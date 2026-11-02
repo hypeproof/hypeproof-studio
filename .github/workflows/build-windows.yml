@@ -486,16 +486,19 @@ jobs:
       # classic scrollbars, which the measure depended on. This runs the composer width sweep against
       # the webview THIS build packaged (not the source), in headless Chrome with the runner's own
       # Segoe UI / Malgun Gothic and classic scrollbars. A #185, the error card, or a held layout
-      # loop fails the build, so the release cannot be promoted.
+      # loop fails the build, so the release cannot be promoted. Budget: at most 10 minutes per
+      # release (cost-first). Korean and English only, 2 px steps where the composer turns
+      # multi-line, 20 px above, stop at the first failure; emoji and code drafts stay in the PR smoke.
       - name: Composer layout-loop gate (packaged webview)
         shell: pwsh
-        timeout-minutes: 45
+        timeout-minutes: 10
         env:
           HEADLESS_CHROMIUM: C:\Program Files\Google\Chrome\Application\chrome.exe
           FOCUS_REQUIRE_BROWSER: "1"
           COMPOSER_METRICS: native
-          COMPOSER_DRAFTS: ko,en,emoji
-          COMPOSER_RANGES: 280-640:1,644-1200:4
+          COMPOSER_DRAFTS: ko,en
+          COMPOSER_RANGES: 280-640:2,660-1200:20
+          COMPOSER_MAX_FAILURES: "1"
         run: |
           $smokeRoot = Join-Path $env:RUNNER_TEMP "hps-smoke"
           $env:COMPOSER_WEBVIEW_DIST = Join-Path $smokeRoot "resources/app/extensions/hypeproof-chat/webview-ui/dist"

@@ -16,6 +16,7 @@
 //   COMPOSER_RANGES="280-640:1,644-1200:4"     width ranges in px with their steps
 //                                                (default "280-640:10": a PR-sized sample, about 2-3 minutes)
 //   COMPOSER_DRAFTS=ko,en,emoji,code              which drafts       COMPOSER_METRICS=native,windows,mac
+//   COMPOSER_MAX_FAILURES=1                        stop at the first failure (the release gate; default 6)
 //   COMPOSER_WEBVIEW_DIST=<dir>                    test a PACKAGED build's webview-ui/dist instead of bundling
 //                                                  the source (the Windows release gate, build-windows.yml)
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
@@ -105,12 +106,13 @@ const state = () => b.evaluate(`(() => { const w = (window.sent || []).find(m =>
   return { fatal: !!document.querySelector('.hps-fatal-title'), error: w ? String(w.message).slice(0, 160) : loop ? String(loop).slice(0, 160) : null,
     expanded: input?.getAttribute('data-expanded') === 'true' }; })()`);
 const failures = [];
+const MAX_FAILURES = Number(process.env.COMPOSER_MAX_FAILURES ?? 6);
 let widthsChecked = 0, expandedSeen = 0;
 for (const metricName of metricNames) for (const draftName of draftNames) {
   const metric = METRICS[metricName], DRAFT = DRAFTS[draftName];
   let seenHere = 0, checkedHere = 0;
   for (const w of WIDTHS) {
-    if (failures.length >= 6) break;
+    if (failures.length >= MAX_FAILURES) break;
     await b.send('Emulation.setDeviceMetricsOverride', { width: w, height: 800, deviceScaleFactor: 1, mobile: false });
     const { identifier } = await b.send('Page.addScriptToEvaluateOnNewDocument', { source: `
       window.sent = []; window.errs = [];
