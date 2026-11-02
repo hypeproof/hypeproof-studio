@@ -347,6 +347,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          PRODUCT_VERSION: ${{ needs.candidate.outputs.version }}
         run: |
           set -euo pipefail
           zip=dist/HypeProof-Studio-darwin-arm64.zip
@@ -355,7 +356,7 @@ jobs:
           [[ ${#seeds[@]} -eq 1 && -f "${seeds[0]}" ]] || { echo "::error::expected one darwin-arm64 SDK seed"; exit 1; }
           out="$RUNNER_TEMP/install-kit"
           node scripts/release/install-kit.mjs render --tag "$TAG" --source-sha "$SOURCE_SHA" \
-            --zip-sha256 "$(sha256sum "$zip" | cut -d' ' -f1)" \
+            --product-version "$PRODUCT_VERSION" --mac-zip "$zip" --zip-sha256 "$(sha256sum "$zip" | cut -d' ' -f1)" \
             --seed-name "$(basename "${seeds[0]}")" --seed-sha256 "$(sha256sum "${seeds[0]}" | cut -d' ' -f1)" \
             --seeder-sha256 "$(git show "$SOURCE_SHA:scripts/seed-sdk-binary.sh" | sha256sum | cut -d' ' -f1)" \
             --out "$out"
