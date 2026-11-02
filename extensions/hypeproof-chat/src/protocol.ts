@@ -183,6 +183,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
+  temporaryTask?: { allowed: boolean };
   /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
   taskMove?: import('./taskMove').TaskMoveView;
   activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
@@ -560,6 +562,8 @@ export type WebviewMessage = (
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
+  /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
+  | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
   | { type: 'taskRename'; title: string; requestId?: string }

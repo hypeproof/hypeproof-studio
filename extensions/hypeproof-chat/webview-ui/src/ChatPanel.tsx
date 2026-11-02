@@ -133,6 +133,7 @@ import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
+import { TEMPORARY_TASK_COPY, TEMPORARY_TASK_UNAVAILABLE } from "../../src/temporaryTask";
 import { MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
@@ -1716,6 +1717,13 @@ export function ChatPanel(props: Props) {
           </button>
           {personalWorkspace && !props.instructor && taskAppearance.open && <button type="button" className="tw-task-appearance" onClick={taskAppearance.open} data-hp-tooltip="목록에서 이 작업을 찾기 쉽게 표시를 붙여요">{TASK_APPEARANCE_LABEL}</button>}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
+          {/* CGP-KNOW-R-029 — "기록 없이 묻기": opens a chat-only task this computer keeps in memory only. Every other learner
+              seat (class, lesson, minor, unknown) sees it unavailable, with the reason on focus and hover (fail closed). */}
+          {!props.instructor && config?.temporaryTask && <button type="button" className="tw-temporary-open" aria-disabled={!config.temporaryTask.allowed || props.streaming || undefined}
+            aria-describedby={config.temporaryTask.allowed ? undefined : 'tw-temporary-reason'} data-hp-tooltip={config.temporaryTask.allowed ? TEMPORARY_TASK_COPY.device : TEMPORARY_TASK_UNAVAILABLE}
+            onClick={() => { if (config.temporaryTask?.allowed && !props.streaming) postToHost({ type: 'taskCreateTemporary' }); }}>
+            {TEMPORARY_TASK_COPY.create}{!config.temporaryTask.allowed && <span id="tw-temporary-reason" className="tw-temporary-reason">{TEMPORARY_TASK_UNAVAILABLE}</span>}
+          </button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-archive-task" onClick={() => postToHost({ type: 'taskArchive' })} disabled={props.streaming} data-hp-tooltip="목록에서 숨기고 대화는 그대로 둬요">보관하기</button>}

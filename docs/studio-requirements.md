@@ -8219,6 +8219,80 @@ and pick rows, 14px text, oldest first with the 80% pick, Escape back to the but
 checked names, the host's answer, and no purchase, upgrade or pricing word, link or class in the DOM; proved against a
 planted "용량 늘리기" pricing link).
 
+## "기록 없이 묻기": a task this computer does not keep (CGP-KNOW-R-029)
+
+REQ-STUDIO-TEMPORARY-TASK / REQ-KNOW-47 (CGP-KNOW-047) / DES-KNOW-47; DEC-01, DEC-02. Scope A (chat only), chosen by the
+CGP lead on 2026-11-02 as a reversible default; memory is read in it (DEC-02: memory stays on).
+
+- **Who may open one.** An adult personal seat only: a personal activity (the record's kind, and a served `activity_kind`
+  that is absent or personal; never a trial, whose adult status cannot be told apart: the lead's ruling, 2026-11-02) with
+  a task workspace, not instructor mode, no lesson, and a profile `isMinorProfile` calls adult. It fails closed: a minor cohort, any tier outside the adult
+  workshop tiers (`website`, `search-webapp`), an unknown tier and no profile are not adult. The host checks again on the
+  press and on every turn (a seat that changed keeps the input and is told why).
+- **Where.** 대화 메뉴 (personal) or the header row (classroom): "기록 없이 묻기". On every other learner seat (class,
+  lesson, minor, unknown, trial) the control is unavailable, never natively disabled, so focus reaches it. Focus or hover shows
+  "수업에서는 기록이 남아요", which is also its description, and pressing it does nothing.
+- **What the task is.** The task store holds it in memory only. It is never in the task file or any sidecar, a restart
+  never sees it, and search does not find it. Its transcript, draft and verdicts live there. Rename, appearance, archive,
+  move, recovery and export are refused ("기록 없이 묻는 작업은 저장하거나 옮기지 않아요."). Leaving it (another task, 새
+  작업, 다시 열기) discards it.
+- **What this computer keeps of it: nothing.**
+  - No session spool event: the spool is absent while it is open, so a cohort with `analytics.upload_session_logs` has
+    nothing of it to upload.
+  - The "기억 사용 N" ledger of its answers lives in memory, not in workspaceState.
+  - No memory write (none exists from a turn).
+  - The agent-sdk turn runs with `persistSession: false`, so the CLI writes no session file under the seat's config dir.
+  - It is chat only: of the SDK tools only `read` survives; write, shell, browser, subagents, browser control and the
+    orchestrator roster are dropped, so no file change, version or provenance record can come from it. It takes no
+    restore point (the copy of the work folder under globalStorage, kept per task), and no photo: a photo is saved into
+    the work folder before it is sent, so the text and the photo go back to the composer with "기록 없이 묻는 작업에서는
+    사진을 보낼 수 없어요. 사진은 입력창에 그대로 두었어요."
+  - No observation record: the profile's `observation` is dropped, so no recorder is built.
+  - No write into the work folder, whatever the folder's access: the one write question (`folderWriteRefusalFor`)
+    refuses for a turn that began in a temporary task (its stream id) and while one is open, with "기록 없이 묻는
+    작업에서는 작업 폴더의 파일을 만들거나 바꾸지 않아요. 결과는 미리보기에서만 보여요." An answer's ```html fence,
+    `<!doctype html>` page or ```js fence is shown from memory, as on a read-only folder. Every host write passes this
+    question: the page and engine saves, the world archive, the page history, agent.md, the preview's save, the
+    trash's restore and the slide PDF export. No photo is staged either.
+  - No accuracy-education offer: it names the task, so a temporary turn makes none.
+  - Each of these is decided by the turn's own flag, taken once at its start, not by whichever task is open later.
+- **What it does not promise.** The request still goes to the Service to be answered. On cohorts with
+  `analytics.log_user_messages` the Service stores the turn's last user message, and the client cannot stop that. A
+  per-request no-log flag is a Service contract (`service-contracts-backlog.md` #12), blocked-external. So the copy
+  promises this device only.
+- **The band.** Across the top of the task while it is open, above the heading: "기록 없이 묻기" (lock glyph), "이 기기에
+  기록을 남기지 않아요. 이 작업을 떠나면 대화가 사라져요.", "대화만 할 수 있어요. AI가 파일을 만들거나 바꾸지 않아요. 질문과
+  답은 답을 만들기 위해 서비스로 보내져요." It is set apart by a rule and its title, uses 14px or more at 4.5:1, and never
+  says "anywhere".
+
+Evidence:
+- `extensions/hypeproof-chat/test/temporary-task.smoke.mjs` covers:
+  - the store: byte-identical files, a fresh read, refusals, discard on leaving;
+  - the profile narrowing;
+  - the seat gate on the real provider and store: adult allowed; minor cohort, kids tier, unknown tier, no profile,
+    lesson and instructor refused with the reason;
+  - the marker sweep, on proxy and agent-sdk with the real task store, a real on-disk spool and recorded
+    workspaceState/globalState. The temporary task is the seat's FIRST turn, so a one-time record is its to claim.
+    A unique marker sent, answered, drafted and given a verdict in it (memory read, its ledger used) is afterwards in no
+    file under globalStorage, the spool, the activity folder, the TMPDIR or ~/.claude, and in no state value. Neither is
+    the temporary task's id, in file contents or in path names. No file there was created or changed while it was open.
+    One variant serves `observation` with a recorder that really records. An ordinary turn afterwards (control) leaves
+    the marker in the task file, the spool and the observation record. Photos are refused with no file written. On a
+    folder with access "full", an answer with a ```html fence, a doctype page or a ```js fence leaves the work folder
+    byte-identical (an ordinary task writes it: control); the write question and photo staging refuse while the task
+    is open. The agent-sdk turn has `ephemeralSession` and
+    `sdk_tools {read}` only. In an ordinary task the marker lands in the task file and the spool (control).
+  - Mutations caught: spool kept, ledger in workspaceState, `persistSession` left on, tools not narrowed, the minor
+    check removed, the accuracy offer kept, observation kept, the restore point kept, trial allowed, photos taken, the
+    folder write gate removed, the turn's write flag removed, and photo staging allowed.
+- `extensions/hypeproof-chat/test/temporary-task-browser.smoke.mjs` (real App bundle, dark/light, 320/800/1420, forced
+  colours) covers:
+  - adult: the menu item, one request, the band's exact words above the heading, 14px, 4.5:1, no sideways scroll, and
+    gone on leaving;
+  - refused personal and classroom seats: unavailable, the reason on real keyboard focus, nothing posted.
+- The agent-sdk session file itself: `memory-use-sdk.smoke.mjs` proves that the real CLI with `persistSession: false`
+  writes none.
+
 ## One-time memory notice (CGP-KNOW-R-031)
 
 REQ-STUDIO-MEMORY-NOTICE / REQ-KNOW-49 (CGP-KNOW-049) / DES-KNOW-49 (CGP-KNOW-D-031) / PI#2 (the learner can see what

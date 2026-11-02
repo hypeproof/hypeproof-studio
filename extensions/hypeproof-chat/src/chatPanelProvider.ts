@@ -82,6 +82,7 @@ import * as fs from "fs";
 import { TaskActivityTurns, type TaskActivityEvent } from "./taskActivityHost";
 import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
+import { TEMPORARY_TASK_NO_IMAGES, TEMPORARY_TASK_NO_WRITE, TEMPORARY_TASK_UNAVAILABLE, temporaryTaskProfile } from './temporaryTask';
 import { parseTaskAppearanceRequest } from './taskAppearance';
 import type { TaskWorkspaceExpected } from './taskWorkspaceContract';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -790,7 +791,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (source) this.draftSource = source;
           let recoveryDraft: ActivityDraft | undefined;
           // CGP-CHAT-R-025 — archive and 다시 열기 leave the open task like a switch does: its draft is flushed first.
-          const leaving = msg.type === 'taskCreate' || msg.type === 'taskSelect' || msg.type === 'taskArchive' || msg.type === 'taskRestore';
+          const leaving = msg.type === 'taskCreate' || msg.type === 'taskCreateTemporary' || msg.type === 'taskSelect' || msg.type === 'taskArchive' || msg.type === 'taskRestore';
           // CGP-KNOW-R-009 — moving the open task away leaves it like a switch does.
           const leftTask = leaving || (msg.type === 'taskMove' && msg.id === msg.taskId);
           await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, leftTask);
@@ -798,6 +799,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
           if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          // CGP-KNOW-R-029 — checked again here, on the seat as it is now; refused with the same reason the control shows.
+          else if (msg.type === 'taskCreateTemporary') {
+            if (!this.temporaryTaskAllowed()) throw new Error(TEMPORARY_TASK_UNAVAILABLE);
+            await store.createTemporary(expected);
+          }
           else if (msg.type === 'taskRecoverDraft') {
             if (!recoveryDraft) throw new Error('현재 입력을 확인하지 못했습니다. 이 창을 유지하고 다시 시도해 주세요.');
             await store.recoverDraft(msg.taskId, recoveryDraft);
@@ -1430,12 +1436,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private folderConsentOpts() { return { servedRoot: this.servedWorkspaceRoot, instructor: this._instructorMode?.isInstructor === true }; }
-  /** REQ-STUDIO-FOLDER-CONSENT — the one write question (also asked by the preview). null = may write. */
-  folderWriteRefusalFor(target: string): string | null { return folderWriteRefusal(this.context, this.cachedProfile, this.folderConsentOpts(), target); }
+  /**
+   * REQ-STUDIO-FOLDER-CONSENT — the one write question (also asked by the preview). null = may write.
+   * CGP-KNOW-R-029 — a "기록 없이 묻기" turn (by its own stream id) or an open temporary task writes nothing into the
+   * folder, whatever the folder's access: the answer's page is shown from memory, as on a read-only folder.
+   */
+  folderWriteRefusalFor(target: string, streamId?: string): string | null {
+    if (this.temporaryWrite(streamId)) return TEMPORARY_TASK_NO_WRITE;
+    return folderWriteRefusal(this.context, this.cachedProfile, this.folderConsentOpts(), target);
+  }
+  /** CGP-KNOW-R-029 — the turns that began in a temporary task (their writes stay refused to the end). */
+  private temporaryStreams?: Set<string>;
+  private temporaryWrite(streamId?: string): boolean {
+    return (streamId !== undefined && !!this.temporaryStreams?.has(streamId)) || this.inTemporaryTask();
+  }
   private readonly folderWriteNoted = new Set<string>();
   /** Every host write into the open folder passes here: true = blocked, with one 폴더 권한 line per turn. */
   private folderWriteBlocked(target: string, streamId?: string): boolean {
-    const refusal = this.folderWriteRefusalFor(target);
+    const refusal = this.folderWriteRefusalFor(target, streamId);
     if (!refusal) return false;
     if (!streamId) this.postPageNotice(refusal, "folder");
     else if (!this.folderWriteNoted.has(streamId)) { this.folderWriteNoted.add(streamId); this.postToolLog(streamId, { id: randomId(), icon: "🔒", label: refusal, state: "error", denial: denialNotice("folder", this.getSeatAudience() === "classroom") }); }
@@ -3136,14 +3154,41 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private personalContinuationPane?: vscode.Disposable;
   private personalContinuationOpening = false;
   private readonly artifactGate = new ArtifactChangeGate();
+  private spoolSink?: SessionSpool;
+  /**
+   * #580 — the local session-log spool. CGP-KNOW-R-029: a "기록 없이 묻기" task has none, so no event of it is written
+   * (or later uploaded on a cohort with `analytics.upload_session_logs`).
+   */
+  private get spool(): SessionSpool | undefined { return this.inTemporaryTask() ? undefined : this.spoolSink; }
+  private set spool(value: SessionSpool | undefined) { this.spoolSink = value; }
+  /** CGP-KNOW-R-029 — the open task is a temporary one (held in memory by the task store, never written). */
+  private inTemporaryTask(): boolean {
+    const store = this.currentTaskStore?.();
+    return !!store && store.isTemporary?.(store.getView().activeTaskId) === true;
+  }
+  /**
+   * CGP-KNOW-R-029 (REQ-KNOW-47) — "기록 없이 묻기" is offered only on an adult personal seat: a personal activity (the
+   * record's kind, and a served `activity_kind` that is absent or personal; never a trial) with a task workspace, not
+   * instructor mode, no lesson, and a profile `isMinorProfile` calls adult (it fails closed: a minor cohort, any tier
+   * outside the adult workshop tiers, or no profile at all is not adult).
+   */
+  private temporaryTaskAllowed(profile: ResolvedProfile | null | undefined = this.cachedProfile): boolean {
+    if (!this.currentTaskStore?.() || this._instructorMode?.isInstructor !== false || !profile) return false;
+    const record = activityConnections(this.context)?.current;
+    // A personal activity only (the lead's ruling, 2026-11-02): a trial seat's adult status cannot be told apart.
+    if (record?.kind !== 'personal' || !(profile.activity_kind == null || profile.activity_kind === 'personal')) return false;
+    if (profile.lesson || profile.lesson_binding?.enforced || record.lesson) return false;
+    return !isMinorProfile(profile);
+  }
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly preview: PreviewProvider,
     private readonly liveServer: LiveServer,
     /** #580 — the local session-log spool. Optional: tests and older callers run without recording. */
-    private readonly spool?: SessionSpool,
+    spool?: SessionSpool,
   ) {
+    this.spoolSink = spool;
     // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
     context.subscriptions.push(setFolderConsentPresenter(folder => this.folderConsentRequest.ask(folder)));
@@ -5375,6 +5420,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
   private stageImageBytes(stageId: string, name: string, mime: string, bytes: Buffer): string | null {
     if (!this.isImageFilesEnabled()) return "이 수업에서는 사진을 붙일 수 없어요.";
+    // CGP-KNOW-R-029 — a photo would be kept in the staging folder; a temporary task takes none.
+    if (this.inTemporaryTask()) return TEMPORARY_TASK_NO_IMAGES;
     this.ensureAttachmentStaging();
     const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.has(stageId) ? 0 : this.imageStaging?.count() ?? 0 });
     if (refusal) return refusal;
@@ -5893,7 +5940,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       content: checked.html,
     });
     // #751 F4 — a real change to the artifact, reported to the class board as digests only (never the HTML).
-    { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
+    // CGP-KNOW-R-029 — not for a temporary task's page.
+    if (!this.temporaryWrite?.(spoolTurn)) { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
 
     // 2026-08-17, Windows real device — the screen stayed blank for a long time
     // **even after** the coach said "완성됐어요!". Between the stream ending and the
@@ -6816,7 +6864,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026 / REQ-KNOW-44) — the memory a request carries, the "기억 사용 N" count on its
   // answer and the learner's per-task exclusions. The ledger (memoryUse.ts) holds digests only, beside the task file.
   private memoryTurns?: Map<string, { scope: string; used: MemoryUseItem[] }>;
-  private memoryLedger() { try { return acceptMemoryUse(this.context.workspaceState.get(MEMORY_USE_KEY)); } catch { return acceptMemoryUse(null); } }
+  /** CGP-KNOW-R-029 — a temporary task's ledger lives here only, for that task, and goes with it. */
+  private temporaryMemoryLedger?: { taskId: string; ledger: ReturnType<typeof acceptMemoryUse> };
+  private memoryLedger() {
+    if (this.inTemporaryTask()) {
+      const taskId = this.currentTaskStore?.()?.getView().activeTaskId ?? '';
+      if (this.temporaryMemoryLedger?.taskId !== taskId) this.temporaryMemoryLedger = { taskId, ledger: acceptMemoryUse(null) };
+      return this.temporaryMemoryLedger.ledger;
+    }
+    try { return acceptMemoryUse(this.context.workspaceState.get(MEMORY_USE_KEY)); } catch { return acceptMemoryUse(null); }
+  }
+  private async saveMemoryLedger(next: ReturnType<typeof acceptMemoryUse>): Promise<void> {
+    if (this.inTemporaryTask()) { this.temporaryMemoryLedger = { taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? '', ledger: next }; return; }
+    await this.context.workspaceState.update(MEMORY_USE_KEY, next);
+  }
   /**
    * The memory for this turn's request, read now through the R-005 binding: a personal or trial activity, never an
    * instructor, a class or a lesson seat (checked again on the turn's own profile), and only after the activity's
@@ -6840,7 +6901,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const answer = items.filter(item => item.role === "assistant").at(-1);
     if (!turn || !answer) return;
     this.memoryTurns!.delete(streamId);
-    try { await this.context.workspaceState.update(MEMORY_USE_KEY, rememberMemoryUse(this.memoryLedger(), turn.scope, answer.id, turn.used)); }
+    try { await this.saveMemoryLedger(rememberMemoryUse(this.memoryLedger(), turn.scope, answer.id, turn.used)); }
     catch { /* display-only: the request carried the items either way; the chip is missing after a failed save */ }
     await this.postMemoryUseMarks();
   }
@@ -6861,7 +6922,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (msg.exclude !== undefined) {
       const next = typeof msg.id === "string" && typeof msg.exclude === "boolean" ? setMemoryExcluded(this.memoryLedger(), binding.scope, messageId, msg.id, msg.exclude) : null;
       if (!next) { await reply(null); return; }
-      try { await this.context.workspaceState.update(MEMORY_USE_KEY, next); } catch { await reply(null); return; }
+      try { await this.saveMemoryLedger(next); } catch { await reply(null); return; }
     }
     const current = await new ActivityMemory(binding.root).contextItems().catch(() => null);
     const after = this.activityMemoryBinding;
@@ -7458,7 +7519,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
-    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {
@@ -8359,6 +8420,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let completionFailed = false;
     const deferCompletion = (streamId: string, signal?: AbortSignal, failed = false) => { completedStreamId = streamId; completionSignal = signal; completionFailed = failed; };
     const attachmentNames = (attachments ?? []).map(id=>({id,name:this.imageStaging?.name(id) ?? "사진"}));
+    // CGP-KNOW-R-029 — whether this turn belongs to a "기록 없이 묻기" task, taken once here: every writer below asks this
+    // flag, not "the open task now".
+    const temporaryTurn = this.inTemporaryTask();
     let preflightComplete=false;
     const releasePower = workPower.acquire("coach-turn");
     try {
@@ -8387,6 +8451,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // switch leaves the turn exactly as it would have been; only "switched but the new profile could not be verified"
     // stops it, and then the learner's text and attachments go straight back into the composer.
     if (this.opsObserver?.switchPendingSetting) await this.lessonBindingPreflight();
+    // CGP-KNOW-R-029 — a photo or pasted image is saved into the work folder (#421); a "기록 없이 묻기" task keeps nothing,
+    // so it takes none (the input and the photos go back to the composer, with the reason).
+    if (temporaryTurn && ((images?.length ?? 0) > 0 || (attachments?.length ?? 0) > 0)) throw new TurnToolModeError(TEMPORARY_TASK_NO_IMAGES);
     const preparedAttachments = this.prepareAttachments([
       ...(attachments ?? []).map(id => ({id,stageId:id})),
       ...(images ?? []).map((dataUrl,index) => ({id:`pasted-${index}`,dataUrl})),
@@ -8502,7 +8569,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const coach = this.getCoach();
     // Fixed-naming cohorts must NOT inject a user-supplied coach name carried
     // over from a different cohort's user-data-dir into the LLM context (#140).
-    const resolvedProfile = await this.ensureProfile();
+    const servedProfile = await this.ensureProfile();
+    // CGP-KNOW-R-029 — a "기록 없이 묻기" turn: the seat is checked again on this turn's profile (a seat that turned
+    // minor, class or lesson keeps the input and is told why), and the turn is chat only. Narrowed first: the access
+    // choice and the folder choice below only narrow further.
+    if (temporaryTurn && !this.temporaryTaskAllowed(servedProfile)) throw new TurnToolModeError(TEMPORARY_TASK_UNAVAILABLE);
+    const resolvedProfile = temporaryTurn && servedProfile ? temporaryTaskProfile(servedProfile) : servedProfile;
     await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
@@ -8659,6 +8731,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // has to be able to resend it to the worker's trace. The worker validates turn_id
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
+    if (temporaryTurn) (this.temporaryStreams ??= new Set()).add(streamId);
     if (memoryTurn) { this.memoryTurns ??= new Map(); this.memoryTurns.set(streamId, { scope: memoryTurn.scope, used: memoryTurn.used }); }
     // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
     // policy: the details list is where each request's agent and model are shown.
@@ -8667,6 +8740,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.effortResult = {state:'loading',requests:[]};
       void this.postConfig();
     }
+    // CGP-KNOW-R-029 — a temporary turn's profile carries no `observation` (temporaryTaskProfile), so no recorder is built.
     const observation = await this.prepareObservation(proxyUrl, token, profile);
     // cr-verify — the coach's verify calls in this turn write to this turn's recorder.
     this.verifyTurnRecorder = observation?.batch.format === 'hps-observation/2' ? observation : null;
@@ -8693,7 +8767,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     responseStarted(streamId);
     // Kept before it is announced, so a history post racing this turn already carries the mark.
-    if (stepMark) await this.rememberStepMark(userId, stepMark);
+    if (stepMark && !temporaryTurn) await this.rememberStepMark(userId, stepMark);
     void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId, ...(stepMark ? { lessonStep: stepMark } : {}) });
     this.rememberAnswerTurn(messageId, streamId);
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
@@ -8802,7 +8876,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       current: { usage: Record<string, unknown>; totalCostUsd: number | null } | null;
     } = { current: null };
     // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
-    const turnRestorePoint = await this.beginTurnRestore(streamId);
+    // CGP-KNOW-R-029 — a temporary turn takes no restore point (a copy of the work folder under globalStorage, keyed by
+    // the task). It is chat only, so there is nothing of it to undo.
+    const turnRestorePoint = temporaryTurn ? null : await this.beginTurnRestore(streamId);
     // REQ-STUDIO-DELEGATION-ROW — rows this turn left open are closed at its end (stop excepted).
     let delegations: DelegationTracker | null = null;
     const closeDelegations = (reason: string) => {
@@ -9417,7 +9493,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             history: history.map((m) => ({ role: m.role, content: m.content })),
             userText: userTextForModel,
             // CGP-KNOW-R-026 — a prompt that carries memory leaves no CLI session file outside the activity (DEC-01).
-            ...(memoryTurn ? { ephemeralSession: true, memoryContext: memoryTurn.text } : {}),
+            // CGP-KNOW-R-029 — so does every turn of a "기록 없이 묻기" task.
+            ...(memoryTurn || temporaryTurn ? { ephemeralSession: true } : {}),
+            ...(memoryTurn ? { memoryContext: memoryTurn.text } : {}),
             images: effectiveImages,
             signal: ctrl.signal,
             // #457 — with no folder open, workspaceFolders is empty and cwd goes
@@ -9589,7 +9667,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-KNOW-R-026 — the finished answer of a request that carried memory gets the count.
         await this.rememberMemoryTurn(streamId, finishedItems);
         const answer = finishedItems.filter(item => item.role === 'assistant' && item.content.trim()).at(-1);
-        if (answer) accuracyResult = { owner: crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex'),
+        // CGP-KNOW-R-029 — no accuracy-education offer (it names the task) comes from a temporary turn.
+        if (answer && !temporaryTurn) accuracyResult = { owner: crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex'),
           offer: { scope: accuracyScope, messageId: answer.id }, text: assistantText, instructor: this._instructorMode.isInstructor === true };
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
@@ -10606,6 +10685,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         hasToken: !!token,
         workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
         ...(taskView ? { taskWorkspace: taskView } : {}),
+        // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
+        ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
         ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},

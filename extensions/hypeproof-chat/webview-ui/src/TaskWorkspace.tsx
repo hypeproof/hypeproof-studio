@@ -23,6 +23,7 @@ import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, markTitleMatches, railSearchFolded, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
+import { TEMPORARY_TASK_COPY } from '../../src/temporaryTask';
 import { MemoryUseList } from './MemoryUseChip';
 import { MEMORY_USE_COPY } from '../../src/memoryUseView';
 import { ActivityHomeContext, activityTitleText, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
@@ -710,6 +711,13 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     </nav>
     {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
     <section ref={main} className="tw-main" aria-label="작업 공간">
+      {/* CGP-KNOW-R-029 (DES-KNOW-47) — always across the top while the temporary task is open. It promises only what this
+          computer does (no record here, chat only) and says the request still goes to the Service. */}
+      {view.temporaryTaskId && view.activeTaskId === view.temporaryTaskId && <div className="tw-temporary-band" role="note" aria-labelledby="tw-temporary-band-title" data-testid="temporary-band">
+        <p id="tw-temporary-band-title" className="tw-temporary-band-title"><ChatIcon kind="lock" size={16} /><span>{TEMPORARY_TASK_COPY.bandTitle}</span></p>
+        <p>{TEMPORARY_TASK_COPY.device}</p>
+        <p>{TEMPORARY_TASK_COPY.chatOnly} {TEMPORARY_TASK_COPY.service}</p>
+      </div>}
       <header className="tw-heading">
         <button ref={railToggle} className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
         {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
