@@ -856,7 +856,15 @@ export class StartPage {
               : "계정 기능을 불러오려면 Studio 창을 다시 열어야 해요. 작업 파일은 그대로 남아요.",
             { modal: true }, action);
           if (choice === action) {
+            if (this.chat.hasActiveStream()) {
+              this.error = "진행 중인 작업을 마치거나 중지한 후 로그인해 주세요.";
+              await this.refresh(); return;
+            }
             if (disabled) await config.update("accountsEnabled", true, vscode.ConfigurationTarget.Global);
+            if (this.chat.hasActiveStream()) {
+              this.error = "개인 계정 사용은 켜졌어요. 진행 중인 작업을 마친 뒤 다시 로그인해 주세요.";
+              await this.refresh(); return;
+            }
             await vscode.commands.executeCommand("workbench.action.reloadWindow");
           }
         } catch {
