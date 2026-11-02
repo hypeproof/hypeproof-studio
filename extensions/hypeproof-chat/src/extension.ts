@@ -66,6 +66,7 @@ import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
 import { registerSkillStore } from "./skillStorePanel";
+import { isMinorProfile } from "./sdkCoachHelpers";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
@@ -280,7 +281,12 @@ export async function activate(context: vscode.ExtensionContext) {
   registerSkillStore(context, {
     render: (webview, dist) => provider.renderHtml(webview, dist),
     accountToken: async () => accounts?.accessToken(),
-    hasSeat: async () => Boolean(await activityConnections(context)?.token()),
+    seat: async () => {
+      if (!(await activityConnections(context)?.token())) return "none";
+      const profile = await provider.ensureProfile();
+      if (!profile) return "none";
+      return profile.activity_kind === "classroom" || isMinorProfile(profile) ? "classroom" : "personal";
+    },
     attachToChat: skill => provider.attachStoreSkill(skill),
   });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {

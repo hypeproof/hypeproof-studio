@@ -17,8 +17,11 @@ export interface SkillStoreDeps {
   render: (webview: vscode.Webview, dist: vscode.Uri) => string;
   /** The signed-in personal account's bearer; undefined when accounts are off or signed out. */
   accountToken: () => Promise<string | undefined>;
-  /** True when this App has a seat (pass or class) whose usage a run would spend. */
-  hasSeat: () => Promise<boolean>;
+  /**
+   * The seat a run would spend: `personal` (the buyer's own pass, trial or free seat), `classroom`
+   * (a class or minor cohort, which must not pay for or reach the store), or `none`.
+   */
+  seat: () => Promise<"personal" | "classroom" | "none">;
   /** Hands the downloaded skill to the chat panel for the buyer's next turn. */
   attachToChat: (skill: { item_id: string; title: string; body: string }) => Promise<void>;
 }
@@ -43,6 +46,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   };
 
   const load = async (tab: StoreTab = state.tab, extra: Partial<StoreState> = {}) => {
+    // A class seat (every under-14 instructor-code cohort included) has no store, however the panel was opened.
+    if ((await deps.seat().catch(() => "none")) === "classroom") return push({ access: "unavailable", tab, items: [], installs: [], seller: undefined, busy: false, error: STORE_COPY.classroomSeat });
     const c = client();
     let items = state.items;
     try {
@@ -139,8 +144,15 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         });
       case "storeRun":
         return run(async () => {
-          // The first fetch ends the refund right, so nothing is fetched until a seat can run it.
-          if (!(await deps.hasSeat().catch(() => false))) return void push({ busy: false, error: STORE_COPY.needsSeat });
+          // The first fetch ends the refund right, so nothing is fetched until the buyer's own seat can run it,
+          // and a refundable install asks first.
+          const seat = await deps.seat().catch(() => "none" as const);
+          if (seat !== "personal") return void push({ busy: false, error: seat === "classroom" ? STORE_COPY.classroomSeat : STORE_COPY.needsSeat });
+          const install = state.installs.find((i) => i.item_id === msg.itemId);
+          if (install?.refundable) {
+            const ok = await vscode.window.showWarningMessage(STORE_COPY.runEndsRefund, { modal: true }, "실행하기");
+            if (ok !== "실행하기") return void push({ busy: false });
+          }
           const skill = await c.run(msg.itemId);
           await deps.attachToChat({ item_id: skill.item_id, title: skill.title, body: skill.body });
           await load("mine", { notice: STORE_COPY.ran(skill.title) });
