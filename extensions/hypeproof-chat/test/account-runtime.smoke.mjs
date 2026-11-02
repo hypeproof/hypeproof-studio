@@ -11,11 +11,11 @@ const bundle=await build({stdin:{contents:"export * from './src/startPage.ts';ex
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'studio-account-runtime-')),root=path.join(tmp,'workspace');fs.mkdirSync(root);
 const SERVICE='http://127.0.0.1:8793/v1',SITE='http://localhost:3193',ID='ord_'+'a'.repeat(32),SECRET='b'.repeat(64);
 let now=1000000,rotations=0,revoked=false,stops=0,service=SERVICE;
-let site=SITE,enabled=true,recoveryChoice,commands=[],updates=[];
+let site=SITE,enabled=true,recoveryChoice,commands=[],updates=[],recoveryBusy=false,busyOnPrompt=false,busyOnUpdate=false;
 const calls=[],states=[],secrets=new Map(),workspace=new Map();
 const profile={activity_id:'b'.repeat(64),activity_kind:'trial',profile_id:'adult',display_name:'Personal pass',workspace_root:root,pass:{request_limit:10,requests_used:1,expires_at:2000000000},ux:{coach:{naming_mode:'fixed',fallback_name:'Coach'}},welcome:{},series_index:1,series_total:1};
 const ctx={globalStorageUri:{fsPath:path.join(tmp,'storage')},workspaceState:{keys:()=>[...workspace.keys()],get:(k,d)=>workspace.get(k)??d,update:async(k,v)=>workspace.set(k,v)},secrets:{keys:async()=>[...secrets.keys()],get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)},extension:{packageJSON:{version:'test'}},subscriptions:[]};
-const vscode={workspace:{workspaceFolders:[{name:'workspace',uri:{fsPath:root}}],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:k==='siteBase'?site:k==='accountsEnabled'?enabled:d,update:async(...args)=>updates.push(args)})},window:{showInformationMessage:async()=>recoveryChoice},ConfigurationTarget:{Global:1},commands:{executeCommand:async cmd=>commands.push(cmd)},Uri:{parse:u=>u},env:{openExternal:async()=>true}};
+const vscode={workspace:{workspaceFolders:[{name:'workspace',uri:{fsPath:root}}],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:k==='siteBase'?site:k==='accountsEnabled'?enabled:d,update:async(...args)=>{updates.push(args);if(busyOnUpdate)recoveryBusy=true;}})},window:{showInformationMessage:async()=>{if(busyOnPrompt)recoveryBusy=true;return recoveryChoice;}},ConfigurationTarget:{Global:1},commands:{executeCommand:async cmd=>commands.push(cmd)},Uri:{parse:u=>u},env:{openExternal:async()=>true}};
 const json=(status,body)=>new Response(JSON.stringify(body),{status});
 const fetch=async(url,init={})=>{
  const p=new URL(url).pathname,headers=new Headers(init.headers);calls.push({p,auth:headers.get('authorization')});
@@ -40,7 +40,7 @@ try {
  secrets.set(ACCOUNT_SECRET_KEY,JSON.stringify({service:SERVICE,accessToken:'account-secret',refreshToken:'refresh-secret',sessionId:'session-1',expiresAt:now+3600000}));
  const accounts=new AccountSession({service:SERVICE,site:SITE,secrets:scoped.secrets,label:'Test',fetch,now:()=>now,openBrowser:async()=>true,invalidated:async id=>{stops++;await connections.forgetAccount(id)}});
  connections.accountToken=b=>accounts.resolvePass(b);
- const chat={ensureProfile:async()=>connections.current?profile:null,profileFailure:()=>null,coachDisplayName:()=> 'Coach',coachNameIsChosen:()=>true,hasActiveStream:()=>false,setConnectionChanging:async()=>{},invalidateProfile(){},refreshConfig(){},openInEditor:async()=>{}};
+ const chat={ensureProfile:async()=>connections.current?profile:null,profileFailure:()=>null,coachDisplayName:()=> 'Coach',coachNameIsChosen:()=>true,hasActiveStream:()=>recoveryBusy,setConnectionChanging:async()=>{},invalidateProfile(){},refreshConfig(){},openInEditor:async()=>{}};
  const page=new StartPage(scoped,chat,async(_p,commit)=>{await commit(root);return false},undefined,accounts);page.panel={webview:{postMessage:async msg=>states.push(msg)}};
  page.purchaseStage='choosing';
  await page.handle({type:'accountActivate',passId:ID});
@@ -70,6 +70,14 @@ try {
  await unavailable.handle({type:'accountSignIn'});
  assert.equal(updates.length,0,'closing the recovery prompt changes nothing');
  recoveryChoice='켜고 다시 열기';
+ commands.length=0;busyOnPrompt=true;
+ await unavailable.handle({type:'accountSignIn'});
+ assert.equal(updates.length,0,'work beginning in the confirmation prevents mutation');
+ assert.equal(commands.length,0);
+ recoveryBusy=false;busyOnPrompt=false;busyOnUpdate=true;
+ await unavailable.handle({type:'accountSignIn'});
+ assert.equal(commands.length,0,'work beginning during settings persistence prevents reload');
+ recoveryBusy=false;busyOnUpdate=false;updates.length=0;
  await unavailable.handle({type:'accountSignIn'});
  assert.deepEqual(updates,[['accountsEnabled',true,1]]);
  assert.equal(commands.at(-1),'workbench.action.reloadWindow');
