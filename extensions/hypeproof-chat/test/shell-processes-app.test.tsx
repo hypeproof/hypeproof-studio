@@ -15,9 +15,9 @@ const panel = () => host.querySelector('.hps-running-processes');
 async function main() {
   await act(async () => root.render(<App />));
   await hostMessage(config('activity-a'));
-  await hostMessage({ type: 'runningProcesses', entries: [{ id: 'live:1', purpose: '라이브 서버', folder: '.', state: 'running' }] });
+  await hostMessage({ type: 'runningProcesses', entries: [{ id: 'live:1', purpose: '미리보기 서버', kind: 'preview', folder: '작업 폴더 전체 (site)', address: '127.0.0.1:43210', state: 'running' }] });
   assert.ok(panel(), 'the host list is drawn');
-  assert.ok(panel().textContent.includes('라이브 서버'));
+  assert.ok(panel().textContent.includes('미리보기 서버 실행 중'));
   await act(async () => click(panel().querySelector('button')));
   assert.deepEqual((globalThis as any).__posted.at(-1), { type: 'stopRunningProcess', id: 'live:1', activityId: 'activity-a' }, 'stop sends only the owned id, bound to its activity');
   await hostMessage(config('activity-a'));

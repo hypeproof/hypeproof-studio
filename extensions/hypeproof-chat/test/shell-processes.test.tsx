@@ -107,7 +107,7 @@ async function main() {
   await registry.stop('live'); await registry.stop('live');
   assert.equal(calls, 1); assert.equal(registry.list()[0].state, 'stopping');
   let ui = render(<RunningProcessesPanel entries={registry.list()} onStop={() => {}} />);
-  assert(ui.includes('실행 중인 것')); assert(ui.includes('라이브 서버')); assert(ui.includes('폴더: .')); assert(ui.includes('멈추는 중')); assert(ui.includes('disabled')); assert(!ui.includes('멈췄어요'));
+  assert(ui.includes('실행 중인 것')); assert(ui.includes('라이브 서버')); assert(ui.includes('폴더: .') === false, 'never 폴더: .'); assert(ui.includes('작업 폴더 전체')); assert(ui.includes('끄는 중')); assert(ui.includes('disabled')); assert(!ui.includes('멈췄어요'));
   assert.equal(timers.length, 0, 'nothing expires while running or stopping');
   registry.finish('live', 'stopped'); ui = render(<RunningProcessesPanel entries={registry.list()} onStop={() => {}} />);
   assert(ui.includes('멈췄어요')); assert(!ui.includes('<button'));
