@@ -12,6 +12,7 @@
   "hypeproofChat.requireApprovalFor": "실행 전 확인할 동작",
   "hypeproofChat.siteBase": "사이트 주소",
   "hypeproofChat.accountsEnabled": "개인 계정 사용",
+  "hypeproofChat.autoUpdate": "자동 업데이트",
   "hypeproofChat.publicUpdates": "공개 업데이트 확인",
   "hypeproofChat.accountsPreview": "개인 계정 미리보기",
   "hypeproofChat.annotationBatchEnabled": "미리보기 표시 모아 보내기",
