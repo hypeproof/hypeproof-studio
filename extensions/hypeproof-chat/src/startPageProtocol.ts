@@ -111,6 +111,8 @@ export type StartRequest =
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
   | { type: "openStudioFiles" }
+  /** REQ-STUDIO-FEEDBACK-ENTRY — 의견·문제 보내기: runs `hypeproof-chat.reportProblem` (the chat panel's form). */
+  | { type: "reportProblem" }
   | { type: "openAdvancedSettings" }
   | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */

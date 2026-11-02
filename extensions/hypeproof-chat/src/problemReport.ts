@@ -167,8 +167,19 @@ export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버�
 
 export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean; includeLogs: boolean }
 
+/**
+ * REQ-STUDIO-FEEDBACK-ENTRY — the visible way in (대화 메뉴, start page) and the form's title when opened from it:
+ * one name for both a complaint and a failure, so the learner does not have to decide which one it is first.
+ */
+export const FEEDBACK_ENTRY_LABEL = "의견·문제 보내기";
+
+/** The form's title: the entry's own name when the learner opened it, 문제 보내기 when a failure did. */
+export function problemFormTitle(reason: ProblemFormReason): string {
+  return reason === "manual" ? FEEDBACK_ENTRY_LABEL : "문제 보내기";
+}
+
 export const PROBLEM_FORM_LEAD: Record<ProblemFormReason, string> = {
-  manual: "무엇이 안 되는지 알려 주세요. Studio 운영팀이 확인하고 고쳐요.",
+  manual: "안 되는 것도, 「이게 불편해요」 같은 한마디도 좋아요. Studio 운영팀이 읽고 고쳐요.",
   error: "방금 생긴 문제를 Studio 운영팀에 알려요. 한 줄만 적어 주셔도 충분해요.",
   crash: "화면이 멈춘 문제를 Studio 운영팀에 알려요. 앱 기록을 함께 보내면 원인을 찾을 수 있어요.",
   repeat: "같은 문제가 반복되고 있어요. 보내 주시면 원인을 찾는 데 도움이 돼요.",

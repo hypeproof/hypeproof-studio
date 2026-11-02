@@ -50,6 +50,7 @@ await page.handle({type:'beginCourse'});assert.equal(stored,'valid-old');assert.
 response='valid';await page.handle({type:'beginCourse'});assert.equal(stored,'valid-new');assert.equal(starts,1);assert.equal(page.panel,undefined);assert.equal(page.candidate,undefined);assert.equal(page.started,true);
 attach();await page.handle({type:'disconnectCourse'});assert.equal(stored,undefined);assert.equal(states.at(-1).state.profile,undefined);
 await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer'],'CGP-SHELL-R-014: 설정 opens the learner sheet, never the settings editor directly');
+await page.handle({type:'reportProblem'});assert.deepEqual(commands,['workbench.view.explorer','hypeproof-chat.reportProblem'],'REQ-STUDIO-FEEDBACK-ENTRY: 의견·문제 보내기 runs the existing report command');
 console.log('PASS host candidate transaction: 401/403/network/malformed, active-stream exclusion, preview/cancel, workspace/storage/revalidation rollback, committed entry, disconnect and navigation');
 
 response='waiting';stored='valid-old';const pending=page.handle({type:'connectCourse',token:'valid-first'});
