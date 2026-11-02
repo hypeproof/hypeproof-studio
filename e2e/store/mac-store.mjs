@@ -106,7 +106,7 @@ try {
       if (process.env.STORE_HAS_SEAT !== '1') {
         // No pass or class on this App: 실행 must not spend the refund right.
         await pressText(store, '실행', 'run without a seat');
-        await driver.wait(() => has(store, '실행하려면 이용권이나 수업 연결이 필요해요.'), 'seat needed notice', 30000);
+        await driver.wait(() => has(store, '실행하려면 내 이용권이 필요해요.'), 'seat needed notice', 30000);
         note('refund still offered after a seatless run: ' + await store.evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='환불')"));
         await shot('run-needs-seat');
       }
