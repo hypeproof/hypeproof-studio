@@ -80,8 +80,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
       const order = checkoutOrder;
       if (!order) return;
       let next: string;
+      let reason: string | undefined;
       try {
-        next = await client().orderState(order.id);
+        ({ state: next, block_reason: reason } = await client().orderState(order.id));
       } catch {
         next = "pending";
       }
@@ -93,7 +94,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
       }
       if (next === "blocked" || next === "failed" || next === "expired" || Date.now() - order.startedAt > CHECKOUT_LIMIT_MS) {
         checkoutOrder = undefined;
-        await push({ checkout: undefined, busy: false, error: next === "blocked" ? STORE_COPY.blocked : STORE_COPY.failed });
+        await push({ checkout: undefined, busy: false, error: next === "blocked" ? (reason === "duplicate_purchase" ? STORE_COPY.duplicate : STORE_COPY.blocked) : STORE_COPY.failed });
         return;
       }
       watchOrder();

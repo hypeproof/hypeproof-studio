@@ -93,8 +93,8 @@ export class StoreClient {
     if (!got || got.origin !== expected.origin || got.pathname !== expected.pathname || !/^sto_[0-9a-f]{32}$/.test(order?.order_id)) throw new StoreClientError("invalid_response");
     return order;
   }
-  async orderState(orderId: string): Promise<StoreOrderState> {
-    return (await this.call<{ state: StoreOrderState }>(`/orders/${encodeURIComponent(orderId)}`)).state;
+  async orderState(orderId: string): Promise<{ state: StoreOrderState; block_reason?: string }> {
+    return this.call<{ state: StoreOrderState; block_reason?: string }>(`/orders/${encodeURIComponent(orderId)}`);
   }
   refund(orderId: string) {
     return this.call<{ state: "refunded" }>(`/orders/${encodeURIComponent(orderId)}/refund`, { method: "POST", body: {} });
@@ -126,6 +126,7 @@ export const STORE_COPY = {
   checkoutOpen: "브라우저에서 결제를 마치면 여기에 자동으로 설치돼요.",
   paid: (title: string) => `「${title}」을 설치했어요. '실행'을 누르면 다음 대화에 붙어요.`,
   blocked: "판매자와 같은 기기, 카드 또는 네트워크로는 살 수 없어요. 결제는 자동으로 취소됐어요.",
+  duplicate: "이미 산 스킬이라 이번 결제는 자동으로 취소됐어요.",
   failed: "결제가 끝나지 않았어요. 돈은 나가지 않았어요.",
   refunded: "환불했어요. 스킬도 지웠어요.",
   needsSeat: "실행하려면 내 이용권이 필요해요. 실행하기 전까지는 환불할 수 있어요.",
@@ -147,6 +148,7 @@ const ERRORS: Record<string, string> = {
   minor_paid_purchase_blocked: STORE_COPY.minorBuy,
   blocked_shared_signal: STORE_COPY.blocked,
   already_installed: "이미 설치한 스킬이에요.",
+  payment_in_progress: "이 스킬의 결제를 확인하고 있어요. 잠시 뒤 다시 확인해 주세요.",
   own_item: "내가 올린 스킬은 살 수 없어요.",
   seller_monthly_cap: "이 판매자는 이번 달 판매 한도에 닿았어요.",
   already_run: "이미 실행한 스킬은 환불할 수 없어요.",
