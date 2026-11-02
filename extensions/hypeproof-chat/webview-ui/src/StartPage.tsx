@@ -236,7 +236,7 @@ export function StartPage() {
         <div className="studio-card-footer">{freeCard ? FREE_START_COPY.footer : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? FREE_START_COPY.footer : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
-    <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <ChatIcon kind="external" size={16} /></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">만들기 · 검토하기 · 내 것으로</span></footer>
+    <footer className="studio-bottom"><button onClick={() => postToHost({ type: "startSupport" })}>도움 요청 · 문제 신고</button><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <ChatIcon kind="external" size={16} /></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">만들기 · 검토하기 · 내 것으로</span></footer>
   </main>;
 }
 

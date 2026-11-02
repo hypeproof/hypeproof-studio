@@ -67,7 +67,7 @@ export class ChatErrorBoundary extends Component<Props, State> {
             대화는 안전하게 저장됐어요. 아래 버튼으로 다시 열 수 있어요.
           </p>
           <pre className="hps-fatal-detail">{err.message}</pre>
-          <div className="hps-fatal-row">
+          <div className="hps-fatal-row"><button className="hps-fatal-btn-ghost" onClick={() => postToHost({ type: "supportFallback" })}>도움 요청</button>
             <button className="hps-fatal-btn" onClick={this.reload}>
               다시 열기
             </button>

@@ -25,6 +25,7 @@ const EXCLUDED = "포함하지 않는 것: AI 기억, 개인 메모";
 function fakeVscode() {
   const v = {
     dialogs: [], answer: undefined, inputs: [], picks: [], infos: [], warnings: [], progress: 0,
+    commands: { registerCommand: () => ({ dispose() {} }) },
     window: {
       showWarningMessage: async (message, options, ...actions) => {
         if (options && typeof options === "object" && options.modal) { v.dialogs.push({ message, options, actions }); v.onDialog?.(); return v.answer; }
@@ -52,7 +53,7 @@ async function load(entry, stubs = {}) {
   return (vscode, fetchImpl) => {
     const mod = { exports: {} };
     vm.runInNewContext(out.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), fetch: (...a) => fetchImpl(...a),
-      console: { log() {}, error() {}, warn() {} }, Buffer, process, setTimeout, clearTimeout, setImmediate, AbortSignal, AbortController, URL, TextEncoder, TextDecoder, Response, crypto: webcrypto, structuredClone });
+      console: { log() {}, error() {}, warn() {} }, Buffer, process, setTimeout, clearTimeout, setInterval: () => ({ unref() {} }), clearInterval: () => {}, setImmediate, AbortSignal, AbortController, URL, TextEncoder, TextDecoder, Response, crypto: webcrypto, structuredClone });
     return mod.exports;
   };
 }
@@ -79,13 +80,16 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
 
 // ── H2 the real 문제 신고하기 command ─────────────────────────────────────────────────────────────────────────────────────
 {
-  const make = await load("src/reportProblem.ts", { "^\\./extension$": 'export const TOKEN_KEY = "synthetic.token.key";' });
+  const make = await load('export { runReportProblemCommand } from "./src/reportProblem.ts"; export { registerSupportOutbox } from "./src/supportOutboxHost.ts";', { "^\\./extension$": 'export const TOKEN_KEY = "synthetic.token.key";' });
   const turns = [{ role: "system", content: "SYSTEM" }, { role: "user", content: "내 질문 PRIVATE-TURN" }, { role: "assistant", content: "AI 답" }];
   const run = async ({ answer, includeTurns }) => {
     const v = fakeVscode(), posts = [];
     v.answer = answer; v.inputs = ["버튼을 눌러도 아무 일도 없어요 PRIVATE-DESC", "010-0000-0000"]; v.picks = [includeTurns ? 1 : 0];
-    const { runReportProblemCommand } = make(v, async (url, init) => { posts.push({ url, body: init.body, method: init.method }); return Response.json({ report_id: "R-1" }); });
-    await runReportProblemCommand({ context: { secrets: { get: async () => undefined }, extension: { packageJSON: { version: "0.0.0-synthetic" } } }, getLastRequestId: () => "req-1", getProfileId: () => "profile-1", getRecentTurns: () => turns, getAudience: () => "classroom" });
+    const { runReportProblemCommand, registerSupportOutbox } = make(v, async (url, init) => { posts.push({ url, body: init.body, method: init.method }); return Response.json({ report_id: "R-1" }); });
+    const secrets = new Map();
+    const context = { globalStorageUri: { fsPath: require("node:fs").mkdtempSync(path.join(require("node:os").tmpdir(), "cs-consent-")) }, subscriptions: [], globalState: { get: () => false }, secrets: { get: async k => secrets.get(k), store: async (k,v) => secrets.set(k,v) }, extension: { packageJSON: { version: "0.0.0-synthetic" } } };
+    registerSupportOutbox(context);
+    await runReportProblemCommand({ context, getLastRequestId: () => "req-1", getProfileId: () => "profile-1", getRecentTurns: () => turns, getAudience: () => "classroom" });
     return { v, posts };
   };
   for (const includeTurns of [true, false]) {
@@ -96,7 +100,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
     const lines = cancelled.v.dialogs[0].options.detail.split("\n");
     assert.equal(lines[0], "받는 곳: Studio 운영팀 (문제 신고 채널) · service.invalid", "recipient line");
     assert.equal(lines.at(-1), EXCLUDED, "exclusion line");
-    assert.ok(lines.some((l) => /^• 내가 쓴 문제 설명 \([\d,]+ 바이트\)$/.test(l)) && lines.some((l) => /^• 내가 적은 연락처 \([\d,]+ 바이트\)$/.test(l)));
+    assert.ok(lines.some((l) => /^• 내가 쓴 문제 설명.* \([\d,]+ 바이트\)$/.test(l)) && lines.some((l) => /^• 내가 적은 연락처 \([\d,]+ 바이트\)$/.test(l)));
     assert.equal(lines.filter((l) => l.startsWith("• 최근 대화")).length, includeTurns ? 2 : 0, "each included turn is its own sized line");
     const sent = await run({ answer: "확인하고 보내기", includeTurns });
     assert.equal(sent.posts.length, 1, "approved: one POST"); assert.equal(sent.posts[0].url, "https://service.invalid/v1/report");
@@ -104,7 +108,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
     assert.equal(body.description, "버튼을 눌러도 아무 일도 없어요 PRIVATE-DESC");
     assert.deepEqual(body.recent_turns?.map((t) => t.role), includeTurns ? ["user", "assistant"] : undefined);
     const detail = sent.v.dialogs[0].options.detail, item = (name, v) => new RegExp(`• ${name} \\(${Buffer.byteLength(JSON.stringify(v)).toLocaleString("ko-KR")} 바이트\\)`);
-    assert.match(detail, item("내가 쓴 문제 설명", body.description), "the size shown is the size sent");
+    assert.match(detail, item("내가 쓴 문제 설명.*", body.description), "the size shown is the size sent");
     if (includeTurns) assert.match(detail, item("최근 대화 1 · 내가 보낸 말", body.recent_turns[0]));
     assert.match(sent.v.infos[0] ?? "", /R-1/);
   }

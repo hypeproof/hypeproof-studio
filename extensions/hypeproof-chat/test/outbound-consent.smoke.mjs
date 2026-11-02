@@ -84,13 +84,13 @@ try {
   const body={description:'버튼이 안 눌려요 한😀',contact:'010',recent_turns:[{role:'user',content:'내 질문'},{role:'assistant',content:'AI 답'}],attachments:{os:'x'},request_id:'r',profile_id:'p'};
   let m=null;assert.equal(await confirmProblemReport('https://api.invalid/v1',body,async x=>(m=x,false)),null);
   assert.equal(m.recipient,'Studio 운영팀 (문제 신고 채널) · api.invalid');
-  assert.deepEqual(m.items.map(i=>i.name),['내가 쓴 문제 설명','내가 적은 연락처','최근 대화 1 · 내가 보낸 말','최근 대화 2 · AI의 답','앱 정보 (버전·운영체제·요청 번호·프로필)']);
+  assert.deepEqual(m.items.map(i=>i.name),['내가 쓴 문제 설명 (전송 전 이 기기에 보관, 실패 시 자동 재전송)','내가 적은 연락처','최근 대화 1 · 내가 보낸 말','최근 대화 2 · AI의 답','앱 정보 (버전·운영체제·요청 번호·프로필)']);
   assert.equal(m.items[0].bytes,Buffer.byteLength(JSON.stringify(body.description)));assert.equal(m.items[2].bytes,Buffer.byteLength(JSON.stringify(body.recent_turns[0])));
   assert.equal(await confirmProblemReport('https://api.invalid/v1',body,undefined),null,'no adapter, no report');
   const frozen=await confirmProblemReport('https://api.invalid/v1',body,async()=>{body.description='changed after approval';return true;});
   assert.equal(JSON.parse(frozen).description,'버튼이 안 눌려요 한😀','the approved body is what is sent');
   const posted=[];assert.equal((await postProblemReport('https://api.invalid/v1',frozen,'t',async(u,i)=>{posted.push([u,i.body]);return Response.json({report_id:'R1'});})).ok,true);assert.deepEqual(posted,[['https://api.invalid/v1/report',frozen]]);
-  assert.deepEqual(reportManifestItems({description:'d'}).map(i=>i.name),['내가 쓴 문제 설명','앱 정보 (버전·운영체제·요청 번호·프로필)'],'no turns, no contact: none listed');
+  assert.deepEqual(reportManifestItems({description:'d'}).map(i=>i.name),['내가 쓴 문제 설명 (전송 전 이 기기에 보관, 실패 시 자동 재전송)','앱 정보 (버전·운영체제·요청 번호·프로필)'],'no turns, no contact: none listed');
  }
  { // gallery session record: the bytes listed are the bytes sent, even if the spool grows after the dialog
   writeFileSync(join(root,'events.jsonl'),'before\n');const read=readSessionSnapshot({dir:root,sessionId:'s',day:'d'});assert.equal(read.ok,true);

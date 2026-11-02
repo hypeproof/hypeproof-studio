@@ -10,6 +10,14 @@ import type { FailureFacts } from "./problemReport";
  */
 type Sink = (facts: FailureFacts) => void;
 let sink: Sink | undefined;
+let automatic: Sink | undefined;
+export function setAutomaticProblemSink(next: Sink): { dispose(): void } {
+  automatic = next;
+  return { dispose: () => { if (automatic === next) automatic = undefined; } };
+}
+export function dispatchAutomaticProblem(facts: FailureFacts): void {
+  try { automatic?.(facts); } catch { /* reporting never interrupts work */ }
+}
 
 export function setProblemSink(next: Sink): { dispose(): void } {
   sink = next;
@@ -17,7 +25,7 @@ export function setProblemSink(next: Sink): { dispose(): void } {
 }
 
 export function noteAppProblem(facts: FailureFacts): void {
-  try { sink?.(facts); } catch { /* reporting never breaks the failing path */ }
+  try { if (sink) sink(facts); else dispatchAutomaticProblem(facts); } catch { /* reporting never breaks the failing path */ }
 }
 
 /**

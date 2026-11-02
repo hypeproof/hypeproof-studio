@@ -8319,3 +8319,12 @@ option writes it; NOT RUN without the vendored binary). The provider smoke also 
 `uploadAllPending` sends on an uploading cohort hold none, that the Service's prompt record (the last user message, as `lastUserMessageText`
 extracts it) holds none on proxy and on agent-sdk (real CLI request bodies),
 that the agent-sdk turn is asked for no transcript, trial seats, and that unknown kinds fail closed.
+
+## Durable customer support (2026-11-02, #3384)
+
+REQ-H13 extends REQ-H10/H11 with pre-login and failed-renderer access, host-independent
+fault observation, durable consented delivery and a receipt without a GitHub account.
+The automatic ticket predicate is the bounded machine-fault allowlist in
+`isAutomaticProblem`: normal safety denials, invalid entry, expired access and cancellation
+are excluded. Existing diagnostic collection opt-in is unchanged. See
+[the support contract](requirements/studio-support.md) for persistence, limits and acceptance.

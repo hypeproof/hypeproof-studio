@@ -39,6 +39,7 @@ import {
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
 import { ChalkContractHost } from "./chalkContract";
+import { registerSupportOutbox } from "./supportOutboxHost";
 import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
@@ -80,6 +81,24 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  try { await activateCore(context); }
+  catch {
+    noteAppProblem({ step: "other", code: "startup_failed" });
+    const choice = await vscode.window.showErrorMessage("Studio를 시작하지 못했어요. 도움 요청으로 앱 정보를 보낼 수 있어요.", "도움 요청", "브라우저에서 도움 요청");
+    if (choice === "도움 요청") await runReportProblemCommand({ context, getLastRequestId: () => undefined, getProfileId: () => undefined, getRecentTurns: () => [], getAudience: () => "solo" });
+    else if (choice === "브라우저에서 도움 요청") await vscode.env.openExternal(vscode.Uri.parse("https://api.hypeproof-ai.xyz/v1/report/help"));
+  }
+}
+
+async function activateCore(context: vscode.ExtensionContext) {
+  registerSupportOutbox(context);
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.supportInBrowser", () => {
+    const endpoint = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    return vscode.env.openExternal(vscode.Uri.parse(endpoint.replace(/\/+$/, "") + "/report/help"));
+  }));
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.supportFallback", () => runReportProblemCommand({
+    context, getLastRequestId: () => undefined, getProfileId: () => undefined, getRecentTurns: () => [], getAudience: () => "solo",
+  })));
   // CGP-SHELL-R-035: first, while globalState still tells a fresh install from an updated profile.
   try { await recordWhatsNewBaseline(context.globalState, learnerNotes(LEARNER_RELEASE_NOTES)); }
   catch { console.warn('HypeProof: could not record the what\'s-new baseline.'); }
@@ -256,6 +275,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
     || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', ACCOUNTS_ENABLED_DEFAULT), accountService, accountSite);
   const accounts = accountEnabled ? new AccountSession({
+    problem: code => noteAppProblem({ step: "access", code }),
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
     openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
@@ -584,9 +604,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
     { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
-    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
+    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async (source?: string) => {
       // REQ-STUDIO-PROBLEM-REPORT — the in-panel form first; the input boxes only when no chat panel can show it.
-      if (await provider.openProblemReport("manual")) return;
+      if (source !== "start" && await provider.openProblemReport("manual")) return;
       await runReportProblemCommand({
         context,
         getLastRequestId: () => provider.getLastRequestId(),

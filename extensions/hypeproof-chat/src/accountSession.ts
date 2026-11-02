@@ -28,6 +28,7 @@ interface Options {
   /** Resolves the original desktop window through VS Code's URI router. No credentials. */
   createReturnUri?(state: string): PromiseLike<string>;
   returned?(): PromiseLike<void>;
+  problem?(code: "account_login_failed" | "account_browser_failed"): void;
   invalidated?(sessionId: string): Promise<void>;
   /** Serializes mutation across extension-host windows, not only concurrent requests in one host. */
   lock?<T>(work: () => Promise<T>): Promise<T>;
@@ -198,17 +199,22 @@ export class AccountSession {
       const link = copyableSignInLink(url, this.options.site, d.user_code, [d.device_code]);
       this.device = { code: d.device_code, url, link, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation, ...(freeCredential ? { freeCredential } : {}) };
       this.state = { status: 'waiting', userCode: d.user_code, expiresAt, message: '브라우저에서 Google 로그인 후 이 Studio 연결을 승인해 주세요.', ...(link ? { link: 'ready' as const } : {}) }; this.emit();
-      if (!await this.options.openBrowser(url)) { this.state.message = link ? '브라우저를 열지 못했어요. 로그인 창 다시 열기를 누르거나 링크를 복사해 다른 브라우저에서 열어 주세요.' : '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
+      if (!await this.options.openBrowser(url)) { try { this.options.problem?.("account_browser_failed"); } catch {} this.state.message = link ? '브라우저를 열지 못했어요. 로그인 창 다시 열기를 누르거나 링크를 복사해 다른 브라우저에서 열어 주세요.' : '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
       this.schedule();
-    } catch (e) { if (generation === this.generation) { this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit(); } }
+    } catch (e) { if (generation === this.generation) { this.noteFailure(e); this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit(); } }
+  }
+  private noteFailure(error?: unknown): void {
+    if (error instanceof AccountError && /denied|expired|cancel|revoked|suspended|deleted|pass|trial|slow_down/.test(error.code)) return;
+    try { this.options.problem?.("account_login_failed"); } catch { /* diagnostics must not affect login */ }
   }
   private schedule(): void { if (this.timer) clearTimeout(this.timer); if (this.device) this.timer = setTimeout(() => { void this.poll(); }, this.device.interval); }
   async reopen(): Promise<void> {
     if (!this.device) return;
     try {
       const opened = await this.options.openBrowser(this.device.url);
+      if (!opened) this.noteFailure();
       this.state.message = opened ? '브라우저에서 연결 번호를 확인하고 승인해 주세요.' : '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.';
-    } catch { this.state.message = '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.'; }
+    } catch (e) { this.noteFailure(e); this.state.message = '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.'; }
     this.emit();
   }
   /** REQ-L13 ⑧: copies the verification URL this flow opens; the outcome is shown as it happened. */
@@ -272,6 +278,7 @@ export class AccountSession {
       await this.completeReturn();
     } catch (e) {
       if (this.device !== d) return;
+      this.noteFailure(e);
       if (e instanceof AccountError && (e.code === 'unavailable' || e.code === 'slow_down' || e.code === 'rate_limited' || /^http_5/.test(e.code))) { if (e.code === 'slow_down') d.interval = Math.min(d.interval + 1000, 15000); this.state.message = '연결을 다시 확인하고 있어요. 잠시만 기다려 주세요.'; this.emit(); this.schedule(); return; }
       this.cancel(false); this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit();
     }

@@ -95,6 +95,9 @@ export interface FreeStartView {
   refillsAt?: number;
 }
 export type StartRequest =
+  | { type: "startSupport" }
+  | { type: "supportFallback" }
+  | { type: "webviewError"; messageId?: string; message: string; stack: string; componentStack: string }
   | { type: "startReady" }
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }

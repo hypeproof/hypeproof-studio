@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { AccountSession } from '../src/accountSession.ts';
+const problems=[];
+const base={service:'https://api.hypeproof-ai.xyz/v1',site:'https://hypeproof-ai.xyz',label:'synthetic',secrets:{get:async()=>undefined,store:async()=>{},delete:async()=>{}},openBrowser:async()=>true,problem:code=>problems.push(code)};
+const failed=new AccountSession({...base,fetch:async()=>{throw Error('offline');}});
+await failed.start(); assert.deepEqual(problems,['account_login_failed']);
+problems.length=0;
+const cancelled=new AccountSession({...base,fetch:async()=>Response.json({error:'device_denied'},{status:403})});
+await cancelled.start(); assert.deepEqual(problems,[]);
+console.log('PASS: internally handled account failure is observed; expected denial is not a ticket');

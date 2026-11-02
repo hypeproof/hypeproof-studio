@@ -65,6 +65,16 @@ export function problemDiagnostic(f: FailureFacts, env: { appVersion: string; pl
   };
 }
 
+/** Only observed faults, not normal denials or user cancellation, create automatic diagnostics. */
+export function isAutomaticProblem(f: FailureFacts): boolean {
+  const code = f.code ?? f.kind ?? f.type ?? "";
+  if (["cancelled", "canceled", "aborted", "invalid_code", "invalid_token", "expired", "trial_expired", "free_daily_cap", "pass_expired", "safety_blocked"].includes(code)) return false;
+  if (f.step === "safety") return false;
+  if (f.status && f.status >= 500) return true;
+  if (f.status === 408 || f.status === 429) return true;
+  return ["network_unreachable", "request_timeout", "workspace_prepare_failed", "update_install_failed", "sdk_required", "account_login_failed", "account_browser_failed", "renderer_failed", "startup_failed", "trial_model_unpriced", "usage_bound_unpriced"].includes(code);
+}
+
 /** The exact automatic-report body: the allowlisted keys and nothing else. */
 export function autoReportBody(d: ProblemDiagnostic): Record<string, string | number> {
   const body: Record<string, string | number> = {

@@ -1,3 +1,4 @@
+import { noteAppProblem } from "./problemReportHost";
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -828,6 +829,9 @@ export class StartPage {
 
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.type === "webviewError") { noteAppProblem({ step: "other", code: "renderer_failed" }); return; }
+    if (msg.type === "supportFallback") { await vscode.commands.executeCommand("hypeproof-chat.supportFallback"); return; }
+    if (msg.type === "startSupport") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start"); return; }
     if (msg.type.startsWith("account")) {
       if (!this.accounts) return;
       this.error = undefined;

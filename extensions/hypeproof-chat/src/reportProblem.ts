@@ -1,3 +1,4 @@
+import { submitSupportReport, supportResultText } from "./supportOutboxHost";
 // Issue #64: in-Studio bug report. Since REQ-STUDIO-PROBLEM-REPORT (2026-10-29) the chat panel's in-panel form is
 // the primary surface; this QuickInput cascade remains only as the fallback when no chat panel can be shown. Collects a short description + auto-
 // attached metadata (request_id, jti hash, profile, version, OS) and POSTs
@@ -32,7 +33,6 @@ import {
   extractJtiUnverified,
   sanitizeRecentTurns,
   confirmProblemReport,
-  postProblemReport,
 } from "./reportProblemHelpers";
 import { confirmOutbound } from "./outboundConsentHost";
 
@@ -90,16 +90,16 @@ export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<
   // Step 1: description.
   const description = await vscode.window.showInputBox({
     title: "문제 신고하기",
-    prompt: "무엇이 안 되나요? (10자 이상)",
+    prompt: "무엇이 안 되나요? (선택 — 앱 정보는 자동으로 붙어요)",
     placeHolder: "예: 토큰 붙여넣었는데 '틀리다'고 떠요. 다섯 번 다시 해봐도 같은 메시지.",
     ignoreFocusOut: true,
     validateInput: (v) => {
-      if (!v || v.trim().length < 10) return "10자 이상 적어주세요.";
+
       if (v.length > 5000) return "5000자 이하로 줄여주세요.";
       return null;
     },
   });
-  if (description === undefined || description.trim().length === 0) return;
+  if (description === undefined) return;
 
   // Step 2: include recent turns? (default: no)
   const includeChoice = await vscode.window.showQuickPick(
@@ -138,7 +138,7 @@ export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<
   const attachments = collectMetadata(deps, jtiHash);
   const recentTurns = includeRecentTurns ? sanitizeRecentTurns(deps.getRecentTurns()) : undefined;
   const body: Record<string, unknown> = {
-    description: description.trim(),
+    description: description.trim() || "앱 사용 중 도움이 필요해요.",
     request_id: deps.getLastRequestId(),
     profile_id: deps.getProfileId(),
     contact: contact.trim() || undefined,
@@ -155,11 +155,11 @@ export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "문제 신고 접수 중…", cancellable: false },
     async () => {
-      const result = await postProblemReport(proxyUrl, frozen, token);
+      const result = await submitSupportReport(proxyUrl, frozen);
       if (result.ok) {
         vscode.window.showInformationMessage(reportReceipt(audience, result.reportId));
       } else {
-        vscode.window.showWarningMessage(`신고 전송 실패: ${result.reason}`);
+        vscode.window.showWarningMessage(supportResultText(result));
       }
     },
   );

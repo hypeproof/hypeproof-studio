@@ -75,7 +75,7 @@ export interface SubmitFail { ok: false; reason: string; httpStatus?: number }
  */
 export function reportManifestItems(body: { description?: unknown; contact?: unknown; recent_turns?: unknown; attachments?: unknown; request_id?: unknown; profile_id?: unknown }): OutboundItem[] {
   const size = (v: unknown) => contentBytes(JSON.stringify(v ?? null));
-  const items: OutboundItem[] = [{ name: "내가 쓴 문제 설명", bytes: size(body.description) }];
+  const items: OutboundItem[] = [{ name: "내가 쓴 문제 설명 (전송 전 이 기기에 보관, 실패 시 자동 재전송)", bytes: size(body.description) }];
   if (typeof body.contact === "string" && body.contact) items.push({ name: "내가 적은 연락처", bytes: size(body.contact) });
   if (Array.isArray(body.recent_turns)) body.recent_turns.forEach((t: { role?: string }, i: number) => items.push({ name: `최근 대화 ${i + 1} · ${t?.role === "user" ? "내가 보낸 말" : "AI의 답"}`, bytes: size(t) }));
   items.push({ name: "앱 정보 (버전·운영체제·요청 번호·프로필)", bytes: size({ attachments: body.attachments, request_id: body.request_id, profile_id: body.profile_id }) });
@@ -99,7 +99,7 @@ export async function postProblemReport(proxyBase: string, frozen: string, token
   if (token) headers["authorization"] = "Bearer " + token;
   let res: Response;
   try {
-    res = await fetchImpl(url, { method: "POST", headers, body: frozen });
+    res = await fetchImpl(url, { method: "POST", headers, body: frozen, signal: AbortSignal.timeout(10000), redirect: "error" });
   } catch (err) {
     return { ok: false, reason: `네트워크 오류: ${(err as Error).message}` };
   }

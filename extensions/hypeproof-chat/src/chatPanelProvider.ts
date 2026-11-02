@@ -1,3 +1,4 @@
+import { submitSupportReport, supportResultText } from "./supportOutboxHost";
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
@@ -100,10 +101,10 @@ import { fetchSdkSeed } from "./sdkSeedFetch";
 import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
-import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
-import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
+import { ProblemTracker, problemDiagnostic, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
+import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink, dispatchAutomaticProblem } from "./problemReportHost";
 import { collectReportMetadata } from "./reportProblem";
-import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
+import { confirmProblemReport, extractJtiUnverified, hashJti, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
@@ -3311,9 +3312,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const diagnostic = problemDiagnostic(facts, { appVersion: typeof version === "string" ? version : "unknown", platform: process.platform, arch: process.arch });
     this.lastProblem = { diagnostic, at: Date.now() };
     const note = this.problemTracker.note(diagnostic);
-    if (note.send && autoProblemReportEnabled(this.context?.globalState)) {
-      void postAutoReport(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"), diagnostic);
-    }
+    dispatchAutomaticProblem(facts);
     if (note.offer) void this.post({ type: "problemReportOffer", offer: { reason: "repeat" } });
   }
 
@@ -3353,9 +3352,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     const frozen = await confirmProblemReport(proxyUrl, body, confirmOutbound);
     if (frozen === null) return true;
-    const result = await postProblemReport(proxyUrl, frozen, token);
+    const result = await submitSupportReport(proxyUrl, frozen);
     if (result.ok) void vscode.window.showInformationMessage(reportReceipt(audience, result.reportId));
-    else void vscode.window.showWarningMessage(`문제를 보내지 못했어요: ${result.reason}`);
+    else void vscode.window.showWarningMessage(supportResultText(result));
     return true;
   }
 
@@ -7962,6 +7961,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // REQ-STUDIO-PROBLEM-REPORT — the error card's 문제 보내기 opens the in-panel form with that failure's diagnostic.
         if (!(await this.openProblemReport(msg.source === "error" ? "error" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
         return;
+      case "supportFallback":
+        void vscode.commands.executeCommand("hypeproof-chat.supportFallback");
+        break;
       case "problemReportAnswer":
         if (this.problemForm && msg.id === this.problemForm.id) this.problemForm.finish(parseProblemAnswer(msg.answer));
         return;
@@ -8192,6 +8194,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.publishSite();
         return;
       case "webviewError":
+        this.noteProblem({ step: "other", code: "renderer_failed" });
         // S-04 (#48). Log to output channel so the trace survives a panel
         // reload; don't crash the host.
         console.error(

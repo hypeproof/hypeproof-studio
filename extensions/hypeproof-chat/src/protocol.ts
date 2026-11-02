@@ -730,6 +730,7 @@ export type WebviewMessage = (
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
   | { type: "openReportModal"; source?: "error" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "supportFallback" }
   | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
   | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
   | { type: "problemReportAutoSetting"; enabled: boolean }
