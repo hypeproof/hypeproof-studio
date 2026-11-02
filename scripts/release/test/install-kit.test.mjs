@@ -13,6 +13,8 @@ import test from 'node:test';
 import {
   KIT_ZIP_RE, isFreeStart, kitDirName, kitZipName, notesSection, oneLiner, renderInstaller, renderReadme,
   renderStart, withInstallSection, writeKit, verifyMacArchive,
+  WINDOWS_UPDATER_NAME, announcement, installProblems, renderWindowsUpdater, windowsNotesSection, windowsOneLiner,
+  writeWindowsUpdater,
 } from '../install-kit.mjs';
 import {expectedAppVersion, buildTagMessage} from '../build-contract.mjs';
 import {isAppPackage} from '../../../e2e/unified-release/artifact.mjs';
@@ -494,4 +496,129 @@ test('renderer follows the existing build contract for marked and legacy RCs', (
     const script = renderInstaller({...base,tag});
     assert.ok(script.includes('HPS_PRODUCT_VERSION="2026.1101.0-rc.1"'), 'programmatic legacy default remains compatible');
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+// ── Windows update command (update-windows.cmd, 2026-11-02) ─────────────────
+const EXE = 'HypeProof.StudioUserSetup-x64-1.116.07355.exe';
+const winBase = {tag: 'v2026.1102.3', exeName: EXE, exeSha256: H('d')};
+const PS_TAIL = /\r?\n#PS#\r?\n/;
+
+test('update-windows.cmd is CRLF, pinned to the tag and exe SHA-256, and splits once at the marker', () => {
+  const cmd = renderWindowsUpdater(winBase);
+  assert.ok(!cmd.includes('@@'));
+  assert.equal(cmd.replace(/\r\n/g, '').includes('\n'), false, 'every line ends in CRLF');
+  assert.match(cmd, /^\$Tag = 'v2026\.1102\.3'\r$/m);
+  assert.match(cmd, new RegExp(`^\\$Exe = '${EXE.replaceAll('.', '\\.')}'\\r$`, 'm'));
+  assert.match(cmd, new RegExp(`^\\$Sha = '${H('d')}'\\r$`, 'm'));
+  assert.ok(cmd.includes('/VERYSILENT') && cmd.includes('/MERGETASKS=!runcode'));
+  // #3412 split at the first "#PS#", which a comment also contained, and ran the cmd header as PowerShell.
+  const parts = cmd.split(PS_TAIL);
+  assert.equal(parts.length, 2, 'exactly one marker line');
+  assert.ok(parts[1].startsWith('[Console]::OutputEncoding'));
+  assert.ok(parts[0].includes("-split '\\r?\\n#PS#\\r?\\n', 2"), 'the cmd header splits on the line-anchored marker');
+  assert.throws(() => renderWindowsUpdater({...winBase, exeName: "HypeProof.StudioUserSetup-x64-1'; calc.exe"}), /per-user installer/);
+  assert.throws(() => renderWindowsUpdater({...winBase, exeName: 'HypeProof.StudioSetup-x64-1.116.07355.exe'}), /per-user installer/);
+  assert.throws(() => renderWindowsUpdater({...winBase, exeSha256: 'abc'}), /sha256/);
+  assert.throws(() => renderWindowsUpdater({...winBase, tag: 'latest'}), /release tag/);
+});
+
+test('render-windows hashes the accepted installer it is given', () => {
+  const dir = tmp('hps-win-kit-');
+  try {
+    const exe = path.join(dir, EXE);
+    fs.writeFileSync(exe, 'accepted installer bytes');
+    assert.deepEqual(writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, path.join(dir, 'out')), [WINDOWS_UPDATER_NAME]);
+    const cmd = fs.readFileSync(path.join(dir, 'out', WINDOWS_UPDATER_NAME), 'utf8');
+    assert.ok(cmd.includes(`$Sha = '${sha256(exe)}'`));
+    assert.equal(isAppPackage(WINDOWS_UPDATER_NAME), false, 'the acceptance receipts never count the updater');
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+// The section Jay added by hand to v2026.1102.2 (2026-11-02): the generated one keeps its markers,
+// asset name and PowerShell form, and replaces it instead of duplicating it.
+const HAND_MADE = [
+  '<!-- hps-install-windows:v1 -->', '## Install or update on Windows (x64)', '',
+  'Double-click [`update-windows.cmd`](https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1102.3/update-windows.cmd)', '',
+  '```powershell', 'irm https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1102.3/update-windows.cmd -OutFile "$env:TEMP\\hps-update.cmd"; & "$env:TEMP\\hps-update.cmd"', '```',
+  '<!-- /hps-install-windows:v1 -->',
+].join('\n');
+
+test('release notes carry the Mac and Windows commands once, Mac first', () => {
+  const tag = 'v2026.1102.3';
+  assert.equal(windowsOneLiner(tag), HAND_MADE.split('\n')[6]);
+  const both = withInstallSection(`${HAND_MADE}\n\n## What's Changed\n- x\n`, tag, {mac: true, windows: true});
+  assert.ok(both.startsWith('<!-- hps-install-mac:v1 -->'));
+  assert.equal(both.split('<!-- hps-install-windows:v1 -->').length, 2);
+  assert.ok(both.indexOf('hps-install-mac:v1') < both.indexOf('hps-install-windows:v1'));
+  assert.ok(both.indexOf('<!-- /hps-install-windows:v1 -->') < both.indexOf("## What's Changed"));
+  assert.ok(both.includes(windowsOneLiner(tag)) && both.includes(oneLiner(tag)));
+  assert.equal(withInstallSection(both, tag, {mac: true, windows: true}), both);
+  const winOnly = withInstallSection(both, tag, {mac: false, windows: true});
+  assert.ok(winOnly.startsWith('<!-- hps-install-windows:v1 -->') && !winOnly.includes('hps-install-mac'));
+  assert.match(windowsNotesSection('v2026.1102.3-rc.1'), /over the installed HypeProof Studio/);
+});
+
+test('a release whose platform lacks its installer or notes command cannot publish', () => {
+  const tag = 'v2026.1102.3';
+  const body = withInstallSection('## What changed\n', tag, {mac: true, windows: true});
+  const assets = [{name: 'install-mac.sh'}, {name: WINDOWS_UPDATER_NAME}];
+  const both = ['darwin-arm64', 'win32-x64'];
+  assert.deepEqual(installProblems({tag, platforms: both, body, assets}), []);
+  assert.match(installProblems({tag, platforms: both, body, assets: assets.slice(0, 1)}).join('\n'), /Windows: release asset update-windows\.cmd is missing/);
+  assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag), assets}).join('\n'), /Windows: the release notes lack/);
+  assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag, {mac: false, windows: true}), assets}).join('\n'), /macOS: the release notes lack/);
+  assert.deepEqual(installProblems({tag, platforms: ['darwin-arm64'], body: withInstallSection('', tag), assets: assets.slice(0, 1)}), []);
+  // A section pinned to another tag does not count.
+  assert.match(installProblems({tag: 'v2026.1102.4', platforms: both, body, assets}).join('\n'), /lack/);
+});
+
+test('the announcement leads with both commands', () => {
+  const tag = 'v2026.1102.3';
+  const text = announcement(withInstallSection("## What's Changed\n* a\n", tag, {mac: true, windows: true}), tag);
+  const lines = text.split('\n');
+  assert.equal(lines[0], `Install / update ${tag}`);
+  assert.equal(lines[2], oneLiner(tag));
+  assert.equal(lines[4], windowsOneLiner(tag));
+  assert.ok(!text.includes('<!--') && text.includes("## What's Changed"));
+  assert.ok(lines.slice(0, 5).join('\n').length < 700, 'survives the 800-character Discord template truncation');
+  assert.equal(announcement('## Notes\n', tag), '## Notes\n');
+});
+
+// Runs the PowerShell part the way the .cmd does, with the asset-dir seam and dry run, so it never
+// closes or installs anything. Skipped where pwsh is absent; GitHub's Ubuntu and macOS images have it.
+const pwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1'], {encoding: 'utf8'}).status === 0;
+test('update-windows.cmd verifies the pinned installer before running it', {skip: !pwsh && 'pwsh not installed'}, () => {
+  const dir = tmp('hps-win-run-');
+  try {
+    const assets = path.join(dir, 'assets');
+    fs.mkdirSync(assets);
+    const exe = path.join(assets, EXE);
+    fs.writeFileSync(exe, 'accepted installer bytes');
+    writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, dir);
+    const run = () => spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command',
+      "$s = [IO.File]::ReadAllText($env:HPS_SELF, [Text.Encoding]::UTF8); iex ($s -split '\\r?\\n#PS#\\r?\\n', 2)[1]"], {
+      encoding: 'utf8', env: {...process.env, HPS_SELF: path.join(dir, WINDOWS_UPDATER_NAME), HPS_INSTALL_ASSET_DIR: assets, HPS_INSTALL_DRY_RUN: '1', TMPDIR: dir, TEMP: dir},
+    });
+    const good = run();
+    assert.equal(good.status, 0, good.stdout + good.stderr);
+    assert.match(good.stdout, /DRY RUN: .*HypeProof\.StudioUserSetup-x64-1\.116\.07355\.exe \/VERYSILENT \/SUPPRESSMSGBOXES \/NORESTART \/MERGETASKS=!runcode/);
+    fs.writeFileSync(exe, 'tampered bytes');
+    const bad = run();
+    assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+    assert.match(bad.stdout, /SHA-256 불일치/);
+    assert.doesNotMatch(bad.stdout, /DRY RUN/);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('release workflows render, check and announce the Windows command', () => {
+  const read = name => fs.readFileSync(new URL(`../../../.github/workflows/${name}`, import.meta.url), 'utf8');
+  const verify = read('verify-unified-release.yml');
+  assert.match(verify, /install-kit\.mjs render-windows --tag "\$TAG" --user-setup/);
+  assert.match(verify, /install-kit\.mjs notes --tag "\$TAG" "\$\{sections\[@\]\}"/);
+  // The check runs before the draft is published.
+  const publish = verify.indexOf('--draft=false');
+  const check = verify.indexOf('install-kit.mjs check --tag "$TAG"');
+  assert.ok(check > 0 && check < publish, 'install command check precedes publication');
+  assert.match(read('notify-release-published.yml'), /install-kit\.mjs announce --tag "\$TAG"/);
+  assert.match(read('mirror-release.yml'), /dist\/update-windows\.cmd/);
 });
