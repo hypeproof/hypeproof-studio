@@ -10516,6 +10516,9 @@
           "path": "extensions/hypeproof-chat/test/composer-geometry.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/composer-expand-oscillation-browser.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/focus-placeholder.smoke.mjs"
         }
       ]

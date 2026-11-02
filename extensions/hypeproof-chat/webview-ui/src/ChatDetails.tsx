@@ -302,9 +302,18 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const compactWidth = Math.max(40, (card?.clientWidth ?? node.clientWidth) - inset - (tools?.offsetWidth ?? 0) - (controls?.offsetWidth ?? 44) - 12);
       const line = parseFloat(getComputedStyle(node).lineHeight) || 24;
       // Measure at the compact width so a wrapped paragraph cannot oscillate between layouts.
-      node.style.width = `${compactWidth}px`;
+      // The measure must not depend on the layout it decides. Collapsed to 0px, an overflowing
+      // field drew a vertical scrollbar in the single-line layout and not in the expanded one, so
+      // the same draft wrapped at two different widths: one line expanded, two lines collapsed, and
+      // `expanded` flipped until React stopped with #185 (2026-11-02, a Windows seat on
+      // v2026.1029.0, whose scrollbars are wider; test/composer-expand-oscillation-browser.smoke.mjs).
+      // No scrollbar while measuring, and the width pinned with min and max as well.
+      const saved = [node.style.minWidth, node.style.maxWidth, node.style.overflowY];
+      node.style.width = node.style.minWidth = node.style.maxWidth = `${compactWidth}px`;
+      node.style.overflowY = 'hidden';
       node.style.height = '0px';
       const needsRoom = hasContext || node.scrollHeight > line + 1;
+      [node.style.minWidth, node.style.maxWidth, node.style.overflowY] = saved;
       node.style.width = '';
       setExpanded(needsRoom);
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
