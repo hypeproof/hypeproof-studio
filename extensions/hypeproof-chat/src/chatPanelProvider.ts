@@ -359,6 +359,7 @@ import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryU
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
+import { draftHasContent } from "./autoUpdate";
 import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
@@ -4606,6 +4607,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._annotationLeaveRequest?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
+      this.draftSources?.delete(sidebarWebview);
       if (this.view === view) this.view = undefined;
       if (!this.editorChat) abortAllStreams(this.activeStreams);
     });
@@ -4631,6 +4633,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this._annotationLeaveRequest?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
+        this.draftSources?.delete(editorWebview);
         if (this.editorChat === entry) {
           this.editorChat = undefined;
           abortAllStreams(this.activeStreams);
@@ -4834,6 +4837,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** REQ-STUDIO-QUIT-GUARD — chat surfaces that last reported a queued, unsent message. */
   private queuedSources = new Set<vscode.Webview>();
   quitGuardActivity(): QuitGuardActivity { return { turnRunning: this.hasActiveStream(), queuedUnsent: this.queuedSources.size > 0 }; }
+  /** #3411 — chat surfaces whose last saved composer state still holds unsent input. */
+  private draftSources = new Set<vscode.Webview>();
+  /** #3411 — everything an automatic idle restart could interrupt (see autoUpdate.idleApplyBlocker). */
+  autoUpdateActivity(): { turnRunning: boolean; queuedUnsent: boolean; unsentDraft: boolean; processRunning: boolean; previewRunning: boolean; classHeld: boolean; chatIdleMs: number } {
+    const processRunning = [...(this.processScopes?.values() ?? [])].some(registry => registry.list().length > 0);
+    return {
+      ...this.quitGuardActivity(),
+      unsentDraft: (this.draftSources?.size ?? 0) > 0,
+      processRunning,
+      previewRunning: !!this.liveServer?.isListening?.(),
+      classHeld: this.isClassUpdateHeld(),
+      chatIdleMs: Date.now() - this.lastActivityAt,
+    };
+  }
 
   refreshConfig(): Promise<void> {
     return (async () => {
@@ -7539,6 +7556,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
+      if (source) { if (draftHasContent(msg.draft)) (this.draftSources ??= new Set()).add(source); else this.draftSources?.delete(source); }
       const flush = this.draftFlush;
       if (msg.nonce && flush?.nonce === msg.nonce && flush.source === source && msg.imagePreparationFailed) {
         flush.reject(new Error('이미지를 준비하지 못해 작업을 바꾸지 않았어요. 현재 입력은 그대로입니다. 이미지를 다시 붙이거나 작업 이동을 다시 선택해 주세요.'));

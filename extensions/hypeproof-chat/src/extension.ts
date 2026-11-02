@@ -50,6 +50,10 @@ import {
   checkForUpdates,
   runUpdate,
   installStagedUpdate,
+  autoUpdateEnabled,
+  announceAutoUpdate,
+  scheduleIdleApply,
+  windowPresence,
   dismissVersion,
   currentBundleVersion,
   reportManualUpdateCheckFailure,
@@ -913,9 +917,25 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // #72: kick off background update checks. Scheduler is disposable so we
   // attach it to the extension lifecycle.
+  // #3411: Chrome-style updates. Found releases are staged silently (when the setting is
+  // on and no class seat holds them), installed on the next quit or an idle restart, and
+  // announced once when the new version starts.
+  void announceAutoUpdate(context, currentBundleVersion()).catch(() => {});
+  context.subscriptions.push(
+    scheduleIdleApply({
+      context,
+      autoUpdate: autoUpdateEnabled,
+      activity: () => provider.autoUpdateActivity(),
+      windowFocused: () => vscode.window.state.focused,
+      onFocusChange: listener => vscode.window.onDidChangeWindowState(state => listener(state.focused)),
+      presence: windowPresence(context),
+    }),
+  );
   context.subscriptions.push(
     scheduleUpdateChecks({
       context,
+      autoUpdate: autoUpdateEnabled,
+      classHeld: () => provider.isClassUpdateHeld(),
       currentVersion: currentBundleVersion(),
       pushUpdateBanner: (info) => {
         if (!info) {
