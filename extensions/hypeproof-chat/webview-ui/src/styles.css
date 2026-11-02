@@ -2873,6 +2873,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-running-processes button:disabled { cursor: default; color: var(--hp-text-muted-default); }
 @media (forced-colors: active) {
   .hps-running-processes li.hps-process-card { border-color: CanvasText; }
-  .hps-process-dot { forced-color-adjust: none; background: CanvasText; }
+  /* The fill is forced to Canvas; a border keeps the dot visible. The status label carries the state in words. */
+  .hps-process-dot { border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
   .hps-running-processes button { border-color: ButtonText; }
 }
