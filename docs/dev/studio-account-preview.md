@@ -94,3 +94,9 @@ must choose Open; the app does not disable this confirmation. Choosing its optio
 The native acceptance grants that consent through the actual visible dialog in a
 fresh owned test profile, records the prompt separately, and only then measures
 automatic foreground switching without interacting with the originating window.
+
+## Account entry without checkout (#3385)
+
+Google login must be reachable from the initial free-start card and the account navigation, including when purchase is unavailable or an activity is already saved. The separate anonymous action explicitly says that it starts without login. Browser approval stays visible until the device session completes. Account grants, including the existing `super` pass, use the ordinary account activation flow without creating a purchase. A successful website login alone is not evidence of a connected Studio device.
+
+Regression: `node scripts/run-tsx-tests.mjs account-start-entry` in the extension checks the actual rendered entry, approval and grant activation intents. `node test/account-runtime.smoke.mjs` checks the host activation and stored binding. Installed Windows verification remains a separate release gate.
