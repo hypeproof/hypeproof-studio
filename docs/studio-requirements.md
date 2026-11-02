@@ -1915,6 +1915,21 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   config flag draws it; the host re-checks on every press. On a task workspace seat (personal,
   trial) the same list is the activity home's 자료 view in the task rail instead
   (REQ-STUDIO-ACTIVITY-HOME, CGP-KNOW-R-002); the chat column then has no card of its own.
+- **Writing a note (#3266, parent #555).** “메모 쓰기” accepts a title and text, then an
+  explicit “메모 저장” writes a new `.txt` file through the same checked materials copy path.
+  The title must be a portable plain filename; the body must be nonempty text within the
+  file-attachment limits. Duplicate titles never overwrite a previous file. The note uses
+  the existing folder manifest and is not selected or sent automatically: the learner must
+  press “이번 질문에 넣기” after saving. The host checks the original activity, current work
+  folder and seat again after asynchronous loading, before writing. A refused save retains
+  the draft; only that form's successful acknowledgement clears it. Another activity never
+  inherits the draft. Removing the list entry retains the file and does not erase earlier
+  conversation/provider data; this does not complete AE-41 context exclusion.
+  Pending material actions belong to the displayed activity/task scope. A scope change
+  (including unavailable state and A→B→A) releases the departed request's UI lock
+  and saved-draft callback; same-scope refreshes keep duplicate-submit protection.
+  A late old request reply must not unlock or show an error for a newer request.
+
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
@@ -1946,6 +1961,7 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   truncated or unconfirmed creation history says "추가 시각 미확인"; no current-time fallback.
   Selection remains host-owned and nothing is sent by toggling it. The drop zone of DES-KNOW-04
   is the next bullet (#2641).
+- **Pending drop scope (#3306).** File reads are bound to the materials view lifetime that accepted the drop. A task/activity switch, unavailable view, or unmount discards both late bytes and read-failure requests; switching away and back does not revive an old read. A same-scope refresh preserves normal completion.
 - **Dropping a file (#2641).** The open card also takes one dropped file, the same file "파일
   넣기" takes; the closed summary row is not a drop target. While a file is dragged over the
   open card its own border becomes 2px in the focus-ring colour (Highlight in forced colours),

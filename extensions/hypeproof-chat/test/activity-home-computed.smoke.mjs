@@ -97,7 +97,8 @@ const measure = `(() => {
   const list = document.querySelector('.tw-task-list'), materials = document.querySelector('.tw-home-materials .hp-materials');
   return { vw: document.documentElement.clientWidth, docScroll: document.documentElement.scrollWidth, rail: rb ? { left: rb.left, right: rb.right, shown: shows(rail) } : null, tabs, tablist, title,
     taskListShown: shows(list), taskListHeight: list ? list.getBoundingClientRect().height : 0, materialsShown: shows(materials),
-    draft: document.querySelector('textarea')?.value ?? null, ringColor: (() => { const p = document.createElement('span'); p.style.color = 'var(--hp-ring-focus-default)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; })() };
+    noteDraft: document.querySelector('textarea[name="material-note-text"]')?.value ?? null,
+    draft: document.querySelector('.hps-input textarea')?.value ?? null, ringColor: (() => { const p = document.createElement('span'); p.style.color = 'var(--hp-ring-focus-default)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; })() };
 })()`;
 
 const wait = async (b, expr, tries = 60) => { for (let i = 0; i < tries && !(await b.evaluate(expr).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100)); };
@@ -114,7 +115,7 @@ async function open(b, surface, theme, width, forced, extraCss) {
   await b.send('Page.navigate', { url: base });
   await wait(b, `!!window.sent && window.sent.some((m) => m.type === 'ready')`, 100);
   await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'config', config: ${JSON.stringify(config(surface))} } }))`);
-  await wait(b, `!!document.querySelector('textarea')`);
+  await wait(b, `!!document.querySelector('.hps-input textarea')`);
   await b.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
 }
 
@@ -126,7 +127,7 @@ async function runMatrix(b, extraCss) {
     if (width <= 700) { await b.evaluate(`document.querySelector('.tw-rail-toggle').click()`); await wait(b, `!!document.querySelector('.tw-rail') && document.querySelector('.tw-rail').getClientRects().length > 0`); }
     await wait(b, `!!document.querySelector('#tw-home-tab-tasks')`);
     // A typed draft, through React's own input path.
-    await b.evaluate(`(() => { const t = document.querySelector('textarea'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(t, ${JSON.stringify(DRAFT)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await b.evaluate(`(() => { const t = document.querySelector('.hps-input textarea'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(t, ${JSON.stringify(DRAFT)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await new Promise((r) => setTimeout(r, 50));
     const tasks = await b.evaluate(measure);
     let ring;
@@ -135,6 +136,10 @@ async function runMatrix(b, extraCss) {
     await wait(b, `window.sent.some((m) => m.type === 'materialsRequest')`);
     await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'materialsState', view: ${JSON.stringify(LIST)} } }))`);
     await wait(b, `!!document.querySelector('.tw-home-materials .hp-materials')`);
+    // The materials view has its own textarea. A separate note draft must not be mistaken
+    // for (or overwrite) the conversation composer when checking retained input.
+    await b.evaluate(`(() => { const t = document.querySelector('textarea[name="material-note-text"]'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(t, '독립된 자료 메모'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await new Promise((r) => setTimeout(r, 50));
     const materials = await b.evaluate(measure);
     if (pngDir && !extraCss) {
       const shot = await b.send('Page.captureScreenshot', { format: 'png' });
@@ -158,6 +163,7 @@ function check(results) {
       expect(m.tabs.length === 2, `${at}: ${m.tabs.length} tabs`);
       expect(m.docScroll <= m.vw + 0.5, `${at}: the page scrolls horizontally (${m.docScroll} > ${m.vw})`);
       expect(m.draft === DRAFT, `${at}: the composer draft changed: ${JSON.stringify(m.draft)}`);
+      if (m.materialsShown) expect(m.noteDraft === "독립된 자료 메모", `${at}: the materials note draft changed: ${JSON.stringify(m.noteDraft)}`);
       for (const t of m.tabs) {
         expect(t.shown, `${at}: ${t.name} is not shown`);
         expect(t.w >= 43.5 && t.h >= 43.5, `${at}: ${t.name} target is ${Math.round(t.w)}x${Math.round(t.h)}px, under 44`);

@@ -28,30 +28,50 @@ function useMaterials() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef<string | null>(null);
+  // A new identity on each scope transition also invalidates A → B → A reads.
+  const lifetime = useRef<{ scope: string } | null>(null);
+  const onSaved = useRef<(() => void) | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const dispose = onHostMessage(message => {
       if (message.type !== 'materialsState') return;
+      const scope = message.view?.scope;
+      if (scope !== lifetime.current?.scope) {
+        lifetime.current = scope === undefined ? null : { scope };
+        // A departed scope cannot keep the new list locked or clear its draft.
+        pending.current = null;
+        onSaved.current = undefined;
+        setBusy(false); setError(''); setNotice('');
+      }
       setView(message.view);
       setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.
       if (message.requestId !== undefined && message.requestId !== pending.current) return;
-      if (message.requestId !== undefined) { pending.current = null; setBusy(false); }
+      if (message.requestId !== undefined) {
+        pending.current = null; setBusy(false);
+        const saved = onSaved.current; onSaved.current = undefined;
+        if (!message.error) saved?.();
+      }
       setError(message.error ?? '');
       setNotice(message.notice ?? '');
     });
     postToHost({ type: 'materialsRequest' });
-    return dispose;
+    return () => { lifetime.current = null; dispose(); };
   }, []);
-  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0]) => {
+  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0], saved?: () => void) => {
     if (pending.current) return;
     const requestId = nextId();
+    onSaved.current = saved;
     pending.current = requestId; setBusy(true); setError(''); setNotice('');
     postToHost(build(requestId));
   };
+  const captureView = () => {
+    const owner = lifetime.current;
+    return () => owner !== null && lifetime.current === owner && owner.scope === view?.scope;
+  };
   /** A refusal decided here, with no host request (several files in one drop). */
   const refuse = (message: string) => { setError(message); setNotice(''); };
-  return { view, answered, error, notice, busy, ask, refuse };
+  return { view, answered, error, notice, busy, ask, refuse, captureView };
 }
 
 const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some(item => item.kind === 'file');
@@ -80,10 +100,14 @@ function MaterialAddedTime({ at }: { at?: number }) {
  * with a heading instead of a disclosure. Without it, the coach rail's closed card (classroom seats).
  */
 export function MaterialsPanel({ home = false }: { home?: boolean }) {
-  const { view, answered, error, notice, busy, ask, refuse } = useMaterials();
+  const { view, answered, error, notice, busy, ask, refuse, captureView } = useMaterials();
   const [url, setUrl] = useState('');
+  const [note, setNote] = useState({ scope: '', title: '', text: '' });
   const [dropping, setDropping] = useState(false);
   if (!view) return home ? <p className="hp-materials-note hp-materials-home-state" role="status">{answered ? MATERIALS_COPY.homeUnavailable : MATERIALS_COPY.homeLoading}</p> : null;
+  const draft = note.scope === view.scope ? note : { scope: view.scope, title: '', text: '' };
+  const submitNote = () => ask(requestId => ({ type: 'materialAddNote', requestId, ...draft }),
+    () => setNote(current => current === draft ? { scope: view.scope, title: '', text: '' } : current));
   const chosen = view.items.filter(item => item.selected).length;
   const submitUrl = () => { if (url.trim()) ask(requestId => ({ type: 'materialAddUrl', requestId, url })); };
   // Only the open card is a drop target (the home view is always open); the closed summary row leaves a drop to the shell.
@@ -103,10 +127,14 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length !== 1) { refuse(MATERIALS_COPY.dropOne); return; }
     const [file] = files;
+    const isCurrent = captureView();
     // Over the cap the bytes are never read: the host answers with the picker's size refusal.
     const read = file.size > MATERIALS_DROP_MAX_BYTES ? Promise.resolve('') : file.arrayBuffer().then(base64Of);
-    void read.then(base64 => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 })))
-      .catch(() => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' })));
+    void read.then(base64 => {
+      if (isCurrent()) ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 }));
+    }).catch(() => {
+      if (isCurrent()) ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' }));
+    });
   };
   const Root = home ? 'section' : 'details';
   const count = `자료 ${view.items.length}개${chosen ? ` · 이번 질문에 ${chosen}개 넣음` : ''}`;
@@ -148,6 +176,18 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
         <button type="submit" className="hp-cta-quiet" disabled={busy || !url.trim()}>주소 넣기</button>
       </form>
     </div>
+    <details className="hp-materials-write">
+      <summary>메모 쓰기</summary>
+      <form onSubmit={event => { event.preventDefault(); submitNote(); }}>
+        <label>메모 제목<input name="material-note-title" value={draft.title} maxLength={196} disabled={busy}
+          onChange={event => setNote({ ...draft, title: event.target.value })}
+          onKeyDown={event => { if (event.key === 'Enter' && imeComposing(event)) event.preventDefault(); }} /></label>
+        <label>메모 내용<textarea name="material-note-text" value={draft.text} maxLength={20000} rows={6} disabled={busy}
+          onChange={event => setNote({ ...draft, text: event.target.value })} /></label>
+        <p className="hp-materials-note">자료 폴더에 글 파일로 저장해요. 저장한 뒤 ‘이번 질문에 넣기’를 눌러야 AI에게 보내요. 목록에서 빼도 파일은 남아요.</p>
+        <button type="submit" className="hp-cta-quiet" disabled={busy || !draft.title.trim() || !draft.text.trim()}>메모 저장</button>
+      </form>
+    </details>
     {error && <p role="alert" className="hp-materials-error">{error}</p>}
     {notice && <p role="status" className="hp-materials-notice">{notice}</p>}
   </Root>;
