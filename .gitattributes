@@ -13,3 +13,4 @@
 # The trace registry merges by node id when the clone registered the Harness driver
 # (hypeproof-harness scripts/git-merge/install.sh <clone>); otherwise git's text merge.
 config/traceability.json merge=hp-json-nodes
+*.cmd text eol=crlf
