@@ -1,6 +1,7 @@
 import { AnswerWikiReview } from './AnswerWikiReview';
 import { CopyFeedback } from './CopyFeedback';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutLoopGuard } from './layoutLoopGuard';
 
 /**
  * CGP-DS-R-018 / REQ-STUDIO-STROKE-ICONS — the webview's one stroke icon set. Studio's own paths
@@ -182,6 +183,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   const follow = useRef(true);
   const readingAnchor = useRef<{ element: HTMLElement; offset: number } | null>(null);
   const [away, setAway] = useState(false);
+  const measuredAway = useLayoutLoopGuard(setAway, 'chat.away');
   // Explicit history navigation is reading, not a new live answer to follow.
   const pauseFollowing = () => {
     if (!enabled) return;
@@ -220,7 +222,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   useLayoutEffect(() => {
     if (enabled && ref.current) {
       if (follow.current) ref.current.scrollTop = ref.current.scrollHeight;
-      else setAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
+      else measuredAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
     }
   }, [enabled, revision, ref, textSize]);
   useLayoutEffect(() => {
@@ -268,6 +270,7 @@ function composerCaretLine(node: HTMLTextAreaElement) {
 /** Keep one editor node while compact and expanded layouts share draft ownership. */
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
+  const measuredExpanded = useLayoutLoopGuard(setExpanded, 'composer.expanded');
   useLayoutEffect(() => {
     if (!ref.current) return;
     const node = ref.current;
@@ -315,7 +318,7 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const needsRoom = hasContext || node.scrollHeight > line + 1;
       [node.style.minWidth, node.style.maxWidth, node.style.overflowY] = saved;
       node.style.width = '';
-      setExpanded(needsRoom);
+      measuredExpanded(needsRoom);
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
         height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
@@ -345,6 +348,6 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       node.removeEventListener('select', rememberCaret);
       node.removeEventListener('keyup', rememberCaret);
     };
-  }, [enabled, draft, ref, hasContext, expanded]);
+  }, [enabled, draft, ref, hasContext, expanded, measuredExpanded]);
   return expanded;
 }
