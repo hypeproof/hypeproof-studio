@@ -746,7 +746,7 @@ try {
     // Saved age: a single Primary, no question again.
     await startState(p, freeStart({ age: '14+' }));
     await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
-    await btn(p, '바로 시작하기').click();
+    await btn(p, '로그인 없이 무료로 시작하기').click();
     await request(p, { type: 'freeStartClaim' });
     // The code path: one label, no trial/class split.
     await btn(p, '참여 코드가 있어요').click();
@@ -754,7 +754,7 @@ try {
     await expect(p.getByText('강사나 운영자에게 받은 코드를 붙여 넣으세요.', { exact: true })).toBeVisible();
     assert.doesNotMatch(await cardText(p), /체험/);
     await btn(p, '돌아가기').click();
-    await expect(btn(p, '바로 시작하기')).toBeVisible();
+    await expect(btn(p, '로그인 없이 무료로 시작하기')).toBeVisible();
     // The secondary links sit on the card's left axis with everything else (not centred under the Primary).
     const [linkX, primaryX] = await Promise.all([btn(p, '참여 코드가 있어요'), p.locator('.studio-connect .studio-primary')].map(async l => Math.round((await l.boundingBox()).x)));
     assert.ok(Math.abs(linkX + 4 - primaryX) <= 2, `secondary links align left with the Primary: ${linkX} vs ${primaryX}`);
@@ -764,11 +764,11 @@ try {
     const limit = '이 네트워크에서 오늘 시작할 수 있는 횟수를 모두 사용했습니다. 내일 다시 시도하거나, 참여 코드나 이용권으로 시작해 주세요.';
     await startState(p, freeStart({ age: '14+', refusal: { code: 'network_limit', message: limit } }));
     await expect(p.getByRole('alert')).toHaveText(limit);
-    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await expect(btn(p, '로그인 없이 무료로 시작하기')).toBeEnabled();
     await startState(p, freeStart({ age: '14+', refusal: { code: 'network', message: '연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.' } }));
-    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await expect(btn(p, '로그인 없이 무료로 시작하기')).toBeEnabled();
     await startState(p, freeStart({ age: '14+', tooOld: true, refusal: { code: 'app_too_old', message: '이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요.' } }));
-    await expect(btn(p, '바로 시작하기')).toHaveCount(0);
+    await expect(btn(p, '로그인 없이 무료로 시작하기')).toHaveCount(0);
     await btn(p, '업데이트 확인').click();
     await request(p, { type: 'freeStartUpdate' });
   }, { surface: 'start' });
@@ -841,7 +841,7 @@ try {
     await startState(p, { profile: trialSeat(nearLimit, { id: 'studio-open-trial', free: true }) });
     await expect(p.locator('.studio-verified')).toHaveText('무료 사용');
     // POLISH iter4 — a free seat has no code, so its footer never speaks of one.
-    await expect(p.locator('.studio-card-footer')).toHaveText('만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.');
+    await expect(p.locator('.studio-card-footer')).toHaveText('만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요.');
     await expect(p.locator('.studio-course dt', { hasText: '남은 무료 사용' })).toHaveCount(0); // no count while in use (Jay 2026-10-19)
     assert.doesNotMatch(await cardText(p), /번 남음/);
     assert.doesNotMatch(await cardText(p), /체험/);
@@ -883,7 +883,7 @@ try {
     await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
     await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
   }, { surface: 'start' });
-  await test('TUX-SP-17', 'Login at purchase: Google sign-in is the Primary before checkout; never on the first screen; no anonymous fallback', async p => {
+  await test('TUX-SP-17', 'Google sign-in on first open and before checkout; no anonymous purchase fallback', async p => {
     // Selectors follow StartPage.tsx: AccountEntry's signed-out button is `.studio-google` (studio-primary).
     const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
     const signedOut = { status: 'signedOut' };
@@ -892,10 +892,14 @@ try {
     // Control: today's choice list (no free start) draws the account entry, so the checker below can fail.
     await startState(p, { account: signedOut, purchase: { available: true } });
     await expect(google).toHaveCount(1);
-    // The first screen of free start has no login, even with the account runtime present.
+    // Existing grants must be reachable on first open without starting checkout (#3385).
     await startState(p, { account: signedOut, purchase: { available: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
-    await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
-    await expect(google).toHaveCount(0);
+    await expect(p.locator('#connect-title')).toHaveText('내 계정 또는 무료로 시작하기');
+    await expect(google).toHaveCount(1);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
+    await google.click();
+    await request(p, { type: 'accountSignIn' });
+    assert.equal(emitted(await requests(p), 'purchaseStart').length, 0);
     // The pass list on a free seat while signed out: the Google button is the one Primary, no pay button, no payer question.
     await btn(p, '이용권으로 시작하기').click();
     await request(p, { type: 'purchaseOpen' });
@@ -909,7 +913,7 @@ try {
     await expect(p.getByRole('radiogroup', { name: '이용권 고르기' })).toBeVisible(); // the passes stay visible to choose from
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await p.screenshot({ path: path.join(out, 'TUX-SP-17-sign-in-390.png'), fullPage: true });
-    await btn(p, 'Google로 시작하기').click();
+    await google.click();
     await request(p, { type: 'accountSignIn' });
     assert.equal(emitted(await requests(p), 'purchaseStart').length, 0, 'no checkout before sign-in');
     // Signed in: the gate is gone and checkout follows (payer question first on a free seat).
