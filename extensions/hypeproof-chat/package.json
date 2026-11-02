@@ -683,7 +683,7 @@
   },
   "scripts": {
     "build": "npm run build:webview && npm run build:extension",
-    "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
+    "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js && node scripts/copy-pdfjs-data.mjs",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
     "test:companion-workspace": "node --experimental-strip-types --test test/companion-workspace.test.mjs test/companion-workspace-host.test.mjs",
@@ -749,6 +749,7 @@
     "@types/vscode": "^1.90.0",
     "esbuild": "^0.28.1",
     "jsqr": "^1.4.0",
+    "pdfjs-dist": "6.4.299",
     "qrcode-generator": "^2.0.4",
     "typescript": "^5.4.0"
   }
