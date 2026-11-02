@@ -45,6 +45,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -71,7 +75,9 @@ jobs:
           R=$(gh release view "$TAG" --json name,body,assets,url --repo "$REPO")
           URL=$(echo "$R" | jq -r .url)
           COUNT=$(echo "$R" | jq '.assets | length')
-          BODY=$(echo "$R" | jq -r .body | head -c 800)
+          # Install/update commands first (macOS curl, Windows PowerShell), then the notes
+          # without the install sections; the Discord template keeps 800 characters.
+          BODY=$(echo "$R" | jq -r .body | node scripts/release/install-kit.mjs announce --tag "$TAG" | head -c 800)
 
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "URL=$URL" >> "$GITHUB_ENV"

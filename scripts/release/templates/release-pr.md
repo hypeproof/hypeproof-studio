@@ -6,7 +6,7 @@
 ```bash
 {{INSTALL_ONELINER}}
 ```
-
+{{INSTALL_WINDOWS}}
 The release manager works through the sections in order. Black-box process: [release casebook](https://github.com/hypeproof/hypeproof-studio/blob/main/docs/operations/release-casebook/README.md).
 
 ## 1. Candidate
