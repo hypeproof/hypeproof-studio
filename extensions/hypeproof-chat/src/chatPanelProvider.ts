@@ -103,6 +103,8 @@ import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
 import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
+import { WEBVIEW_ERRORS_KEY, rememberWebviewError, validWebviewErrors, webviewErrorRecord } from "./reportLogs";
+import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
@@ -3110,6 +3112,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly problemTracker = new ProblemTracker();
   private lastProblem?: { diagnostic: ProblemDiagnostic; at: number };
   private problemForm?: { id: string; finish(answer: ProblemReportAnswer | null): void };
+  /** REQ-STUDIO-REPORT-LOGS — the webview crashed in this app session (the log box starts ticked). */
+  private webviewCrashedThisSession = false;
   /**
    * Task E (docs/plan/dag.yaml) — liveness. `lastActivityAt` is bumped by any
    * webview message; the pinger turns it into an idle_ms the instructor board
@@ -3379,6 +3383,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const audience = this.getSeatAudience();
     const id = crypto.randomUUID();
     const turns = sanitizeRecentTurns(this.getHistorySnapshot());
+    const webviewErrors = validWebviewErrors(this.context.globalState.get(WEBVIEW_ERRORS_KEY));
+    const logDir = this.context.logUri?.fsPath;
+    const crashed = reason === "crash" || this.webviewCrashedThisSession;
     const answer = await new Promise<ProblemReportAnswer | null>(resolve => {
       const timer = setTimeout(() => this.problemForm?.finish(null), 15 * 60_000);
       this.problemForm = { id, finish: value => { clearTimeout(timer); this.problemForm = undefined; void this.post({ type: "problemReportForm", form: null }); resolve(value); } };
@@ -3386,6 +3393,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         id, reason, details: problemDetailRows(diagnostic, appVersion, problemOs(process.platform, process.arch)),
         contactPrompt: reportContactPrompt(audience), contactPlaceholder: reportContactPlaceholder(audience), recentTurns: turns.length,
         autoReport: autoProblemReportEnabled(this.context.globalState),
+        logs: { available: logsAvailable(logDir), checked: crashed, errorCount: webviewErrors.length },
       } }).then(shown => { if (shown === false) this.problemForm?.finish(null); });
     });
     if (!answer) return true;
@@ -3393,12 +3401,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const jti = token ? extractJtiUnverified(token) : undefined;
     const body = problemReportBody(answer, {
       diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(),
+      logs: { webview_errors: webviewErrors, ...(answer.includeLogs ? await readSessionLogs(logDir) : {}) },
       metadata: collectReportMetadata(this.context, { requestId: this.lastRequestId, profileId: this.getProfileId(), jtiHash: jti ? await hashJti(jti) : undefined }),
     });
     const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     const frozen = await confirmProblemReport(proxyUrl, body, confirmOutbound);
     if (frozen === null) return true;
     const result = await postProblemReport(proxyUrl, frozen, token);
+    // Sent crash records are not sent again with the next report.
+    if (result.ok && webviewErrors.length) await this.context.globalState.update(WEBVIEW_ERRORS_KEY, undefined);
     if (result.ok) void vscode.window.showInformationMessage(reportReceipt(audience, result.reportId));
     else void vscode.window.showWarningMessage(`문제를 보내지 못했어요: ${result.reason}`);
     return true;
@@ -8025,7 +8036,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "openReportModal":
         // REQ-STUDIO-PROBLEM-REPORT — the error card's 문제 보내기 opens the in-panel form with that failure's diagnostic.
-        if (!(await this.openProblemReport(msg.source === "error" ? "error" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        if (!(await this.openProblemReport(msg.source === "error" ? "error" : msg.source === "crash" ? "crash" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
         return;
       case "problemReportAnswer":
         if (this.problemForm && msg.id === this.problemForm.id) this.problemForm.finish(parseProblemAnswer(msg.answer));
@@ -8266,6 +8277,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           `stack:\n${msg.stack}\n` +
           `componentStack:\n${msg.componentStack}`,
         );
+        // REQ-STUDIO-REPORT-LOGS — keep the last few crashes (redacted, bounded) for the next problem report.
+        this.webviewCrashedThisSession = true;
+        if (this.context?.globalState) {
+          const version = this.context.extension?.packageJSON?.version;
+          const record = webviewErrorRecord(msg, { appVersion: typeof version === "string" ? version : "unknown", os: problemOs(process.platform, process.arch), home: os.homedir() });
+          void this.context.globalState.update(WEBVIEW_ERRORS_KEY, rememberWebviewError(this.context.globalState.get(WEBVIEW_ERRORS_KEY), record));
+        }
         return;
       // #580 — a trace event lands in the local spool first (spool-then-forward).
       // Real-time forwarding to the worker (#552, #9d follow-up) can later just read

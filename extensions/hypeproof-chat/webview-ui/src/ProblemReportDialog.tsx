@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { AUTO_REPORT_HINT, AUTO_REPORT_LABEL, PROBLEM_CONTACT_MAX, PROBLEM_DESCRIPTION_MAX, PROBLEM_FORM_LEAD, type OfferReason, type ProblemReportAnswer, type ProblemReportFormView } from '../../src/problemReport';
+import { AUTO_REPORT_HINT, AUTO_REPORT_LABEL, LOGS_HINT, LOGS_LABEL, PROBLEM_CONTACT_MAX, PROBLEM_DESCRIPTION_MAX, PROBLEM_FORM_LEAD, type OfferReason, type ProblemReportAnswer, type ProblemReportFormView } from '../../src/problemReport';
 import { normalizeTextSize } from '../../src/textSize';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
@@ -21,13 +21,14 @@ export function ProblemReportDialog({ form, onAnswer, onAutoReport, textSize }: 
   const [description, setDescription] = useState('');
   const [contact, setContact] = useState('');
   const [includeRecentTurns, setInclude] = useState(false);
+  const [includeLogs, setIncludeLogs] = useState(form.logs.available && form.logs.checked);
   const [autoReport, setAutoReport] = useState(form.autoReport);
   const finish = (answer: ProblemReportAnswer | null) => {
     if (answered.current) return;
     answered.current = true;
     finishModal(dialog.current, () => onAnswer(form.id, answer));
   };
-  const submit = () => finish({ description: description.trim(), contact: contact.trim(), includeRecentTurns });
+  const submit = () => finish({ description: description.trim(), contact: contact.trim(), includeRecentTurns, includeLogs: form.logs.available && includeLogs });
   useDialogFocus(dialog, { open: true, kind: 'modal', initialFocus: '[data-problem-description]' });
   useEffect(() => {
     const node = dialog.current; node?.showModal(); node?.querySelector<HTMLElement>('[data-problem-description]')?.focus();
@@ -59,6 +60,11 @@ export function ProblemReportDialog({ form, onAnswer, onAutoReport, textSize }: 
         <span>최근 대화 {form.recentTurns}개 함께 보내기
           <small>내가 보낸 말과 AI의 답이 그대로 가요. 개인정보가 있으면 체크하지 마세요.</small></span>
       </label>}
+      {form.logs.available && <label className="hps-outbound-item hps-problem-optin">
+        <input data-problem-logs type="checkbox" checked={includeLogs} onChange={event => setIncludeLogs(event.target.checked)} />
+        <span>{LOGS_LABEL}<small>{LOGS_HINT}</small></span>
+      </label>}
+      {form.logs.errorCount > 0 && <p className="hps-problem-note" data-problem-crashes>최근 화면 오류 기록 {form.logs.errorCount}건을 함께 보내요 (오류 내용과 화면 구성 이름만).</p>}
       <details className="hps-problem-details">
         <summary>함께 보내는 정보 {form.details.length}가지</summary>
         <dl>{form.details.map(row => <div key={row.label}><dt>{row.label}</dt><dd><code>{row.value}</code></dd></div>)}</dl>
