@@ -63,13 +63,15 @@ export interface ActivityMemoryView {
   unsafe: boolean;
   /** REQ-STUDIO-MEMORY-OVERVIEW — null on a minor or unknown cohort, where there is no overview. */
   overview: MemoryOverview | null;
+  /** REQ-STUDIO-MEMORY-CAPACITY (CGP-KNOW-R-024) — how many files the store takes before new writes are refused. */
+  limit?: number;
 }
 
 /**
  * `correct` (REQ-STUDIO-MEMORY-OVERVIEW) replaces one item with the learner's own words. `deleteAll`
  * (REQ-STUDIO-MEMORY-MANAGER) removes the listed files the learner saw, after two native confirms.
  */
-export type ActivityMemoryAction = "open" | "delete" | "correct" | "deleteAll";
+export type ActivityMemoryAction = "open" | "delete" | "correct" | "deleteAll" | "deleteOld";
 
 /**
  * A host answer to one press. `cancelled`: the learner closed the native confirm; nothing changed. `unchanged`: a
@@ -83,12 +85,45 @@ export const MEMORY_NO_CHANGE = "바뀐 기억이 없어요.";
 
 export function memoryResultNotice(result: ActivityMemoryResult): string {
   if (result.action === "correct") return result.unchanged ? MEMORY_NO_CHANGE : "기억을 고쳤어요.";
+  if (result.action === "deleteOld") {
+    const kept = result.kept ? ` ${result.kept}개는 지우지 못했어요. 목록에서 확인해 주세요.` : "";
+    return `오래된 기억 ${result.removed ?? 0}개를 지웠어요.${kept}`;
+  }
   if (result.action === "deleteAll") {
     const kept = result.kept ? ` ${result.kept}개는 남아 있어요. 목록에서 확인해 주세요.` : "";
     return `기억 파일 ${result.removed ?? 0}개를 지웠어요.${kept}`;
   }
   return result.action === "delete" ? `기억 파일 “${result.name ?? ""}”을 지웠어요.` : "";
 }
+
+/**
+ * REQ-STUDIO-MEMORY-CAPACITY (CGP-KNOW-R-024 / REQ-KNOW-42) — memory capacity as used/limit, never a purchase. Every
+ * file in the folder counts (the store refuses a new one at the limit). From 90% a notice offers 오래된 기억 정리, which
+ * picks the oldest items until the store is back at 80%; the learner can change the pick, and the host deletes only
+ * listed files after its own two native confirms (the R-023 delete).
+ */
+export const MEMORY_CAPACITY = { near: 0.9, after: 0.8 } as const;
+export type MemoryCapacityLevel = "ok" | "near" | "full";
+export function memoryCapacity(used: number, limit: number): { used: number; limit: number; level: MemoryCapacityLevel; percent: number } {
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : 1;
+  const count = Math.max(0, Math.floor(used));
+  const level: MemoryCapacityLevel = count >= safeLimit ? "full" : count >= Math.ceil(safeLimit * MEMORY_CAPACITY.near) ? "near" : "ok";
+  return { used: count, limit: safeLimit, level, percent: Math.min(100, Math.round((count / safeLimit) * 100)) };
+}
+/** How many of the oldest items 오래된 기억 정리 picks first: enough to bring the store back to 80%, at least one. */
+export function memoryCleanupCount(used: number, limit: number): number {
+  return Math.max(1, used - Math.floor(limit * MEMORY_CAPACITY.after));
+}
+export const MEMORY_CAPACITY_COPY = {
+  line: (used: number, limit: number) => `기억 ${used}/${limit}개`,
+  near: (used: number, limit: number) => `기억이 거의 찼어요. ${limit}개까지 남길 수 있고 지금 ${used}개예요.`,
+  full: (limit: number, canCorrect: boolean) => `기억이 가득 찼어요. ${limit}개가 다 차서 새 기억은 남지 않아요. 있는 기억은 ${canCorrect ? '고치거나 ' : ''}지울 수 있어요.`,
+  cleanup: "오래된 기억 정리",
+  pickTitle: "지울 오래된 기억",
+  pickNote: (n: number) => `오래된 것부터 ${n}개를 골라 두었어요. 남길 기억은 체크를 풀어 주세요.`,
+  confirm: (n: number) => `고른 기억 ${n}개 지우기…`,
+  cancel: "취소",
+} as const;
 
 /** CGP-KNOW-D-023 (DES-KNOW-41) — the "AI가 기억하는 것" list in 대화 설정, in the learner's words. */
 export const MEMORY_SETTINGS_COPY = {

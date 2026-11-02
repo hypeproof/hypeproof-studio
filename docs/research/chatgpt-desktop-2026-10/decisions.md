@@ -1577,6 +1577,16 @@ Applies DEC-01 (the learner reads and deletes the local memory files). Built as 
 - "Absent from the next request payload": no request carries memory (R-030 rule; injection waits for REQ-KNOW-44 and REQ-KNOW-49). Proven as the store contract instead: `contextItems()` is the only reader a request may use and has no cache, and tests read it right after each delete and after 모두 지우기. This is a contract test, not a payload capture; REQ-KNOW-44 must build its injection on that reader.
 - Default: on for every seat with the memory view (learner's own privacy action; no new data flow).
 
+## CGP-KNOW-R-024: memory capacity as used/limit with cleanup (2026-11-01, agent-selected conservative implementation)
+
+Applies DEC-01. Built as REQ-STUDIO-MEMORY-CAPACITY on the R-030 store and the R-023 delete.
+- The limit is the store's existing `MEMORY_LIMITS.items` (200 files), one constant that also caps the listing and makes `append()` refuse. No second number: what the learner sees is what the store enforces. Every entry of the folder counts, because `append()` counts listed and unlisted entries.
+- "Capacity bar with numeric text N/M개": the words carry the state and the bar repeats them. It is `aria-hidden`, outlined, and one fill at every level, so no state is colour-only.
+- "Cleanup entry": 오래된 기억 정리 picks the oldest items until the store is back at 80% (the 90% notice would otherwise come back after one new item). The learner can change the pick, and the delete goes through R-023's host path: pinned listed files and two native confirms, with its own words and button. The new action `deleteOld` reuses `deleteAll`'s code rather than adding a second delete.
+- "At 100% new writes are refused and the turn states it": the refusal is in `append()` and covers today's only writer, the R-025 correction, with its reason. Stating it in the turn needs the in-turn writer, R-027, which is blocked (#3338). That part waits; R-027 must map `full` to its timeline line.
+- A correction replaces an item and is allowed at 100%; only additions are refused (fix round 1, after verification: R-025's correction had gone through the plain count and was refused at exactly the limit, which took away REQ-KNOW-43's correction exactly when the store is full). `append()` takes the listed file it replaces and does not count it; the write-then-remove order and the pin rollback are unchanged. A store already past the limit still refuses it.
+- No purchase path of any kind: the limit is a local folder's. The browser smoke asserts DOM absence of purchase, upgrade, plan and pricing words, links and classes, and was proved with a planted pricing link.
+
 ## CGP-KNOW-R-031: one-time memory notice (2026-11-01, agent-selected conservative implementation)
 
 Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-MEMORY-NOTICE on the R-030 store and the R-005 binding; also covers DES-KNOW-49 (CGP-KNOW-D-031).

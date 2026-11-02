@@ -10,6 +10,7 @@ import { buildMemoryOverview, memoryOverviewPasses, memoryStatementRefusal, type
 const CANCEL: vscode.MessageItem = { title: '취소', isCloseAffordance: true };
 const DELETE = '지우기';
 const DELETE_ALL = '모두 지우기';
+const DELETE_OLD = '오래된 기억 지우기';
 
 /** REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023) — one task of the activity, listed or in 보관함. */
 export interface MemoryTaskRef { id: string; title: string; archived: boolean }
@@ -79,7 +80,10 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
    * before the first confirm. Two native modals, each with one 취소; only the second's button deletes. A file added,
    * replaced or removed meanwhile is kept and counted; files the list never showed (unsafe names, links) are untouched.
    */
-  const deleteAll = async (store: ActivityMemory, expected: string, root: string, names: readonly string[]): Promise<ActivityMemoryResult> => {
+  // REQ-STUDIO-MEMORY-CAPACITY (CGP-KNOW-R-024) — 오래된 기억 정리 uses the same path for the learner's pick of old items
+  // (`old`): its own words, and `kept` counts only the picked files that were not removed.
+  const deleteAll = async (store: ActivityMemory, expected: string, root: string, names: readonly string[], old = false): Promise<ActivityMemoryResult> => {
+    const action = old ? 'deleteOld' as const : 'deleteAll' as const;
     const seen = new Set(names.slice(0, MEMORY_LIMITS.items));
     const listing = await store.list();
     const pinned: Array<{ entry: MemoryFile; id: MemoryFileId }> = [];
@@ -91,20 +95,24 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
     if (!pinned.length) throw new Error('nothing_to_delete');
     const count = pinned.length;
     const untouched = listing.other ? ` 목록에 없는 파일 ${listing.other}개는 지우지 않아요.` : '';
-    const first = await vscode.window.showWarningMessage(`기억 파일 ${count}개를 모두 지울까요?`, { modal: true, detail: `이 활동의 ${MEMORY_FOLDER_LABEL} 안에 있는 기억 파일이에요. 지운 기억은 되돌릴 수 없어요.${untouched}` }, { title: DELETE_ALL }, CANCEL);
-    if (first?.title !== DELETE_ALL) return { action: 'deleteAll', cancelled: true };
+    const firstButton = old ? DELETE_OLD : DELETE_ALL;
+    const first = old
+      ? await vscode.window.showWarningMessage(`고른 오래된 기억 ${count}개를 지울까요?`, { modal: true, detail: `이 활동의 ${MEMORY_FOLDER_LABEL} 안에 있는 기억 파일이에요. 고르지 않은 기억은 그대로 두어요. 지운 기억은 되돌릴 수 없어요.` }, { title: DELETE_OLD }, CANCEL)
+      : await vscode.window.showWarningMessage(`기억 파일 ${count}개를 모두 지울까요?`, { modal: true, detail: `이 활동의 ${MEMORY_FOLDER_LABEL} 안에 있는 기억 파일이에요. 지운 기억은 되돌릴 수 없어요.${untouched}` }, { title: DELETE_ALL }, CANCEL);
+    if (first?.title !== firstButton) return { action, cancelled: true };
     check(expected, root);
     const second = await vscode.window.showWarningMessage(`정말 기억 파일 ${count}개를 지울까요?`, { modal: true, detail: '한 번 더 확인해요. 지우면 되돌릴 수 없어요.' }, { title: `${count}개 지우기` }, CANCEL);
-    if (second?.title !== `${count}개 지우기`) return { action: 'deleteAll', cancelled: true };
+    if (second?.title !== `${count}개 지우기`) return { action, cancelled: true };
     check(expected, root);
     let removed = 0;
     for (const { entry, id } of pinned) {
       // The file the learner confirmed, not whatever has that name now.
       try { await store.remove(entry.name, id); removed++; } catch { /* kept: counted below */ }
     }
+    if (old) return { action, removed, kept: count - removed };
     // Whatever is still listed (replaced, added meanwhile, or never shown) is what the learner still has.
     const kept = (await store.list().catch(() => null))?.entries.length ?? 0;
-    return { action: 'deleteAll', removed, kept };
+    return { action, removed, kept };
   };
   return {
     async view() {
@@ -125,17 +133,17 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
           const pin = await store.identify(entry.name).then(memoryPin, () => undefined);
           entries.push({ name: entry.name, at: entry.at, text: entry.text, source: memorySource(entry.task, known), ...(pin ? { pin } : {}) });
         }
-        return { scope, folder: MEMORY_FOLDER_LABEL, entries, other: listing.other, unsafe: listing.unsafe, overview };
+        return { scope, folder: MEMORY_FOLDER_LABEL, entries, other: listing.other, unsafe: listing.unsafe, overview, limit: MEMORY_LIMITS.items };
       } catch { return null; }
     },
     async act(action, name, expected, text, names, confirmedPin) {
       if (busy) return { action, error: '앞의 작업이 끝나면 다시 시도해 주세요.' };
       busy = true;
       try {
-        if (action !== 'open' && action !== 'delete' && action !== 'correct' && action !== 'deleteAll') throw new Error('invalid');
+        if (action !== 'open' && action !== 'delete' && action !== 'correct' && action !== 'deleteAll' && action !== 'deleteOld') throw new Error('invalid');
         const { store, root } = current();
         check(expected, root);
-        if (action === 'deleteAll') return await deleteAll(store, expected, root, names ?? []);
+        if (action === 'deleteAll' || action === 'deleteOld') return await deleteAll(store, expected, root, names ?? [], action === 'deleteOld');
         // identify() refuses anything but a plainly named regular file inside the store.
         const pinned = await store.identify(name);
         if (action === 'correct') {
@@ -150,7 +158,8 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
           if (next === current) return { action, name, unchanged: true };
           if (memoryStatementRefusal(next)) throw new Error('correction_judgment');
           check(expected, root);
-          const added = await store.append(next, Date.now(), entry.task);
+          // REQ-STUDIO-MEMORY-CAPACITY — a replacement, not an addition: allowed in a full store (the old file goes next).
+          const added = await store.append(next, Date.now(), entry.task, name);
           try { await store.remove(name, pinned); } catch (error) {
             // The old item changed under the press: keep it, drop the new copy, and say so.
             await store.remove(added).catch(() => undefined);

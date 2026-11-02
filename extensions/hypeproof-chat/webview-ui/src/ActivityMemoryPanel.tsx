@@ -10,9 +10,12 @@
 // replaces; 취소 returns focus to that 고치기. The field is a textarea, so Enter (and an IME's Enter) never submits.
 // REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023 / REQ-KNOW-41) — each file names the task it was kept from (a link that opens
 // that task, or the reason there is none), and 모두 지우기… removes every listed file after the host's two native confirms.
+// REQ-STUDIO-MEMORY-CAPACITY (CGP-KNOW-R-024 / REQ-KNOW-42) — "기억 N/M개" with a bar that only repeats the words; from 90%
+// a notice with 오래된 기억 정리, which lists the oldest items with a pre-checked pick for the host's two native confirms.
+// There is no purchase, upgrade or "get more" control: the limit is a local folder's, not a plan's.
 
 import { useEffect, useRef, useState } from 'react';
-import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_SOURCE_TEXT, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView, type MemorySource } from '../../src/activityMemoryView';
+import { MEMORY_CAPACITY_COPY, MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, memoryCapacity, memoryCleanupCount, MEMORY_SCOPE_LABEL, MEMORY_SOURCE_TEXT, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView, type MemorySource } from '../../src/activityMemoryView';
 import { focusIsLost } from './dialogFocus';
 import { onHostMessage, postToHost } from './vscode';
 
@@ -45,9 +48,14 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const corrector = useRef<HTMLButtonElement | null>(null);
+  /** 오래된 기억 정리: the names picked for deletion, oldest first; null while the picker is closed. */
+  const [cleanup, setCleanup] = useState<string[] | null>(null);
+  const cleanupButton = useRef<HTMLButtonElement>(null);
+  const pickHeading = useRef<HTMLHeadingElement>(null);
+  const pickForm = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    setView(undefined); setPending(false); setError(''); setNotice(''); setEditing(null); setDraft('');
+    setView(undefined); setPending(false); setError(''); setNotice(''); setEditing(null); setDraft(''); setCleanup(null);
     request.current = null; refocus.current = false;
     const dispose = onHostMessage(message => {
       if (message.type !== 'activityMemoryState') return;
@@ -62,8 +70,9 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
       if (result.error) { setError(result.error); return; }
       setError(''); setNotice(memoryResultNotice(result));
       if (result.action === 'correct') setEditing(null);
+      if (result.action === 'deleteOld') setCleanup(null);
       // The deleted (or replaced) row's button goes away with this answer: the effect below lands focus after the commit.
-      if (result.action === 'delete' || result.action === 'correct' || result.action === 'deleteAll') refocus.current = true;
+      if (result.action === 'delete' || result.action === 'correct' || result.action === 'deleteAll' || result.action === 'deleteOld') refocus.current = true;
     });
     postToHost({ type: 'activityMemoryRequest' });
     return dispose;
@@ -81,7 +90,7 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
     const requestId = nextRequestId();
     request.current = requestId; setPending(true); setError(''); setNotice('');
     // 모두 지우기 names exactly the files this list shows; the host removes nothing else.
-    const extra = action === 'correct' ? { text: text ?? '' } : action === 'deleteAll' ? { names: view.entries.map(entry => entry.name) } : {};
+    const extra = action === 'correct' ? { text: text ?? '' } : action === 'deleteAll' ? { names: view.entries.map(entry => entry.name) } : action === 'deleteOld' ? { names: cleanup ?? [] } : {};
     postToHost({ type: 'activityMemoryAction', requestId, scope: view.scope, action, name, ...extra });
   };
   const overview = view?.overview ?? null;
@@ -92,6 +101,29 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
     if (corrector.current?.isConnected) corrector.current.focus({ preventScroll: true });
     else refocus.current = true;
   };
+  const capacity = view?.limit ? memoryCapacity(view.entries.length + view.other, view.limit) : null;
+  // Oldest first. The pick starts with as many as bring the store back to 80%; the list shows at least ten to choose from.
+  const oldest = view ? [...view.entries].sort((a, b) => a.at - b.at || (a.name < b.name ? -1 : 1)) : [];
+  const openCleanup = () => {
+    if (!capacity || pending) return;
+    const count = Math.min(oldest.length, memoryCleanupCount(capacity.used, capacity.limit));
+    setCleanup(oldest.slice(0, count).map(entry => entry.name)); setError(''); setNotice('');
+    requestAnimationFrame(() => pickHeading.current?.focus({ preventScroll: true }));
+  };
+  const closeCleanup = () => { setCleanup(null); requestAnimationFrame(() => cleanupButton.current?.focus({ preventScroll: true })); };
+  // Escape closes only the pick: the drawer listens for Escape on its own element, so the key is stopped here, natively.
+  const pickOpen = cleanup !== null;
+  useEffect(() => {
+    const node = pickForm.current;
+    if (!pickOpen || !node) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229) return;
+      event.preventDefault(); event.stopPropagation();
+      closeCleanup();
+    };
+    node.addEventListener('keydown', onKey);
+    return () => node.removeEventListener('keydown', onKey);
+  }, [pickOpen]);
 
   const note = (text: string, status = false) => <p className="tw-works-note" role={status ? 'status' : undefined}>{text}</p>;
   if (view === undefined) return note('기억 파일을 불러오는 중…', true);
@@ -105,6 +137,32 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
     {view.unsafe && <p className="tw-memory-note">기억 폴더가 링크이거나 폴더가 아니어서 읽지 않았어요.</p>}
     {error && <p role="alert" className="tw-memory-note">{error}</p>}
     <p role="status" className="tw-memory-note">{notice}</p>
+    {capacity && <div className="tw-memory-capacity" data-testid="memory-capacity" data-level={capacity.level}>
+      <p className="tw-memory-capacity-line">{MEMORY_CAPACITY_COPY.line(capacity.used, capacity.limit)}</p>
+      {/* The words carry the state; the bar repeats them and is hidden from assistive tech. */}
+      <div className="tw-memory-capacity-bar" aria-hidden="true"><span style={{ inlineSize: `${capacity.percent}%` }} /></div>
+      {capacity.level !== 'ok' && <div className="tw-memory-capacity-notice">
+        <p className="tw-memory-note">{capacity.level === 'full' ? MEMORY_CAPACITY_COPY.full(capacity.limit, !!overview) : MEMORY_CAPACITY_COPY.near(capacity.used, capacity.limit)}</p>
+        {oldest.length > 0 && <div className="tw-memory-actions">
+          <button ref={cleanupButton} type="button" aria-disabled={pending || undefined} aria-expanded={cleanup !== null} aria-controls={cleanup ? 'tw-memory-cleanup' : undefined}
+            onClick={() => cleanup ? closeCleanup() : openCleanup()}>{MEMORY_CAPACITY_COPY.cleanup}</button>
+        </div>}
+      </div>}
+      {cleanup && <form ref={pickForm} id="tw-memory-cleanup" className="tw-memory-cleanup" aria-labelledby="tw-memory-cleanup-title" onSubmit={event => { event.preventDefault(); if (!pending && cleanup.length) act('deleteOld', ''); }}>
+        <h5 id="tw-memory-cleanup-title" ref={pickHeading} tabIndex={-1}>{MEMORY_CAPACITY_COPY.pickTitle}</h5>
+        <p className="tw-memory-note">{MEMORY_CAPACITY_COPY.pickNote(cleanup.length)}</p>
+        <ul aria-labelledby="tw-memory-cleanup-title">{oldest.slice(0, Math.max(10, memoryCleanupCount(capacity.used, capacity.limit))).map(entry => <li key={entry.name}>
+          <label className="tw-memory-cleanup-item">
+            <input type="checkbox" checked={cleanup.includes(entry.name)} onChange={event => setCleanup(event.target.checked ? [...cleanup, entry.name] : cleanup.filter(name => name !== entry.name))} />
+            <span><span className="tw-memory-text" dir="auto">{entry.text ?? MEMORY_FOLDER_LABEL + entry.name}</span><time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('ko-KR')}</time></span>
+          </label>
+        </li>)}</ul>
+        <div className="tw-memory-actions">
+          <button type="submit" aria-disabled={pending || !cleanup.length || undefined}>{MEMORY_CAPACITY_COPY.confirm(cleanup.length)}</button>
+          <button type="button" onClick={closeCleanup}>{MEMORY_CAPACITY_COPY.cancel}</button>
+        </div>
+      </form>}
+    </div>}
     <div className="tw-memory-list">
       <p className="tw-memory-note">이 활동 폴더 안의 <code className="tw-memory-path" dir="ltr">{view.folder}</code>에 있는 파일이에요. 이 활동 밖의 기억은 읽지 않아요.</p>
       {overview && <section className="tw-memory-overview" aria-labelledby="tw-memory-overview-title" data-testid="memory-overview">

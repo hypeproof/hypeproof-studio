@@ -8179,6 +8179,46 @@ malformed pin falling back to the native confirm, a class seat refused) and
 search, the confirm with 취소 focused first and Escape closing only it, one delete naming the pin, both empty states, no
 list without a view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
 
+## Memory capacity: used/limit and cleanup (CGP-KNOW-R-024)
+
+REQ-STUDIO-MEMORY-CAPACITY / REQ-KNOW-42 (CGP-KNOW-042) / DES-KNOW-42; DEC-01 (memory is files in the activity folder,
+so the limit is that folder's, not a plan's). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES and REQ-STUDIO-MEMORY-MANAGER.
+
+- **The limit.** `MEMORY_LIMITS.items` in `activityMemory.ts` (200 files), one constant: the store refuses a new file at
+  it (`append()` throws `full`), the listing shows at most that many, and the view carries it to the webview as
+  `limit`. Every entry of the folder counts, listed or not (`entries + other`).
+- **Shown as used/limit.** The 기억 view of the 내 작품 drawer shows "기억 N/M개" in words (14px, strong), with a bar
+  that repeats the words: outlined, `aria-hidden`, the same fill at every level, so no state is carried by colour.
+- **From 90%.** A notice says it is almost full ("기억이 거의 찼어요. M개까지 남길 수 있고 지금 N개예요.") or, at 100%,
+  that new memories are not kept ("기억이 가득 찼어요. M개가 다 차서 새 기억은 남지 않아요. 있는 기억은 고치거나 지울 수
+  있어요.", without "고치거나 " where the seat has no overview to correct in), with 오래된 기억 정리.
+- **오래된 기억 정리.** It opens a pick of the oldest items, oldest first (at least ten, or as many as needed), with as
+  many pre-checked as bring the store back to 80%. Each row is a 44px checkbox label with the item's words and time;
+  the learner can change the pick; Escape or 취소 closes it and focus returns to the button. "고른 기억 N개 지우기…"
+  sends the checked names (`deleteOld`) to the R-023 delete path: the host pins the listed files, asks twice in native
+  modals with its own words ("고른 오래된 기억 N개를 지울까요?", then "N개 지우기"), and removes only those files;
+  names the list never showed and unlisted entries are left alone. The status line then says "오래된 기억 N개를 지웠어요.".
+- **No purchase.** No "get more", upgrade, plan, purchase or pricing element exists anywhere in the view.
+- **At 100%, only additions are refused.** `append()` refuses a new file at the limit. A correction (R-025) replaces one
+  item and adds none, so it is allowed at 100%: its write passes the file it replaces (`append(…, replacing)`), which is
+  not counted, and the old file is removed right after (the store holds limit + 1 files only inside that one host
+  action; if the old file changed, the new copy is dropped, as before). A store already past the limit (unlisted
+  entries beyond it) refuses the correction too, with "기억 파일이 너무 많아서 고치지 못했어요. 필요 없는 기억을 먼저 지워
+  주세요." and nothing left behind. Saying a refused addition in the turn belongs to the in-turn writer, REQ-KNOW-45
+  (CGP-KNOW-R-027), which is blocked (#3338): when it lands, its `append()` call gets the same `full` refusal and must
+  state it in the turn's memory line.
+
+Evidence: `extensions/hypeproof-chat/test/memory-capacity.smoke.mjs` (the level at 0/89/90/99/100% and the 80% pick;
+the real provider and host on real files: the view's limit, used counting an unlisted entry, `append()` refused at the
+limit while a correction at exactly the limit replaces its item and keeps the count, a correction past the limit refused
+with no residue, the correction's pin keeping a file replaced during the press at the limit, `deleteOld` with 취소 at either step, removing exactly the picked listed files and
+nothing else, writing again after cleanup, a press without names refused) and
+`extensions/hypeproof-chat/test/memory-capacity-browser.smoke.mjs` (the real panel in headless Chromium, dark/light,
+320/800 px, forced colours, at 50/90/100%: the words, the outlined hidden bar, the notice only from 90%, 44px controls
+and pick rows, 14px text, oldest first with the 80% pick, Escape back to the button, one `deleteOld` with exactly the
+checked names, the host's answer, and no purchase, upgrade or pricing word, link or class in the DOM; proved against a
+planted "용량 늘리기" pricing link).
+
 ## One-time memory notice (CGP-KNOW-R-031)
 
 REQ-STUDIO-MEMORY-NOTICE / REQ-KNOW-49 (CGP-KNOW-049) / DES-KNOW-49 (CGP-KNOW-D-031) / PI#2 (the learner can see what

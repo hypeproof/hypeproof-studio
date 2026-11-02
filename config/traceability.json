@@ -16541,6 +16541,67 @@
           "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-CAPACITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory capacity: used/limit and cleanup (CGP-KNOW-R-024)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-CAPACITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-CAPACITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-CAPACITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-CAPACITY",
+        "ST-IMP-MEMORY-CAPACITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-capacity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-capacity-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }
