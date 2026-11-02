@@ -8,7 +8,7 @@
  * scope-specific selector has to out-rank the base. The ring is 2px solid, 2px outside the
  * control (the gap separates it from the control's own fill), or -2px inside a scrolling
  * viewport and its descendants, where an outside ring would be clipped. */
-html body :focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) {
+html body :focus-visible:where(:not(.hps-shell .hps-input textarea):not(.cp-preview h3)) {
   outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default, var(--ds-c-focus-ring)) !important;
   outline-offset: var(--hp-focus-offset, var(--ds-c-focus-offset)) !important;
 }
@@ -33,6 +33,7 @@ html body :is(
   .hps-codeblock[data-wrap="off"] > pre,
   .hps-shell:has(> .hp-mission .hp-mission-sentence),
   .hps-shell:has(.hps-effort:not(:empty)),
+  .hps-shell .hps-input textarea,
   .hps-shell[data-chat-detail="personal"] .hps-input textarea,
   .hps-shell .hps-input[data-file-context] > textarea,
   .hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > textarea,
@@ -55,12 +56,12 @@ html body :is(
  * scroll inset and use the system Canvas/CanvasText pair so a Highlight-filled selected control
  * cannot swallow the Highlight ring. Outside forced colors focus never repaints a control. */
 @media (forced-colors: active) {
-  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) {
+  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell .hps-input textarea):not(.cp-preview h3)) {
     outline-color: Highlight !important;
     background: Canvas !important;
     color: CanvasText !important;
   }
-  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) :where(*) {
+  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell .hps-input textarea):not(.cp-preview h3)) :where(*) {
     color: inherit !important;
   }
 }

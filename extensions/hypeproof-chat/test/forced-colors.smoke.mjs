@@ -100,7 +100,7 @@ const OVER_IMAGE = [".hps-attachment-remove", ".hps-edit-image button"];
 // CGP-ART-R-006: a style-tweak swatch IS the colour the learner picks; repainting it would erase the choice.
 const ADJUST_NONE_OK = [".hps-publish-link img", ".studio-guardian-pay img", ".hps-style-tweak-chip"];
 // The only outline removals: a programmatic focus target, and a field whose wrapper draws the ring.
-const OUTLINE_NONE_OK = [".cp-preview h3:focus", '.hps-shell[data-chat-detail="personal"] .hps-input textarea'];
+const OUTLINE_NONE_OK = [".hps-input textarea:focus", ".cp-preview h3:focus", '.hps-shell[data-chat-detail="personal"] .hps-input textarea'];
 const COMPOSER_RING = '.hps-shell[data-chat-detail="personal"] .hps-input:focus-within';
 const MUST_HAVE_BLOCK = ["tokens.css", "styles.css", "chatDetails.css", "start.css"];
 const STATE = /\[aria-(?:pressed|checked|selected|current)="[^"]+"\]|\[aria-expanded="true"\]|:has\(input:checked\)/g;
@@ -134,6 +134,8 @@ function audit(files) {
     const o = value(forcedDecls(sel, f), "outline") ?? "";
     if (!/^2px solid var\(--hp-ring-focus-default\)/.test(o)) bad.push(`${f}: forced "${sel}" outline is "${o}", not 2px solid var(--hp-ring-focus-default)`);
   }
+  const sharedComposerOutline = value(restRules.filter(r => r.f === "styles.css" && r.parts.includes(".hps-input:focus-within")).flatMap(r => r.decls), "outline") ?? "";
+  if (!(parseFloat(sharedComposerOutline) >= 2 && /px solid var\(--hp-ring-focus-default\)/.test(sharedComposerOutline))) bad.push("styles.css: shared composer wrapper must retain its focus outline");
   for (const { f, parts, decls } of [...restRules, ...forcedRules]) {
     const focus = parts.some((p) => /:focus(-visible|-within)?\b/.test(p));
     for (const [k, v] of decls) {
@@ -238,6 +240,7 @@ const mutate = (f, from, to) => {
   return audit({ ...files, [f]: files[f].replace(from, to) });
 };
 const expectBad = (problems, re, label) => assert.ok(problems.some((p) => re.test(p)), `negative control not caught: ${label}\n${problems.join("\n")}`);
+expectBad(mutate("styles.css", ".hps-input:focus-within", ".hps-input[data-no-focus]"), /shared composer wrapper/, "shared composer wrapper focus removed");
 // origin/main: no forced-colors block anywhere.
 const noBlocks = Object.fromEntries(Object.entries(files).map(([f, css]) => [f, split(css).rest]));
 expectBad(audit(noBlocks), /tokens\.css: no @media \(forced-colors: active\) block/, "CSS without forced-colors blocks (origin/main)");

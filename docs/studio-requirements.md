@@ -8120,6 +8120,16 @@ files byte-identical; the real provider with a scripted runtime: no classroom, l
 memory item) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs` (headless Chromium: the scope
 label's exact text, drawn, 14px, 4.5:1, no control and no scope-changing control; no label without a view).
 
+### Classroom composer growth (#2440)
+
+REQ-STUDIO-CHAT-DETAIL: classroom input grows to its text, bounded by 192px and
+one third of the shell viewport; longer text scrolls inside the input, and clearing
+shrinks it. Its scrollable lesson shell does not subtract the whole lesson height
+from the input budget. Personal mode keeps its existing available-space calculation.
+All seats show composer focus on the card rather than a duplicate inner textarea ring.
+Browser regression: classroom-composer.smoke.mjs covers growth, internal scroll,
+shrink and personal controls at narrow/wide and short/tall viewports.
+
 ## Memory manager: view and delete each item (CGP-KNOW-R-023)
 
 REQ-STUDIO-MEMORY-MANAGER / REQ-KNOW-41 (CGP-KNOW-041) / PI#2 (the learner can see and remove what the AI keeps);
