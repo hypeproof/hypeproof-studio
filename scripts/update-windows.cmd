@@ -1,8 +1,8 @@
 @echo off
 rem HypeProof Studio Windows updater: double-click to install the latest public release.
-rem Everything after the #PS# marker is PowerShell; this file runs itself through it.
+rem Everything after the marker line below is PowerShell; this file runs itself through it.
 chcp 65001 >nul
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = [IO.File]::ReadAllText('%~f0', [Text.Encoding]::UTF8); iex ($s -split '#PS#', 2)[1]"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = [IO.File]::ReadAllText('%~f0', [Text.Encoding]::UTF8); iex ($s -split '\r?\n#PS#\r?\n', 2)[1]"
 echo.
 pause
 exit /b
