@@ -365,6 +365,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     }
   }), [clearRequestTimer, updateRequest, closeSources]);
   useLayoutEffect(() => {
+    // layout-loop-ok: resets panel state when the task scope changes; it measures nothing.
     clearRequestTimer();
     updateRequest(null);
     sourceTrigger.current = null;
@@ -457,6 +458,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     });
   }, [sourcesOpen, preview, memoryShelf, scopeKey, sourceRequest?.requestId]);
   useLayoutEffect(() => {
+    // layout-loop-ok: reads two CSS tokens once on mount (no dependencies), so it cannot re-run on its own result.
     const style = workspaceEl.current ? getComputedStyle(workspaceEl.current) : null;
     const read = (name: string, panel: PanelName) => { const px = parseFloat(style?.getPropertyValue(name) ?? ''); return Number.isFinite(px) ? px : PANEL_LIMITS[panel].min; };
     setTokenWidths({ rail: read('--tw-rail-default', 'rail'), sources: read('--tw-source-default', 'sources') });
@@ -473,6 +475,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   }, []);
   // Release inert before the queued focus restoration runs on the next animation frame.
   useLayoutEffect(() => {
+    // layout-loop-ok: setRailOpen runs only from an Escape key handler, never from a measurement.
     const dialog = sourceDialog ? sourcePanel.current : railDialog ? rail.current : null;
     if (!dialog) return;
     const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;

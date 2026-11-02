@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import type { MentionFile } from '../../src/workspaceFileMentions';
 import { onHostMessage, postToHost } from './vscode';
 import { ChatIcon } from './ChatDetails';
+import { useLayoutLoopGuard } from './layoutLoopGuard';
 export function mentionAt(text: string, caret: number): { start: number; end: number; query: string } | null {
   const match = /(?:^|\s)@([^\s@]{0,256})$/.exec(text.slice(0, caret));
   return match ? { start: caret - match[1].length - 1, end: caret, query: match[1] } : null;
@@ -40,6 +41,7 @@ export function useFileMentions({ enabled, draft, setDraft, editor, composing, a
   const [state, setState] = useState<{ requestId: string; files: MentionFile[]; loading: boolean; pending: boolean; limited: boolean; error?: string } | null>(null);
   const [selected, setSelected] = useState(0), id = useId();
   const [anchor, setAnchor] = useState(0), list = useRef<HTMLDivElement>(null);
+  const measuredAnchor = useLayoutLoopGuard(setAnchor, 'fileMentions.anchor');
   const current = useRef(draft);current.current = draft;
   const signature = `${draft}\0${caret}`;
   const trigger = enabled && !composing && dismissed !== signature ? mentionAt(draft, caret) : null;
@@ -71,13 +73,13 @@ export function useFileMentions({ enabled, draft, setDraft, editor, composing, a
   useLayoutEffect(() => {
     const area = editor.current, card = area?.closest('.hps-input');
     if (!opened || start === undefined || !area || !card) return;
-    const measure = () => setAnchor(Math.round(caretInlineOffset(area, start, card)));
+    const measure = () => measuredAnchor(Math.round(caretInlineOffset(area, start, card)));
     measure();
     // A wider or narrower card, a text-size change or rewrapped text before the `@` moves the glyph.
     const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
     watch?.observe(card);watch?.observe(area);
     return () => watch?.disconnect();
-  }, [opened, start, draft, editor]);
+  }, [opened, start, draft, editor, measuredAnchor]);
   // Only the list scrolls to keep the chosen row in view; scrollIntoView would also move the transcript.
   useEffect(() => {
     const box = list.current, row = box && state?.files[selected] ? document.getElementById(`${id}-${selected}`) : null;

@@ -5,6 +5,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { ChatIcon, type IconKind } from "./ChatDetails";
+import { useLayoutLoopGuard } from "./layoutLoopGuard";
 import {
   TASK_ACTIVITY_HINT, TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, taskActivityChipText, middleEllipsis, taskActivityTotal,
   type TaskActivitySummary, type TaskActivityVerb,
@@ -33,16 +34,17 @@ function lineFits(el: HTMLElement): ((shown: string) => boolean) | null {
 function TargetName({ target }: { target: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [shown, setShown] = useState(() => middleEllipsis(target));
+  const measuredShown = useLayoutLoopGuard(setShown, 'taskActivity.target');
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const fit = () => setShown(fitMiddleEllipsis(target, lineFits(el)));
+    const fit = () => measuredShown(fitMiddleEllipsis(target, lineFits(el)));
     fit();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [target]);
+  }, [target, measuredShown]);
   return <span ref={ref} className="hps-task-activity-target" title={target}>
     <span aria-hidden="true">{shown}</span>
     <span className="hps-sr-only">{target}</span>
