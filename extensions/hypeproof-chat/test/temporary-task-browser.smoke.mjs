@@ -1,8 +1,8 @@
 // CGP-KNOW-R-029 (REQ-KNOW-47 / DES-KNOW-47) — "기록 없이 묻기" in the real App bundle in headless Chromium, measured on the
 // real markup. Dark and light at 320, 800 and 1420 px, plus forced colours:
 //   1. an adult personal seat: the 대화 메뉴 has 기록 없이 묻기 (a 44px item); choosing it posts `taskCreateTemporary` once;
-//   2. while the temporary task is open, a band runs across the top of the task above its heading: the title, "이 기기에
-//      기록을 남기지 않아요…", that it is chat only and that the request still goes to the Service; 14px or more, 4.5:1,
+//   2. while the temporary task is open, a band runs across the top of the task above its heading: the title "이 기기에
+//      기록이 남지 않는 작업" (CGP-KNOW-D-029: the register's title, scoped to this device), "이 기기에 기록을 남기지 않아요…", that it is chat only and that the request still goes to the Service; 14px or more, 4.5:1,
 //      inside the window; it promises nothing about other places ("어디에도", "서버에도" never appear); it goes when the
 //      learner leaves the task;
 //   3. a seat that may not open one (a personal seat the host refused: minor or unknown; and a classroom seat): the
@@ -66,6 +66,9 @@ try {
       assert.ok(band, `${tag}: the band is shown`);
       assert.deepEqual(band.lines, [TEMPORARY_TASK_COPY.bandTitle, TEMPORARY_TASK_COPY.device, `${TEMPORARY_TASK_COPY.chatOnly} ${TEMPORARY_TASK_COPY.service}`], `${tag}: the band's words`);
       assert.ok(band.text.includes('이 기기에 기록을 남기지 않아요'), `${tag}: it promises this device`);
+      // CGP-KNOW-D-029 — the register's title "기록이 남지 않는 작업", always scoped to this device, never unscoped.
+      assert.equal(band.lines[0], '이 기기에 기록이 남지 않는 작업', `${tag}: the band's title`);
+      assert.ok(band.lines.every(line => !/^기록이 남지 않는/.test(line)), `${tag}: no unscoped "기록이 남지 않는…"`);
       assert.doesNotMatch(band.text, /어디에도|서버에도|아무 데도|완전히|영원히/, `${tag}: and nothing about other places`);
       assert.ok(band.bottom <= band.heading + 0.5, `${tag}: above the task heading (${band.bottom} <= ${band.heading})`);
       assert.ok(band.left >= -0.5 && band.right <= width + 0.5 && band.scroll <= 0, `${tag}: inside the window, no sideways scroll`);

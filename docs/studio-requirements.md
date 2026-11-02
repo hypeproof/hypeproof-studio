@@ -8260,7 +8260,8 @@ CGP lead on 2026-11-02 as a reversible default; memory is read in it (DEC-02: me
   `analytics.log_user_messages` the Service stores the turn's last user message, and the client cannot stop that. A
   per-request no-log flag is a Service contract (`service-contracts-backlog.md` #12), blocked-external. So the copy
   promises this device only.
-- **The band.** Across the top of the task while it is open, above the heading: "기록 없이 묻기" (lock glyph), "이 기기에
+- **The band.** Across the top of the task while it is open, above the heading: "이 기기에 기록이 남지 않는 작업" (lock
+  glyph; CGP-KNOW-D-029, DES-KNOW-47's title scoped to this device), "이 기기에
   기록을 남기지 않아요. 이 작업을 떠나면 대화가 사라져요.", "대화만 할 수 있어요. AI가 파일을 만들거나 바꾸지 않아요. 질문과
   답은 답을 만들기 위해 서비스로 보내져요." It is set apart by a rule and its title, uses 14px or more at 4.5:1, and never
   says "anywhere".
