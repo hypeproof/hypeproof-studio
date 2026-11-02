@@ -153,3 +153,12 @@ one issue titled "Daily release cut skipped: needs attention", and posts to `#al
 
 From 2026-10-25 to 10-28 the admin password rotation left this secret stale and the gate skipped three
 days with green runs and no message; this section exists because of that.
+
+A cut crash is also loud (#3177): a nonzero exit without a matching completed
+plan, malformed plan or missing result body fails the cut and raises the same
+alarm. Only an explicit `skipped.json` no-commit receipt permits a missing plan.
+A completed smoke FAIL in create mode still opens its existing failure issue;
+NOT_RUN keeps the existing creation gate. Setup/control failures and unsuccessful
+creation are also alarmed. This does not change the daily cadence or authorize
+publication. The added classifier makes no network or model calls; its cost is
+a local file read and a short Node process within the existing job.
