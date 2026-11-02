@@ -1,3 +1,4 @@
+import { FEEDBACK_ENTRY_LABEL } from '../../src/problemReport';
 import { useMenuTypeahead } from './menuTypeahead';
 import { citationKindLabel } from './citationKind';
 import { elapsedWorkLabel } from '../../src/turnElapsed';
@@ -1730,6 +1731,9 @@ export function ChatPanel(props: Props) {
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
           {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} data-hp-tooltip="이용권과 사용량 확인">이용권 · 사용량</button>}
+          {/* REQ-STUDIO-FEEDBACK-ENTRY (#3413) — a visible way to send a complaint or a problem: the same in-panel form
+              (and the same automatic attachments) as the error card's 문제 보내기, opened as a learner's own report. */}
+          {personalWorkspace && <button type="button" className="tw-feedback-open" onClick={() => props.onReportProblem()} data-hp-tooltip="불편한 점이나 안 되는 것을 운영팀에 알려요">{FEEDBACK_ENTRY_LABEL}</button>}
           <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;

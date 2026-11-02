@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { AUTO_REPORT_HINT, AUTO_REPORT_LABEL, LOGS_HINT, LOGS_LABEL, PROBLEM_CONTACT_MAX, PROBLEM_DESCRIPTION_MAX, PROBLEM_FORM_LEAD, type OfferReason, type ProblemReportAnswer, type ProblemReportFormView } from '../../src/problemReport';
+import { AUTO_REPORT_HINT, AUTO_REPORT_LABEL, LOGS_HINT, LOGS_LABEL, PROBLEM_CONTACT_MAX, PROBLEM_DESCRIPTION_MAX, PROBLEM_FORM_LEAD, problemFormTitle, type OfferReason, type ProblemReportAnswer, type ProblemReportFormView } from '../../src/problemReport';
 import { normalizeTextSize } from '../../src/textSize';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
@@ -42,13 +42,13 @@ export function ProblemReportDialog({ form, onAnswer, onAutoReport, textSize }: 
       if (imeComposing(event, composing.current)) { event.stopPropagation(); return; }
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(null); }
     }}>
-    <h2 id="problem-report-title">문제 보내기</h2>
+    <h2 id="problem-report-title">{problemFormTitle(form.reason)}</h2>
     <p id="problem-report-lead">{PROBLEM_FORM_LEAD[form.reason]}</p>
     <form onSubmit={event => { event.preventDefault(); submit(); }}>
       <label className="hps-problem-field">
         <span>무슨 일이 있었나요? <small>(선택)</small></span>
         <input data-problem-description type="text" value={description} maxLength={PROBLEM_DESCRIPTION_MAX}
-          placeholder="예: 보내기를 누르면 계속 오류가 나요" onChange={event => setDescription(event.target.value)} />
+          placeholder={form.reason === 'manual' ? '예: 글씨가 작아서 읽기 불편해요' : '예: 보내기를 누르면 계속 오류가 나요'} onChange={event => setDescription(event.target.value)} />
       </label>
       <label className="hps-problem-field">
         <span>{form.contactPrompt} <small>(선택)</small></span>

@@ -16,6 +16,9 @@ async function main(){
  const button=(text:string)=>[...document.querySelectorAll('button')].find(b=>b.textContent?.replace(/→/g,'').trim()===text)!;
  await update(base);
  assert(button('Google 로그인')); assert(button('로그인 없이 무료로 시작하기'));
+ // REQ-STUDIO-FEEDBACK-ENTRY: the start page nav carries 의견·문제 보내기, which asks the host to open the report form.
+ const feedback=button('의견·문제 보내기'); assert(feedback?.closest('nav[aria-label="Studio 탐색"]'),'의견·문제 보내기 is in the start nav');
+ await act(async()=>feedback.click()); assert.deepEqual(posted.at(-1),{type:'reportProblem'});
  // The actual account button (not navigation) initiates auth without opening checkout.
  const signIn=document.querySelector<HTMLButtonElement>('.studio-google')!;
  await act(async()=>signIn.click()); assert.equal(posted.at(-1).type,'accountSignIn');
