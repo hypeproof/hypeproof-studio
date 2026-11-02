@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
+import { AccountError, accountProductionEnabled, ACCOUNTS_ENABLED_DEFAULT, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, FOLDER_TAKEN_MESSAGE, activityConnections, passTakesOver } from "./activityConnections";
 import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
@@ -836,7 +836,35 @@ export class StartPage {
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
     if (msg.type.startsWith("account")) {
-      if (!this.accounts) return;
+      if (!this.accounts) {
+        if (msg.type !== "accountSignIn") return;
+        if (this.chat.hasActiveStream()) {
+          this.error = "진행 중인 작업을 마치거나 중지한 후 로그인해 주세요.";
+          await this.refresh(); return;
+        }
+        try {
+          const config = vscode.workspace.getConfiguration("hypeproofChat");
+          const { proxyUrl, siteBase } = this.settings();
+          if (!accountProductionEnabled(true, proxyUrl, siteBase)) {
+            this.error = "현재 서버 설정에서는 Google 로그인을 사용할 수 없어요. 공식 서비스 주소인지 확인해 주세요.";
+            await this.refresh(); return;
+          }
+          const disabled = !config.get<boolean>("accountsEnabled", ACCOUNTS_ENABLED_DEFAULT);
+          const action = disabled ? "켜고 다시 열기" : "다시 열기";
+          const choice = await vscode.window.showInformationMessage(
+            disabled ? "이 기기에서 개인 계정 사용이 꺼져 있어요. 켜고 Studio 창을 다시 열까요? 작업 파일은 그대로 남아요."
+              : "계정 기능을 불러오려면 Studio 창을 다시 열어야 해요. 작업 파일은 그대로 남아요.",
+            { modal: true }, action);
+          if (choice === action) {
+            if (disabled) await config.update("accountsEnabled", true, vscode.ConfigurationTarget.Global);
+            await vscode.commands.executeCommand("workbench.action.reloadWindow");
+          }
+        } catch {
+          this.error = "계정 기능을 다시 열지 못했어요. 잠시 뒤 다시 눌러 주세요.";
+          await this.refresh();
+        }
+        return;
+      }
       this.error = undefined;
       try {
         if (msg.type === "accountSignIn") {

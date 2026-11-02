@@ -11,10 +11,11 @@ const bundle=await build({stdin:{contents:"export * from './src/startPage.ts';ex
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'studio-account-runtime-')),root=path.join(tmp,'workspace');fs.mkdirSync(root);
 const SERVICE='http://127.0.0.1:8793/v1',SITE='http://localhost:3193',ID='ord_'+'a'.repeat(32),SECRET='b'.repeat(64);
 let now=1000000,rotations=0,revoked=false,stops=0,service=SERVICE;
+let site=SITE,enabled=true,recoveryChoice,commands=[],updates=[];
 const calls=[],states=[],secrets=new Map(),workspace=new Map();
 const profile={activity_id:'b'.repeat(64),activity_kind:'trial',profile_id:'adult',display_name:'Personal pass',workspace_root:root,pass:{request_limit:10,requests_used:1,expires_at:2000000000},ux:{coach:{naming_mode:'fixed',fallback_name:'Coach'}},welcome:{},series_index:1,series_total:1};
 const ctx={globalStorageUri:{fsPath:path.join(tmp,'storage')},workspaceState:{keys:()=>[...workspace.keys()],get:(k,d)=>workspace.get(k)??d,update:async(k,v)=>workspace.set(k,v)},secrets:{keys:async()=>[...secrets.keys()],get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)},extension:{packageJSON:{version:'test'}},subscriptions:[]};
-const vscode={workspace:{workspaceFolders:[{name:'workspace',uri:{fsPath:root}}],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:k==='siteBase'?SITE:d})},window:{},commands:{executeCommand:async()=>{}},Uri:{parse:u=>u},env:{openExternal:async()=>true}};
+const vscode={workspace:{workspaceFolders:[{name:'workspace',uri:{fsPath:root}}],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:k==='siteBase'?site:k==='accountsEnabled'?enabled:d,update:async(...args)=>updates.push(args)})},window:{showInformationMessage:async()=>recoveryChoice},ConfigurationTarget:{Global:1},commands:{executeCommand:async cmd=>commands.push(cmd)},Uri:{parse:u=>u},env:{openExternal:async()=>true}};
 const json=(status,body)=>new Response(JSON.stringify(body),{status});
 const fetch=async(url,init={})=>{
  const p=new URL(url).pathname,headers=new Headers(init.headers);calls.push({p,auth:headers.get('authorization')});
@@ -59,5 +60,18 @@ try {
  const exposed=JSON.stringify(states);for(const secret of ['account-secret','refresh-secret','pass-secret',SECRET])assert.equal(exposed.includes(secret),false);
  service='http://127.0.0.1:8999/v1';const before=calls.length;await page.handle({type:'accountActivate',passId:ID});assert.equal(calls.length,before,'changed Service receives no account token');service=SERVICE;
  revoked=true;await accounts.refreshView();assert.equal(stops,1);assert.equal(connections.current,undefined);assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),undefined);assert.equal(secrets.has(old),true,'classroom credential is retained');assert.equal(fs.existsSync(root),true);
+ const unavailable=new StartPage(scoped,chat,async()=>false,undefined,undefined);
+ unavailable.panel={webview:{postMessage:async msg=>states.push(msg)}};
+ const beforeRecovery=calls.length;
+ await unavailable.handle({type:'accountSignIn'});
+ assert.equal(calls.length,beforeRecovery,'custom service recovery never sends credentials or switches servers');
+ assert.equal(updates.length,0);
+ service='https://api.hypeproof-ai.xyz/v1';site='https://hypeproof-ai.xyz';enabled=false;
+ await unavailable.handle({type:'accountSignIn'});
+ assert.equal(updates.length,0,'closing the recovery prompt changes nothing');
+ recoveryChoice='켜고 다시 열기';
+ await unavailable.handle({type:'accountSignIn'});
+ assert.deepEqual(updates,[['accountsEnabled',true,1]]);
+ assert.equal(commands.at(-1),'workbench.action.reloadWindow');
  accounts.dispose();console.log('PASS real start host: preview rollback, bound runtime refresh, account purchase bearer, no anonymous claim, no token view leaks, origin pinning and targeted revoke');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
