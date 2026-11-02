@@ -6382,6 +6382,9 @@
         },
         {
           "path": "e2e/accounts/mac-return.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/account-start-entry.test.tsx"
         }
       ]
     },
@@ -6402,6 +6405,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         }
       ]
     },

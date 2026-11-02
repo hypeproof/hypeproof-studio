@@ -28,6 +28,8 @@ interface Options {
   /** Resolves the original desktop window through VS Code's URI router. No credentials. */
   createReturnUri?(state: string): PromiseLike<string>;
   returned?(): PromiseLike<void>;
+  /** Runs once after an explicit device approval, never for background account refresh. */
+  signedIn?(): PromiseLike<void>;
   invalidated?(sessionId: string): Promise<void>;
   /** Serializes mutation across extension-host windows, not only concurrent requests in one host. */
   lock?<T>(work: () => Promise<T>): Promise<T>;
@@ -270,6 +272,7 @@ export class AccountSession {
       this.cancel(false); this.browserReturn = browserReturn;
       await this.refreshView();
       await this.completeReturn();
+      await this.options.signedIn?.();
     } catch (e) {
       if (this.device !== d) return;
       if (e instanceof AccountError && (e.code === 'unavailable' || e.code === 'slow_down' || e.code === 'rate_limited' || /^http_5/.test(e.code))) { if (e.code === 'slow_down') d.interval = Math.min(d.interval + 1000, 15000); this.state.message = '연결을 다시 확인하고 있어요. 잠시만 기다려 주세요.'; this.emit(); this.schedule(); return; }
