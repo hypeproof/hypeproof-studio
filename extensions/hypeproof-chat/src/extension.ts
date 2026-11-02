@@ -65,6 +65,7 @@ import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
 import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
+import { registerSkillStore } from "./skillStorePanel";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
@@ -275,6 +276,12 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
+  // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
+  registerSkillStore(context, {
+    render: (webview, dist) => provider.renderHtml(webview, dist),
+    accountToken: async () => accounts?.accessToken(),
+    attachToChat: skill => provider.attachStoreSkill(skill),
+  });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);

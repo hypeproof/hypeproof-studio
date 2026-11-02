@@ -1,8 +1,9 @@
 import type { LocalReviewRequest } from "../../src/localReviewProtocol";
+import type { StoreRequest } from "../../src/skillStoreProtocol";
 import type { HostMessage, WebviewMessage } from "../../src/protocol";
 
 interface VSCodeApi {
-  postMessage(msg: WebviewMessage | LocalReviewRequest): void;
+  postMessage(msg: WebviewMessage | LocalReviewRequest | StoreRequest): void;
   getState<T>(): T | undefined;
   setState<T>(state: T): void;
 }
@@ -38,6 +39,7 @@ export function onHostMessage(handler: (m: HostMessage) => void): () => void {
 }
 
 export function postLocalReview(msg: LocalReviewRequest): void { api?.postMessage(msg); }
+export function postSkillStore(msg: StoreRequest): void { api?.postMessage(msg); }
 
 /** The webview's own persisted state (survives a reload of the same panel). Outside a webview it is a no-op. */
 export function readWebviewState<T extends object>(): Partial<T> {
