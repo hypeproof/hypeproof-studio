@@ -2430,7 +2430,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 
 | ID | 요구사항 | 수용 기준 | Layer |
 |---|---|---|---|
-| REQ-I1 | 24h cadence + 30s initial | 활성화 30s 후 첫 체크, 이후 24h 마다 | U |
+| REQ-I1 | 4h cadence + 30s initial (#3411; was 24h) | 활성화 30s 후 첫 체크, 이후 4h 마다 (`AUTO_UPDATE_CHECK_INTERVAL_MS`). 일시 실패 재시도(15분, 주기당 3회)는 그대로 | U (`test/update-orchestration`, `test/auto-update`) |
 | REQ-I2 | Banner gating (#730) | newer version + dismissals 에 없음 → 배너; 동일/구버전 → null. 수업 미연결·작명 중에도 배너를 유지하며 토큰 없이 설치 확인/보류 가능 | U + E (`e2e/update-check/run.mjs`) |
 | REQ-I3 | Dismiss = 7일 silence | `dismissVersion` 후 동일 버전 배너 7일간 미노출 | U |
 | REQ-I4 | 설치 pipeline (#730) | 공개 릴리스 파일 크기·SHA-256 검증 → unzip → installer 준비 → 사용자 재시작 승인 → detached spawn 성공 확인 → 정상 quit. 보류하면 자동 적용을 약속하지 않는다. 실행 중인 앱은 교체하지 않는다 | U + M |
@@ -5388,12 +5388,66 @@ and rechecks turn/class state after download and confirmation. When that recheck
 the lease refuses, Studio does not quit and tells the learner why in Korean, and the
 prepared update stays for the next eligible quit. No background download
 or new restart permission is introduced (no capability-assessment claim).
+Superseded in part by REQ-STUDIO-AUTO-UPDATE (#3411): with `hypeproofChat.autoUpdate`
+on, the download now also happens in the background, and an idle restart is added.
 
 Evidence: `test/staged-update.smoke.mjs`, `test/update-stage-host.smoke.mjs`,
 `test/update-quit-lifecycle.smoke.mjs` (Cmd+Q on macOS, last-window close on Windows),
 `test/update-installer.smoke.mjs`, `test/update-windows-wrapper.smoke.mjs`, and the
 existing quit-guard and patch fixtures. These isolate native services;
 released-app installation/next-launch and OS-native dialog capture remain owner checks.
+
+## Automatic updates without a click (#3411)
+
+`REQ-STUDIO-AUTO-UPDATE` extends REQ-I1/I4 and REQ-STUDIO-UPDATE-ON-QUIT; respects
+REQ-I16 (CGP-SHELL-R-001). Jay 2026-11-02: "자동업데이트를 하게해주면좋은데". A learner
+on Windows stayed on a crashing build because the update waited behind a banner.
+
+- **Setting.** Machine setting `hypeproofChat.autoUpdate`, default `true`. Off: the
+  REQ-I2 banner and the manual "업데이트 확인/설치" commands exactly as before. The
+  manual commands keep working when it is on.
+- **Check.** 30 s after activation, then every 4 hours (REQ-I1).
+- **Background staging.** When a check finds a newer release and the setting is on, the
+  updater downloads it, verifies size and SHA-256 (REQ-I12), unzips (macOS) and stages
+  it with no progress notification, no modal and no message. A version already staged
+  is not downloaded again. The staged record carries three installers: the explicit
+  restart one, the quit one (stays closed) and the idle one (relaunches; macOS
+  `open -g` so it never takes focus, Windows Setup `/mergetasks=runcode`). The idle
+  installer is fingerprinted with the other artifacts, so a changed file is refused.
+- **Class seat.** While REQ-I16 holds, nothing is downloaded and the held status line
+  stays (REQ-I17). An update staged before the class is not applied during it.
+- **Fallback.** The REQ-I2 banner appears when the setting is off, during a class seat,
+  or when staging fails or is impossible (dev host, under 1 GB free).
+- **Apply.** (1) On the next committed app quit, via the existing quit hook
+  (REQ-STUDIO-UPDATE-ON-QUIT), unchanged. (2) An idle restart, checked every minute,
+  only when all of these hold: setting on; a staged version newer than the running app;
+  no class seat; no running turn (`hasActiveStream`: streaming, settling, pending send or
+  approval); no queued unsent message; no unsent composer input (text, image, inline
+  edit or recovered request in any chat surface); no running process in any activity
+  scope; the preview server not serving; no other open Studio window (per-app window
+  registry, records older than 3 minutes ignored, an unreadable record counts as a
+  window); the window unfocused for at least 30 minutes continuously (any focus resets
+  it); and no chat-panel message for 30 minutes. The same check runs again inside the
+  install lease right before the installer starts; if it fails there, Studio keeps
+  running and the update stays staged. **A running turn is never interrupted.**
+- **After the update.** When the new version first starts, one non-modal line:
+  "Studio를 v<version>(으)로 자동 업데이트했어요." with "변경 내용 보기" (opens the
+  release page). Shown once; not shown while the staged version has not started. No VS
+  Code release notes (REQ-I19).
+- **Bootstrapping.** Only builds that contain this feature update themselves. Installs
+  on v2026.1102.2 and older need one manual update.
+
+Evidence: `test/auto-update.smoke.mjs` (pure policy with a positive control and every
+blocker as a negative control; a running turn blocks for 6 simulated hours; window
+registry; staged relaunch record and tampering; the real bundled updater on macOS and
+Windows paths: silent staging, idle restart through the real scheduler, a turn that
+starts before the launch keeps Studio running, the quit hook still installs, notice
+once, scheduler fallback to the banner for off / class / failed staging, no second
+download), `test/update-orchestration.smoke.mjs` (4 h cadence) and the existing
+updater suites. Removing the turn check from `idleApplyBlocker` fails the test
+(negative control run 2026-11-02). **NOT RUN:** a real rc installed side by side
+updating itself to a newer rc with no click on macOS and on Windows; focus behavior of
+`open -g` and of Setup's relaunch on real desktops.
 
 ## Work-scoped system sleep prevention
 

@@ -11411,6 +11411,69 @@
       ]
     },
     {
+      "id": "ST-REQ-UPDATE-NO-CLICK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE",
+        "ST-REQ-UPDATE-ON-QUIT"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Automatic updates without a click (#3411)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-UPDATE-NO-CLICK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-NO-CLICK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/autoUpdate.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/stagedUpdate.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-UPDATE-NO-CLICK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-NO-CLICK",
+        "ST-IMP-UPDATE-NO-CLICK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/auto-update.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-orchestration.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-WORK-POWER",
       "stage": "requirement",
       "owner": "jayleekr",
