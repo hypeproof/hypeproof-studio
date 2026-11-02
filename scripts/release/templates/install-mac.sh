@@ -49,6 +49,8 @@ set -euo pipefail
 # ── Baked in at release time ─────────────────────────────────────────────────
 HPS_TAG="@@TAG@@"
 HPS_VERSION="@@VERSION@@"
+# RCs embed the final product version so the accepted bytes can be promoted unchanged.
+HPS_PRODUCT_VERSION="@@PRODUCT_VERSION@@"
 HPS_SOURCE_SHA="@@SOURCE_SHA@@"
 HPS_ZIP_NAME="HypeProof-Studio-darwin-arm64.zip"
 HPS_ZIP_SHA256="@@ZIP_SHA256@@"
@@ -148,7 +150,7 @@ ARCH="${HPS_INSTALL_UNAME_M:-$(uname -m)}"
 [ "$ARCH" = arm64 ] || fail "Apple 칩(M1 이후) Mac만 지원합니다. 이 Mac은 $ARCH 입니다. Intel Mac용 HypeProof Studio는 아직 없습니다."
 [ "$(id -u)" != 0 ] || fail "sudo 없이 실행해 주세요. 이 설치는 관리자 권한이 필요 없습니다."
 INSTALL_STEP=dependencies
-for tool in curl shasum ditto /usr/libexec/PlistBuddy; do
+for tool in curl shasum ditto /usr/libexec/PlistBuddy /usr/bin/plutil; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool 을 찾지 못했습니다."
 done
 
@@ -225,7 +227,14 @@ NEW="$WORK/x/$APP_NAME"
 INSTALL_STEP=verify
 [ "$(plist CFBundleIdentifier "$NEW")" = "$HPS_BUNDLE_ID" ] || fail "앱 식별자가 맞지 않습니다."
 GOT="$(plist CFBundleShortVersionString "$NEW")"
-[ "$GOT" = "$HPS_VERSION" ] || fail "앱 버전이 맞지 않습니다(기대 $HPS_VERSION, 실제 $GOT)."
+[ "$GOT" = "$HPS_PRODUCT_VERSION" ] || fail "앱 버전이 맞지 않습니다(기대 $HPS_PRODUCT_VERSION, 실제 $GOT)."
+
+# Check the payload identity as well as the pinned archive digest before placement.
+PRODUCT="$NEW/Contents/Resources/app/product.json"
+PRODUCT_VERSION=$(/usr/bin/plutil -extract version raw -o - "$PRODUCT" 2>/dev/null) || fail "앱 제품 버전을 읽지 못했습니다."
+PRODUCT_COMMIT=$(/usr/bin/plutil -extract commit raw -o - "$PRODUCT" 2>/dev/null) || fail "앱 소스 커밋을 읽지 못했습니다."
+[ "$PRODUCT_VERSION" = "$HPS_PRODUCT_VERSION" ] || fail "앱 제품 버전이 맞지 않습니다."
+[ "$PRODUCT_COMMIT" = "$HPS_SOURCE_SHA" ] || fail "앱 소스 커밋이 맞지 않습니다."
 
 # ── Install: stage beside the target, then swap (the old copy returns on failure) ──
 INSTALL_STEP=place
@@ -251,7 +260,7 @@ if [ "$FROM_COMMAND" = 0 ]; then
 elif xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1; then
   warn "앱에 다운로드 격리 표시가 있습니다. 보안 설정을 바꾸지 말고 아래 한 줄 설치 명령을 쓰세요: $ONE_LINER"
 fi
-[ "$(plist CFBundleShortVersionString "$APP")" = "$HPS_VERSION" ] || fail "설치된 앱 버전을 확인하지 못했습니다."
+[ "$(plist CFBundleShortVersionString "$APP")" = "$HPS_PRODUCT_VERSION" ] || fail "설치된 앱 버전을 확인하지 못했습니다."
 
 # ── Kit layout: own profile + START script ───────────────────────────────────
 if [ "$LAYOUT" = kit ]; then

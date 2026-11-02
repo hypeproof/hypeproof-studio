@@ -16,12 +16,13 @@
 // CLI:
 //   install-kit.mjs render --tag vX --source-sha SHA --zip-sha256 HEX
 //       [--seed-name claude-agent-sdk-darwin-arm64-V.tgz --seed-sha256 HEX --seeder-sha256 HEX]
-//       --out DIR
+//       --product-version EXACT_BUILD_CONTRACT_VERSION --mac-zip PATH_TO_ACCEPTED_MAC_ZIP --out DIR
 //     writes DIR/install-mac.sh and DIR/HypeProof-<tag>-Test-Kit.zip
 //   install-kit.mjs notes --tag vX < BODY > BODY
 //     the release body with the install section added (or replaced, idempotent)
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -70,8 +71,17 @@ function fill(text, values) {
   return out;
 }
 
-function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = ''}) {
-  parseTag(tag);
+// The existing build contract resolves marked RCs to final-version bytes and
+// legacy RCs to suffixed bytes. Keep that exact caller-supplied value.
+export function productVersionFor({tag, productVersion}) {
+  const parsed = parseTag(tag);
+  const value = productVersion ?? parsed.version;
+  if (![parsed.version, parsed.core.join('.')].includes(value)) throw Error('product version does not belong to release tag');
+  return value;
+}
+
+function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = '', productVersion}) {
+  productVersionFor({tag, productVersion});
   if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '')) throw Error('source sha must be 40 lowercase hex characters');
   if (!HEX64.test(zipSha256 ?? '')) throw Error('zip sha256 must be 64 lowercase hex characters');
   if (seedName || seedSha256 || seederSha256) {
@@ -98,7 +108,7 @@ export function renderInstaller(opts) {
   const start = renderStart(tag).replace(/\n$/, '');
   if (/^START_COMMAND$/m.test(start)) throw Error('START.command must not contain the heredoc delimiter');
   return fill(template('install-mac.sh'), {
-    TAG: tag, VERSION: version, SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
+    TAG: tag, VERSION: version, PRODUCT_VERSION: productVersionFor(opts), SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
     SEED_NAME: seedName, SEED_SHA256: seedSha256, SEED_VERSION: SEED_RE.exec(seedName)?.[1] ?? '',
     SEEDER_SHA256: seederSha256, PRERELEASE: prerelease ? '1' : '0', FREE_START: isFreeStart(tag) ? '1' : '0',
     KIT_DIR_NAME: kitDirName(tag), START_COMMAND: start,
@@ -172,7 +182,36 @@ export function withInstallSection(body, tag) {
   return `${notesSection(tag)}\n\n${base.trim()}\n`.replace(/\n{3,}/g, '\n\n');
 }
 
+/** Check the exact accepted payload before generating a public installer, on either CI OS. */
+export function verifyMacArchive(opts, archive) {
+  validate(opts);
+  const hash = crypto.createHash('sha256');
+  const fd = fs.openSync(archive, 'r');
+  try {
+    const block = Buffer.alloc(256 * 1024);
+    for (let n; (n = fs.readSync(fd, block)) > 0;) hash.update(block.subarray(0, n));
+  } finally { fs.closeSync(fd); }
+  if (hash.digest('hex') !== opts.zipSha256) throw Error('Mac archive SHA-256 does not match the pinned installer input');
+  const identity = JSON.parse(execFileSync('python3', ['-c', `
+import json, plistlib, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    plist = 'HypeProof Studio.app/Contents/Info.plist'
+    product = 'HypeProof Studio.app/Contents/Resources/app/product.json'
+    if any(z.namelist().count(p) != 1 for p in [plist, product]):
+        raise ValueError('Missing or duplicate Mac identity metadata')
+    info = plistlib.loads(z.read(plist))
+    app = json.loads(z.read(product))
+    print(json.dumps({'bundleId': info.get('CFBundleIdentifier'), 'plistVersion': info.get('CFBundleShortVersionString'), 'productVersion': app.get('version'), 'sourceSha': app.get('commit')}))
+`, path.resolve(archive)], {encoding: 'utf8', timeout: 10000, maxBuffer: 65536}));
+  const expected = productVersionFor(opts);
+  if (identity.bundleId !== 'ai.hypeproof.studio' || identity.plistVersion !== expected || identity.productVersion !== expected || identity.sourceSha !== opts.sourceSha) {
+    throw Error(`Mac archive product identity does not match ${opts.tag} at ${opts.sourceSha}`);
+  }
+  return identity;
+}
+
 export function writeKit(opts, outDir) {
+  if (opts.macZip) verifyMacArchive(opts, opts.macZip);
   const installer = renderInstaller(opts);
   const {version} = parseTag(opts.tag);
   fs.mkdirSync(outDir, {recursive: true});
@@ -200,12 +239,14 @@ function main(argv) {
   const {values} = parseArgs({args: rest, options: {
     tag: {type: 'string'}, 'source-sha': {type: 'string'}, 'zip-sha256': {type: 'string'},
     'seed-name': {type: 'string'}, 'seed-sha256': {type: 'string'}, 'seeder-sha256': {type: 'string'},
-    out: {type: 'string'},
+    out: {type: 'string'}, 'mac-zip': {type: 'string'}, 'product-version': {type: 'string'},
   }});
   if (command === 'render') {
     if (!values.out) throw Error('--out is required');
+    if (!values['product-version']) throw Error('--product-version is required from the build contract');
+    if (!values['mac-zip']) throw Error('--mac-zip is required to verify the accepted product identity');
     const names = writeKit({tag: values.tag, sourceSha: values['source-sha'], zipSha256: values['zip-sha256'],
-      seedName: values['seed-name'], seedSha256: values['seed-sha256'], seederSha256: values['seeder-sha256']}, values.out);
+      seedName: values['seed-name'], seedSha256: values['seed-sha256'], seederSha256: values['seeder-sha256'], macZip: values['mac-zip'], productVersion: values['product-version']}, values.out);
     for (const name of names) console.log(path.join(values.out, name));
   } else if (command === 'notes') {
     process.stdout.write(withInstallSection(fs.readFileSync(0, 'utf8'), parseTag(values.tag).tag));
