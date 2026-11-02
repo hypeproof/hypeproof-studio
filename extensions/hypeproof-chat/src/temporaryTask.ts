@@ -18,7 +18,9 @@ export const TEMPORARY_TASK_NO_IMAGES = "기록 없이 묻는 작업에서는 �
 
 export const TEMPORARY_TASK_COPY = {
   create: "기록 없이 묻기",
-  bandTitle: "기록 없이 묻기",
+  // CGP-KNOW-D-029 (DES-KNOW-47) — the register's band title "기록이 남지 않는 작업", scoped to this device: the Service
+  // still logs the request on some cohorts (contract #12), so an unscoped "not recorded" would promise too much.
+  bandTitle: "이 기기에 기록이 남지 않는 작업",
   device: "이 기기에 기록을 남기지 않아요. 이 작업을 떠나면 대화가 사라져요.",
   chatOnly: "대화만 할 수 있어요. AI가 파일을 만들거나 바꾸지 않아요.",
   service: "질문과 답은 답을 만들기 위해 서비스로 보내져요.",
