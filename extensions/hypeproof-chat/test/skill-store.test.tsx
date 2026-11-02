@@ -85,6 +85,8 @@ async function main() {
 
 // The age question appears before buying or selling when the Service does not know the age.
 assert.ok(html(base({ tab: 'mine', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'));
+assert.ok(html(base({ tab: 'browse', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'), 'asked where the buy button is');
+assert.equal(html(base({ tab: 'browse', ageGroup: 'unknown', access: 'signedOut' })).includes('태어난 해를 한 번만'), false);
 assert.equal(html(base({ tab: 'mine', ageGroup: 'adult' })).includes('태어난 해를 한 번만'), false);
 }
 main().then(() => { console.log('skill-store render checks passed'); process.exit(0); }, e => { console.error(e); process.exit(1); });

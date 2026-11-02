@@ -280,6 +280,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerSkillStore(context, {
     render: (webview, dist) => provider.renderHtml(webview, dist),
     accountToken: async () => accounts?.accessToken(),
+    hasSeat: async () => Boolean(await activityConnections(context)?.token()),
     attachToChat: skill => provider.attachStoreSkill(skill),
   });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {

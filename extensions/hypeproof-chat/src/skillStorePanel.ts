@@ -17,6 +17,8 @@ export interface SkillStoreDeps {
   render: (webview: vscode.Webview, dist: vscode.Uri) => string;
   /** The signed-in personal account's bearer; undefined when accounts are off or signed out. */
   accountToken: () => Promise<string | undefined>;
+  /** True when this App has a seat (pass or class) whose usage a run would spend. */
+  hasSeat: () => Promise<boolean>;
   /** Hands the downloaded skill to the chat panel for the buyer's next turn. */
   attachToChat: (skill: { item_id: string; title: string; body: string }) => Promise<void>;
 }
@@ -137,6 +139,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         });
       case "storeRun":
         return run(async () => {
+          // The first fetch ends the refund right, so nothing is fetched until a seat can run it.
+          if (!(await deps.hasSeat().catch(() => false))) return void push({ busy: false, error: STORE_COPY.needsSeat });
           const skill = await c.run(msg.itemId);
           await deps.attachToChat({ item_id: skill.item_id, title: skill.title, body: skill.body });
           await load("mine", { notice: STORE_COPY.ran(skill.title) });

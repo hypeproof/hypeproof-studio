@@ -43,7 +43,7 @@ export function SkillStoreView({ state, send, draftBody }: { state: StoreState; 
     {state.checks?.length ? <ul aria-label="자동 검사 결과">{state.checks.map(c => <li key={c}>{c}</li>)}</ul> : null}
     {state.notice && <p role="status">{state.notice}</p>}
     {state.access === "signedOut" && <section><p>{STORE_COPY.signIn}</p><button onClick={() => send({ type: "storeSignIn" })}>Google로 로그인</button></section>}
-    {state.access === "ready" && state.ageGroup === "unknown" && state.tab !== "browse" && <AgeQuestion busy={busy} send={send} />}
+    {state.access === "ready" && state.ageGroup === "unknown" && <AgeQuestion busy={busy} send={send} />}
     {state.checkout && <section className="submission-preview" aria-label="결제 진행 중">
       <h2>{state.checkout.title} · {won(state.checkout.amount)}</h2><p>{STORE_COPY.checkoutOpen}</p>
       <button onClick={() => send({ type: "storeCancelCheckout" })}>결제 기다리지 않기</button>
