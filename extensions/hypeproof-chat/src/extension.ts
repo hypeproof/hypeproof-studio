@@ -261,6 +261,7 @@ export async function activate(context: vscode.ExtensionContext) {
     openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
     createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(true),
     returned: async () => { await startPage.show(); },
+    signedIn: async () => { await startPage.finishAccountSignIn(); },
     changed: () => startPage.accountChanged(),
     lock: accountLock(context.globalStorageUri.fsPath),
     freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),

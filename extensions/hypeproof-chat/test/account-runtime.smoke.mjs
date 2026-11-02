@@ -10,6 +10,7 @@ const require=createRequire(import.meta.url);
 const bundle=await build({stdin:{contents:"export * from './src/startPage.ts';export * from './src/activityConnections.ts';export * from './src/accountSession.ts';",resolveDir:new URL('..',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'studio-account-runtime-')),root=path.join(tmp,'workspace');fs.mkdirSync(root);
 const SERVICE='http://127.0.0.1:8793/v1',SITE='http://localhost:3193',ID='ord_'+'a'.repeat(32),SECRET='b'.repeat(64);
+let superGrant=false,delayProfile=false,releaseProfile;
 let now=1000000,rotations=0,revoked=false,stops=0,service=SERVICE;
 let site=SITE,enabled=true,recoveryChoice,commands=[],updates=[],recoveryBusy=false,busyOnPrompt=false,busyOnUpdate=false;
 const calls=[],states=[],secrets=new Map(),workspace=new Map();
@@ -20,11 +21,11 @@ const json=(status,body)=>new Response(JSON.stringify(body),{status});
 const fetch=async(url,init={})=>{
  const p=new URL(url).pathname,headers=new Headers(init.headers);calls.push({p,auth:headers.get('authorization')});
  if(p==='/v1/auth/refresh'){rotations++;return json(200,{access_token:'new-account-secret',refresh_token:'new-refresh-secret',session_id:'session-1',expires_in:3600});}
- if(p==='/v1/profile')return json(200,profile);
+ if(p==='/v1/profile'){if(delayProfile)await new Promise(resolve=>{releaseProfile=resolve});return json(200,profile);}
  if(p==='/v1/activity')return json(200,{activity_id:profile.activity_id});
  if(revoked)return json(401,{error:'session_revoked'});
  if(p==='/v1/me')return json(200,{account:{id:'acc_1',email:'test@example.test',display_name:'Test'}});
- if(p==='/v1/me/passes')return json(200,{passes:[{id:ID,product_name:'Pass',status:'active',requests_used:1,requests_limit:10,requests_remaining:9,amount:10000}]});
+ if(p==='/v1/me/passes')return json(200,{passes:[{id:superGrant?'super':ID,product_name:'Pass',status:'active',requests_used:1,requests_limit:10,requests_remaining:9,amount:10000}]});
  if(p.endsWith('/activate'))return json(200,{access_token:'pass-secret-'+rotations,expires_in:3600});
  if(p==='/v1/purchase/products')return json(200,{products:[{id:'pass',label:'Pass',amount:10000,currency:'KRW',duration_hours:720,request_limit:10}]});
  if(p==='/v1/purchase/orders')return json(201,{order_id:ID,order_secret:SECRET,amount:10000,label:'Pass',expires_at:now+1800000,checkout_url:SITE+'/studio/checkout?order='+ID});
@@ -60,6 +61,44 @@ try {
  const exposed=JSON.stringify(states);for(const secret of ['account-secret','refresh-secret','pass-secret',SECRET])assert.equal(exposed.includes(secret),false);
  service='http://127.0.0.1:8999/v1';const before=calls.length;await page.handle({type:'accountActivate',passId:ID});assert.equal(calls.length,before,'changed Service receives no account token');service=SERVICE;
  revoked=true;await accounts.refreshView();assert.equal(stops,1);assert.equal(connections.current,undefined);assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),undefined);assert.equal(secrets.has(old),true,'classroom credential is retained');assert.equal(fs.existsSync(root),true);
+ // Explicit login with a grant enters work without a checkout or second start click.
+ revoked=false;superGrant=true;
+ secrets.set(ACCOUNT_SECRET_KEY,JSON.stringify({service:SERVICE,accessToken:'account-secret',refreshToken:'refresh-secret',sessionId:'session-1',expiresAt:now+3600000}));
+ await accounts.refreshView();
+ page.order=undefined;page.purchaseStage='choosing';page.candidate=undefined;
+ const ordersBefore=calls.filter(c=>c.p==='/v1/purchase/orders').length;
+ const freeProfile={...profile,activity_id:'c'.repeat(64),profile_id:'studio-open-trial',pass:undefined};
+ await connections.commit('free-secret',freeProfile,root);
+ fs.writeFileSync(path.join(root,'learner.txt'),'my work');
+ page.useGrantAfterSignIn=true;
+ await page.finishAccountSignIn();
+ assert.equal(connections.current?.accountPass?.passId,'super','approval connects the granted pass directly');
+ assert.equal(page.candidate,undefined,'no extra activity confirmation is left');
+ assert.equal(fs.realpathSync(connections.current.workspace),fs.realpathSync(root));
+ assert.equal(fs.readFileSync(path.join(root,'learner.txt'),'utf8'),'my work');
+ assert.equal(calls.filter(c=>c.p==='/v1/purchase/orders').length,ordersBefore,'grant entry never creates a purchase');
+ // Background completion or a new login must not replace an existing non-free activity.
+ const bound=connections.current.ref;
+ page.useGrantAfterSignIn=true;await page.finishAccountSignIn();
+ assert.equal(connections.current.ref,bound);
+ // A navigation intent during activation wins over the delayed automatic continuation.
+ let releaseActivation;
+ const activate=accounts.activate.bind(accounts);
+ accounts.activate=async id=>{await new Promise(resolve=>{releaseActivation=resolve});return activate(id)};
+ const entering=page.handle({type:'accountActivate',passId:'super'});
+ while(!releaseActivation)await new Promise(resolve=>setImmediate(resolve));
+ await page.handle({type:'accountCancel'});
+ releaseActivation();await entering;
+ assert.equal(connections.current.ref,bound,'late activation cannot replace the selected activity');
+ assert.equal(page.candidate,undefined);
+ accounts.activate=activate;
+ delayProfile=true;
+ const profileEntry=page.handle({type:'accountActivate',passId:'super'});
+ while(!releaseProfile)await new Promise(resolve=>setImmediate(resolve));
+ await page.handle({type:'accountCancel'});
+ releaseProfile();await profileEntry;delayProfile=false;
+ assert.equal(connections.current.ref,bound,'cancel during profile fetch prevents automatic entry');
+ assert.equal(page.candidate,undefined,'late profile cannot install a candidate');
  const unavailable=new StartPage(scoped,chat,async()=>false,undefined,undefined);
  unavailable.panel={webview:{postMessage:async msg=>states.push(msg)}};
  const beforeRecovery=calls.length;

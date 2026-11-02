@@ -24,8 +24,12 @@ async function main(){
  assert(document.body.textContent?.includes('브라우저에서 연결을 승인해 주세요'));
  await update({...base,account:{status:'signedIn',account:{display_name:'Member',email:'member@example.invalid'},passes:[{id:'super',product_name:'무제한 이용권',status:'active',requests_remaining:100000,requests_limit:100000,duration_seconds:0}]}});
  assert(document.body.textContent?.includes('관리자가 부여한 무제한 이용 권한'));
- await act(async()=>button('이 이용권으로 시작하기').click());
+ await act(async()=>button('무제한으로 시작하기').click());
  assert.deepEqual(posted.at(-1),{type:'accountActivate',passId:'super'});
+ await update({...base,purchase:{available:true,focus:1,stage:'choosing',products:[]},account:{status:'signedIn',passes:[{id:'super',product_name:'무제한 이용권',status:'active',requests_remaining:100000,requests_limit:100000,duration_seconds:0}]}});
+ assert(button('무제한으로 시작하기'));
+ assert(!document.body.textContent?.includes('어떤 이용권으로 시작할까요?'));
+ assert.equal(document.querySelector('[role="radiogroup"]'),null);
  // Login remains accessible from a saved activity, independently of purchases.
  await update({...base,freeStart:undefined,profile:{name:'Saved',workspace:'/tmp/saved',kind:'trial'}});
  await act(async()=>button('Google 로그인').click());

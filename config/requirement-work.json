@@ -462,7 +462,7 @@
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "6d13995c6910155cad4162d48dcadcc1a8a15352ac4401b9370f4e0005231c5a",
+      "sha256": "d9ee86f93b8d83981aaed7efd674d737902d984b1dbdf0e7159752fe1a25f8af",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
