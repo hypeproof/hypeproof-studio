@@ -41,7 +41,9 @@ try {
  connections.accountToken=b=>accounts.resolvePass(b);
  const chat={ensureProfile:async()=>connections.current?profile:null,profileFailure:()=>null,coachDisplayName:()=> 'Coach',coachNameIsChosen:()=>true,hasActiveStream:()=>false,setConnectionChanging:async()=>{},invalidateProfile(){},refreshConfig(){},openInEditor:async()=>{}};
  const page=new StartPage(scoped,chat,async(_p,commit)=>{await commit(root);return false},undefined,accounts);page.panel={webview:{postMessage:async msg=>states.push(msg)}};
+ page.purchaseStage='choosing';
  await page.handle({type:'accountActivate',passId:ID});
+ assert.equal(page.purchaseStage,undefined,'existing account pass exits the purchase list to show activation confirmation');
  assert.equal(connections.current.ref,old,'preview preserves current classroom binding');
  assert.equal(page.candidate.accountPass.sessionId,'session-1');
  await page.handle({type:'beginCourse'});

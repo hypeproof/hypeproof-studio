@@ -722,6 +722,13 @@ export class StartPage {
     await this.handle({type:"connectCourse",token:activated.token});
     if (!this.candidate || this.candidate.token !== activated.token) throw new AccountError('pass_profile_unavailable', '이용권 정보를 확인하지 못했어요. 새로고침 후 다시 선택해 주세요.');
     this.candidate.accountPass = activated.binding;
+    // An existing grant is not a checkout. Reveal its confirmation card after activation.
+    // A real order being claimed keeps its own connecting/error recovery lifecycle.
+    if (this.purchaseStage === "choosing" && !this.order) {
+      this.purchaseStage = undefined;
+      this.purchaseMessage = undefined;
+      this.purchasePick = undefined;
+    }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
