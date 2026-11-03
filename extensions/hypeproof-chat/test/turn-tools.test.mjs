@@ -65,7 +65,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
   });
   const { ChatPanelProvider, runSdkCoach, SdkUnavailableError, BrowserControl } = module.exports;
   const h = Object.create(ChatPanelProvider.prototype), state = new Map();
-  const context = { workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => 'synthetic-test-token' } };
+  const context = { workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => 'synthetic-test-token' }, globalState: { get: (key, fallback) => fallback, update: async () => {} } };
   Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: instructor, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: resolvedProfile,
     getHistory: () => history, appendHistory: async items => { for (const item of items) { const i = history.findIndex(previous => previous.id === item.id); if (i < 0) history.push(copy(item)); else history[i] = copy(item); } },
@@ -78,6 +78,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
     buildBrowserMcpHost: () => ({}), saveAgentMdIfPresent: async () => {}, observationWrites: Promise.resolve(), sitePublisher: () => ({ available: () => false }),
     // Object.create skips class fields; the funnel reporter (studio-funnel-events) is one of them.
     funnel: { emit() {}, setTarget() {}, active: false },
+    turnWriteTrackers: new Map(),
     publishReadGate: new PublishReadGate(),
   });
   return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, BrowserControl, root, vscode };
