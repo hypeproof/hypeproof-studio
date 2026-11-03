@@ -7588,6 +7588,9 @@
           "path": "extensions/hypeproof-chat/test/turn-restore.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/turn-restore-large.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/turn-review.test.tsx"
         }
       ]

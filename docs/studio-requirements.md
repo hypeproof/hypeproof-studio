@@ -3105,10 +3105,26 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
   instructor surface takes none.
 - **Bounds, never silent.** A file above 20 MB, files past 5000 or 200 MB per point, links and
   unreadable entries are recorded as not covered and named on the bar; they are never claimed
-  restored, never removed by a revert, and an added file that was not copied stays. A folder walk
-  past 20,000 entries makes the point incomplete: the turn gets one ⚠️ timeline line and no revert,
-  because an unvisited file would look added. A point that cannot be written gets the same kind of
-  line and the turn runs. The newest 10 points per store are kept; pruning removes older manifests
+  restored, never removed by a revert, and an added file that was not copied stays. A point that
+  cannot be written gets one ⚠️ timeline line and the turn runs without a revert.
+- **Large folders keep undo (#3427).** Before the whole-folder point, a metadata-only walk
+  (`folderFitsRestoreLimits`: names and sizes, nothing read) checks the same bounds. A folder past
+  20,000 entries, 5000 files or 200 MB (or one that grows past them during the walk) is not copied:
+  the turn takes a `tracked` point instead (`TurnWriteTracker`). After a Write, Edit, MultiEdit or
+  NotebookEdit call is approved and before it runs, every runtime's approval callback
+  (`captureTurnWrite`) records each target on its first write in the turn: its bytes when it exists,
+  its absence when the turn creates it, and the first observation of each parent directory. Folder
+  size no longer matters; only touched files are copied, up to 20 MB per file and 200 MB per turn.
+  A file past either bound gets one ⚠️ line naming it ("…: 파일이 너무 커서 이번 요청에서는 되돌릴 수
+  없어요.") and is listed as not covered. Diff, keep, revert ("복구 직전" included) and verify read
+  only the point's own paths (`scanForPoint`), so the revert puts back the edited bytes, removes the
+  created files and the directories the turn made, and leaves every other file alone. A shell step
+  allowed in a tracked turn is not recorded; the turn's end shows "작업 폴더가 커서 이번 요청은 AI가
+  쓰거나 고친 파일만 보관했어요. 명령 실행으로 바뀐 파일은 되돌릴 수 없어요." as a timeline line and on
+  the review bar, never an offer to undo it. Small folders keep the whole-folder point, so shell
+  changes there are still found and undone as before. A tracked turn does not observe the folder,
+  so provenance marks that window unmeasured (as an incomplete walk did) and no checkpoint is
+  offered for it. Studio's own host writes during a tracked turn are not recorded either. The newest 10 points per store are kept; pruning removes older manifests
   and every copy no remaining point names. A turn that changed nothing drops its point.
 - **Review bar after the turn**, also after a stop or a failure. The folder is rescanned and
   compared with the point. If anything was added, changed or deleted, the chat shows
@@ -3145,7 +3161,11 @@ offered; older points are kept for 10 turns but have no UI), per-file restore, t
 tool success from check success (AE-05), attributing a change to shell or subagent tools (they are
 counted, as any folder change is, but not labelled), refreshing the preview after a revert (the
 page shown stays until the learner reopens it), and any Chalk view. Mid-turn changes outside the
-work folder are out of scope by design. Verification: U (`extensions/hypeproof-chat/test/turn-restore.smoke.mjs`
+work folder are out of scope by design. Verification: U (`extensions/hypeproof-chat/test/turn-restore-large.smoke.mjs`
+— a synthetic folder of 20,000 files where a turn edits 2 files and creates 1 in a new nested folder: undo
+restores exactly those bytes, removes the created file and folders, leaves all other files, copies only
+2 files; deleted file, first-write-wins, per-file and per-turn byte bounds named, outside paths and links,
+manifest validation, host wiring; `extensions/hypeproof-chat/test/turn-restore.smoke.mjs`
 — real temp folders with planted add/change/delete including a nested directory and a binary,
 exact-hash revert, 복구 직전 round trip, caps, links, pruning, tampered-copy and lying-manifest
 negative controls, a parent folder or target file swapped for a link to outside (outside listing and

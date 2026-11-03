@@ -541,3 +541,24 @@ cases:
     origin:
       kind: design
     automated_by: e2e/update-check/run.mjs
+
+  - id: BB-032
+    journey: CUJ-7
+    priority: P0
+    title: 파일이 아주 많은 작업 폴더에서도 AI 요청을 되돌릴 수 있다
+    requirements: [REQ-STUDIO-TURN-RESTORE]
+    steps:
+      - '파일이 2만 개 넘는 폴더를 작업 폴더로 연다 (예: 터미널에서 mkdir -p big && cd big && for d in $(seq 1 210); do mkdir c$d; for f in $(seq 1 100); do echo $d $f > c$d/n$f.md; done; done 로 만든 폴더)'
+      - 채팅에 c1/n1.md 와 c2/n2.md 두 파일 끝에 한 줄씩 덧붙이고, 보고서/report.html 을 새로 만들어 줘 라고 보낸다
+      - 요청이 끝나면 되돌리기 를 누르고 확인 창에서 되돌리기 를 누른다
+    expect:
+      - 요청 중에 작업 폴더에 파일이 너무 많아서 이번 요청은 되돌리기를 쓸 수 없어요. 줄이 나오지 않는다
+      - 요청 뒤 AI가 이번에 바꾼 파일 3개 와 되돌리기 · 이대로 둘게요 가 나온다. 목록은 c1/n1.md, c2/n2.md (바뀜)와 보고서/report.html (새로 만듦)이다
+      - 되돌린 뒤 c1/n1.md 와 c2/n2.md 는 요청 전 내용이고, 보고서 폴더와 report.html 은 없다. 다른 파일은 그대로다
+      - 같은 폴더에서 AI 가 명령을 실행한 요청이 끝나면 작업 폴더가 커서 이번 요청은 AI가 쓰거나 고친 파일만 보관했어요. 명령 실행으로 바뀐 파일은 되돌릴 수 없어요. 가 나온다
+    origin:
+      kind: escaped-bug
+      date: "2026-11-03"
+      ref: "#3456"
+    automated_by: extensions/hypeproof-chat/test/turn-restore-large.smoke.mjs
+    notes: 2026-11-03 회원 신고(이슈 3394, 3427). 작업 폴더가 2만 항목을 넘자 모든 요청에서 되돌리기가 꺼졌고, 회원이 폴더를 쪼개서 피했다. 큰 폴더는 이제 AI 파일 도구가 쓰기 직전에 그 파일만 보관한다. 자동 테스트는 모듈과 연결만 보고 실제 앱 화면은 사람이 본다. 명령 실행 줄은 셸 권한이 있는 좌석에서만 볼 수 있다.
