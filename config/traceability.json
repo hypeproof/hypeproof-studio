@@ -6728,6 +6728,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/browserSafetyHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ExternalLinkBlocked.tsx"
         }
       ]
     },
@@ -6742,6 +6745,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/external-link-route.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/external-link-blocked.test.tsx"
         }
       ]
     },

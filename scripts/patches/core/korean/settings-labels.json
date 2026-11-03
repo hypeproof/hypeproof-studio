@@ -1,6 +1,7 @@
 {
   "hypeproofChat.artifactHistoryEnabled": "파일 이전 버전 보관",
   "hypeproofChat.activityTrashEnabled": "활동 휴지통",
+  "hypeproofChat.safeLinkAllowlistEnabled": "수업 허용 사이트만 열기",
   "hypeproofChat.proxyUrl": "서비스 주소",
   "hypeproofChat.freeStart": "코드 없이 시작",
   "hypeproofChat.model": "사용할 모델",

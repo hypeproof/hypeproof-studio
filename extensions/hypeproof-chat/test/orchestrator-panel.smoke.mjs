@@ -209,6 +209,8 @@ const CLASS_FUNDED = { status: "ready", selected: "class-1", view: { schema: "hp
   allowed: { models: [], efforts: [], features: [], runtimes: [] }, resources: [{ meter: "requests:count", remaining: 37, held: 3, unresolved: 2, spent: 10, limit: 50, overrun: 0, shared: false }] }] } };
 /** name → props: every screen whose markup must not move for an old profile. */
 const OLD_SCREENS = {
+  // Re-recorded for CGP-ART-D-008 (TZ=UTC): ChatPanel gained two state hooks for the blocked-link notice, which shifts
+  // React useId values (:R24l: -> :R24n:). With ids normalized the six markups equal main byte for byte (HPS_A5_DUMP_DIR).
   "ChatPanel/adult-plain": () => ["ChatPanel", chatPanelProps({ config: adultConfig() })],
   "ChatPanel/adult-effort-observed": () => ["ChatPanel", chatPanelProps({ config: adultConfig({ effort: POLICY, effortResult: { state: "observed", requests: ROWS } }) })],
   "ChatPanel/adult-timeline": () => ["ChatPanel", chatPanelProps({ config: adultConfig(), messages: TOOL_LINES })],
@@ -279,10 +281,10 @@ const OLD_SCREENS = {
 // `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
 // flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "0389c7005b9f1a651e7617d7c5541749933a869b46466050fd0d58a112aa8756",
-  "ChatPanel/adult-effort-observed": "ab1133b738cfe3040817fc1162ddd20481f4cbebcea702a7ce30dab48ef9cfa3",
-  "ChatPanel/adult-timeline": "f8b18bf1d887d50169a334c47cd40f861e535da2387d2e9e740cf57336c7306a",
-  "ChatPanel/kids": "1e7940aec1f428191595d92802b2c68d2994b7857105fed4dd768e14a1b99bc4",
+  "ChatPanel/adult-plain": "eaac7b3f487b6fbe459937b39f0c493c1b74042ae830779a946ea725a8163f89",
+  "ChatPanel/adult-effort-observed": "ce3f6d5e8a1a28b805efcea11d3f4b9dc310410dc6fd8c8cb31f1302500eb9c8",
+  "ChatPanel/adult-timeline": "65849c70449845d5415e1f219c7e9a85d907a2f28735b9d8a3af713857605551",
+  "ChatPanel/kids": "2a688e31c7eb37b7603165c75e7cd60d34aec7d1cf7df88b741d4af338725b0d",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -302,8 +304,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "bc43567a39bfb2b9ecb57e66852e9b7afbe78149e645818a130d62a67624a12d",
-  "ChatPanel/classroom-access-unknown": "89446106a8699d9f736402ee12fb417f1988dcbd3eb75fc46c9ee31a95eb3a16",
+  "ChatPanel/classroom-class-funded": "7ce544487f402896ee646afd46f41df40757a1a1ec437c0628e8d2f6c9aa6273",
+  "ChatPanel/classroom-access-unknown": "960ebe1c429c09f13b45dbd022b606394c8bdd093729b3fe280a6bd3d4c34387",
 };
 
 const status = rendererStatus();
