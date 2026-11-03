@@ -6905,6 +6905,42 @@
       ]
     },
     {
+      "id": "ST-IMP-COACH-LOCALHOST-PREVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/previewServerFacts.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COACH-LOCALHOST-PREVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-COACH-LOCALHOST-PREVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/coach-localhost-preview.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-preview-url.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-FINISH-NOTICE",
       "stage": "implementation",
       "owner": "jayleekr",
@@ -16759,6 +16795,86 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/temporary-task-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-STUDIO-DOCTOR",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## H. Report problem (#64)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-STUDIO-DOCTOR",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-DOCTOR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studioDoctor.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioDoctorHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/problemReport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reportProblemHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ProblemReportDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STUDIO-DOCTOR",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-DOCTOR",
+        "ST-IMP-STUDIO-DOCTOR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/studio-doctor.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/studio-doctor-ui.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/korean-shell.smoke.mjs"
+        },
+        {
+          "path": "docs/operations/release-casebook/cases.yaml"
         }
       ]
     },

@@ -95,6 +95,10 @@
         "title": "HypeProof Chat: 문제 신고하기"
       },
       {
+        "command": "hypeproof-chat.runDoctor",
+        "title": "HypeProof Chat: 진단 실행"
+      },
+      {
         "command": "hypeproof-chat.checkForUpdates",
         "title": "HypeProof Chat: 업데이트 확인"
       },
@@ -416,6 +420,9 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "hypeproof-chat.runDoctor"
+        },
         {
           "command": "hypeproof-chat.savePagePdf",
           "when": "false"

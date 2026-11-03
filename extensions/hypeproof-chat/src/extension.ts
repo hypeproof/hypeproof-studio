@@ -602,9 +602,12 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
     { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
-    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
+    // REQ-STUDIO-DOCTOR — 「HypeProof Chat: 진단 실행」: the full check list for support (automatic runs stay quiet).
+    vscode.commands.registerCommand("hypeproof-chat.runDoctor", async () => { await provider.doctor?.showList(); }),
+    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async (entry?: unknown) => {
       // REQ-STUDIO-PROBLEM-REPORT — the in-panel form first; the input boxes only when no chat panel can show it.
-      if (await provider.openProblemReport("manual")) return;
+      // #3426: the start page passes "start_page" so a report with no description still says where it came from.
+      if (await provider.openProblemReport("manual", entry === "start_page" ? "start_page" : "command")) return;
       await runReportProblemCommand({
         context,
         getLastRequestId: () => provider.getLastRequestId(),

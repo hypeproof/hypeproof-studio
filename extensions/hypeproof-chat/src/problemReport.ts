@@ -156,16 +156,24 @@ export interface ProblemReportFormView {
    * `checked` is the initial state: on when the screen crashed in this app session.
    */
   logs: { available: boolean; checked: boolean; errorCount: number };
+  /**
+   * REQ-STUDIO-DOCTOR: 「진단 결과 첨부」. Ticked by default (Jay 2026-11-03): the attachment carries check ids and
+   * result codes only (studioDoctor.doctorAttachment). Absent from an older host: no box, nothing attached.
+   */
+  doctor?: { available: boolean; checked: boolean };
 }
 
+/** REQ-STUDIO-DOCTOR — the report form's attachment box (here, not in studioDoctor.ts, which the webview cannot bundle). */
+export const DOCTOR_ATTACH_LABEL = "진단 결과 첨부";
+export const DOCTOR_ATTACH_HINT = "확인한 항목의 이름과 결과 코드만 보내요. 파일 이름·경로·대화 내용은 보내지 않아요.";
 export const LOGS_LABEL = "앱 기록 파일 첨부 (화면·확장 로그 마지막 부분)";
 export const LOGS_HINT = "renderer.log·exthost.log 의 마지막 부분이에요. 보내기 전에 토큰·이메일·내 컴퓨터 사용자 이름을 지워요.";
 
 /** The toggle's label and its statement of what it sends (REQ-H10). */
 export const AUTO_REPORT_LABEL = "오류가 나면 오류 정보만 자동으로 보내기";
-export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버전·운영체제·요청 번호만 보내요. 대화 내용, 파일 이름과 경로, 프롬프트, 토큰은 보내지 않고 계정과 연결하지 않아요. 기본은 꺼짐이에요.";
+export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버전·운영체제·요청 번호만 보내요. 대화 내용, 파일 이름과 경로, 프롬프트, 토큰은 보내지 않고 계정과 연결하지 않아요. 기본으로 켜져 있고, 여기서 끌 수 있어요.";
 
-export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean; includeLogs: boolean }
+export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean; includeLogs: boolean; includeDoctor?: boolean }
 
 /**
  * REQ-STUDIO-FEEDBACK-ENTRY — the visible way in (대화 메뉴, start page) and the form's title when opened from it:
@@ -213,9 +221,51 @@ export function parseProblemAnswer(v: unknown): ProblemReportAnswer | null {
   if (typeof a.description !== "string" || typeof a.contact !== "string" || typeof a.includeRecentTurns !== "boolean") return null;
   // An answer without the logs choice (an older panel) attaches no log file.
   if (a.includeLogs !== undefined && typeof a.includeLogs !== "boolean") return null;
+  if (a.includeDoctor !== undefined && typeof a.includeDoctor !== "boolean") return null;
   const description = a.description.replace(/\s+/g, " ").trim(), contact = a.contact.trim();
   if (description.length > PROBLEM_DESCRIPTION_MAX || contact.length > PROBLEM_CONTACT_MAX) return null;
-  return { description, contact, includeRecentTurns: a.includeRecentTurns, includeLogs: a.includeLogs === true };
+  return { description, contact, includeRecentTurns: a.includeRecentTurns, includeLogs: a.includeLogs === true, ...(a.includeDoctor === true ? { includeDoctor: true } : {}) };
+}
+
+/** #3426 — where the report form was opened from. */
+export type ProblemReportEntry = "start_page" | "chat_panel" | "command" | "error_card" | "crash_screen" | "offer" | "unknown";
+const ENTRY_LABEL: Record<ProblemReportEntry, string> = {
+  start_page: "시작 화면", chat_panel: "대화 창", command: "명령", error_card: "오류 안내", crash_screen: "멈춤 화면", offer: "도움 제안", unknown: "",
+};
+export interface ProblemReportUiState {
+  entry: ProblemReportEntry;
+  chat_surface: "editor" | "sidebar" | "hidden";
+  active_tab?: string;
+  last_error?: { code: string; step: string; age_s: number };
+}
+
+/**
+ * #3426 — the last visible UI state a report carries, so a report sent with no description still says which screen
+ * and action it came from. Only kinds and codes: an open file is named by its extension, never its name or path; a
+ * webview by its view type (Studio's own identifiers). No conversation content.
+ */
+export function problemReportUiState(input: {
+  entry: unknown;
+  chatSurface: "editor" | "sidebar" | "hidden";
+  activeTab?: { kind: "text"; fileName: string } | { kind: "webview"; viewType: string } | { kind: "other" };
+  lastProblem?: { diagnostic: { code: string; step: string }; at: number };
+  now?: number;
+}): ProblemReportUiState {
+  const entry = typeof input.entry === "string" && input.entry in ENTRY_LABEL ? input.entry as ProblemReportEntry : "unknown";
+  const tab = input.activeTab;
+  let active_tab: string | undefined;
+  if (tab?.kind === "text") {
+    const ext = /\.([A-Za-z0-9]{1,8})$/.exec(tab.fileName)?.[1];
+    active_tab = `text:${ext ? `.${ext.toLowerCase()}` : "none"}`;
+  } else if (tab?.kind === "webview") active_tab = `webview:${tab.viewType.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 80)}`;
+  else if (tab?.kind === "other") active_tab = "other";
+  const lp = input.lastProblem;
+  return {
+    entry,
+    chat_surface: input.chatSurface,
+    ...(active_tab ? { active_tab } : {}),
+    ...(lp ? { last_error: { code: lp.diagnostic.code, step: lp.diagnostic.step, age_s: Math.max(0, Math.round(((input.now ?? Date.now()) - lp.at) / 1000)) } } : {}),
+  };
 }
 
 /**
@@ -224,10 +274,11 @@ export function parseProblemAnswer(v: unknown): ProblemReportAnswer | null {
  */
 export function problemReportBody(
   answer: ProblemReportAnswer,
-  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason; logs?: { webview_errors: unknown[]; renderer_log?: string; exthost_log?: string } },
+  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason; logs?: { webview_errors: unknown[]; renderer_log?: string; exthost_log?: string }; uiState?: ProblemReportUiState; doctor?: import("./studioDoctor").DoctorAttachment },
 ): Record<string, unknown> {
   const d = ctx.diagnostic;
-  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : ctx.reason === "crash" ? "(설명 없음) 화면이 멈췄어요" : "(설명 없음)";
+  const from = ctx.uiState && ENTRY_LABEL[ctx.uiState.entry] ? ` ${ENTRY_LABEL[ctx.uiState.entry]}에서 보냄` : "";
+  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : ctx.reason === "crash" ? "(설명 없음) 화면이 멈췄어요" : `(설명 없음)${from}`;
   // REQ-STUDIO-REPORT-LOGS: crash records always (already redacted, no conversation); log tails only when ticked.
   const errors = ctx.logs?.webview_errors ?? [];
   const tails = answer.includeLogs ? { ...(ctx.logs?.renderer_log ? { renderer_log: ctx.logs.renderer_log } : {}), ...(ctx.logs?.exthost_log ? { exthost_log: ctx.logs.exthost_log } : {}) } : {};
@@ -239,7 +290,7 @@ export function problemReportBody(
     contact: answer.contact || undefined,
     include_recent_turns: answer.includeRecentTurns,
     recent_turns: answer.includeRecentTurns ? ctx.recentTurns : undefined,
-    attachments: { ...ctx.metadata, report_source: ctx.reason, ...(d ? { diagnostic: autoReportBody(d) } : {}) },
+    attachments: { ...ctx.metadata, report_source: ctx.reason, ...(d ? { diagnostic: autoReportBody(d) } : {}), ...(ctx.uiState ? { ui_state: ctx.uiState } : {}), ...(answer.includeDoctor && ctx.doctor ? { doctor: ctx.doctor } : {}) },
     ...(logs ? { logs } : {}),
   };
 }

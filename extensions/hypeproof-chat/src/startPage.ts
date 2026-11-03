@@ -983,7 +983,7 @@ export class StartPage {
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
-    if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem"); return; }
+    if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start_page"); return; }
     if (msg.type === "openSkillStore") { await vscode.commands.executeCommand("hypeproof-chat.skillStore"); return; }
     // CGP-SHELL-R-014 — the start page "설정" opens the learner sheet (webview-side); the VS Code settings
     // editor is reached only through the sheet's "고급 설정", re-checked here: a minor seat never gets it.

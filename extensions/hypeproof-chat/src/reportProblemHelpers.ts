@@ -4,6 +4,7 @@
 
 import type { ChatMessage } from "./protocol";
 import { contentBytes, type OutboundConfirmation, type OutboundItem } from "./outboundConsent.ts";
+import { COACH_LOG_HEADER } from "./reportLogs.ts";
 
 /**
  * Hash a JWT-ish identifier with SHA-256, return the first 16 hex chars.
@@ -79,11 +80,14 @@ export function reportManifestItems(body: { description?: unknown; contact?: unk
   if (typeof body.contact === "string" && body.contact) items.push({ name: "내가 적은 연락처", bytes: size(body.contact) });
   if (Array.isArray(body.recent_turns)) body.recent_turns.forEach((t: { role?: string }, i: number) => items.push({ name: `최근 대화 ${i + 1} · ${t?.role === "user" ? "내가 보낸 말" : "AI의 답"}`, bytes: size(t) }));
   items.push({ name: "앱 정보 (버전·운영체제·요청 번호·프로필)", bytes: size({ attachments: body.attachments, request_id: body.request_id, profile_id: body.profile_id }) });
+  // REQ-STUDIO-DOCTOR — the 진단 결과 rides inside attachments; it is named on its own line so the learner sees it.
+  const doctor = (body.attachments as { doctor?: unknown } | undefined)?.doctor;
+  if (doctor) items.push({ name: "진단 결과 (확인한 항목과 결과 코드)", bytes: size(doctor) });
   // REQ-STUDIO-REPORT-LOGS — each attached diagnostic is its own line with its size.
   const logs = body.logs;
   if (Array.isArray(logs?.webview_errors) && logs.webview_errors.length) items.push({ name: `최근 화면 오류 기록 ${logs.webview_errors.length}건`, bytes: size(logs.webview_errors) });
   if (typeof logs?.renderer_log === "string") items.push({ name: "화면 로그 (renderer.log 마지막 부분)", bytes: size(logs.renderer_log) });
-  if (typeof logs?.exthost_log === "string") items.push({ name: "확장 로그 (exthost.log 마지막 부분)", bytes: size(logs.exthost_log) });
+  if (typeof logs?.exthost_log === "string") items.push({ name: logs.exthost_log.includes(COACH_LOG_HEADER) ? "확장 로그 (exthost.log·코치 기록 마지막 부분)" : "확장 로그 (exthost.log 마지막 부분)", bytes: size(logs.exthost_log) });
   return items;
 }
 export const reportRecipient = (proxyBase: string): string => { let host = "알 수 없는 주소"; try { host = new URL(proxyBase).host; } catch { /* shown as unknown */ } return `Studio 운영팀 (문제 신고 채널) · ${host}`; };
