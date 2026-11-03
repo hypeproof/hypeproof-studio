@@ -498,7 +498,7 @@
   "test/turn-idle-progress.smoke.mjs": 1,
   "test/turn-restore.smoke.mjs": 1,
   "test/turn-review-css.smoke.mjs": 1,
-  "test/type-scale.smoke.mjs": 458,
+  "test/type-scale.smoke.mjs": 333,
   "test/ui-polish-1.smoke.mjs": 2,
   "test/update-access-copy.smoke.mjs": 1,
   "test/update-checker.smoke.mjs": 1,
