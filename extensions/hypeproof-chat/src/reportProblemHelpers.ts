@@ -4,6 +4,7 @@
 
 import type { ChatMessage } from "./protocol";
 import { contentBytes, type OutboundConfirmation, type OutboundItem } from "./outboundConsent.ts";
+import { COACH_LOG_HEADER } from "./reportLogs.ts";
 
 /**
  * Hash a JWT-ish identifier with SHA-256, return the first 16 hex chars.
@@ -83,7 +84,7 @@ export function reportManifestItems(body: { description?: unknown; contact?: unk
   const logs = body.logs;
   if (Array.isArray(logs?.webview_errors) && logs.webview_errors.length) items.push({ name: `최근 화면 오류 기록 ${logs.webview_errors.length}건`, bytes: size(logs.webview_errors) });
   if (typeof logs?.renderer_log === "string") items.push({ name: "화면 로그 (renderer.log 마지막 부분)", bytes: size(logs.renderer_log) });
-  if (typeof logs?.exthost_log === "string") items.push({ name: "확장 로그 (exthost.log 마지막 부분)", bytes: size(logs.exthost_log) });
+  if (typeof logs?.exthost_log === "string") items.push({ name: logs.exthost_log.includes(COACH_LOG_HEADER) ? "확장 로그 (exthost.log·코치 기록 마지막 부분)" : "확장 로그 (exthost.log 마지막 부분)", bytes: size(logs.exthost_log) });
   return items;
 }
 export const reportRecipient = (proxyBase: string): string => { let host = "알 수 없는 주소"; try { host = new URL(proxyBase).host; } catch { /* shown as unknown */ } return `Studio 운영팀 (문제 신고 채널) · ${host}`; };

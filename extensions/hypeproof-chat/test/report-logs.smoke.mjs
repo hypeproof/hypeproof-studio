@@ -5,14 +5,19 @@
 //   redaction   tokens, JWTs, key=value secrets, emails and the home user name never survive; ordinary log lines do
 //   tail        only the last LOG_TAIL_BYTES of a file are read and sent, starting at a line, with a cut note
 //   paths       renderer.log and exthost.log are found from the extension's own log folder (no fixed paths)
+//   noise       (#3426) a flood of one line (the i18n warning, or any frequent/consecutive duplicate) is collapsed to
+//               one line with its count before the tail is taken, so a real error before the flood survives; masking
+//               still applies; the coach output channel rides in exthost_log within the same byte cap
+//   ui state    (#3426) a report says where it was sent from and what was on screen, without conversation content
 //   body        crash records always go; log tails only when the box is ticked; the confirmation lists each part
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const { redactLog, logTail, webviewErrorRecord, rememberWebviewError, validWebviewErrors, LOG_TAIL_BYTES, WEBVIEW_ERROR_LIMIT } = await import("../src/reportLogs.ts");
+const { redactLog, logTail, webviewErrorRecord, rememberWebviewError, validWebviewErrors, LOG_TAIL_BYTES, WEBVIEW_ERROR_LIMIT, LOG_SCAN_BYTES, COACH_LOG_HEADER, COACH_LOG_TAIL_BYTES, FREQUENT_LINE_MIN, collapseLogNoise, LogLineBuffer } = await import("../src/reportLogs.ts");
 const { sessionLogPaths, readLogTail, readSessionLogs, logsAvailable } = await import("../src/reportLogsHost.ts");
+const { problemReportUiState } = await import("../src/problemReport.ts");
 const { problemReportBody, parseProblemAnswer } = await import("../src/problemReport.ts");
 const { reportManifestItems } = await import("../src/reportProblemHelpers.ts");
 
@@ -75,7 +80,9 @@ await t("paths: logs are found from the extension's log folder; files are read f
   assert.equal(p.exthost, path.join(root, "20261102T101010", "window1", "exthost", "exthost.log"));
   assert.equal(logsAvailable(extDir), false, "no files yet");
   const head = "OLD Bearer hps_head_secret_value_should_not_be_read\n";
-  fs.writeFileSync(p.renderer, head + "filler line\n".repeat(LOG_TAIL_BYTES / 6) + "React error #185 at /Users/minji/x\nBearer hps_tail_secret_abcdefgh1234\n");
+  // Unique filler (repeats would be collapsed, #3426) longer than the scan window, so the head is never read.
+  let filler = ""; for (let i = 0; filler.length <= LOG_SCAN_BYTES; i++) filler += `filler line ${i}\n`;
+  fs.writeFileSync(p.renderer, head + filler + "React error #185 at /Users/minji/x\nBearer hps_tail_secret_abcdefgh1234\n");
   fs.writeFileSync(p.exthost, "[hypeproof-chat] webview error: boom\n");
   assert.equal(logsAvailable(extDir), true);
   const got = await readSessionLogs(extDir);
@@ -124,6 +131,90 @@ await t("answer: includeLogs is a boolean; an older panel's answer attaches no l
   assert.equal(parseProblemAnswer({ description: "", contact: "", includeRecentTurns: false }).includeLogs, false);
   assert.equal(parseProblemAnswer({ description: "", contact: "", includeRecentTurns: false, includeLogs: true }).includeLogs, true);
   assert.equal(parseProblemAnswer({ description: "", contact: "", includeRecentTurns: false, includeLogs: "yes" }), null);
+});
+
+const I18N = (k) => `2026-11-03 09:12:${String(k % 60).padStart(2, "0")}.123 [warning] Using default string since no string found in i18n bundle that has the key: key.${k}`;
+
+await t("noise: 1,000 i18n warnings plus one real error keep the error in the attached tail, masked (#3426 acceptance)", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hps-report-noise-"));
+  const extDir = path.join(root, "s", "window1", "exthost", "hypeproof.hypeproof-chat");
+  fs.mkdirSync(extDir, { recursive: true });
+  const p = sessionLogPaths(extDir);
+  const before = Array.from({ length: 400 }, (_, i) => I18N(i));
+  const after = Array.from({ length: 600 }, (_, i) => I18N(400 + i));
+  const error = "2026-11-03 09:12:40.000 [error] [hypeproof-chat] stream failed for C:\\Users\\minji\\homepage: Bearer hps_live_secret_abcdef123456";
+  fs.writeFileSync(p.exthost, ["2026-11-03 09:00:00.000 [info] Extension host started", ...before, error, ...after, ""].join("\n"));
+  // Negative control: the pre-#3426 tail (no collapse) loses the error, the way the real report did.
+  const raw = fs.readFileSync(p.exthost, "utf8");
+  assert.ok(!logTail(raw, LOG_TAIL_BYTES).includes("stream failed"), "control: a plain tail of the flood has no error");
+  const got = await readSessionLogs(extDir, undefined, "C:\\Users\\minji");
+  assert.match(got.exthost_log, /\[error\] \[hypeproof-chat\] stream failed/);
+  assert.match(got.exthost_log, /Extension host started/);
+  assert.ok(!got.exthost_log.includes("hps_live_secret"), "masking still applies");
+  assert.ok(!got.exthost_log.includes("minji"), "masking still applies to the home folder");
+  const i18n = got.exthost_log.split("\n").filter((l) => l.includes("i18n bundle"));
+  assert.equal(i18n.length, 1, "the warning is kept once");
+  assert.match(i18n[0], /^\[×1000\] 2026-11-03 09:12:39\.123 \[warning\] Using default string/, "with its count, at its last position");
+  assert.ok(got.exthost_log.indexOf("stream failed") < got.exthost_log.indexOf("[×1000]"), "order kept: the error came before the last warning");
+  // Even with a tail smaller than the flood, the error stays.
+  assert.match(await readLogTail(p.exthost, "C:\\Users\\minji", 1024), /stream failed/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+await t("noise: frequent and consecutive duplicates collapse with a count; stacks and rare lines are untouched", () => {
+  const frequent = Array.from({ length: FREQUENT_LINE_MIN }, (_, i) => [`2026-11-03 10:00:${String(i).padStart(2, "0")} [info] heartbeat ok`, `unique ${i}`]).flat();
+  const out = collapseLogNoise(frequent.join("\n")).split("\n");
+  assert.equal(out.filter((l) => l.includes("heartbeat ok")).length, 1);
+  assert.match(out.at(-2), /^\[×20\] .*heartbeat ok$/);
+  assert.equal(out.filter((l) => l.startsWith("unique ")).length, FREQUENT_LINE_MIN, "rare lines all stay, in order");
+  const consecutive = ["start", "retrying connect", "retrying connect", "retrying connect", "Error: boom", "    at a (x.ts:1)", "    at a (x.ts:1)", "Error: boom", "    at a (x.ts:1)", "", "", "end"].join("\n");
+  assert.equal(collapseLogNoise(consecutive), ["start", "[×3] retrying connect", "Error: boom", "[×2]     at a (x.ts:1)", "Error: boom", "    at a (x.ts:1)", "", "", "end"].join("\n"));
+  // Positive control: an ordinary log is returned unchanged.
+  const plain = "a line one\nb line two\n    at frame\nc line three\n";
+  assert.equal(collapseLogNoise(plain), plain);
+});
+
+await t("coach channel: its lines ride at the end of exthost_log inside the same byte cap, collapsed and masked", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hps-report-coach-"));
+  const extDir = path.join(root, "s", "window1", "exthost", "hypeproof.hypeproof-chat");
+  fs.mkdirSync(extDir, { recursive: true });
+  const p = sessionLogPaths(extDir);
+  let big = ""; for (let i = 0; big.length < 200 * 1024; i++) big += `exthost line ${i}\n`;
+  fs.writeFileSync(p.exthost, big);
+  const buf = new LogLineBuffer();
+  buf.push("[coach] SdkUnavailableError: token=hps_coach_secret_123456 at /Users/minji/x", Date.parse("2026-11-03T00:00:00Z"));
+  for (let i = 0; i < 50; i++) buf.push("[heartbeat] skipped");
+  assert.equal(logsAvailable(undefined, buf.text()), true, "the coach log alone makes logs available");
+  assert.equal(logsAvailable(undefined, ""), false);
+  const got = await readSessionLogs(extDir, buf.text(), "/Users/minji");
+  assert.ok(new TextEncoder().encode(got.exthost_log).byteLength <= LOG_TAIL_BYTES + 64, "same cap as before");
+  const [ext, coach] = got.exthost_log.split(COACH_LOG_HEADER);
+  assert.match(ext, /exthost line \d+\n+$/);
+  assert.match(coach, /2026-11-03T00:00:00.000Z \[coach\] SdkUnavailableError/);
+  assert.ok(!coach.includes("hps_coach_secret") && !coach.includes("minji"), "masked");
+  assert.equal(coach.split("\n").filter((l) => l.includes("[heartbeat] skipped")).length, 1, "collapsed");
+  assert.ok(new TextEncoder().encode(coach).byteLength <= COACH_LOG_TAIL_BYTES + 64);
+  const names = reportManifestItems({ logs: { webview_errors: [], exthost_log: got.exthost_log } }).map((i) => i.name);
+  assert.ok(names.includes("확장 로그 (exthost.log·코치 기록 마지막 부분)"), "the confirmation says the coach log is inside");
+  // No log folder, only the coach channel: still attached.
+  assert.match((await readSessionLogs(undefined, buf.text(), "/Users/minji")).exthost_log, /SdkUnavailableError/);
+  // The in-memory buffer is bounded.
+  const small = new LogLineBuffer(1024);
+  for (let i = 0; i < 500; i++) small.push(`line ${i}`);
+  assert.ok(small.text().length <= 1024 && small.text().endsWith("line 499"));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+await t("ui state: a manual report with no description still says where it came from, without conversation content", () => {
+  const ui = problemReportUiState({ entry: "start_page", chatSurface: "hidden", activeTab: { kind: "text", fileName: "C:\\Users\\minji\\homepage\\index_full_20261030.html" }, lastProblem: { diagnostic: { code: "network_unreachable", step: "chat" }, at: 1_000 }, now: 61_000 });
+  assert.deepEqual(ui, { entry: "start_page", chat_surface: "hidden", active_tab: "text:.html", last_error: { code: "network_unreachable", step: "chat", age_s: 60 } });
+  assert.ok(!JSON.stringify(ui).includes("index_full") && !JSON.stringify(ui).includes("minji"), "no file name or path");
+  assert.deepEqual(problemReportUiState({ entry: "nonsense", chatSurface: "sidebar", activeTab: { kind: "webview", viewType: "mainThreadWebview-hypeproof.preview" } }), { entry: "unknown", chat_surface: "sidebar", active_tab: "webview:mainThreadWebview-hypeproof.preview" });
+  const body = problemReportBody({ description: "", contact: "", includeRecentTurns: false, includeLogs: false }, { recentTurns: [{ role: "user", content: "secret turn" }], metadata: {}, reason: "manual", uiState: ui });
+  assert.equal(body.attachments.report_source, "manual");
+  assert.deepEqual(body.attachments.ui_state, ui);
+  assert.equal(body.description, "(설명 없음) 시작 화면에서 보냄");
+  assert.ok(!JSON.stringify(body).includes("secret turn"), "no conversation content unless ticked");
 });
 
 if (fail) { console.error(`report-logs: ${fail} failed`); process.exit(1); }
