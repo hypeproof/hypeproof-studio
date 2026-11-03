@@ -1,3 +1,4 @@
+import { StoreClient } from "./skillStore";
 import * as vscode from "vscode";
 import { AccountError, accountProductionEnabled, ACCOUNTS_ENABLED_DEFAULT, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -154,6 +155,7 @@ export class StartPage {
     // anywhere else (waiting, stopped, list closed): nothing is restored later.
     if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
+    void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
   }
 
   /** Explicit login resumes granted personal use; background refresh never changes activities. */
@@ -571,6 +573,22 @@ export class StartPage {
     this.purchaseFocus = Date.now();
     await this.refresh();
   }
+  /**
+   * Epic #3418 — one read per window and account: the store entry is drawn only when the Service
+   * answers the store for this account (a rollout may open it to listed accounts only).
+   */
+  private storeOn?: boolean;
+  private storeFor?: string;
+  private async loadStore(): Promise<boolean> {
+    const view = this.accounts?.view();
+    const key = view?.status === "signedIn" ? `in:${view.account?.id ?? ""}` : "out";
+    if (this.storeFor === key) return false;
+    this.storeFor = key;
+    const token = key === "out" ? undefined : await this.accounts?.accessToken().catch(() => undefined);
+    const before = this.storeOn;
+    this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => token }).items().then(() => true, () => false);
+    return before !== this.storeOn;
+  }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
     if (this.products !== undefined && !force) return;
@@ -834,6 +852,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
+      ...(this.storeOn ? { skillStore: true } : {}),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
@@ -963,7 +982,7 @@ export class StartPage {
         const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
         await Promise.race([this.loadTrialOffer(), bound]);
       }
-      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
     if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
     if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
@@ -978,6 +997,7 @@ export class StartPage {
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
     if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start_page"); return; }
+    if (msg.type === "openSkillStore") { await vscode.commands.executeCommand("hypeproof-chat.skillStore"); return; }
     // CGP-SHELL-R-014 — the start page "설정" opens the learner sheet (webview-side); the VS Code settings
     // editor is reached only through the sheet's "고급 설정", re-checked here: a minor seat never gets it.
     if (msg.type === "openAdvancedSettings") {

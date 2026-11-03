@@ -34,6 +34,12 @@ extensions/hypeproof-chat/
 - A test that needs a different window stub or esbuild flag goes in the runner's `OVERRIDES` map, not in a new script.
 - Bundles go to a fresh `mkdtemp` directory, never a fixed `/tmp/<name>.test.cjs`. Fixed paths let two worktrees overwrite each other and fail with `SyntaxError`.
 
+## Smoke shards in CI
+
+- PR CI runs the `npm test` chain in six shards (`extension / smoke (N/6)`) plus one aggregate `extension / smoke`. `scripts/run-smoke-shard.mjs` reads the chain from package.json, so a new `test/*.smoke.mjs` or a new `&&` step needs no CI edit.
+- Reproduce a shard: `node scripts/run-smoke-shard.mjs --shard 3/6` (`--list` prints its units, `--plan 6` the split). Full local run is still `npm test`.
+- The split uses `test/smoke-durations.json`; an unmeasured unit counts as 30 s. Refresh it when a shard runs much longer than the others.
+
 ## Proxy contract
 
 Webview talks to the Service (`worker/`, deployed at api.hypeproof-ai.xyz); `proxy-poc/` is the retired PoC. Endpoint is OpenAI-compatible (`/v1/chat/completions`, SSE streaming). Workshop token is supplied via the UI and stored in `secrets` (VS Code SecretStorage API) — never in plaintext settings.

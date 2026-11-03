@@ -236,7 +236,7 @@ import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs 
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
-import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, scanForPoint, takeRestorePoint, turnRestoreStoreDir, folderFitsRestoreLimits, TurnWriteTracker, TRACKED_SHELL_NOTICE, trackedTooLargeLine, type RestoreManifest, type TrackedCapture } from "./turnRestore";
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
@@ -254,7 +254,7 @@ import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type Artifac
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
-import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
+import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
@@ -394,6 +394,8 @@ class LessonBindingPreflightError extends Error {}
 
 /** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
 interface BrainRun { lines: string[]; open?: string }
+/** A coach turn's restore point; `tracker` only on a folder too large for a whole-folder point (#3427). */
+interface TurnRestoreHandle { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string; tracker?: TurnWriteTracker }
 /** CGP-KNOW-R-021 — where a download line goes: the activity and task open when the download began. */
 interface DownloadDestination { store: TaskWorkspaceStore | undefined; taskId: string | undefined; activityId: string | undefined; historyKey: string }
 
@@ -6768,6 +6770,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // The copies live in the extension's storage, per work folder and task, so the coach's tools never see them and every
   // seat (minors too) gets them. One review bar at a time: the next turn replaces it.
   private turnReview: { view: TurnReviewView; store: string; root: string; point: RestoreManifest; taskKey: string; measuredDigest?: string } | null = null;
+  /** #3427 — the copy-on-first-write tracker of each running turn on a folder too large for a whole-folder point. */
+  private readonly turnWriteTrackers = new Map<string, TurnWriteTracker>();
   private turnRestoreBusy = false;
   private artifactHistoryEnabled(): boolean {
     return !!this.cachedProfile && this._instructorMode?.isInstructor === false
@@ -7239,7 +7243,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
-  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null> {
+  private async beginTurnRestore(streamId: string): Promise<TurnRestoreHandle | null> {
     const pageCardScope = this.pageCardScope();
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
     if (this._instructorMode?.isInstructor === true) {
@@ -7265,12 +7269,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       store = turnRestoreStoreDir(base, root, taskKey);
     } catch { return null; }
     try {
+      // #3427 — a folder past the whole-folder bounds is not copied: the turn records each file its
+      // file tools write, on first write (TurnWriteTracker). Undo stays on, whatever the folder's size.
+      if (!(await folderFitsRestoreLimits(root))) return await this.beginTrackedTurnRestore(streamId, store, root, taskKey, pageCardScope);
       const { point } = await takeRestorePoint({ store, root, id: streamId, turnId: streamId, kind: "turn" });
       if (!point.complete) {
+        // The folder grew past the bounds during the walk: same fallback.
         await dropRestorePoint(store, point.id);
-        await this.provenanceRecorder()?.unobserved(root);
-        this.postToolLog(streamId, { id: `turn-restore-${streamId}`, icon: "⚠️", label: "작업 폴더에 파일이 너무 많아서 이번 요청은 되돌리기를 쓸 수 없어요.", state: "error" });
-        return null;
+        return await this.beginTrackedTurnRestore(streamId, store, root, taskKey, pageCardScope);
       }
       await this.provenanceRecorder()?.turnStart(root, point);
       return { store, root, point, taskKey, pageCardScope };
@@ -7281,11 +7287,42 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * #3427 — the tracked restore point of a turn on a large folder. The folder is not walked, so the
+   * provenance window is unmeasured (as before); the revert itself covers every file the turn's
+   * file tools write.
+   */
+  private async beginTrackedTurnRestore(streamId: string, store: string, root: string, taskKey: string, pageCardScope: string | undefined): Promise<TurnRestoreHandle> {
+    const tracker = await TurnWriteTracker.start({ store, root, id: streamId, turnId: streamId });
+    this.turnWriteTrackers.set(streamId, tracker);
+    await this.provenanceRecorder()?.unobserved(root);
+    return { store, root, point: tracker.point(), taskKey, pageCardScope, tracker };
+  }
+
+  /**
+   * #3427 — an approved write of a turn with a tracked point: record each target's pre-write state
+   * before the tool runs. A file past the per-file or per-turn byte bound is named right away; a
+   * failure never blocks the write (the path then reads as not covered at the turn's end).
+   */
+  private async captureTurnWrite(streamId: string, action: { toolName: string; input: unknown }, approved: boolean): Promise<void> {
+    const tracker = this.turnWriteTrackers.get(streamId);
+    if (!tracker || !approved || !isWriteToolName(action.toolName)) return;
+    let captured: TrackedCapture[] = [];
+    try { captured = await tracker.capture(writeScopeKeys(action.toolName, action.input, tracker.root)); } catch { return; }
+    const tooBig = captured.filter((c) => c.reason === "too_large" || c.reason === "total_cap");
+    if (tooBig.length) this.postToolLog(streamId, { id: `turn-restore-big-${streamId}-${tooBig[0].path}`, icon: "⚠️", label: trackedTooLargeLine(tooBig.map((c) => c.path)), state: "error" });
+  }
+
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
-  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null, streamId: string, messageId: string, assistantText = ""): Promise<void> {
+  private async endTurnRestore(handle: TurnRestoreHandle | null, streamId: string, messageId: string, assistantText = ""): Promise<void> {
     if (!handle) return;
+    // #3427 — a tracked point: every write was recorded by now; compare only its own paths.
+    const tracker = handle.tracker;
+    if (tracker) { this.turnWriteTrackers.delete(streamId); handle = { ...handle, point: tracker.point() }; }
+    const shellUntracked = !!tracker?.shellRan();
+    if (shellUntracked) this.postToolLog(streamId, { id: `turn-restore-shell-${streamId}`, icon: "⚠️", label: TRACKED_SHELL_NOTICE, state: "error" });
     try {
-      const now = await scanFolder(handle.root);
+      const now = tracker ? await scanForPoint(handle.root, handle.point) : await scanFolder(handle.root);
       if (!now.complete) {
         await this.provenanceRecorder()?.unobserved(handle.root);
         this.postToolLog(streamId, { id: `turn-restore-end-${streamId}`, icon: "⚠️", label: "작업 폴더에 파일이 너무 많아져서 이번 요청은 되돌릴 수 없어요.", state: "error" });
@@ -7293,7 +7330,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       const changes = diffRestorePoint(handle.point, now);
       // CGP-KNOW-D-016 — the turn's task and assistant row, so the file's info popover can open this turn.
-      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now, { taskId: handle.taskKey, messageId });
+      // A tracked turn saw only its own writes, not the folder: that window stays unmeasured (#3427).
+      if (tracker) await this.provenanceRecorder()?.unobserved(handle.root);
+      else await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now, { taskId: handle.taskKey, messageId });
       void this.postArtifactProvenance(false);
       if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
       // REQ-STUDIO-PAGE-CARD — the same diff (a stopped turn included) names the pages; the card sits under the
@@ -7308,12 +7347,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,
-        view: { files: await reviewTurnFiles(handle.store, handle.root, handle.point, now), turnId: handle.point.turnId, state: "open", added: changes.added, changed: changes.changed, deleted: changes.deleted, notCovered: changes.notCovered.map((n) => n.path) },
+        view: { files: await reviewTurnFiles(handle.store, handle.root, handle.point, now), turnId: handle.point.turnId, state: "open", added: changes.added, changed: changes.changed, deleted: changes.deleted, notCovered: changes.notCovered.map((n) => n.path), ...(tracker ? { trackedOnly: true } : {}), ...(shellUntracked ? { notice: TRACKED_SHELL_NOTICE } : {}) },
       };
       // CGP-AGENT-R-027 — adult website tracks may save this state as a checkpoint; the AI's answer
       // for this turn prefills the message the learner reviews. Never a new model request.
       const base = this.context?.globalStorageUri?.fsPath;
-      if (base && checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) {
+      // A checkpoint is a whole-folder save point; a folder too large for one gets none (#3427).
+      if (base && !tracker && checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) {
         const suggestion = suggestCheckpointMessage(assistantText, changes);
         const history = await listCheckpoints(checkpointStoreDir(base, handle.root, handle.taskKey)).catch(() => []);
         this.turnReview.view = { ...this.turnReview.view, checkpoint: { suggestion: suggestion.message, source: suggestion.source, history } };
@@ -7415,7 +7455,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnReview = null;
       this.postTurnReview();
       let afterDigest: string | undefined;
-      try { afterDigest = (await scanFolder(review.root)).digest; } catch { /* recorded without it */ }
+      try { afterDigest = (await scanForPoint(review.root, review.point)).digest; } catch { /* recorded without it */ }
       // REQ-Q1 — local evidence: digests and counts only, never paths or contents.
       this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_keep", payload: { restore_point: review.point.id, before_digest: review.point.digest, ...(afterDigest ? { after_digest: afterDigest } : {}), ...counts } });
       return;
@@ -7439,7 +7479,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     review.view = { ...review.view, state: "restoring", notice: undefined };
     this.postTurnReview();
     try {
-      const now = await scanFolder(review.root);
+      const now = await scanForPoint(review.root, review.point);
       if (!now.complete || !current() || (review.measuredDigest && review.measuredDigest !== now.digest)) {
         review.view = { ...review.view, state: "open", notice: "파일이나 작업이 바뀌었어요. 변경 내용을 다시 확인한 뒤 되돌려 주세요." };
         if (current() && now.complete) {
@@ -7458,7 +7498,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       const out = await restoreToPoint({ store: review.store, root: review.root, point: review.point, paths: selected, sweepDirs: msg.path === undefined, expectedDigest: now.digest, stillCurrent: current, beforeRestoreId: `${review.point.id}-before-restore-${Date.now()}` });
       if (out.touched) {
-        const after = await scanFolder(review.root).catch(() => null);
+        // A tracked point's scan is not the folder: the ledger then only drops the reverted events (#3427).
+        const after = review.point.scope === "tracked" ? null : await scanFolder(review.root).catch(() => null);
         await this.provenanceRecorder()?.reverted(review.root, review.point, after?.complete ? after : null, [...out.restored, ...out.removed]);
       }
       review.view = {
@@ -7472,7 +7513,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         notCovered: out.notCovered.map((n) => n.path),
       };
       if (out.ok && msg.path !== undefined) {
-        const after = await scanFolder(review.root);
+        const after = await scanForPoint(review.root, review.point);
         const changes = diffRestorePoint(review.point, after);
         if (changeCount(changes)) {
           review.measuredDigest = after.digest;
@@ -9268,6 +9309,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.mcpBrowser?.crNewTurn();
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
         webActivity.observe(a);
+        // #3427 — a shell step on a tracked turn: its changes are not in the restore point.
+        if (a.kind === 'approval' && a.allowed && (a.name === 'Bash' || a.name === 'PowerShell')) this.turnWriteTrackers.get(streamId)?.noteShell();
         if (a.kind === 'tool_use') this.noteTaskActivity(streamId, { kind: 'use', id: a.id, name: a.name, input: a.input });
         else if (a.kind === 'approval' && !a.allowed) this.noteTaskActivity(streamId, { kind: 'deny', id: a.id });
         else if (a.kind === 'tool_result') this.noteTaskActivity(streamId, { kind: 'result', id: a.id, isError: a.isError });
@@ -9668,6 +9711,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               let prompted=false;
               let denialSource: import("./denialSource").DenialSource | undefined;
               const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
+              await this.captureTurnWrite(streamId,action,approved);
               return {approved,actor:prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
@@ -9685,6 +9729,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               let prompted=false;
               let denialSource: import("./denialSource").DenialSource | undefined;
               const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
+              await this.captureTurnWrite(streamId,action,approved);
               return {approved,actor:prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
@@ -9798,6 +9843,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               let prompted = false;
               let denialSource: import('./denialSource').DenialSource | undefined;
               const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; }, source => { denialSource = source; });
+              // #3427 — copy on first write: the file's pre-turn bytes are kept before the tool runs.
+              await this.captureTurnWrite(streamId, action, approved);
               return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
             },
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof

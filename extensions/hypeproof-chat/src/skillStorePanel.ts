@@ -1,0 +1,194 @@
+// Skill store editor panel (Epic #3418, REQ-STORE-*). Webview surface "skill-store"
+// (webview-ui/src/SkillStore.tsx); Service calls in skillStore.ts.
+//
+// Purchase: the Service creates the order, the browser opens the Service's checkout page, and
+// this panel polls the order until the Service itself reports it paid (the gateway confirmed it
+// server to server). The App never sees card data and never decides a refund or a price rule.
+import * as vscode from "vscode";
+import { createHash } from "node:crypto";
+import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage } from "./skillStore";
+import type { StoreHostMessage, StoreRequest, StoreState, StoreTab } from "./skillStoreProtocol";
+
+export const SKILL_STORE_COMMAND = "hypeproof-chat.skillStore";
+const POLL_MS = 3000;
+const CHECKOUT_LIMIT_MS = 30 * 60 * 1000;
+
+export interface SkillStoreDeps {
+  render: (webview: vscode.Webview, dist: vscode.Uri) => string;
+  /** The signed-in personal account's bearer; undefined when accounts are off or signed out. */
+  accountToken: () => Promise<string | undefined>;
+  /**
+   * The seat a run would spend: `personal` (the buyer's own pass, trial or free seat), `classroom`
+   * (a class or minor cohort, which must not pay for or reach the store), or `none`.
+   */
+  seat: () => Promise<"personal" | "classroom" | "none">;
+}
+
+export function registerSkillStore(context: vscode.ExtensionContext, deps: SkillStoreDeps): void {
+  let panel: vscode.WebviewPanel | undefined;
+  let state: StoreState = { access: "ready", tab: "browse", items: [], ageGroup: "unknown", installs: [], testPayments: true };
+  let poll: ReturnType<typeof setTimeout> | undefined;
+  let checkoutOrder: { id: string; startedAt: number } | undefined;
+  const client = () =>
+    new StoreClient({
+      proxyUrl: vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"),
+      token: deps.accountToken,
+      device: createHash("sha256").update(`hps-store-device\u0000${vscode.env.machineId}`).digest("hex").slice(0, 40),
+    });
+  const post = async (msg: StoreHostMessage) => {
+    try { await panel?.webview.postMessage(msg); } catch { /* the panel closed */ }
+  };
+  const push = async (patch: Partial<StoreState>) => {
+    state = { ...state, ...patch };
+    await post({ type: "storeState", state });
+  };
+
+  const load = async (tab: StoreTab = state.tab, extra: Partial<StoreState> = {}) => {
+    // A class seat (every under-14 instructor-code cohort included) has no store, however the panel was opened.
+    if ((await deps.seat().catch(() => "none")) === "classroom") return push({ access: "unavailable", tab, items: [], installs: [], seller: undefined, busy: false, error: STORE_COPY.classroomSeat });
+    const c = client();
+    let items = state.items;
+    try {
+      items = await c.items();
+    } catch (error) {
+      await push({ access: "unavailable", tab, busy: false, error: storeErrorMessage(error), ...extra });
+      return;
+    }
+    if (!(await deps.accountToken().catch(() => undefined))) {
+      await push({ access: "signedOut", tab, items, installs: [], seller: undefined, busy: false, ...extra });
+      return;
+    }
+    try {
+      const me = await c.me();
+      const seller = tab === "sell" ? await c.seller() : state.seller;
+      await push({ access: "ready", tab, items, ageGroup: me.age_group, installs: me.installs, seller, busy: false, ...extra });
+    } catch (error) {
+      const signedOut = error instanceof StoreClientError && error.code === "account_required";
+      await push({ access: signedOut ? "signedOut" : "ready", tab, items, busy: false, error: storeErrorMessage(error), ...extra });
+    }
+  };
+
+  const stopPoll = () => {
+    if (poll) clearTimeout(poll);
+    poll = undefined;
+  };
+  const watchOrder = () => {
+    stopPoll();
+    poll = setTimeout(async () => {
+      const order = checkoutOrder;
+      if (!order) return;
+      let next: string;
+      let reason: string | undefined;
+      try {
+        ({ state: next, block_reason: reason } = await client().orderState(order.id));
+      } catch {
+        next = "pending";
+      }
+      if (next === "paid") {
+        const title = state.checkout?.title ?? "";
+        checkoutOrder = undefined;
+        await load("mine", { checkout: undefined, notice: STORE_COPY.paid(title) });
+        return;
+      }
+      if (next === "blocked" || next === "failed" || next === "expired" || Date.now() - order.startedAt > CHECKOUT_LIMIT_MS) {
+        checkoutOrder = undefined;
+        await push({ checkout: undefined, busy: false, error: next === "blocked" ? (reason === "duplicate_purchase" ? STORE_COPY.duplicate : STORE_COPY.blocked) : STORE_COPY.failed });
+        return;
+      }
+      watchOrder();
+    }, POLL_MS);
+  };
+
+  const handle = async (msg: StoreRequest) => {
+    if (!msg || typeof msg.type !== "string") return;
+    const c = client();
+    const run = async (fn: () => Promise<void>) => {
+      await push({ busy: true, error: undefined, notice: undefined, checks: undefined });
+      try {
+        await fn();
+      } catch (error) {
+        const checks = error instanceof StoreClientError && Array.isArray(error.detail.messages) ? (error.detail.messages as string[]) : undefined;
+        await push({ busy: false, error: storeErrorMessage(error), checks });
+      }
+    };
+    switch (msg.type) {
+      case "storeLoad":
+        return load(msg.tab ?? state.tab);
+      case "storeSignIn":
+        await vscode.commands.executeCommand("hypeproof-chat.start");
+        return push({ notice: "시작 화면에서 Google로 로그인한 뒤 스토어로 돌아오세요." });
+      case "storeDeclareAge":
+        return run(async () => {
+          await c.declareAge(msg.birthYear);
+          await load(state.tab);
+        });
+      case "storeBuy":
+        return run(async () => {
+          const item = state.items.find((i) => i.id === msg.itemId);
+          const order = await c.createOrder(msg.itemId);
+          checkoutOrder = { id: order.order_id, startedAt: Date.now() };
+          await push({ busy: false, checkout: { itemId: msg.itemId, title: item?.title ?? order.title, amount: order.amount }, notice: STORE_COPY.checkoutOpen });
+          await vscode.env.openExternal(vscode.Uri.parse(order.checkout_url));
+          watchOrder();
+        });
+      case "storeCancelCheckout":
+        checkoutOrder = undefined;
+        stopPoll();
+        return push({ checkout: undefined, busy: false });
+      case "storeInstallFree":
+        return run(async () => {
+          await c.installFree(msg.itemId);
+          const title = state.items.find((i) => i.id === msg.itemId)?.title ?? "";
+          await load("mine", { notice: STORE_COPY.paid(title) });
+        });
+      case "storeRefund":
+        return run(async () => {
+          const ok = await vscode.window.showWarningMessage("환불하면 스킬이 지워지고 결제가 전액 취소돼요.", { modal: true }, "환불하기");
+          if (ok !== "환불하기") return void push({ busy: false });
+          await c.refund(msg.orderId);
+          await load("mine", { notice: STORE_COPY.refunded });
+        });
+      case "storeReport":
+        return run(async () => {
+          await c.report(msg.itemId, msg.reason);
+          await load(state.tab, { notice: STORE_COPY.reported });
+        });
+      case "storePublish":
+        return run(async () => {
+          const r = await c.publish(msg.draft);
+          await load("sell", { notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
+        });
+      case "storeImportFile": {
+        const picked = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { "스킬 문서": ["md", "txt"] }, title: "스토어에 올릴 스킬 파일 고르기" });
+        if (!picked?.[0]) return;
+        const bytes = await vscode.workspace.fs.readFile(picked[0]);
+        if (bytes.byteLength > 20_000 * 4) return push({ error: "파일이 너무 커요. 2만 자 이하로 줄여 주세요." });
+        return post({ type: "storeDraftBody", body: new TextDecoder().decode(bytes).slice(0, 20_000) });
+      }
+    }
+  };
+
+  const open = () => {
+    if (panel) {
+      panel.reveal();
+      void load();
+      return;
+    }
+    const dist = vscode.Uri.joinPath(context.extensionUri, "webview-ui", "dist");
+    panel = vscode.window.createWebviewPanel("hypeproof.skillStore", STORE_COPY.title, vscode.ViewColumn.Active, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [dist],
+    });
+    panel.webview.html = deps.render(panel.webview, dist).replace(/<html\b/, '<html data-surface="skill-store"');
+    panel.webview.onDidReceiveMessage((m) => void handle(m as StoreRequest));
+    // Sign-in happens on the start page; coming back to this tab re-reads the account.
+    panel.onDidChangeViewState((e) => { if (e.webviewPanel.visible && !checkoutOrder) void load(); });
+    panel.onDidDispose(() => {
+      panel = undefined;
+      stopPoll();
+      checkoutOrder = undefined;
+    });
+  };
+  context.subscriptions.push(vscode.commands.registerCommand(SKILL_STORE_COMMAND, open), { dispose: stopPoll });
+}

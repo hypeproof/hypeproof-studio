@@ -239,10 +239,28 @@ function evalLength(v, parentPx) {
 }
 // Cascade order: importance, then specificity, then source order (rule, then declaration).
 const beats = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
-// Computes font-size (px) and the winning declaration for the last element of `descs`.
+// compute() depends on `env` only through which rules' media queries hold, and many viewports in
+// ENVS select the same rules. Results are memoized per rule list, by that set of live rules and by
+// `descs`, so an identical cascade is evaluated once instead of once per viewport (#3417: this
+// sweep was 7.6 min of CI). The verdicts are unchanged: same inputs, same function.
+const computeCache = new WeakMap();
 function compute(rules, descs, env) {
+  let perRules = computeCache.get(rules);
+  if (!perRules) computeCache.set(rules, (perRules = { lives: new Map(), results: new Map() }));
+  const envKey = `${env.w}x${env.h}:${env.forced}:${env.reduce}`;
+  let lv = perRules.lives.get(envKey);
+  if (!lv) {
+    const mask = rules.map((r) => (mediaOk(r.media, env) ? "1" : "0")).join("");
+    const live = rules.filter((r) => mediaOk(r.media, env));
+    perRules.lives.set(envKey, (lv = { mask, live }));
+  }
+  const key = `${lv.mask}\u0000${descs.join("\u0001")}`;
+  if (!perRules.results.has(key)) perRules.results.set(key, computeLive(lv.live, descs));
+  return perRules.results.get(key);
+}
+// Computes font-size (px) and the winning declaration for the last element of `descs`.
+function computeLive(live, descs) {
   const chain = [{ tag: "html", classes: new Set(), attrs: new Map(), root: true, desc: "html" }, ...descs.map(element)];
-  const live = rules.filter((r) => mediaOk(r.media, env));
   let parentPx = 16, parentVars = new Map(), winner = null;
   for (let ci = 0; ci < chain.length; ci++) {
     const best = new Map();

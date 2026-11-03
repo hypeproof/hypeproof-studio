@@ -30,6 +30,13 @@ t("open bar: count, grouped list, both choices", () => {
   has(html, "작업 폴더 밖에서 바뀐 것은 되돌리지 않아요");
   lacks(html, "disabled");
 });
+t("#3427 tracked point: the counting line says only the AI's file writes were counted, and the shell notice shows", () => {
+  const html = bar({ ...OPEN, trackedOnly: true, notice: "작업 폴더가 커서 이번 요청은 AI가 쓰거나 고친 파일만 보관했어요. 명령 실행으로 바뀐 파일은 되돌릴 수 없어요." });
+  has(html, "작업 폴더가 커서 AI가 쓰거나 고친 파일만 셌어요.");
+  lacks(html, "AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요.");
+  has(html, "명령 실행으로 바뀐 파일은 되돌릴 수 없어요.");
+  has(html, ">모두 되돌리기</button>");
+});
 t("empty groups are not drawn", () => {
   const html = bar({ ...OPEN, added: [], deleted: [] });
   has(html, "이번 요청 동안 바뀐 파일 1개");

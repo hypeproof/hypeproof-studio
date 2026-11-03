@@ -87,6 +87,11 @@ node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문
 - P2 FAIL 은 이슈만 남긴다.
 - PASS 는 스크린샷이 있어야 PASS 다. 사전 테스트의 FAIL 은 깨끗한 프로필에서 한 번 다시 해 본 뒤의 FAIL 이다.
 - 체크박스를 비워 둔 채 승인하지 않는다. 할 수 없었던 케이스는 `BLOCKED — 이유` 로 적는다.
+- **발행 게이트가 이것을 확인한다**(#3429, `scripts/release/publish-gate.mjs`). 승인 경로의 안정 태그는 릴리스 PR 에
+  현재 head 를 테스트한 `hps-blackbox-run/1` 결과 댓글이 태그 시점 `cases.yaml` 의 P0 케이스(자동화됨 제외) 전부에
+  PASS 를 줄 때만 공개된다. 결과 댓글은 멤버·협업자나 조직 봇이 단 것만 센다. 대신 Jay 나 그 PR 을 승인한 writer 가 head
+  커밋 뒤에 `Release manager override` 로 시작하고 이유를 적은 댓글을 남기면 공개된다. 어느 길로 나갔는지 한 줄이 릴리스
+  노트의 `hps-process:v1` 블록에 남는다. 공개 Service 가 rc 수락 뒤에 바뀌어 수락을 다시 돌렸으면 그 사실도 한 줄 남는다.
 
 ## 유출 버그 규칙
 
@@ -95,7 +100,12 @@ node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문
 - `origin: {kind: escaped-bug, date: <발견일>, ref: "#<고친 PR>"}`.
 - 케이스는 그 버그를 사용자 눈으로 다시 밟는 단계와, 고친 뒤의 실제 문구를 `expect` 에 적는다.
 - 추가된 날부터 14일 동안은 P0 가 아니어도 매 릴리스에 뽑힌다. 그 뒤에는 우선순위와 요구사항 연결로만 뽑힌다.
-- 리뷰어는 `fix(...)` PR 의 원인이 운영 발견인데 `cases.yaml` 변경이 없으면 고치라고 한다.
+- PR 검사 `process / escaped-bug-case` 가 이 규칙을 기계로 지킨다(#3429, `scripts/release/escaped-bug-case.mjs`).
+  PR 이 닫는 이슈(`Closes #N` 또는 연결된 이슈)에 `escaped-bug` 라벨이 있거나 `member-report` + `bug` 이면, 이 PR 이
+  `cases.yaml` 에서 추가·수정한 케이스 중 하나가 `origin.ref` 에 그 PR 이나 이슈 번호를 적거나, `automated_by` 에 이 PR 이
+  추가한 테스트 파일을 적어야 한다. 아니면 빨간불이다.
+- 예외: 라벨 `no-casebook-needed` 와 본문 한 줄 `No casebook: <이유>` 를 함께 단다. 둘 중 하나만 있으면 빨간불이고,
+  쓴 기록은 검사 요약과 주석에 남는다.
 - **회원 신고도 운영 발견이다.** 앱 안 신고(`reports`), 회원 메시지, 릴리스 뒤 실패로 찾은 버그는 모두 이 규칙을 따른다.
   이슈에 `escaped-bug` 라벨을 붙이고, 고치는 PR 이 케이스를 추가한다. 2026-11-03 에 사람 리뷰어 없이 봇이 머지하면서
   이 규칙이 한 번도 지켜지지 않은 것을 확인했다(#3399 는 케이스 없이 머지). 기계 검사로 바꾸는 일: #3429.

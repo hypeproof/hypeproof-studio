@@ -21,8 +21,17 @@
 //
 // Bounds: a file above `fileMax`, files past `filesMax` or `totalMax`, links and
 // unreadable entries are recorded in `notCovered` (named, never silently dropped). A
-// folder walk that passes `entriesMax` marks the point incomplete; the host then offers
-// no revert for that turn, because an unvisited file would look "added".
+// folder walk that passes `entriesMax` marks the point incomplete.
+//
+// Large folders (#3427): when the folder does not fit those bounds (`folderFitsRestoreLimits`,
+// a metadata-only walk), the host does not copy the folder at all. It takes a `tracked`
+// point instead: empty at the start of the turn, then each file the coach's file tools are
+// about to write is recorded on first write (`TurnWriteTracker`): its bytes when it exists,
+// its absence when the turn creates it. Folder size no longer matters; only the files the
+// turn touches are copied, bounded per file (`fileMax`) and per turn (`totalMax`), and a
+// file past either bound is named in `notCovered`. Diff, revert and verify of a tracked
+// point read only its own paths (`scanForPoint`). What a shell command changes outside those
+// writes is not in a tracked point; the host says so instead of offering it.
 
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -84,6 +93,13 @@ export interface RestoreManifest {
   complete: boolean;
   /** sha256 over the sorted `path size sha256` lines: one value per folder state, no contents. */
   digest: string;
+  /**
+   * #3427 — `tracked`: only the paths the turn's file tools wrote are recorded (copy on first
+   * write), `files` holds those that existed, `absent` those the turn created. Absent: the whole folder.
+   */
+  scope?: "tracked";
+  /** `tracked` only: paths that did not exist when the turn first wrote them. */
+  absent?: string[];
 }
 
 export interface FolderScan {
@@ -245,7 +261,9 @@ function validManifest(value: unknown): value is RestoreManifest {
     (m.message === undefined || (m.kind === "checkpoint" && typeof m.message === "string" && m.message.length <= 4096)) &&
     typeof m.createdAt === "number" && Array.isArray(m.files) && Array.isArray(m.dirs) && Array.isArray(m.notCovered) &&
     m.files.every((f) => f && typeof f.path === "string" && safeRel(f.path) && typeof f.size === "number" && SHA.test(f.sha256)) &&
-    m.dirs.every((d) => typeof d === "string" && safeRel(d));
+    m.dirs.every((d) => typeof d === "string" && safeRel(d)) &&
+    (m.scope === undefined || (m.scope === "tracked" && m.kind !== "checkpoint")) &&
+    (m.absent === undefined || (m.scope === "tracked" && Array.isArray(m.absent) && m.absent.every((p) => typeof p === "string" && safeRel(p))));
 }
 
 /** A manifest path may never leave the folder. */
@@ -350,6 +368,249 @@ export function diffRestorePoint(point: Pick<RestoreManifest, "files" | "notCove
     notCovered.push(n);
   }
   return { added, changed, deleted, notCovered };
+}
+
+// --- #3427: tracked points (copy on first write) -------------------------------------------
+
+/** Shown once per tracked turn that ran a shell step: those changes were not recorded, so they are not offered for undo. */
+export const TRACKED_SHELL_NOTICE = "작업 폴더가 커서 이번 요청은 AI가 쓰거나 고친 파일만 보관했어요. 명령 실행으로 바뀐 파일은 되돌릴 수 없어요.";
+
+/** The line naming files too large to keep for undo (per file `fileMax`, per turn `totalMax`). */
+export function trackedTooLargeLine(paths: readonly string[], shown = 3): string {
+  const names = paths.slice(0, shown).join(", ");
+  const more = paths.length > shown ? ` 외 ${paths.length - shown}개` : "";
+  return `${names}${more}: 파일이 너무 커서 이번 요청에서는 되돌릴 수 없어요.`;
+}
+
+/**
+ * Does the folder fit a whole-folder point? A metadata-only walk (names and sizes, no file is
+ * read) with the same skip rules and bounds as `scanFolder`. False as soon as the walk passes
+ * `entriesMax`, or the files it would copy pass `filesMax` or `totalMax`; then the host takes a
+ * tracked point instead, so a large folder never costs a copy of everything or a lost revert.
+ */
+export async function folderFitsRestoreLimits(root: string, limitsIn: Partial<TurnRestoreLimits> = {}): Promise<boolean> {
+  const limits = { ...TURN_RESTORE_LIMITS, ...limitsIn };
+  let entries = 0, files = 0, total = 0;
+  const walk = async (absDir: string): Promise<boolean> => {
+    let names: syncFs.Dirent[];
+    try { names = await fs.readdir(absDir, { withFileTypes: true }); } catch { return true; }
+    for (const d of names) {
+      if (++entries > limits.entriesMax) return false;
+      if (d.isSymbolicLink()) continue;
+      const abs = path.join(absDir, d.name);
+      if (d.isDirectory()) {
+        if (skipDir(d.name)) continue;
+        if (!(await walk(abs))) return false;
+        continue;
+      }
+      if (!d.isFile() || TURN_RESTORE_SKIP_FILES.includes(d.name)) continue;
+      let size: number;
+      try { size = (await fs.lstat(abs)).size; } catch { continue; }
+      if (size > limits.fileMax) continue;
+      if (++files > limits.filesMax || (total += size) > limits.totalMax) return false;
+    }
+    return true;
+  };
+  return walk(path.resolve(root));
+}
+
+/** Every path a tracked point covers: recorded files, recorded absences and named-not-covered paths. */
+export function trackedPathsOf(point: Pick<RestoreManifest, "files" | "absent" | "notCovered">): string[] {
+  const set = new Set<string>();
+  for (const f of point.files) set.add(f.path);
+  for (const p of point.absent ?? []) set.add(p);
+  for (const n of point.notCovered) if (safeRel(n.path)) set.add(n.path);
+  return [...set].sort();
+}
+
+/** Every proper ancestor directory of `rel` ("a/b/c.txt" → "a", "a/b"). */
+function ancestorsOf(rel: string): string[] {
+  const parts = rel.split("/");
+  const out: string[] = [];
+  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
+  return out;
+}
+
+/**
+ * Scan only `paths` of the folder, with `scanFolder`'s rules for each one (a link or an
+ * unreadable entry is named, a file above `fileMax` is named). `dirs` lists the existing
+ * ancestor directories of those paths, so a revert can remove only directories the turn made.
+ */
+export async function scanPaths(root: string, paths: readonly string[], opts: { limits?: Partial<TurnRestoreLimits>; onFile?: (sha256: string, data: Buffer) => Promise<void> } = {}): Promise<FolderScan> {
+  const limits = { ...TURN_RESTORE_LIMITS, ...opts.limits };
+  const base = path.resolve(root);
+  const files: ManifestFile[] = [];
+  const notCovered: NotCovered[] = [];
+  const dirs = new Set<string>();
+  const checked = new Map<string, boolean>();
+  const isRealDir = async (rel: string): Promise<boolean> => {
+    if (!checked.has(rel)) {
+      let ok = false;
+      try { const st = await fs.lstat(path.join(base, ...rel.split("/"))); ok = st.isDirectory() && !st.isSymbolicLink(); } catch { ok = false; }
+      checked.set(rel, ok);
+    }
+    return checked.get(rel)!;
+  };
+  for (const rel of [...new Set(paths)].sort()) {
+    if (!safeRel(rel)) continue;
+    let parentsOk = true;
+    for (const d of ancestorsOf(rel)) {
+      if (await isRealDir(d)) dirs.add(d); else { parentsOk = false; break; }
+    }
+    if (!parentsOk) continue; // a missing parent: the file is absent (a parent that is a link is never followed)
+    const abs = path.join(base, ...rel.split("/"));
+    let st: import("node:fs").Stats;
+    try { st = await fs.lstat(abs); } catch (e) { if (errCode(e) !== "ENOENT") notCovered.push({ path: rel, reason: "unreadable" }); continue; }
+    if (st.isSymbolicLink()) { notCovered.push({ path: rel, reason: "link" }); continue; }
+    if (!st.isFile()) { notCovered.push({ path: rel, reason: "unreadable" }); continue; }
+    if (st.size > limits.fileMax) { notCovered.push({ path: rel, reason: "too_large", size: st.size }); continue; }
+    let data: Buffer;
+    try { data = await fs.readFile(abs); } catch { notCovered.push({ path: rel, reason: "unreadable", size: st.size }); continue; }
+    if (data.length > limits.fileMax) { notCovered.push({ path: rel, reason: "too_large", size: data.length }); continue; }
+    const hash = sha256(data);
+    files.push({ path: rel, size: data.length, sha256: hash });
+    if (opts.onFile) await opts.onFile(hash, data);
+  }
+  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { files, dirs: [...dirs].sort(), notCovered, complete: true, digest: manifestDigest(files) };
+}
+
+/** The scan a point is compared with: the whole folder, or only a tracked point's own paths. */
+export function scanForPoint(root: string, point: Pick<RestoreManifest, "scope" | "files" | "absent" | "notCovered">, limits?: Partial<TurnRestoreLimits>): Promise<FolderScan> {
+  return point.scope === "tracked" ? scanPaths(root, trackedPathsOf(point), { limits }) : scanFolder(root, { limits });
+}
+
+/** Record `paths` of the folder as a tracked point (the "복구 직전" state of a tracked revert). */
+export async function takeTrackedPoint(req: TakeRestorePointRequest & { paths: readonly string[] }): Promise<TakeRestorePointResult> {
+  if (!validRestoreId(req.id)) throw new Error("invalid restore point id");
+  const scan = await scanPaths(req.root, req.paths, {
+    limits: req.limits,
+    onFile: async (hash, data) => {
+      const target = blobPath(req.store, hash);
+      if (!(await exists(target))) await writeAtomic(target, data);
+    },
+  });
+  const present = new Set([...scan.files.map((f) => f.path), ...scan.notCovered.map((n) => n.path)]);
+  const point: RestoreManifest = {
+    version: 1, id: req.id, kind: req.kind === "checkpoint" ? "before_restore" : req.kind, turnId: req.turnId, createdAt: req.now ?? Date.now(),
+    files: scan.files, dirs: scan.dirs, notCovered: scan.notCovered, complete: true, digest: scan.digest,
+    scope: "tracked", absent: req.paths.filter((p) => safeRel(p) && !present.has(p)).sort(),
+  };
+  await writeAtomic(pointPath(req.store, req.id), JSON.stringify(point));
+  const pruned = await pruneRestorePoints(req.store, req.keep ?? TURN_RESTORE_KEEP, [req.id, ...(req.protect ?? [])]);
+  return { point, pruned };
+}
+
+/** What one first-write capture recorded (the host names `notCovered` ones to the learner). */
+export interface TrackedCapture { path: string; state: "copied" | "absent" | "not_covered" | "outside"; reason?: NotCoveredReason; size?: number }
+
+/**
+ * #3427 — copy on first write. Created before a turn on a folder that does not fit a whole-folder
+ * point; `capture` is awaited after a write tool call is approved and before it runs. The first
+ * observation of a path (and of each of its parent directories) is its pre-turn state; later
+ * captures of the same path change nothing. The manifest is rewritten after every capture, so a
+ * revert after a crash still finds every copy it names.
+ */
+export class TurnWriteTracker {
+  readonly store: string;
+  readonly root: string;
+  private manifest: RestoreManifest;
+  private readonly limits: TurnRestoreLimits;
+  private readonly seen = new Set<string>();
+  private readonly dirState = new Map<string, boolean>();
+  private bytes = 0;
+  private queue: Promise<unknown> = Promise.resolve();
+  private shell = false;
+
+  private constructor(store: string, root: string, manifest: RestoreManifest, limits: TurnRestoreLimits) {
+    this.store = store; this.root = root; this.manifest = manifest; this.limits = limits;
+  }
+
+  /** Write the empty tracked point (so pruning and a drop see it) and return its tracker. `root` must be a real path. */
+  static async start(req: { store: string; root: string; id: string; turnId: string; now?: number; keep?: number; limits?: Partial<TurnRestoreLimits> }): Promise<TurnWriteTracker> {
+    if (!validRestoreId(req.id)) throw new Error("invalid restore point id");
+    const manifest: RestoreManifest = {
+      version: 1, id: req.id, kind: "turn", turnId: req.turnId, createdAt: req.now ?? Date.now(),
+      files: [], dirs: [], notCovered: [], complete: true, digest: manifestDigest([]), scope: "tracked", absent: [],
+    };
+    await writeAtomic(pointPath(req.store, req.id), JSON.stringify(manifest));
+    await pruneRestorePoints(req.store, req.keep ?? TURN_RESTORE_KEEP, [req.id]);
+    return new TurnWriteTracker(req.store, req.root, manifest, { ...TURN_RESTORE_LIMITS, ...req.limits });
+  }
+
+  /** The point as recorded so far. */
+  point(): RestoreManifest { return { ...this.manifest, files: [...this.manifest.files], dirs: [...this.manifest.dirs], notCovered: [...this.manifest.notCovered], absent: [...(this.manifest.absent ?? [])] }; }
+
+  /** A shell step ran in this turn: what it changed is not in this point. */
+  noteShell(): void { this.shell = true; }
+  shellRan(): boolean { return this.shell; }
+
+  /** Record the pre-write state of each absolute path (a canonical write key). Serialized; never throws for one bad path. */
+  capture(absPaths: readonly string[]): Promise<TrackedCapture[]> {
+    const next = this.queue.then(() => this.captureAll(absPaths));
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  private async captureAll(absPaths: readonly string[]): Promise<TrackedCapture[]> {
+    const out: TrackedCapture[] = [];
+    let dirty = false;
+    for (const abs of absPaths) {
+      const rel = path.relative(this.root, path.resolve(abs)).split(path.sep).join("/");
+      if (!rel || rel.startsWith("..") || path.isAbsolute(rel) || !safeRel(rel)) { out.push({ path: abs, state: "outside" }); continue; }
+      if (this.seen.has(rel)) continue;
+      this.seen.add(rel);
+      dirty = true;
+      out.push(await this.captureOne(rel));
+    }
+    if (dirty) {
+      const m = this.manifest;
+      m.files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+      m.dirs = [...this.dirState].filter(([, existed]) => existed).map(([d]) => d).sort();
+      m.absent = [...(m.absent ?? [])].sort();
+      m.digest = manifestDigest(m.files);
+      await writeAtomic(pointPath(this.store, m.id), JSON.stringify(m));
+    }
+    return out;
+  }
+
+  private async captureOne(rel: string): Promise<TrackedCapture> {
+    const m = this.manifest;
+    const notCovered = (reason: NotCoveredReason, size?: number): TrackedCapture => {
+      m.notCovered.push(size === undefined ? { path: rel, reason } : { path: rel, reason, size });
+      return { path: rel, state: "not_covered", reason, ...(size === undefined ? {} : { size }) };
+    };
+    // Parent directories: the first observation wins, so a directory the turn makes is never kept by a revert.
+    let parentMissing = false;
+    for (const d of ancestorsOf(rel)) {
+      if (!this.dirState.has(d)) {
+        let existed = false;
+        try { const st = await fs.lstat(path.join(this.root, ...d.split("/"))); existed = st.isDirectory() && !st.isSymbolicLink(); if (st.isSymbolicLink()) return notCovered("link"); } catch { existed = false; }
+        this.dirState.set(d, existed);
+      }
+      if (!this.dirState.get(d)) parentMissing = true;
+    }
+    const abs = path.join(this.root, ...rel.split("/"));
+    let st: import("node:fs").Stats | null = null;
+    if (!parentMissing) {
+      try { st = await fs.lstat(abs); } catch (e) { if (errCode(e) !== "ENOENT") return notCovered("unreadable"); }
+    }
+    if (!st) { (m.absent ??= []).push(rel); return { path: rel, state: "absent" }; }
+    if (st.isSymbolicLink()) return notCovered("link");
+    if (!st.isFile()) return notCovered("unreadable");
+    if (st.size > this.limits.fileMax) return notCovered("too_large", st.size);
+    if (this.bytes + st.size > this.limits.totalMax) return notCovered("total_cap", st.size);
+    let data: Buffer;
+    try { data = await fs.readFile(abs); } catch { return notCovered("unreadable", st.size); }
+    if (data.length > this.limits.fileMax) return notCovered("too_large", data.length);
+    if (this.bytes + data.length > this.limits.totalMax) return notCovered("total_cap", data.length);
+    const hash = sha256(data);
+    const target = blobPath(this.store, hash);
+    try { if (!(await exists(target))) await writeAtomic(target, data); } catch { return notCovered("unreadable", data.length); }
+    this.bytes += data.length;
+    m.files.push({ path: rel, size: data.length, sha256: hash });
+    return { path: rel, state: "copied", size: data.length };
+  }
 }
 
 export interface RestoreFailure {
@@ -475,7 +736,11 @@ async function restoreToPointLocked(req: RestoreRequest): Promise<RestoreOutcome
   try {
     // The "복구 직전" point must survive this revert's own pruning, and so must the target
     // (its blobs are about to be read).
-    before = (await takeRestorePoint({ store: req.store, root, id: req.beforeRestoreId, turnId: req.point.turnId, kind: "before_restore", now: req.now, keep: req.keep, protect: [req.point.id], limits: req.limits })).point;
+    const beforeReq = { store: req.store, root, id: req.beforeRestoreId, turnId: req.point.turnId, kind: "before_restore" as const, now: req.now, keep: req.keep, protect: [req.point.id], limits: req.limits };
+    // #3427 — a tracked point is put back from its own paths only; the folder around them is never walked.
+    before = (req.point.scope === "tracked"
+      ? await takeTrackedPoint({ ...beforeReq, paths: trackedPathsOf(req.point) })
+      : await takeRestorePoint(beforeReq)).point;
   } catch (e) {
     return { ok: false, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: `before_restore_failed: ${String((e as Error)?.message ?? e).slice(0, 160)}` };
   }
@@ -548,7 +813,7 @@ async function restoreToPointLocked(req: RestoreRequest): Promise<RestoreOutcome
   }
 
   // 4. Verify from a fresh scan: every point file has its manifest hash, every removed file is gone.
-  const after = await scanFolder(root, { limits: req.limits });
+  const after = await scanForPoint(root, req.point, req.limits);
   const afterFiles = new Map(after.files.map((f) => [f.path, f]));
   const failedPaths = new Set(failed.map((x) => x.path));
   for (const f of targetFiles) {
