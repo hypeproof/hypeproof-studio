@@ -27,5 +27,7 @@ export function noteAppProblem(facts: FailureFacts): void {
  */
 export const AUTO_PROBLEM_REPORT_KEY = "hypeproof.autoProblemReport";
 export function autoProblemReportEnabled(state: vscode.Memento | undefined): boolean {
-  return state?.get<boolean>(AUTO_PROBLEM_REPORT_KEY, false) === true;
+  // On by default since 2026-11-03 (Jay): content-free signals only; the learner can switch it off
+  // in the report form, and an explicit false is kept.
+  return state?.get<boolean>(AUTO_PROBLEM_REPORT_KEY, true) !== false;
 }
