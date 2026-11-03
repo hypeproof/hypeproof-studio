@@ -3,7 +3,7 @@
 // decides every rule (price caps, age, refund window, fraud block); the App only shows the result
 // and the Service's reason. Custody (design v1 D1): the App receives the public layer of a skill
 // only. A run is composed by the Service on the buyer's chat turn; no call returns the seller's text.
-import type { StoreInstallView, StoreItemView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
+import type { StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
 
 export class StoreClientError extends Error {
   readonly code: string;
@@ -73,8 +73,10 @@ export class StoreClient {
     }
     return value as T;
   }
-  async items(): Promise<StoreItemView[]> {
-    const r = await this.call<{ items: StoreItemView[] }>("/items", { auth: "optional" });
+  /** The public list, or a search of titles, descriptions and step titles (scene 2). */
+  async items(query = ""): Promise<StoreItemView[]> {
+    const q = query.trim().slice(0, 40);
+    const r = await this.call<{ items: StoreItemView[] }>(q ? `/items?q=${encodeURIComponent(q)}` : "/items", { auth: "optional" });
     return Array.isArray(r?.items) ? r.items : [];
   }
   me() {
@@ -107,7 +109,22 @@ export class StoreClient {
   report(itemId: string, reason: string) {
     return this.call<{ status: string }>(`/items/${encodeURIComponent(itemId)}/report`, { body: { reason } });
   }
-  /** A single-step skill until quest skills (#1605) publish their own steps. */
+  /** A quest skill (questSkill.ts): every step's public layer and its private layer, which the Service seals. */
+  publishPackage(pkg: unknown) {
+    return this.call<{ id: string; status: "listed" | "review"; tier: string; cap_krw: number }>("/items", { body: pkg });
+  }
+  /** The buyer's own adaptation and the public steps; never the seller's text. */
+  overlay(itemId: string) {
+    return this.call<StoreOverlayView>(`/items/${encodeURIComponent(itemId)}/overlay`);
+  }
+  saveOverlay(itemId: string, steps: Record<string, StoreOverlaySpec>) {
+    return this.call<StoreOverlayView>(`/items/${encodeURIComponent(itemId)}/overlay`, { method: "PUT", body: { steps } });
+  }
+  /** Moves to the seller's current version; one that adds connections, tools or outputs needs `consent` (F5). */
+  update(itemId: string, consent = false) {
+    return this.call<{ version: number; widened: string[] }>(`/items/${encodeURIComponent(itemId)}/update`, { body: { consent } });
+  }
+  /** A single-step skill written in the store form. */
   publish(draft: StorePublishDraft) {
     return this.call<{ id: string; status: "listed" | "review"; tier: string; cap_krw: number }>("/items", {
       body: {
@@ -145,7 +162,18 @@ export const STORE_COPY = {
   reported: "신고했어요. 운영팀이 확인할게요.",
   payoutNotStarted: "정산은 기록만 되고 있어요. 실제 지급은 결제사 계약이 끝난 뒤 시작돼요.",
   payoutLinkedAdult: "만 19세 미만 판매자의 정산금은 연결된 보호자 계정으로만 지급돼요. 보호자 연결이 필요해요.",
+  listed: "판매 중",
+  connected: "이미 연결됨",
+  needsConnection: "연결 필요",
+  questPrefill: "완성한 퀘스트의 이름과 설명을 채워 두었어요. 가격만 정하면 올릴 수 있어요.",
+  questPrivate: "단계 이름과 설명만 공개돼요. 메일 문구와 지침은 HypeProof 서버에만 보관되고 구매자에게도 보이지 않아요. 내 Google 계정·명단·보낸 메일은 올라가지 않아요.",
+  runStarted: (title: string) => `「${title}」 스킬로 새 작업을 열었어요. 대화창에 요청을 입력하세요.`,
+  adapted: "내 방식으로 바꿨어요. 다음 실행부터 적용돼요.",
+  updated: "새 버전으로 바꿨어요. 내가 바꾼 단계는 그대로 다시 적용돼요.",
+  consent: "새 버전이 연결이나 도구를 더 써요. 확인한 뒤에만 바꿔요.",
 } as const;
+/** A store skill runs only where the Service composes it (design v1 D2/D8). */
+export const STORE_RUN_NEEDS_SERVICE = "스토어 스킬은 HypeProof 서버에 연결된 AI 코치에서만 실행돼요. 내 구독이나 로컬 연결로는 실행할 수 없어요.";
 
 const ERRORS: Record<string, string> = {
   account_required: STORE_COPY.signIn,
@@ -169,6 +197,10 @@ const ERRORS: Record<string, string> = {
   age_already_declared: "태어난 해는 이미 알려 주셨어요.",
   rate_limited: "잠시 뒤 다시 시도해 주세요.",
   gateway_error: "결제사 응답이 없어서 환불하지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+  not_installed: "설치되지 않은 스킬이에요. 스토어에서 다시 확인해 주세요.",
+  invalid_overlay: "바꾼 내용을 저장하지 못했어요. 입력을 확인해 주세요.",
+  item_unlisted: "운영자가 내린 스킬이라 바꿀 수 없어요.",
+  no_finished_quest: "먼저 자동화 퀘스트의 모든 단계를 완료해 주세요.",
 };
 export function storeErrorMessage(error: unknown): string {
   if (error instanceof StoreClientError) {

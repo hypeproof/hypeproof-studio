@@ -17094,6 +17094,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/SkillStore.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/questSkill.ts"
         }
       ]
     },
@@ -17111,6 +17114,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/skill-store-client.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quest-skill-store.smoke.mjs"
         },
         {
           "path": "e2e/store/mac-store.mjs"
