@@ -395,3 +395,6 @@ jobs:
           gh release upload "$TAG" dist/unified-acceptance.json --clobber
           gh release edit "$TAG" --draft=false
           gh workflow run mirror-release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false
+          # A release published with the workflow token fires no `release: published` event, so the
+          # Discord announcement is dispatched here (v2026.1103.0 went out silent until dispatched by hand).
+          gh workflow run notify-release-published.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false
