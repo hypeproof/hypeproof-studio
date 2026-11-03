@@ -5302,6 +5302,19 @@
       ]
     },
     {
+      "id": "ST-DES-WORKPLACE-AUTOMATION",
+      "stage": "design",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/workplace-automation-journey.md"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-EMAIL-AUTOMATION",
       "stage": "implementation",
       "owner": "TJ-kr",

@@ -2961,7 +2961,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation .hps-input:focus-within { border-color: var(--hp-accent); }
 .hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: 2px; line-height: 1.6; min-height: 44px; }
 .hps-shell-automation .hps-input textarea:focus { outline: none; }
-.hps-shell-automation .hps-input button { min-height: 34px; padding: 7px 16px; border-radius: 6px; }
+.hps-shell-automation .hps-input button { min-height: var(--hp-control-min); padding: 7px 16px; border-radius: 6px; }
 .hps-shell-automation .hps-user-question { background: var(--hp-panel); border: 1px solid var(--hp-line); border-top: 3px solid var(--hp-accent); border-radius: 10px; margin-bottom: 4px; }
 .hps-shell-automation .hps-user-question h3 { font-size: 18px; line-height: 1.5; letter-spacing: -.2px; }
 .hps-shell-automation .hps-question-label { color: var(--hp-muted); }
