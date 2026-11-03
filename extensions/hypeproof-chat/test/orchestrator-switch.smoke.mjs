@@ -160,10 +160,13 @@ function canon(value) {
 }
 
 /** The CLI env as a delta from process.env (which the builder spreads). */
+// REQ-M6 pins the CLI's own title request off on every seat (asserted in observeTurn); the host's
+// ambient value of that key must not decide whether the comparison sees it.
+const PINNED_ENV = new Set(["CLAUDE_CODE_DISABLE_TERMINAL_TITLE"]);
 function envDelta(env) {
   const set = {};
-  for (const k of Object.keys(env)) if (env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
-  const removed = Object.keys(process.env).filter((k) => !(k in env));
+  for (const k of Object.keys(env)) if (!PINNED_ENV.has(k) && env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
+  const removed = Object.keys(process.env).filter((k) => !PINNED_ENV.has(k) && !(k in env));
   return { set, removed };
 }
 
@@ -226,6 +229,7 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, 
   });
   const call = sdk.calls[0];
   const { env, ...rest } = call.options;
+  assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "REQ-M6: the CLI's paid title request stays disabled");
   return {
     snapshot: canon({
       prompt: call.prompt,
