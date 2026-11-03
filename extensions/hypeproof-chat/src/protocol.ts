@@ -197,6 +197,8 @@ export interface ChatConfig {
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
+  /** Display-only: host-confirmed local subscription AI route; never an execution grant. */
+  localSubscription?: boolean;
   /** CGP-SHELL-R-015: host-confirmed cohort policy, never inferred from a local menu. */
   cohortSettings?: { model: boolean; effort: boolean };
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
@@ -295,6 +297,8 @@ export interface TrialEndNotifyView {
 }
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
+  /** Service-owned opt-in, never inferred from a local setting. */
+  automations?: { enabled: boolean; provider: 'gmail'; appsScript?: boolean; maxRecipients?: number; oauthClientId?: string };
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
@@ -552,6 +556,9 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | ({ type: 'automationAnswer' } & import('./automationProtocol').AutomationAnswer)
+  | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
+  | { type: 'automationClose' }
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
@@ -879,6 +886,8 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
+  | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
   | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
   | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
@@ -905,7 +914,7 @@ export type HostMessage = (
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | { type: "attachmentsPrepared"; requestId: string; failures: import("./attachmentFailure").AttachmentFailure[] }
-  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode}
+  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode;notice?:string}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */

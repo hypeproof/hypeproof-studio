@@ -36,6 +36,8 @@ import {
 } from "../../src/chatTimeline";
 import { onHostMessage, postToHost } from "./vscode";
 import { runVoiceCapabilityProbe } from "./voiceProbe";
+import { UserQuestionCard } from "./UserQuestionCard";
+import type { AutomationQuestion } from "../../src/automationProtocol";
 import { ChatPanel } from "./ChatPanel";
 import { TaskWorkspaceFrame } from './TaskWorkspace';
 import { askAboutFileAllowed } from './askAboutFile';
@@ -395,6 +397,9 @@ function homeTitle(activity: ChatConfig["activity"]): string | undefined {
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Private setup and previews never enter the message timeline or composer.
+  const [automationQuestion, setAutomationQuestion] = useState<AutomationQuestion | null>(null);
+  const automationEnabled = useRef(false);
   const [runningProcesses, setRunningProcesses] = useState<import("../../src/runningProcesses").RunningProcess[]>([]);
   const [refusal, setRefusal] = useState(false);
   const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
@@ -457,10 +462,13 @@ export function App() {
       if (msg.type === "config") {
         setWorkspace(msg.config.taskWorkspace);
         setWorkspaceError(null);
+        automationEnabled.current = msg.config.profile?.automations?.enabled === true;
+        if (!automationEnabled.current) setAutomationQuestion(null);
         if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
           setDraftSaveError(null);
           setHistorySaveError(null);
           setIncomingImage(null);
+          setAutomationQuestion(null);
           verifyRequests.current.clear();
           pendingVerdicts.current.clear();
           latestVerdictRequests.current.clear();
@@ -499,6 +507,7 @@ export function App() {
         setApprovalPending(false); setWriteApproval(null);
       }
       switch (msg.type) {
+        case "automationQuestion": if (automationEnabled.current || msg.question === null) setAutomationQuestion(msg.question); break;
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
@@ -615,7 +624,7 @@ export function App() {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
     const hasAttachments = !!attachments && attachments.length > 0;
-    if ((!trimmed && !hasImages && !hasAttachments) || !beginRequest()) return false;
+    if ((!trimmed && !hasImages && !hasAttachments) || automationQuestion || !beginRequest()) return false;
     // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
@@ -902,7 +911,9 @@ export function App() {
           postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
         }}
         verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
-        sendLocked={!!state.verify?.running || !!workspace?.error}
+        questionId={automationQuestion?.id}
+        questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
+        sendLocked={!!state.verify?.running || !!workspace?.error || !!automationQuestion}
         annotationsEnabled={state.annotationsEnabled}
         annotations={state.annotations}
         onAnnotationAction={(action, number, comment) => postToHost({type:'annotationAction', action, number, comment})}

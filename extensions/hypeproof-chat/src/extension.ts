@@ -1,3 +1,4 @@
+import { registerAutomationHost } from "./automationHost";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
@@ -124,7 +125,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // a more reliable fallback.
   const backdoors = await applyTestBackdoors(context);
 
-  const preview = new PreviewProvider(context);
+  const preview: PreviewProvider = new PreviewProvider(context, () => {
+    startPage.closeForAutomationPreview();
+    return provider.automationPreviewColumn();
+  });
   // REQ-STUDIO-PREVIEW-RECOVERY — remember the preview server's addresses (max 20, 7 days) so a tab restored on an old port is known.
   const liveServer = new LiveServer({
     get: () => context.globalState.get<unknown[]>("hypeproof.previewServedOrigins.v2", []),
@@ -255,6 +259,8 @@ export async function activate(context: vscode.ExtensionContext) {
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
+  const automationHost = registerAutomationHost(context, provider, preview);
+  provider.setEmailAutomationHost(() => automationHost.getMcpHost());
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const accountConfig = vscode.workspace.getConfiguration('hypeproofChat');
   const accountService = accountConfig.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
@@ -397,6 +403,8 @@ export async function activate(context: vscode.ExtensionContext) {
     readCollection: (sinceMs, identity) => provider.opsReadCollection(sinceMs, identity),
     recoverPreview: () => provider.opsRecoverPreview(),
   }, (line) => console.log(line));
+  classroomOps.setAutomationSource(() => automationHost.observation());
+  automationHost.setProgressListener(() => { classroomOps.refreshAutomation(); });
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
   provider.classWindowSource = () => classroomOps.helpConnection();

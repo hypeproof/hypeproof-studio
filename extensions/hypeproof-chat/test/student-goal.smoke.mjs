@@ -343,6 +343,7 @@ function makeHost(context, profile, provider = proto) {
     saveGoal: provider.saveGoal,
     draftWrites: Promise.resolve(),
     loadAccess: async () => {},
+    applyPendingFundingSelection: proto.applyPendingFundingSelection,
     ensureProfile: async () => profile,
     lastProfileFailure: null,
     refreshCrDirectorContext: async () => {},

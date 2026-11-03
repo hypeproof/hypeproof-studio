@@ -129,18 +129,18 @@ export function StartPage() {
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색"><button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button>{state.skillStore && state.profile?.kind !== "classroom" && <button onClick={() => postToHost({ type: "openSkillStore" })}>스킬 스토어</button>}<button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "reportProblem" })}>{FEEDBACK_ENTRY_LABEL}</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.automationsEnabled && <button onClick={() => postToHost({ type: "openEmailAutomation" })}>메일 자동화 열기</button>}<button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button>{state.skillStore && state.profile?.kind !== "classroom" && <button onClick={() => postToHost({ type: "openSkillStore" })}>스킬 스토어</button>}<button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "reportProblem" })}>{FEEDBACK_ENTRY_LABEL}</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
     <StartUpdateNotice update={state.update} />
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
         <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>
-        <h1 id="start-title">생각을 현실로.<br/><span>완성은 내 손으로.</span></h1>
-        <p className="studio-lead">목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</p>
+        <h1 id="start-title">{state.automationsEnabled ? <>어떤 업무를<br/><span>자동화할까요?</span></> : <>생각을 현실로.<br/><span>완성은 내 손으로.</span></>}</h1>
+        <p className="studio-lead">{state.automationsEnabled ? <>평소 하던 일을 코치에게 설명해 주세요.<br className="studio-wide"/> 함께 스킬을 만들고, 하나씩 연결해 실행해요.</> : <>목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</>}</p>
         <div className="studio-process" aria-label="목표 정하기, 함께 만들기, 직접 검토하기">
-          <div><span>01</span><strong>목표 정하기</strong><p>무엇을 바꾸고 싶은가요?</p></div>
-          <div><span>02</span><strong>함께 만들기</strong><p>{copy.stepTwo}</p></div>
-          <div><span>03</span><strong>직접 검토하기</strong><p>결과를 확인하고 내 것으로.</p></div>
+          <div><span>01</span><strong>{state.automationsEnabled ? "업무 설명하기" : "목표 정하기"}</strong><p>{state.automationsEnabled ? "매번 어떤 일을 반복하나요?" : "무엇을 바꾸고 싶은가요?"}</p></div>
+          <div><span>02</span><strong>{state.automationsEnabled ? "AI와 스킬 만들기" : "함께 만들기"}</strong><p>{state.automationsEnabled ? "필요한 것만 하나씩 물어봐요." : copy.stepTwo}</p></div>
+          <div><span>03</span><strong>{state.automationsEnabled ? "확인하고 실행하기" : "직접 검토하기"}</strong><p>{state.automationsEnabled ? "내용을 확인한 뒤 직접 승인해요." : "결과를 확인하고 내 것으로."}</p></div>
         </div>
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
@@ -154,7 +154,7 @@ export function StartPage() {
           {ended ? (purchase?.available || (ended.reason === "exhausted" && !state.candidate)) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "체험 이후 고르기"}>
             {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이어서 하려면 이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
             {ended.reason === "exhausted" && !state.candidate && <button className="studio-choice" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : "지난 대화 보기"} <span aria-hidden="true">→</span></button>}
-          </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
+          </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: state.automationsEnabled ? "openEmailAutomation" : "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.automationsEnabled ? "메일 자동화 열기" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
           {!ended && gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
           {!ended && gh?.status === "unavailable" && <p className="studio-help">GitHub에 올린 홈페이지를 확인하지 못했어요. 새로 시작해도 돼요.</p>}
           {/* #751 U2 — a quiet line under the one Primary (SX-02/04): the same list, from the same host read, as the work screen. */}

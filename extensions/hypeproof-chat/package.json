@@ -61,6 +61,11 @@
       { "command": "hypeproof-chat.recordPerformanceTrace", "title": "느려요 기록 시작", "category": "HypeProof", "enablement": "config.hypeproofChat.performanceTraceEnabled" },
       { "command": "hypeproof-chat.stopPerformanceTrace", "title": "느려요 기록 멈추기", "category": "HypeProof" },
       {
+        "command": "hypeproof-chat.configureGoogleDesktopClient",
+        "title": "운영자: Google Desktop OAuth 설정",
+        "enablement": "config.hypeproofChat.googleOperatorSetup"
+      },
+      {
         "command": "hypeproof-chat.focus",
         "title": "대화로 이동"
       },
@@ -303,6 +308,10 @@
       {
         "command": "hypeproof-chat.askAboutFile",
         "title": "이 파일에 대해 묻기"
+      },
+      {
+        "command": "hypeproof-chat.emailAutomation",
+        "title": "HypeProof: 업무 자동화"
       }
     ],
     "menus": {
@@ -446,6 +455,14 @@
         {
           "command": "hypeproof-chat.stopPerformanceTrace",
           "when": "false"
+        },
+        {
+          "command": "hypeproof-chat.emailAutomation",
+          "when": "false"
+        },
+        {
+          "command": "hypeproof-chat.configureGoogleDesktopClient",
+          "when": "config.hypeproofChat.googleOperatorSetup"
         },
         {
           "command": "hypeproof-chat.diagnoseVoiceCapability",
@@ -645,6 +662,18 @@
           "description": "사이트 주소입니다. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
           "scope": "machine"
         },
+        "hypeproofChat.googleOperatorSetup": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "개발용 Dev 앱 운영자에게 Google Desktop OAuth 설정 명령을 보여 줍니다. 수강생 앱에는 이 명령이 없습니다."
+        },
+        "hypeproofChat.automationGoogleClientId": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "메일 자동화 수업에서 쓰는 Google Desktop OAuth 클라이언트 ID입니다. Service 프로필이 메일 자동화를 켠 경우에만 사용합니다."
+        },
         "hypeproofChat.accountsEnabled": {
           "type": "boolean",
           "default": true,
@@ -708,7 +737,7 @@
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
     "test:companion-workspace": "node --experimental-strip-types --test test/companion-workspace.test.mjs test/companion-workspace-host.test.mjs",
-    "test": "npm run test:companion-workspace && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:page-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
+    "test": "npm run test:companion-workspace && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:page-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs && npm run test:apps-script",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",
@@ -756,6 +785,8 @@
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
+    "test:automation": "node --experimental-strip-types --test test/automation*.smoke.mjs test/google-automation.smoke.mjs test/appsScriptRuntime.test.ts test/automationQuest.test.ts",
+    "test:apps-script": "node --experimental-strip-types --test test/appsScriptRuntime.test.ts test/automationQuest.test.ts",
     "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-move.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
   },
   "devDependencies": {

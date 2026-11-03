@@ -15,6 +15,20 @@ async function withFetch(run, handler) {
 const send = (path, headers = {}, bindings = env) =>
   chalk.fetch(new Request('https://chalk.test' + path, { headers }), bindings, {});
 
+test('read and instructor transports refuse redirects without a second request or Location exposure', async () => {
+  let calls = 0;
+  await withFetch(async () => {
+    for (const path of ['/admin/cohorts/cohort-a/board', '/admin/cohorts/cohort-a/classroom/runs/run-a/status']) {
+      const r = await send(path, { authorization: 'Bearer synthetic-token' });
+      assert.equal(r.status, 502); assert.equal(r.headers.get('location'), null);
+    }
+    assert.equal(calls, 2);
+  }, async (_url, init) => {
+    calls++; assert.equal(init.redirect, 'manual');
+    return new Response(null, { status: 302, headers: { location: 'https://untrusted.invalid' } });
+  });
+});
+
 test('board preserves query, upstream auth rejection and request correlation', async () => {
   await withFetch(async () => {
     const r = await send('/admin/cohorts/cohort-a/board?seat_prefix=A-', {

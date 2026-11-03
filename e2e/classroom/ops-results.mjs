@@ -257,8 +257,19 @@ try {
   // ── R: more than twelve actions, settled and pending mixed. The settled action sent EARLIEST leaves the cards first; no pending one
   // ever does; what leaves is listed and can be read again by its id for this connection. ──
   await page.locator('#disconnect').click(); await connect();
-  const diag = async (seat) => { await pick([seat]); await page.locator('#ops-bulk-diagnose').click(); const id = await until('command recorded', async () => { const c = commandsNow().at(-1); return c && !made.includes('command:' + c.id) ? c.id : null; }); await card('command:' + id).waitFor(); made.push('command:' + id); return 'command:' + id; };
-  const made = []; const shelf = () => page.locator('#ops-ledger-shelf-list > p').evaluateAll((l) => l.map((x) => x.dataset.key));
+  const diag = async (seat) => {
+    await pick([seat]);
+    // Reconnecting clears cards, not Service history. Wait for this click's new
+    // command instead of mistaking the previous scenario's last command for it.
+    const before = new Set(commandsNow().map((command) => command.id));
+    await page.locator('#ops-bulk-diagnose').click();
+    const id = await until('new command recorded', async () => commandsNow().find((command) => !before.has(command.id))?.id);
+    await card('command:' + id).waitFor();
+    made.push('command:' + id);
+    return 'command:' + id;
+  };
+  const made = [];
+  const shelf = () => page.locator('#ops-ledger-shelf-list > p').evaluateAll((l) => l.map((x) => x.dataset.key));
   for (const id of local.db.prepare("SELECT t.command_id id FROM ops_command_targets t WHERE t.seat_id IN ('A1','A3') AND t.state IN ('queued','leased')").all().map((r) => r.id)) for (const seat of ['A1', 'A3']) { const r = await sync(seat); const got = (r.json.commands || []).find((x) => x.command_id === id); if (got) { leased[seat + id] = got; await report(seat, id, 'rejected', 'busy'); } }
   const P1 = await diag('A1'); const S = []; for (let i = 0; i < 6; i++) S.push(await diag('A6')); const P2 = await diag('A3'); for (let i = 0; i < 7; i++) S.push(await diag('A6'));
   // 15 actions: P1, S1–S6, P2, S7–S13. Twelve fit; the three earliest settled (S1 S2 S3) leave; P1 — the oldest of all — stays.

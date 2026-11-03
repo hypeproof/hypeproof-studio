@@ -2,6 +2,7 @@
 // is exactly the stylesheet order: tokens.css → localReview.css (LocalReview) →
 // start.css (StartPage) → styles.css (last, explicit import).
 import "./tokens.css";
+import { AutomationSurface } from "./AutomationSurface";
 import "./focusGeometry.css";
 import { LocalReview } from "./LocalReview";
 import { SkillStore } from "./SkillStore";
@@ -19,6 +20,6 @@ installImeHostBarrier(document);
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root element");
 const surface = document.documentElement.dataset.surface;
-createRoot(container).render(surface === "local-review" ? <LocalReview /> : surface === "skill-store" ? <SkillStore /> : surface === "start" ? <StartPage /> : <App />);
+createRoot(container).render(surface === "automation" ? <AutomationSurface /> : surface === "local-review" ? <LocalReview /> : surface === "skill-store" ? <SkillStore /> : surface === "start" ? <StartPage /> : <App />);
 
 installTooltips(document);

@@ -259,6 +259,21 @@ console.log('PASS saved activity selection: record drives token/workspace, crede
   console.log('PASS openChat(): panel present calls openInEditor, absent is noop');
 }
 
+// Reclaim only the owned welcome panel; editors and a transferred chat stay open.
+{
+  let disposals = 0;
+  const beforeCommands = commands.length;
+  page.panel = { viewColumn: 1, dispose() { disposals++; } };
+  page.candidate = { token: 'synthetic-pending-candidate' };
+  assert.equal(page.closeForAutomationPreview(), 1);
+  assert.equal(disposals, 1);
+  assert.equal(page.panel, undefined);
+  assert.equal(page.candidate, undefined);
+  assert.equal(page.closeForAutomationPreview(), undefined);
+  assert.equal(disposals, 1, 'a transferred chat or user editor is never closed');
+  assert.equal(commands.length, beforeCommands, 'no global close-editor or layout commands');
+  console.log('PASS automation canvas reclaim: only owned welcome panel closes, column preserved');
+}
 // A focus action arriving during slow restore must not open a second chat surface.
 {
  let release, restored=false, focused=0, shown=0;const focusPhases=[];chat.focusDiagnostic=phase=>focusPhases.push(phase);

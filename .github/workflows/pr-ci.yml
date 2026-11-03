@@ -11,6 +11,10 @@ on:
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'scripts/email-test-participant-auth.mjs'
+      - 'scripts/tests/email-test-participant-auth.test.mjs'
+      - 'scripts/email-test-r2-download.mjs'
+      - 'scripts/tests/email-test-r2-download.test.mjs'
       - 'scripts/service-tooling.mjs'
       - 'scripts/review-pr.sh'
       - 'scripts/test/service-tooling-symlink.test.mjs'
@@ -105,6 +109,9 @@ jobs:
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
+      - name: Private pilot participant and download restrictions
+        if: ${{ !cancelled() }}
+        run: node --test scripts/tests/email-test-participant-auth.test.mjs scripts/tests/email-test-r2-download.test.mjs
       - name: service-tooling path under a symlinked TMPDIR (#2981)
         if: ${{ !cancelled() }}
         run: node --test scripts/test/service-tooling-symlink.test.mjs

@@ -160,10 +160,13 @@ function canon(value) {
 }
 
 /** The CLI env as a delta from process.env (which the builder spreads). */
+// REQ-M6 pins the CLI's own title request off on every seat (asserted in observeTurn); the host's
+// ambient value of that key must not decide whether the comparison sees it.
+const PINNED_ENV = new Set(["CLAUDE_CODE_DISABLE_TERMINAL_TITLE"]);
 function envDelta(env) {
   const set = {};
-  for (const k of Object.keys(env)) if (env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
-  const removed = Object.keys(process.env).filter((k) => !(k in env));
+  for (const k of Object.keys(env)) if (!PINNED_ENV.has(k) && env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
+  const removed = Object.keys(process.env).filter((k) => !PINNED_ENV.has(k) && !(k in env));
   return { set, removed };
 }
 
@@ -171,7 +174,7 @@ function envDelta(env) {
  * One run of the real runSdkCoach with a scripted CLI. Returns everything observable: the
  * query input, canUseTool's answers to PROBES, the approvals asked, and the callbacks.
  */
-async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }) {
+async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, emailAutomationHost }) {
   const seen = { approvals: [], deltas: [], activities: [], usage: [], events: [], fetches: [] };
   let decisions = [];
   const sdk = fakeSdk(async ({ options }) => {
@@ -210,6 +213,7 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
       return { approved: true, actor: "policy" };
     },
     ...(browserHost ? { browserHost } : {}),
+    ...(emailAutomationHost ? { emailAutomationHost } : {}),
     ...(host
       ? {
           orchestrator: {
@@ -225,6 +229,7 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
   });
   const call = sdk.calls[0];
   const { env, ...rest } = call.options;
+  assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "REQ-M6: the CLI's paid title request stays disabled");
   return {
     snapshot: canon({
       prompt: call.prompt,
@@ -501,6 +506,27 @@ function surfacesOf({ call, seen }) {
   assert.ok(!matrixLog.some((l) => /roster not used: (absent|served off)/.test(l)));
   assert.equal(fs.existsSync(path.join(WS, ".hypeproof")), false, "no turn above created the archive folder");
   ok(`inventory: ${CASES.filter((x) => !x.on).length} switch-off turns show no orchestrator tool, hook, header, env pin, request, approval kind or event, and deny both tools; the ${CASES.filter((x) => x.on).length} on-turns show every one; the legacy subagents go only with the roster`);
+}
+
+// Combined grant path: the email server stays separate, while an orchestrator
+// without a browser host still gets its own tools. Missing email hosts grant none.
+{
+  const profile = { ...PROFILES.adultRW, automations: { enabled: true, provider: "gmail", appsScript: true, maxRecipients: 20 } };
+  const emailAutomationHost = { isAllowed: () => true, isAppsScriptAllowed: () => true, isSharedRunner: () => true, runtime: {}, confirmSend: async () => false };
+  const { value: both } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null, emailAutomationHost }));
+  const options = both.call.options;
+  assert.deepEqual(Object.keys(options.mcpServers).sort(), ["hypeproof", "hypeproof_email"]);
+  assert.deepEqual(options.mcpServers.hypeproof.tools.map(t => t.name), ["consult", "site_check"]);
+  assert.ok(options.mcpServers.hypeproof_email.tools.some(t => t.name === "apps_script_run"));
+  assert.match(options.systemPrompt, /Installed Studio execution contract: shared Google runner/);
+  assert.deepEqual(both.snapshot.end, { failed: false });
+  const signal = new AbortController().signal;
+  assert.equal((await options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "allow");
+  assert.equal((await options.canUseTool("mcp__hypeproof__browser_read", {}, { signal })).behavior, "deny");
+  const { value: absent } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null }));
+  assert.deepEqual(Object.keys(absent.call.options.mcpServers), ["hypeproof"]);
+  assert.equal((await absent.call.options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "deny");
+  ok("combined email and orchestrator grants: separate servers, shared-runner guidance retained, no borrowed browser or missing-host email grants");
 }
 
 // ── 3. A full consult turn through runSdkCoach against a fake gateway ───────

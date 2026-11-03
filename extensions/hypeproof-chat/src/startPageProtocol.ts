@@ -13,6 +13,7 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
   /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
   skillStore?: boolean;
@@ -112,6 +113,7 @@ export type StartRequest =
   | { type: "selectActivity"; ref: string }
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
+  | { type: "openEmailAutomation" }
   | { type: "openStudioFiles" }
   /** REQ-STUDIO-FEEDBACK-ENTRY — 의견·문제 보내기: runs `hypeproof-chat.reportProblem` (the chat panel's form). */
   | { type: "reportProblem" }

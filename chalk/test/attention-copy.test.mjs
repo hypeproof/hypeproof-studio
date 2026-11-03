@@ -39,6 +39,8 @@ const expected = {
   no_signal: ['앱 신호가 아직 없음', '앱이 켜져 있는지 학생에게 확인해 보세요'],
   stale_signal: ['신호 끊김 · 확인 불가', '노트북 덮개·와이파이·앱 종료를 직접 확인해 주세요'],
   waiting_approval: ['학생 승인 기다리는 중', '오류 아님 · 학생에게 승인 창을 보게 해 주세요'],
+  automation_blocked: ['자동화 설정 확인 필요', '학생 질문 카드의 Google 연결 안내를 같이 봐 주세요'],
+  automation_failed: ['자동화 실행 확인 필요', '실패한 단계를 확인하고 메일은 다시 보내지 마세요'],
 };
 
 // 1. The full list, in order. A new reason type or a reworded item must be added here on purpose.
@@ -85,7 +87,8 @@ for (const needle of ['stale_signal: 확인 불가', 'too_long_title: title leng
   assert.ok(found.includes(needle), 'linter reports ' + needle + '\n' + found);
 
 // 3. The approval-wait row stage (no reason code, runtime says waiting) uses the same title as the item.
-assert.match(html, /else if\(wait\)stage=reasonLabels\.waiting_approval\[0\];/, 'approval-wait stage reads the item title');
+// An automation waiting for approval names its step instead (#1604); every other approval wait reads the item title.
+assert.match(html, /else if\(wait\)stage=(?:s\.automation\?\.phase==='waiting_approval'\?automationText\(s\):)?reasonLabels\.waiting_approval\[0\];/, 'approval-wait stage reads the item title');
 
 // 4. The old wording is gone from the page (no second copy left behind).
 for (const old of ['토큰 기한이 지났습니다', '토큰이 올바르지 않습니다', '기기가 연결되지 않았습니다', '신호가 끊겼습니다 · 확인 불가',

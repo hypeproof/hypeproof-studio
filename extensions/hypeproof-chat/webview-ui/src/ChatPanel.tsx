@@ -63,7 +63,7 @@ import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerO
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
-import { AccessControl } from './AccessControl';
+import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -180,6 +180,9 @@ interface Props {
   onRemoveFileAttachment?: (undoId?: string) => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
+  /** A transient private question, outside normal chat messages. */
+  questionPanel?: import("react").ReactNode;
+  questionId?: string;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
   sendLocked?: boolean;
   aiNotice: string | null;             // #320 — AI disclosure at session start
@@ -280,6 +283,43 @@ function extractRenderableHtml(text: string): string | null {
   return null;
 }
 
+function ConversationActions({ compact, children }: { compact: boolean; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!compact) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (menu.current && event.target instanceof Node && !menu.current.contains(event.target)) menu.current.open = false;
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    const cleanup = () => document.removeEventListener("pointerdown", closeOutside);
+    return cleanup;
+  }, [compact]);
+  return compact ? <details ref={menu} className="hps-conversation-actions" onKeyDown={event => {
+    if (event.key === "Escape" && !imeComposing(event) && menu.current?.open) {
+      event.preventDefault(); event.stopPropagation(); menu.current.open = false;
+      menu.current.querySelector<HTMLElement>("summary")?.focus();
+    }
+  }}>
+    <summary aria-label="대화 메뉴">메뉴</summary><div onClick={event => {
+      const button = event.target instanceof Element ? event.target.closest("button") : null;
+      if (button && !button.disabled && menu.current) menu.current.open = false;
+    }}>{children}<p className="hps-layout-hint">대화와 결과 사이 경계를 좌우로 드래그해 너비를 조절할 수 있어요.</p></div>
+  </details> : <div className="hps-actions">{children}</div>;
+}
+
+// Optional classroom controls must not compete with a working automation conversation.
+function ConversationSupport({ compact, children }: { compact: boolean; children: ReactNode }) {
+  return compact ? <details className="hps-conversation-support"><summary>수업 안내 · 도움</summary>{children}</details> : <>{children}</>;
+}
+
+function ConversationSettings({ compact, required, questionId, children }: { compact: boolean; required: boolean; questionId?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(required);
+  useEffect(() => { setOpen(required); }, [required]);
+  useEffect(() => { if (questionId && !required) setOpen(false); }, [questionId, required]);
+  return compact ? <details className="hps-conversation-settings" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{required ? "이용권을 선택해 주세요" : "대화 설정 · 이용권"}</summary>{children}
+  </details> : <>{children}</>;
+}
 /** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
 const LOW_DISK_POLL_MS = 60_000;
 
@@ -506,6 +546,7 @@ export function ChatPanel(props: Props) {
   const [queued, setQueued] = useState<string | null>(separateQueue ? saved?.queued ?? null : null);
   const [frozen, setFrozen] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
@@ -636,6 +677,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage(msg => {
       if (msg.activityId !== activityId || (msg.taskId && msg.taskId !== taskId)) return;
       if (msg.type === "inputRejected") {
+        if (msg.notice) setSubmissionNotice(msg.notice);
         if(msg.photos?.length) setStagedPhotos(old=>[...old,...msg.photos!.filter(p=>!old.some(own=>own.id===p.id)).map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:true}))]);
         setSteerMarks(steerMarksRefuse);
         setSteerDelivery(null);
@@ -904,6 +946,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // Optional classroom controls must not compete with a working automation conversation.
+  const automationCompact = config?.profile?.automations?.enabled === true;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
   // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
@@ -1039,9 +1083,26 @@ export function ChatPanel(props: Props) {
     config.profile.ux.coach.naming_mode === "user_names_it" &&
     !config.coach?.configured;
 
+  const questionRef = useRef<HTMLDivElement>(null);
+  const [questionVisible, setQuestionVisible] = useState(true);
   useEffect(() => {
-    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: scrollBehavior() });
-  }, [messages.length, streaming, personalWorkspace]);
+    const heading = questionRef.current?.querySelector("h3");
+    const scroller = scrollRef.current;
+    if (!heading || !scroller) { setQuestionVisible(true); return; }
+    const observer = new IntersectionObserver(([entry]) => setQuestionVisible(entry.isIntersecting), { root: scroller });
+    observer.observe(heading);
+    const disconnect = () => observer.disconnect();
+    return disconnect;
+  }, [props.questionId, !!props.questionPanel]);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (props.questionPanel && questionRef.current) {
+      // Keep a new question's beginning visible instead of jumping to its last button.
+      const top = questionRef.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top, behavior: "instant" });
+    } else if (!personalWorkspace) scroller.scrollTo({ top: scroller.scrollHeight, behavior: scrollBehavior() });
+  }, [messages.length, streaming, personalWorkspace, props.questionId, !!props.questionPanel]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
@@ -1074,6 +1135,7 @@ export function ChatPanel(props: Props) {
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
+    setSubmissionNotice(null);
     const sendPrepared = () => {
     if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
@@ -1629,7 +1691,7 @@ export function ChatPanel(props: Props) {
 
   return (
     <CopyFeedbackRegion><div
-      className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
+      className={`hps-shell${automationCompact ? " hps-shell-automation" : ""}${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
       onDragOver={handleDragOver}
@@ -1670,8 +1732,9 @@ export function ChatPanel(props: Props) {
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
-        <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
-        <HeaderActions personal={personalWorkspace} taskId={taskId}>
+        {/* An automation conversation shows usage inside its settings disclosure; a second header row would squeeze the chat. */}
+        {!automationCompact && <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />}
+        <HeaderActions personal={personalWorkspace} automation={automationCompact} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
               own size makes the header row grow taller because of this one button.
@@ -1792,6 +1855,7 @@ export function ChatPanel(props: Props) {
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
 
+      <ConversationSupport compact={automationCompact}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
           Student-only, like region A (#1298). */}
@@ -1848,7 +1912,7 @@ export function ChatPanel(props: Props) {
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
-      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
+      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson hps-artifact-approval" data-artifact-approval="">
         <summary>수업 결과물 승인</summary>
         <p className="hp-rail-lesson-note">작업 폴더의 index.html 지금 판을 수업 결과물로 승인하거나 승인을 취소합니다. 누르면 그 판의 지문을 먼저 보여 주고 고르게 합니다. 승인한 판만 ‘학생이 승인한 결과물’ 회수에 들어가며, 이 버튼은 아무것도 보내지 않습니다. 고치면 새 판은 다시 승인해야 합니다.</p>
         <button type="button" className="hp-cta-quiet" data-artifact-approve="" onClick={() => postToHost({ type: "artifactApprove" })}>지금 결과물 확인하고 승인·취소</button>
@@ -1888,6 +1952,8 @@ export function ChatPanel(props: Props) {
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
       {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
+
+      </ConversationSupport>
 
       {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
@@ -2072,6 +2138,8 @@ export function ChatPanel(props: Props) {
         )}
 
         {props.verifyPanel}
+        {submissionNotice && <div className="hps-page-notice" role="status" aria-live="polite">{submissionNotice}</div>}
+        {props.questionPanel && <div ref={questionRef} className="hps-question-anchor">{props.questionPanel}</div>}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
@@ -2175,6 +2243,10 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
+          questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+          questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
+        }}>답변할 질문으로 이동 ↑</button>}
         {!props.instructor && config?.profile?.lesson && <PanelBoundary panel="goal-status">{() => <GoalStatusBar
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
           pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
@@ -2198,9 +2270,10 @@ export function ChatPanel(props: Props) {
         <AttachmentFailures items={attachmentFailures.items} retry={attachmentFailures.retry} remove={attachmentFailures.remove} />
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
-        {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
+        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId}>
+          <ModelControl config={config} streaming={streaming} />
           <EffortControl config={config} post={postToHost} />
-          <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
+          <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} /></ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
@@ -2377,8 +2450,8 @@ export function ChatPanel(props: Props) {
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
-            autoFocus
-            readOnly={unavailable || folderMissing}
+            autoFocus={!props.questionPanel}
+            readOnly={unavailable || folderMissing || !!props.questionPanel}
             aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
             aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             aria-autocomplete={config?.fileMentions ? "list" : undefined}
@@ -2413,7 +2486,7 @@ export function ChatPanel(props: Props) {
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
-              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing) return;
+              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing || props.questionPanel) return;
               e.preventDefault();
               if (imagePreparationBlocksSend()) return;
               // Roll-expand owns Enter while it is open (idle-only flow).
@@ -2439,17 +2512,19 @@ export function ChatPanel(props: Props) {
               submit();
             }}
             placeholder={
-              personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
+              props.questionPanel ? "위 질문 카드에서 답변해 주세요." : personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
                 ? queued
                   ? "이어서 적으면 예약 메시지에 덧붙여요"
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"
                 : rollExpand
                   ? "한 가지만 더 떠올려서 적어주세요"
+                  : config.profile?.automations?.enabled
+                    ? "자동화하고 싶은 업무를 이야기해 주세요"
                   : imagePasteEnabled
                     ? platformizeKeys("메시지를 입력하고 Enter — 이미지는 ⌘V로 붙여넣기 (Shift+Enter 줄바꿈)")
                     : "메시지를 입력하고 Enter (Shift+Enter 줄바꿈)"
             }
-            rows={personalWorkspace ? 1 : 3}
+            rows={personalWorkspace ? 1 : automationCompact ? 2 : 3}
           />
           {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           {(!folderMissing || streaming) && <div className="hps-input-buttons">
@@ -2476,7 +2551,7 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '응답 멈추기' : undefined}
                 data-hp-tooltip={personalWorkspace ? '응답 멈추기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="stop" /> : 'Stop'}
+                {personalWorkspace ? <ChatIcon kind="stop" /> : automationCompact ? '중지' : 'Stop'}
               </button>
             ) : rollExpand ? (
               <button
@@ -3661,7 +3736,7 @@ function UpdateBanner({
 
 
 /** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
-export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
+export function HeaderActions({ personal, automation = false, taskId, children }: { personal: boolean; automation?: boolean; taskId?: string; children: import('react').ReactNode }) {
   const [open, setOpen] = useState(false);
   const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
@@ -3680,7 +3755,7 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
     const choices = items();
     (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
   }, [personal, open]);
-  if (!personal) return <div className="hps-actions">{children}</div>;
+  if (!personal) return <ConversationActions compact={automation}>{children}</ConversationActions>;
   return <div className="hps-actions tw-chat-menu" ref={root} onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, items())} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {

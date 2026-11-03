@@ -49,6 +49,7 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
+import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
 import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
@@ -378,6 +379,10 @@ export function permittedMcpToolsFor(
   const orchestrator = orchestratorBindingFor(profile, roster);
   if (orchestrator?.consult) tools.push(MCP_CONSULT);
   if (orchestrator?.siteCheck) tools.push(MCP_SITE_CHECK);
+  if (!isMinorTier(profile) && profile.automations?.enabled === true && profile.automations.provider === "gmail") {
+    tools.push(...GOOGLE_AUTOMATION_MCP_TOOLS);
+    if (profile.automations.appsScript === true) tools.push(...APPS_SCRIPT_MCP_TOOLS);
+  }
   // One-click publish: its own grant, independent of `sdk_tools.browser` — the profile's
   // `publishing` block is the owner (the same gate the toolbar button uses), minors never.
   if (sitePublishAllowed(profile.publishing, isMinorProfile(profile)).ok) tools.push(MCP_PUBLISH_SITE);
@@ -1141,6 +1146,12 @@ export function buildSdkGatewayEnv(
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   env.ANTHROPIC_BASE_URL = anthropicBaseUrlFor(args.proxyUrl);
   env.ANTHROPIC_AUTH_TOKEN = args.token;
+  // Bundled CLI 0.3.207 starts an unawaited generate_session_title request
+  // beside the first SDK prompt unless this switch is set. That paid helper
+  // competes with the learner's turn for the native-trial single request lease
+  // (trial_busy/429). Studio owns its conversation title; never inherit an
+  // ambient opt-in to the CLI's separate model-generated terminal title.
+  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
   // The env scrub above cannot reach credentials stored on DISK. The CLI reads
   // those from its config dir and prefers them over ANTHROPIC_AUTH_TOKEN, so the
   // coach must get a config dir of its own or the workshop token is ignored
@@ -1517,7 +1528,8 @@ export function profileToAgentOptions(
  * or 400 (request the gateway refuses outright) will fail all 10 retries
  * identically. 403 is NOT here — the worker uses it for session-window/roster
  * states that the SDK doesn't retry (they surface as a terminal error), and
- * 5xx/429/529 stay retryable (the SDK's backoff is the right behavior there).
+ * 5xx/529 stay retryable. Capacity 429 is handled separately without an auth
+ * error, because a budget refusal needs action rather than CLI backoff.
  */
 export const SDK_FATAL_AUTH_STATUSES: ReadonlySet<number> = new Set([400, 401]);
 
@@ -1535,6 +1547,24 @@ export function sdkFatalAuthStatus(msg: Record<string, unknown>): number | null 
 /** True for the SDK's retry tick (`{type:"system", subtype:"api_retry"}`). */
 export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
   return msg["type"] === "system" && msg["subtype"] === "api_retry";
+}
+
+/** SDK API failures are control messages, not assistant prose. Never display
+ * their raw body: a gateway error can contain private request details. A 429
+ * also covers a hard budget reservation refusal, so waiting through CLI retries
+ * cannot be assumed to help. Leave retry to an explicit learner action. */
+function sdkApiFailure(msg: Record<string, unknown>): Error | null {
+  const rateLimit = (isSdkRetryEvent(msg) && msg.error_status === 429)
+    || (msg.type === 'assistant' && msg.error === 'rate_limit');
+  const assistantFailure = msg.type === 'assistant' && (msg.isApiErrorMessage === true
+    || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
+  if (!rateLimit && !assistantFailure) return null;
+  // REQ-M44 — a CLI line carrying the Service's own sentence (trial or pass end) ends the turn with that sentence.
+  if (msg.type === 'assistant') { const line = sdkCliErrorLine(msg); if (line && sdkServiceSentence(line)) return null; }
+  return Object.assign(new Error(rateLimit
+    ? '요청이 제한됐어요. 이용권·사용량과 실행 중인 작업을 확인한 뒤 다시 보내 주세요. 잔액이 있어도 AI 서비스의 요청 제한이 적용될 수 있어요. (429)'
+    : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
+    { name: 'SdkApiError', ...(rateLimit ? { status: 429 } : {}) });
 }
 
 // ── First-token / idle stall watchdog (#403) ────────────────────────────────
@@ -2138,6 +2168,11 @@ export interface SdkStreamHandlers {
    * before. Attach it with sdkBusyPolicyFor (orchestrator seats only).
    */
   busy?: SdkBusyPolicy;
+  /**
+   * Email-automation turns: an unmanaged 429 or CLI API failure ends the turn at once instead of
+   * waiting out CLI retries, because a budget refusal needs the learner's action (#1604).
+   */
+  failFast?: boolean;
 }
 
 /**
@@ -2206,6 +2241,8 @@ const SDK_CLI_ERROR_TEXT = /Claude Code returned an error result|Claude Code pro
 /** The text of a CLI-generated API-error assistant message, or null for anything the model said. */
 export function sdkCliErrorLine(msg: Record<string, unknown>): string | null {
   if (msg["type"] !== "assistant") return null;
+  // A reply cut at the output limit is the model's own text, not a CLI refusal line.
+  if (msg["error"] === "max_output_tokens") return null;
   const synthetic = (msg["message"] as { model?: unknown } | undefined)?.model === "<synthetic>";
   if (msg["error"] === undefined && !synthetic) return null;
   const text = extractSdkText(msg);
@@ -2399,7 +2436,7 @@ export async function consumeSdkStream(
       // A response that came back after the retries answers them: their status no longer describes this turn.
       // The CLI's own "API Error: …" line is an assistant message too — it is the failure, not an answer (`error` set, or
       // the CLI's `<synthetic>` model).
-      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
+      else if (msg["type"] === "assistant" && (msg["error"] === undefined || msg["error"] === "max_output_tokens") && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
         lastRetryStatus = undefined;
         // …and ends a busy episode: the next rush counts from zero again.
         busyRetries = 0;
@@ -2412,6 +2449,18 @@ export async function consumeSdkStream(
         // Kill the subprocess's retry loop first, then surface the token error.
         h.abortQuery();
         throw h.makeFatalAuthError(fatal);
+      }
+      // A served busy policy owns its bounded busy-retry episode (REQ-M44 keeps the CLI's error
+      // lines out of the bubble). Without that policy an automation turn fails immediately on a
+      // budget/concurrency refusal.
+      const managedBusyFailure = busy && (
+        (isSdkRetryEvent(msg) && SDK_BUSY_STATUSES.has(Number(msg.error_status)))
+        || (msg.type === 'assistant' && ['rate_limit', 'overloaded'].includes(String(msg.error)))
+      );
+      const apiFailure = managedBusyFailure || !h.failFast ? null : sdkApiFailure(msg);
+      if (apiFailure) {
+        h.abortQuery();
+        throw apiFailure;
       }
       // Retry ticks are the pathology, not progress — they must not renew the
       // watchdog budget.
@@ -2603,6 +2652,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
     (MCP_BROWSER_EXTRA_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
     toolName === MCP_PUBLISH_SITE
   );
@@ -3108,6 +3158,12 @@ export function evaluateSdkToolUse(args: {
     // subagent's own tool calls come back through this same function
     // (sdk.d.ts: CanUseTool options carry agentID for sub-agent context).
     return { decision: "ask" };
+  }
+
+  // The registered host rechecks capability and requires an exact-preview native
+  // confirmation for every send. This dispatch grant cannot approve delivery.
+  if ((ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
+    return { decision: "allow" };
   }
 
   // ── Orchestrator tools (A2; spec §3.2, §5.1, §6.1) ───────────────────────
