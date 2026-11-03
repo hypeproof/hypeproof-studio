@@ -25,6 +25,7 @@ jobs:
       published: ${{ steps.candidate.outputs.published }}
       matrix: ${{ steps.candidate.outputs.matrix }}
       accepted: ${{ steps.reuse.outputs.accepted }}
+      reuse_reason: ${{ steps.reuse.outputs.reason }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,7 +99,10 @@ jobs:
           set -euo pipefail
           if [[ "$TAG" == *-* ]]; then echo "accepted=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           gh release download "$TAG" --dir "$RUNNER_TEMP/promoted"
-          node scripts/release/promote.mjs reuse-acceptance --tag "$TAG" --sha "$SHA" --version "$VERSION" --dir "$RUNNER_TEMP/promoted" | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/release/promote.mjs reuse-acceptance --tag "$TAG" --sha "$SHA" --version "$VERSION" --dir "$RUNNER_TEMP/promoted" | tee "$RUNNER_TEMP/reuse.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          # Why acceptance runs again (e.g. a Service deploy after the rc's acceptance); the publish
+          # job writes it into the release notes (process-notes.mjs, #3429).
+          echo "reason=$(sed -n 2p "$RUNNER_TEMP/reuse.txt" | tr -d '\r')" >> "$GITHUB_OUTPUT"
   acceptance:
     needs: candidate
     if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.accepted != 'true'
@@ -282,7 +286,11 @@ jobs:
       # A tag can be pushed by anyone with write access (no tag protection on this plan).
       # A stable tag is published only with an approved release PR or as a hotfix; otherwise
       # the release stays a draft. Rerun this workflow after the approval to publish it.
+      # The approval route also needs the release casebook (#3429): an hps-blackbox-run/1 result
+      # with PASS for every P0 case at the PR head, or a "Release manager override" comment with
+      # a reason from Jay or the approving writer. notes_line records which path was used.
       - name: Publish gate — approved release PR or hotfix
+        id: gate
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
@@ -381,6 +389,22 @@ jobs:
           gh release upload "$TAG" "$out"/* --clobber
           gh release view "$TAG" --json body --jq .body | node scripts/release/install-kit.mjs notes --tag "$TAG" "${sections[@]}" > "$RUNNER_TEMP/release-notes.md"
           gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+      # One line per release-process fact (#3429): the publish gate's path (casebook run,
+      # override or hotfix) and, when acceptance re-ran because the public Service changed
+      # after the rc's acceptance, that fact. Written while still a draft; idempotent.
+      - name: Record the release-process path in the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          GATE_LINE: ${{ steps.gate.outputs.notes_line }}
+          REUSE_REASON: ${{ needs.candidate.outputs.reuse_reason }}
+        run: |
+          set -euo pipefail
+          [[ -n "$GATE_LINE" ]] || { echo "::error::the publish gate gave no notes line"; exit 1; }
+          gh release view "$TAG" --json body --jq .body \
+            | node scripts/release/process-notes.mjs --gate-line "$GATE_LINE" --reuse-reason "$REUSE_REASON" > "$RUNNER_TEMP/process-notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/process-notes.md"
+          sed -n '/hps-process:v1/,/\/hps-process:v1/p' "$RUNNER_TEMP/process-notes.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,38 @@
+name: process
+
+# Delivery-process rules as PR checks (#3429). PRs are merged by a bot with no human
+# reviewer, so a rule that only "the reviewer" enforces never runs.
+# Re-runs when the body or labels change: the escape hatch is a label plus a body line.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: process-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  escaped-bug-case:
+    # Name is load-bearing: hypeproof-harness loop/gates/required_checks.yaml lists it.
+    name: process / escaped-bug-case
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      # README "유출 버그 규칙": a PR closing an escaped-bug (or member-report + bug) issue adds or
+      # changes a cases.yaml case naming the PR or the issue, or one whose automated_by is a test it adds.
+      - name: Escaped-bug fix carries a release-casebook case
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/release/escaped-bug-case.mjs --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
