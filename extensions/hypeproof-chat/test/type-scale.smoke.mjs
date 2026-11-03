@@ -201,7 +201,10 @@ function mediaOk(list, env) {
 function element(desc) {
   const k = parseCompound(desc);
   const attrs = new Map(k.attrs.map((a) => [a.name, a.value ?? ""]));
-  return { tag: k.tag ?? "div", classes: new Set(k.classes), attrs, root: false, desc };
+  // A test-only attribute marks a classroom shell that holds a mission sentence, so the mission header's
+  // `.hps-shell:has(> .hp-mission .hp-mission-sentence)` rules can match (CGP-DS-R-008 classroom).
+  const has = attrs.get("data-test-has") === "mission" ? ["> .hp-mission .hp-mission-sentence"] : undefined;
+  return { tag: k.tag ?? "div", classes: new Set(k.classes), attrs, root: false, desc, has };
 }
 function substitute(value, lookup, seen = new Set()) {
   let out = value, guard = 0;
@@ -701,7 +704,33 @@ function check(files, { typeOnly = false } = {}) {
     if (ellipsis) { if (!h.titled.test(files[h.tsx] ?? "")) findings.push(`header: ${h.label} is nowrap with an ellipsis but its markup has no title carrying the full text`); continue; }
     if (!h.shortFixed) findings.push(`header: ${h.label} is nowrap and cannot give way at 390px; it pushes the trial count or the task title into an ellipsis`);
   }
-  return { findings, probes: probes.length, typeChecked: typeChecked.length, rules };
+  // 7. CGP-DS-R-008 in the classroom seat (DEC-29b, Jay 2026-11-03): every rule in a file the classroom
+  //    shell loads that can set a size below 14px, whatever its prefix, is classified; classroom learner
+  //    selectors compute to >=14px inside the classroom shell (a shell without data-chat-detail="personal")
+  //    at every viewport, and the classroom message body is the 16px body step.
+  const classroomProbes = [];
+  for (const f of CLASSROOM_FILES) for (const r of fontRules(f)) {
+    const v = r.decls.find((d) => d.prop === "font-size").value;
+    if (!small(v)) continue;
+    for (const s of r.selectors) {
+      const sel = s.text;
+      if (/^\.studio-/.test(sel) || /\[data-chat-detail="personal"\]|\.tw-/.test(sel)) continue;
+      if (CLASSROOM_OUT[sel]) continue;
+      if (/:(hover|focus|active|disabled)/.test(sel)) continue;
+      classroomProbes.push({ label: `classroom ${f}: ${sel}`, chain: chainOf(sel.replace(/^\.hps-shell(:[\w-]+\([^)]*\))*\s*>?\s*/, "")) });
+    }
+  }
+  for (const sel of Object.keys(CLASSROOM_OUT)) if (!CLASSROOM_FILES.some((f) => fontRules(f).some((r) => r.selectors.some((s) => s.text === sel) && small(r.decls.find((d) => d.prop === "font-size").value)))) findings.push(`classroom: CLASSROOM_OUT "${sel}" no longer sets a size below 14px (stale inventory)`);
+  classroomProbes.push(...CLASSROOM_PROBES);
+  for (const p of typeOnly ? [] : classroomProbes) for (const env of ENVS) {
+    const got = compute(rules, [...(p.ctx ?? ROOM), ...p.chain], env);
+    if (got.px < FLOOR) { findings.push(`${p.label} computes to ${got.px}px at ${env.w}x${env.h} (${got.file}: ${got.rule} { font-size: ${got.value} })`); break; }
+  }
+  if (!typeOnly) for (const env of ENVS) {
+    const body = compute(rules, [...ROOM, "div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-msg-body.hps-prose"], env).px;
+    if (body !== 16) { findings.push(`classroom message body is ${body}px at ${env.w}x${env.h}, want 16px`); break; }
+  }
+  return { findings, probes: probes.length, classroomProbes: classroomProbes.length, typeChecked: typeChecked.length, rules };
 }
 
 const TOKENS = {
@@ -814,6 +843,48 @@ const EXTRA_PROBES = [
   { label: "classroom help preview exclusion line (포함하지 않는 것)", ctx: () => PAGE, chain: ["div.hps-shell", "details.hp-inbox.hp-rail-lesson.hp-help", "section.hp-help-preview", "p.hp-outbound-excluded"] },
 ];
 
+// CGP-DS-R-008 classroom seat (DEC-29b). The classroom chat is ChatPanel without the personal workspace:
+// App → div.hps-shell with no data-chat-detail. Files of the separate automation and local-review
+// surfaces (their own webview entry points) and the personal-only files are not loaded by it.
+const ROOM = [...PAGE, "div.hps-shell"];
+// The personal files are loaded by the classroom too; only their personal-scoped and .tw-* rules are skipped below.
+const CLASSROOM_FILES = ORDER.filter((f) => !["tokens.css", "AutomationPanel.css", "localReview.css"].includes(f));
+const CLASSROOM_OUT = {
+  ".hp-inbox-quiet .hp-inbox-meta": "quiet inbox on the entry page (StartPage), not the classroom chat",
+  ".hp-inbox-quiet .hp-rail-lesson-note": "quiet inbox on the entry page (StartPage), not the classroom chat",
+  ".hp-inbox-quiet .hp-inbox-link-url": "quiet inbox on the entry page (StartPage), not the classroom chat",
+  ".hps-msg-body": "base 13px; the classroom shell sets the 16px body step (checked below)",
+  ".hp-ai-can-do-mark": "decorative stroke icon (aria-hidden); the row's state word carries the state",
+  ".hps-queued-cancel": "glyph button (×) with an aria-label (DEC-29 exempts glyph-only buttons)",
+  ".hps-attachment-remove": "glyph button (×) with an aria-label (DEC-29 exempts glyph-only buttons)",
+  ".hps-fatal-sub": "error boundary screen (ChatErrorBoundary, bare shell in both seats); its own 11-13px rules stay (follow-up)",
+  ".hps-fatal-detail": "error boundary screen, own rule (follow-up)",
+  ".hps-fatal-btn": "error boundary screen, own rule (follow-up)",
+  ".hps-fatal-btn-ghost": "error boundary screen, own rule (follow-up)",
+  ".hps-composer-hint": "visually hidden keyboard hint (DEC-29 exempts visually hidden text)",
+  ".hps-instructor-band": "instructor-only",
+  ".hps-instructor-model-input": "instructor-only",
+  ".hps-instructor-model-error": "instructor-only",
+  ".hps-voice-progress": "VoicePanel is not mounted by any screen today",
+  ".hps-voice-resume": "VoicePanel is not mounted by any screen today",
+  ".hps-voice-transcript": "VoicePanel is not mounted by any screen today",
+  ".hps-voice-partial-tag": "VoicePanel is not mounted by any screen today",
+  ".hps-voice-info": "VoicePanel is not mounted by any screen today",
+};
+// Classroom elements whose size comes from an inherited or personal-file rule (no own sub-14px rule).
+const CLASSROOM_PROBES = [
+  { label: "classroom mission completion line (compact-height layout, :has rule)", ctx: [...PAGE, "div.hps-shell[data-test-has=mission]"], chain: ["header.hp-mission", "ul.hp-mission-completion"] },
+  { label: "classroom CTA (inherits the shell)", chain: ["header.hp-mission", "div.hp-mission-actions", "button.hp-cta-quiet"] },
+  { label: "classroom bare paragraph (inherits the shell)", chain: ["div.hps-messages", "p"] },
+  { label: "classroom answer paragraph", chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-msg-body.hps-prose", "p"] },
+  { label: "classroom header trial line", chain: ["header.hps-header", "span.hps-trial-left"] },
+  { label: "classroom code-block copy status", chain: ["div.hps-messages", "div.hps-codeblock", "span.hps-copy-status"] },
+  { label: "classroom tools menu caption", chain: ["footer.hps-input-area", "div.hps-input", "div.hps-tools-menu", "button", "small"] },
+  { label: "classroom citation chip title", chain: ["div.hps-messages", "div.cp-rack", "button.cp-citation", "span.cp-citation-title"] },
+  { label: "classroom citation chip domain", chain: ["div.hps-messages", "div.cp-rack", "button.cp-citation", "span.cp-citation-domain"] },
+  { label: "classroom help preview exclusion line", chain: ["details.hp-inbox.hp-rail-lesson.hp-help", "section.hp-help-preview", "p.hp-outbound-excluded"] },
+];
+
 // Learner text in the task heading. `titled` matches the element's own title attribute in its
 // component (the fallback for an ellipsis); `shortFixed` marks short labels allowed to stay rigid.
 const HEADER_TEXT = [
@@ -839,8 +910,8 @@ const real = { ...Object.fromEntries(ORDER.map((f) => [f, read(f)])), "TaskWorks
   // .tw-conversation .hps-msg-body (0,2,0) loses to the personal body rule (0,3,0).
   assert.equal(compute(rules, [...shellCtx("base"), "div.hps-msg", "div.hps-msg-body"], env).px, 16, "personal body is 16px");
   assert.equal(compute(rules, [...shellCtx("xlarge"), "div.hps-msg", "div.hps-msg-body"], env).px, 20, "personal body at 아주 크게 is 20px");
-  // Classroom (no personal shell) keeps its own sizes: the change is personal-scoped.
-  assert.equal(compute(rules, [...PAGE, "div.hps-shell", "div.hps-msg", "div.hps-msg-role"], env).px, 11, "classroom role line is unchanged (11px)");
+  // Classroom (no personal shell): the role line rises from 11px to the caption step (DEC-29b).
+  assert.equal(compute(rules, [...PAGE, "div.hps-shell", "div.hps-msg", "div.hps-msg-role"], env).px, 14, "classroom role line is the 14px caption step");
 }
 
 // CGP-AGENT-D-002: the capability label is body-sized in both seats, even at 320px.
@@ -893,6 +964,14 @@ const NEGATIVE = [
   ["the trial count allowed to shrink again", mutate("taskWorkspace.css", (s) => s.replace(/\n\s*\.tw-heading \.hps-trial-left \{ flex-shrink: 0; \}/, "")), /trial remaining count can shrink at 390px/],
   ["the task title's full-text title removed", { ...real, "TaskWorkspace.tsx": real["TaskWorkspace.tsx"].replace(/className="tw-title-button" data-hp-tooltip=\{`[^`]*`\}/, 'className="tw-title-button" data-hp-tooltip="작업 이름 바꾸기"') }, /task title button is nowrap with an ellipsis but its markup has no title/],
   ["a stale classification (rule deleted from styles.css)", mutate("styles.css", (s) => s.replace(/\.hps-roll-cancel \{[^}]*\}/, "")), /hps-roll-cancel" no longer sets a font-size/],
+  // CGP-DS-R-008 classroom seat (DEC-29b).
+  ["a classroom-only class left without its classroom override", mutate("styles.css", (s) => s.replace('.hps-shell:not([data-chat-detail="personal"]) .hp-mission-week,\n', "")), /classroom styles\.css: \.hp-mission-week computes to 12px/],
+  ["the classroom shell left at the VS Code 13px", mutate("styles.css", (s) => s.replace('.hps-shell:not([data-chat-detail="personal"]) { font-size: var(--hp-font-caption); }', "")), /classroom bare paragraph \(inherits the shell\) computes to 13px/],
+  ["the classroom message body back at 13px", mutate("styles.css", (s) => s.replace('.hps-shell:not([data-chat-detail="personal"]) .hps-msg-body,\n', "")), /classroom message body is 13px/],
+  ["a new sub-14px rule in a component file the classroom loads", mutate("lessonTip.css", (s) => `${s}\n.hp-lesson-tip-meta { font-size: 12px; }\n`), /classroom lessonTip\.css: \.hp-lesson-tip-meta computes to 12px/],
+  ["the compact-height mission completion line back at 12px", mutate("styles.css", (s) => s.replace(/(> \.hp-mission \.hp-mission-completion \{ order:6;[^}]*?)font-size:var\(--hp-font-caption\)/, "$1font-size:12px")), /mission completion line \(compact-height layout, :has rule\) computes to 12px at \d+x\d+/],
+  ["a citation chip number left without its classroom override", mutate("styles.css", (s) => s.replace('.hps-shell:not([data-chat-detail="personal"]) .cp-citation-number,\n', "")), /classroom citationPreview\.css: \.cp-citation-number computes to 11px/],
+  ["a stale classroom exemption", mutate("styles.css", (s) => s.replace(/\.hps-instructor-band \{([^}]*)font-size: 12px/, ".hps-instructor-band {$1font-size: 14px")), /CLASSROOM_OUT "\.hps-instructor-band" no longer/],
 ];
 // CGP-DS-D-005 (DES-CGP-DS-09): weights, tracking, leading and the upper scale steps.
 const NEGATIVE_TYPE = [
@@ -931,4 +1010,4 @@ assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-c
 // CGP-DS-D-005 positive controls: the other scale steps, the regular weight and prose leading pass.
 assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-display); font-weight: var(--hp-weight-regular); line-height: var(--hp-leading-prose); letter-spacing: var(--hp-tracking-hangul); }\n`)).findings, [], "D-005 positive control flagged");
 assert.deepEqual(check(mutate("styles.css", (s) => `${s}\n.hps-edit-note { font-weight: 600; letter-spacing: 0; line-height: 1.7; }\n`)).findings, [], "D-005 shared positive control flagged");
-console.log(`type-scale OK: ${result.probes} probes ≥${FLOOR}px across ${ENVS.length} viewports, text-size steps followed; DES-CGP-DS-09 scale, weights, tracking and leading on ${result.typeChecked} probes; ${NEGATIVE.length + NEGATIVE_TYPE.length} negative controls caught`);
+console.log(`type-scale OK: ${result.probes} personal and ${result.classroomProbes} classroom probes ≥${FLOOR}px across ${ENVS.length} viewports, text-size steps followed; DES-CGP-DS-09 scale, weights, tracking and leading on ${result.typeChecked} probes; ${NEGATIVE.length + NEGATIVE_TYPE.length} negative controls caught`);
