@@ -2885,28 +2885,28 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-question > .hps-artifact-approval { display: none; }
 .hps-shell-question .hps-input-area .hps-model-selection,
 .hps-shell-question .hps-input-area .hps-effort { display: none; }
-.hps-shell-question .hps-input-area .hps-access[open] { max-height: 120px; overflow-y: auto; }
+.hps-shell-question .hps-input-area .hps-access[open] { max-height: var(--ds-c-studio-styles-size-142); overflow-y: auto; }
 .hps-shell-question > .hps-messages { min-height: 0; }
 
 /* EA-01/03: keep optional rails out of the automation workspace's height budget.
    This also overrides legacy effort/mission rules that scroll the entire shell. */
 .hps-shell.hps-shell-automation { min-height: 0; overflow: hidden; }
 .hps-shell-automation > .hps-header { flex-shrink: 0; }
-.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 12px; border-bottom: 1px solid var(--hp-line); max-height: 25%; overflow-y: auto; }
-.hps-conversation-support > summary { cursor: pointer; padding: 10px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
+.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 var(--ds-c-studio-styles-space-1); border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-line); max-height: 25%; overflow-y: auto; }
+.hps-conversation-support > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-7) 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-ink-14)); }
 .hps-shell-automation > .hps-messages { flex: 1 1 0; min-height: 0; overscroll-behavior: contain; }
 .hps-shell-automation > .hps-messages > * { flex-shrink: 0; }
 .hps-shell-automation > .hps-input-area { flex: 0 0 auto; max-height: 45%; box-sizing: border-box; overflow-y: auto; }
-.hps-shell-automation .hps-access { margin: 0; padding: 6px 8px; }
+.hps-shell-automation .hps-access { margin: 0; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); }
 .hps-shell-automation .hps-access[open] { box-sizing: border-box; max-height: 14vh; }
 .hps-shell-automation .hps-access:not([open]) .hps-access-summary { display: none; }
 .hps-shell-automation.hps-shell-question .hps-input { display: none; }
-.hps-question-return { text-align: left; padding: 6px 0; border: 0; background: transparent; color: var(--vscode-textLink-foreground, #6aa6df); cursor: pointer; }
+.hps-question-return { text-align: left; padding: var(--ds-c-studio-styles-space-15) 0; border: 0; background: transparent; color: var(--vscode-textLink-foreground, var(--ds-c-studio-styles-ink-41)); cursor: pointer; }
 .hps-conversation-support > summary:focus-visible,
-.hps-question-return:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }
+.hps-question-return:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--vscode-focusBorder, var(--ds-c-studio-styles-boundary-90)); outline-offset: var(--ds-c-studio-styles-size-143); }
 .hps-conversation-settings { flex-shrink: 0; max-height: 16vh; overflow-y: auto; }
-.hps-conversation-settings > summary { cursor: pointer; padding: 4px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
-.hps-conversation-settings > summary:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }
+.hps-conversation-settings > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-13) 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-ink-14)); }
+.hps-conversation-settings > summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--vscode-focusBorder, var(--ds-c-studio-styles-boundary-90)); outline-offset: var(--ds-c-studio-styles-size-143); }
 
 /* EA-01/03: a focused conversation, one current question, and quiet utility controls. */
 .hps-shell-automation {
@@ -2922,67 +2922,67 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   --vscode-panel-border: var(--hp-line);
   --vscode-editor-background: var(--hp-panel);
 }
-.hps-shell-automation > .hps-header { gap: 12px; padding: 10px 14px; align-items: flex-start; }
+.hps-shell-automation > .hps-header { gap: var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); align-items: flex-start; }
 /* The automation header holds only the name, the run state and one menu, so the state stays in the row on a
    narrow pane (no extra band over a short sidebar's conversation); the name yields first and keeps its tooltip. */
 @media (max-width: 480px) {
-  .hps-shell-automation > .hps-header:has(> .hps-run-state) { padding-bottom: 10px; }
+  .hps-shell-automation > .hps-header:has(> .hps-run-state) { padding-bottom: var(--ds-c-studio-styles-space-7); }
   .hps-shell-automation > .hps-header > .hps-run-state { position: static; }
   .hps-shell-automation > .hps-header > .hps-coach-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
-.hps-shell-automation .hps-coach-name { margin: 0; padding: 7px 0; font-size: 14px; text-align: left; }
-.hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: 12px; }
-.hps-conversation-actions > summary { cursor: pointer; padding: 7px 10px; color: var(--hp-muted); border: 1px solid var(--hp-line); border-radius: 6px; }
-.hps-conversation-actions > div { display: grid; gap: 4px; margin-top: 6px; }
-.hps-header .hps-conversation-actions button { margin: 0; padding: 8px 10px; text-align: left; font-size: 12px; white-space: normal; }
-.hps-shell-automation :is(button, summary, select, input, textarea):focus-visible { outline: 2px solid var(--hp-accent); outline-offset: 2px; }
-.hps-shell-automation > .hps-conversation-support { padding-inline: 14px; }
-.hps-shell-automation > .hps-conversation-support > summary { padding-block: 7px; }
-.hps-shell-automation > .hps-messages { padding: 20px 14px; gap: 20px; scroll-padding-block: 16px; }
-.hps-shell-automation .hps-msg-body { font-size: 13px; line-height: 1.75; min-width: 0; box-sizing: border-box; }
+.hps-shell-automation .hps-coach-name { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; font-size: var(--ds-c-studio-styles-type-17); text-align: left; }
+.hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: var(--ds-c-studio-styles-type-1); }
+.hps-conversation-actions > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-12) var(--ds-c-studio-styles-space-7); color: var(--hp-muted); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-3); }
+.hps-conversation-actions > div { display: grid; gap: var(--ds-c-studio-styles-space-13); margin-top: var(--ds-c-studio-styles-space-15); }
+.hps-header .hps-conversation-actions button { margin: 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); text-align: left; font-size: var(--ds-c-studio-styles-type-1); white-space: normal; }
+.hps-shell-automation :is(button, summary, select, input, textarea):focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-accent); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-shell-automation > .hps-conversation-support { padding-inline: var(--ds-c-studio-styles-space-19); }
+.hps-shell-automation > .hps-conversation-support > summary { padding-block: var(--ds-c-studio-styles-space-12); }
+.hps-shell-automation > .hps-messages { padding: var(--ds-c-studio-styles-space-5) var(--ds-c-studio-styles-space-19); gap: var(--ds-c-studio-styles-space-5); scroll-padding-block: var(--ds-c-studio-styles-space-20); }
+.hps-shell-automation .hps-msg-body { font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-21); min-width: 0; box-sizing: border-box; }
 .hps-shell-automation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
-.hps-shell-automation .hps-msg-user .hps-msg-body { background: var(--hp-panel); border: 1px solid var(--hp-line); color: var(--hp-ink); max-width: 94%; }
+.hps-shell-automation .hps-msg-user .hps-msg-body { background: var(--hp-panel); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); color: var(--hp-ink); max-width: 94%; }
 .hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-muted); }
 .hps-shell-automation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
-.hps-shell-automation > .hps-input-area { padding: 10px 14px; gap: 8px; background: var(--hp-bg); }
+.hps-shell-automation > .hps-input-area { padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); gap: var(--ds-c-studio-styles-space-2); background: var(--hp-bg); }
 /* The settings disclosure gives way first so the composer and its buttons always stay in the capped footer. */
 .hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; flex-shrink: 1; min-height: 0; }
-.hps-shell-automation .hps-conversation-settings > summary { padding: 6px 0; }
-.hps-shell-automation .hps-conversation-settings[open] { border-bottom: 1px solid var(--hp-line); padding-bottom: 8px; }
+.hps-shell-automation .hps-conversation-settings > summary { padding: var(--ds-c-studio-styles-space-15) 0; }
+.hps-shell-automation .hps-conversation-settings[open] { border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-line); padding-bottom: var(--ds-c-studio-styles-space-2); }
 /* Keep the conversation usable on short Windows screens with expanded settings,
    including systems whose Korean fallback font has taller line metrics. Main's growing
    composer fills the footer up to this cap, so the cap alone sets the conversation height. */
 @media (max-height: 600px) {
   .hps-shell-automation > .hps-input-area { max-height: 37%; }
 }
-.hps-shell-automation .hps-access-embedded { border: 0; padding: 8px 0; max-height: none; overflow: visible; }
-.hps-shell-automation .hps-access-heading { font-size: 12px; margin: 6px 0; }
-.hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: 1.6; }
+.hps-shell-automation .hps-access-embedded { border: 0; padding: var(--ds-c-studio-styles-space-2) 0; max-height: none; overflow: visible; }
+.hps-shell-automation .hps-access-heading { font-size: var(--ds-c-studio-styles-type-1); margin: var(--ds-c-studio-styles-space-15) 0; }
+.hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: var(--ds-c-studio-styles-typography-4); }
 .hps-shell-automation .hps-access select { box-sizing: border-box; }
-.hps-shell-automation .hps-input { padding: 10px; border: 1px solid var(--hp-line); border-radius: 10px; background: var(--hp-panel); flex-shrink: 0; }
+.hps-shell-automation .hps-input { padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-9); background: var(--hp-panel); flex-shrink: 0; }
 .hps-shell-automation .hps-input:focus-within { border-color: var(--hp-accent); }
-.hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: 2px; line-height: 1.6; min-height: 44px; }
+.hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: var(--ds-c-studio-styles-space-14); line-height: var(--ds-c-studio-styles-typography-4); min-height: var(--ds-c-studio-styles-size-8); }
 .hps-shell-automation .hps-input textarea:focus { outline: none; }
-.hps-shell-automation .hps-input button { min-height: var(--hp-control-min); padding: 7px 16px; border-radius: 6px; }
-.hps-shell-automation .hps-user-question { background: var(--hp-panel); border: 1px solid var(--hp-line); border-top: 3px solid var(--hp-accent); border-radius: 10px; margin-bottom: 4px; }
-.hps-shell-automation .hps-user-question h3 { font-size: 18px; line-height: 1.5; letter-spacing: -.2px; }
+.hps-shell-automation .hps-input button { min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-12) var(--ds-c-studio-styles-space-20); border-radius: var(--ds-c-studio-styles-radius-3); }
+.hps-shell-automation .hps-user-question { background: var(--hp-panel); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-top: var(--ds-c-studio-styles-size-15) solid var(--hp-accent); border-radius: var(--ds-c-studio-styles-radius-9); margin-bottom: var(--ds-c-studio-styles-space-13); }
+.hps-shell-automation .hps-user-question h3 { font-size: var(--ds-c-studio-styles-type-5); line-height: var(--ds-c-studio-styles-typography-5); letter-spacing: var(--ds-c-studio-styles-typography-22); }
 .hps-shell-automation .hps-question-label { color: var(--hp-muted); }
-.hps-shell-automation .hps-question-option { border-radius: 7px; }
+.hps-shell-automation .hps-question-option { border-radius: var(--ds-c-studio-styles-radius-17); }
 .hps-shell-automation .hps-question-option[data-selected=true] { background: var(--hp-bg); border-color: var(--hp-accent); }
-.hps-shell-automation .hps-question-actions button { min-height: 38px; border-radius: 6px; }
+.hps-shell-automation .hps-question-actions button { min-height: var(--ds-c-studio-styles-size-144); border-radius: var(--ds-c-studio-styles-radius-3); }
 .hps-shell-automation .hps-question-cancel { color: var(--hp-muted); }
-.hps-shell-automation .hps-question-return { margin: 0; padding: 7px 0; color: var(--hp-ink); font-size: 12px; }
+.hps-shell-automation .hps-question-return { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; color: var(--hp-ink); font-size: var(--ds-c-studio-styles-type-1); }
 @media (max-width: 340px) {
   .hps-shell-automation > .hps-header,
   .hps-shell-automation > .hps-messages,
-  .hps-shell-automation > .hps-input-area { padding-inline: 10px; }
-  .hps-shell-automation .hps-user-question { padding: 14px 12px; }
+  .hps-shell-automation > .hps-input-area { padding-inline: var(--ds-c-studio-styles-space-7); }
+  .hps-shell-automation .hps-user-question { padding: var(--ds-c-studio-styles-space-19) var(--ds-c-studio-styles-space-1); }
   .hps-shell-automation .hps-question-actions { flex-direction: column; align-items: stretch; }
 }
 
 /* Without a lesson mission, activity identity fits in one quiet row. */
-.hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) { position: static; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; }
+.hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) { position: static; display: flex; align-items: center; justify-content: space-between; gap: var(--ds-c-studio-styles-space-7); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-19); }
 .hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-activity,
 .hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-foot { margin: 0; }
 
-.hps-conversation-actions .hps-layout-hint { max-width: 190px; margin: 4px 0 0; padding: 9px 10px 2px; border-top: 1px solid var(--hp-line); color: var(--hp-muted); font-size: 11px; line-height: 1.6; }
+.hps-conversation-actions .hps-layout-hint { max-width: var(--ds-c-studio-styles-size-145); margin: var(--ds-c-studio-styles-space-13) 0 0; padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-14); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-line); color: var(--hp-muted); font-size: var(--ds-c-studio-styles-type-3); line-height: var(--ds-c-studio-styles-typography-4); }
