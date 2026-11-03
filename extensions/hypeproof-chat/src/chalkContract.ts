@@ -199,3 +199,31 @@ export class ChalkContractHost {
     return this.runner.previewOpen(a.webPath);
   }
 }
+
+export interface ContractView { token?: string; url?: string; connection?: ConnectionKind }
+
+export interface ContractWant {
+  isInstructor: boolean;
+  panelMode: string;
+  issuerToken: string | undefined;
+  url: string;
+  connection: ConnectionKind;
+}
+
+// Keeps the Chalk session in step with the instructor verdict (#2556). A new server address
+// re-activates over the existing session; a new token or connection ends the old one first.
+export async function syncInstructorSession(host: ChalkContractHost, current: ContractView, want: ContractWant): Promise<ContractView> {
+  if (want.isInstructor && want.issuerToken) {
+    const sameSession = current.token === want.issuerToken && current.connection === want.connection;
+    if (host.active && sameSession && current.url === want.url) return current;
+    if (host.active && !sameSession) await host.deactivate("superseded").catch(() => undefined);
+    const reply = await host.activate({ issuerToken: want.issuerToken, verifiedServerUrl: want.url, connection: want.connection })
+      .catch(() => ({ ok: false }));
+    return reply.ok ? { token: want.issuerToken, url: want.url, connection: want.connection } : {};
+  }
+  if (host.active) {
+    const reason: DeactivateReason = want.panelMode !== "instructor" ? "studentSlotWins" : want.issuerToken ? "rejected" : "issuerRemoved";
+    await host.deactivate(reason).catch(() => undefined);
+  }
+  return {};
+}

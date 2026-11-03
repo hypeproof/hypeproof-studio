@@ -4631,6 +4631,9 @@
           "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/chalk-instructor-rejudge.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx"
         }
       ]
