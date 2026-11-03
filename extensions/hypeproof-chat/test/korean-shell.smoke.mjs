@@ -200,9 +200,14 @@ try {
     // is reviewed with the branch and may gate its own new command: config.hypeproofChat.<key> with type boolean, default false.
     for(const [key,prop] of Object.entries(manifest.contributes.configuration?.properties??{}))
       if(!baseKeys.has(key)&&key.startsWith('hypeproofChat.')&&prop?.type==='boolean'&&prop?.default===false)functionGates.add(`config.${key}`);
+    // REQ-STUDIO-DOCTOR (Jay 2026-11-03 "전부다 켜"): 「진단 실행」 is read-only support for every seat. It changes nothing
+    // until a learner presses a fix, and every fix reuses an existing action, so it has no feature switch to reuse.
+    // Only this id is exempt from the gate rule; its palette entry must still exist and carry no `when`.
+    const ALWAYS_ON_SUPPORT=new Set(['hypeproof-chat.runDoctor']);
     for(const c of manifest.contributes.commands.filter(x=>!baseCommands.has(x.command))){
       const entries=Object.entries(manifest.contributes.menus??{}).flatMap(([menu,list])=>(Array.isArray(list)?list:[]).filter(x=>x.command===c.command||x.alt===c.command).map(x=>[menu,x]));
       assert.ok(entries.some(([menu])=>menu==='commandPalette'),`new command ${c.command}: has a palette entry`);
+      if(ALWAYS_ON_SUPPORT.has(c.command)){assert.equal(c.enablement,undefined);assert.deepEqual(entries.map(([menu,x])=>[menu,x.when]),[['commandPalette',undefined]],`${c.command}: palette only, no gate`);continue;}
       // An ungated new command is allowed only when it is hidden from every menu (when: "false"), e.g. a status-bar-only stop.
       if(c.enablement===undefined){
         for(const [menu,x] of entries)assert.equal(x.when,'false',`new ungated command ${c.command} in ${menu}: hidden (when "false")`);

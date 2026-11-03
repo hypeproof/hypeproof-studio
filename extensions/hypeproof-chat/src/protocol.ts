@@ -736,6 +736,9 @@ export type WebviewMessage = (
   | { type: "openReportModal"; source?: "error" | "crash" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
   | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
   | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
+  /** REQ-STUDIO-DOCTOR — the quiet doctor line's answer (`fix` = its fix button) and the error card's 「진단하기」. */
+  | { type: "doctorNoticeAnswer"; id: string; fix: boolean }
+  | { type: "runDoctor" }
   | { type: "problemReportAutoSetting"; enabled: boolean }
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
   // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
@@ -884,6 +887,8 @@ export type HostMessage = (
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | { type: "problemReportForm"; form: import("./problemReport").ProblemReportFormView | null }
   | { type: "problemReportOffer"; offer: { reason: import("./problemReport").OfferReason } | null }
+  /** REQ-STUDIO-DOCTOR — one quiet line for a failing check (null hides it). */
+  | { type: "doctorNotice"; notice: import("./studioDoctor").DoctorNotice | null }
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }

@@ -80,6 +80,9 @@ export function reportManifestItems(body: { description?: unknown; contact?: unk
   if (typeof body.contact === "string" && body.contact) items.push({ name: "내가 적은 연락처", bytes: size(body.contact) });
   if (Array.isArray(body.recent_turns)) body.recent_turns.forEach((t: { role?: string }, i: number) => items.push({ name: `최근 대화 ${i + 1} · ${t?.role === "user" ? "내가 보낸 말" : "AI의 답"}`, bytes: size(t) }));
   items.push({ name: "앱 정보 (버전·운영체제·요청 번호·프로필)", bytes: size({ attachments: body.attachments, request_id: body.request_id, profile_id: body.profile_id }) });
+  // REQ-STUDIO-DOCTOR — the 진단 결과 rides inside attachments; it is named on its own line so the learner sees it.
+  const doctor = (body.attachments as { doctor?: unknown } | undefined)?.doctor;
+  if (doctor) items.push({ name: "진단 결과 (확인한 항목과 결과 코드)", bytes: size(doctor) });
   // REQ-STUDIO-REPORT-LOGS — each attached diagnostic is its own line with its size.
   const logs = body.logs;
   if (Array.isArray(logs?.webview_errors) && logs.webview_errors.length) items.push({ name: `최근 화면 오류 기록 ${logs.webview_errors.length}건`, bytes: size(logs.webview_errors) });

@@ -281,6 +281,27 @@ cases:
       ref: "#3426"
     notes: 2026-11-03 회원 신고의 확장 기록 64KB 가 i18n 경고 542줄뿐이라 원인을 볼 수 없었다. 설명이 빈 신고도 받는다.
 
+  - id: BB-031
+    journey: CUJ-6
+    priority: P1
+    title: Studio 진단이 막힌 작업 폴더를 조용한 한 줄로 알리고 신고에 결과 코드만 붙인다
+    requirements: [REQ-STUDIO-DOCTOR, REQ-H16, REQ-H11]
+    steps:
+      - Mac 에서 시스템 설정 › 개인정보 보호 및 보안 › 파일 및 폴더 에서 HypeProof Studio 의 문서 폴더 접근을 끈다. 작업 폴더를 ~/Documents 아래 폴더로 연다
+      - Studio 를 열고 1분 넘게 기다린다
+      - 명령 팔레트에서 HypeProof Chat 진단 실행 을 고른다
+      - 채팅의 대화 메뉴에서 의견·문제 보내기 를 열고 보낸다. 보내기 확인 창의 항목을 읽는다
+      - 같은 날 Studio 를 다시 열고 1분 기다린다
+    expect:
+      - 채팅에 대화 상자가 아닌 한 줄로 Mac 개인정보 보호 설정이 Studio의 이 폴더 접근을 막고 있어요. 설정에서 HypeProof Studio를 켜 주세요. 와 Mac 설정 열기 · 닫기 버튼이 나온다. Mac 설정 열기 는 시스템 설정의 파일 및 폴더 화면을 연다
+      - 진단 실행 목록 제목이 진단 실행 — 확인할 것이 1개 있어요. 처럼 나오고, 작업 폴더 줄에 ⚠ 가, 나머지 줄에 ✓ 가 있다
+      - 양식에 진단 결과 첨부 가 켜진 채 있고, 보내기 확인 창에 진단 결과 (확인한 항목과 결과 코드) 줄이 있다. 운영 DB 의 그 신고 attachments.doctor 에 workfolder 의 folder_mac_privacy 가 있고 폴더 경로는 없다
+      - 같은 날 두 번째 실행에서는 그 한 줄이 다시 나오지 않는다
+      - 모든 설정을 되돌린 깨끗한 Mac 에서는 1분이 지나도 진단 줄이 나오지 않는다
+    origin:
+      kind: design
+    notes: test/studio-doctor.smoke.mjs 가 판정 규칙(EPERM 분류, 하루 한 번, 첨부 정리)을 재지만 실제 macOS 개인정보 보호 거절과 시스템 설정 화면 열림은 이 케이스만 본다. 신호 집계(doctor_folder_mac_privacy)는 Service 의 problem_signal_counts 에서 본다.
+
   # ── CUJ-2 무료 사용량 소진 → Google 로그인으로 이용권 구매 ────────────────────────
 
   - id: BB-011
