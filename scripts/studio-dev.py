@@ -291,6 +291,24 @@ def check_runtime_dependencies(source, shipped, metadata):
             raise RuntimeError('Unbundled runtime dependency differs from base app: ' + name + '. Use a compatible base app; launcher does not package new SDK dependencies.')
 
 
+INACTIVE_BACKUP = re.compile(r'previous-[0-9a-f]{32}\.inactive')
+
+
+def discard_inactive(path):
+    try:
+        shutil.rmtree(path)
+    except OSError as error:
+        print(f'WARNING: could not remove previous development app {path.name}: {error}', file=sys.stderr, flush=True)
+        return False
+    return True
+
+
+def prune_inactive(state, keep=None):
+    for path in state.iterdir():
+        if INACTIVE_BACKUP.fullmatch(path.name) and path.is_dir() and not path.is_symlink() and path != keep:
+            discard_inactive(path)
+
+
 def prepare(repo, base, state, service, account_preview=False):
     app = state / ('HypeProof Studio Dev.app' if is_mac_app(base) else 'HypeProof Studio Dev')
     if app_running(app):
@@ -341,6 +359,8 @@ def prepare(repo, base, state, service, account_preview=False):
         if backup is not None:
             backup.rename(app)
         raise
+    kept_backup = backup if backup is not None and not discard_inactive(backup) else None
+    prune_inactive(state, keep=kept_backup)
     branch = subprocess.check_output(['git', 'branch', '--show-current'], cwd=repo, text=True, encoding='utf-8').strip()
     user = state / 'user-data/User'
     user.mkdir(parents=True, exist_ok=True)
@@ -354,7 +374,7 @@ def prepare(repo, base, state, service, account_preview=False):
                'branch': branch, 'app': str(app), 'platform': platform.system(),
                'service': service, 'official_app_unchanged': True, 'extension_sha256': sha(app_resources(app) / 'extensions/hypeproof-chat/dist/extension.js'),
                'sdk_vendor': metadata.get('hps_sdk_vendor'),
-               'previous_app': str(backup) if backup else None, 'prepared_at': time.time()}
+               'previous_app': str(kept_backup) if kept_backup else None, 'prepared_at': time.time()}
     (state / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps(receipt, ensure_ascii=False, indent=2), flush=True)
     return app
