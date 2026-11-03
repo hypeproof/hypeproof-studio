@@ -1683,3 +1683,12 @@ Builds DES-ART-08 on REQ-N11 (CGP-ART-R-008, merged in #1862); CGP-SHELL-D-025 i
 - Where: an inline alert beside the composer, not in the browser tab (no trusted in-tab surface, as for CGP-ART-D-002 and D-006).
 - 선생님께 알리기: shown only when the class help channel is ready; it fills the learner's own help draft and opens the panel. The learner previews and consents as usual; there is no automatic instructor notification (DEC-14).
 - Confirmed by Jay: no
+
+## CGP-ART-D-008 follow-up: the minor safe-link block is on for minor cohorts (2026-11-04, Jay)
+
+Jay, 2026-11-04: turn the blocked notice on for minor cohorts after verifying their allowlists. Supersedes the "default off" bullet of the CGP-ART-D-008 section above.
+- Verified: the Service serves `browser_session` from its profile registry (`resolveProfile` overlays only the system prompt). Two profiles are minor (`minor_cohort: true`, kids-quest, `mode: "safe"`), and both served an empty allowlist, which would have blocked every link. hypeproof-service#321 gives each its own gallery path prefix and makes the `/v1/profile` snapshot test fail on any minor seat with an empty or malformed list. Every other profile is adult (`browse`).
+- Enablement is profile-driven (`safeLinkEnforced`): minor seat + safe session + non-empty allowlist. An empty served list keeps today's integrated route (no block-all). Without a loaded profile, the persisted safe session and persisted non-empty list keep it on (fail closed).
+- `hypeproofChat.safeLinkAllowlistEnabled` stays machine-scoped and its default becomes true; only an explicit `false` turns the block off, as a support override.
+- Adults: unchanged (confirm dialog).
+- Confirmed by Jay: yes (2026-11-04)

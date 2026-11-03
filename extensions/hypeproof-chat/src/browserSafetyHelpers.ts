@@ -101,8 +101,26 @@ export function hostAllowed(url: URL, allowlist: readonly string[]): boolean {
 }
 
 export interface LinkRouteOptions {
-  /** `hypeproofChat.safeLinkAllowlistEnabled` (machine, default off): a safe-session link outside the allowlist is blocked. */
+  /** From `safeLinkEnforced`: a safe-session link outside the allowlist is blocked. */
   enforceAllowlist?: boolean;
+}
+
+/**
+ * CGP-ART-D-008 (Jay, 2026-11-04) — is the minor allowlist block on for this seat? The served profile decides:
+ * on only when it marks the seat minor (`minor_cohort: true`), in the safe session, with a non-empty allowlist.
+ * An empty served list leaves today's integrated route instead of blocking every link. Without a loaded profile,
+ * the persisted safe session with a persisted non-empty list decides (that list is written only for safe cohorts),
+ * so a refetch never opens a gap. `hypeproofChat.safeLinkAllowlistEnabled` (machine, default true) is the support
+ * override: only an explicit `false` turns it off.
+ */
+export function safeLinkEnforced(
+  profile: (BrowserSafetyProfileLike & { minor_cohort?: boolean }) | null | undefined,
+  safety: BrowserSafetyConfig,
+  setting: unknown,
+): boolean {
+  if (setting === false) return false;
+  if (!safety.safeSession || safety.safeAllowlist.length === 0) return false;
+  return profile ? profile.minor_cohort === true : true;
 }
 
 /**
