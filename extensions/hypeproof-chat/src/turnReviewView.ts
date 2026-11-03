@@ -24,11 +24,16 @@ export interface TurnReviewView {
   nothingChanged?: boolean;
   /** The revert was refused because the folder has more entries than a restore point covers. */
   tooLarge?: boolean;
+  /** #3427 — a tracked point: only files the AI's file tools wrote were kept and compared. */
+  trackedOnly?: boolean;
   /** A one-line refusal for the last button press (e.g. a turn is running); the bar stays as it was. */
   notice?: string;
   /** CGP-AGENT-R-027 — present only on an adult website-track seat (checkpoint.ts checkpointApplies). */
   checkpoint?: CheckpointView;
 }
+
+/** #3427 — the bar's counting line for a tracked point, in place of the whole-folder one. */
+export const TRACKED_ONLY_NOTE = "작업 폴더가 커서 AI가 쓰거나 고친 파일만 셌어요.";
 
 /** Longest checkpoint message, in code points (the webview field and the host share it). */
 export const CHECKPOINT_MESSAGE_MAX = 200;

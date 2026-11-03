@@ -10,6 +10,8 @@
 #          preview could not be seen by the coach, #3425 — the core "make a page" loop had no journey)
 #   CUJ-6  REQ-STUDIO-REPORT-LOGS, REQ-STUDIO-FEEDBACK-ENTRY (2026-11-03: the report path is how
 #          escaped bugs reach us; it was untested end to end, #3426)
+#   CUJ-7  REQ-STUDIO-TURN-RESTORE (2026-11-03: undo turned off on every turn for a member whose work
+#          folder had many files, #3427 — reviewing and undoing the AI's changes had no journey)
 # 요구사항 문서에 다른 핵심 여정이 있는지도 봤다. Windows 설치(PRA-09, PRA-12, REQ-I9)는 별도 여정이 아니라
 # CUJ-1 의 다른 입구로 둔다: config/release-platforms.json 이 2026-10-20(#2139)부터 win32-x64 를 다시 출시하고,
 # 설치 뒤 시작 화면은 같은 코드다(BB-026). 강사 Chalk 는 별도 표면(chalk.hypeproof-ai.xyz)이라 앱 릴리스 여정이 아니다.
@@ -50,3 +52,9 @@ journeys:
     goal: 사용자가 오류든 단순한 불편이든 앱 안에서 두 번 클릭으로 보내고, 운영팀이 받은 신고만으로 원인을 찾는다.
     entry: 채팅의 대화 메뉴 또는 오류 카드.
     done_when: 신고가 운영팀에 도착하고, 붙은 기록에 실제 원인 줄이 남아 있다.
+
+  - id: CUJ-7
+    title: AI 가 바꾼 파일을 확인하고 되돌린다
+    goal: 사용자가 AI 요청 뒤 바뀐 파일 목록을 보고, 원하면 요청 전으로 되돌린다. 작업 폴더가 커도 된다.
+    entry: AI 가 작업 폴더의 파일을 쓰거나 고친 요청이 끝난다.
+    done_when: 되돌리기 뒤 바뀐 파일이 요청 전 내용이고, 새로 만든 파일은 없다.
