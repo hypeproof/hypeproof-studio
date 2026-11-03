@@ -14,6 +14,16 @@ export const MEMORY_STATE_LABEL = "AI 기억: 켜짐";
 export const MEMORY_SCOPE_LABEL = "기억 범위: 이 작업 공간 안에서만 · 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.";
 
 /**
+ * CGP-KNOW-D-005 (DES-KNOW-07) — the scope words of the activity header and settings line, after the state. The one scope
+ * the store enforces (CGP-KNOW-R-005): this personal or trial activity. There is no class wording because a class seat has
+ * no memory store and therefore no line.
+ */
+export const MEMORY_SCOPE_HEADER = "이 작업 공간 안에서만";
+
+/** CGP-KNOW-D-005 — the one sentence the header line's tooltip and accessible text give for the scope. */
+export const MEMORY_SCOPE_SENTENCE = `AI 기억은 이 작업 공간의 ${MEMORY_FOLDER_LABEL} 폴더에만 남고, 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.`;
+
+/**
  * REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023 / REQ-KNOW-41) — the task an item was kept from, as the host resolved it on
  * this listing. `task`: a listed task the learner can open (`id` is sent back with `taskSelect`); `archived`: the task is
  * in 보관함, which only 다시 열기 opens; `gone`: the file names a task this activity no longer has; `none`: no task recorded.

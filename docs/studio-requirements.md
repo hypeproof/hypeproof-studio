@@ -8261,19 +8261,28 @@ keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMO
   shown under it.
 - **Only where the store exists.** The line is part of the store's own view: no view (an instructor, a
   seat with no task workspace, a classroom lesson seat, a profile not loaded yet, a task or activity
-  switch in progress) means no line. Class activities keep their own stores (REQ-KNOW-07) and show none.
+  switch in progress) means no line. Class activities have no memory store (REQ-STUDIO-ACTIVITY-MEMORY-SCOPE) and show none.
 - The line is learner text: at least 14px and 4.5:1 in both themes, inside the drawer at 800 and 1420 px.
 - **Settings dialog and activity header (CGP-KNOW-D-022 / DES-KNOW-40).** The same read-only line is also in
   view outside the drawer, on exactly the seats that have the store (the host serves `memoryState` from the
   same binding; instructors, class and lesson seats get none). In the task heading it stands after the
-  activity line: "AI 기억: 켜짐" whole at every width, then "· `.hypeproof/memory/`", which gives way before
-  anything else (ellipsis, the full line kept in both tooltips). It costs the heading no word: at 1100px and
+  activity line: "AI 기억: 켜짐" (with its scope since CGP-KNOW-D-005) whole at every width, then
+  "· `.hypeproof/memory/`", which gives way before anything else (ellipsis; both tooltips name the folder). It costs the heading no word: at 1100px and
   below the state moves into a band under the heading, at its end (the band the coach run state also uses at
   480px and below), and the folder is visually hidden, so the activity kind and a name that is whole without
-  the line stay whole, nothing overlaps and no control is pushed out. In 대화 설정 it is a paragraph "AI 기억: 켜짐 · `.hypeproof/memory/`" before the
-  nickname field. Neither is a control (no button, input, switch role or tab stop); there is no off wording
+  the line stay whole, nothing overlaps and no control is pushed out. In 대화 설정 it is a paragraph "AI 기억: 켜짐 · `.hypeproof/memory/`" (with the scope
+  words since CGP-KNOW-D-005) before the nickname field. Neither is a control (no button, input, switch role or tab stop); there is no off wording
   and no "선생님이 정해요"; every cohort with the store, minors included, sees the same words (DEC-02). 14px and
   4.5:1 in both themes, bordered nowhere (it is text), legible in forced colours.
+- **The line names its scope (CGP-KNOW-D-005 / DES-KNOW-07).** In the task heading the state reads "AI 기억: 켜짐 · 이 작업
+  공간 안에서만", and in 대화 설정 "AI 기억: 켜짐 · 이 작업 공간 안에서만 · `.hypeproof/memory/`". The scope words are the one
+  scope the store enforces (REQ-STUDIO-ACTIVITY-MEMORY-SCOPE): this personal or trial activity. They are whole at every
+  width: above 480px on one line with the state; at 480px and below, where the coach run state shares the band, the state
+  takes at most half the band at its end and, when it does not fit there, the scope words move to a second line (the band
+  is two lines tall there), breaking only between words, never cut; the run state and the memory state never overlap. Both header tooltips and a screen-reader-only sentence explain the scope in one sentence:
+  "AI 기억은 이 작업 공간의 `.hypeproof/memory/` 폴더에만 남고, 수업 활동에서는 이 기억을 읽거나 쓰지 않아요." The words carry it
+  (no colour or icon stands for the scope). A class or lesson seat has no memory store and therefore no line: there is no
+  "이 수업 안에서만" wording until a class store exists (decisions.md "CGP-KNOW-D-005").
 
 Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
 a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no
@@ -8291,6 +8300,11 @@ in the window and overlapping nothing, every header control still in the window,
 4.5:1, no control, no off or teacher wording; no line without `memoryState`; and a width sweep from 320 to 1420 px in
 both themes and forced colours comparing the same heading with and without the line: the activity kind and the
 activity line are never cut where they are whole without it, no two heading items overlap, no control leaves the window).
+For CGP-KNOW-D-005 the same browser smoke asserts the state with its scope words, every scope word drawn whole on one line
+inside the window (1420/800/320 px, both themes, forced colours), the scope sentence as both tooltips and as
+screen-reader-only text, the settings paragraph with the scope, and no scope wording on a classroom seat;
+`extensions/hypeproof-chat/test/coach-run-state-browser.smoke.mjs` draws all seven run states (the longest words
+included) beside the memory line at 320 to 480 px in both themes and asserts no overlap, no covered or cut scope word.
 
 ## Learning block draws no judgment visuals (CGP-LEARN-D-002)
 
@@ -8403,7 +8417,7 @@ and where); DEC-01 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILE
 - **Label.** The memory view (내 작품 → 기억) shows, under the state line, the text "기억 범위: 이 작업 공간 안에서만 ·
   수업 활동에서는 이 기억을 읽거나 쓰지 않아요.": a paragraph, never a control, 14px and 4.5:1 in both themes.
   Class activities have no memory view, so the register's "AI 기억: 이 수업 안에서만" wording (DES-KNOW-07) has no home
-  yet; the activity header line is CGP-KNOW-D-005.
+  yet. The activity header names the personal scope (CGP-KNOW-D-005, under REQ-STUDIO-ACTIVITY-MEMORY-STATE).
 
 Evidence: `extensions/hypeproof-chat/test/activity-memory-scope.smoke.mjs` (the scope rule with positive and negative
 controls; the real provider and host module on real files: personal and trial views, no view or binding on classroom,
