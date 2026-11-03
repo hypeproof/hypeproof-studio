@@ -155,6 +155,7 @@ export class StartPage {
     // anywhere else (waiting, stopped, list closed): nothing is restored later.
     if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
+    void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
   }
 
   /** Explicit login resumes granted personal use; background refresh never changes activities. */
@@ -561,11 +562,21 @@ export class StartPage {
     this.purchaseFocus = Date.now();
     await this.refresh();
   }
-  /** Epic #3418 — one unauthenticated read per window: the store entry is drawn only when the Service runs a store. */
+  /**
+   * Epic #3418 — one read per window and account: the store entry is drawn only when the Service
+   * answers the store for this account (a rollout may open it to listed accounts only).
+   */
   private storeOn?: boolean;
-  private async loadStore(): Promise<void> {
-    if (this.storeOn !== undefined) return;
-    this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => undefined }).items().then(() => true, () => false);
+  private storeFor?: string;
+  private async loadStore(): Promise<boolean> {
+    const view = this.accounts?.view();
+    const key = view?.status === "signedIn" ? `in:${view.account?.id ?? ""}` : "out";
+    if (this.storeFor === key) return false;
+    this.storeFor = key;
+    const token = key === "out" ? undefined : await this.accounts?.accessToken().catch(() => undefined);
+    const before = this.storeOn;
+    this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => token }).items().then(() => true, () => false);
+    return before !== this.storeOn;
   }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {

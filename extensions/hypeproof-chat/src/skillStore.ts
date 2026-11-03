@@ -39,11 +39,12 @@ export class StoreClient {
   private base() {
     return this.o.proxyUrl.replace(/\/+$/, "") + "/store";
   }
-  private async call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
+  /** `optional` sends the account when there is one: a store open to listed accounts only answers 404 without it. */
+  private async call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean | "optional" } = {}): Promise<T> {
     const headers: Record<string, string> = { "content-type": "application/json" };
-    if (init.auth !== false) {
-      const token = await this.o.token();
-      if (!token) throw new StoreClientError("account_required");
+    const token = init.auth === false ? undefined : await this.o.token();
+    if (!token && init.auth !== false && init.auth !== "optional") throw new StoreClientError("account_required");
+    if (token) {
       headers.authorization = `Bearer ${token}`;
       if (this.o.device) headers["x-hps-device"] = this.o.device;
     }
@@ -72,7 +73,7 @@ export class StoreClient {
     return value as T;
   }
   async items(): Promise<StoreItemView[]> {
-    const r = await this.call<{ items: StoreItemView[] }>("/items", { auth: false });
+    const r = await this.call<{ items: StoreItemView[] }>("/items", { auth: "optional" });
     return Array.isArray(r?.items) ? r.items : [];
   }
   me() {

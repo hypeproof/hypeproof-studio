@@ -60,6 +60,10 @@ The Service needs these keys to enforce the rows above. They were chosen by the 
 | `pg.fee_rate_bps` | 340 (3.4%) | Placeholder estimate of the card fee. The real fee comes from the PG contract (#3419 step 6); until then the ledger's `pg_fee` line is an estimate. |
 | `age.adult_min` / `age.minor_min` | 19 / 14 | Korean civil adulthood and the account minimum. Age is a self-declared birth year until a verified source exists; the ambiguous year at a boundary counts as the younger group. |
 
+## Rollout switch (not a policy value)
+
+Who can reach the store is a Service secret, `HPS_STORE_ACCOUNTS`: a comma-separated list of account ids, or `*` for every account. Accounts outside it get the same 404 as a store that is off, so the App draws no entry. Unset in production means closed. Opening the store to everyone is a secret change to `*`; it needs no code change or App release. Live gateway keys are a separate, reviewed code change gated on #3419.
+
 ## Not yet enforced in the first slice
 
 `updates`, `payout.schedule` (no transfer exists; the ledger only records amounts), `refund.after_split` for already-paid balances, `linked_adult.verification`, and the `tax` handling of referral payouts. They take effect when the work that needs them ships after #3419.

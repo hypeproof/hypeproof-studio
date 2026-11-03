@@ -31,6 +31,16 @@ const client = (routes, token = 'acct-token') => {
   assert.equal(calls[0].redirect, 'error');
 }
 
+// Signed in, the list carries the account: a rollout to listed accounts answers only them,
+// and its 404 to anyone else reads as no store at all.
+{
+  const { c, calls } = client(() => [200, { items: [] }]);
+  await c.items();
+  assert.equal(calls[0].headers.authorization, 'Bearer acct-token');
+  const off = client(() => [404, { error: 'not_found' }]);
+  await assert.rejects(off.c.items(), (e) => e.code === 'store_off');
+}
+
 // An order sends the account bearer and the device id, and only the Service's own checkout page is accepted.
 {
   const good = { order_id: ORDER, amount: 10000, title: 't', policy_version: 'v1', checkout_url: `https://service.test/v1/store/checkout?order=${ORDER}` };
