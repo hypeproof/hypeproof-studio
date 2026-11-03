@@ -216,10 +216,21 @@ try {
       assert.ok(functionGates.has(c.enablement),`new command ${c.command}: enablement ${c.enablement} reuses a function gate of a main command or is its own new default-off switch`);
       for(const [menu,x] of entries)assert.ok(functionGates.has(x.when),`new command ${c.command} in ${menu}: when ${x.when} reuses a function gate of a main command or is its own new default-off switch`);
     }
+    // A default an owner decision changed on purpose: the new default must be exactly the decided one, and nothing
+    // else about the setting may move. Jay 2026-11-04 (CGP-ART-D-008 follow-up): the served profile decides the minor
+    // safe-link block, so this switch defaults true and only an explicit false is the support override.
+    const DECIDED_DEFAULTS={'hypeproofChat.safeLinkAllowlistEnabled':true};
+    const compared=structuredClone(manifest);
+    for(const [key,to] of Object.entries(DECIDED_DEFAULTS)){
+      const head=compared.contributes?.configuration?.properties?.[key],was=baseManifest.contributes?.configuration?.properties?.[key];
+      if(!head||!was)continue;
+      assert.equal(head.default,to,`${key}: the decided default`);
+      head.default=was.default;
+    }
     const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
-    assert.equal(only(manifest),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
+    assert.equal(only(compared),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
     // Defaults, scopes, enums and ids come through stripping untouched; spot-check the security-relevant ones too.
-    const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
+    const props=compared.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
     for(const key of Object.keys(baseProps)){assert.deepEqual({...props[key],description:0,enumItemLabels:0},{...baseProps[key],description:0,enumItemLabels:0},`setting ${key}: default/scope/enum unchanged`);}
     assert.deepEqual(manifest.contributes.keybindings,baseManifest.contributes.keybindings,'keybindings unchanged');
     assert.deepEqual(manifest.contributes.commands.filter(c=>baseCommands.has(c.command)).map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');
