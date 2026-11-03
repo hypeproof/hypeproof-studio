@@ -16,6 +16,7 @@ import { createGoogleAutomationRuntime, validateEmailRecipe, type GoogleAutomati
 import { createAutomationPanelController, spreadsheetIdFromInput } from './automationPanel';
 import { createAutomationStoreClient } from './automationStoreClient';
 import { readAutomationDraft, automationDraftValue } from './automationDraft';
+import { deviceDraftKey, isSealedDraft, openDraft, sealDraft } from './automationDraftSeal';
 import { publishAutomationRecipe } from './automationPublication';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
@@ -113,7 +114,14 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   }
   provider.setAutomationConversationHandlers?.({ answer: answerQuestion, cancel: cancelQuestion, isWaiting: () => !!pendingQuestion });
   const recipeKey = (owner: Binding) => `hps.automation.recipe.${owner.namespace}`;
-  const savedDraft = (owner: Binding) => readAutomationDraft(context.globalState.get(recipeKey(owner)));
+  // D7 (Epic #3418): the draft in globalState is sealed with this device's key from SecretStorage.
+  // The key is loaded in prepare() when a draft exists; reads stay synchronous and always see globalState as it is.
+  let draftKey: Buffer | undefined;
+  const requireDraftKey = () => { if (!draftKey) throw new Error('자동화 보관 키를 불러오지 못했어요. 자동화를 다시 열어 주세요.'); return draftKey; };
+  const storedDraft = (owner: Binding) => { const value = context.globalState.get<unknown>(recipeKey(owner)); return value === undefined ? undefined : openDraft(requireDraftKey(), owner.namespace, value); };
+  const savedDraft = (owner: Binding) => readAutomationDraft(storedDraft(owner));
+  // The key is created only when a draft is first written, so an activity without a draft adds no secret.
+  const writeDraft = async (owner: Binding, value: unknown) => { draftKey ??= await deviceDraftKey(context.secrets); await context.globalState.update(recipeKey(owner), sealDraft(draftKey, owner.namespace, value)); };
   const reusable = (value: unknown) => {
     const recipe = validateEmailRecipe(value);
     if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}|docs\.google\.com\/spreadsheets/i.test(JSON.stringify(recipe))) throw new Error('재사용 스킬에는 실제 주소·시트·비밀값을 넣지 마세요.');
@@ -226,7 +234,12 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         return binding === pinned && allowed();
       },
     });
-    const saved = context.globalState.get<unknown>(`hps.automation.recipe.${pinned.namespace}`);
+    // A draft written before D7 is plaintext: seal it in place on first open.
+    const legacy = context.globalState.get<unknown>(recipeKey(pinned));
+    if (legacy !== undefined) draftKey ??= await deviceDraftKey(context.secrets);
+    if (legacy !== undefined && !isSealedDraft(legacy)) await writeDraft(pinned, legacy);
+    let saved: unknown;
+    try { saved = storedDraft(pinned); } catch { saved = undefined; }
     if (saved) { try { const draft = readAutomationDraft(saved); controller.importRecipe(draft.recipe, draft.source); } catch { /* A malformed draft never prevents a fresh template. */ } }
   }
   async function handle(entry: Queued): Promise<void> {
@@ -257,7 +270,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         await authorize(); if (!valid()) return; activeController.importRecipe(recipe);
       } else { await activeController.handle(action); }
       if (!valid()) return;
-      try { const recipe = validateEmailRecipe(activeController.view().recipe); await context.globalState.update(recipeKey(owner), automationDraftValue(recipe, activeController.view().source ?? null)); } catch { /* Incomplete edits remain in memory; no credentials or rows are persisted. */ }
+      try { const recipe = validateEmailRecipe(activeController.view().recipe); await writeDraft(owner, automationDraftValue(recipe, activeController.view().source ?? null)); } catch { /* Incomplete edits remain in memory; no credentials or rows are persisted. */ }
     } catch (error) {
       if (!valid()) return;
       const view = activeController?.view();
@@ -352,6 +365,48 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       const nodes = snap.nodes.map(({ status: _status, ...node }) => node);
       return { draft: questDraft(recipe, nodes), pkg: (meta: { title: string; summary: string; price_krw: number }) => emailQuestPackage(recipe, nodes, meta) };
     },
+    /**
+     * Epic #3418 D10/F7: runs an installed store mail skill without its template ever reaching this device. The
+     * buyer's own roster (the sheet set up in this activity) is read here; only the rows go to the Service, which
+     * renders the messages. Every recipient must be one of the sheet's addresses (checked again by the runtime),
+     * the buyer approves the exact preview, and the mail leaves through the buyer's own Gmail connection. No model
+     * takes part, so none can choose or add a recipient.
+     */
+    async runStoreMail(skill: { title: string; params: { name: string; label: string }[] }, render: (rows: { to: string; values: Record<string, string> }[]) => Promise<{ to: string; subject: string; body: string }[]>): Promise<{ sent: number; failed: number } | { cancelled: true }> {
+      await prepare();
+      const pinned = binding, active = runtime;
+      if (!pinned || !active || !allowed()) throw new Error('메일 스킬은 Google 자동화를 쓰는 활동에서 실행할 수 있어요.');
+      const identity = await active.getConnectionIdentity();
+      if (!identity) throw new Error('먼저 Google 계정을 연결해 주세요.');
+      let setting: { spreadsheetId: string; range: string; connection: string } | null = null;
+      try { setting = JSON.parse((await context.secrets.get(`hps.email-automation.${pinned.namespace}.sheet`)) ?? 'null'); } catch { setting = null; }
+      if (!setting || setting.connection !== identity || typeof setting.spreadsheetId !== 'string') throw new Error('먼저 내 명단 시트를 연결해 주세요.');
+      const sheet = await active.readSheet({ spreadsheetId: setting.spreadsheetId, range: setting.range });
+      const headers = (sheet[0] ?? []).map(cell => cell.trim());
+      const column = (label: string) => {
+        const at = headers.indexOf(label.trim());
+        if (at < 0 || headers.lastIndexOf(label.trim()) !== at) throw new Error(`시트의 ${label} 열을 하나만 준비해 주세요.`);
+        return at;
+      };
+      const email = skill.params.find(p => p.name === 'email');
+      if (!email) throw new Error('이 스킬에는 받는 사람 열 정보가 없어요.');
+      const toAt = column(email.label);
+      const fields = skill.params.filter(p => p.name !== 'email').map(p => [p.name, column(p.label)] as const);
+      const rows = sheet.slice(1).filter(row => row.some(cell => cell.trim())).map(row => ({ to: (row[toAt] ?? '').trim(), values: Object.fromEntries(fields.map(([name, at]) => [name, (row[at] ?? '').trim().slice(0, 200)])) }));
+      if (!rows.length) throw new Error('보낼 수신자가 없어요.');
+      if (rows.length > pinned.maxRecipients) throw new Error(`한 번에 ${pinned.maxRecipients}명까지 보낼 수 있어요.`);
+      const rendered = await render(rows);
+      // The Service returns one message per row, in order; anything else is refused before a preview exists.
+      if (rendered.length !== rows.length || rendered.some((m, i) => m?.to?.trim().toLowerCase() !== rows[i]!.to.toLowerCase())) throw new Error('받는 사람이 내 명단과 달라요. 보내지 않았어요.');
+      const preview = await active.previewRendered({ messages: rendered });
+      const detail = preview.messages.map((m, i) => `${i + 1}. 받는 사람: ${m.to}\n제목: ${m.subject}\n\n${m.body}`).join('\n\n────────────────────\n\n');
+      const choice = await vscode.window.showWarningMessage(`「${skill.title}」로 ${preview.messages.length}명에게 보낼 메일을 모두 확인해 주세요.`, { modal: true, detail }, '확인한 메일 보내기');
+      if (choice !== '확인한 메일 보내기') return { cancelled: true };
+      await authorize();
+      if (binding !== pinned || !allowed()) throw new Error('활동이 변경돼 보내지 않았어요.');
+      const { records } = await active.send({ previewId: preview.id, approved: true });
+      return { sent: records.filter(r => r.status === 'sent').length, failed: records.filter(r => r.status !== 'sent').length };
+    },
     /** Which connections this device already has for the store card (D6): presence only, never an account or a sheet. */
     async storeConnections(): Promise<StoreLocalConnections> {
       try { await prepare(); } catch { return { google: false, roster: false }; }
@@ -437,7 +492,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const recipe = reusable(value);
           const source = context.globalState.get(recipeKey(pinned)) ? savedDraft(pinned).source : null;
-          await context.globalState.update(recipeKey(pinned), automationDraftValue(recipe, source));
+          await writeDraft(pinned, automationDraftValue(recipe, source));
           if (!live()) throw new Error('Changed activity');
           controller?.importRecipe(recipe, source);
           return { saved: true, title: recipe.title };
@@ -508,7 +563,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           const source = { id: detail.item.id, title: recipe.title, version: detail.item.version };
           const answer = await askQuestion({ kind: 'install', title: `${recipe.title} 버전 ${detail.item.version}을 가져올까요?`, description: '현재 템플릿을 선택한 버전으로 바꿔요. 새 버전은 자동 적용되지 않아요. 내 Google 연결과 발송 기록은 유지하며, 발송 전에는 다시 미리보고 확인해요.', recipe, private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
-          await context.globalState.update(recipeKey(pinned), automationDraftValue(recipe, source));
+          await writeDraft(pinned, automationDraftValue(recipe, source));
           if (!live()) throw new Error('Changed activity');
           controller?.importRecipe(recipe, source);
           return { installed: true, id: detail.item.id, version: detail.item.version, familyId: detail.item.familyId, recipe };

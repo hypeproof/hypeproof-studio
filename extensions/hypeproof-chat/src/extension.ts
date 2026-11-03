@@ -296,6 +296,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return profile.activity_kind === "classroom" || isMinorProfile(profile) ? "classroom" : "personal";
     },
     localConnections: () => automationHost.storeConnections(),
+    runMailSkill: (skill, render) => automationHost.runStoreMail(skill, render),
     questOffer: () => automationHost.storeQuestOffer(),
     // Scene 3: the installed skill opens as the buyer's quest (public layer only) beside a new chat task the Service composes.
     runSkill: async (skill) => {

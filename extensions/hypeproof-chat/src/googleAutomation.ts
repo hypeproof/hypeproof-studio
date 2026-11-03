@@ -245,6 +245,34 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
       if (!sheet || sheet.revision !== await connectionRevision()) { cachedSheet = null; return fail('현재 Google 계정의 시트를 다시 읽어 주세요.'); }
       return preview({ recipe: args.recipe, rows: sheet.rows });
     },
+    /**
+     * Epic #3418 D10/F7: a store skill's messages arrive rendered by the Service; the template never reaches this
+     * device. Every recipient must be an address in the buyer's own sheet as last read here, once each, so neither
+     * the Service nor a model can add one. The result is the same one-current preview the send approval binds to.
+     */
+    async previewRendered(args: { messages: ReadonlyArray<{ to: string; subject: string; body: string }> }): Promise<EmailPreview> {
+      allowed();
+      const revision = await connectionRevision();
+      const sheet = cachedSheet;
+      if (!revision || !sheet || sheet.revision !== revision) { cachedSheet = null; return fail('현재 Google 계정의 시트를 다시 읽어 주세요.'); }
+      const roster = new Set(sheet.rows.slice(1).flat().map(cell => cell.trim().toLowerCase()).filter(cell => cell.includes('@')));
+      if (!Array.isArray(args.messages) || !args.messages.length || args.messages.length > maxRecipients) return fail('보낼 수신자가 없어요.');
+      const recipients = new Set<string>();
+      const messages = args.messages.map(m => {
+        if (!m || typeof m.to !== 'string' || typeof m.subject !== 'string' || typeof m.body !== 'string') fail('메일 내용을 확인할 수 없어요.');
+        const to = m.to.trim();
+        if (!roster.has(to.toLowerCase())) fail('내 명단에 없는 받는 사람이 있어요. 보내지 않았어요.');
+        if (recipients.has(to.toLowerCase())) fail('중복 수신자가 있어요. 시트를 확인해 주세요.');
+        recipients.add(to.toLowerCase());
+        if (/[\r\n]/.test(m.subject) || m.subject.length > 998 || m.body.length > 100000) fail('메일 내용이 너무 길어요.');
+        const message = { id: hash(JSON.stringify([to.toLowerCase(), m.subject, m.body])), to, subject: m.subject, body: m.body };
+        gmailMime(message);
+        return Object.freeze(message);
+      });
+      const result = Object.freeze({ id: nonce(), createdAt: now(), messages: Object.freeze(messages) });
+      previews.clear(); previewRevisions.clear(); previews.set(result.id, result); previewRevisions.set(result.id, revision);
+      return result;
+    },
     getPreview(id: string): EmailPreview | undefined { return previews.get(id); },
     async status() { return { connected: !!(await stored()), configured: !!deps.clientId.trim() }; },
     // Only the browser/callback wait is cancellable here. Existing credentials,

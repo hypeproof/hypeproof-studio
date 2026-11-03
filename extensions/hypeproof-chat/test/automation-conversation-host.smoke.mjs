@@ -65,7 +65,10 @@ try {
   await handlers.answer({questionId:card.id,text:'actual@example.invalid'});assert.match(question.error,/비공개/);assert.equal(handlers.isWaiting(),true);
   await handlers.answer({questionId:card.id,choiceId:'documents'});assert.deepEqual(JSON.parse(JSON.stringify(await pending)),{choiceId:'documents'});assert.equal(question,null);
   await assert.rejects(mcp.previewSavedSkill(),/Invalid recipe|자동화 형식/);
-  await mcp.saveSkill(recipe);assert.deepEqual([...globals.values()][0],recipe);
+  await mcp.saveSkill(recipe);
+  // D7 (#3418): the draft at rest is ciphertext under this device's key; opened with that key it is the saved recipe.
+  {const stored=[...globals.values()][0];assert.equal(stored.schema,'hps-sealed-automation-draft/1');assert.equal(JSON.stringify(stored).includes(recipe.subjectTemplate),false);
+   const {openDraft,DRAFT_KEY_SECRET}=await import('../src/automationDraftSeal.ts');assert.deepEqual(openDraft(Buffer.from(secrets.get(DRAFT_KEY_SECRET),'base64'),[...globals.keys()][0].replace('hps.automation.recipe.',''),stored),recipe);}
   const toolHandlers={};buildGoogleAutomationMcpServer({tool:(name,_description,_schema,handler)=>{toolHandlers[name]=handler;return{name};},createSdkMcpServer:value=>value},{string:()=>({})},mcp);
   const previewResult=await toolHandlers.email_preview({recipe:JSON.stringify({...recipe,bodyTemplate:'An unsaved model rewrite must never execute.'})});
   assert.equal(previewResult.isError,undefined);assert.deepEqual(previewedRecipe,recipe);

@@ -120,6 +120,15 @@ export class StoreClient {
   saveOverlay(itemId: string, steps: Record<string, StoreOverlaySpec>) {
     return this.call<StoreOverlayView>(`/items/${encodeURIComponent(itemId)}/overlay`, { method: "PUT", body: { steps } });
   }
+  /**
+   * D10: the buyer's roster rows in, the rendered messages out. The template stays in the Service; the first
+   * render ends the refund right like the first run (F1).
+   */
+  async render(itemId: string, version: number, rows: { to: string; values: Record<string, string> }[]) {
+    const r = await this.call<{ messages: { to: string; subject: string; body: string }[] }>(`/items/${encodeURIComponent(itemId)}/render`, { body: { version, rows } });
+    if (!Array.isArray(r?.messages)) throw new StoreClientError("invalid_response");
+    return r.messages;
+  }
   /** Moves to the seller's current version; one that adds connections, tools or outputs needs `consent` (F5). */
   update(itemId: string, consent = false) {
     return this.call<{ version: number; widened: string[] }>(`/items/${encodeURIComponent(itemId)}/update`, { body: { consent } });
@@ -171,6 +180,8 @@ export const STORE_COPY = {
   adapted: "내 방식으로 바꿨어요. 다음 실행부터 적용돼요.",
   updated: "새 버전으로 바꿨어요. 내가 바꾼 단계는 그대로 다시 적용돼요.",
   consent: "새 버전이 연결이나 도구를 더 써요. 확인한 뒤에만 바꿔요.",
+  mailSent: (sent: number, failed: number) => failed ? `${sent}명에게 보냈고 ${failed}명은 보내지 못했어요. 자동화 기록에서 확인해 주세요.` : `${sent}명에게 메일을 보냈어요.`,
+  mailCancelled: "메일을 보내지 않았어요.",
 } as const;
 /** A store skill runs only where the Service composes it (design v1 D2/D8). */
 export const STORE_RUN_NEEDS_SERVICE = "스토어 스킬은 HypeProof 서버에 연결된 AI 코치에서만 실행돼요. 내 구독이나 로컬 연결로는 실행할 수 없어요.";
@@ -201,6 +212,11 @@ const ERRORS: Record<string, string> = {
   invalid_overlay: "바꾼 내용을 저장하지 못했어요. 입력을 확인해 주세요.",
   item_unlisted: "운영자가 내린 스킬이라 바꿀 수 없어요.",
   no_finished_quest: "먼저 자동화 퀘스트의 모든 단계를 완료해 주세요.",
+  no_mail_template: "이 스킬에는 메일 템플릿이 없어요.",
+  mail_step_disabled: "메일을 만드는 단계를 꺼 두셨어요. 단계를 다시 켠 뒤 실행해 주세요.",
+  minor_google_send: "만 19세 미만은 메일을 보내는 스토어 스킬을 실행할 수 없어요.",
+  store_version_mismatch: "스킬이 업데이트됐어요. 스토어에서 다시 열어 주세요.",
+  store_audit_unavailable: "지금은 스토어 스킬을 실행할 수 없어요. 잠시 뒤 다시 시도해 주세요.",
 };
 export function storeErrorMessage(error: unknown): string {
   if (error instanceof StoreClientError) {
