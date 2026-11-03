@@ -2945,7 +2945,8 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-muted); }
 .hps-shell-automation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
 .hps-shell-automation > .hps-input-area { padding: 10px 14px; gap: 8px; background: var(--hp-bg); }
-.hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; }
+/* The settings disclosure gives way first so the composer and its buttons always stay in the capped footer. */
+.hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; flex-shrink: 1; min-height: 0; }
 .hps-shell-automation .hps-conversation-settings > summary { padding: 6px 0; }
 .hps-shell-automation .hps-conversation-settings[open] { border-bottom: 1px solid var(--hp-line); padding-bottom: 8px; }
 /* Keep the conversation usable on short Windows screens with expanded settings,
@@ -2958,7 +2959,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation .hps-access-heading { font-size: 12px; margin: 6px 0; }
 .hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: 1.6; }
 .hps-shell-automation .hps-access select { box-sizing: border-box; }
-.hps-shell-automation .hps-input { padding: 10px; border: 1px solid var(--hp-line); border-radius: 10px; background: var(--hp-panel); }
+.hps-shell-automation .hps-input { padding: 10px; border: 1px solid var(--hp-line); border-radius: 10px; background: var(--hp-panel); flex-shrink: 0; }
 .hps-shell-automation .hps-input:focus-within { border-color: var(--hp-accent); }
 .hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: 2px; line-height: 1.6; min-height: 44px; }
 .hps-shell-automation .hps-input textarea:focus { outline: none; }

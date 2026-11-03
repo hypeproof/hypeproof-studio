@@ -105,6 +105,8 @@ const layout = await page.locator('.hps-messages').evaluate(el => {
   compressed:messages.some(m=>m.box.height+2<m.height),viewport:innerHeight};
 });
 if(process.env.HPS_LAYOUT_SCREENSHOT)await page.screenshot({path:process.env.HPS_LAYOUT_SCREENSHOT});
+const send=await page.evaluate(()=>{const b=[...document.querySelectorAll('.hps-input button')].find(b=>b.textContent.includes('보내기'));const r=b.getBoundingClientRect();const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {top:r.top,bottom:r.bottom,hit:b.contains(hit)};});
+assert.ok(send.top>=0&&send.bottom<=540+1&&send.hit,'the composer send button stays visible and clickable with settings open: '+JSON.stringify(send));
 assert.ok(layout.height>=180 && layout.bottom<=layout.footerTop+1 && layout.footerBottom<=layout.viewport+1 && !layout.compressed,
  'short sidebar reserves at least one third for conversation even with settings open, without overlap: '+JSON.stringify(layout));
 await page.setViewportSize({width:300,height:900});
