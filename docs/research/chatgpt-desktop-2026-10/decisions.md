@@ -1688,7 +1688,7 @@ Builds DES-ART-08 on REQ-N11 (CGP-ART-R-008, merged in #1862); CGP-SHELL-D-025 i
 
 Jay, 2026-11-04: turn the blocked notice on for minor cohorts after verifying their allowlists. Supersedes the "default off" bullet of the CGP-ART-D-008 section above.
 - Verified: the Service serves `browser_session` from its profile registry (`resolveProfile` overlays only the system prompt). Two profiles are minor (`minor_cohort: true`, kids-quest, `mode: "safe"`), and both served an empty allowlist, which would have blocked every link. hypeproof-service#321 gives each its own gallery path prefix and makes the `/v1/profile` snapshot test fail on any minor seat with an empty or malformed list. Every other profile is adult (`browse`).
-- Enablement is profile-driven (`safeLinkEnforced`): minor seat + safe session + non-empty allowlist. An empty served list keeps today's integrated route (no block-all). Without a loaded profile, the persisted safe session and persisted non-empty list keep it on (fail closed).
+- Enablement is profile-driven (`safeLinkEnforced`): minor seat + safe session + an allowlist with at least one usable entry. An empty (or all-malformed) served list keeps today's integrated route (no block-all). Without a loaded profile, the persisted safe session and allowlist decide; they are registered only by the core patch, so on current builds the block waits for the profile (the link still stays in the integrated browser). Persisting the list in an extension-owned setting is left for the core-patch batch.
 - `hypeproofChat.safeLinkAllowlistEnabled` stays machine-scoped and its default becomes true; only an explicit `false` turns the block off, as a support override.
 - Adults: unchanged (confirm dialog).
 - Confirmed by Jay: yes (2026-11-04)

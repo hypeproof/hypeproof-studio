@@ -118,6 +118,8 @@ assert.equal(hostAllowed(new URL("https://example.org/"), ["", "   ", "https://"
   assert.equal(on(kid, false), false, "machine setting false forces it off");
   // Negative controls.
   assert.equal(on(kidEmpty, undefined), false, "an empty served list never turns on the block (it would block every link)");
+  assert.equal(on({ ...kid, browser_session: { mode: "safe", allowlist: ["https://", "exa mple.org", "/x"] } }, undefined), false, "only malformed entries count as empty");
+  assert.equal(on({ ...kid, browser_session: { mode: "safe", allowlist: ["https://", "example.org"] } }, undefined), true, "one usable entry is enough");
   assert.equal(on(kidNoFlag, undefined), false, "the profile must mark the seat minor");
   assert.equal(on(grown, undefined), false, "adults: never");
   assert.equal(on({ minor_cohort: true, browser_session: { mode: "browse", allowlist: ["example.org"] } }, undefined), false, "no safe session: unchanged");
