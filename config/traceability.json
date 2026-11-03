@@ -17144,6 +17144,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/questSkill.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationDraftSeal.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/storeMail.ts"
         }
       ]
     },
@@ -17164,6 +17170,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/quest-skill-store.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/store-mail-custody.smoke.mjs"
         },
         {
           "path": "e2e/store/mac-store.mjs"
