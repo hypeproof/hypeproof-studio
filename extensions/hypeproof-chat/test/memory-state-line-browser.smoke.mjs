@@ -5,6 +5,9 @@
 //   2. the settings dialog shows "AI 기억: 켜짐 · .hypeproof/memory/" as plain text, 14px, inside the dialog;
 //   3. neither is a control: no button, input, switch role or tab stop, no "꺼짐" and no "선생님이 정해요" anywhere;
 //   4. a minor cohort's config (same memoryState) shows the same line; a seat without memoryState shows none.
+// CGP-KNOW-D-005 (DES-KNOW-07): the state names its scope, "AI 기억: 켜짐 · 이 작업 공간 안에서만", whole at every width (at
+//   320px it may wrap, but no scope word is cut or split across lines); the tooltip and the accessible text explain the
+//   scope in one sentence; a classroom seat (no store) shows no scope line and no class wording.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +16,9 @@ import { THEMES } from './lib/vscode-default-themes.mjs';
 import { chatConfig } from './sx-screen-fixtures.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
 
-const { MEMORY_STATE_LABEL, MEMORY_FOLDER_LABEL } = await import('../src/activityMemoryView.ts');
+const { MEMORY_STATE_LABEL, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE } = await import('../src/activityMemoryView.ts');
+assert.equal(MEMORY_SCOPE_HEADER, '이 작업 공간 안에서만');
+assert.ok(MEMORY_SCOPE_SENTENCE.includes(MEMORY_FOLDER_LABEL) && MEMORY_SCOPE_SENTENCE.includes('수업 활동에서는') && MEMORY_SCOPE_SENTENCE.endsWith('요.'), 'one sentence naming the folder and the class rule');
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN memory state line: no Chromium'); process.exit(0); }
 const dir = fileURLToPath(new URL('../webview-ui/', import.meta.url));
@@ -25,7 +30,8 @@ const b = await launch(bin);
 const settle = (ms = 80) => new Promise(r => setTimeout(r, ms));
 const send = async (data) => { await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(data)}}))`); await settle(); };
 const shot = async (name) => { if (!evidence) return; const s = await b.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/${name}.png`, Buffer.from(s.data, 'base64')); };
-const FULL = `${MEMORY_STATE_LABEL} · ${MEMORY_FOLDER_LABEL}`;
+const STATE = `${MEMORY_STATE_LABEL} · ${MEMORY_SCOPE_HEADER}`;
+const FULL = `${STATE} · ${MEMORY_FOLDER_LABEL}`;
 const lum = rgb => rgb.slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
 const rgb = v => v.match(/[\d.]+/g).map(Number);
 const contrast = (a, c) => { const x = lum(rgb(a)), y = lum(rgb(c)); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
@@ -51,19 +57,28 @@ try {
       const overlap=others.some(q=>q.left<r.right-.5&&q.right>r.left+.5&&q.top<r.bottom-.5&&q.bottom>r.top+.5);
       // Every other header control stays in the window (the state must not push 자료 or the menu out).
       const out=[...document.querySelectorAll('.hps-header button, .tw-heading button')].filter(x=>!e.contains(x)).map(x=>x.getBoundingClientRect()).filter(q=>q.width>2&&q.height>2&&(q.right>innerWidth+.5||q.left<-.5)).length;
-      return {out,overlap,label:e.textContent.replace(/\u00a0/g,' '),tip:s.getAttribute('data-hp-tooltip'),text:e.textContent.replace(/\u00a0/g,' '),state:s.textContent,whole:s.scrollWidth<=s.clientWidth+1&&r.width>0,inside:r.left>=0&&r.right<=innerWidth+.5,visible:r.width>0&&r.height>0&&getComputedStyle(s).visibility!=='hidden'&&!getComputedStyle(s).clipPath.includes('inset(50%'),
+      // DES-KNOW-07: every scope word is drawn whole on one line (wrapping between words is allowed, a cut is not).
+      const scope=e.querySelector('.hps-memory-now-scope');const words=[];if(scope){const text=scope.textContent;let i=0;for(const w of text.split(/\\s+/)){if(!w)continue;const at=text.indexOf(w,i);i=at+w.length;const node=[...scope.childNodes].find(n=>n.nodeType===3&&n.textContent.includes(w));if(!node)continue;const off=node.textContent.indexOf(w);const g=document.createRange();g.setStart(node,off);g.setEnd(node,off+w.length);const rs=[...g.getClientRects()].filter(q=>q.width>0);const box=s.getBoundingClientRect();words.push({w,lines:new Set(rs.map(q=>Math.round(q.top))).size,inside:rs.every(q=>q.left>=box.left-.5&&q.right<=box.right+.5&&q.left>=0&&q.right<=innerWidth+.5)});}}
+      const sr=e.querySelector('[data-testid=memory-scope-sentence]');const srText=sr?.textContent.trim();
+      return {words,sentence:srText,srHidden:sr?getComputedStyle(sr).clipPath.includes('inset(50%'):null,scopeTip:e.querySelector('.hps-memory-now-folder')?.getAttribute('data-hp-tooltip'),out,overlap,label:e.textContent.replace(/\u00a0/g,' '),tip:s.getAttribute('data-hp-tooltip'),text:e.textContent.replace(/\u00a0/g,' '),state:s.textContent,whole:s.scrollWidth<=s.clientWidth+1&&r.width>0,inside:r.left>=0&&r.right<=innerWidth+.5,visible:r.width>0&&r.height>0&&getComputedStyle(s).visibility!=='hidden'&&!getComputedStyle(s).clipPath.includes('inset(50%'),
         font:parseFloat(c.fontSize),fg:c.color,bg:(${bgOf})(s),controls:e.querySelectorAll('button,input,select,textarea,[role=switch],[tabindex]').length,tab:e.tabIndex}})()`);
     if (seat === 'classroom') {
       assert.equal(header, null, `${tag}: no memory state on a seat without the store`);
+      const page = await b.evaluate(`document.body.innerText`);
+      assert.doesNotMatch(page, /이 수업 안에서만|이 작업 공간 안에서만/, `${tag}: no scope line on a seat without the store`);
       await shot(tag); states++; continue;
     }
     assert.ok(header, `${tag}: the header line is drawn`);
-    assert.equal(header.label, FULL, `${tag}: the full line is in the text a screen reader reads`);
+    assert.equal(header.label, `${FULL} ${MEMORY_SCOPE_SENTENCE}`, `${tag}: the full line and the scope sentence are in the text a screen reader reads`);
+    assert.equal(header.sentence, MEMORY_SCOPE_SENTENCE, `${tag}: the accessible scope sentence`);
+    assert.equal(header.srHidden, true, `${tag}: the sentence is for screen readers; the tooltip shows it on hover`);
+    assert.equal(header.scopeTip, MEMORY_SCOPE_SENTENCE, `${tag}: the folder's tooltip explains the scope too`);
+    assert.deepEqual(header.words.map(w => w.w), ['·', ...MEMORY_SCOPE_HEADER.split(' ')], `${tag}: the scope words are drawn`);
+    for (const w of header.words) assert.ok(w.lines === 1 && w.inside, `${tag}: scope word "${w.w}" whole on one line, in view (${JSON.stringify(w)})`);
     assert.equal(header.overlap, false, `${tag}: nothing in the header row overlaps the state words`);
     assert.equal(header.out, 0, `${tag}: every header control stays inside the window`);
-    assert.equal(header.tip, FULL, `${tag}: the tooltip keeps the full line`);
-    assert.equal(header.text, FULL, `${tag}: state and folder`);
-    assert.equal(header.state, MEMORY_STATE_LABEL);
+    assert.equal(header.tip, MEMORY_SCOPE_SENTENCE, `${tag}: the tooltip explains the scope in one sentence (naming the folder)`);
+    assert.equal(header.state, STATE, `${tag}: state and scope`);
     assert.ok(header.visible && header.whole && header.inside, `${tag}: the state words are whole and in view (${JSON.stringify(header)})`);
     assert.ok(header.font >= 14, `${tag}: ${header.font}px`);
     if (!forcedColors) assert.ok(contrast(header.fg, header.bg) >= 4.5, `${tag}: contrast ${header.fg} on ${header.bg}`);

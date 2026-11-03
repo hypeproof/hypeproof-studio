@@ -18,6 +18,15 @@
   .tw-heading .hps-memory-now-state { position: absolute; inset-inline-end: var(--ds-c-studio-coachrunstate-space-1); bottom: var(--ds-c-studio-coachrunstate-space-2); margin: 0; }
   .hps-memory-now-folder { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+/* CGP-KNOW-D-005 (DES-KNOW-07): at 480px and below the coach run state shares the band (at its start), so the state with
+   its scope takes at most half the band at its end. When it does not fit there, the scope words move to a second line as
+   a unit (and break only between words if even that line is too narrow), never cut. The band is two lines tall there. */
+@media (max-width: 480px) {
+  .tw-heading:has(.hps-memory-now-state .hps-memory-now-scope) { padding-bottom: calc(2 * var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state { max-width: 50%; white-space: normal; text-align: end; line-height: var(--hp-leading-label); }
+  .tw-heading .hps-memory-now-on { white-space: nowrap; }
+  .tw-heading .hps-memory-now-scope { display: inline-block; word-break: keep-all; }
+}
 .hps-memory-now code, .hps-memory-state-setting code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); background: transparent; padding: 0; }
 .hps-memory-state-setting { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */

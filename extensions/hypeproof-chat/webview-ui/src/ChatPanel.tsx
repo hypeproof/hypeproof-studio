@@ -136,7 +136,7 @@ import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } fro
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
 import { TEMPORARY_TASK_COPY, TEMPORARY_TASK_UNAVAILABLE } from "../../src/temporaryTask";
-import { MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
+import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -1734,7 +1734,7 @@ export function ChatPanel(props: Props) {
           </span>;
         })()}
         {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
-            switch; the folder yields first on a narrow header (the tooltip keeps the full line). */}
+            switch; it names its scope (CGP-KNOW-D-005); the folder yields first on a narrow header (the tooltip names it). */}
         {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
@@ -3067,16 +3067,18 @@ function StepDivider({ id, label }: { id: string; label: string }) {
 /**
  * CGP-KNOW-D-022 (DES-KNOW-40) — "AI 기억: 켜짐" with the memory folder. The same words on every seat that has the store,
  * minors included (DEC-02): no switch, no off state, no "선생님이 정해요". Not focusable and not a control.
+ * CGP-KNOW-D-005 (DES-KNOW-07) — the state names its scope, "이 작업 공간 안에서만" (the one scope the store enforces,
+ * CGP-KNOW-R-005), and the tooltip and the accessible text explain it in one sentence. A class seat has no store, so it has
+ * no line and there is no class wording.
  */
 function MemoryStateLine({ folder, place }: { folder: string; place: 'header' | 'settings' }) {
-  const full = `${MEMORY_STATE_LABEL} · ${folder}`;
   return place === 'header'
-    // Two items of the header row (the wrapper is display: contents): the state never shrinks, the folder yields first and
-    // is visually hidden on a narrow header (screen readers still read it; the tooltip keeps the full line).
+    // Two items of the header row (the wrapper is display: contents): the state with its scope never shrinks or cuts, the
+    // folder yields first and is visually hidden on a narrow header (screen readers still read it; the tooltip names it).
     ? <span className="hps-memory-now" data-testid="memory-state-header">
-        <span className="hps-memory-now-state" data-hp-tooltip={full}>{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-folder" data-hp-tooltip={full}>{' · '}<code dir="ltr">{folder}</code></span>
+        <span className="hps-memory-now-state" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}</span></span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}</span>
       </span>
-    : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · <code dir="ltr">{folder}</code></p>;
+    : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · {MEMORY_SCOPE_HEADER} · <code dir="ltr">{folder}</code></p>;
 }
 
 function ContextNote({ text }: { text: string }) {
