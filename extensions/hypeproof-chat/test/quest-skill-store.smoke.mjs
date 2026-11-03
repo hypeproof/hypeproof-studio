@@ -100,4 +100,20 @@ const recipe = defaultAutomationRecipe();
   ok('the buyer\'s turn names the installed skill in x-hps-store-run and nothing else can');
 }
 
+{
+  // D8 structural guard: chatPanelProvider cannot be driven without vscode, so its two exits to a non-Service
+  // runtime are read from source. Before any route is chosen, and in the SDK-unavailable fallback before the
+  // seat's outcome is decided, a store-run task is refused.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
+  const route = src.indexOf('const local = localRuntimeConfig(vscode.env.appName, proxyUrl);');
+  const routeGuard = src.indexOf('throw new Error(STORE_RUN_NEEDS_SERVICE)', route);
+  assert.ok(route > 0 && routeGuard > route && routeGuard < src.indexOf('if (local) {', route), 'refused before the runtime route');
+  const fallback = src.indexOf('if (!(err instanceof SdkUnavailableError)) throw err;');
+  const outcome = src.indexOf('const outcome = sdkUnavailableOutcome(', fallback);
+  const fallbackGuard = src.indexOf('throw new Error(STORE_RUN_NEEDS_SERVICE)', fallback);
+  assert.ok(fallback > 0 && fallbackGuard > fallback && fallbackGuard < outcome, 'refused before the proxy fallback is decided');
+  ok('a store-run task never reaches a local, instructor or proxy runtime, including the SDK-unavailable fallback');
+}
+
 console.log(`quest-skill-store: ${n} passed`);

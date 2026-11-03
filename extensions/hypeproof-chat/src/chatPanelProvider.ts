@@ -84,6 +84,7 @@ import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
 import { TEMPORARY_TASK_NO_IMAGES, TEMPORARY_TASK_NO_WRITE, TEMPORARY_TASK_UNAVAILABLE, temporaryTaskProfile } from './temporaryTask';
 import { STORE_RUN_NEEDS_SERVICE } from './skillStore';
+const STORE_RUN_TASKS_KEY = 'hps.store.runTasks.v1';
 import { parseTaskAppearanceRequest } from './taskAppearance';
 import type { TaskWorkspaceExpected } from './taskWorkspaceContract';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -4948,7 +4949,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Epic #3418 D2 — the task that runs an installed store skill. Turns of that task only carry
    * `x-hps-store-run`; the Service composes the seller's private layer, which never reaches this App.
    */
-  private storeRunTask?: { taskId: string; run: string; title: string };
+  private storeRunTasks?: Map<string, string>;
+  /** Tasks bound to an installed skill, kept across restarts (item ids and versions only, nothing of the skill). */
+  private storeRuns(): Map<string, string> {
+    if (!this.storeRunTasks) {
+      const saved = this.context.globalState.get<Record<string, string>>(STORE_RUN_TASKS_KEY) ?? {};
+      this.storeRunTasks = new Map(Object.entries(saved).filter(([id, run]) => typeof id === 'string' && /^ski_[0-9a-f]{32}@[1-9]\d{0,5}$/.test(String(run))));
+    }
+    return this.storeRunTasks;
+  }
   /** Opens a new task bound to an installed store skill (agent runtime only: the Service composes on /v1/messages). */
   async beginStoreRun(skill: { itemId: string; version: number; title: string }): Promise<void> {
     const run = `${skill.itemId}@${skill.version}`;
@@ -4961,11 +4970,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.handleTaskMessage({ type: 'taskCreate', taskId: before } as WebviewMessage);
     const taskId = this.currentTaskStore?.()?.getView().activeTaskId;
     if (!taskId || taskId === before) throw new Error('새 작업을 열지 못했어요. 다시 실행해 주세요.');
-    this.storeRunTask = { taskId, run, title: skill.title.slice(0, 60) };
+    const runs = this.storeRuns();
+    runs.set(taskId, run);
+    // Bounded: the oldest binding goes first, and its task then runs as an ordinary chat without the skill.
+    while (runs.size > 50) runs.delete(runs.keys().next().value!);
+    await this.context.globalState.update(STORE_RUN_TASKS_KEY, Object.fromEntries(runs));
   }
   /** The store skill the open task runs, or undefined. */
   storeRunFor(taskId: string | null | undefined): string | undefined {
-    return taskId && this.storeRunTask?.taskId === taskId ? this.storeRunTask.run : undefined;
+    return taskId ? this.storeRuns().get(taskId) : undefined;
   }
 
   async beginAutomationConversation(): Promise<void> {
@@ -9904,6 +9917,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (ended) { spoolStatus = "error"; spoolErrorKind = ended.errorKind; opsFailure = ended.failure; }
         } catch (err) {
           if (!(err instanceof SdkUnavailableError)) throw err;
+          // D8: a store run never falls back to the proxy route, whatever the seat would otherwise do.
+          if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId)) throw new Error(STORE_RUN_NEEDS_SERVICE);
           // REQ-M45 — an SDK-only seat (native trial, pass) or a picked pass is refused on the proxy
           // route by the Service, so it never falls back: every branch shows the same install notice
           // and the raw English reason goes to the developer log only. Classroom seats keep the
