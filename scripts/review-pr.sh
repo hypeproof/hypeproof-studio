@@ -2,6 +2,7 @@
 # JY dev review: one command from PR number to Dev app window.
 # Usage: bash scripts/review-pr.sh <PR-number-or-branch> [--provider claude|codex|service] [--vault <path>]
 #                                   [--profile <id>] [--cohort <id>] [--no-app]
+#                                   [--chalk-ref <branch> | --chalk-pr <N>] [--with-chalk | --no-chalk]
 # Wraps studio-dev.py; never touches production values.
 # --vault <path>   explicit path to the curriculum_wiki vault for Chalk knowledge import.
 #                  Falls back to CHALK_VAULT_PATH env var, then auto-detects sibling repo paths.
@@ -10,6 +11,10 @@
 # --cohort <id>    override the default review cohort (default: derived from --profile's file).
 #                  If --profile is given without --cohort the cohort is read from that profile file.
 # --no-app         stop before launching the Dev app (step 5); keep the local server running.
+# --chalk-ref <b>  build the Dev app's Chalk extension from origin/<b> of the sibling hypeproof-chalk
+#                  checkout (default: origin/main). Built in a temporary worktree, removed on exit.
+# --chalk-pr <N>   the same, from pull request N of hypeproof-chalk.
+# --no-chalk       do not install Chalk into the Dev app. --with-chalk: a missing checkout fails.
 #                  Use for automated pre-flight checks (set_inputs → save_plan flow) without a GUI.
 set -Eeuo pipefail
 
@@ -23,11 +28,15 @@ REVIEW_PROFILE_ARG=""
 REVIEW_COHORT_ARG=""
 NO_APP=0
 AFTER_SCRIPT=""
+CHALK_REF_ARG=""
+CHALK_PR_ARG=""
+CHALK_FLAG=""
+CHALK_WT=""
 DEV_APP_PID=""
 STUDENT_SESSION=0
 
 if [[ -z "$INPUT" ]]; then
-  echo "Usage: bash scripts/review-pr.sh <PR-number-or-branch> [--provider claude|codex|service] [--vault <path>] [--profile <id>] [--cohort <id>] [--no-app] [--student-session]" >&2
+  echo "Usage: bash scripts/review-pr.sh <PR-number-or-branch> [--provider claude|codex|service] [--vault <path>] [--profile <id>] [--cohort <id>] [--no-app] [--student-session] [--chalk-ref <branch> | --chalk-pr <N>] [--with-chalk | --no-chalk]" >&2
   exit 1
 fi
 shift
@@ -40,6 +49,12 @@ while [[ $# -gt 0 ]]; do
     --no-app) NO_APP=1; shift ;;
     --after) AFTER_SCRIPT="$2"; shift 2 ;;
     --student-session) STUDENT_SESSION=1; shift ;;
+    --chalk-ref) CHALK_REF_ARG="$2"; shift 2 ;;
+    --chalk-pr)
+      [[ "$2" =~ ^[0-9]+$ ]] || { echo "--chalk-pr needs a PR number: $2" >&2; exit 1; }
+      CHALK_PR_ARG="$2"; shift 2 ;;
+    --with-chalk) CHALK_FLAG="--with-chalk"; shift ;;
+    --no-chalk) CHALK_FLAG="--no-chalk"; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -142,6 +157,10 @@ cleanup() {
   [[ -n "${TOKEN_ERR_TMP:-}" ]] && rm -f "$TOKEN_ERR_TMP" 2>/dev/null || true
   # Student token file (--student-session): cleanup target, never survives the session.
   rm -f "${WORKTREE_DIR}/student-token.txt" 2>/dev/null || true
+  if [[ -n "${CHALK_WT:-}" && -d "$CHALK_WT" ]]; then
+    echo "Removing Chalk worktree $CHALK_WT..."
+    git -C "${CHALK_SRC:-$REPO}" worktree remove "$CHALK_WT" --force 2>/dev/null || true
+  fi
   if [[ -d "$WORKTREE_DIR" ]]; then
     echo "Removing worktree $WORKTREE_DIR..."
     git -C "$REPO" worktree remove "$WORKTREE_DIR" --force 2>/dev/null || true
@@ -514,6 +533,36 @@ else
   echo ""
   echo "=== [5/6] Dev app ==="
 
+  # Chalk for the Dev app: a temporary worktree of the sibling hypeproof-chalk
+  # checkout, packed with npm run vsix. The user's Chalk working tree and node_modules
+  # stay untouched; only the remote-tracking ref is fetched.
+  CHALK_SIBLING="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")/../hypeproof-chalk"
+  CHALK_SRC=""
+  if [[ "$CHALK_FLAG" != "--no-chalk" ]]; then
+    CHALK_SRC="$(cd "${HPS_CHALK_CHECKOUT:-$CHALK_SIBLING}" 2>/dev/null && pwd -P || true)"
+    if [[ -n "$CHALK_SRC" ]] && ! git -C "$CHALK_SRC" remote get-url origin 2>/dev/null | grep -Eq '[:/]hypeproof/hypeproof-chalk(\.git)?/?$'; then
+      CHALK_SRC=""
+    fi
+    if [[ -z "$CHALK_SRC" && ( -n "$CHALK_REF_ARG" || -n "$CHALK_PR_ARG" ) ]]; then
+      echo "ERROR: --chalk-ref and --chalk-pr need a hypeproof-chalk checkout beside this repo or HPS_CHALK_CHECKOUT." >&2
+      exit 1
+    fi
+  fi
+  if [[ -n "$CHALK_SRC" ]]; then
+    if [[ -n "$CHALK_PR_ARG" ]]; then CHALK_SPEC="pull/$CHALK_PR_ARG/head"; else CHALK_SPEC="${CHALK_REF_ARG:-main}"; fi
+    git -C "$CHALK_SRC" fetch origin "$CHALK_SPEC" --quiet
+    CHALK_SHA="$(git -C "$CHALK_SRC" rev-parse FETCH_HEAD)"
+    CHALK_WT="$TMP_BASE/chalk-review-${SAFE_BRANCH}"
+    if [[ -d "$CHALK_WT" ]]; then
+      git -C "$CHALK_WT" checkout --detach "$CHALK_SHA" 2>&1
+    else
+      git -C "$CHALK_SRC" worktree add --detach "$CHALK_WT" "$CHALK_SHA" 2>&1
+    fi
+    (cd "$CHALK_WT" && npm ci --prefer-offline --silent 2>&1)
+    export HPS_CHALK_CHECKOUT="$CHALK_WT"
+    echo "Chalk: $CHALK_SPEC at $CHALK_SHA (worktree $CHALK_WT)"
+  fi
+
   # Note: instructor (issuer) token is seeded only via HPS_DEV_ISSUER_TOKEN_FILE above.
   # Never write it to local-participant-token.txt (TOKEN_KEY student slot).
 
@@ -521,6 +570,7 @@ else
   DEV_APP_RAW="$(python3 "$WORKTREE_DIR/scripts/studio-dev.py" run \
     --provider "$PROVIDER" \
     --service local \
+    ${CHALK_FLAG:+$CHALK_FLAG} \
     ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)"
   echo "$DEV_APP_RAW"
   DEV_APP_PID="$(echo "$DEV_APP_RAW" | grep -oE 'Development process started: [0-9]+' | grep -oE '[0-9]+$' || true)"

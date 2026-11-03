@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -457,5 +458,124 @@ class DevLauncherTests(unittest.TestCase):
             receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
             self.assertIsNotNone(receipt['previous_app'])
             self.assertTrue(Path(receipt['previous_app']).is_dir())
+
+class DevChalkTests(DevLauncherTests):
+    def chalk_fixture(self, root, origin='https://github.com/hypeproof/hypeproof-chalk.git', name='hypeproof-chalk'):
+        chalk = root/'hypeproof-chalk'; chalk.mkdir()
+        (chalk/'package.json').write_text(json.dumps({'publisher': 'hypeproof', 'name': name, 'version': '0.1.0'}), encoding='utf-8')
+        (chalk/'node_modules').mkdir()
+        for args in [('init', '-q'), ('config', 'user.name', 'Chalk Test'), ('config', 'user.email', 'chalk@example.invalid'), ('remote', 'add', 'origin', origin), ('add', '.'), ('commit', '-qm', 'fixture')]:
+            subprocess.run(['git', *args], cwd=chalk, check=True, capture_output=True)
+        return chalk
+
+    def chalk_base(self, base):
+        cli = base/'resources/app/bin/hypeproof-studio.cmd'
+        cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
+
+    @staticmethod
+    def fake_run(npm_fails=False, calls=None):
+        def fake(args, **kwargs):
+            args = [str(a) for a in args]
+            if calls is not None:
+                calls.append(args)
+            if args[0] in ('npm', shutil.which('npm') or 'npm'):
+                if npm_fails:
+                    raise subprocess.CalledProcessError(1, args)
+                dist = Path(kwargs['cwd'])/'dist'; dist.mkdir(exist_ok=True)
+                (dist/'hypeproof-chalk-0.1.0.vsix').write_bytes(b'synthetic vsix')
+                return subprocess.CompletedProcess(args, 0)
+            if args[0].endswith('hypeproof-studio.cmd'):
+                extensions = Path(next(a.split('=', 1)[1] for a in args if a.startswith('--extensions-dir=')))
+                folder = extensions/'hypeproof.hypeproof-chalk-0.1.0'; folder.mkdir(parents=True)
+                (folder/'package.json').write_text('{}', encoding='utf-8')
+                return subprocess.CompletedProcess(args, 0)
+            raise AssertionError('unexpected command: ' + repr(args))
+        return fake
+
+    def test_chalk_default_installs_built_vsix_and_records_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            chalk = self.chalk_fixture(Path(tmp))
+            commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=chalk, text=True).strip()
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run()), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local', False, 'auto')
+            self.assertTrue((state/'extensions/hypeproof.hypeproof-chalk-0.1.0/package.json').is_file())
+            receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
+            self.assertEqual(receipt['chalk']['commit'], commit)
+            self.assertFalse(receipt['chalk']['dirty'])
+            self.assertEqual(receipt['chalk']['ref'], 'main')
+            self.assertEqual(len(receipt['chalk']['vsix_sha256']), 64)
+
+    def test_no_chalk_removes_installed_copy_and_never_builds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            stale = state/'extensions/hypeproof.hypeproof-chalk-0.1.0'; stale.mkdir(parents=True)
+            calls = []
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local', False, 'off')
+            self.assertFalse(stale.exists())
+            self.assertEqual(calls, [])
+            self.assertIsNone(json.loads((state/'receipt.json').read_text(encoding='utf-8'))['chalk'])
+
+    def test_missing_checkout_is_a_note_by_default_and_a_failure_when_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            missing = Path(tmp)/'no-such-chalk'
+            printed = []
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(missing)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print', side_effect=lambda *a, **k: printed.append(' '.join(map(str, a)))):
+                dev.prepare(repo, base, state, 'local', False, 'auto')
+            self.assertIn('NOTE: Chalk checkout not found; Dev app runs without the Chalk extension.', printed)
+            self.assertIsNone(json.loads((state/'receipt.json').read_text(encoding='utf-8'))['chalk'])
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(missing)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                with self.assertRaisesRegex(RuntimeError, 'no Chalk checkout'):
+                    dev.prepare(repo, base, state, 'local', False, 'on')
+
+    def test_failed_vsix_build_fails_prepare_and_keeps_the_running_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            chalk = self.chalk_fixture(Path(tmp))
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(npm_fails=True)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                with self.assertRaisesRegex(RuntimeError, 'npm run vsix failed.*--no-chalk'):
+                    dev.prepare(repo, base, state, 'local', False, 'auto')
+            self.assertTrue((old/'marker.txt').is_file())
+            self.assertFalse((state/'receipt.json').exists())
+
+    def test_other_repository_is_not_a_chalk_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            other = self.chalk_fixture(Path(tmp), origin='https://github.com/hypeproof/hypeproof-studio.git')
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(other)}):
+                checkout, reason = dev.chalk_checkout(Path(tmp))
+            self.assertIsNone(checkout)
+            self.assertIn('is not a checkout of hypeproof/hypeproof-chalk', reason)
+
+    def test_wrong_extension_name_is_not_a_chalk_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong = self.chalk_fixture(Path(tmp), name='hypeproof-chalk-fork')
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(wrong)}):
+                checkout, reason = dev.chalk_checkout(Path(tmp))
+            self.assertIsNone(checkout)
+            self.assertIn('package.json is not hypeproof.hypeproof-chalk', reason)
+
+    def test_flag_and_environment_must_agree(self):
+        with patch.dict(os.environ, {'HPS_DEV_CHALK': '0'}):
+            self.assertEqual(dev.chalk_mode(True, False), 'on')
+        with patch.dict(os.environ, {'HPS_DEV_CHALK': '1'}):
+            self.assertEqual(dev.chalk_mode(False, True), 'off')
+        with patch.dict(os.environ, {'HPS_DEV_CHALK': 'yes'}):
+            with self.assertRaisesRegex(ValueError, 'HPS_DEV_CHALK must be 0 or 1'):
+                dev.chalk_mode(False, False)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(dev.chalk_mode(False, False), 'auto')
+            with self.assertRaisesRegex(ValueError, 'only one'):
+                dev.chalk_mode(True, True)
+
+    def test_official_build_scripts_never_mention_chalk(self):
+        root = Path(__file__).resolve().parents[1]
+        for relative in ['scripts/inject-builtin-extensions.sh', 'scripts/apply-product-overrides.sh']:
+            self.assertNotIn('chalk', (root/relative).read_text(encoding='utf-8').lower(), relative)
 
 if __name__=='__main__': unittest.main()

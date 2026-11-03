@@ -814,6 +814,37 @@ else
   fail "71: applicationName pgrep still used or state-path check missing"
 fi
 
+# 77. Chalk flags reach studio-dev.py only as flags; no shell string splicing.
+if grep -q '\${CHALK_FLAG:+\$CHALK_FLAG}' "$SCRIPT" && grep -q -- '--chalk-ref) CHALK_REF_ARG' "$SCRIPT" && grep -q -- '--with-chalk) CHALK_FLAG' "$SCRIPT" && grep -q -- '--no-chalk) CHALK_FLAG' "$SCRIPT"; then
+  ok "77: --chalk-ref/--chalk-pr/--with-chalk/--no-chalk parsed and passed to studio-dev run"
+else
+  fail "77: Chalk flags missing from parser or studio-dev run"
+fi
+
+# 78. npm ci for Chalk runs only in the temporary worktree, never in the user's checkout.
+if grep -q 'npm ci --prefer-offline --silent 2>&1)' "$SCRIPT" && grep -q '(cd "\$CHALK_WT" && npm ci' "$SCRIPT" && ! grep -q '(cd "\$CHALK_SRC" && npm' "$SCRIPT"; then
+  ok "78: Chalk npm ci runs only inside the temporary worktree"
+else
+  fail "78: Chalk npm ci could touch the user's Chalk checkout"
+fi
+
+# 79. Cleanup removes the Chalk worktree before the studio worktree.
+CW_LINE="$(grep -n 'worktree remove "\$CHALK_WT"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+SW_LINE="$(grep -n 'worktree remove "\$WORKTREE_DIR"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+if [[ -n "$CW_LINE" && -n "$SW_LINE" && "$CW_LINE" -lt "$SW_LINE" ]]; then
+  ok "79: cleanup removes the Chalk worktree before the studio worktree"
+else
+  fail "79: Chalk worktree removal missing or out of order (chalk=$CW_LINE studio=$SW_LINE)"
+fi
+
+# 80. --chalk-pr rejects a non-numeric value before any network call.
+CP_OUT="$(bash "$SCRIPT" 1 --chalk-pr abc 2>&1 || true)"
+if [[ "$CP_OUT" == *"--chalk-pr needs a PR number"* ]]; then
+  ok "80: --chalk-pr rejects non-numeric input"
+else
+  fail "80: --chalk-pr accepted non-numeric input: $CP_OUT"
+fi
+
 for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
 rm -rf "$PS_TMP"
 
