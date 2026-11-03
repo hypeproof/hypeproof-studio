@@ -194,7 +194,12 @@ await t("host wiring: large folders take a tracked point; every approved write i
   ok(/if \(!point\.complete\) \{[\s\S]*?return await this\.beginTrackedTurnRestore\(/.test(begin), "an incomplete walk falls back to a tracked point");
   // Each coach runtime's approval callback (instructor, local, agent-sdk) captures after the answer.
   eq((src.match(/await this\.captureTurnWrite\(streamId, ?action, ?approved\);/g) ?? []).length, 3, "captures in approval callbacks");
-  ok(/a\.kind === 'approval' && a\.allowed && \(a\.name === 'Bash' \|\| a\.name === 'PowerShell'\)\) this\.turnWriteTrackers\.get\(streamId\)\?\.noteShell\(\)/.test(src), "shell steps noted");
+  ok(/a\.kind === 'approval' && a\.allowed && \(a\.name === 'Bash' \|\| a\.name === 'PowerShell'\)\) this\.turnWriteTrackers\?\.get\(streamId\)\?\.noteShell\(\)/.test(src), "shell steps noted");
+  // Every tool's approval runs through captureTurnWrite: a non-write tool must leave before any restore state
+  // is read, and nothing in it may throw (a throw there broke WebSearch approvals on main at #3456).
+  const capture = src.slice(src.indexOf("  private async captureTurnWrite("), src.indexOf("  /** After a coach turn: compare"));
+  ok(/^\s*private async captureTurnWrite\([^)]*\): Promise<void> \{\s*if \(!approved \|\| !isWriteToolName\(action\.toolName\)\) return;\s*try \{/.test(capture), "non-write tools return first; the rest is inside try");
+  ok(/\} catch \{ \/\* not covered at the turn's end \*\/ \}\s*\}\s*$/.test(capture), "capture never throws into the approval callback");
   const end = src.slice(src.indexOf("  private async endTurnRestore("), src.indexOf("  private async refuseSendWhileRestoring("));
   ok(end.includes("label: TRACKED_SHELL_NOTICE"), "shell notice posted at the turn's end");
   ok(end.includes("await scanForPoint(handle.root, handle.point)"), "tracked turn compares only its paths");
