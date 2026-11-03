@@ -5,7 +5,11 @@
 #   CUJ-1  REQ-STUDIO-FREE-START, TUX-SP-14/15/16, US-04, US-19 / scripts/release/templates/install-mac.sh
 #   CUJ-2  TUX-SP-17, TUX-COND-07, REQ-L12, AB-13, AB-14
 #   CUJ-3  US-03, US-04, US-09, US-10, US-12, REQ-P4
-#   CUJ-4  REQ-I2, REQ-I3, REQ-I4, REQ-I13 to REQ-I16, US-13, TUX-COND-02
+#   CUJ-4  REQ-I2, REQ-I3, REQ-I4, REQ-I13 to REQ-I16, US-13, TUX-COND-02, REQ-STUDIO-AUTO-UPDATE
+#   CUJ-5  REQ-STUDIO-PREVIEW-FOLLOW, REQ-STUDIO-PREVIEW-RECOVERY (2026-11-03: a member's localhost
+#          preview could not be seen by the coach, #3425 — the core "make a page" loop had no journey)
+#   CUJ-6  REQ-STUDIO-REPORT-LOGS, REQ-STUDIO-FEEDBACK-ENTRY (2026-11-03: the report path is how
+#          escaped bugs reach us; it was untested end to end, #3426)
 # 요구사항 문서에 다른 핵심 여정이 있는지도 봤다. Windows 설치(PRA-09, PRA-12, REQ-I9)는 별도 여정이 아니라
 # CUJ-1 의 다른 입구로 둔다: config/release-platforms.json 이 2026-10-20(#2139)부터 win32-x64 를 다시 출시하고,
 # 설치 뒤 시작 화면은 같은 코드다(BB-026). 강사 Chalk 는 별도 표면(chalk.hypeproof-ai.xyz)이라 앱 릴리스 여정이 아니다.
@@ -34,3 +38,15 @@ journeys:
     goal: 새 버전이 나왔을 때 사용자가 앱 안에서 업데이트하고, 재시작 뒤에도 활동·파일·대화가 그대로다.
     entry: 이전 안정 버전이 깔린 Mac 에 새 안정 버전이 공개된다.
     done_when: 새 버전으로 재시작한 뒤 같은 활동·파일·대화가 보인다.
+
+  - id: CUJ-5
+    title: 만든 페이지를 미리보기로 열고 코치와 같은 화면을 본다
+    goal: 사용자가 만든 웹 페이지를 Studio 에서 띄운 로컬 서버(localhost)로 열고, 코치가 그 서버가 보여 주는 파일과 화면을 사용자와 똑같이 확인해 고친다.
+    entry: 작업 폴더에 페이지가 있고, 채팅에서 미리보기 서버를 띄워 달라고 하거나 이미 떠 있다.
+    done_when: 코치가 서버가 보여 주는 파일 이름을 말하고 그 화면을 기준으로 고친 결과가 같은 주소에서 보인다.
+
+  - id: CUJ-6
+    title: 불편하거나 고장 나면 앱 안에서 보내고 운영팀이 원인을 안다
+    goal: 사용자가 오류든 단순한 불편이든 앱 안에서 두 번 클릭으로 보내고, 운영팀이 받은 신고만으로 원인을 찾는다.
+    entry: 채팅의 대화 메뉴 또는 오류 카드.
+    done_when: 신고가 운영팀에 도착하고, 붙은 기록에 실제 원인 줄이 남아 있다.
