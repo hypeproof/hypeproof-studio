@@ -1,5 +1,6 @@
 import { FolderConsentDialog } from './FolderConsentDialog';
-import { ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import { DoctorNoticeLine, ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import type { DoctorNotice } from '../../src/studioDoctor';
 import type { OfferReason, ProblemReportFormView } from '../../src/problemReport';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import {BrowserApprovalDialog} from './BrowserApprovalDialog';
@@ -438,6 +439,7 @@ export function App() {
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [problemForm,setProblemForm]=useState<ProblemReportFormView|null>(null);
   const [problemOffer,setProblemOffer]=useState<OfferReason|null>(null);
+  const [doctorNotice,setDoctorNotice]=useState<DoctorNotice|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
@@ -506,6 +508,7 @@ export function App() {
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'problemReportForm': setProblemForm(msg.form); if (msg.form) setProblemOffer(null); return;
         case 'problemReportOffer': setProblemOffer(msg.offer?.reason ?? null); return;
+        case 'doctorNotice': setDoctorNotice(msg.notice ?? null); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
         case 'taskWorkspaceError':
@@ -816,6 +819,7 @@ export function App() {
     </PanelBoundary>
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {doctorNotice && !problemForm && <DoctorNoticeLine notice={doctorNotice} onAnswer={fix=>{postToHost({type:'doctorNoticeAnswer',id:doctorNotice.id,fix});setDoctorNotice(null);}}/>}
       {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
       {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
@@ -964,6 +968,7 @@ export function App() {
           postToHost({ type: "saveCoach", name, personality })
         }
         onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
       />

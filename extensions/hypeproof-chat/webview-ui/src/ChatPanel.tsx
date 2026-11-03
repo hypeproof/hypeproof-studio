@@ -259,6 +259,8 @@ interface Props {
   onNamingRitual: () => void;
   onSaveCoach: (name: string, personality: string) => void;
   onReportProblem: (source?: "error") => void;          // #64; "error" = the error card (REQ-STUDIO-PROBLEM-REPORT)
+  /** REQ-STUDIO-DOCTOR — the error card's 「진단하기」 (the host shows the full check list). */
+  onDiagnose?: () => void;
   onInstallUpdate: () => void;                          // #72
   onDismissUpdate: (version: string) => void;           // #72
   // #1298 — when true, student-only surfaces (MissionHeader, HelpRequest, artifact approval) are hidden.
@@ -2154,6 +2156,7 @@ export function ChatPanel(props: Props) {
             onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(() => { sendWhenOnline(props.onRetryLast, 'press'); }); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={() => props.onReportProblem("error")}
+            onDiagnose={props.onDiagnose}
             audience={audience}
           />
         )}
@@ -3455,6 +3458,7 @@ function ErrorBanner({
   onRetry,
   onDismiss,
   onReport,
+  onDiagnose,
   audience = "classroom",
 }: {
   message: string;
@@ -3464,6 +3468,7 @@ function ErrorBanner({
   onRetry: () => void;
   onDismiss: () => void;
   onReport: () => void;
+  onDiagnose?: () => void;
   audience?: SeatAudience;
 }) {
   // Spot common transport-layer signals so the framing is honest about the
@@ -3511,6 +3516,15 @@ function ErrorBanner({
             data-hp-tooltip={reportButtonTitle(audience)}
           >
             <ChatIcon kind="flag" size={16} /> 문제 보내기
+          </button>
+        )}
+        {!notice && onDiagnose && (
+          <button
+            className="hps-error-banner-report hps-error-banner-diagnose"
+            onClick={onDiagnose}
+            data-hp-tooltip="이 컴퓨터의 Studio 설정을 확인해요"
+          >
+            진단하기
           </button>
         )}
         <button

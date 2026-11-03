@@ -100,7 +100,9 @@ import { resolveSdkBinaryForHost, runSdkCoach, SdkGatewayAuthError, SdkUnavailab
 import { fetchSdkSeed } from "./sdkSeedFetch";
 import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
-import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
+import { SdkRequiredError, sdkUnavailableOutcome, profileRequiresSdk } from "./sdkRequiredHelpers";
+import { StudioDoctorHost } from "./studioDoctorHost";
+import { doctorAttachment, type DoctorNotice } from "./studioDoctor";
 import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, problemReportUiState, type FailureFacts, type ProblemReportEntry, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
 import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
 import { LogLineBuffer, WEBVIEW_ERRORS_KEY, rememberWebviewError, validWebviewErrors, webviewErrorRecord } from "./reportLogs";
@@ -3138,6 +3140,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly problemTracker = new ProblemTracker();
   private lastProblem?: { diagnostic: ProblemDiagnostic; at: number };
   private problemForm?: { id: string; finish(answer: ProblemReportAnswer | null): void };
+  /** REQ-STUDIO-DOCTOR — Studio 진단 (studioDoctorHost.ts). Absent on hosts assembled without the constructor. */
+  doctor?: StudioDoctorHost;
+  /** The quiet doctor line now on screen; its fix runs only from this host copy, never from an id the webview sends. */
+  private doctorShown: DoctorNotice | null = null;
   /** REQ-STUDIO-REPORT-LOGS — the webview crashed in this app session (the log box starts ticked). */
   private webviewCrashedThisSession = false;
   /**
@@ -3226,6 +3232,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
     context.subscriptions.push(setProblemSink(facts => this.noteProblem(facts)));
+    // REQ-STUDIO-DOCTOR — background checks: once ~60 s after startup, after failures, before a report is sent.
+    this.doctor = new StudioDoctorHost(context, {
+      workFolder: () => this.lowDiskFolder(),
+      sdkRequired: () => profileRequiresSdk(this.cachedProfile),
+      hasActiveStream: () => this.hasActiveStream(),
+      refreshProfile: async () => !!(await this.refreshProfileAndConfig()),
+      reseedSdk: () => this.doctorReseedSdk(),
+      showNotice: (notice) => { this.doctorShown = notice; return this.post({ type: "doctorNotice", notice }); },
+      token: () => Promise.resolve(this.context.secrets.get(TOKEN_KEY)),
+    });
+    context.subscriptions.push(this.doctor);
+    this.doctor.scheduleStartup();
     context.subscriptions.push({ dispose: () => this.problemForm?.finish(null) });
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
@@ -3391,6 +3409,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void postAutoReport(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"), diagnostic);
     }
     if (note.offer) void this.post({ type: "problemReportOffer", offer: { reason: "repeat" } });
+    this.doctor?.noteFailure();
+  }
+
+  /**
+   * REQ-STUDIO-DOCTOR fix 「AI 작업 도구 다시 받기」: the REQ-M46 on-demand seed (its own confirm modal, pinned hash).
+   * Returns false when the seed is not offered for this seat (switched off); the doctor host then opens the install page.
+   */
+  async doctorReseedSdk(): Promise<boolean> {
+    const cfg = vscode.workspace.getConfiguration("hypeproofChat");
+    if (!sdkSeedOnDemandEnabled({ setting: cfg.get<boolean>("sdkSeedOnDemand", false), profile: this.cachedProfile })) return false;
+    // A click is a fresh request: an earlier 「아니요」 to the turn-time offer does not answer it.
+    this.sdkSeedDeclined = false;
+    await this.maybeOfferSdkSeed(this.cachedProfile, cfg.get<string>("sdkBinaryPath"), new AbortController().signal);
+    return true;
   }
 
   /**
@@ -3428,13 +3460,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         contactPrompt: reportContactPrompt(audience), contactPlaceholder: reportContactPlaceholder(audience), recentTurns: turns.length,
         autoReport: autoProblemReportEnabled(this.context.globalState),
         logs: { available: logsAvailable(logDir, this.coachLog.text()), checked: crashed, errorCount: webviewErrors.length },
+        // REQ-STUDIO-DOCTOR — 「진단 결과 첨부」, ticked by default: codes and versions only.
+        doctor: { available: !!this.doctor, checked: true },
       } }).then(shown => { if (shown === false) this.problemForm?.finish(null); });
     });
     if (!answer) return true;
+    // REQ-STUDIO-DOCTOR — run before the report leaves, so the attachment describes this moment.
+    const doctor = answer.includeDoctor && this.doctor ? await this.doctor.run().then(doctorAttachment, () => undefined) : undefined;
     const token = await this.context.secrets.get(TOKEN_KEY);
     const jti = token ? extractJtiUnverified(token) : undefined;
     const body = problemReportBody(answer, {
-      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(), uiState,
+      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(), uiState, doctor,
       logs: { webview_errors: webviewErrors, ...(answer.includeLogs ? await readSessionLogs(logDir, this.coachLog.text()) : {}) },
       metadata: collectReportMetadata(this.context, { requestId: this.lastRequestId, profileId: this.getProfileId(), jtiHash: jti ? await hashJti(jti) : undefined }),
     });
@@ -8114,6 +8150,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "problemReportAutoSetting":
         // The form's own toggle is the only place this switch changes (REQ-H10); it sends nothing by itself.
         if (this.problemForm && typeof msg.enabled === "boolean") await this.context.globalState.update(AUTO_PROBLEM_REPORT_KEY, msg.enabled);
+        return;
+      case "doctorNoticeAnswer": {
+        // REQ-STUDIO-DOCTOR — the quiet line's button runs the fix this host chose; 닫기 only hides the line.
+        const shown = this.doctorShown;
+        if (!shown || msg.id !== shown.id) return;
+        this.doctorShown = null;
+        void this.post({ type: "doctorNotice", notice: null });
+        if (msg.fix === true && shown.fix) await this.doctor?.fix(shown.fix.id);
+        return;
+      }
+      case "runDoctor":
+        // The error card's 「진단하기」: the full list (same as the command).
+        await this.doctor?.showList();
         return;
       case "problemReportOfferAnswer":
         void this.post({ type: "problemReportOffer", offer: null });
