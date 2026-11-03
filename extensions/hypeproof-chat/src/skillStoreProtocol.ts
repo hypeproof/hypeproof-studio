@@ -1,12 +1,23 @@
 // Messages between the skill store panel (webview surface "skill-store") and its host
 // (skillStorePanel.ts). REQ-STORE-* in docs/studio-requirements.md, Epic #3418.
 
+/** The public layer of one step (design v1 D4). The private layer never reaches the App. */
+export interface StoreStepView {
+  step_id: string;
+  title: string;
+  description: string;
+  connections: { id: string; why: string }[];
+}
 export interface StoreItemView {
   id: string;
   title: string;
   summary: string;
   price_krw: number;
+  version: number;
   tools: string[];
+  outputs: string[];
+  steps: StoreStepView[];
+  connections: string[];
   seller_name: string;
   refund_window_days: number;
 }
@@ -15,6 +26,11 @@ export interface StoreInstallView {
   title: string;
   summary: string;
   price_krw: number;
+  version: number;
+  public: { steps: StoreStepView[]; outputs: string[] };
+  update_available: boolean;
+  runnable: boolean;
+  warning: "reported" | null;
   order_id: string | null;
   first_run_at: number | null;
   refundable: boolean;
@@ -65,6 +81,7 @@ export interface StoreState {
   checks?: string[];
   testPayments: boolean;
 }
+/** The App's single-step draft. The Service checks the text, seals it and never returns it. */
 export interface StorePublishDraft {
   title: string;
   summary: string;
@@ -78,7 +95,6 @@ export type StoreRequest =
   | { type: "storeDeclareAge"; birthYear: number }
   | { type: "storeBuy"; itemId: string }
   | { type: "storeInstallFree"; itemId: string }
-  | { type: "storeRun"; itemId: string }
   | { type: "storeRefund"; orderId: string }
   | { type: "storeReport"; itemId: string; reason: string }
   | { type: "storePublish"; draft: StorePublishDraft }

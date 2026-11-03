@@ -287,7 +287,6 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!profile) return "none";
       return profile.activity_kind === "classroom" || isMinorProfile(profile) ? "classroom" : "personal";
     },
-    attachToChat: skill => provider.attachStoreSkill(skill),
   });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);

@@ -6,7 +6,7 @@
 // server to server). The App never sees card data and never decides a refund or a price rule.
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
-import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage, storeSkillBlock } from "./skillStore";
+import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage } from "./skillStore";
 import type { StoreHostMessage, StoreRequest, StoreState, StoreTab } from "./skillStoreProtocol";
 
 export const SKILL_STORE_COMMAND = "hypeproof-chat.skillStore";
@@ -22,8 +22,6 @@ export interface SkillStoreDeps {
    * (a class or minor cohort, which must not pay for or reach the store), or `none`.
    */
   seat: () => Promise<"personal" | "classroom" | "none">;
-  /** Hands the downloaded skill to the chat panel for the buyer's next turn. */
-  attachToChat: (skill: { item_id: string; title: string; body: string }) => Promise<void>;
 }
 
 export function registerSkillStore(context: vscode.ExtensionContext, deps: SkillStoreDeps): void {
@@ -142,21 +140,6 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           await c.installFree(msg.itemId);
           const title = state.items.find((i) => i.id === msg.itemId)?.title ?? "";
           await load("mine", { notice: STORE_COPY.paid(title) });
-        });
-      case "storeRun":
-        return run(async () => {
-          // The first fetch ends the refund right, so nothing is fetched until the buyer's own seat can run it,
-          // and a refundable install asks first.
-          const seat = await deps.seat().catch(() => "none" as const);
-          if (seat !== "personal") return void push({ busy: false, error: seat === "classroom" ? STORE_COPY.classroomSeat : STORE_COPY.needsSeat });
-          const install = state.installs.find((i) => i.item_id === msg.itemId);
-          if (install?.refundable) {
-            const ok = await vscode.window.showWarningMessage(STORE_COPY.runEndsRefund, { modal: true }, "실행하기");
-            if (ok !== "실행하기") return void push({ busy: false });
-          }
-          const skill = await c.run(msg.itemId);
-          await deps.attachToChat({ item_id: skill.item_id, title: skill.title, body: skill.body });
-          await load("mine", { notice: STORE_COPY.ran(skill.title) });
         });
       case "storeRefund":
         return run(async () => {

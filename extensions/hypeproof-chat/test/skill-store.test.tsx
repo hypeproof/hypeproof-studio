@@ -12,7 +12,11 @@ import type { StoreRequest, StoreState } from '../src/skillStoreProtocol';
 for (const name of ['Node', 'Element']) (globalThis as any)[name] ??= (window as any)[name];
 (globalThis as any).HTMLElement ??= (window as any).Element;
 
-const PAID = { id: 'ski_' + 'a'.repeat(32), title: '회의록 정리 스킬', summary: '회의 메모를 표로 정리해요.', price_krw: 10000, tools: ['read', 'write'], seller_name: 'seller', refund_window_days: 7 };
+const STEPS = [
+  { step_id: 'read-notes', title: '메모 읽기', description: '회의 메모를 읽어요.', connections: [] },
+  { step_id: 'send-summary', title: '요약 보내기', description: '참석자에게 요약을 보내요.', connections: [{ id: 'google.gmail.send', why: '요약 메일을 보내요' }] },
+];
+const PAID = { id: 'ski_' + 'a'.repeat(32), title: '회의록 정리 스킬', summary: '회의 메모를 표로 정리해요.', price_krw: 10000, version: 1, tools: ['read', 'write'], outputs: ['chat_answer'], steps: STEPS, connections: ['google.gmail.send'], seller_name: 'seller', refund_window_days: 7 };
 const FREE = { ...PAID, id: 'ski_' + 'b'.repeat(32), title: '무료 스킬', price_krw: 0 };
 const base = (patch: Partial<StoreState> = {}): StoreState => ({ access: 'ready', tab: 'browse', items: [PAID, FREE], ageGroup: 'adult', installs: [], testPayments: true, ...patch });
 const html = (state: StoreState) => renderToStaticMarkup(<SkillStoreView state={state} send={() => {}} />);
@@ -32,6 +36,8 @@ async function main() {
   assert.ok(page.includes('구매 후 7일 안에, 한 번도 실행하지 않았다면 전액 환불돼요. 처음 실행한 뒤에는 환불할 수 없어요.'));
   assert.ok(page.includes('실행할 때 드는 AI 사용량은 내 이용권에서 차감돼요.'));
   assert.ok(page.includes('지금은 테스트 결제만 돼요.'), 'test-key payments say so');
+  // Scene 2: the card lists the included steps and the connection each needs, from the public layer.
+  assert.ok(page.includes('요약 보내기: 참석자에게 요약을 보내요. (필요한 연결: Gmail 보내기, 요약 메일을 보내요)'));
   const { host, root, sent } = await mounted(base());
   await act(() => click(buttons(host, '10,000원 카드 결제')[0]));
   await act(() => click(buttons(host, '무료로 설치')[0]));
@@ -58,12 +64,14 @@ async function main() {
 }
 
 // Mine: refund before the first run; after the run the refund button is gone and the reason is shown.
+// Custody (design v1 D1): the App has no run button that fetches a skill; a run is composed by the Service.
 {
-  const install = { item_id: PAID.id, title: PAID.title, summary: PAID.summary, price_krw: 10000, order_id: 'sto_' + 'c'.repeat(32), first_run_at: null, refundable: true, refund_until: Date.UTC(2026, 10, 10) };
+  const install = { item_id: PAID.id, title: PAID.title, summary: PAID.summary, price_krw: 10000, version: 1, public: { steps: STEPS, outputs: ['chat_answer'] }, update_available: false, runnable: true, warning: null, order_id: 'sto_' + 'c'.repeat(32), first_run_at: null, refundable: true, refund_until: Date.UTC(2026, 10, 10) };
   const before = await mounted(base({ tab: 'mine', installs: [install] }));
   await act(() => click(buttons(before.host, '환불')[0]));
-  await act(() => click(buttons(before.host, '실행')[0]));
-  assert.deepEqual(before.sent, [{ type: 'storeRefund', orderId: install.order_id }, { type: 'storeRun', itemId: PAID.id }]);
+  assert.equal(buttons(before.host, '실행').length, 0);
+  assert.ok(before.host.textContent.includes('메모 읽기'));
+  assert.deepEqual(before.sent, [{ type: 'storeRefund', orderId: install.order_id }]);
   await act(() => before.root.unmount());
   const after = await mounted(base({ tab: 'mine', installs: [{ ...install, first_run_at: Date.now(), refundable: false }] }));
   assert.equal(buttons(after.host, '환불').length, 0);

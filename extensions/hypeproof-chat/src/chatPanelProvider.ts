@@ -77,7 +77,6 @@ import * as os from "node:os";
 import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel, ATTACHED_IMAGE_DIR } from "./attachedImages";
 import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReferenceImages, referenceImageFailuresNote } from "./referenceImages";
 import { selectedExternalInstructions } from "./externalSkillCommands";
-import { STORE_COPY, storeSkillBlock } from "./skillStore";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import { TaskActivityTurns, type TaskActivityEvent } from "./taskActivityHost";
@@ -4022,16 +4021,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * be recreated later (WebviewView has no retainContextWhenHidden). Posting
    * is idempotent: the webview reducer replaces pageNotice, never appends.
    */
-  // Epic #3418 — a store skill the buyer chose to run. It rides on the next turn only, which the
-  // buyer's own seat pays for (REQ-STORE-RUN).
-  private pendingStoreSkill: { title: string; text: string } | null = null;
-  async attachStoreSkill(skill: { item_id: string; title: string; body: string }): Promise<void> {
-    this.pendingStoreSkill = { title: skill.title, text: storeSkillBlock(skill) };
-    await vscode.commands.executeCommand("hypeproof-chat.focus");
-    this.postPageNotice(STORE_COPY.ran(skill.title));
-    void this.post({ type: "focusInput" });
-  }
-
   postPageNotice(label: string, source?: import("./denialSource").DenialSource): void {
     if (source) { void this.postDenialNotice(source); return; }
     this.pendingPageNotice = label;
@@ -8951,11 +8940,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           userTextForModel += `\n\n${selected.text}`;
           this.postToolLog(streamId, { id: randomId(), icon: "📖", label: selected.provenance.map(s => `${s.name} · ${s.revision.slice(0, 12)}`).join(" · "), state: "done" });
         }
-      }
-      if (this.pendingStoreSkill) {
-        userTextForModel += `\n\n${this.pendingStoreSkill.text}`;
-        this.postToolLog(streamId, { id: randomId(), icon: "🛒", label: `스토어 스킬 · ${this.pendingStoreSkill.title}`, state: "done" });
-        this.pendingStoreSkill = null;
       }
       // #282 Phase 1 — route to the Agent SDK coach behind the flag. Default
       // "proxy" keeps the exact existing single-turn behavior; "agent-sdk"

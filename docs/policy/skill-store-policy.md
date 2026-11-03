@@ -62,7 +62,7 @@ The Service needs these keys to enforce the rows above. They were chosen by the 
 
 ## Rollout switch (not a policy value)
 
-Who can reach the store is a Service secret, `HPS_STORE_ACCOUNTS`: a comma-separated list of account ids, or `*` for every account. Accounts outside it get the same 404 as a store that is off, so the App draws no entry. Unset in production means closed. Opening the store to everyone is a secret change to `*`; it needs no code change or App release. Live gateway keys are a separate, reviewed code change gated on #3419.
+Who can reach the store is a Service secret, `HPS_STORE_ACCOUNTS`: a comma-separated list of account ids, or `*` for every account. Accounts outside it get the same 404 as a store that is off, so the App draws no entry. Unset in production means closed. Opening the store to everyone is a secret change to `*`; it needs no code change or App release. Live gateway keys are a separate, reviewed code change gated on #3419. Independently of this switch, production has no custody keyring until the external KMS of design v1 F10 exists, so the store answers 404 there.
 
 ## Not yet enforced in the first slice
 
