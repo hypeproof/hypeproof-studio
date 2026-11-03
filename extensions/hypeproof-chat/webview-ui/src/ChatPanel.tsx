@@ -1732,7 +1732,8 @@ export function ChatPanel(props: Props) {
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
-        <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
+        {/* An automation conversation shows usage inside its settings disclosure; a second header row would squeeze the chat. */}
+        {!automationCompact && <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />}
         <HeaderActions personal={personalWorkspace} automation={automationCompact} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its

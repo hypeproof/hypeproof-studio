@@ -2923,6 +2923,13 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   --vscode-editor-background: var(--hp-panel);
 }
 .hps-shell-automation > .hps-header { gap: 12px; padding: 10px 14px; align-items: flex-start; }
+/* The automation header holds only the name, the run state and one menu, so the state stays in the row on a
+   narrow pane (no extra band over a short sidebar's conversation); the name yields first and keeps its tooltip. */
+@media (max-width: 480px) {
+  .hps-shell-automation > .hps-header:has(> .hps-run-state) { padding-bottom: 10px; }
+  .hps-shell-automation > .hps-header > .hps-run-state { position: static; }
+  .hps-shell-automation > .hps-header > .hps-coach-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 .hps-shell-automation .hps-coach-name { margin: 0; padding: 7px 0; font-size: 14px; text-align: left; }
 .hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: 12px; }
 .hps-conversation-actions > summary { cursor: pointer; padding: 7px 10px; color: var(--hp-muted); border: 1px solid var(--hp-line); border-radius: 6px; }
