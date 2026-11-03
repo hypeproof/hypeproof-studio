@@ -564,8 +564,8 @@
           "description": "활동이 바뀔 때 내 작업을 이 기기에 따로 저장해 둘 수 있게 합니다. 모든 이용 방식에서 기본은 꺼짐이며, 참여 코드나 AI 사용 권한은 옮기지 않습니다."
         },
         "hypeproofChat.safeLinkAllowlistEnabled": {
-          "type": "boolean", "default": false, "scope": "machine",
-          "description": "미성년 수업(안전 브라우저)에서 채팅 링크가 수업 허용 목록 밖이면 열지 않고 알림을 보여 줍니다. 기본은 꺼짐이며, 켜는 것은 소유자가 결정합니다."
+          "type": "boolean", "default": true, "scope": "machine",
+          "description": "미성년 수업(안전 브라우저)에서 채팅 링크가 수업 허용 목록 밖이면 열지 않고 알림을 보여 줍니다. 수업 정보가 미성년 수업이고 허용 목록이 있을 때만 켜집니다. 지원을 위해 끄면 이 기기에서는 막지 않습니다."
         },
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",

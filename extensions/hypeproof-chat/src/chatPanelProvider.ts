@@ -256,7 +256,7 @@ import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, write
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { externalLinkDialog, linkSafety, resolveBrowserSafety, routeExternalLink, type ExternalLinkRoute } from "./browserSafetyHelpers";
+import { externalLinkDialog, linkSafety, resolveBrowserSafety, routeExternalLink, safeLinkEnforced, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -4802,16 +4802,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /**
    * CGP-ART-R-008 — the one exit for links a learner clicks in chat. Minor cohorts stay in the
    * integrated browser; others confirm the host before the system browser opens. CGP-ART-D-008:
-   * the learner's own loopback preview opens in the integrated browser with no dialog, and with
-   * `hypeproofChat.safeLinkAllowlistEnabled` on, a minor's link outside the cohort allowlist does
-   * not navigate and the chat panel shows the blocked notice. The persist:hp-safe core patch is not
+   * the learner's own loopback preview opens in the integrated browser with no dialog, and when the
+   * served profile marks the seat minor with a non-empty allowlist (`safeLinkEnforced`), a link outside
+   * that allowlist does not navigate and the chat panel shows the blocked notice. The persist:hp-safe core patch is not
    * in the pinned vscodium-base, so this host check is the only allowlist enforcement.
    */
   async openLearnerLink(raw: unknown): Promise<void> {
     const route = this.learnerLinkRoute(raw);
     if (route.kind === "refuse") return;
     if (route.kind === "blocked") {
-      // CGP-ART-D-008 (flag on): nothing navigates; the chat panel draws the blocked notice with the host.
+      // CGP-ART-D-008 (block on): nothing navigates; the chat panel draws the blocked notice with the host.
       void this.post({ type: "externalLinkBlocked", host: route.host, at: Date.now() });
       return;
     }
@@ -4830,11 +4830,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (choice === "열기") await vscode.env.openExternal(vscode.Uri.parse(route.url));
     else if (choice === "링크 복사") await vscode.env.clipboard.writeText(route.url);
   }
-  /** CGP-ART-R-008 / D-008: one route for every learner link; the allowlist block is behind a machine-scoped, default-off flag. */
+  /** CGP-ART-R-008 / D-008: one route for every learner link; the served profile turns the minor allowlist block on, the machine setting can only force it off. */
   private learnerLinkRoute(raw: unknown): ExternalLinkRoute {
     const browser = vscode.workspace.getConfiguration("hypeproof.browser");
-    const enforceAllowlist = vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled", false) === true;
-    return routeExternalLink(raw, linkSafety(this.cachedProfile, browser.get<boolean>("safeSession"), browser.get<string[]>("safeAllowlist")), { enforceAllowlist });
+    const safety = linkSafety(this.cachedProfile, browser.get<boolean>("safeSession"), browser.get<string[]>("safeAllowlist"));
+    const enforceAllowlist = safeLinkEnforced(this.cachedProfile, safety, vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled"));
+    return routeExternalLink(raw, safety, { enforceAllowlist });
   }
   private opsLastArtifact: string | undefined;
   // #751 R3 — why new AI runs are held. Local editing, saving, Stop and export never consult this.

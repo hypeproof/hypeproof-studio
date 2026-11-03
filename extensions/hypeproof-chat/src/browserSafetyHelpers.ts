@@ -101,8 +101,40 @@ export function hostAllowed(url: URL, allowlist: readonly string[]): boolean {
 }
 
 export interface LinkRouteOptions {
-  /** `hypeproofChat.safeLinkAllowlistEnabled` (machine, default off): a safe-session link outside the allowlist is blocked. */
+  /** From `safeLinkEnforced`: a safe-session link outside the allowlist is blocked. */
   enforceAllowlist?: boolean;
+}
+
+/**
+ * CGP-ART-D-008 (Jay, 2026-11-04) — is the minor allowlist block on for this seat? The served profile decides:
+ * on only when it marks the seat minor (`minor_cohort: true`), in the safe session, with a non-empty allowlist.
+ * An empty served list (or one with no usable entry) leaves today's integrated route instead of blocking every link.
+ * Without a loaded profile, the persisted `hypeproof.browser.safeSession` / `safeAllowlist` decide; those settings
+ * are registered only by the fork core patch, which the pinned vscodium-base lacks, so on shipped builds nothing is
+ * persisted and the block is off until the profile loads (the link still opens only in the integrated browser).
+ * `hypeproofChat.safeLinkAllowlistEnabled` (machine, default true) is the support override: only an explicit `false`
+ * turns it off.
+ */
+export function safeLinkEnforced(
+  profile: (BrowserSafetyProfileLike & { minor_cohort?: boolean }) | null | undefined,
+  safety: BrowserSafetyConfig,
+  setting: unknown,
+): boolean {
+  if (setting === false) return false;
+  if (!safety.safeSession || !safety.safeAllowlist.some(allowlistEntryUsable)) return false;
+  return profile ? profile.minor_cohort === true : true;
+}
+
+/** An entry `hostAllowed` can match at all; a list of only unusable entries counts as empty. */
+export function allowlistEntryUsable(raw: unknown): boolean {
+  if (typeof raw !== "string") return false;
+  const entry = raw.trim().toLowerCase();
+  if (!entry) return false;
+  if (entry.includes("://")) {
+    try { const e = new URL(entry); return /^https?:$/.test(e.protocol) && !!e.hostname; } catch { return false; }
+  }
+  const bare = entry.replace(/^\*?\./, "");
+  return !!bare && !/[\/?#@\s]/.test(bare);
 }
 
 /**
