@@ -247,15 +247,19 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
     },
     /**
      * Epic #3418 D10/F7: a store skill's messages arrive rendered by the Service; the template never reaches this
-     * device. Every recipient must be an address in the buyer's own sheet as last read here, once each, so neither
+     * device. Every recipient must be in the recipient column of the buyer's own sheet as last read here, once each, so neither
      * the Service nor a model can add one. The result is the same one-current preview the send approval binds to.
      */
-    async previewRendered(args: { messages: ReadonlyArray<{ to: string; subject: string; body: string }> }): Promise<EmailPreview> {
+    async previewRendered(args: { emailColumn: string; messages: ReadonlyArray<{ to: string; subject: string; body: string }> }): Promise<EmailPreview> {
       allowed();
       const revision = await connectionRevision();
       const sheet = cachedSheet;
       if (!revision || !sheet || sheet.revision !== revision) { cachedSheet = null; return fail('현재 Google 계정의 시트를 다시 읽어 주세요.'); }
-      const roster = new Set(sheet.rows.slice(1).flat().map(cell => cell.trim().toLowerCase()).filter(cell => cell.includes('@')));
+      // The roster is the recipient column only: an address elsewhere in the sheet (a CC or a manager column) is not one.
+      const headers = (sheet.rows[0] ?? []).map(cell => cell.trim());
+      const at = headers.indexOf(String(args.emailColumn ?? '').trim());
+      if (at < 0 || headers.lastIndexOf(String(args.emailColumn).trim()) !== at) return fail(`시트의 ${args.emailColumn} 열을 하나만 준비해 주세요.`);
+      const roster = new Set(sheet.rows.slice(1).map(row => (row[at] ?? '').trim().toLowerCase()).filter(Boolean));
       if (!Array.isArray(args.messages) || !args.messages.length || args.messages.length > maxRecipients) return fail('보낼 수신자가 없어요.');
       const recipients = new Set<string>();
       const messages = args.messages.map(m => {

@@ -223,6 +223,9 @@ export function storeErrorMessage(error: unknown): string {
     if (error.code === "over_tier_cap" && typeof error.detail.cap_krw === "number") return `판매자 등급의 가격 한도(${won(error.detail.cap_krw)})를 넘었어요.`;
     return ERRORS[error.code] ?? STORE_COPY.unavailable;
   }
+  // A host refusal (roster, Google connection, recipient cap) is fixed Korean copy the buyer can act on; anything else
+  // (an internal or English error) stays behind the generic sentence.
+  if (error instanceof Error && /[가-힣]/.test(error.message) && error.message.length <= 200) return error.message;
   return STORE_COPY.unavailable;
 }
 export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;

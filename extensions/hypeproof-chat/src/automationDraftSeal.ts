@@ -23,7 +23,9 @@ export async function deviceDraftKey(keyring: DraftKeyring): Promise<Buffer> {
   }
   const key = randomBytes(32);
   await keyring.store(DRAFT_KEY_SECRET, key.toString('base64'));
-  return key;
+  // Two windows creating the key at once: both continue with whichever value was stored last.
+  const kept = Buffer.from((await keyring.get(DRAFT_KEY_SECRET)) ?? '', 'base64');
+  return kept.length === 32 ? kept : key;
 }
 
 export const isSealedDraft = (value: unknown): value is SealedDraft =>

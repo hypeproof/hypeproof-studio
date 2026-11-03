@@ -17100,6 +17100,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/automationDraftSeal.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/storeMail.ts"
         }
       ]
     },

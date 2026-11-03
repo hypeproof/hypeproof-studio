@@ -218,6 +218,7 @@ try {
   globals.set(savedRecipeKey,recipe);
   const reopen=async()=>{const renders=[];const reopened=module.exports.registerAutomationHost(ctx,{}, {setLabels(){},show(){},showAutomation:async html=>renders.push(html)});assert.ok(await reopened.getMcpHost());return renders.at(-1);};
   let restored=await reopen();assert.match(restored,/2 \/ 6 완료/);
+  assert.equal(globals.get(savedRecipeKey).schema,'hps-sealed-automation-draft/1','D7: a plaintext draft is sealed in place when the automation opens');
   assert.match(restored,/class="node succeeded" data-node-id="goal"/);assert.match(restored,/class="node succeeded" data-node-id="skill"/);
   assert.doesNotMatch(restored,/class="node succeeded" data-node-id="(?:connect|sheet|prepare|upload|deploy|preview)"/);
   globals.set(savedRecipeKey,{...recipe,bodyTemplate:'private@example.invalid'});
