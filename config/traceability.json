@@ -16877,6 +16877,78 @@
           "path": "docs/operations/release-casebook/cases.yaml"
         }
       ]
+    },
+    {
+      "id": "ST-INT-SKILL-STORE",
+      "stage": "intent",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "LAB-PRODUCT-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "docs/intents/skill-store.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SKILL-STORE",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-INT-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Public skill store (#3418)"
+        },
+        {
+          "path": "docs/policy/skill-store-policy.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SKILL-STORE",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/skillStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/skillStorePanel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/skillStoreProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SkillStore.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SKILL-STORE",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-SKILL-STORE",
+        "ST-IMP-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/skill-store.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/skill-store-client.smoke.mjs"
+        },
+        {
+          "path": "e2e/store/mac-store.mjs"
+        }
+      ]
     }
   ]
 }

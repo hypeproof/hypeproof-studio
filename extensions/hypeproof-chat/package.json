@@ -158,6 +158,10 @@
         "title": "HypeProof: 나의 변화 기록"
       },
       {
+        "command": "hypeproof-chat.skillStore",
+        "title": "HypeProof: 스킬 스토어"
+      },
+      {
         "command": "hypeproof-chat.classroomConnect",
         "title": "HypeProof: 수업 연결 (강사가 준 코드 입력)"
       },
@@ -416,6 +420,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "hypeproof-chat.skillStore",
+          "when": "false"
+        },
         {
           "command": "hypeproof-chat.runDoctor"
         },
