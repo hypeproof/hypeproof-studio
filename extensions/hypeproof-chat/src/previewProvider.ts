@@ -370,14 +370,30 @@ export class PreviewProvider {
       vscode.postMessage({ type: "preview_ask_file", revision });
     });
 
-    // Only the outer VS Code webview frame may drive the shell: it delivers host
-    // messages with contentWindow.postMessage, so ev.source === window.parent.
-    // Everything else (the preview page, frames nested in it, detached frames whose
-    // parent is null, a null source) is untrusted.
+    // Only the outer VS Code webview frame may drive the shell. It delivers host messages with
+    // contentWindow.postMessage, but VS Code's webview preamble sets window.parent = window
+    // (and window.top) in this document before this script runs, so ev.source can never be
+    // compared with window.parent (#3476: every host message was dropped). A trusted source is
+    // instead one whose parent chain reaches a top-level window without passing through the
+    // preview page. The preview page, frames nested in it, detached frames (parent null), the
+    // shell itself and a null source are untrusted.
+    const fromHost = (source) => {
+      if (!source || source === window) return false;
+      let w = source;
+      for (let i = 0; i < 16; i++) {
+        if (w === frame.contentWindow) return false;
+        let p;
+        try { p = w.parent; } catch (_) { return false; }
+        if (!p) return false;
+        if (p === w) return true;
+        w = p;
+      }
+      return false;
+    };
     // host → shell → inner iframe
     window.addEventListener("message", (ev) => {
       const m = ev.data || {};
-      const trusted = ev.source === window.parent && ev.source !== window;
+      const trusted = fromHost(ev.source);
       if (trusted && m.type === "previewAskState") {
         revision = m.revision;
         enabled = m.enabled === true;

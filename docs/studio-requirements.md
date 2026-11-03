@@ -1546,7 +1546,10 @@ score. CGP-KNOW-D-015 adds the 44px header action to the page-card HTML preview.
 host binds it to that card's checked local file, work folder and task; it reuses the same
 attach gateway after revealing the chat. A revision rejects stale clicks and save reads;
 generated HTML without a file callback has no action. The inner sandbox cannot set header
-identity or request this action. Repeated activation is single-flight. Visibility follows the
+identity or request this action. The shell trusts a host message only when its source's parent chain
+reaches a top-level window without passing the preview page (VS Code's webview preamble sets
+`window.parent = window` in the shell, so a `window.parent` comparison dropped every host message
+and left every preview blank in the installed App, #3476); framed, nested and detached pages stay untrusted. Repeated activation is single-flight. Visibility follows the
 resolved file-attach grant, and the attach gateway rechecks consent and the grant.
 Backspace with a collapsed selection at composer offset zero removes the queued file while
 preserving the draft and focus; IME, modifier keys and text selections do not remove it.
