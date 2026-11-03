@@ -360,6 +360,7 @@ import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
 import { draftHasContent } from "./autoUpdate";
+import { describeLoopbackServer } from "./previewServerFacts";
 import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
@@ -6186,14 +6187,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Nothing is corrected when the server is not up — it is never fixed by guessing
    * (if we do not know, leave it as it is).
    */
-  private retargetLoopbackNavigation(call: BrowserToolCall): {
+  private async retargetLoopbackNavigation(call: BrowserToolCall): Promise<{
     call: BrowserToolCall;
     note?: string;
-  } {
+  }> {
     if (call.name !== "browser_navigate") return { call };
     const requested = String(call.input?.url ?? "");
     const target = resolveLivePreviewUrl(requested, this.liveServer.currentUrl());
     if (!target?.redirected) return { call };
+    // #3425 — a port that answers is a server the learner started (e.g. on 9000), not a guess: keep it.
+    try {
+      const head = await fetch(target.requested ?? requested, { method: "HEAD", signal: AbortSignal.timeout(2000) });
+      if (head.status > 0) return { call };
+    } catch { /* nothing listens: the #507 correction stands */ }
     return {
       call: { ...call, input: { ...call.input, url: target.url } },
       note:
@@ -6494,6 +6500,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           return { ok: false, status: 0 };
         }
       },
+      // #3425 — which folder and entry file a loopback server serves, for the coach's tool results.
+      previewServerFacts: (url: string) => describeLoopbackServer(url, {
+        liveUrl: this.liveServer.currentUrl() ?? null,
+        liveRoot: this.liveServer.currentRoot() ?? null,
+        workRoot: this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        fetchRoot: async (origin: string) => {
+          try {
+            const res = await fetch(`${origin}/`, { signal: AbortSignal.timeout(2000) });
+            const body = (await res.text()).slice(0, 1_000_000);
+            return { status: res.status, contentType: res.headers.get("content-type") ?? "", body };
+          } catch {
+            return null;
+          }
+        },
+      }),
       inspect: async (name, input) => {
         try {
           this.mcpBrowser ??= new BrowserControl(this.crBrowserOptions());
@@ -10081,7 +10102,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const outsideBrowserIntent = p.generalBrowserRequest && !blankOpen;
           const fixed = p.generalBrowserRequest
             ? { call: blankOpen ? { ...call, input: { ...call.input, url: "about:blank" } } : call }
-            : this.retargetLoopbackNavigation(call);
+            : await this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
           if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
           this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });

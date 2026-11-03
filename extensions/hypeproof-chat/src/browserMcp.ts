@@ -193,6 +193,12 @@ export interface BrowserMcpHost {
    */
   fetchHead?(url: string): Promise<{ ok: boolean; status: number }>;
   /**
+   * #3425 — one coach-facing line naming a loopback server's address/port, the folder it serves and the
+   * file a visitor gets at `/` (previewServerFacts.ts). Null when nothing answers there. Optional: a host
+   * without it just omits the line.
+   */
+  previewServerFacts?(url: string): Promise<string | null>;
+  /**
    * #507 — 지금 **떠 있는** 라이브 서버의 주소 (안 떠 있으면 null). 시작시키지
    * 않는다 — "주소가 뭐냐"를 묻는 것이 서버를 켜는 부작용을 가지면 안 된다.
    *
@@ -543,7 +549,10 @@ export async function resolveAlreadyOpen(
   // #507 — 추측된 루프백 포트를 **실제로 떠 있는** 라이브 서버로 교정한다.
   // 판정 함수 안에서 하는 이유: 승인 모달(canUseTool)과 핸들러가 같은 주소를
   // 봐야 한다. 갈라지면 모달에 뜬 주소와 실제로 여는 주소가 달라진다.
-  const target = resolveLivePreviewUrl(raw, (await readLivePreviewUrl(host)) ?? null);
+  let target = resolveLivePreviewUrl(raw, (await readLivePreviewUrl(host)) ?? null);
+  // #3425 — #507 corrects a *guessed* port, one nobody listens on. A port that answers is a server the
+  // learner (or a command they approved) started — e.g. `python -m http.server 9000` — and is opened as asked.
+  if (target?.redirected && (await loopbackAnswers(host, raw))) target = { url: raw, redirected: false };
   const url = target?.url ?? raw;
   const redirectedFrom = target?.redirected ? target.requested : undefined;
   const current = await readCurrentPage(host);
@@ -565,6 +574,30 @@ export async function resolveAlreadyOpen(
  * 모름과 없음을 뭉개면 안 된다: "모른다"에서 서버를 띄우거나 주소를 교정하면
  * 그게 곧 짐작이다.
  */
+/**
+ * #3425 — does a server answer at this loopback address? Any HTTP status counts (a 404 is still a server);
+ * only "no answer" (status 0, a throw, no fetchHead) is false. Never asked for a non-loopback address.
+ */
+export async function loopbackAnswers(host: BrowserMcpHost, url: string): Promise<boolean> {
+  if (!isLoopbackUrl(url) || typeof host.fetchHead !== "function") return false;
+  try {
+    return (await host.fetchHead(url)).status > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** #3425 — the served-folder line for a loopback address, or "" (no host support, not loopback, failure). */
+async function serverFactsLine(host: BrowserMcpHost, url: string): Promise<string> {
+  if (!isLoopbackUrl(url) || typeof host.previewServerFacts !== "function") return "";
+  try {
+    const line = await host.previewServerFacts(url);
+    return line ? `\n${line}` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function readLivePreviewUrl(host: BrowserMcpHost): Promise<string | null | undefined> {
   if (typeof host.livePreviewUrl !== "function") return undefined;
   try {
@@ -741,7 +774,7 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
       focused ?? current ?? null,
     );
   }
-  if (isLoopbackUrl(url) && (await readLivePreviewUrl(host)) === null) {
+  if (isLoopbackUrl(url) && (await readLivePreviewUrl(host)) === null && !(await loopbackAnswers(host, url))) {
     const started = await host.startLivePreview();
     if (started) {
       return withPageState(
@@ -752,7 +785,8 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
               text:
                 `${url} 은(는) 이 Studio 의 주소가 아니에요 — 라이브 서버 포트는 실행할 때마다 ` +
                 `무작위로 정해집니다. 라이브 서버를 시작하고 브라우저에 열었어요: ${started}. ` +
-                `앞으로 미리보기는 이 주소를 그대로 쓰세요(포트를 추측하거나 참가자에게 묻지 마세요).`,
+                `앞으로 미리보기는 이 주소를 그대로 쓰세요(포트를 추측하거나 참가자에게 묻지 마세요).` +
+                (await serverFactsLine(host, started)),
             },
           ],
         },
@@ -770,7 +804,7 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
       if (!head.ok) {
         return withPageState(
           {
-            content: [{ type: "text", text: `파일이 없어요: ${url} (HTTP ${head.status}). chalk_open_course로 파일을 먼저 만드세요.` }],
+            content: [{ type: "text", text: `파일이 없어요: ${url} (HTTP ${head.status}). chalk_open_course로 파일을 먼저 만드세요.${await serverFactsLine(host, url)}` }],
             isError: true,
           },
           await readCurrentPage(host),
@@ -790,12 +824,13 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
     ? `${redirectedFrom} 이 아니라 실제 라이브 서버 주소로 열었어요: ${url} ` +
       `(포트는 실행할 때마다 달라집니다 — 추측하지 말고 이 주소를 쓰세요).`
     : `브라우저에서 열었어요: ${url}`;
-  const text = replaced
+  const facts = await serverFactsLine(host, url);
+  const text = (replaced
     ? `${opened}\n` +
       `(참고: 같은 자리에 있던 ${replaced} 는 이 주소로 이동했어요 — ` +
       `결과물 1개 · 참고 사이트 1개까지만 동시에 띄울 수 있어요. ` +
       `둘을 비교하려면 번갈아 열어야 합니다.)`
-    : opened;
+    : opened) + facts;
   return withPageState({ content: [{ type: "text", text }] }, { url });
 }
 
@@ -843,7 +878,7 @@ export async function runLivePreviewStart(host: BrowserMcpHost): Promise<McpTool
     );
   }
   return withPageState(
-    { content: [{ type: "text", text: `라이브 프리뷰를 시작하고 브라우저에 열었어요: ${url}` }] },
+    { content: [{ type: "text", text: `라이브 프리뷰를 시작하고 브라우저에 열었어요: ${url}${await serverFactsLine(host, url)}` }] },
     { url },
   );
 }

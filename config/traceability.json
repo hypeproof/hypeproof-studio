@@ -6905,6 +6905,42 @@
       ]
     },
     {
+      "id": "ST-IMP-COACH-LOCALHOST-PREVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/previewServerFacts.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COACH-LOCALHOST-PREVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-COACH-LOCALHOST-PREVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/coach-localhost-preview.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-preview-url.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-FINISH-NOTICE",
       "stage": "implementation",
       "owner": "jayleekr",
