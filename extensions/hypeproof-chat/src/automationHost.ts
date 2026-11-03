@@ -27,16 +27,16 @@ interface Binding { token: string; service: string; activityId: string; namespac
 export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider, preview?: PreviewProvider) {
   let progressListener: (() => void) | undefined;
   const notifyProgress = () => { try { progressListener?.(); } catch { /* Observation is independent of the automation. */ } maybeOfferStore(); };
-  // Epic #3418 scene 1: once every quest step is confirmed, the completion card offers "스토어에 등록".
+  // Epic #3418 scene 1: once every quest step is confirmed, a completion notice offers "스토어에 등록". It is not
+  // a question card, so it never blocks the automation's own questions that may follow in the same turn.
   let storeOffered = false;
   const questFinished = () => { try { const snap = quest.snapshot(); return !!snap && snap.nodes.every(node => node.status === 'succeeded'); } catch { return false; } };
   function maybeOfferStore() {
     if (!questFinished()) { storeOffered = false; return; }
-    const owner = binding;
-    if (storeOffered || !owner || pendingQuestion || authorizingAnswer) return;
+    if (storeOffered || !binding) return;
     storeOffered = true;
-    void askQuestion({ kind: 'choice', title: '자동화 퀘스트를 완성했어요', description: '스토어에 등록하면 다른 사람도 이 퀘스트를 자기 계정과 명단으로 쓸 수 있어요. 단계 이름과 설명만 공개되고 메일 문구, 내 Google 계정·명단은 올라가지 않아요.', choices: [{ id: 'store', label: '스토어에 등록' }, { id: 'later', label: '나중에 할게요' }], private: true }, owner, operationEpoch)
-      .then(answer => { if (answer.choiceId === 'store') void vscode.commands.executeCommand(SKILL_STORE_PUBLISH_QUEST_COMMAND); }, () => undefined);
+    try { void Promise.resolve(vscode.window.showInformationMessage('자동화 퀘스트를 완성했어요. 스토어에 등록하면 다른 사람도 자기 계정과 명단으로 쓸 수 있어요. 메일 문구와 내 Google 계정·명단은 올라가지 않아요.', '스토어에 등록')
+      ).then(choice => { if (choice === '스토어에 등록') void vscode.commands.executeCommand(SKILL_STORE_PUBLISH_QUEST_COMMAND); }, () => undefined); } catch { /* The store offer never affects the automation. */ }
   }
   const quest = createAutomationQuestSession(async html => {
     if (!matches() || !preview) return;

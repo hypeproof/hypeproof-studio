@@ -38,6 +38,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   let state: StoreState = { access: "ready", tab: "browse", items: [], ageGroup: "unknown", installs: [], testPayments: true };
   let poll: ReturnType<typeof setTimeout> | undefined;
   let checkoutOrder: { id: string; startedAt: number } | undefined;
+  /** The finished quest this window already published, so 「내 스토어」 does not offer it twice. */
+  let publishedDraft: string | undefined;
   const client = () =>
     new StoreClient({
       proxyUrl: vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"),
@@ -59,6 +61,11 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     let items = state.items;
     const connections = await deps.localConnections?.().catch(() => undefined);
     if (connections) extra = { connections, ...extra };
+    // 「내 스토어」 always offers the finished quest on this device, however the tab was reached.
+    if (tab === "sell" && !state.questDraft && !("questDraft" in extra)) {
+      const offer = deps.questOffer?.();
+      if (offer && JSON.stringify(offer.draft) !== publishedDraft) extra = { questDraft: offer.draft, ...extra };
+    }
     try {
       items = await c.items(state.query ?? "");
     } catch (error) {
@@ -177,6 +184,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           const offer = deps.questOffer?.();
           if (!offer) throw new StoreClientError("no_finished_quest");
           const r = await c.publishPackage(offer.pkg({ title: msg.title, summary: msg.summary, price_krw: msg.price_krw }));
+          publishedDraft = JSON.stringify(offer.draft);
           await load("sell", { questDraft: undefined, notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
         });
       case "storeRun":
