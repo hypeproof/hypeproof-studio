@@ -149,6 +149,11 @@ export interface SdkCoachArgs {
   lessonStep?: string;
   helpMode?: string;
   /**
+   * Epic #3418 D2/D8 — the installed store skill this turn runs, as `<item_id>@<version>`. The Service composes the
+   * seller's private layer server-side; this turn runs with an ephemeral SDK session and without the orchestrator.
+   */
+  storeRun?: string;
+  /**
    * The extension's proxyUrl setting (OpenAI-compat base ending in /v1).
    * ANTHROPIC_BASE_URL is DERIVED from it (the /v1 suffix stripped — the SDK
    * appends /v1/messages itself); see buildSdkGatewayEnv.
@@ -589,7 +594,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = mode === 'auto' ? args.orchestrator : undefined;
+  const orchestratorHost = mode === 'auto' && !args.storeRun ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -763,6 +768,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,
       helpMode: args.helpMode,
+      storeRun: args.storeRun,
       token: args.token,
       cwd: args.cwd,
       baseEnv: process.env,
@@ -920,7 +926,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };
     },
     abortController,
-    ...(args.ephemeralSession ? { persistSession: false } : {}),
+    ...(args.ephemeralSession || args.storeRun ? { persistSession: false } : {}),
   };
   if (args.memoryContext) {
     const additionalContext = args.memoryContext;

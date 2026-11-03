@@ -19,11 +19,25 @@ import { readAutomationDraft, automationDraftValue } from './automationDraft';
 import { publishAutomationRecipe } from './automationPublication';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
+import { emailQuestPackage, questDraft } from './questSkill';
+import { SKILL_STORE_PUBLISH_QUEST_COMMAND } from './skillStorePanel';
+import type { StoreLocalConnections } from './skillStoreProtocol';
 
 interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; appsScript: boolean; signature: string }
 export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider, preview?: PreviewProvider) {
   let progressListener: (() => void) | undefined;
-  const notifyProgress = () => { try { progressListener?.(); } catch { /* Observation is independent of the automation. */ } };
+  const notifyProgress = () => { try { progressListener?.(); } catch { /* Observation is independent of the automation. */ } maybeOfferStore(); };
+  // Epic #3418 scene 1: once every quest step is confirmed, the completion card offers "스토어에 등록".
+  let storeOffered = false;
+  const questFinished = () => { try { const snap = quest.snapshot(); return !!snap && snap.nodes.every(node => node.status === 'succeeded'); } catch { return false; } };
+  function maybeOfferStore() {
+    if (!questFinished()) { storeOffered = false; return; }
+    const owner = binding;
+    if (storeOffered || !owner || pendingQuestion || authorizingAnswer) return;
+    storeOffered = true;
+    void askQuestion({ kind: 'choice', title: '자동화 퀘스트를 완성했어요', description: '스토어에 등록하면 다른 사람도 이 퀘스트를 자기 계정과 명단으로 쓸 수 있어요. 단계 이름과 설명만 공개되고 메일 문구, 내 Google 계정·명단은 올라가지 않아요.', choices: [{ id: 'store', label: '스토어에 등록' }, { id: 'later', label: '나중에 할게요' }], private: true }, owner, operationEpoch)
+      .then(answer => { if (answer.choiceId === 'store') void vscode.commands.executeCommand(SKILL_STORE_PUBLISH_QUEST_COMMAND); }, () => undefined);
+  }
   const quest = createAutomationQuestSession(async html => {
     if (!matches() || !preview) return;
     preview.setLabels({ title: '자동화 진행', placeholder: '대화에서 원하는 업무를 알려 주세요', emoji: '◇' });
@@ -328,6 +342,28 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       return { owner: { u: owner.u, c: owner.c }, progress: automationOpsProgress(quest.snapshot(), pendingQuestion?.owner === binding ? pendingQuestion.question : undefined) };
     },
     show, startConversation, getRuntime: () => allowed() ? runtime : undefined,
+    /** The finished quest as a store offer (scene 1), or undefined while a step is unconfirmed. */
+    storeQuestOffer() {
+      const pinned = binding;
+      const snap = quest.snapshot();
+      if (!pinned || !snap || !questFinished()) return undefined;
+      let recipe;
+      try { recipe = reusable(savedDraft(pinned).recipe); } catch { return undefined; }
+      const nodes = snap.nodes.map(({ status: _status, ...node }) => node);
+      return { draft: questDraft(recipe, nodes), pkg: (meta: { title: string; summary: string; price_krw: number }) => emailQuestPackage(recipe, nodes, meta) };
+    },
+    /** Which connections this device already has for the store card (D6): presence only, never an account or a sheet. */
+    async storeConnections(): Promise<StoreLocalConnections> {
+      try { await prepare(); } catch { return { google: false, roster: false }; }
+      const pinned = binding, active = runtime;
+      if (!pinned || !active) return { google: false, roster: false };
+      const identity = await active.getConnectionIdentity().catch(() => null);
+      if (!identity) return { google: false, roster: false };
+      const sheet = await context.secrets.get(`hps.email-automation.${pinned.namespace}.sheet`);
+      let roster = false;
+      try { roster = !!sheet && JSON.parse(sheet).connection === identity; } catch { /* malformed: not connected */ }
+      return { google: true, roster };
+    },
     async refreshRuntime() { if (!runtime) await prepare(); else await authorize(); return allowed() ? runtime : undefined; },
     async getMcpHost(): Promise<GoogleAutomationMcpHost | undefined> {
       if (!activityConnections(context)?.current) return undefined;

@@ -7,9 +7,12 @@
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
 import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage } from "./skillStore";
-import type { StoreHostMessage, StoreRequest, StoreState, StoreTab } from "./skillStoreProtocol";
+import type { StoreHostMessage, StoreLocalConnections, StoreQuestDraft, StoreRequest, StoreState, StoreStepView, StoreTab } from "./skillStoreProtocol";
+import { adaptOverlay } from "./questSkill";
 
 export const SKILL_STORE_COMMAND = "hypeproof-chat.skillStore";
+/** The quest completion card's "스토어에 등록": the sell tab with the finished quest prefilled (scene 1). */
+export const SKILL_STORE_PUBLISH_QUEST_COMMAND = "hypeproof-chat.skillStore.publishQuest";
 const POLL_MS = 3000;
 const CHECKOUT_LIMIT_MS = 30 * 60 * 1000;
 
@@ -22,6 +25,12 @@ export interface SkillStoreDeps {
    * (a class or minor cohort, which must not pay for or reach the store), or `none`.
    */
   seat: () => Promise<"personal" | "classroom" | "none">;
+  /** Which connections this device already has (D6), for the card's "이미 연결됨". */
+  localConnections?: () => Promise<StoreLocalConnections>;
+  /** The finished quest on this device, as a completion-card prefill and the package that publishes it. */
+  questOffer?: () => { draft: StoreQuestDraft; pkg: (meta: { title: string; summary: string; price_krw: number }) => unknown } | undefined;
+  /** Opens the buyer's run of an installed skill: a new chat task the Service composes (D2), shown as a quest. */
+  runSkill?: (skill: { itemId: string; version: number; title: string; steps: StoreStepView[]; connections?: StoreLocalConnections }) => Promise<void>;
 }
 
 export function registerSkillStore(context: vscode.ExtensionContext, deps: SkillStoreDeps): void {
@@ -48,8 +57,10 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     if ((await deps.seat().catch(() => "none")) === "classroom") return push({ access: "unavailable", tab, items: [], installs: [], seller: undefined, busy: false, error: STORE_COPY.classroomSeat });
     const c = client();
     let items = state.items;
+    const connections = await deps.localConnections?.().catch(() => undefined);
+    if (connections) extra = { connections, ...extra };
     try {
-      items = await c.items();
+      items = await c.items(state.query ?? "");
     } catch (error) {
       await push({ access: "unavailable", tab, busy: false, error: storeErrorMessage(error), ...extra });
       return;
@@ -113,7 +124,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     };
     switch (msg.type) {
       case "storeLoad":
-        return load(msg.tab ?? state.tab);
+        return load(msg.tab ?? state.tab, { consent: undefined });
       case "storeSignIn":
         await vscode.commands.executeCommand("hypeproof-chat.start");
         return push({ notice: "시작 화면에서 Google로 로그인한 뒤 스토어로 돌아오세요." });
@@ -158,6 +169,49 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           const r = await c.publish(msg.draft);
           await load("sell", { notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
         });
+      case "storeSearch":
+        state = { ...state, query: msg.query.slice(0, 40) };
+        return load("browse");
+      case "storePublishQuest":
+        return run(async () => {
+          const offer = deps.questOffer?.();
+          if (!offer) throw new StoreClientError("no_finished_quest");
+          const r = await c.publishPackage(offer.pkg({ title: msg.title, summary: msg.summary, price_krw: msg.price_krw }));
+          await load("sell", { questDraft: undefined, notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
+        });
+      case "storeRun":
+        return run(async () => {
+          const install = state.installs.find((i) => i.item_id === msg.itemId);
+          if (!install?.runnable || !deps.runSkill) throw new StoreClientError(install ? "item_unlisted" : "not_installed");
+          await deps.runSkill({ itemId: install.item_id, version: install.version, title: install.title, steps: install.public?.steps ?? [], connections: state.connections });
+          await push({ busy: false, notice: STORE_COPY.runStarted(install.title) });
+        });
+      case "storeOverlayOpen":
+        return run(async () => push({ busy: false, overlay: await c.overlay(msg.itemId) }));
+      case "storeOverlayClose":
+        return push({ overlay: undefined });
+      case "storeOverlaySave":
+        return run(async () => push({ busy: false, overlay: await c.saveOverlay(msg.itemId, msg.steps), notice: STORE_COPY.adapted }));
+      case "storeAdapt":
+        return run(async () => {
+          const current = state.overlay?.item_id === msg.itemId ? state.overlay : await c.overlay(msg.itemId);
+          const { overlay, changes } = adaptOverlay(msg.text, current.steps, current.overlay);
+          const saved = await c.saveOverlay(msg.itemId, overlay);
+          await push({ busy: false, overlay: saved, notice: [STORE_COPY.adapted, ...changes].join(" ") });
+        });
+      case "storeUpdate":
+        return run(async () => {
+          try {
+            await c.update(msg.itemId, msg.consent === true);
+          } catch (error) {
+            if (error instanceof StoreClientError && error.code === "consent_required") {
+              const widened = Array.isArray(error.detail.widened) ? (error.detail.widened as string[]) : [];
+              return void (await push({ busy: false, consent: { itemId: msg.itemId, widened }, notice: STORE_COPY.consent }));
+            }
+            throw error;
+          }
+          await load("mine", { consent: undefined, overlay: undefined, notice: STORE_COPY.updated });
+        });
       case "storeImportFile": {
         const picked = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { "스킬 문서": ["md", "txt"] }, title: "스토어에 올릴 스킬 파일 고르기" });
         if (!picked?.[0]) return;
@@ -168,10 +222,11 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     }
   };
 
-  const open = () => {
+  const open = (tab?: StoreTab, extra: Partial<StoreState> = {}) => {
+    if (tab) state = { ...state, tab, ...extra };
     if (panel) {
       panel.reveal();
-      void load();
+      void load(tab);
       return;
     }
     const dist = vscode.Uri.joinPath(context.extensionUri, "webview-ui", "dist");
@@ -190,5 +245,13 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
       checkoutOrder = undefined;
     });
   };
-  context.subscriptions.push(vscode.commands.registerCommand(SKILL_STORE_COMMAND, open), { dispose: stopPoll });
+  context.subscriptions.push(
+    vscode.commands.registerCommand(SKILL_STORE_COMMAND, () => open()),
+    vscode.commands.registerCommand(SKILL_STORE_PUBLISH_QUEST_COMMAND, () => {
+      const offer = deps.questOffer?.();
+      if (!offer) return void vscode.window.showInformationMessage("먼저 자동화 퀘스트의 모든 단계를 완료해 주세요.");
+      open("sell", { questDraft: offer.draft, notice: STORE_COPY.questPrefill });
+    }),
+    { dispose: stopPoll },
+  );
 }

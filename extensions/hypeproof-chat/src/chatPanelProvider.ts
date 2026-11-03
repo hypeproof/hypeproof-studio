@@ -83,6 +83,7 @@ import { TaskActivityTurns, type TaskActivityEvent } from "./taskActivityHost";
 import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
 import { TEMPORARY_TASK_NO_IMAGES, TEMPORARY_TASK_NO_WRITE, TEMPORARY_TASK_UNAVAILABLE, temporaryTaskProfile } from './temporaryTask';
+import { STORE_RUN_NEEDS_SERVICE } from './skillStore';
 import { parseTaskAppearanceRequest } from './taskAppearance';
 import type { TaskWorkspaceExpected } from './taskWorkspaceContract';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -4943,6 +4944,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Opening the workspace is free; the learner's first message starts onboarding. */
+  /**
+   * Epic #3418 D2 — the task that runs an installed store skill. Turns of that task only carry
+   * `x-hps-store-run`; the Service composes the seller's private layer, which never reaches this App.
+   */
+  private storeRunTask?: { taskId: string; run: string; title: string };
+  /** Opens a new task bound to an installed store skill (agent runtime only: the Service composes on /v1/messages). */
+  async beginStoreRun(skill: { itemId: string; version: number; title: string }): Promise<void> {
+    const run = `${skill.itemId}@${skill.version}`;
+    if (!/^ski_[0-9a-f]{32}@[1-9]\d{0,5}$/.test(run)) throw new Error('스킬 정보를 확인하지 못했어요. 스토어에서 다시 열어 주세요.');
+    if (this.hasActiveStream()) throw new Error('진행 중인 AI 작업이 끝난 뒤 다시 실행해 주세요.');
+    if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
+    const store = this.currentTaskStore?.();
+    const before = store?.getView().activeTaskId;
+    if (!store || !before) throw new Error('작업 목록을 연 뒤 다시 실행해 주세요.');
+    await this.handleTaskMessage({ type: 'taskCreate', taskId: before } as WebviewMessage);
+    const taskId = this.currentTaskStore?.()?.getView().activeTaskId;
+    if (!taskId || taskId === before) throw new Error('새 작업을 열지 못했어요. 다시 실행해 주세요.');
+    this.storeRunTask = { taskId, run, title: skill.title.slice(0, 60) };
+  }
+  /** The store skill the open task runs, or undefined. */
+  storeRunFor(taskId: string | null | undefined): string | undefined {
+    return taskId && this.storeRunTask?.taskId === taskId ? this.storeRunTask.run : undefined;
+  }
+
   async beginAutomationConversation(): Promise<void> {
     if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
   }
@@ -9646,6 +9671,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await lowDiskCheck;
       await withCoachSeatLock(coachSeatKeyFor({ token: token ?? undefined, profile: profile ?? undefined }), async () => {
       const local = localRuntimeConfig(vscode.env.appName, proxyUrl);
+      // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
+      if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
         if (this._instructorMode.isInstructor === true) {
           // Instructor path — bypasses student token, ensureProfile, lesson gates, spool
@@ -9750,7 +9777,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.maybeOfferSdkSeed(profile, cfg.get<string>("sdkBinaryPath", "") || undefined, ctrl.signal);
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
-          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          const storeRun = this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId);
+          // A store run holds only the tools its seller declared (F2): no automation MCP host on that turn.
+          const emailAutomationHost = profile.automations?.enabled && !storeRun ? await this.emailAutomationHost?.() : undefined;
           const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
             onDiagnostic: phase => this.ensureLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
@@ -9782,7 +9811,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             userText: userTextForModel,
             // CGP-KNOW-R-026 — a prompt that carries memory leaves no CLI session file outside the activity (DEC-01).
             // CGP-KNOW-R-029 — so does every turn of a "기록 없이 묻기" task.
-            ...(memoryTurn || temporaryTurn ? { ephemeralSession: true } : {}),
+            ...(memoryTurn || temporaryTurn || storeRun ? { ephemeralSession: true } : {}),
+            ...(storeRun ? { storeRun } : {}),
             ...(memoryTurn ? { memoryContext: memoryTurn.text } : {}),
             images: effectiveImages,
             signal: ctrl.signal,

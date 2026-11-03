@@ -7,6 +7,37 @@ export interface StoreStepView {
   title: string;
   description: string;
   connections: { id: string; why: string }[];
+  params?: { name: string; label: string }[];
+  /** Earlier steps this one waits for (quest graph). Absent: linear order. */
+  depends_on?: string[];
+}
+/** A buyer's adaptation of one step (design v1 D5). Keys starting with `buyer-` are steps the buyer added. */
+export interface StoreOverlaySpec {
+  enabled?: boolean;
+  position?: number;
+  params?: Record<string, string>;
+  tone?: "짧게" | "친근하게" | "격식 있게";
+  extra?: string;
+  replace?: string;
+  title?: string;
+}
+export interface StoreOverlayView {
+  item_id: string;
+  version: number;
+  steps: StoreStepView[];
+  overlay: Record<string, StoreOverlaySpec>;
+  needs_review: string[];
+}
+/** Connections this device already has, for the card's "이미 연결됨" (design v1 D6). Never their values. */
+export interface StoreLocalConnections {
+  google: boolean;
+  roster: boolean;
+}
+/** A finished quest offered for sale from its completion card: name and description prefilled. */
+export interface StoreQuestDraft {
+  title: string;
+  summary: string;
+  steps: { title: string; description: string }[];
 }
 export interface StoreItemView {
   id: string;
@@ -80,6 +111,13 @@ export interface StoreState {
   /** Publication check messages from the Service, one per failed check. */
   checks?: string[];
   testPayments: boolean;
+  query?: string;
+  connections?: StoreLocalConnections;
+  questDraft?: StoreQuestDraft;
+  /** The open adaptation of one installed skill. */
+  overlay?: StoreOverlayView;
+  /** A seller update that adds connections, tools or outputs waits for this consent (F5). */
+  consent?: { itemId: string; widened: string[] };
 }
 /** The App's single-step draft. The Service checks the text, seals it and never returns it. */
 export interface StorePublishDraft {
@@ -99,5 +137,13 @@ export type StoreRequest =
   | { type: "storeReport"; itemId: string; reason: string }
   | { type: "storePublish"; draft: StorePublishDraft }
   | { type: "storeImportFile" }
-  | { type: "storeCancelCheckout" };
+  | { type: "storeCancelCheckout" }
+  | { type: "storeSearch"; query: string }
+  | { type: "storePublishQuest"; title: string; summary: string; price_krw: number }
+  | { type: "storeRun"; itemId: string }
+  | { type: "storeOverlayOpen"; itemId: string }
+  | { type: "storeOverlayClose" }
+  | { type: "storeOverlaySave"; itemId: string; steps: Record<string, StoreOverlaySpec> }
+  | { type: "storeAdapt"; itemId: string; text: string }
+  | { type: "storeUpdate"; itemId: string; consent?: boolean };
 export type StoreHostMessage = { type: "storeState"; state: StoreState } | { type: "storeDraftBody"; body: string };

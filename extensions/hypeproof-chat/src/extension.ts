@@ -67,6 +67,8 @@ import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
 import { registerSkillStore } from "./skillStorePanel";
+import { storeQuestSnapshot } from "./questSkill";
+import { renderQuestHtml } from "./automationQuest";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
@@ -292,6 +294,17 @@ export async function activate(context: vscode.ExtensionContext) {
       const profile = await provider.ensureProfile();
       if (!profile) return "none";
       return profile.activity_kind === "classroom" || isMinorProfile(profile) ? "classroom" : "personal";
+    },
+    localConnections: () => automationHost.storeConnections(),
+    questOffer: () => automationHost.storeQuestOffer(),
+    // Scene 3: the installed skill opens as the buyer's quest (public layer only) beside a new chat task the Service composes.
+    runSkill: async (skill) => {
+      await provider.beginStoreRun(skill);
+      const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
+      if (snapshot) {
+        preview.setLabels({ title: "스토어 스킬", placeholder: "대화에서 요청을 입력하세요", emoji: "◇" });
+        await preview.showAutomation(renderQuestHtml(snapshot));
+      }
     },
   });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {

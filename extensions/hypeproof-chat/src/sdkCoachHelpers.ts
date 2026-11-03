@@ -932,7 +932,7 @@ export const SDK_AUTO_COMPACT_WINDOW_TOKENS = 200_000;
  * ambient environment that names one is dropped before ours are added.
  */
 const OWNED_HEADER_LINE =
-  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
+  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator|store-run)\s*:/i;
 
 /**
  * #749 (AE-14) — the seat a CLI session belongs to: this student, on this
@@ -1114,6 +1114,8 @@ export function buildSdkGatewayEnv(
   /** #751 G2 — the lesson step on screen and the learner's help mode for this turn. Teaching pointers the Service re-checks; never grants. */
   lessonStep?: string;
   helpMode?: string;
+  /** Epic #3418 D2 — `<item_id>@<version>` of the installed store skill this turn runs; the Service composes it. */
+  storeRun?: string;
     proxyUrl: string;
     token: string;
     /** 작업 폴더 절대경로 — 워커가 `x-hps-workspace` 로 받아 시스템 블록에 넣는다. */
@@ -1194,6 +1196,10 @@ export function buildSdkGatewayEnv(
   const custom: string[] = [];
   if(args.fundingSource){if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(args.fundingSource))throw Error('invalid funding source');custom.push(`x-hps-funding-source: ${args.fundingSource}`);}
   if (args.effort) custom.push(`x-hps-effort: ${args.effort}`);
+  if (args.storeRun !== undefined) {
+    if (!/^ski_[0-9a-f]{32}@[1-9]\d{0,5}$/.test(args.storeRun)) throw Error('invalid store run');
+    custom.push(`x-hps-store-run: ${args.storeRun}`);
+  }
   if (args.lessonBinding && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(args.lessonBinding)) custom.push(`x-hps-lesson-binding: ${args.lessonBinding}`);
   // A help mode is meaningful only for a named step: the Service refuses one without it, so neither goes out alone.
   if (args.lessonStep && /^[a-zA-Z0-9_-]{1,64}$/.test(args.lessonStep)) {
@@ -1378,6 +1384,8 @@ export function buildSdkQueryOptions(
   /** #751 G2 — the lesson step on screen and the learner's help mode for this turn. Teaching pointers the Service re-checks; never grants. */
   lessonStep?: string;
   helpMode?: string;
+  /** Epic #3418 D2 — `<item_id>@<version>` of the installed store skill this turn runs; the Service composes it. */
+  storeRun?: string;
     proxyUrl: string;
     token: string;
     cwd?: string;
@@ -1449,6 +1457,7 @@ export function buildSdkQueryOptions(
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,
       helpMode: args.helpMode,
+      storeRun: args.storeRun,
       token: args.token,
       ...(args.configDir ? { configDir: args.configDir } : {}),
       // 시스템 프롬프트 경로는 워커가 버리므로 헤더로 보낸다 (#431).
