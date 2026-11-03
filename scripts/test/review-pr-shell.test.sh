@@ -295,12 +295,12 @@ else
 fi
 
 # 33. cleanup: osascript quit by bundle ID, 15 s wait loop, no SIGKILL (#1487).
-# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s pgrep wait → warn if surviving.
+# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s wait on dev_app_pids (state path) → warn if surviving.
 # SIGKILL (kill -9) is forbidden and must be absent.
 CLEANUP_BODY="$(awk '/^cleanup\(\)/{found=1} found{print} found && /^\}/{exit}' "$SCRIPT")"
 if echo "$CLEANUP_BODY" | grep -qE 'osascript.*quit app id' && \
    echo "$CLEANUP_BODY" | grep -q 'sleep 1' && \
-   echo "$CLEANUP_BODY" | grep -qE 'pgrep.*STATE_HASH'; then
+   echo "$CLEANUP_BODY" | grep -qE 'dev_app_pids.*STATE_DIR_REAL'; then
   if echo "$CLEANUP_BODY" | grep -q 'kill -9'; then
     fail "cleanup: SIGKILL (kill -9) present — forbidden (SIGKILL 금지)"
   else
@@ -715,6 +715,107 @@ else
   fail "60: review-pr-issue-token.sh syntax error"
 fi
 rm -rf "$TK_TMP"
+
+# 55–66. Review Dev state cleanup (#3465): only this review's state folder goes.
+CLEAN_LIB="$(cd "$(dirname "$0")/../.." && pwd)/scripts/review-pr-state-cleanup.sh"
+CL_TMP="$(mktemp -d)"
+CL_WT="$CL_TMP/studio-review-branch"; mkdir -p "$CL_WT"
+CL_REAL_WT="$(cd "$CL_WT" && pwd -P)"
+CL_HASH="abc123def456"
+CL_DEV="$CL_TMP/Library/Application Support/HypeProof Studio Development"
+CL_STATE="$CL_DEV/$CL_HASH"
+mkdir -p "$CL_STATE/user-data" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_STATE/owner.json"
+echo "app copy" > "$CL_STATE/app.bin"
+CL_MAIN="$CL_DEV/0f0f0f0f0f0f"; mkdir -p "$CL_MAIN" && printf '{"format":"x","repo":"/Users/someone/main-checkout"}' > "$CL_MAIN/owner.json"
+run_cleanup() { ( STATE_HASH="$1"; STATE_DIR_REAL="$2"; WORKTREE_DIR="$CL_WT"; source "$CLEAN_LIB"; remove_review_state ); }
+
+# 61. This review's own state folder is removed.
+run_cleanup "$CL_HASH" "$CL_STATE"
+if [[ ! -e "$CL_STATE" ]]; then ok "61: this review's Dev state folder is removed after the app quit"; else fail "61: state folder survived"; fi
+
+# 62. Another checkout's state folder (different hash) is kept.
+if [[ -f "$CL_MAIN/owner.json" ]]; then ok "62: another checkout's state folder is untouched"; else fail "62: other state folder removed"; fi
+
+# 63. A path outside 'HypeProof Studio Development/' is never removed.
+mkdir -p "$CL_TMP/elsewhere/$CL_HASH" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_TMP/elsewhere/$CL_HASH/owner.json"
+run_cleanup "$CL_HASH" "$CL_TMP/elsewhere/$CL_HASH"
+if [[ -f "$CL_TMP/elsewhere/$CL_HASH/owner.json" ]]; then ok "63: folder outside the Dev state root is kept"; else fail "63: folder outside the Dev state root removed"; fi
+
+# 64. A folder whose owner.json names another repo is kept.
+mkdir -p "$CL_DEV/111111111111" && printf '{"format":"x","repo":"/Users/someone/other"}' > "$CL_DEV/111111111111/owner.json"
+run_cleanup "111111111111" "$CL_DEV/111111111111"
+if [[ -f "$CL_DEV/111111111111/owner.json" ]]; then ok "64: state owned by another repo is kept"; else fail "64: foreign-owned state removed"; fi
+
+# 65. A failed removal only warns and still returns 0.
+mkdir -p "$CL_DEV/222222222222/user-data" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_DEV/222222222222/owner.json"
+if [[ "$(id -u)" -eq 0 ]]; then
+  warn "65: skipped as root (chmod cannot block removal)"
+else
+  chmod 555 "$CL_DEV"
+  RC=0; OUT="$(run_cleanup 222222222222 "$CL_DEV/222222222222" 2>&1)" || RC=$?
+  chmod 755 "$CL_DEV"
+  if [[ $RC -eq 0 ]] && grep -q 'WARNING: could not remove' <<<"$OUT"; then
+    ok "65: failed removal prints a warning and returns 0"
+  else
+    fail "65: failed removal (rc=$RC, out='$OUT')"
+  fi
+fi
+
+# 66. review-pr.sh calls the cleanup before it removes the worktree, and sources the helper.
+CALL_LINE="$(grep -n '^  remove_review_state$' "$SCRIPT" | cut -d: -f1 | head -1)"
+WT_LINE="$(grep -n 'worktree remove "\$WORKTREE_DIR"' "$SCRIPT" | cut -d: -f1 | head -1)"
+if [[ -n "$CALL_LINE" && -n "$WT_LINE" && "$CALL_LINE" -lt "$WT_LINE" ]] && grep -q 'source "\$REPO/scripts/review-pr-state-cleanup.sh"' "$SCRIPT"; then
+  ok "66: review-pr.sh sources the helper and cleans state before the worktree is removed"
+else
+  fail "66: cleanup wiring wrong (call=$CALL_LINE worktree=$WT_LINE)"
+fi
+chmod -R u+w "$CL_TMP" 2>/dev/null || true
+rm -rf "$CL_TMP"
+
+# 67–71. Running-app check uses the state path, not the applicationName (#3465 follow-up).
+PS_TMP="$(mktemp -d)"
+PS_DEV="$PS_TMP/Library/Application Support/HypeProof Studio Development"
+PS_WT="$PS_TMP/studio-review-branch"; mkdir -p "$PS_WT"; PS_REAL_WT="$(cd "$PS_WT" && pwd -P)"
+mk_state() { mkdir -p "$1/user-data" && printf '{"format":"x","repo":"%s"}' "$PS_REAL_WT" > "$1/owner.json"; }
+ps_cleanup() { ( STATE_HASH="$1"; STATE_DIR_REAL="$2"; WORKTREE_DIR="$PS_WT"; source "$CLEAN_LIB"; remove_review_state ); }
+PS_PIDS=()
+
+# 67. A live process whose command line names this state folder keeps it.
+PS_LIVE="$PS_DEV/fedcba987654"; mk_state "$PS_LIVE"
+bash -c 'sleep 30; true' "$PS_LIVE/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "fedcba987654" "$PS_LIVE"
+if [[ -f "$PS_LIVE/owner.json" ]]; then ok "67: state folder of a running Dev app (path in its command line) is kept"; else fail "67: running app's state folder removed"; fi
+
+# 68. A process naming another hash's folder does not keep this state.
+PS_OTHER="$PS_DEV/a1a1a1a1a1a1"; mk_state "$PS_OTHER"
+PS_TARGET="$PS_DEV/b2b2b2b2b2b2"; mk_state "$PS_TARGET"
+bash -c 'sleep 30; true' "$PS_OTHER/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "b2b2b2b2b2b2" "$PS_TARGET"
+if [[ ! -e "$PS_TARGET" && -f "$PS_OTHER/owner.json" ]]; then ok "68: a process of another checkout does not block removal; its folder is untouched"; else fail "68: other-hash process affected removal"; fi
+
+# 69. A sibling folder whose name starts with this state's name does not match.
+PS_BASE="$PS_DEV/c3c3c3c3c3c3"; mk_state "$PS_BASE"
+PS_SIB="${PS_BASE}2"; mk_state "$PS_SIB"
+bash -c 'sleep 30; true' "$PS_SIB/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "c3c3c3c3c3c3" "$PS_BASE"
+if [[ ! -e "$PS_BASE" && -f "$PS_SIB/owner.json" ]]; then ok "69: sibling folder with a longer name does not match the state path"; else fail "69: prefix match blocked or wrongly kept"; fi
+
+# 70. An empty path matches nothing (it would otherwise match every process).
+PS_EMPTY_OUT="$( ( source "$CLEAN_LIB"; dev_app_pids "" ) )"
+if [[ -z "$PS_EMPTY_OUT" ]]; then ok "70: empty state path matches no process"; else fail "70: empty path matched processes"; fi
+
+# 71. review-pr.sh no longer looks for the applicationName; both places use dev_app_pids.
+if ! grep -q 'pgrep -f "hypeproof-studio-dev-' "$SCRIPT" && [[ "$(grep -c 'dev_app_pids' "$SCRIPT")" -ge 3 ]]; then
+  ok "71: review-pr.sh wait loop and warning use the state-path check"
+else
+  fail "71: applicationName pgrep still used or state-path check missing"
+fi
+
+for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
+rm -rf "$PS_TMP"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"

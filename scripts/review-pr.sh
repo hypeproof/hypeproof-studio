@@ -97,6 +97,8 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 # macOS BSD date does not support %N; use python3 for millisecond timestamps.
 ms() { python3 -c 'import time;print(int(time.time()*1000))'; }
 
+# shellcheck source=review-pr-state-cleanup.sh
+source "$REPO/scripts/review-pr-state-cleanup.sh"
 _CLEANUP_DONE=0
 cleanup() {
   [[ $_CLEANUP_DONE -eq 1 ]] && return; _CLEANUP_DONE=1
@@ -121,18 +123,19 @@ cleanup() {
       sleep 1
       _QUIT_WAITED=$(( _QUIT_WAITED + 1 ))
       # App is gone when no process with that bundle ID remains.
-      if ! pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+      if [[ -z "$(dev_app_pids "$STATE_DIR_REAL")" ]]; then
         break
       fi
     done
-    if pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+    if [[ -n "$(dev_app_pids "$STATE_DIR_REAL")" ]]; then
       echo "WARNING: Dev app did not exit after 15 s. Remaining PIDs:"
-      pgrep -f "hypeproof-studio-dev-$STATE_HASH" || true
+      dev_app_pids "$STATE_DIR_REAL" || true
     fi
   elif [[ -n "${DEV_APP_PID:-}" ]] && kill -0 "$DEV_APP_PID" 2>/dev/null; then
     echo "Closing Dev app (PID $DEV_APP_PID, no STATE_HASH)..."
     kill "$DEV_APP_PID" 2>/dev/null || true
   fi
+  remove_review_state
   [[ -n "${KB_SQL:-}" ]] && rm -f "$KB_SQL" 2>/dev/null || true
   [[ -n "${HPS_DEV_ISSUER_TOKEN_FILE:-}" ]] && rm -f "$HPS_DEV_ISSUER_TOKEN_FILE" 2>/dev/null || true
   [[ -n "${TOKEN_JSON_TMP:-}" ]] && rm -f "$TOKEN_JSON_TMP" 2>/dev/null || true

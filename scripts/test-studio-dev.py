@@ -380,4 +380,82 @@ class DevLauncherTests(unittest.TestCase):
                 dev.main()
             self.assertTrue(launch.call_args.kwargs['inmemory_secrets'])
 
+    def prepared_fixture(self, root):
+        repo = root/'repo'; base = root/'installed'; state = root/'state'; state.mkdir()
+        source = repo/'extensions/hypeproof-chat'; source.mkdir(parents=True)
+        (source/'package.json').write_text('{"name":"hypeproof-chat"}', encoding='utf-8')
+        payload = base/'resources/app'; shipped = payload/'extensions/hypeproof-chat'
+        (shipped/'dist').mkdir(parents=True); (shipped/'webview-ui/dist').mkdir(parents=True)
+        (payload/'product.json').write_text('{"nameShort":"HypeProof Studio"}', encoding='utf-8')
+        (shipped/'package.json').write_text('{"name":"hypeproof-chat"}', encoding='utf-8')
+        (shipped/'dist/extension.js').write_text('official', encoding='utf-8')
+        (base/'HypeProof Studio.exe').write_bytes(b'signed shell')
+        self.init_repo(repo)
+        old = state/'HypeProof Studio Dev'; old.mkdir(); (old/'marker.txt').write_text('old development app', encoding='utf-8')
+        return repo, base, state, old
+
+    @staticmethod
+    def stub_build(_repo, stage):
+        (stage/'webview').mkdir(parents=True, exist_ok=True)
+        (stage/'extension.js').write_text('new build', encoding='utf-8')
+        (stage/'webview/index.html').write_text('new webview', encoding='utf-8')
+        return {}
+
+    def test_successful_switch_leaves_no_previous_app_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                app = dev.prepare(repo, base, state, 'local')
+            self.assertEqual(sorted(p.name for p in state.glob('previous-*.inactive')), [])
+            self.assertFalse((app/'marker.txt').exists())
+            self.assertEqual((dev.app_resources(app)/'extensions/hypeproof-chat/webview-ui/dist/index.html').read_text(encoding='utf-8'), 'new webview')
+            receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
+            self.assertIsNone(receipt['previous_app'])
+
+    def test_failed_switch_restores_previous_app_and_does_not_discard_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            real_rename = dev.Path.rename
+            def failing_rename(path, target):
+                if path.name.startswith('candidate-') and Path(target).name == 'HypeProof Studio Dev':
+                    raise OSError('simulated rename failure')
+                return real_rename(path, target)
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), \
+                 patch.object(dev.Path, 'rename', failing_rename), patch('builtins.print'):
+                with self.assertRaisesRegex(OSError, 'simulated rename failure'):
+                    dev.prepare(repo, base, state, 'local')
+            self.assertEqual((old/'marker.txt').read_text(encoding='utf-8'), 'old development app')
+            self.assertEqual(sorted(p.name for p in state.glob('previous-*.inactive')), [])
+
+    def test_prune_removes_only_matching_inactive_app_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            stale = state/('previous-' + 'a' * 32 + '.inactive'); stale.mkdir(); (stale/'payload.bin').write_bytes(b'x' * 16)
+            other_name = state/'previous-notahex.inactive'; other_name.mkdir()
+            stray_file = state/('previous-' + 'b' * 32 + '.inactive'); stray_file.write_text('not a folder', encoding='utf-8')
+            user_data = state/'user-data/User'; user_data.mkdir(parents=True); (user_data/'settings.json').write_text('{}', encoding='utf-8')
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local')
+            self.assertFalse(stale.exists())
+            self.assertTrue(other_name.is_dir())
+            self.assertTrue(stray_file.is_file())
+            self.assertTrue((user_data/'settings.json').is_file())
+
+    def test_failed_discard_warns_and_keeps_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            real_rmtree = dev.shutil.rmtree
+            def rmtree(path, *args, **kwargs):
+                if Path(path).name.startswith('previous-'):
+                    raise OSError('simulated busy folder')
+                return real_rmtree(path, *args, **kwargs)
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), \
+                 patch.object(dev.shutil, 'rmtree', side_effect=rmtree), patch('sys.stdout', new_callable=io.StringIO), patch('sys.stderr', new_callable=io.StringIO) as err:
+                app = dev.prepare(repo, base, state, 'local')
+            self.assertIn('could not remove previous development app', err.getvalue())
+            self.assertEqual((dev.app_resources(app)/'extensions/hypeproof-chat/webview-ui/dist/index.html').read_text(encoding='utf-8'), 'new webview')
+            receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
+            self.assertIsNotNone(receipt['previous_app'])
+            self.assertTrue(Path(receipt['previous_app']).is_dir())
+
 if __name__=='__main__': unittest.main()
