@@ -12,20 +12,33 @@ dev_app_pids() {
     | STATE_PATH="$1/" awk -v self="$$" 'index($0, ENVIRON["STATE_PATH"]) > 0 { if ($1 != self) print $1 }'
 }
 
+# Resolves STATE_DIR_REAL again from STATE_DIR. review-pr.sh step 1.5 resolves it before
+# studio-dev.py creates the folder, when realpath still returns nothing.
+refresh_state_dir_real() {
+  STATE_DIR_REAL="$(realpath "${STATE_DIR:-}" 2>/dev/null || true)"
+}
+
+# Skips the removal with a NOTE on stderr. The exit status stays 0.
+state_removal_skipped() {
+  echo "NOTE: state removal skipped: $1" >&2
+  return 0
+}
+
 # Expects STATE_HASH,
 # STATE_DIR_REAL and WORKTREE_DIR from review-pr.sh. Always returns 0: a failed
 # removal is a warning, never a change of the review's exit status.
 remove_review_state() {
   local owner real_wt
-  [[ -n "${STATE_DIR_REAL:-}" && -n "${STATE_HASH:-}" && -n "${WORKTREE_DIR:-}" ]] || return 0
-  [[ "$(basename "$STATE_DIR_REAL")" == "$STATE_HASH" ]] || return 0
-  [[ "$STATE_DIR_REAL" == *"/HypeProof Studio Development/"* ]] || return 0
-  [[ -d "$STATE_DIR_REAL" && ! -L "$STATE_DIR_REAL" ]] || return 0
+  [[ -n "${STATE_HASH:-}" && -n "${WORKTREE_DIR:-}" ]] || { state_removal_skipped "review variables are not set"; return 0; }
+  [[ -n "${STATE_DIR_REAL:-}" ]] || { state_removal_skipped "no Dev state folder was created for this review"; return 0; }
+  [[ "$(basename "$STATE_DIR_REAL")" == "$STATE_HASH" ]] || { state_removal_skipped "folder name does not match this review's hash ($STATE_DIR_REAL)"; return 0; }
+  [[ "$STATE_DIR_REAL" == *"/HypeProof Studio Development/"* ]] || { state_removal_skipped "folder is outside the Dev state root ($STATE_DIR_REAL)"; return 0; }
+  [[ -d "$STATE_DIR_REAL" && ! -L "$STATE_DIR_REAL" ]] || { state_removal_skipped "not a folder, or a symbolic link ($STATE_DIR_REAL)"; return 0; }
   if [[ -n "$(dev_app_pids "$STATE_DIR_REAL")" ]]; then
     echo "NOTE: keeping $STATE_DIR_REAL: the Dev app is still running." >&2
     return 0
   fi
-  real_wt="$(cd "$WORKTREE_DIR" 2>/dev/null && pwd -P)" || return 0
+  real_wt="$(cd "$WORKTREE_DIR" 2>/dev/null && pwd -P)" || { state_removal_skipped "the review worktree is gone"; return 0; }
   owner="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("repo", ""))' "$STATE_DIR_REAL/owner.json" 2>/dev/null)" || owner=""
   if [[ -z "$owner" || "$owner" != "$real_wt" ]]; then
     echo "NOTE: keeping $STATE_DIR_REAL: owner.json does not name this review worktree." >&2

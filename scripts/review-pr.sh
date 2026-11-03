@@ -104,6 +104,8 @@ cleanup() {
   [[ $_CLEANUP_DONE -eq 1 ]] && return; _CLEANUP_DONE=1
   echo ""
   echo "=== Cleanup ==="
+  # Studio dev creates the state folder after step 1.5; resolve it now so the wait and removal see it.
+  refresh_state_dir_real
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
     echo "Stopping wrangler dev (PID $SERVER_PID)..."
     kill "$SERVER_PID" 2>/dev/null || true
@@ -195,6 +197,7 @@ print(hashlib.sha256(str(repo).encode()).hexdigest()[:12])
 PY
 )"
 STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$STATE_HASH"
+# Empty here when the folder does not exist yet; cleanup resolves it again (refresh_state_dir_real).
 STATE_DIR_REAL="$(realpath "$STATE_DIR" 2>/dev/null || true)"
 
 WS_DELETED=0
