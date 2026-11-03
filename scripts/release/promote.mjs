@@ -153,7 +153,13 @@ function draftAssets(repo, tag) {
   }
   if (pick.action === 'create') {
     gh('release', 'create', tag, '--draft', '--title', `HypeProof Studio ${tag}`, '--generate-notes', '--verify-tag');
-    pick = pickRelease(list(), tag); // two concurrent runs leave two drafts: stop here
+    // The listing can lag the create by a few seconds (v2026.1102.2, 2026-11-02: releases/undefined).
+    for (let i = 0; i < 10; i++) {
+      pick = pickRelease(list(), tag); // two concurrent runs leave two drafts: stop here
+      if (pick.action !== 'create') break;
+      execFileSync('sleep', ['3']);
+    }
+    if (pick.action === 'create') throw new Error(`The ${tag} draft was created but is not listed yet; rerun.`);
   }
   return {published: false, assets: JSON.parse(gh('api', `repos/${repo}/releases/${pick.id}`)).assets.map(a => ({name: a.name, digest: a.digest ?? null}))};
 }
