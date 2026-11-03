@@ -162,7 +162,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         return run(async () => {
           await c.installFree(msg.itemId);
           const title = state.items.find((i) => i.id === msg.itemId)?.title ?? "";
-          await load("mine", { notice: STORE_COPY.paid(title) });
+          await load("mine", { notice: STORE_COPY.installedFree(title) });
         });
       case "storeRefund":
         return run(async () => {
