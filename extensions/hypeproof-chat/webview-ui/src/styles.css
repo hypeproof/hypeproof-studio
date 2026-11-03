@@ -2945,13 +2945,14 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-muted); }
 .hps-shell-automation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
 .hps-shell-automation > .hps-input-area { padding: 10px 14px; gap: 8px; background: var(--hp-bg); }
-.hps-shell-automation .hps-conversation-settings { max-height: 14vh; overscroll-behavior: contain; }
+.hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; }
 .hps-shell-automation .hps-conversation-settings > summary { padding: 6px 0; }
 .hps-shell-automation .hps-conversation-settings[open] { border-bottom: 1px solid var(--hp-line); padding-bottom: 8px; }
 /* Keep the conversation usable on short Windows screens with expanded settings,
-   including systems whose Korean fallback font has taller line metrics. */
+   including systems whose Korean fallback font has taller line metrics. Main's growing
+   composer fills the footer up to this cap, so the cap alone sets the conversation height. */
 @media (max-height: 600px) {
-  .hps-shell-automation > .hps-input-area { max-height: 40%; }
+  .hps-shell-automation > .hps-input-area { max-height: 37%; }
 }
 .hps-shell-automation .hps-access-embedded { border: 0; padding: 8px 0; max-height: none; overflow: visible; }
 .hps-shell-automation .hps-access-heading { font-size: 12px; margin: 6px 0; }
