@@ -173,7 +173,7 @@ export async function pullInto(
     let backup: string | undefined;
     if (opts.keepBackup) {
       backup = `${folder}.before-pull-${opts.stamp}`;
-      fs.cpSync(folder, backup, { recursive: true, errorOnExist: true, force: false });
+      copyTree(folder, backup);
     }
     const incoming = new Set<string>();
     const walk = (dir: string, rel: string) => {
@@ -198,6 +198,22 @@ export async function pullInto(
     return { ok: false, code: "unexpected", detail: err instanceof Error ? err.message : String(err) };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Copy `from` into `to`, which must not exist (nor any file under it). Not `fs.cpSync`: on
+ * Windows it crashes the whole process when the path has non-ASCII characters — measured
+ * 2026-10-17 in Studio's own runtime (Electron 39.8.7, Node 22.22.1) under `C:\Users\홍길동`, i.e.
+ * every Korean user name. Links are not followed (they are not copied).
+ */
+export function copyTree(from: string, to: string): void {
+  fs.mkdirSync(to);
+  for (const e of fs.readdirSync(from, { withFileTypes: true })) {
+    const a = path.join(from, e.name);
+    const b = path.join(to, e.name);
+    if (e.isDirectory()) copyTree(a, b);
+    else if (e.isFile()) fs.copyFileSync(a, b, fs.constants.COPYFILE_EXCL);
   }
 }
 

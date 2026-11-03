@@ -6,7 +6,7 @@ as commercial launch approval. Parent: Epic1603 / issue1604 / PR1605, EA-02/08/1
 
 ## Confirmed architecture and bounded verification
 
-TJ selected the managed shared Google executor on 2026-10-14 (DEC-023).
+TJ selected the managed shared Google executor on 2026-10-14 (DEC-026).
 Personal Apps Script export is deferred in the current email baseline; DEC-024
 separately designs learner-owned deployment for the expanded workplace journey.
 Learners supply bounded saved recipes;
@@ -77,7 +77,7 @@ scope verification are separate from a pilot-user list.
 
 | Priority / owner | Work | Required evidence / current state |
 | --- | --- | --- |
-| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-023). Architecture isolation and native shared-preview integration passed; full-product two-account reuse is next. |
+| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-026). Architecture isolation and native shared-preview integration passed; full-product two-account reuse is next. |
 | P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Own-Sheet reads, cross-Sheet denial and per-user state have revision-bound live evidence. The approved shared-runner self-mail passed at624b214f with matching Inbox receipt at15:04KST on2026-10-15. Current three-account Mac-to-Windows store reuse and production credential persistence remain open; see the canonical store contract. |
 | P0 Product/site owner | Publish product homepage, accurate privacy/deletion policy, support contact; verify company domain | URLs reachable without login and domain ownership verified. Technical disclosure draft below is prepared; publication and legal/retention facts need owner confirmation. |
 | P0 Google project owner | Production OAuth project/client, required APIs, branding and least-privilege scope declarations; submit demo and rationale | Separate production and test configuration; submission receipt then Google approval. Never infer approval from a Publish button. |

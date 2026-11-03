@@ -155,10 +155,10 @@ const enterWork = async (where = 'true') => { const e = await frame('.studio-pri
 const PANEL = `(()=>{const p=document.querySelector('[data-lesson-step-panel]');if(!p)return null;return {step:p.dataset.lessonStepPanel,help:[...p.querySelectorAll('input[name="hp-help-mode"]')].map(i=>[i.value,i.checked]),surface:p.querySelector('[data-surface]')?.dataset.surface??null,saved:p.querySelector('[data-saved-work]')?.textContent??null,rehearsal:p.querySelector('.hp-rehearsal')?.textContent??null,result:p.querySelector('[data-rehearsal-result]')?.textContent??null,text:p.textContent.slice(0,600)};})()`;
 const panelOf = (chat) => chat.evaluate(PANEL);
 /** The mission header as drawn in the real window (MissionHeader.tsx): week line, sentence, completion items and their marks. */
-const HEADER = `(()=>{const h=document.querySelector('header.hp-mission');if(!h)return null;return {week:h.querySelector('.hp-mission-week')?.textContent??null,sentence:h.querySelector('.hp-mission-sentence')?.textContent??null,completion:[...h.querySelectorAll('.hp-mission-completion-text')].map(e=>e.textContent),marks:[...h.querySelectorAll('.hp-mission-completion li:not(.hp-mission-completion-note) .hp-mark')].map(e=>e.textContent)};})()`;
+const HEADER = `(()=>{const h=document.querySelector('header.hp-mission');if(!h)return null;return {week:h.querySelector('.hp-mission-week')?.textContent??null,sentence:h.querySelector('.hp-mission-sentence')?.textContent??null,completion:[...h.querySelectorAll('.hp-mission-completion-text')].map(e=>e.textContent),marks:[...h.querySelectorAll('.hp-mission-completion li:not(.hp-mission-completion-note) .hp-mark')].map(e=>e.querySelector('svg')?.dataset.icon??e.textContent)};})()`;
 const headerOf = (chat) => chat.evaluate(HEADER);
 const UNSET = { week: null, sentence: '미션이 정해지지 않았습니다.', completion: [], marks: [] };
-const headerFor = (m) => m ? { week: m.week + '주차', sentence: m.mission, completion: m.completion.map((c) => c[0]), marks: m.completion.map(() => '☐') } : UNSET;
+const headerFor = (m) => m ? { week: m.week + '주차', sentence: m.mission, completion: m.completion.map((c) => c[0]), marks: m.completion.map(() => 'square') } : UNSET;
 const waitHeader = (chat, m, label) => wait(async () => { const h = await headerOf(chat); return JSON.stringify(h) === JSON.stringify(headerFor(m)) ? h : null; }, label + ' — the header draws ' + (m ? '‘' + m.mission + '’' : 'no mission'));
 const shot = async (w, name) => { try { await w.screenshot({ path: path.join(out, name) }); } catch (e) { console.log('screenshot skipped: ' + e.message); } };
 const db = (sql, ...a) => local.db.prepare(sql).all(...a).map((r) => ({ ...r }));
@@ -294,6 +294,7 @@ try {
   assert.deepEqual(la1.mission, [1, A.mission.mission], 'the next turn carried A\'s mission'); result.header_A = await waitHeader(chat, A.mission, 'A1 on A'); assert.ok(!la1.tools.some((n) => ['Write', 'Edit', 'MultiEdit'].includes(n)), 'A1 on A: no write tool');
   let p = await wait(async () => { const x = await panelOf(chat); return x?.surface === 'criterion_form' ? x : null; }, 'A\'s work surface on the learner\'s screen'); assert.deepEqual(p.help, [['hint', true], ['independent', false]]);
   await press(chat, 'input[name="hp-help-mode"][value="independent"]', 'the help choice 직접 해보기');
+  await press(chat, '[data-block-card="criterion_form"] [data-block-toggle]', 'the 자료 card\'s 열어 보기 (CGP-LEARN-D-001)');
   await setValue(chat, '[data-surface="criterion_form"] textarea', '예약 버튼이 첫 화면에서 바로 보인다'); await press(chat, '[data-surface="criterion_form"] button[type="submit"]', 'the criterion save button');
   await wait(async () => /저장한 기준: 예약 버튼이 첫 화면에서 바로 보인다/.test((await panelOf(chat))?.saved ?? ''), 'the saved criterion on screen'); await shot(win, 'g2-mac-10-learner-A-criterion.png');
   await ask(chat, 'Q-LA2 기준대로 확인해 주세요', 'Q-LA2'); await idle(chat);
@@ -311,6 +312,7 @@ try {
   const lb1 = callsFor('Q-LB1').at(-1); assert.deepEqual([lb1.lesson, lb1.help?.mode], [VB, '함께 수정']);
   assert.deepEqual(lb1.mission, [2, B.mission.mission], 'the next turn carried B\'s mission'); result.header_B = await waitHeader(chat, B.mission, 'A1 on B'); assert.ok(lb1.tools.includes('Write'), 'B admits writing: ' + lb1.tools);
   p = await wait(async () => { const x = await panelOf(chat); return x?.surface === 'decision_form' ? x : null; }, 'B\'s decision surface'); assert.deepEqual(p.help, [['co_edit', true], ['independent', false]]);
+  await press(chat, '[data-block-card="decision_form"] [data-block-toggle]', 'the 자료 card\'s 열어 보기 (CGP-LEARN-D-001)');
   await setValue(chat, '[data-surface="decision_form"] input', '토요일 진료시간을 오후 2시까지로 고친다'); await setValue(chat, '[data-surface="decision_form"] textarea', '원장님이 확인한 실제 시간이라서');
   await press(chat, '[data-surface="decision_form"] button[type="submit"]', 'the decision save button'); await wait(async () => /저장한 결정: 토요일/.test((await panelOf(chat))?.saved ?? ''), 'the saved decision'); await shot(win, 'g2-mac-12-learner-B-decision.png');
   await ask(chat, 'Q-LB2 이유까지 반영해 주세요', 'Q-LB2'); await idle(chat); const lb2 = callsFor('Q-LB2').at(-1); assert.deepEqual(lb2.decision, ['토요일 진료시간을 오후 2시까지로 고친다', '원장님이 확인한 실제 시간이라서']);

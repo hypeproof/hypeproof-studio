@@ -37,6 +37,7 @@ export async function runClaude({
   messages,
   signal,
   onDelta,
+  onRefusal,
   toolServer,
   timeout,
 }) {
@@ -93,6 +94,8 @@ export async function runClaude({
       signal,
       ...(timeout === undefined ? {} : { timeout }),
       onEvent: (event) => {
+        if ((event.type === "result" && event.stop_reason === "refusal") ||
+            (event.type === "system" && event.subtype === "model_refusal_no_fallback")) onRefusal?.();
         const delta =
           event.type === "stream_event" &&
           event.event?.type === "content_block_delta" &&

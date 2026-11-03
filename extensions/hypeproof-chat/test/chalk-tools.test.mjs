@@ -113,7 +113,8 @@ await check('T-L7 execCheckPlan requires cohort and course', async () => {
 });
 
 // ─── T-L8~T-L9: mergeChalkTools — 도구 목록에 chalk_* 포함 여부 ────────────
-const { mergeChalkTools } = await import('../src/localRuntime/index.ts');
+const { mergeExtraTools } = await import('../src/localRuntime/index.ts');
+const { chalkExtraTools } = await import('../src/chalk/tools.ts');
 
 // 모의 워크스페이스 도구 (Read 하나만)
 const mockWorkTools = {
@@ -126,7 +127,7 @@ await check('T-L8 instructor mode: chalk_* added to definitions (Claude+Codex pa
   const fakeSecrets = { get: async (k) => k === 'hypeproofChat.issuerToken' ? `${issuerPayload}.sig` : undefined };
   const chalkCtx = { serverUrl: 'http://localhost:9999', secrets: fakeSecrets };
 
-  const merged = mergeChalkTools(mockWorkTools, chalkCtx);
+  const merged = mergeExtraTools(mockWorkTools, chalkExtraTools(chalkCtx));
   const names = merged.definitions.map(d => d.name);
 
   assert.ok(names.includes('Read'), 'workspace tool preserved');
@@ -137,7 +138,7 @@ await check('T-L8 instructor mode: chalk_* added to definitions (Claude+Codex pa
 
 await check('T-L9 student mode: chalk_* NOT in definitions', async () => {
   // chalkCtx 없음 = 학생 모드
-  const merged = mergeChalkTools(mockWorkTools, undefined);
+  const merged = mergeExtraTools(mockWorkTools, chalkExtraTools(undefined));
   const names = merged.definitions.map(d => d.name);
 
   assert.ok(names.includes('Read'), 'workspace tool preserved');
@@ -160,7 +161,7 @@ await check('T-L10 mergeChalkTools routes chalk tool call through callChalkTool'
   try {
     const fakeSecrets = { get: async (k) => k === 'hypeproofChat.issuerToken' ? SECRET_TOKEN : undefined };
     const chalkCtx = { serverUrl: `http://127.0.0.1:${port}`, secrets: fakeSecrets };
-    const merged = mergeChalkTools(mockWorkTools, chalkCtx);
+    const merged = mergeExtraTools(mockWorkTools, chalkExtraTools(chalkCtx));
 
     // 버튼 명령도 callChalkTool을 부른다 — 같은 실행 함수 경로 검증
     const result = await merged.call('chalk_check_plan', { cohort: 'c1', course: 'l1' });

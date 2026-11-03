@@ -127,11 +127,11 @@ export function GoalEditor({ fields, edit, onEdit, onSave }: GoalEditorProps) {
     >
       <label>
         내 목표 — 무엇을 만들고, 어떻게 되면 좋을지 적어요
-        <textarea value={fields.goal} maxLength={GOAL_TEXT_MAX} rows={2} onChange={(e) => onEdit({ goal: e.target.value })} />
+        <textarea name="goal" value={fields.goal} maxLength={GOAL_TEXT_MAX} rows={2} onChange={(e) => onEdit({ goal: e.target.value })} />
       </label>
       <label>
         내 완료 기준 — 한 줄에 하나씩, 다섯 줄까지 적어요
-        <textarea value={fields.criteria} rows={3} onChange={(e) => onEdit({ criteria: e.target.value })} />
+        <textarea name="criteria" value={fields.criteria} rows={3} onChange={(e) => onEdit({ criteria: e.target.value })} />
       </label>
       {edit.tooLong ? (
         <p className="hp-rail-lesson-note" role="status">한 줄이 너무 길어요. 조금 줄여 주세요.</p>

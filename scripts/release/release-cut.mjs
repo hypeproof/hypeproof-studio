@@ -18,6 +18,9 @@ import {fileURLToPath} from 'node:url';
 import {classify, fetchPrs, render} from './checklist.mjs';
 import {exitCode, printSmoke, runSmoke} from './smoke/smoke.mjs';
 import {nextRcTag, versionFor} from './version.mjs';
+import {oneLiner, windowsOneLiner} from './install-kit.mjs';
+import {checkoutPlatforms} from './platforms.mjs';
+import {run as selectCases} from './select-cases.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -71,7 +74,6 @@ console.log(`[4] smoke on ${short}`);
 const smoke = await runSmoke({
   sha: candidate, out,
   serviceUrl: arg('--service-url', 'https://api.hypeproof-ai.xyz'),
-  chalkUrl: arg('--chalk-url', 'https://chalk.hypeproof-ai.xyz'),
 });
 printSmoke(smoke);
 const smokeRows = smoke.checks.map(c => `| ${c.id} ${c.name} | ${c.result} | ${String(c.detail).replace(/\|/g, '\\|')} |`).join('\n');
@@ -80,6 +82,22 @@ const smokeRows = smoke.checks.map(c => `| ${c.id} ${c.name} | ${c.result} | ${S
 console.log(`[5] reading ${prNumbers.length} PRs`);
 const {groups, authors} = classify(fetchPrs(REPO, prNumbers));
 const rendered = render({groups});
+
+// 7. Black-box cases for the release manager (docs/operations/release-casebook/README.md).
+// A broken casebook does not stop the cut; the PR body says so and the manager runs every P0 case.
+let cases = {markdown: '', json: null};
+let changedRequirements = '';
+try {
+  cases = selectCases({root, baseline, candidate, today: day, out});
+  changedRequirements = cases.json.touched_requirements.length
+    ? cases.json.touched_requirements.map(id => `\`${id}\``).join(' ')
+    : 'None found in commit messages or requirement-doc diffs.';
+  console.log(`[6] black-box cases: ${cases.json.cases.length} selected, ${cases.json.touched_requirements.length} requirement ids touched`);
+} catch (error) {
+  console.log(`[6] black-box case selection failed: ${error.message}`);
+  cases.markdown = `> **케이스 선택 실패** — \`${String(error.message).split('\n')[0]}\`. 릴리스 관리자는 \`docs/operations/release-casebook/cases.yaml\` 의 P0 케이스를 모두 실행합니다.`;
+  changedRequirements = '_not computed: case selection failed_';
+}
 
 const fill = (name, values) => fs.readFileSync(path.join(here, 'templates', name), 'utf8')
   .replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`);
@@ -96,7 +114,7 @@ const plan = {
 };
 const writePlan = () => fs.writeFileSync(path.join(out, 'plan.json'), JSON.stringify(plan, null, 2));
 
-// 7. Branch on the smoke verdict.
+// 8. Branch on the smoke verdict.
 if (smoke.result === 'FAIL') {
   fs.writeFileSync(path.join(out, 'smoke-failure-issue.md'), fill('smoke-failure-issue.md', {
     ...common, AUTHORS: authors.map(a => `- @${a}`).join('\n') || 'None.',
@@ -113,8 +131,13 @@ if (smoke.result === 'FAIL') {
 fs.writeFileSync(path.join(out, 'release-pr.md'), fill('release-pr.md', {
   ...common,
   RC_TAG: rcTag, FINAL_TAG: version,
+  INSTALL_ONELINER: oneLiner(rcTag),
+  INSTALL_WINDOWS: checkoutPlatforms(root).includes('win32-x64')
+    ? `\n**rc install (Windows, PowerShell — replaces the installed HypeProof Studio; or double-click \`update-windows.cmd\` on the rc page):**\n\n\`\`\`powershell\n${windowsOneLiner(rcTag)}\n\`\`\`\n`
+    : '',
+  BLACKBOX_CASES: cases.markdown, CHANGED_REQUIREMENTS: changedRequirements,
   RC_BUILD_LINK: `https://github.com/${REPO}/releases/tag/${rcTag}`,
-  SERVICE_VERSION: smoke.service_version ?? 'unknown', CHALK_VERSION: smoke.chalk_version ?? 'unknown',
+  SERVICE_VERSION: smoke.service_version ?? 'unknown',
   SMOKE_RESULT: smoke.result,
   DEPENDENCY_ITEMS: rendered.dependency, FEATURE_ITEMS: rendered.features, AUTOMATIC_ITEMS: rendered.automatic,
   SMOKE_MISSING: 'No baseline commit for smoke declarations yet. Listed from the baseline onward.',
@@ -125,7 +148,7 @@ writePlan();
 
 console.log(`\n→ smoke ${smoke.result}. A real cut would create:`);
 if (smoke.result !== 'PASS') console.log('   ⚠ a check is NOT_RUN. A real cut stops here; the rest is a preview.');
-console.log(`   · tag ${rcTag} on ${short} (starts build-mac, build-windows and the automatic E2E)`);
+console.log(`   · tag ${rcTag} on ${short} (starts the configured platform builds and the automatic E2E)`);
 console.log(`   · branch ${branch} adding releases/${version}.md`);
 console.log(`   · release PR "${plan.title}"  (${path.join(out, 'release-pr.md')})`);
 console.log(`     ${groups.features.length} feature checks · ${groups.dependency.length} dependency/deploy · ${groups.automatic.length} automatic\n`);

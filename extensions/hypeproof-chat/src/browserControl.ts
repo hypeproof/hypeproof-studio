@@ -1,8 +1,12 @@
+import { dragRectangle, intersects, marker, markerComment, isAnnotationOverlayNode, type MarkerOptions } from "./annotationCapture";
+import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
+import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
 import { CdpSession } from "./cdpSession";
 import { safeNavigateUrl, quadCenter, buildAxSnapshot } from "./browserControlHelpers";
 import { CrExecutor, checkAgentOrigin, type CrHooks, type Observation } from "./experimentBrowser";
 import { buildElementContext, waitForPick, type ElementContext } from "./elementPick";
+import { STYLE_TWEAK_APPLY, STYLE_TWEAK_CALL_MS, STYLE_TWEAK_PROPS, STYLE_TWEAK_READ, type StyleTweakFacts } from "./styleTweak";
 
 // #278 Phase 3 — the coach's browser control executor. Runs one tool call
 // (from the agentic loop) against the integrated browser via CDP and returns a
@@ -55,6 +59,9 @@ export class BrowserControl {
   private targetTab: vscode.BrowserTab | undefined;
   private refs = new Map<string, number>();
   private cr: CrExecutor | undefined;
+  private annotationMarkers = new Map<number, { cdp: import("./experimentBrowser").CdpLike; version: number; revision: number }>();
+  private annotationMarkerVersion = 0;
+  private annotationMarkerEpoch = 0;
 
   private readonly crOptions: CrBrowserOptions | undefined;
 
@@ -110,7 +117,9 @@ export class BrowserControl {
     if (this.targetTab === tab) return;
     this.targetTab = tab;
     // 대상이 바뀌면 이전 탭에 붙어 있던 세션·ref 는 무효다.
-    void this.session?.close().catch(() => {});
+    // CGP-ART-R-006: a style preview on the old tab is taken off it before its session closes.
+    const old = this.session;
+    if (old) void this.restoreTweakOn(old).finally(() => old.close().catch(() => {}));
     this.session = undefined;
     this.tabForSession = undefined;
     this.refs.clear();
@@ -137,7 +146,12 @@ export class BrowserControl {
    */
   async pickElement(opts: { root: string | null; timeoutMs?: number }): Promise<ElementContext> {
     const cr = this.crExecutor();
-    if (!cr || !this.crOptions) throw new Error("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
+    // REQ-STUDIO-DENIAL-SOURCE — no CR options means this control was built without the
+    // Experiment Browser hooks (source unknown); options present but no executor means the
+    // served switch is off (a lesson setting). The host checks the switch first with the
+    // seat's wording; this backstop does not know the seat, so it uses the neutral wording.
+    if (!this.crOptions) throw new Error(denialCopy({ source: "unknown", feature: "요소 고르기" }, "neutral"));
+    if (!cr) throw new Error(lessonFeatureOff("요소 고르기", "neutral"));
     const url = this.currentTab()?.url;
     if (!url) throw new Error("열린 미리보기 탭이 없어요. 먼저 미리보기를 여세요.");
     const scope = checkAgentOrigin(url, this.crOptions.allowedOrigins());
@@ -145,6 +159,7 @@ export class BrowserControl {
     const s = await this.cdp();
     const log = await cr.logFor(s);
     const picked = await waitForPick(s, opts.timeoutMs);
+    if (await isAnnotationOverlayNode(s, picked)) throw new Error("표시 대신 페이지의 요소를 골라 주세요.");
     const hooks = this.crOptions;
     return buildElementContext(s, log, picked, {
       root: opts.root,
@@ -152,6 +167,165 @@ export class BrowserControl {
       refFor: (id) => cr.refFor(id),
       adopt: (refs, generation) => cr.adoptRefs(refs, generation),
     });
+  }
+
+  /**
+   * CGP-ART-R-006 — the style preview this control left on a page, so it can be taken off that
+   * page before the session to it is closed (a tab switch, a target change). Null when none.
+   */
+  private tweakOnPage: { session: CdpSession; backendNodeId: number; generation: string; styleAttr: string | null } | null = null;
+
+  /**
+   * The picked node in the document it was picked in, resolved in a Studio-owned isolated world
+   * (the page's own scripts cannot override the DOM methods the tweak calls), or a refusal. The
+   * tab must still be the student's preview (CR-11) and its current document the same generation.
+   * `restore` (an empty preview) is allowed with the CR switch off, so turning the lesson setting
+   * off still takes a preview off the page.
+   */
+  private async styleTweakNode(cdp: CdpSession, backendNodeId: number, generation: string): Promise<string> {
+    if (!this.crOptions) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const tree = await cdp.send("Page.getFrameTree", {});
+    const frame = tree?.frameTree?.frame;
+    if (!generation || frame?.loaderId !== generation) throw new Error("화면이 바뀌었어요. 요소를 다시 골라 주세요.");
+    const scope = checkAgentOrigin(String(frame?.url ?? ""), this.crOptions.allowedOrigins());
+    if (!scope.ok) throw new Error(scope.reason);
+    const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame.id, worldName: "hps-style-tweak" });
+    const resolved = await cdp.send("DOM.resolveNode", { backendNodeId, executionContextId: world?.executionContextId }).catch(() => null);
+    const objectId = resolved?.object?.objectId;
+    if (!objectId) throw new Error("화면이 바뀌었어요. 요소를 다시 골라 주세요.");
+    return objectId;
+  }
+
+  /** One page call, bounded: a page that never answers cannot stall the next restore. */
+  private styleTweakCall(cdp: CdpSession, params: Record<string, unknown>): Promise<any> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("미리보기가 응답하지 않아요.")), STYLE_TWEAK_CALL_MS); });
+    return Promise.race([cdp.send("Runtime.callFunctionOn", params), limit]).finally(() => clearTimeout(timer));
+  }
+
+  /** Read the picked node's current values, its style attribute and the page's colours. Reads only. */
+  async styleTweakRead(backendNodeId: number, generation: string): Promise<StyleTweakFacts> {
+    if (!this.crExecutor()) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const cdp = await this.cdp();
+    const objectId = await this.styleTweakNode(cdp, backendNodeId, generation);
+    const r = await this.styleTweakCall(cdp, { objectId, functionDeclaration: STYLE_TWEAK_READ, arguments: [{ value: [...STYLE_TWEAK_PROPS] }], returnByValue: true });
+    const v = r?.result?.value;
+    if (!v || typeof v !== "object") throw new Error("요소의 모습을 읽지 못했어요.");
+    return v as StyleTweakFacts;
+  }
+
+  /**
+   * Show `values` on the picked node in this tab only: the original style attribute is restored
+   * exactly, then each value is set inline. No file is touched; a reload drops it. An empty
+   * `values` is a restore and is allowed with the switch off.
+   */
+  async styleTweakApply(backendNodeId: number, generation: string, styleAttr: string | null, values: Record<string, string>): Promise<void> {
+    const restore = Object.keys(values).length === 0;
+    if (!restore && !this.crExecutor()) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const cdp = await this.cdp();
+    const objectId = await this.styleTweakNode(cdp, backendNodeId, generation);
+    await this.styleTweakCall(cdp, { objectId, functionDeclaration: STYLE_TWEAK_APPLY, arguments: [{ value: styleAttr }, { value: values }], returnByValue: true });
+    this.tweakOnPage = restore ? null : { session: cdp, backendNodeId, generation, styleAttr };
+  }
+
+  /** Before a session closes: take this control's preview off that page (best effort, bounded). */
+  private async restoreTweakOn(session: CdpSession): Promise<void> {
+    const t = this.tweakOnPage;
+    if (!t || t.session !== session) return;
+    this.tweakOnPage = null;
+    try {
+      const objectId = await this.styleTweakNode(session, t.backendNodeId, t.generation);
+      await this.styleTweakCall(session, { objectId, functionDeclaration: STYLE_TWEAK_APPLY, arguments: [{ value: t.styleAttr }, { value: {} }], returnByValue: true });
+    } catch {
+      /* the page changed or went away: the preview went with it */
+    }
+  }
+
+  async annotationIdentity(): Promise<{ generation: string; artifactId: string }> {
+    const cr = this.crExecutor();
+    if (!cr || !this.crOptions) throw new Error("표시를 사용할 수 없어요.");
+    const cdp = await this.cdp();
+    const log = await cr.logFor(cdp);
+    // Query the current frame as well: a queued navigation event must not authorize stale refs.
+    const tree = await cdp.send('Page.getFrameTree', {});
+    const frame = tree.frameTree.frame;
+    if (frame.loaderId !== log.documentGeneration) throw new Error("화면이 바뀌었어요.");
+    const artifact = await this.crOptions.artifactVersion(frame.url);
+    return { generation: frame.loaderId, artifactId: artifact.id };
+  }
+
+  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null, options: MarkerOptions = {}): Promise<void> {
+    if (!rect) {
+      const record = this.annotationMarkers.get(number);
+      if (!record) return;
+      this.annotationMarkers.delete(number);
+      await marker(record.cdp, number, null, { version: record.version });
+      return;
+    }
+    const epoch = this.annotationMarkerEpoch;
+    const cdp = await this.cdp();
+    if (epoch !== this.annotationMarkerEpoch) return;
+    const version = ++this.annotationMarkerVersion;
+    await marker(cdp, number, rect, { ...options, version });
+    if (epoch !== this.annotationMarkerEpoch) {
+      await marker(cdp, number, null, { version }).catch(() => {});
+      return;
+    }
+    this.annotationMarkers.set(number, { cdp, version, revision: 0 });
+  }
+
+  async annotationComment(number: number, comment: string): Promise<void> {
+    const record = this.annotationMarkers.get(number);
+    if (record) await markerComment(record.cdp, number, comment, record.version, ++record.revision);
+  }
+
+  async clearAnnotationMarkers(): Promise<void> {
+    this.annotationMarkerEpoch++;
+    const previous = [...this.annotationMarkers];
+    this.annotationMarkers.clear();
+    for (const [number, record] of previous) await marker(record.cdp, number, null, { version: record.version }).catch(() => {});
+  }
+  annotationRefsValid(contexts: ElementContext[]): boolean {
+    return contexts.every(c => !c.ref || this.crExecutor()?.refFor(c.backendNodeId) === c.ref);
+  }
+
+  async pickRectangle(root: string | null): Promise<{ contexts: ElementContext[]; crop: NonNullable<ElementContext['crop']> }> {
+    const cr = this.crExecutor();
+    if (!cr || !this.crOptions) throw new Error("표시를 사용할 수 없어요.");
+    const hooks = this.crOptions;
+    const scope = checkAgentOrigin(this.currentTab()?.url ?? "", hooks.allowedOrigins());
+    if (!scope.ok) throw new Error(scope.reason);
+    const cdp = await this.cdp();
+    const log = await cr.logFor(cdp);
+    const before = await this.annotationIdentity();
+    const clip = await dragRectangle(cdp);
+    const shot = await cdp.send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 1 } });
+    if (!shot.data) throw new Error("고른 영역을 가져오지 못했어요.");
+    const ax = await cdp.send('Accessibility.getFullAXTree', {});
+    const { refs } = buildAxSnapshot(ax.nodes ?? [], { maxLines: (ax.nodes?.length ?? 0) + 1 });
+    const metrics = await cdp.send('Page.getLayoutMetrics', {});
+    const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport;
+    const ids: number[] = [];
+    for (const id of new Set(refs.values())) {
+      if (await isAnnotationOverlayNode(cdp, id)) continue;
+      const model = await cdp.send('DOM.getBoxModel', { backendNodeId: id }).catch(() => null);
+      const q = model?.model?.border;
+      if (!q) continue;
+      const xs = [q[0],q[2],q[4],q[6]], ys = [q[1],q[3],q[5],q[7]];
+      if (intersects(clip, {x: Math.min(...xs)+(viewport?.pageX ?? 0), y: Math.min(...ys)+(viewport?.pageY ?? 0), width: Math.max(...xs)-Math.min(...xs), height: Math.max(...ys)-Math.min(...ys)})) ids.push(id);
+    }
+    if (ids.length > 200) throw new Error("요소가 있는 더 작은 영역을 골라 주세요.");
+    const contexts: ElementContext[] = [];
+    for (const id of ids) contexts.push(await buildElementContext(cdp, log, id, {
+      root, snapshotRefs: refs, artifactVersion: u => hooks.artifactVersion(u), refFor: id => cr.refFor(id), adopt: (refs,generation) => cr.adoptRefs(refs,generation),
+    }));
+    if (!contexts.length) {
+      const url = this.currentTab()?.url ?? '';
+      contexts.push({ref:'', backendNodeId:0, tag:'region', text:'', snippet:'', snippetTruncated:false, style:{}, source:'unmapped', crop:null, url, route:new URL(url).pathname, documentGeneration:before.generation, artifact:await hooks.artifactVersion(url), captureMs:0});
+    }
+    const after = await this.annotationIdentity();
+    if (before.generation !== after.generation || before.artifactId !== after.artifactId) throw new Error("화면이 바뀌었어요. 다시 골라 주세요.");
+    return { contexts, crop: { mimeType: 'image/png', data: shot.data, clip } };
   }
 
   /** Route + run one tool call. Always resolves (errors become is_error results). */
@@ -246,7 +420,7 @@ export class BrowserControl {
 
   private async navigate(rawUrl: string): Promise<BrowserToolResult> {
     const url = safeNavigateUrl(rawUrl);
-    if (!url) return fail(`허용되지 않은 주소예요: ${rawUrl} (http/https/localhost/file만 가능)`);
+    if (!url) return fail(denialToolText({ source: "safety", reason: `열 수 없는 주소예요: ${rawUrl}` }, undefined, "(http/https/localhost/file만 가능)"));
     await this.openOrNavigate(url);
     this.refs.clear(); // navigation invalidates old refs
     const active = this.currentTab();
@@ -288,10 +462,11 @@ export class BrowserControl {
 
   private async screenshot(): Promise<BrowserToolResult> {
     const s = await this.cdp();
-    const shot = await s.send("Page.captureScreenshot", { format: "jpeg", quality: 70 });
-    const data = String(shot?.data ?? "");
-    if (!data) return fail("화면 캡쳐에 실패했어요.");
-    return { content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } }], isError: false };
+    const { data, metadata } = await captureReferenceScreenshot(s);
+    return { content: [
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } },
+      { type: "text", text: referenceCaptureText(metadata) },
+    ], isError: false };
   }
 
   private async click(ref: string): Promise<BrowserToolResult> {
@@ -353,7 +528,10 @@ export class BrowserControl {
     const tab = this.currentTab();
     if (!tab) throw new Error("열린 브라우저 탭이 없어요. 먼저 browser_navigate로 페이지를 여세요.");
     if (this.session && this.tabForSession === tab) return this.session;
-    if (this.session) await this.session.close().catch(() => {});
+    if (this.session) {
+      await this.restoreTweakOn(this.session); // CGP-ART-R-006
+      await this.session.close().catch(() => {});
+    }
     this.session = await CdpSession.attach(tab);
     this.tabForSession = tab;
     return this.session;

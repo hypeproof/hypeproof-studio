@@ -179,6 +179,20 @@ if [[ -n "$PJSON" ]]; then
   else
     bad "Info.plist CFBundleShortVersionString='$SHORTVER' != product.json.version='$PVER' (#361 stamp missing/misordered)"
   fi
+  # 6d. #3221 — macOS folder prompts carry Studio's Korean reason.
+  if python3 "$(dirname "${BASH_SOURCE[0]}")/stamp-mac-usage.py" --check "$APP/Contents/Info.plist" >/dev/null; then
+    ok "Info.plist: Korean privacy usage descriptions present"
+  else
+    bad "Info.plist: privacy usage descriptions missing or stale (#3221 stamp-mac-usage.py did not run)"
+  fi
+  # 6c. #3212 — no upstream release notes. With .releaseNotesUrl present, Studio opens
+  # VS Code's release notes (code.visualstudio.com/updates) after every update.
+  RNURL=$(jq -r '.releaseNotesUrl // ""' "$PJSON")
+  if [[ -z "$RNURL" ]]; then
+    ok "product.json: no releaseNotesUrl (no VS Code release notes after update)"
+  else
+    bad "product.json.releaseNotesUrl is set ($RNURL): Studio would open VS Code's release notes after an update (#3212)"
+  fi
 else
   bad "product.json not found inside .app"
 fi
@@ -255,11 +269,17 @@ if [[ "${REQUIRE_SDK_VENDOR:-0}" == "1" || -n "$SDK_DEP" ]]; then
     # must NEVER land in the shipped bundle — they reach students via the W4a seed
     # (scripts/seed-sdk-binary.sh); bundling them clobbers Anthropic's Developer-ID
     # signature. `find` (not a shell glob) so an empty match is safe under zsh too.
-    LEAKED_BIN=$(find "$EXT_DIR/dist/vendor/node_modules/@anthropic-ai" -maxdepth 1 -type d -name 'claude-agent-sdk-*' 2>/dev/null || true)
+    # The release also publishes those packages as public seed assets
+    # (claude-agent-sdk-<platform>-<version>.tgz, studio-public-sdk-seed); a
+    # copy of one inside the extension is the same leak in another form.
+    LEAKED_BIN=$( {
+      find "$EXT_DIR/dist/vendor/node_modules/@anthropic-ai" -maxdepth 1 -type d -name 'claude-agent-sdk-*' 2>/dev/null
+      find "$EXT_DIR" -type f -name 'claude-agent-sdk-*.tgz' 2>/dev/null
+    } || true)
     if [[ -z "$LEAKED_BIN" ]]; then
-      ok "No per-platform SDK binary package leaked into the shipped vendor tree"
+      ok "No per-platform SDK binary package or native seed in the shipped extension"
     else
-      bad "Per-platform SDK binary package(s) leaked into the shipped vendor (must be seeded, not bundled):"
+      bad "Per-platform SDK binary package(s) or native seed(s) inside the shipped extension (must be seeded, not bundled):"
       echo "$LEAKED_BIN" | sed 's/^/      /'
     fi
   fi
@@ -315,6 +335,24 @@ if [[ -f "$CSP_CHECK" ]]; then
   fi
 else
   warn "check-webview-csp-hash.py not found next to this script — CSP hash NOT verified"
+fi
+
+# 12. product.json core-file checksums. VS Code recomputes them at runtime and
+# shows "Your installation appears to be corrupt" on a mismatch. Built-in
+# extensions are not covered, so the repack fast path (scripts/repack-mac.sh)
+# cannot break them; this check keeps that a measurement on both paths.
+echo
+echo "12. product.json core-file checksums"
+SUM_CHECK="$(dirname "$0")/check-mac-checksums.mjs"
+if [[ -f "$SUM_CHECK" ]]; then
+  if SUM_OUT="$(node "$SUM_CHECK" "$APP" 2>&1)"; then
+    ok "$SUM_OUT"
+  else
+    echo "$SUM_OUT" | sed 's/^/      /'
+    bad "product.json checksums do not match the shipped core files (integrity warning at launch)"
+  fi
+else
+  warn "check-mac-checksums.mjs not found next to this script — checksums NOT verified"
 fi
 
 echo

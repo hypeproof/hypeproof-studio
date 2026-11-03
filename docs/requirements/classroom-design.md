@@ -30,7 +30,7 @@ Verification: `ops-g1-layout.mjs` (real Chalk/Service browser fixture), `ops.mjs
 | DES-06 | 모든 동작을 키보드로 수행하고 포커스가 보인다. 입력은 label과 연결하고 동작 대상은 최소 44×44px를 기본으로 한다. | P0 |
 | DES-07 | 초기·로딩·빈 결과·부분 실패·401·403·409·만료·오프라인 상태를 구분한다. 실패한 갱신을 최신 정상 상태로 표시하지 않는다. | P0 |
 | DES-08 | 저장 실패·충돌에서 입력이 유지된다. 동시 저장은 차단하거나 충돌을 보여주며 재연결 시 이전 사용자의 내용은 지운다. | P0 |
-| DES-09 | 기본 운영 보드와 공유 원문을 시각적으로 분리한다. 공유 전 대상 강사·선택 내용·기한·철회 방법을 명시하며 동의를 미리 체크하지 않는다. | P0 |
+| DES-09 | 기본 운영 보드와 공유 원문을 시각적으로 분리한다. 공유 전 대상 강사·선택 내용·기한·철회 방법을 명시하며 동의를 미리 체크하지 않는다. Studio outbound confirmation (CGP-KNOW-D-006 / DES-KNOW-09) presents every CGP-KNOW-R-006 manifest as a native HTML modal in the visible chat panel: exact recipient, unchecked checklist of every item with byte counts (all required, Send disabled until all are checked), fixed AI memory/personal-note exclusion box, primary 보내기 / secondary 취소 with initial focus on 취소; no transfer on cancellation, timeout, reload or stale scope; the R-006 VS Code modal remains when no chat panel is visible. Trap focus, restore the opener, ignore IME Enter/Escape, maintain a 3:1 exclusion border and avoid overlap at 200% zoom. | P0 |
 | DES-10 | 수업 종료·권한 변경·삭제는 대상과 영향을 명확히 보여준다. 복구 가능한 동작은 복구 방법을 제공하고 조회 버튼이 쓰기를 일으키지 않는다. | P0 |
 | DES-11 | 텍스트 대비 4.5:1, 큰 글자 3:1, 필수 컨트롤 경계·포커스 3:1을 기준으로 실제 색을 검사한다. 애니메이션 없이도 모든 정보와 기능이 유지된다. | P0 |
 | DES-12 | 한국어 사용자 문구는 할 일·문제·다음 조치를 설명한다. 기술 오류 원문·토큰·스택을 UI에 노출하지 않으며 프롬프트 수를 능력 점수로 표현하지 않는다. | P0 |

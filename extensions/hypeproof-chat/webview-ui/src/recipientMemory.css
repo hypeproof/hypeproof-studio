@@ -1,0 +1,8 @@
+.hps-recipient-memory {
+  display: flex; align-items: flex-start; gap: var(--hp-space-2);
+  color: var(--hp-text-primary-default); font-size: var(--hp-font-caption);
+}
+.hps-recipient-memory [data-recipient-ai-memory-icon] {
+  display: inline-flex; flex: 0 0 auto; color: inherit;
+}
+@media (forced-colors: active) { .hps-recipient-memory { color: CanvasText; } }

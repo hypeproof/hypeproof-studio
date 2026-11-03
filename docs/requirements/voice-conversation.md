@@ -3,13 +3,13 @@
 상태: **계획**. VO-01–35는 #897–903에 발행된 요구의 전사본이며 VO-36–47은 #939의 팝업 UX 구체화다.
 제품 구현이나 실제 기기·사람 평가 완료를 뜻하지 않는다. 이슈의 후속 변경은 이 문서와 함께 갱신한다.
 
-[Product Intent](../PRODUCT-INTENT.md) → [Voice Intent #896](https://github.com/jayleekr/hypeproof-studio/issues/896) → VO → [VO-T](../testing/voice-conversation.md) → [구현 순서](../plan/voice-conversation-epics.md).
+[Product Intent](../PRODUCT-INTENT.md) → [Voice Intent #896](https://github.com/hypeproof/hypeproof-studio/issues/896) → VO → [VO-T](../testing/voice-conversation.md) → [구현 순서](../plan/voice-conversation-epics.md).
 철학과 7개 자산의 정의는 기존 원문을 참조하며 음성 사용 자체를 학습 성과로 간주하지 않는다.
 
 Claude는 제품 코드와 단위·계약 테스트, Codex는 요구/시험 연결과 독립 인수를 맡는다.
 이 구분은 세션 작업 분담이며 새로운 영구 owner나 승인 권한을 부여하지 않는다.
 
-## V0 — [[Voice V0] 실제 Studio 음성 타당성·통합 계약·요구사항 연결](https://github.com/jayleekr/hypeproof-studio/issues/897)
+## V0 — [[Voice V0] 실제 Studio 음성 타당성·통합 계약·요구사항 연결](https://github.com/hypeproof/hypeproof-studio/issues/897)
 
 ### VO-01
 실제 설치 Studio의 마이크 권한·webview 오디오 입출력·연결 경로를 확인하고 지원 OS/앱 버전을 명시한다.
@@ -26,7 +26,7 @@ Claude는 제품 코드와 단위·계약 테스트, Codex는 요구/시험 연�
 ### VO-05
 Intent→VO 요구사항→VO-T→구현→증거를 추적하고 제안·구현·실기·사람 평가 상태를 구분한다. 영구 도메인 담당자는 합의 없이 지정하지 않는다.
 
-## V1 — [[Voice V1] 양방향 음성 세션·말 끊기·마이크 수명 관리](https://github.com/jayleekr/hypeproof-studio/issues/898)
+## V1 — [[Voice V1] 양방향 음성 세션·말 끊기·마이크 수명 관리](https://github.com/hypeproof/hypeproof-studio/issues/898)
 
 ### VO-06
 명시적 시작 후에만 마이크를 열고 연결·듣는 중·응답 준비·말하는 중·음소거·종료·오류를 구분한다.
@@ -43,7 +43,7 @@ Intent→VO 요구사항→VO-T→구현→증거를 추적하고 제안·구현
 ### VO-10
 한국어 대화와 영문 이름/제품명 정정을 지원하고 모델 불확실성을 확정 사실로 저장하지 않는다.
 
-## V2 — [[Voice V2] 목적 구체화·화면 맥락·음성/텍스트 연속성](https://github.com/jayleekr/hypeproof-studio/issues/899)
+## V2 — [[Voice V2] 목적 구체화·화면 맥락·음성/텍스트 연속성](https://github.com/hypeproof/hypeproof-studio/issues/899)
 
 ### VO-11
 명확한 요청은 바로 작업으로 이어가고 부족한 정보만 되묻는다. 브리프는 파일럿 과제이며 고정 설문/필수 입구가 아니다.
@@ -60,7 +60,7 @@ AI가 제안한 목적/조건과 사용자의 채택·정정을 구분하고 정
 ### VO-15
 종료 후 브리프/결과물은 기존 저장·재열기·내보내기를 통해 계속 편집 가능하다. 음성 구독/세션 종료가 자기 결과 열람을 막지 않는다.
 
-## V3 — [[Voice V3] 도구 실행·승인·중단·재연결의 일관성](https://github.com/jayleekr/hypeproof-studio/issues/900)
+## V3 — [[Voice V3] 도구 실행·승인·중단·재연결의 일관성](https://github.com/hypeproof/hypeproof-studio/issues/900)
 
 ### VO-16
 음성 명령은 기존 서버 권한과 도구 승인 정책을 통과한다. 발화나 전사 문자열을 권한/승인 증명으로 취급하지 않는다.
@@ -77,7 +77,7 @@ AI 발화 중단과 도구 작업 취소를 구분해 표시한다. 이미 완�
 ### VO-20
 작업 성공 안내는 실제 결과 확인 뒤에 한다. 도구 실패와 음성 재생 실패를 분리하고 사용자가 텍스트로 계속할 수 있게 한다.
 
-## V4 — [[Voice V4] 인증·음성 원가·예산 집행·기록 경계](https://github.com/jayleekr/hypeproof-studio/issues/901)
+## V4 — [[Voice V4] 인증·음성 원가·예산 집행·기록 경계](https://github.com/hypeproof/hypeproof-studio/issues/901)
 
 ### VO-21
 서버가 기존 사용자·수업·이용권·실제 지원 모델을 검증한 뒤 범위/만료가 제한된 연결 자격을 발급한다. 장기 공급자 키를 클라이언트에 노출하지 않는다.
@@ -94,7 +94,7 @@ AI 발화 중단과 도구 작업 취소를 구분해 표시한다. 이미 완�
 ### VO-25
 원음·전사·작업 결과·운영 메타데이터의 목적/보존/접근 범위를 구분한다. 기본 파일럿 제안은 원음 비보존과 최소 메타데이터이며 실제 참여자 정책 활성화는 별도 승인 대상이다.
 
-## V5 — [[Voice V5] 접근성·실제 설치 앱·지연/안정성 통합 인수](https://github.com/jayleekr/hypeproof-studio/issues/902)
+## V5 — [[Voice V5] 접근성·실제 설치 앱·지연/안정성 통합 인수](https://github.com/hypeproof/hypeproof-studio/issues/902)
 
 ### VO-26
 음성은 선택 기능이며 키보드·텍스트만으로 동일 핵심 작업을 완료할 수 있다. 상태는 색/소리만으로 전달하지 않는다.
@@ -111,7 +111,7 @@ AI 발화 중단과 도구 작업 취소를 구분해 표시한다. 이미 완�
 ### VO-30
 음성 비활성/제거/서버 비호환/모델 불가 시 기존 텍스트 경로와 저장 결과를 보존하며 기능 상실을 알린다.
 
-## V6 — [[Voice V6] 사람 파일럿·대조 과제·총원가와 사업 ROI 판정](https://github.com/jayleekr/hypeproof-studio/issues/903)
+## V6 — [[Voice V6] 사람 파일럿·대조 과제·총원가와 사업 ROI 판정](https://github.com/hypeproof/hypeproof-studio/issues/903)
 
 ### VO-31
 첫 대상/과제/품질 루브릭을 정하고 10~20명 탐색 표본에서 텍스트와 음성을 비교한다. 고정 설문을 제품 입구에 강제하지 않는다.
@@ -130,7 +130,7 @@ AI 발화 중단과 도구 작업 취소를 구분해 표시한다. 이미 완�
 
 ## 음성 대화 팝업 구체화 — #939 (계획)
 
-[추적 이슈 #939](https://github.com/jayleekr/hypeproof-studio/issues/939).
+[추적 이슈 #939](https://github.com/hypeproof/hypeproof-studio/issues/939).
 2026-09-10 사용자가 제공한 버튼 이미지와 설명이 입력 근거다. 현재 ChatGPT의 전체 UX를
 실측한 경쟁 비교가 아니다. 사용자가 원하는 행동은 **버튼으로 대화 공간을 열고,
 말하는 동안 반응을 확인하며, 결과물을 보면서 대화를 계속하는 것**이다.

@@ -1,0 +1,38 @@
+/* CGP-KNOW-R-008 / DES-KNOW-13: the task mark (list) and its picker (task menu). */
+.tw-task-mark { display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-13); margin-right: var(--ds-c-studio-taskworkspace-space-12); vertical-align: middle; }
+.tw-task-swatch { display: inline-block; flex: none; width: var(--ds-c-studio-taskworkspace-size-78); height: var(--ds-c-studio-taskworkspace-size-78); border-radius: var(--ds-c-studio-taskworkspace-radius-15); background: currentColor; }
+/* The ds tiers are theme-independent; the theme picks the dark or light value here, like tokens.css does. */
+.tw-workspace, .tw-appearance { --tw-mark-red: var(--ds-c-task-mark-red-dark); --tw-mark-orange: var(--ds-c-task-mark-orange-dark); --tw-mark-yellow: var(--ds-c-task-mark-yellow-dark); --tw-mark-green: var(--ds-c-task-mark-green-dark); --tw-mark-teal: var(--ds-c-task-mark-teal-dark); --tw-mark-blue: var(--ds-c-task-mark-blue-dark); --tw-mark-purple: var(--ds-c-task-mark-purple-dark); --tw-mark-pink: var(--ds-c-task-mark-pink-dark); }
+body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace, body.vscode-light .tw-appearance, body.vscode-high-contrast-light .tw-appearance { --tw-mark-red: var(--ds-c-task-mark-red-light); --tw-mark-orange: var(--ds-c-task-mark-orange-light); --tw-mark-yellow: var(--ds-c-task-mark-yellow-light); --tw-mark-green: var(--ds-c-task-mark-green-light); --tw-mark-teal: var(--ds-c-task-mark-teal-light); --tw-mark-blue: var(--ds-c-task-mark-blue-light); --tw-mark-purple: var(--ds-c-task-mark-purple-light); --tw-mark-pink: var(--ds-c-task-mark-pink-light); }
+[data-colour="red"] > .tw-task-swatch { background: var(--tw-mark-red); }
+[data-colour="orange"] > .tw-task-swatch { background: var(--tw-mark-orange); }
+[data-colour="yellow"] > .tw-task-swatch { background: var(--tw-mark-yellow); }
+[data-colour="green"] > .tw-task-swatch { background: var(--tw-mark-green); }
+[data-colour="teal"] > .tw-task-swatch { background: var(--tw-mark-teal); }
+[data-colour="blue"] > .tw-task-swatch { background: var(--tw-mark-blue); }
+[data-colour="purple"] > .tw-task-swatch { background: var(--tw-mark-purple); }
+[data-colour="pink"] > .tw-task-swatch { background: var(--tw-mark-pink); }
+
+.tw-appearance form { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-1); margin: 0; }
+.tw-appearance h2 { margin: 0; font-size: var(--hp-font-lead); }
+.tw-appearance p { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; }
+.tw-appearance-group { border: 0; margin: 0; padding: 0; min-width: 0; }
+.tw-appearance-group legend { padding: 0; margin-bottom: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.tw-appearance-options { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-15); }
+.tw-appearance-option { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-taskworkspace-space-15); box-sizing: border-box; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-7); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-10); font-size: var(--hp-font-caption); cursor: pointer; }
+.tw-appearance-emoji { padding: 0; font-size: var(--hp-font-lead); }
+.tw-appearance-option:hover { background-color: var(--hp-bg-control-hover); }
+.tw-appearance-option:active { background-color: var(--hp-bg-control-pressed); }
+.tw-appearance-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+/* The selected choice: a 2px ring plus the check mark (colour), so selection is never colour only. */
+.tw-appearance-option[data-selected] { border-color: var(--hp-ring-focus-default); box-shadow: inset 0 0 0 var(--ds-c-studio-taskworkspace-size-3) var(--hp-ring-focus-default); }
+.tw-appearance-option:has(input:focus-visible) { outline: var(--ds-c-studio-taskworkspace-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
+.tw-appearance-group:disabled .tw-appearance-option, .tw-appearance-group:disabled .tw-appearance-option input { cursor: default; }
+.tw-appearance-actions { display: flex; justify-content: flex-end; gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-appearance-actions button { min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-1); border-radius: var(--ds-c-studio-taskworkspace-radius-10); font-size: var(--hp-font-caption); }
+.tw-appearance .tw-error { margin: 0; }
+
+@media (forced-colors: active) {
+  .tw-task-swatch { border: var(--ds-c-studio-taskworkspace-size-3) solid CanvasText; }
+  .tw-appearance-option[data-selected] { border: var(--ds-c-studio-taskworkspace-size-7) solid Highlight; box-shadow: none; }
+}

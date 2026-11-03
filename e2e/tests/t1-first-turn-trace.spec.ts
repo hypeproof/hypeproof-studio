@@ -144,7 +144,8 @@ test("T1 — 첫 턴 현미경: 생각·도구·성공·소요", async () => {
       // 로그 라인 스냅샷
       const lines = await cf.locator(".hps-tool-log-line").all().catch(() => []);
       for (let i = 0; i < lines.length; i++) {
-        const icon = ((await lines[i].locator(".hps-tool-icon").textContent().catch(() => "")) ?? "").trim();
+        // The row draws a stroke icon; the host's glyph key is kept in data-glyph (REQ-STUDIO-STROKE-ICONS).
+        const icon = ((await lines[i].locator(".hps-tool-icon").getAttribute("data-glyph").catch(() => "")) ?? "").trim();
         const label = ((await lines[i].locator(".hps-tool-label").textContent().catch(() => "")) ?? "").trim();
         const cls = (await lines[i].getAttribute("class").catch(() => "")) ?? "";
         const state = /hps-tool-error/.test(cls) ? "error" : /hps-tool-running/.test(cls) ? "running" : "done";

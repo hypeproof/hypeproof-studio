@@ -1,5 +1,12 @@
 /** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
 export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
+/**
+ * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
+ * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
+ */
+export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number;
+  /** REQ-STUDIO-FREE-DAILY-REFILL — free seats only: when this install's next daily allowance opens (epoch ms, 00:00 KST). Absent on an older Service. */
+  refills_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -13,16 +20,25 @@ import type { StartRequest, StartResponse } from "./startPageProtocol";
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
 export interface ChatMessage {
+  /** A receipt measured between observed stream events in this mounted view, never an estimate. */
+  elapsedTurn?: { anchorId: string; ms: number; outcome: 'done' | 'stopped' };
   id: string;
   role: ChatRole;
   content: string;
   createdAt: number;
+  /** The user's requested mode for this turn, not proof that a tool ran. */
+  toolMode?: import('./turnTools').TurnToolMode;
   /**
    * #503 — filled in only when `role: "tool"`. The display content of a single tool
    * line (`🔧 Write(index.html) ✓`). `id` is the SDK's tool_use id, so the
    * running → done update happens in place.
    */
-  tool?: { icon: string; label: string; state: "running" | "done" | "error" };
+  tool?: {
+    shell?: import("./shellPresentation").ShellPresentation;
+    icon: string; label: string; state: "running" | "done" | "error";
+    /** REQ-STUDIO-LONG-STEP-HINT — a running tool step in learner words, and when it began (ms). */
+    step?: string; since?: number;
+  };
   /**
    * #173 — Web search citations attached to an assistant message. Populated
    * by the worker's SSE translator (`hps_citations` delta), accumulated by
@@ -58,14 +74,31 @@ export interface ChatMessage {
    * attached to a `user` or `tool` line.
    */
   assistantName?: string;
+  /**
+   * CGP-CHAT-R-002 (REQ-STUDIO-CHAT-EDIT-RESEND) — on a user line only: this line is an edited
+   * resend of the prompt whose group root is `editOf` (editResend.ts). Absent = its own root, so a saved
+   * conversation written before this field reads as one version per turn.
+   */
+  editOf?: string;
+  /**
+   * CGP-ART-R-020 — the successful tool calls of the turn this line closes (taskActivity.ts), carried
+   * on the turn's last persisted line. Display only: never part of the model history.
+   */
+  activity?: import("./taskActivity").TaskActivityFact[];
+  retryOf?: string;
+  visibleAttemptId?: string;
+  chosenAttemptId?: string;
 }
 
 /**
  * #173 — Source attached to an assistant message. `tier` (1–4) is computed
- * server-side from the URL so the chip palette is consistent across clients.
+ * server-side on the proxy route. SDK typed tool outputs carry no classification,
+ * so their sources use tier 4 (unclassified), never inferred domain authority.
  * 1 academic society·edu·gov, 2 paper·DOI, 3 official manufacturer, 4 blog·YouTube·other.
  */
 export interface Citation {
+  /** Event-owned source kind (web/lesson/file). Missing or future values remain unclassified. */
+  kind?: string;
   url: string;
   title: string;
   domain: string;
@@ -110,20 +143,71 @@ export interface EffortRequestRecord {
   /** Claude Code's purpose marker: main | subagent | workflow | compaction | auxiliary. */
   request_class?: string;
 }
+/** CGP-CHAT-R-011 — a work-folder text file queued for the next turn (node-free, shared with the webview). */
+export interface FileAttachmentPreview {
+  /** Path relative to the work folder, with forward slashes. */
+  path: string;
+  /** Exactly the file text that goes with the next message. */
+  text: string;
+  bytes: number;
+}
+
 export interface ChatConfig {
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
+  /** Server-provided connected class window; absent when not known for this seat. */
+  classWindow?: import("./classWindow").ClassWindow | null;
+  /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
+  folderRestricted?: boolean;
+  /** CGP-AGENT-R-032: opaque seat/lesson disclosure receipt, device-local only. */
+  lessonCapabilityEntry?: { id: string; seen: boolean };
+  /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
+  aiCapabilities?: import('./aiCapabilities').AiCapability[];
+  /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
+  capabilityChange?: import('./aiCapabilities').CapabilityChange;
+  /** CGP-DS-R-009: chat text size chosen on this device. */
+  textSize?: import('./textSize').TextSize;
+  /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
+  learnerNickname?: { value: string };
+  /**
+   * CGP-KNOW-D-022 (DES-KNOW-40): this seat has the activity's personal memory store (the R-005 binding: personal and trial
+   * activities, minors included per DEC-02). The chat then draws the read-only state line "AI 기억: 켜짐" with the folder,
+   * in the activity header and in the settings dialog. Absent: no store, no line. Never a switch: there is no off value.
+   */
+  memoryState?: { folder: string };
+  /** CGP-DS-R-015: `workbench.reduceMotion`: true = on, false = off, absent = system. */
+  reduceMotion?: boolean;
+  turnTools?: import('./turnTools').TurnToolsAvailability;
+  /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */
+  fileAttach?: boolean;
+  /** Personal/adult profile with the existing workspace read grant. */
+  fileMentions?: boolean;
+  /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
+  materials?: boolean;
+  taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
+  temporaryTask?: { allowed: boolean };
+  /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
+  taskMove?: import('./taskMove').TaskMoveView;
+  activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
+    /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
+    free?:boolean};
   activityDraft?: import('./activityDraft').ActivityDraft;
+  /** REQ-L12 ⑫ — trial carry-over offer or the read-only trial transcript; absent unless the Service advertises it. */
+  carryover?: import('./trialCarryoverHelpers').CarryoverView;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
   /** Display-only: host-confirmed local subscription AI route; never an execution grant. */
   localSubscription?: boolean;
+  /** CGP-SHELL-R-015: host-confirmed cohort policy, never inferred from a local menu. */
+  cohortSettings?: { model: boolean; effort: boolean };
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
   effortResult?: { state: 'loading' | 'observed' | 'unknown'; requests: EffortRequestRecord[]; truncated?: boolean };
   proxyUrl: string;
   model: string;
   hasToken: boolean;
+  workTakeawayEnabled?: boolean;
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
@@ -156,6 +240,8 @@ export interface UpdateOffer {
   notes: string;            // markdown — webview renders as plain text for now
   releaseUrl: string;
   sizeBytes: number;
+  /** CGP-SHELL-R-001: a class seat is active, so the banner offers no install. */
+  heldForClass?: boolean;
 }
 
 export interface CoachInfo {
@@ -170,6 +256,45 @@ export interface CoachInfo {
  * sides updated together.
  */
 /** Kept in this file (not in lessonBinding.ts) because the webview build type-checks protocol.ts and must not follow Node-side imports. */
+/**
+ * TUX-COND-07 — what the inline end-of-trial card shows. Built by the host (`trialEndCard.ts`)
+ * from the Service catalogue; the webview only renders it. No price or count is ever made up here.
+ */
+export interface TrialEndCardView {
+  ending: "exhausted" | "expired";
+  title: string;
+  facts: string[];
+  /** The one Primary. Pressing it is the only way the purchase view opens (REQ-L12 ①). */
+  primary: string;
+  /** The escape: closes the card. The host only counts the press (offer_dismissed end_card, CONV-FUNNEL-R-003). */
+  escape: string;
+  /** The catalogue pass whose facts are shown. Absent on the minimal card (CONV-ENDCARD-R-005): no catalogue was read. */
+  productId?: string;
+  /** Title and facts as one line, for the banner fallback and screen readers. */
+  text: string;
+  /**
+   * Optional "이메일로 소식 받기" section below the pass offer (TUX-COND-08). Present only on a free
+   * seat whose `/v1/profile` advertises `notify_optin` (Service HPS_FREE_NOTIFY_OPTIN, default off).
+   * Secondary and skippable: it never replaces the Primary and nothing is pre-checked.
+   */
+  notify?: TrialEndNotifyView;
+}
+
+/** TUX-COND-08 — the end card's optional email section. Copy comes from the host (trialEndCard.ts). */
+export interface TrialEndNotifyView {
+  /** The Service's consent version; the host sends it back with the address. */
+  consentVersion: string;
+  /** This seat already left an address (a local flag; the address itself is never stored). */
+  submitted: boolean;
+  prompt: string;
+  label: string;
+  placeholder: string;
+  button: string;
+  consent: string;
+  done: string;
+  withdraw: string;
+  withdrawn: string;
+}
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
   /** Service-owned opt-in, never inferred from a local setting. */
@@ -184,6 +309,17 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
+  /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
+  trial?: TrialStatus;
+  /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
+  notify_optin?: { available: boolean; consent_version: string };
+  /** REQ-CGP-LEARN-13 (DEC-LEARN-13a) — the Service turns the 109/1388 help lines on for this seat. Only `true` counts; absent → off. */
+  safety_help_lines?: boolean;
+  /**
+   * REQ-L12 ⑫ exception (ot-conversation-carryover) — the Service offers "체험에서 하던 대화 이어가기"
+   * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
+   */
+  conversation_carryover?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -281,6 +417,8 @@ export interface ResolvedProfile {
   // this folder on onboarding. Absent → the legacy default folder is used.
   workspace_root?: string | null;
   workspace_start?: 'empty' | 'html';
+  /** Service-owned image editing capability; absent means unavailable. */
+  image_edit?: { enabled: true };
   /** Optional input capabilities (default off). #278 / website-copyclone. */
   input?: {
     page_context?: boolean;
@@ -421,7 +559,38 @@ export type WebviewMessage = (
   | ({ type: 'automationAnswer' } & import('./automationProtocol').AutomationAnswer)
   | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
   | { type: 'automationClose' }
-  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
+  | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
+  | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
+  | {type:'annotationLeaveAnswer';id:string;discard:boolean}
+  | { type: "stopRunningProcess"; id: string }
+  | {type:'writeApprovalAnswer';id:string;approved:boolean}
+  /** CGP-ART-D-021: open the file now beside the text after the call; never an answer. */
+  | {type:'writeApprovalDiff';id:string;index:number}
+  | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
+  | {type:'outboundAnswer';id:string;selected:string[]|null}
+  | { type: 'taskCreate' }
+  /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
+  | { type: 'taskCreateTemporary' }
+  | { type: 'taskRecoverDraft' }
+  | { type: 'taskSelect'; id: string }
+  | { type: 'taskRename'; title: string; requestId?: string }
+  /** CGP-CHAT-R-029 — 되돌리기 on the rename toast: the host puts back the rename it kept under this id. */
+  | { type: 'taskRenameUndo'; undoId: string }
+  /** CGP-CHAT-R-025 — 보관하기 (the open task) and 보관함's 다시 열기 (an archived task). */
+  | { type: 'taskArchive' }
+  | { type: 'taskRestore'; id: string }
+  /** CGP-KNOW-R-008 — ids from TASK_EMOJI / TASK_COLOURS, or null to clear. Validated again on the host. */
+  | { type: 'taskAppearance'; appearance: import('./taskAppearance').TaskAppearance | null; requestId: string }
+  /** CGP-KNOW-R-009 — move task `id` to the personal activity `destination` (an activity ref the host re-checks). */
+  | { type: 'taskMove'; id: string; destination: string; requestId?: string }
+  | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
+  | { type: 'taskOpenSource'; url: string; requestId?: string }
+  | { type: 'taskReturnFromSource'; requestId: string; url: string }
+  /** CGP-CHAT-R-026 — search this activity's own tasks on this device. */
+  | { type: 'taskSearch'; query: string; requestId: string }
+  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean}
+  /** REQ-STUDIO-QUIT-GUARD — whether this chat surface holds a queued, unsent message. */
+  | { type: 'queueState'; queued: boolean }
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
    * carries no verdict: the webview measures, the host's voiceCapabilityHelpers
@@ -430,8 +599,14 @@ export type WebviewMessage = (
    */
   | { type: 'voiceCapabilityProbeResult'; probeId: string;
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
+  | {type:'workTakeaway'}
+  /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
+  | {type:'exportMyWork'}
+  | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
+  /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
+  | {type:'carryoverDecision';decision:'confirm'|'decline'}
   | {type:'requestBudget';note:string}
   | { type: 'observationOpen' }
   /**
@@ -457,15 +632,52 @@ export type WebviewMessage = (
   | StartRequest
   | { type: "ready" }
   // CR-09 — the student removes the picked element before sending (CR switch only).
+  | { type: "annotationAction"; action: "element" | "rectangle" | "remove" | "comment"; number?: number; comment?: string }
   | { type: "removeElementContext" }
+  /** CGP-ART-R-006 — preview one offered style value on the picked element (null = reset that property). */
+  | { type: "styleTweakSet"; id: string; prop: string; value: string | null }
+  /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
+  | { type: "removePageContext"; undoId?: string }
+  /** CGP-CHAT-R-029 — 되돌리기: the host restores the page/file snapshot it kept under this id, or nothing. */
+  | { type: "restorePageContext"; undoId: string }
+  | { type: "restoreFileContext"; undoId: string }
+  /** CGP-CHAT-R-011 — open the work-folder file picker (host re-checks the gate). */
+  | { type: "retryAttachment"; id: string }
+  | { type: "repickAttachment"; id: string; name: string }
+  | { type: "discardAttachmentFailure"; id: string }
+  | { type: "attachWorkspaceFile" }
+  | { type: "fileMentionSearch"; requestId: string; query: string }
+  | { type: "fileMentionPick"; requestId: string; path: string }
+  | { type: "fileMentionCancel"; requestId: string }
+  /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
+  | { type: "askAboutFile"; path: string }
+  /** CGP-VOICE-R-009 — voice "보여주기": ask for the two-item menu, then attach one chosen target per click. */
+  | { type: "voiceShowThisMenu"; requestId: string }
+  | { type: "voiceShowThis"; requestId: string; target: string }
+  /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
+  | { type: "removeFileContext"; undoId?: string }
+  /** CGP-KNOW-R-003 — the activity's 자료 list: read it, add a file (host picker) or an https address, select an item for the next message, take a learner item off the list. `scope` is the list the press was made on. */
+  | { type: "materialsRequest" }
+  | { type: "materialAddFile"; requestId: string }
+  | { type: "materialAddUrl"; requestId: string; url: string }
+  | { type: "materialAddDrop"; requestId: string; name: string; size: number; base64: string }
+  | { type: "materialSelect"; requestId: string; scope: string; id: string; selected: boolean }
+  | { type: "materialRemove"; requestId: string; scope: string; id: string }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).
   | { type: "verifyOpen" }
   // `requestId`: the panel that asked; only it sends the resulting `sendText` (two chat views receive every post).
   | { type: "verifyStart"; requestId: string; criteria: Array<{ text: string; proposed_by: "student" | "ai"; confirmed: boolean; adopted_from?: string }> }
   | { type: "verifyRetest" }
   | { type: "verifyFix"; requestId: string; criterionId: string; text: string }
+  /** CGP-SHELL-R-011 N1 — the handed-back turn could not be sent (offline): keep it off other turns. */
+  | { type: "verifyPark" }
+  /** The learner pressed the same button again: hand the parked turn back once, unrecorded. */
+  | { type: "verifyResume"; requestId: string }
   // cr-publish — "Publish for user test" (CR-17–CR-22, CR-39, CR-73; CR switch only, re-checked by the host).
   | { type: "publishOpen"; manifest?: string[] }
+  | { type: "publishRefresh" }
+  | { type: "publishClose" }
+  | { type: "publishCopy"; versionId: string }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }
   | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number }
   | { type: "publishRevoke"; linkId: string }
@@ -495,24 +707,68 @@ export type WebviewMessage = (
   | { type: "refreshEffort" }
   | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }>;
       /** D-028 — stage ids of photos attached as files; the host moves them into images/ on send. */
-      attachments?: string[] }
+      attachments?: string[]; toolMode?: import('./turnTools').TurnToolMode; userMessageId?: string;
+      /** CGP-CHAT-R-002 — this send is an edited resend of the latest prompt group (its root user-message id). */
+      editOf?: string }
   /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
+  | { type: "prepareAttachments"; requestId: string; sketch?: boolean; files: Array<{ id: string; stageId?: string; dataUrl?: string }> }
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
   | { type: "discardStagedImage"; stageId: string }
-  | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[] }
+  | { type: "selectAnswerAttempt"; activityId?: string; taskId?: string; rootId: string; attemptId: string; choose: boolean }
+  | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
+  | { type: "stopDelegations"; streamId: string }
+  /** CGP-SHELL-R-023 — local first-result education; no verdict or telemetry. */
+  | { type: "accuracyEducationRequest"; requestId: string }
+  | { type: "accuracyEducationDismiss"; messageId: string }
+  /** CGP-SHELL-R-035 — "새로운 기능" after an update; local record only, no telemetry. */
+  | { type: "whatsNewRequest"; requestId: string }
+  | { type: "whatsNewShown"; notesId: string }
+  | { type: "whatsNewDismiss"; notesId: string }
+  /**
+   * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT) — the learner's verdict on one finished answer in a
+   * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
+   */
+  | { type: "answerVerdict"; requestId?: string; messageId: string; verdict: import('./answerVerdict').AnswerVerdict | null; reason?: import('./answerVerdict').VerdictReason; note?: string }
+  /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer; the host builds, confirms and writes. */
+  | { type: "answerToWiki"; messageId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
+  /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
+  | { type: "setTextSize"; size: string }
+  /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
+  | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
-  | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
+  | { type: "openReportModal"; source?: "error" | "crash" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
+  | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
+  /** REQ-STUDIO-DOCTOR — the quiet doctor line's answer (`fix` = its fix button) and the error card's 「진단하기」. */
+  | { type: "doctorNoticeAnswer"; id: string; fix: boolean }
+  | { type: "runDoctor" }
+  | { type: "problemReportAutoSetting"; enabled: boolean }
+  /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
+  // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
+  | { type: "trialEndCardPasses"; surface?: "header_menu" }
+  /** CONV-FUNNEL-R-003 — the person pressed the end card's escape (오늘은 여기까지); the webview closes the card. */
+  | { type: "trialEndCardDismiss" }
+  | { type: "trialEndCardClaude"; draft: string }
+  /** TUX-COND-08 — the optional email on the end card. The address goes to the host and on to the Service only. */
+  | { type: "notifyOptinSubmit"; email: string }
+  | { type: "notifyOptinWithdraw" }
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
+  /** CGP-SHELL-R-024 — the learner closed the "AI가 할 수 있는 일이 바뀌었어요" card. */
+  | { type: "acknowledgeLessonCapabilities"; id: string }
+  | { type: "dismissClassWindow"; id: string }
+  | { type: "dismissCapabilityChange"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
   | { type: "saveCoach"; name: string; personality: string }
   | { type: "runCode"; html: string }       // from chat panel → host → preview
   | { type: "previewReady" }                // from preview webview only
+  | { type: "savePagePdf"; path: string }  // #3221 part 2 — an HTML page in the work folder, relative to it
+  | { type: "openMacPrivacySettings" }      // #3221 — the macOS-blocked step's button; the host owns the URL
   | { type: "openExternal"; url: string }   // #173 — citation chip click → host opens browser
   /**
    * "갤러리에 올리기" — sends the world currently open to the lab gallery.
@@ -545,6 +801,47 @@ export type WebviewMessage = (
   // #751 U2 — the inbox of instructor notices/materials. `generation` is the connection the card list was drawn under: the
   // host answers a callback from an older one with nothing. Opening a card is kept on this device; it is not reported.
   | { type: "inboxRequest" }
+  // AE-15 / CGP-ART-R-002 — the learner's decision on the last turn's review bar; `turnId` must name the bar the host holds.
+  | { type: "turnReviewRequest" }
+  /** REQ-STUDIO-MISSING-TASK-FOLDER — ask for the notice state; 다시 고르기. */
+  | { type: "missingTaskFolderRequest" }
+  /** REQ-KNOW-35 (CGP-KNOW-R-019) — ask the host to measure free space on the work folder's volume now; `mount` = the panel has no state yet, so the host re-sends even an unchanged one. */
+  | { type: "lowDiskRequest"; mount?: boolean }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — ask whether a 느려요 기록 is running; stop the one recording `id` names (the pill's own id). */
+  | { type: "perfTraceStateRequest" }
+  | { type: "perfTraceStop"; id: string }
+  | { type: "missingTaskFolderRepick" }
+  /** REQ-STUDIO-PREVIEW-RECOVERY — ask for the preview's measured state; run the one action its cause line names. */
+  | { type: "previewRecoveryRequest" }
+  | { type: "previewRecoveryAction"; action: string }
+  | { type: "turnRevert"; turnId: string; path?: string }
+  | { type: "turnKeep"; turnId: string }
+  | { type: "turnReviewClose"; turnId: string }
+  /** CGP-AGENT-R-027 — save the work folder as a checkpoint with the message the learner reviewed. Never pushed. */
+  | { type: "checkpointSave"; turnId: string; message: string }
+  // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
+  // CGP-KNOW-D-013 — the 내 작품 panel's trash: list, and one press (move a file, restore or purge an item) bound to the listed scope.
+  | { type: "activityTrashRequest" }
+  | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
+  | { type: "activityMemoryRequest" }
+  // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string; names?: string[]; confirmedPin?: string }
+  // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — whether the one-time memory notice is due here; 확인 on it, bound to the activity it showed.
+  | { type: "memoryNoticeRequest" }
+  | { type: "memoryNoticeAck"; activity: string }
+  /** CGP-KNOW-R-026 — the items one answer's request carried; with `id` and `exclude`, leaves one out of (or back into) this task. */
+  | { type: "memoryUseRequest"; requestId: string; messageId: string; id?: string; exclude?: boolean }
+  | { type: "artifactProvenanceRequest" }
+  // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
+  | { type: "artifactThumbnailRequest"; requestId: string; path: string }
+  /** CGP-KNOW-D-016 — the info popover of one listed work-folder file; answered once per request id. */
+  | { type: "artifactInfoRequest"; requestId: string; path: string }
+  // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
+  | { type: "pageCardsRequest" }
+  | { type: "pageCardOpen"; turnId: string; path: string }
+  | { type: "pageCardReveal"; turnId: string; path: string }
+  // CGP-KNOW-D-021 — 열기 / 폴더에서 보기 on a stored "다운로드 완료" line of the open task; the host re-checks the file.
+  | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -580,16 +877,44 @@ export type WebviewMessage = (
   // logs to output channel so post-incident reconstruction has a trail.
   | {
       type: "webviewError";
+      /** Opaque response-row identity; the host can correlate current rows to their stream. */
+      messageId?: string;
       message: string;
       stack: string;
       componentStack: string;
-    }) & {activityId?:string};
+    }) & {activityId?:string; taskId?:string};
 
 // Host → Webview
 export type HostMessage = (
   | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
   | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
-  | {type:'inputRejected';text:string;images?:string[];notice?:string}
+  | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
+  | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
+  | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
+  | { type: "runningProcesses"; entries: import("./runningProcesses").RunningProcess[] }
+  | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
+  | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
+  | { type: "problemReportForm"; form: import("./problemReport").ProblemReportFormView | null }
+  | { type: "problemReportOffer"; offer: { reason: import("./problemReport").OfferReason } | null }
+  /** REQ-STUDIO-DOCTOR — one quiet line for a failing check (null hides it). */
+  | { type: "doctorNotice"; notice: import("./studioDoctor").DoctorNotice | null }
+  | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
+  | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
+  | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
+  | { type: 'taskRenameResult'; requestId: string; saved: boolean; undoId?: string }
+  /** CGP-CHAT-R-029 — whether a host-side 되돌리기 (file, page, rename) put the prior state back. */
+  | { type: 'removalUndoResult'; undoId: string; restored: boolean }
+  /** CGP-CHAT-R-029 — a send started: every host-held 되돌리기 (file, page, rename) is gone; offers end. */
+  | { type: 'removalsFinal' }
+  | { type: 'taskSearchResult'; requestId: string; scope: string; results: import('./taskSearch').TaskSearchResult[] | null }
+  | { type: 'taskAppearanceResult'; requestId: string; taskId: string; saved: boolean }
+  | { type: 'taskMoveResult'; requestId: string; moved: boolean; title?: string; destination?: string }
+  | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
+  | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
+  /** Explicit Focus command targets the existing editor composer, not background restore. */
+  | {type:'focusInput'}
+  | { type: "attachmentsPrepared"; requestId: string; failures: import("./attachmentFailure").AttachmentFailure[] }
+  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode;notice?:string}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
@@ -623,10 +948,44 @@ export type HostMessage = (
   | ({ type: "goalState" } & import("./studentGoal").GoalAnswer)
   /** #751 U2 — always read from disk by the host; the webview holds no copy of record. */
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
+  /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
+  | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
+  /** REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder is gone: one notice with 다시 고르기; null hides it. */
+  | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
+  /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
+  | { type: "lowDisk"; notice: import("./lowDisk").LowDiskNotice | null }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — a 느려요 기록 is running (red 기록 중 · 멈추기 pill above the composer) or not; `id` names the recording. */
+  | { type: "perfTraceState"; recording: boolean; id: string | null }
+  /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
+  | { type: "previewRecovery"; signals: import("./previewFailure").PreviewSignals | null; result?: import("./previewFailure").PreviewRecoveryResult }
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
+  /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
+  | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
+  | { type: "activityMemoryState"; view: import("./activityMemoryView").ActivityMemoryView | null; requestId?: string; result?: import("./activityMemoryView").ActivityMemoryResult }
+  /** REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — the activity whose one-time memory notice is due; null shows none. */
+  | { type: "memoryNoticeState"; notice: import("./memoryNotice").MemoryNoticeView | null }
+  /** CGP-KNOW-R-026 — answer id → number of memory items its request carried, for the open task. */
+  | { type: "memoryUseMarks"; marks: Record<string, number> }
+  | { type: "memoryUseItems"; requestId: string; messageId: string; items: import("./memoryUseView").MemoryUseEntry[] | null }
+  | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
+  /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
+  | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
+  | { type: "artifactInfo"; requestId: string; info: import("./artifactProvenanceView").ArtifactInfo | null }
+  /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
+  | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
-  | { type: "streamStart"; streamId: string; messageId: string }
+  | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
+  | { type: "contextTrim"; boundaryId: string | null }
+  /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
+  | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
+  /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string; /** CGP-CHAT-R-023 */ lessonStep?: import("./lessonStepMarks").LessonStepMark }
+  /** CGP-CHAT-R-023 — served lesson step per user message id, for the transcript's step dividers. */
+  | { type: "lessonStepMarks"; marks: import("./lessonStepMarks").LessonStepMarks; /** CGP-CHAT-R-023 — a delta: these ids lose their mark (lessonStepMarks.nextStepMarks). */ forget?: string[] }
   | { type: "streamChunk"; streamId: string; delta: string }
+  | { type: "delegationStopState"; streamId: string; state: import("./delegationStop").DelegationStopState }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
   // SX-59 — the host message that used to leak capability scores to the webview
   // (#204) has been removed. A score reaches the working screen in no shape at all.
@@ -636,7 +995,10 @@ export type HostMessage = (
   // The message name is deliberately not written here again:
   // `test/sx-legacy-score-removed.smoke.mjs` checks this file for the absence of
   // that name.
-  | { type: "streamEnd"; streamId: string }
+  /** `failed` — the stream closed normally but the turn's result was a failure (#751 U4); the task rail shows 오류, not 끝남. */
+  | { type: "streamEnd"; streamId: string; failed?: true }
+  /** REQ-STUDIO-TASK-RUN-STATE — a tool approval modal is open (`waiting: true`) or has just been answered. */
+  | { type: "approvalWait"; waiting: boolean }
   // #497 — user pressed Stop. Distinct from streamEnd (the turn did NOT finish)
   // and from streamError (nothing went wrong — the user asked for this, so no
   // "문제가 생겼어요" banner and no 🚨 신고하기 button). The webview leaves the
@@ -649,14 +1011,35 @@ export type HostMessage = (
   // splices this line into the **same array** as `streamChunk` to build
   // [bubble] → [tool] → [bubble]. `at` is the SDK's own timestamp as it sent it (ms;
   // the host clock when absent) — the createdAt of the persisted line.
-  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number }
+  // CGP-ART-R-020 — one successful tool call of a running turn, bound to the task it started in.
+  | { type: "taskActivityFact"; streamId: string; fact: import("./taskActivity").TaskActivityFact; activityId?: string; taskId?: string }
+  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead
   // of a toast.
+  | { type: "denialNotice"; id: string; label: string; at: number }
+  // CGP-KNOW-R-021 — how a download from the Studio browser ended (re-checked by the webview).
+  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error" | "running"; at: number }
+  // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
+  | { type: "downloadLineNotice"; id: string; notice: string | null }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
+  | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
+  /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
+  | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn (null = none), why a pick was refused, or a one-line notice. The host owns the chip's lifetime. */
+  | { type: "attachmentFailure"; failure: import("./attachmentFailure").AttachmentFailure }
+  | { type: "attachmentFailureResolved"; id: string }
+  | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
+  | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
+  | { type: "fileMentionPicked"; requestId: string; ok: boolean }
+  /** CGP-VOICE-R-009 — the menu state (re-read on every open) and the result of one attach click. */
+  | { type: "voiceShowThisMenu"; requestId: string; items: import("./voicePopupHelpers").ShowThisItem[] }
+  | { type: "voiceShowThisResult"; requestId: string; target: import("./voicePopupHelpers").ShowThisTarget | null; ok: boolean; reference?: import("./voicePopupHelpers").ReferenceTarget; error?: string }
+  /** CGP-KNOW-R-003 — the 자료 list (null = this seat has none). `requestId` answers that press; `error`/`notice` say what happened. */
+  | { type: "materialsState"; view: import("./activityMaterialsView").MaterialsView | null; requestId?: string; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides
   // with it, model-only). `error`: why the last action was refused.
@@ -678,6 +1061,10 @@ export type HostMessage = (
   // stay silent (host-side AiDisclosureGate remembers). Webview renders a
   // compact role=note + aria-live=polite banner at the top of the messages.
   | { type: "aiDisclosure"; text: string }
+  | { type: "accuracyEducationChanged" }
+  | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
+  | { type: "whatsNewChanged" }
+  | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
   // the editor and opens them). The host reads the bytes and hands the webview
   // a data URL to attach to the next turn — making "drag a screenshot in" work
@@ -701,13 +1088,17 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string }
+  /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". `retryable: false` (#1819) — the answer could not be saved; same effect. */
+  | { type: "streamRefusal"; streamId: string }
+  | { type: "streamError"; streamId: string; error: string; activityUnavailable?: import("./activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView; safetyNotice?: import("./safetyNotice").SafetyNoticeView }
   | { type: "actionResult"; requestId: string; approved: boolean }
+  /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
+  | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the
   // host-side __test_crashWebview command which is itself env-gated.
-  | { type: "webviewTestCrash" }) & {activityId?:string};
+  | { type: "webviewTestCrash" }) & {activityId?:string; taskId?:string};
 
 export interface ActionRequest {
   requestId: string;
@@ -750,6 +1141,8 @@ export interface ElementPreview {
   sentText: string;
   /** The element crop as it will be sent, or null when the cohort sends no images. */
   imageDataUrl: string | null;
+  /** CGP-ART-R-006 — the style tweak offered for this element, or null/absent when none. */
+  styleTweak?: import("./styleTweak").StyleTweakView | null;
 }
 
 /** Cohort plan for the learning wiki and deck skills (served as `learning_wiki.plan`; learningWiki.ts re-exports it). */

@@ -200,7 +200,8 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, 
     sdk,
     zod: fakeZod(),
     onDelta: (d) => seen.deltas.push(d),
-    onActivity: (a) => seen.activities.push(a.kind === "approval" ? { ...a, at: 0 } : a),
+    // D006 adds presentation provenance; exclude only that field from the pre-existing runtime identity digest.
+    onActivity: (a) => { const { denialSource, ...unchanged } = a; seen.activities.push(a.kind === "approval" ? { ...unchanged, at: 0 } : a); },
     onUsage: (u) => seen.usage.push(u),
     onCitations: () => {},
     onAssetScore: () => {},
@@ -335,25 +336,48 @@ const ok = (name) => {
   console.log(`✓ ${name}`);
 };
 
-// ── 1. Byte-identity with the pre-A4 email branch ───────────────────────────────────────
-// Taken with HPS_A4_RECORD_BASE=1 on the independent pre-A4 email branch at
-// 624b214f. Its unmanaged 429 fails immediately, so the snapshot includes that
-// error; orchestrator seats still own the bounded busy retry and finish normally.
-// Independently applied #1527 to that pre-A4 source: browser/subagent profile
-// grants are age-independent; the email-specific gate stays on email tools only.
-// Only kidsPolluted and unknownTier changed; all adult digests are unchanged.
-// All ten cases per profile match there: no pre-A4 code reads the roster or host.
+// ── 1. Byte-identity with Studio main ───────────────────────────────────────
+// Taken with HPS_A4_RECORD_BASE=1 on main trees without A4: all ten cases of a profile have
+// the same digest there, because nothing before A4 reads the served `orchestrator` value or
+// the host's `orchestrator` argument. The first eight were taken at 7b8a315 (A1+A2+A3
+// merged) and came out identical at d2a73755, d3ebcbd1 and 48cf6d86. The two publish
+// profiles were taken at 48cf6d86, where one-click publish (#1650) added publish_site.
+// #1762 updates only the two browser descriptions and browser_open's optional URL
+// schema. Restoring those three fields reproduced every prior off-case digest;
+// tool grants, policy decisions, approvals and all other turn surfaces are unchanged.
+// REQ-STUDIO-DENIAL-SOURCE (2026-10-20) changes only the text of each deny decision: it now
+// names its source ("[수업 설정] …", "[안전 규칙] …", "[확인 안 됨] …"). Re-taken on that branch
+// (twice: again after the safety coach rule and the consult/site_check source changed). Control:
+// mapping every tagged deny message back to the old sentence (TOOL_DENIED / PATH_ESCAPE /
+// URL_POLICY) reproduced all ten previous digests (e4650ad1dc31c51b … 449ef9ac1a1a11e5), so
+// grants, verdicts, approvals and every other surface are unchanged.
+// REQ-STUDIO-DELEGATION-ROW (2026-10-20) adds two fields to the SDK activity the stream hands
+// the host: `parent` (parent_tool_use_id, absent on top-level events) and `content` on a
+// tool_result (the raw result, read only for a delegation's final response). The scripted
+// stream's tool_result carries `content: "ok"`, so every digest moved. Control: dropping
+// `content` and `parent` from the recorded activities reproduced all ten previous digests
+// (a39253f30e7fad83 … d0ccabd474a89baa), so prompt, options, env, grants, decisions,
+// approvals, deltas and usage are unchanged.
+// Then adultSubagents alone moved again: a seat that may delegate now pins
+// CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 so helpers stay inside the watched turn (verify F4).
+// Control: deleting that one env key on turns that carry `agents` reproduced 27bd755ac286cb2e.
+// #3221 (2026-10-29) adds page_pdf_save to the browser grant (the coach prints a work-folder page to PDF with Studio's
+// own browser instead of running Chrome). The six profiles that grant the browser moved. Control: removing
+// page_pdf_save from MCP_BROWSER_TOOLS and the server reproduced every previous digest (a7b8013ce7d9d7d0,
+// cdc79d6719de7555, 3545599d2498467d, e7f98f066d7810de, 610234268befcbb9, f854dfa48639b858).
 const BASE = {
-  kidsChat: "b4a9319497b84e59",
-  kidsPolluted: "90f33380959c3fa2",
-  adultRW: "dc75a1c8a5319846",
-  adultWide: "83e6259002a714f2",
-  adultSubagents: "f23a5e09897c354f",
-  adultCR: "c1d3a929179497ef",
-  minorFlagAdultTier: "a12db54f43846784",
-  unknownTier: "4db3527580d1e09c",
-  adultPublishOnly: "0cd0b3747f2ce46a",
-  adultBrowserPublish: "0faf1e3fdbdd8c94",
+  kidsChat: "582e3e0804786f9f",
+  // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
+  // carry their own browser flag's tools.
+  kidsPolluted: "5f38949c153d4c13",
+  adultRW: "6295e410f05b5f13",
+  adultWide: "12183dad8d42f3be",
+  adultSubagents: "b995c4fa789f806f",
+  adultCR: "06c7bf022016cb15",
+  minorFlagAdultTier: "f5e0eea0b4359fcf",
+  unknownTier: "29e081979c05df21",
+  adultPublishOnly: "3fb3dd807365f974",
+  adultBrowserPublish: "fd72f1e495565086",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
@@ -378,6 +402,8 @@ const BASE = {
 // ── 2. The switch-off inventory ─────────────────────────────────────────────
 const { ORCHESTRATOR_SURFACES: SURF, resolveOrchestrator } = await import("../src/orchestratorSurfaces.ts");
 const H2 = await import("../src/sdkCoachHelpers.ts");
+const DS = await import("../src/denialSource.ts");
+const { profileAudience } = await import("../src/seatVocabulary.ts");
 const { orchestratorSessionFor, OrchestratorSession } = await import("../src/consultTool.ts");
 
 /** What one observed turn shows of each inventoried surface. */
@@ -403,13 +429,27 @@ function surfacesOf({ call, seen }) {
   const none = { mcpTools: [], hookEvents: [], cliHeaders: [], cliEnv: [], serviceRoutes: [], approvalKinds: [], events: [] };
   for (const c of CASES.filter((x) => !x.on)) {
     const o = observed[c.name];
-    assert.deepEqual(o.snapshot.end, { failed: true, error: "SdkApiError", status: 429 }, "unmanaged budget refusal fails immediately");
-    assert.deepEqual(o.seen.deltas, [], "no answer is consumed after an unmanaged refusal");
-    assert.deepEqual(surfacesOf(o), none, `${c.name}: switch off, no orchestrator surface`);
-    // canUseTool denies both tools as ungranted (never asks, never runs them).
+    // REQ-STUDIO-DELEGATION-ROW — a seat with the legacy helpers pins the background switch too;
+    // that one variable is the helpers', not the orchestrator's.
+    const surf = surfacesOf(o);
+    if (o.call.options.agents) {
+      assert.equal(o.call.options.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", `${c.name}: helpers stay in the foreground`);
+      surf.cliEnv = surf.cliEnv.filter((k) => k !== "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS");
+    }
+    assert.deepEqual(surf, none, `${c.name}: switch off, no orchestrator surface`);
+    // canUseTool denies both tools as ungranted (never asks, never runs them). The deny names
+    // its source (REQ-STUDIO-DENIAL-SOURCE): the minor posture closes them whatever the lesson
+    // says (안전 규칙); for an adult seat the gate cannot tell the roster, the host and the
+    // Service apart (확인 안 됨, as consultTool says for the same state).
+    const minor = H2.isMinorProfile(c.profile);
     for (const name of SURF.mcpTools) {
       const d = o.snapshot.decisions.find(([n]) => n === name)[1];
-      assert.deepEqual(d, { behavior: "deny", message: H2.TOOL_DENIED_FRIENDLY }, `${c.name}: ${name} denied`);
+      const expected = DS.denialToolText(
+        { source: minor ? "safety" : "unknown", feature: DS.toolFeatureName(name), reason: minor ? H2.MINOR_CLOSED_REASON : "도우미 구성을 확인하지 못했어요" },
+        profileAudience(c.profile),
+      );
+      assert.deepEqual(d, { behavior: "deny", message: expected }, `${c.name}: ${name} denied`);
+      assert.ok(d.message.startsWith(minor ? "[안전 규칙] " : "[확인 안 됨] "), `${c.name}: ${name} names its source`);
     }
   }
   // The legacy subagents stay exactly where they were with the switch off (REQ-M22)…
@@ -433,14 +473,14 @@ function surfacesOf({ call, seen }) {
   // Registration: with the browser grant the orchestrator tools follow the browser tools;
   // without it they register alone (the A2 open item).
   const names = (c) => observed[c].call.options.mcpServers.hypeproof.tools.map((t) => t.name);
-  assert.deepEqual(names("adultWide/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "consult", "site_check"]);
-  assert.deepEqual(names("adultWide/none/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type"]);
+  assert.deepEqual(names("adultWide/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save", "consult", "site_check"]);
+  assert.deepEqual(names("adultWide/none/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save"]);
   assert.deepEqual(names("adultRW/roster/host"), ["consult", "site_check"], "a seat without the browser grant gets the orchestrator tools only");
   // One-click publish (#1650) is a second grant that needs no browser: it keeps its server part,
   // and the orchestrator tools follow it.
   assert.deepEqual(names("adultPublishOnly/none/host"), ["publish_site"], "main's publish-only server, unchanged");
   assert.deepEqual(names("adultPublishOnly/roster/host"), ["publish_site", "consult", "site_check"]);
-  assert.deepEqual(names("adultBrowserPublish/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "publish_site", "consult", "site_check"]);
+  assert.deepEqual(names("adultBrowserPublish/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save", "publish_site", "consult", "site_check"]);
   assert.equal("mcpServers" in observed["adultRW/none/host"].call.options, false, "…and nothing without the roster");
   assert.deepEqual(names("adultCR/roster/host").slice(-2), ["consult", "site_check"]);
   assert.ok(names("adultCR/roster/host").includes("browser_observe"), "CR tools still follow their own switch");

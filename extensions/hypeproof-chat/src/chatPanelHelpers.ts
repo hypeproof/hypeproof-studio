@@ -3,6 +3,8 @@
 
 import { coachDegradedNotice, DEFAULT_COACH_NAME, resolveCoachIdentity } from "./coachIdentity.ts";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers.ts";
+import { HISTORY_MAX } from "./chatTimeline.ts";
+import { BLANK_TARGET_TEXT, browserTarget, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 
 /** An isolated developer app must not inherit a different app's test account. */
 export function testStateCandidates(appName: string, ownedFile: string, legacyHomeFile: string): string[] {
@@ -223,8 +225,8 @@ export function labelsForProfile(profile: ProfileToneShape | null | undefined) {
   return TONE_LABELS[appToneOf(profile)];
 }
 
-/** workspaceState ceiling — oldest turns dropped beyond this. */
-export const HISTORY_MAX = 200;
+/** workspaceState ceiling — oldest turns dropped beyond this. Defined beside clampTimeline (webview-safe). */
+export { HISTORY_MAX };
 
 /** Coach name length ceiling (REQ-F3). */
 export const COACH_NAME_MAX = 40;
@@ -336,9 +338,12 @@ export function isShowIntent(text: string): boolean {
  * outputs without checking) also satisfies ToS §D.3 and embodies the
  * verification_reflex asset (docs/seven-assets.md). Kid-friendly Korean —
  * keep both sentences if you edit.
+ *
+ * REQ-STUDIO-STROKE-ICONS: no leading emoji. The webview draws the stroke info icon in front.
+ * e2e/tests/27-ai-disclosure.spec.ts reads this literal right after the `=`.
  */
 export const AI_DISCLOSURE_TEXT =
-  "🤖 AI 코치와 대화하고 있어요. AI의 답은 틀릴 수 있으니 중요한 내용은 꼭 확인해요!";
+  "AI 코치와 대화하고 있어요. AI의 답은 틀릴 수 있으니 중요한 내용은 꼭 확인해요!";
 
 /**
  * Session gate for the AI disclosure notice (#320). The webview has no memory
@@ -414,6 +419,8 @@ export function sdkFallbackLogLine(reason: string, at: Date): string {
 export function browserToolLogLine(
   name: string,
   input: Record<string, unknown>,
+  // #2788 — the SDK path passes the work folder so a local file target reads `작업 폴더/<path>`.
+  opts: { workspaceRoot?: string } = {},
 ): { icon: string; label: string } {
   const clip = (v: unknown, n = 24): string => {
     const t = String(v ?? "");
@@ -430,6 +437,19 @@ export function browserToolLogLine(
       }
       return { icon: "🔗", label: `${host} 로 이동` };
     }
+    // #2788 — the hypeproof MCP server's open: host only plus its place tag (인터넷 · 내 미리보기 ·
+    // 내 컴퓨터 파일), the same normalization as the approval body (REQ-E3).
+    case "browser_open": {
+      const raw = typeof input.url === "string" ? input.url : undefined;
+      if ((raw ?? "").trim() === "about:blank") return { icon: "🔗", label: `${BLANK_TARGET_TEXT} 열기` };
+      const t = browserTarget(raw, { workspaceRoot: opts.workspaceRoot ?? null });
+      return { icon: "🔗", label: `${t.host ?? UNKNOWN_HOST_TEXT} 열기 · ${t.label}` };
+    }
+    case "live_preview_start":
+      return { icon: "🖼️", label: "미리보기 열기" };
+    // #3221 — PDF with Studio's own browser.
+    case "page_pdf_save":
+      return { icon: "📄", label: `PDF로 저장 · ${clip(input.path)}` };
     case "browser_read":
       return { icon: "👀", label: "페이지 읽는 중" };
     case "browser_screenshot":
@@ -460,8 +480,9 @@ export function browserToolLogLine(
       return { icon: "🧪", label: "기대 조건 테스트 중" };
     case "verify_propose_criteria":
       return { icon: "💡", label: "기대 조건 제안" };
+    // #2788 — an unknown tool is named neutrally, never by its identifier.
     default:
-      return { icon: "🤖", label: name };
+      return { icon: "🔧", label: "도구 사용 중" };
   }
 }
 

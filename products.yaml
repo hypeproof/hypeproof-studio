@@ -45,6 +45,7 @@ non_product_directories:
   - vscodium-base      # submodule — upstream VSCodium fork
   - proxy-poc          # pre-SDK proxy; superseded, kept for reference
   - extensions         # container dir; the product is extensions/hypeproof-chat
+  - releases           # release notes written by release-cut (releases/<version>.md)
 
 entries:
   - name: measurement-host-package

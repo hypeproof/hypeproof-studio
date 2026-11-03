@@ -6,10 +6,15 @@ export interface ActivitySummary {
   kind?: 'trial' | 'personal' | 'classroom';
   /** REQ-L12 — the activity was entered with a bought pass. */
   pass?: boolean;
+  /** Free start (SPEC iteration 4 §2.4) — the free allowance; labelled 무료 사용, never 체험. */
+  free?: boolean;
+  /** CGP-KNOW-R-009 — entered with a served lesson (a class activity). Absent on records saved before. */
+  lesson?: boolean;
   workspace: string;
 }
 export interface StartState {
   automationsEnabled?: boolean;
+  account?: import("./accountSession").AccountView;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -18,7 +23,9 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
-  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; id: string; name: string; coach: string; series: string; workspace: string };
+  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string;
+    /** Free start (SPEC iteration 4 §2.4) — the free allowance seat: labels say 무료 사용, never 체험. */
+    free?: boolean };
   /** #747 — resolved AI display name for the connected seat; absent → "코치". */
   coachName?: string;
   workspace?: string;
@@ -27,6 +34,27 @@ export interface StartState {
   inbox?: import("./classroomInbox").InboxView;
   /** REQ-L12 — buying a pass. Presentation only: the order secret and the issued code never leave the host. */
   purchase?: import("./passPurchase").PurchaseView;
+  /** TUX-SP-12 — the trial entry mode and allowance the Service advertises. Absent: not advertised. */
+  trialOffer?: import("./trialOffer").TrialOffer;
+  /**
+   * TUX-SP-14/15/16 — free start, present only while the Service advertises it (and the local
+   * setting is not "off"). Presentation only: the install id and the issued token stay in the host.
+   */
+  freeStart?: FreeStartView;
+  /**
+   * REQ-STUDIO-JOIN-LINK — a class join link brought the join form forward for this class.
+   * Only the class id: a link never carries a code. `seq` changes on every link press so the
+   * webview reopens and refocuses the empty code field.
+   */
+  joinLink?: { classId: string; seq: number };
+  /**
+   * REQ-STUDIO-START-UPDATE-NOTICE — the update offer the chat banner shows, on the start page too.
+   * Absent: no newer version, or this version was dismissed (same 7-day rule as the banner).
+   * `heldForClass`: a class seat is active, so nothing can be pressed (CGP-SHELL-R-001).
+   */
+  update?: { version: string; heldForClass?: boolean };
+  /** CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". */
+  settings?: import("./startSettings").StartSettingsView;
   /**
    * "GitHub에서 이어하기" while a code is being confirmed (candidate): what this seat's GitHub
    * holds. Absent when the cohort does not publish to GitHub.
@@ -42,23 +70,68 @@ export interface StartState {
     working?: "signin" | "download";
   };
 }
+export interface FreeStartView {
+  /** The saved age answer; absent → ask the one question. */
+  age?: "14+" | "under14";
+  /** A claim is running. */
+  claiming?: boolean;
+  /** The last claim's refusal (the Service's sentence, shown as given; `code` steers layout only). */
+  refusal?: { code: string; message: string; resumesAt?: string };
+  /** The Service said today's free start is not available (offer `available:false`). */
+  unavailable?: "daily_cap" | "paused";
+  /** "무료 AI 요청 30번 · 오늘 밤 12시까지", only from numbers the Service advertised. */
+  allowance?: string;
+  /** This build is below the Service's floor; the update button is drawn. */
+  tooOld?: boolean;
+  /**
+   * The saved free seat's window is over and the Service refused its profile (403 `trial_expired`
+   * with the free sentence). The card says so instead of offering a fresh start the Service would
+   * not give (a reclaim answers `reused` and the seat stays expired; e2e D2).
+   */
+  ended?: "expired";
+  /**
+   * REQ-STUDIO-FREE-DAILY-REFILL — with `ended`: the install's next daily allowance (epoch ms), from
+   * the Service's refusal. While it is ahead the card says it refills at midnight (KST).
+   */
+  refillsAt?: number;
+}
 export type StartRequest =
   | { type: "startReady" }
+  /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
+  | { type: "startUpdateInstall" }
+  | { type: "startUpdateDismiss"; version: string }
+  /**
+   * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
+   * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
+   */
+  | { type: "accountSignIn"; productId?: string }
+  | { type: "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
+  | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
   | { type: "selectActivity"; ref: string }
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
   | { type: "openEmailAutomation" }
   | { type: "openStudioFiles" }
-  | { type: "openStudioSettings" }
-  | { type: "connectCourse"; token: string }
+  /** REQ-STUDIO-FEEDBACK-ENTRY — 의견·문제 보내기: runs `hypeproof-chat.reportProblem` (the chat panel's form). */
+  | { type: "reportProblem" }
+  | { type: "openAdvancedSettings" }
+  | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
+  /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
+  | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }
   | { type: "disconnectCourse" }
   | { type: "cancelCandidate" }
+  | { type: "joinLinkDismiss" }
   | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
   | { type: "purchaseOpen" }
-  | { type: "purchaseStart"; productId: string }
+  | { type: "purchaseStart"; productId: string; guardian?: boolean }
+  | { type: "purchasePayer"; adult: boolean }
+  | { type: "freeStartAge"; answer: "14+" | "under14" }
+  | { type: "freeStartClaim" }
+  | { type: "freeStartGuardian" }
+  | { type: "freeStartUpdate" }
   | { type: "purchaseReopen" }
   | { type: "purchaseRetry" }
   | { type: "purchaseCancel" }

@@ -113,6 +113,24 @@ temporary `--user-data-dir`. Without that switch the copy reads the shared
 re-signed macOS asks for the login keychain password in the middle of your work.
 Never launch `/Applications/HypeProof Studio.app` from automation.
 
+## Microphone replay — `mic-replay/run.mjs` (DEC-03)
+
+Replays generated WAV files (tone, silence, clipping, a 300 ms and an 8 s played-once
+file) through Chromium's fake capture device into a hidden APFS clone of the installed
+app, prepared with `scripts/prep-test-app.sh`. Profiles are temporary and in-memory
+secrets are used. Nothing bypasses permissions: the fake device replaces only the audio
+source, so the mic patch's gates decide as they do for a learner.
+
+```bash
+npm --prefix e2e run test:mic-replay                    # every scenario, one launch per WAV
+node e2e/mic-replay/run.mjs --only 1,2,4                # some scenarios
+node e2e/mic-replay/run.mjs --self-test                 # judge controls only, no app
+```
+
+The run writes `mic-replay-result.json` to `HPS_MIC_OUT` (default `/tmp/hps-mic-replay`).
+Voice features that are not built yet are listed as `pending`. Each turns into a failure
+as soon as the source shows it is wired.
+
 ## Run
 
 ```bash

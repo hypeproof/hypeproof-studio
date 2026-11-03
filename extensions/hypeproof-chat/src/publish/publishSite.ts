@@ -1,3 +1,4 @@
+import type { VisitorPreview } from "../visitorPreview.ts";
 // The one-click publish pipeline. Both entry points — the toolbar command and the coach's
 // `publish_site` tool — call `runPublishSite` and nothing else, so the order of operations,
 // the checks and the Korean the participant reads are identical whichever way it started (D3).
@@ -10,6 +11,8 @@
 // base), so the smoke tests drive the whole pipeline against a scripted GitHub.
 
 import * as fs from "node:fs";
+import * as path from "node:path";
+import { memoryOutboundPath, type OutboundConfirmation } from "../outboundConsent.ts";
 import { createGitHubApi, ghMessage, GitHubTransportError, missingScopes, parseOAuthScopes, type GitHubApi, type GitHubTransport } from "./githubApi.ts";
 import { AuthToolMissingError, type AuthProvider } from "./githubAuth.ts";
 import {
@@ -76,6 +79,11 @@ export const DEFAULT_TIMING: PublishTiming = {
 };
 
 export interface PublishSiteDeps {
+  confirmContent?: OutboundConfirmation;
+  // Required key (REQ-KNOW-63): a caller that forgets the wiring fails to compile, not closed at run time.
+  previewVisitor: VisitorPreview;
+  current?(): boolean;
+  privateDirectories?: string[];
   /** Unauthenticated reads of the published site (the live check). Never carries a token. */
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
@@ -167,14 +175,20 @@ class Steps {
   }
 }
 
-/** Reads files as bytes for the commit. A file that vanished since preflight is dropped. */
+/** Freeze selected bytes before consent. Changed paths refuse; no late file substitution. */
 function readTreeFiles(files: Array<{ path: string; abs: string }>): TreeFile[] {
   const out: TreeFile[] = [];
   for (const f of files) {
     try {
-      out.push({ path: f.path, bytes: fs.readFileSync(f.abs) });
+      let component = path.resolve(f.abs);
+      while (component !== path.dirname(component)) {
+        if (fs.lstatSync(component).isSymbolicLink()) throw new Error("symlink");
+        component = path.dirname(component);
+      }
+      const fd = fs.openSync(f.abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      try { out.push({ path: f.path, bytes: fs.readFileSync(fd) }); } finally { fs.closeSync(fd); }
     } catch {
-      /* deleted between preflight and commit: publishing it is impossible anyway */
+      throw new Error("A selected file changed before confirmation");
     }
   }
   return out;
@@ -224,9 +238,13 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
 
   // ── preflight (nothing leaves the machine before this passes) ─────────────
   let siteFiles: Array<{ path: string; abs: string }> = [];
+  // REQ-KNOW-51: memory-store files the walk left out. Site publish has no student file choice, so they never go; the
+  // confirmation names them so the student sees what stayed behind.
+  let memoryLeftOut: string[] = [];
+  let site: TreeFile[] = [];
   if (!checkOnly) {
     if (!deps.workspaceRoot) return fail("no_workspace");
-    const report = preflightSite(deps.workspaceRoot);
+    const report = preflightSite(deps.workspaceRoot, deps.privateDirectories);
     const lines = summarizeIssues(report.issues);
     if (report.blocked) {
       steps.set("preflight", "failed", lines.join(" / "));
@@ -238,6 +256,8 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       report.issues.length ? `파일 ${report.files.length}개 · 확인할 점: ${lines.join(" / ")}` : `파일 ${report.files.length}개를 검사했어요. 문제 없어요.`,
     );
     siteFiles = report.files;
+    memoryLeftOut = report.excluded.filter((rel) => memoryOutboundPath(rel, deps.privateDirectories ?? []));
+    try { site = readTreeFiles(siteFiles); } catch { return fail("preflight_blocked"); }
     if (report.markers.length) extra.markers = report.markers;
   } else {
     steps.set("preflight", "skipped", "상태만 확인해요.");
@@ -263,7 +283,11 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       if (!token) {
         needed = ["repo", "workflow"];
       } else {
-        api = createGitHubApi({ transport: deps.transport(token), deps: { sleep: deps.sleep, now: deps.now } });
+        const transport = deps.transport(token), signedToken = token;
+        api = createGitHubApi({ transport: async (method, route, body) => {
+          if (method !== "GET") { const active = await deps.auth.token(); if (active !== signedToken || deps.current?.() === false) return { status: 403, headers: new Headers(), json: { message: "연결이 바뀌어서 보내지 않았어요." } }; }
+          return transport(method, route, body);
+        }, deps: { sleep: deps.sleep, now: deps.now } });
         const u = await api.request("GET", "/user");
         if (u.status === 401) {
           // gh still holds a token GitHub no longer accepts (revoked, expired): log in again.
@@ -345,6 +369,17 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       steps.set("repo", "skipped", "공개하지 않기로 해서 아무것도 올리지 않았어요.");
       return fail("declined");
     }
+    const nonce = stage === "save" ? "" : deps.nonce();
+    const knownPages = stage === "save" ? null : await readPages(api, `/repos/${login}/${repoName}`);
+    if (knownPages && !knownPages.ok) return fail(knownPages.code, knownPages.detail);
+    const approvedCname = domain ?? (knownPages?.ok ? knownPages.pages?.cname?.toLowerCase() : null) ?? null;
+    const generated: TreeFile[] = [{ path: ".nojekyll", bytes: new Uint8Array() }, ...(stage === "save" ? [] : [{ path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) }, { path: NONCE_PATH, bytes: enc(`${nonce}\n`) }, ...(approvedCname ? [{ path: "CNAME", bytes: enc(`${approvedCname}\n`) }] : [])])];
+    // REQ-KNOW-63: the preview and the send consent are built from the same recipient and the
+    // same file list that is pushed, so neither can drift from what visitors actually get.
+    const published = [...site, ...generated];
+    const recipient = `GitHub · github.com/${login}/${repoName}${stage === "save" ? "" : ` · 사이트 ${approvedCname ?? new URL(plannedUrl).host}`}`;
+    if (stage !== "save" && !await deps.previewVisitor?.({ entry: "index.html", audience: `${recipient} · 인터넷의 누구나`, files: published.map(f => ({ path: f.path, data: f.bytes })) })) return fail("declined");
+    if (!await deps.confirmContent?.({ recipient, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: published.map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
     const expectedHead = deps.lastPushedSha?.(login, repoName);
 
     // ── repository ──────────────────────────────────────────────────────────
@@ -357,11 +392,8 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     extra.repo_url = repo.htmlUrl;
     steps.set("repo", "ok", repo.created ? `새 저장소 ${repo.htmlUrl} 를 만들었어요.` : `이미 있는 내 저장소 ${repo.htmlUrl} 를 그대로 써요.`);
 
-    const site = readTreeFiles(siteFiles);
-    // `.nojekyll` in both stages: meaningless to the Actions build but harmless, and it keeps
-    // a later switch to branch publishing (or a participant enabling Pages by hand on a saved
-    // repo) from running Jekyll over files with underscores.
-    const common: TreeFile[] = [...site, { path: ".nojekyll", bytes: new Uint8Array() }];
+    // `.nojekyll` (in `generated`, both stages) keeps a later switch to branch publishing, or
+    // Pages enabled by hand on a saved repo, from running Jekyll over files with underscores.
 
     // ── save stage: files only, Pages untouched ───────────────────────────────
     if (stage === "save") {
@@ -370,7 +402,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       // dropped from this snapshot, because keeping it would trigger a deployment — saving
       // would silently publish. agent.md is not edited to record the planned address: the tool
       // never rewrites the participant's prose; the coach writes that line if the lesson wants it.
-      const c = await commitSnapshot(api, repo.path, repo.defaultBranch, common, "HypeProof Studio에서 홈페이지 저장", clock, expectedHead);
+      const c = await commitSnapshot(api, repo.path, repo.defaultBranch, published, "HypeProof Studio에서 홈페이지 저장", clock, expectedHead);
       if (!c.ok) {
         steps.set("commit", "failed", c.code === "remote_changed" ? "GitHub에서 직접 고친 내용이 있어 올리지 않았어요." : "파일을 저장소에 올리지 못했어요.");
         return fail(c.code, c.detail);
@@ -391,14 +423,10 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     const existingDomainSite = existingCname ? { name: existingCname, https: pagesRes.pages.httpsEnforced } : null;
 
     // ── commit: site + workflow + nonce (+ CNAME) as ONE commit ───────────────
-    const nonce = deps.nonce();
     const cnameForTree = domain ?? existingCname;
-    const files: TreeFile[] = [
-      ...common,
-      { path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) },
-      { path: NONCE_PATH, bytes: enc(`${nonce}\n`) },
-      ...(cnameForTree ? [{ path: "CNAME", bytes: enc(`${cnameForTree}\n`) }] : []),
-    ];
+    if (cnameForTree !== approvedCname) return fail("declined", "Domain changed after confirmation");
+    // Exactly the previewed and consented list (approvedCname was checked just above).
+    const files: TreeFile[] = published;
     const commit = await commitSnapshot(api, repo.path, repo.defaultBranch, files, `HypeProof Studio에서 홈페이지 올리기 (${nonce.slice(0, 8)})`, clock, expectedHead);
     if (!commit.ok) {
       steps.set("commit", "failed", commit.code === "remote_changed" ? "GitHub에서 직접 고친 내용이 있어 올리지 않았어요." : "파일을 저장소에 올리지 못했어요.");
@@ -588,4 +616,10 @@ export function resultChatText(r: PublishSiteResult): string {
   }
   // Markdown hard breaks: one fact per line in one bubble (same as the team-brain replies).
   return lines.join("  \n");
+}
+
+/** REQ-KNOW-51: one confirmation line naming the memory-store paths a site publish leaves out (at most five, then a count). */
+export function memoryLeftOutNote(paths: readonly string[]): string {
+  const shown = paths.slice(0, 5).join(", ");
+  return `AI 기억 파일은 올리지 않아요: ${shown}${paths.length > 5 ? ` 외 ${paths.length - 5}개` : ""}`;
 }

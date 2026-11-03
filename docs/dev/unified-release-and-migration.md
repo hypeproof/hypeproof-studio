@@ -27,12 +27,21 @@ flowchart TD
 
 검사는 아래를 구분한다.
 
-- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 같은 SHA의 로컬 합성 Service.
+- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 후보 Studio 커밋의
+  `config/service-deployment.json`에 고정된 Service 소스. `HPS_SERVICE_SOURCE`는
+  그 SHA의 깨끗한 checkout이어야 하며, 없거나 다르면 실패한다. 과거 testkit의
+  Worker 구현으로 대체하지 않는다. App SHA와 Service SHA는 별도 기록한다.
   각 OS에서 체험·수업 각각 A/B 전환, 초안/첨부, 실제 모델 파일 생성, 요청 자료 분리,
   실제 암호화 저장과 프로세스 재시작을 검사한다. Service 바인딩은 합성이며 Cloudflare
   배포 인수는 아니다. 활동별 upstream 요청 최대 8회, 동시 테스트 1개, 실패 시 중단한다.
 - `install-windows.mjs`: 폐기 가능한 Windows CI에서 User/System 설치기를 실제로
   별도 위치에 설치하고 모든 portable payload 파일을 대조한다. 로컬 Mac에서는 실행 불가다.
+  Windows 빌드는 `scripts/patches/windows-policy-locales.patch`를 fork의 patch
+  디렉터리에 복사한 뒤 준비한다. 정책 파일의 언어별 하위 폴더도 설치본에 포함한다.
+  patch 적용 검사는 설치본 검증을 대신하지 않는다.
+  `resources/app/product.json` is the one file compared by field, not by bytes: VS Code's
+  Inno Setup build adds `target` (`user`/`system`) and re-serializes it, so the installed
+  copy must equal the portable one plus the target of the installer that wrote it.
 - `public.mjs`: checks the same candidate App against the current public Service with
   synthetic trial and classroom codes minted for this run, and creates two files in each
   activity. Existing policy and request limits apply and a failed activity is not retried
@@ -92,9 +101,14 @@ its own credentials on every run, on a cohort that cannot hold a real participan
 
 ## Service와 Module
 
-`deploy-worker.yml`은 ref를 SHA로 고정한 뒤 `verify-service-activities.yml`에서
-현재 공개 App의 두 활동을 같은 Service 후보로 검사한다. 통과한 SHA만 기존 배포
-절차에 전달한다. dry-run은 배포하지 않으며 호환성 실기를 완료했다고 보고하지 않는다.
+Since 2026-10-19 Studio does not deploy the Service Worker. hypeproof-service owns
+the deploy (`npm run release:deploy`, its `worker/DEPLOY.md`), and hypeproof-ops
+`opsdb.py` applies schema migrations. `deploy-worker.yml` is verification only: it
+runs the Service tests at the `config/service-deployment.json` pin, optionally runs
+`verify-service-activities.yml` (the public App's two activities against that
+Service SHA) and optionally the production verification scripts. It holds no
+Cloudflare credential. `config/service-deployment.json` is retired as a deploy pin;
+it remains the Service SHA that Studio's compatibility and e2e workflows test.
 Service 변경만으로 App 전체 빌드를 실행하지 않는다.
 
 현재 Module pin은 변경하지 않는다. Module 발행/복귀는 기존 불변 버전과 대상 강의

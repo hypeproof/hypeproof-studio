@@ -20,7 +20,7 @@ try{
  const connections=new ActivityConnections(raw,()=> 'https://synthetic.invalid/v1',()=>root,async()=>{});
  await connections.commit('synthetic-credential',{activity_id:'a'.repeat(64),display_name:'Synthetic'},root);
  const proto=ChatPanelProvider.prototype,events=[];
- const host={context:connections.wrap(),draftWrites:Promise.resolve(),post:async msg=>events.push(msg)};
+ const host={confirmAnnotationLeave:async()=>true,context:connections.wrap(),draftWrites:Promise.resolve(),post:async msg=>events.push(msg)};
  const draft={text:'합성 초안',images:['data:image/png;base64,c3ludGhldGlj'],queued:'다음 합성 요청'};
  const source={postMessage:msg=>proto.handleMessage.call(host,{type:'saveActivityDraft',activityId:connections.scope,draft,nonce:msg.nonce},source)};
  await proto.handleMessage.call(host,{type:'saveActivityDraft',activityId:connections.scope,draft},source);
@@ -31,5 +31,22 @@ try{
  assert.equal(states.get('hps.activity.draft.'+connections.scope).text,'합성 초안');
  fail=true;await assert.rejects(()=>proto.setConnectionChanging.call(host,true),/입력을 저장하지 못했습니다/);fail=false;
  await proto.setConnectionChanging.call(host,false);assert.equal(events.some(e=>e.type==='activityDraftError'),true);
- console.log('PASS actual host draft flush: acknowledged text/images/queue, rejected stale activity, persistence failure blocks transition');
+ // A disconnected composer cannot acknowledge a scoped flush; pending writes still matter.
+ await connections.disconnect();
+ let nonceRequests=0,releaseWrite;
+ host.draftSource={postMessage:msg=>{if(msg.nonce)nonceRequests++;return Promise.resolve(true);}};
+ host.draftWrites=new Promise(resolve=>{releaseWrite=resolve;});
+ let settled=false;
+ const reconnect=proto.setConnectionChanging.call(host,true).then(()=>{settled=true;});
+ await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(settled,false,'reconnect waits for queued persistence even without an active scope');
+ releaseWrite();await reconnect;
+ assert.equal(nonceRequests,0,'unmounted disconnected composer cannot acknowledge a nonce');
+ assert.equal([...states.values()].some(value=>value?.text==='합성 초안'),true,'saved draft remains');
+ await proto.setConnectionChanging.call(host,false);
+ host.interruptedHistory={pending:true};
+ host.retryInterruptedHistory=async()=>{throw new Error('pending history still needs recovery');};
+ await assert.rejects(()=>proto.setConnectionChanging.call(host,true),/pending history still needs recovery/,'disconnected fast path still checks interrupted history');
+ await proto.setConnectionChanging.call(host,false);
+ console.log('PASS actual host draft flush: active acknowledgement, stale scope, write failure and disconnected reconnect guards');
 }finally{fs.rmSync(root,{recursive:true,force:true});}

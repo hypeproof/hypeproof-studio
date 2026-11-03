@@ -1,11 +1,11 @@
 # HypeProof Studio
 
-VSCodium fork rebranded as **HypeProof Studio**. The repo also holds the Worker (`worker/`) and the Chalk instructor surface (`chalk/`); see `products.yaml`.
+VSCodium fork rebranded as **HypeProof Studio**. The repo also holds the Chalk instructor surface (`chalk/`); see `products.yaml`. The Worker is no longer here: it moved to `hypeproof/hypeproof-service` (private) in #1587.
 Strategic + phase plan: see [METAPLAN.md](./METAPLAN.md). Do not duplicate it here.
 
 ## Product philosophy (READ BEFORE DESIGNING UX)
 
-Studio is a prepared environment where learners exercise and examine their agency, judgment and responsibility while working with AI. The current research model is the **six-capability candidate model** (`candidate-capability-v1` — FRAMING, JUDGMENT, ORCHESTRATE, VERIFY, ADAPT, OWNERSHIP), adopted 2026-09-13 (#1020). The **7 AI Native Assets** are `legacy-seven-assets`: historical, still readable, never produced by a new assessment. Neither is an established learning outcome, and there is deliberately no conversion table between them — see `worker/src/lib/measurement-core/capability-models.ts`. Every UX decision in the chat panel, welcome flow, approval modals and onboarding must connect to observable learner behavior and a testable hypothesis.
+Studio is a prepared environment where learners exercise and examine their agency, judgment and responsibility while working with AI. The current research model is the **six-capability candidate model** (`candidate-capability-v1` — FRAMING, JUDGMENT, ORCHESTRATE, VERIFY, ADAPT, OWNERSHIP), adopted 2026-09-13 (#1020). The **7 AI Native Assets** are `legacy-seven-assets`: historical, still readable, never produced by a new assessment. Neither is an established learning outcome, and there is deliberately no conversion table between them — see `worker/src/lib/measurement-core/capability-models.ts` in `hypeproof/hypeproof-service`. Every UX decision in the chat panel, welcome flow, approval modals and onboarding must connect to observable learner behavior and a testable hypothesis.
 
 **Capability names are not learner-facing during work.** SX-01/06/07/59 keep scores, capability labels and evaluation sentences off the work screen; the observation results panel is drawn only where a cohort opted in via `observation.assess` (ADR 0010).
 
@@ -15,7 +15,7 @@ Use this traceability order for product decisions:
 
 `Product Intent` is a product-design layer and is **not** the same concept as the Human Asset `INTENT`.
 
-- Philosophy and asset definitions: [hypeprooflab/PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/main/PHILOSOPHY.md). [docs/seven-assets.md](./docs/seven-assets.md) is the Studio reference and compatibility index, not a second definition. Do **not** fork the definitions elsewhere.
+- Philosophy and asset definitions: [hypeprooflab/PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/main/PHILOSOPHY.md). [docs/seven-assets.md](./docs/seven-assets.md) is the Studio reference and compatibility index, not a second definition. Do **not** fork the definitions elsewhere.
 - Product-intent layer: [docs/PRODUCT-INTENT.md](./docs/PRODUCT-INTENT.md) — translates philosophy into product design principles
 - UX mapping: METAPLAN §4.5 (asset → concrete chat-panel feature)
 - Behavioral contract: [docs/studio-requirements.md](./docs/studio-requirements.md) — REQ-### rows across Studio behavior domains, with test-layer assignments. PR touching Studio behavior must update this doc.
@@ -30,7 +30,7 @@ summary below and a completed plan do not exhaust Studio/Chalk requirements.
 Report ready, claimed, review, dependency, human/environment and reconciliation work
 separately. Missing discovery input means unknown, not "no development remains".
 
-Shipped state (not a work list): the app is released for macOS arm64 and Windows x64
+Shipped state (not a work list): the app is released for macOS arm64 (Windows x64 builds are dispatch-only since 2026-10-19, docs/dev/fast-mac-release.md)
 through `v*` tags, the Worker runs in production at `api.hypeproof-ai.xyz`, and Chalk
 runs at `chalk.hypeproof-ai.xyz`. The Phase 4–5 milestones in METAPLAN are historical.
 Latest detail: git history.
@@ -39,10 +39,19 @@ Latest detail: git history.
 
 - `vscodium-base/` — **submodule** → `jayleekr/vscodium@hps/main`. **Do not edit upstream files directly**; add a patch under `vscodium-base/patches/`. Pointer is pinned — bump deliberately only, never auto-follow. Policy: [.claude/rules/build-pipeline.md](.claude/rules/build-pipeline.md) "Submodule bump policy".
 - `extensions/hypeproof-chat/` — own VS Code extension (React webview), bundled as a built-in extension (`scripts/inject-builtin-extensions.sh`). It talks to the Worker.
-- `worker/` — Cloudflare Worker (`api.hypeproof-ai.xyz`): model proxy, cohort profiles, token auth, classroom operations.
 - `chalk/` — Chalk instructor surface (`chalk.hypeproof-ai.xyz`).
-- `proxy-poc/` — early Python proxy, superseded by `worker/`; kept for reference.
+- `proxy-poc/` — early Python proxy, superseded by the Worker; kept for reference.
 - `METAPLAN.md` — phased build plan. Always cross-reference by section (§N) rather than copying.
+- Not in this repo: the Worker (`api.hypeproof-ai.xyz`: model proxy, cohort profiles, token auth, classroom operations). There is no `worker/` directory. Its source is in `hypeproof/hypeproof-service` (private); Studio's tests and dev scripts use the pinned `@hypeproof/service-testkit` package listed in `config/service-packages.json`.
+
+## Install order
+
+In a new clone or worktree, run `npm run bootstrap:service` before any `npm ci`.
+
+- Node 22.22.1: `scripts/setup.sh` and `scripts/check-env.sh` accept only that version.
+- `gh auth login` with an account that can read `hypeproof/hypeproof-service`. The bootstrap downloads the pinned packages through `gh`.
+- Without the bootstrap, `npm ci` ends in `npm error code ENOENT` on a `.private-service-cache/*.tgz` path and does not mention the bootstrap.
+- Details: [AGENTS.md](./AGENTS.md#install-order).
 
 ## Language
 
@@ -70,6 +79,19 @@ Two consequences worth stating, because a session got both wrong on 2026-09-20:
 - **YOU MUST NOT** run a full Windows shell/installer build locally; those builds happen in GitHub Actions. Full local shell builds target macOS arm64. Windows extension/webview development and tests may use the isolated installed-shell copy via `scripts/studio-dev.py` / `scripts/Studio Dev.ps1`; see [Studio development](docs/dev/studio-dev.md). This exception does not authorize release builds or production changes.
 - **YOU MUST NOT** edit files under `vscodium-base/vscode/` or `vscodium-base/VSCode-*/` directly — these are upstream/build artifacts. All changes go through `vscodium-base/patches/*.patch` or the `prepare_vscode.sh` jq edits.
 - **YOU MUST NOT** put secrets (Workshop tokens, Apple Developer ID, signing certs) in any tracked file. `.env` only, gitignored.
+
+## Cost-first
+
+Cost is a design input, not a later fix (Jay, 2026-10-29). Canon: [hypeprooflab `docs/decisions/2026-10-29-cost-first-design-principle.md`](https://github.com/hypeproof/hypeprooflab/blob/main/docs/decisions/2026-10-29-cost-first-design-principle.md).
+
+- **State the cost.** A PR or design doc that adds a paid call (model, API, CI minutes, storage) states its cost per use and the cap that bounds it.
+- **Cheapest capable model first.** Escalate to a stronger model only on a measured signal, inside the person's ceiling (Service routes the free tier this way).
+- **Cap by money, not counts.** Prefer a per-person cost ceiling over turn or request counts.
+- **Do local work before paying a model.** Extract text from PDF/HTML on the device, read file ranges, cache summaries by file hash, and never inline binaries into a request (#3225).
+- **Measure every paid call.** Log the model and the reason it was chosen.
+- **Jev answers typed judgments; code decides.** A judgment call (Jev, TypeSafe `jev-latest`; OpenAI Decisions only as a configurable fallback) returns a typed answer, and ordinary code decides from those answers with a truth table.
+- **Use Jev for judgments** across the Harness and member MCP tools instead of a general model call, to cut cost and time (hypeproof/hypeproof-harness#489).
+- **CI and build minutes are cost.** Promote an approved rc without rebuilding (#3172), repack instead of rebuilding, and keep scheduled jobs short.
 
 ## Build & branding (Mac)
 

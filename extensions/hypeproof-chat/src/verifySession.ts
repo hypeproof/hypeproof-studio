@@ -21,6 +21,8 @@
 //   5. "검증됨" only for a version with an all-pass report bound to it (CR-81).
 
 import { randomUUID } from "node:crypto";
+import { denialToolText, lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import {
   CRITERIA_MAX,
@@ -64,6 +66,8 @@ export interface VerifyRecorderPort {
 
 export interface VerifyHostPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   recorder(): Promise<VerifyRecorderPort | null>;
   /** The preview entry page (live server URL), or null when the preview is off. */
   startUrl(): string | null;
@@ -90,7 +94,6 @@ const REFUSAL: Record<string, string> = {
   unconfirmed_ai_criterion: "코치가 제안한 조건은 내가 확인해야 쓸 수 있어요. '이대로 쓰기'를 누르거나 고쳐 써 주세요.",
   missing_adopted_from: "코치 제안을 확인하지 못했어요. 다시 골라 주세요.",
   duplicate_criterion: "같은 조건이 두 번 있어요.",
-  switch_off: "지금 수업에서는 제품 테스트를 쓸 수 없어요.",
   no_record: "이 수업에서는 테스트 기록을 남길 수 없어 시작하지 않았어요.",
   no_preview: "먼저 미리보기를 켜야 테스트할 수 있어요.",
   busy: "테스트가 이미 진행 중이에요.",
@@ -105,8 +108,13 @@ const REFUSAL: Record<string, string> = {
   no_plans: "다시 돌릴 테스트가 없어요. 먼저 '테스트 시작'을 해 주세요.",
   turn_running: "코치가 답하는 중이에요. 답이 끝난 뒤에 다시 눌러 주세요.",
   record_failed: "조건을 기록하지 못해 테스트를 시작하지 않았어요. 다시 시도해 주세요.",
+  nothing_parked: "보내지 못한 테스트 요청을 찾지 못했어요. 한 번 더 눌러 주세요.",
 };
-export const refusalText = (code: string): string => REFUSAL[code] ?? `처리하지 못했어요 (${code}).`;
+/** `switch_off` is the served switch, a lesson setting (REQ-STUDIO-DENIAL-SOURCE). */
+export const refusalText = (code: string, audience?: SeatAudience): string =>
+  code === "switch_off" ? lessonFeatureOff("제품 테스트", audience) : REFUSAL[code] ?? `처리하지 못했어요 (${code}).`;
+/** The same switch-off refusal as a coach-facing tool result: tagged with its source. */
+const switchOffToolText = (audience?: SeatAudience): string => denialToolText({ source: "lesson", feature: "제품 테스트" }, audience);
 
 export class VerifySession {
   private run: ActiveRun | null = null;
@@ -118,6 +126,10 @@ export class VerifySession {
   /** The one browser tab: every run on it goes through this chain, one at a time. */
   private tab: Promise<unknown> = Promise.resolve();
   private coachContext: string | null = null;
+  /** CGP-SHELL-R-011 N1 — a handed-back turn the webview could not send (offline): kept off every other turn. */
+  private parked: { run: ActiveRun | null; coachContext: string; sendText: string } | null = null;
+  /** The text of the turn last handed back, so a park can keep it for the resume. */
+  private handedBack: string | null = null;
   private notice: string | null = null;
   private readonly ports: VerifyHostPorts;
   private readonly newId: () => string;
@@ -131,7 +143,33 @@ export class VerifySession {
   takeCoachContext(): string | null {
     const c = this.coachContext;
     this.coachContext = null;
+    this.handedBack = null;
     return c;
+  }
+
+  /**
+   * N1 — the webview could not send the handed-back turn. Its context and run leave the live slots,
+   * so the next unrelated turn carries no test context and opens no run. Nothing is recorded or
+   * erased: the criteria (or the fix request) stay recorded once. Returns whether anything was parked.
+   */
+  park(): boolean {
+    if (!this.coachContext || this.handedBack === null) return false;
+    this.parked = { run: this.run, coachContext: this.coachContext, sendText: this.handedBack };
+    this.run = null;
+    this.coachContext = null;
+    this.handedBack = null;
+    return true;
+  }
+
+  /** N1 — the learner pressed the same button again: the parked turn comes back once, unrecorded. */
+  resume(): { ok: true; sendText: string } | { ok: false; code: string } {
+    const p = this.parked;
+    if (!p) return { ok: false, code: "nothing_parked" };
+    this.parked = null;
+    this.run = p.run;
+    this.coachContext = p.coachContext;
+    this.handedBack = p.sendText;
+    return { ok: true, sendText: p.sendText };
   }
 
   /** The turn ended: an open run takes no more coach calls (a later turn cannot test on its own). */
@@ -197,7 +235,9 @@ export class VerifySession {
     this.proposals = this.proposals.filter((p) => !checked.criteria.some((c) => c.adopted_from === p.id));
     this.coachContext = coachRunContext(this.run, startUrl);
     this.notice = null;
-    return { ok: true, sendText: `내 제품을 이 기대 조건 ${criteria.length}개로 테스트해 주세요:\n${criteria.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}` };
+    this.parked = null;
+    this.handedBack = `내 제품을 이 기대 조건 ${criteria.length}개로 테스트해 주세요:\n${criteria.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}`;
+    return { ok: true, sendText: this.handedBack };
   }
 
   /** A proposal the student adopted keeps the id of the event that recorded it (design rule 4). */
@@ -210,7 +250,7 @@ export class VerifySession {
 
   /** `verify_propose_criteria` from the coach: drafts the student must confirm (SX-14, HC-04). */
   async propose(input: Record<string, unknown>): Promise<ToolAnswer> {
-    if (!this.ports.switchOn()) return { isError: true, text: refusalText("switch_off") };
+    if (!this.ports.switchOn()) return { isError: true, text: switchOffToolText(this.ports.audience?.()) };
     const raw = input.criteria;
     let list: unknown = raw;
     if (typeof raw === "string") {
@@ -240,7 +280,7 @@ export class VerifySession {
    * the preview, record the verdict, and answer the coach with it (CR-13, CR-15).
    */
   async runTool(input: Record<string, unknown>): Promise<ToolAnswer> {
-    if (!this.ports.switchOn()) return { isError: true, text: refusalText("switch_off") };
+    if (!this.ports.switchOn()) return { isError: true, text: switchOffToolText(this.ports.audience?.()) };
     if (this.retesting) return { isError: true, text: refusalText("busy") };
     const run = this.run;
     if (!run) return { isError: true, text: `진행 중인 테스트가 없어요. 학생이 "테스트 시작"을 눌러야 ${VERIFY_TOOL}을 쓸 수 있어요.` };
@@ -350,6 +390,8 @@ export class VerifySession {
     }
     const [studentLine, ...rest] = built.request.coach_text.split("\n\n");
     this.coachContext = rest.join("\n\n");
+    this.parked = null;
+    this.handedBack = studentLine!;
     return { ok: true, sendText: studentLine! };
   }
 
@@ -454,7 +496,7 @@ export class VerifySession {
           .map((o) => verificationReport(events, o.run_id)?.criteria.find((c) => c.id === o.id))
           .filter((c): c is NonNullable<typeof c> => !!c)
       : [];
-    const reason = !on ? refusalText("switch_off") : !rec ? refusalText("no_record") : !this.ports.startUrl() ? refusalText("no_preview") : null;
+    const reason = !on ? refusalText("switch_off", this.ports.audience?.()) : !rec ? refusalText("no_record") : !this.ports.startUrl() ? refusalText("no_preview") : null;
     return { available: on && !!rec, reason, version, verification, report, held, run: this.run, proposals: [...this.proposals], running: this.running, notice: this.notice };
   }
 

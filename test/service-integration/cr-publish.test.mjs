@@ -817,12 +817,15 @@ function workspace(files) {
 }
 
 function appSession(f, root, { events = [], switchOn = () => true } = {}) {
+  // One stored credential per app session; minting on every read simulates an identity replacement.
+  const credential = f.student();
   const calls = [];
   let project;
   let origin = null;
   const session = new PublishSession({
+    confirmOutbound: async () => true,
     switchOn,
-    token: async () => f.student(),
+    token: async () => credential,
     base: () => "https://service.test/v1/curriculum",
     fetchImpl: async (url, init) => {
       calls.push({ method: init?.method ?? "GET", path: new URL(url).pathname, body: init?.body ? JSON.parse(init.body) : undefined });

@@ -543,9 +543,9 @@ def selftest() -> int:
         check(reread[keep.id] == keep, f"쓰기 왕복에서 {keep.id} 가 변했다: {reread[keep.id]}")
 
     # ── ref 추출 ───────────────────────────────────────────────────────────
-    R = "jayleekr/hypeproof-studio"
-    check(refs_in("[#898](https://github.com/jayleekr/hypeproof-studio/issues/898#issuecomment-563)", R)
-          == [(R, 898)], f"앵커가 붙은 링크에서 중복·오탐이 났다: {refs_in('[#898](https://github.com/jayleekr/hypeproof-studio/issues/898#issuecomment-563)', R)}")
+    R = "hypeproof/hypeproof-studio"
+    check(refs_in("[#898](https://github.com/hypeproof/hypeproof-studio/issues/898#issuecomment-563)", R)
+          == [(R, 898)], f"앵커가 붙은 링크에서 중복·오탐이 났다: {refs_in('[#898](https://github.com/hypeproof/hypeproof-studio/issues/898#issuecomment-563)', R)}")
     check(refs_in("jayleekr/vscodium#2", R) == [("jayleekr/vscodium", 2)], "크로스 레포 지목을 못 읽었다")
     check(refs_in("https://github.com/a/b/pull/9", R) == [("a/b", 9)], "PR URL 을 못 읽었다")
     check(refs_in("#1 과 #2", R) == [(R, 1), (R, 2)], "여러 지목을 못 읽었다")
@@ -605,7 +605,7 @@ def selftest() -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="에이전트 인계 큐")
-    p.add_argument("--repo", default="jayleekr/hypeproof-studio")
+    p.add_argument("--repo", default="hypeproof/hypeproof-studio")
     p.add_argument("--issue", type=int, default=896)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-verify", action="store_true",

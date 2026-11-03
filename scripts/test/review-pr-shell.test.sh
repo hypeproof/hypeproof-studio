@@ -647,6 +647,75 @@ fi
   rm -rf "$_EMPTY_BASE"
 }
 
+# 55–60. Instructor token step (#3060): the issuer runs from any working directory,
+# its failure is shown with secrets redacted, and no bare testkit import remains.
+TOKEN_HELPER="$(cd "$(dirname "$0")/../.." && pwd)/scripts/review-pr-issue-token.sh"
+TK_TMP="$(mktemp -d)"
+TK_SECRET="dev-local-$(openssl rand -hex 10)"
+mkdir -p "$TK_TMP/pkg/test/harness" "$TK_TMP/pkg/scripts" "$TK_TMP/noloader/scripts" "$TK_TMP/elsewhere"
+printf 'export {};\n' > "$TK_TMP/pkg/test/harness/loader.mjs"
+cat > "$TK_TMP/pkg/scripts/issue-issuer-token.ts" <<'TS'
+const secret = process.env.HPS_SIGNING_SECRET ?? '';
+if (secret.length < 16) { console.error('secret missing'); process.exit(2); }
+if (process.env.FIXTURE_FAIL === '1') {
+  console.error('boom secret=' + secret + ' eyJhbGciOiJIUzI1NiJ9.payloadpart.sig');
+  process.exit(3);
+}
+console.log(JSON.stringify({ type: 'issuer-token', token: 'fixture-token-value-000000' }));
+TS
+cp "$TK_TMP/pkg/scripts/issue-issuer-token.ts" "$TK_TMP/noloader/scripts/"
+
+# 55. From a directory without the package, the token is written to the file and nothing is printed.
+RC=0
+OUT="$(cd "$TK_TMP/elsewhere" && HPS_SIGNING_SECRET="$TK_SECRET" bash "$TOKEN_HELPER" "$TK_TMP/pkg" "$TK_TMP/ok.json" "$TK_TMP/ok.err" --instructor t --cohorts c --profiles p --max-hours 4 --days 1 2>&1)" || RC=$?
+if [[ $RC -eq 0 && -z "$OUT" ]] && grep -q 'fixture-token-value-000000' "$TK_TMP/ok.json"; then
+  ok "55: token step works from a directory without testkit; token only in the json file"
+else
+  fail "55: token step from a foreign cwd (rc=$RC, printed=${#OUT} bytes)"
+fi
+
+# 56. A failing issuer prints redacted stderr and exits 1; the secret and JWT never appear.
+RC=0
+OUT="$(cd "$TK_TMP/elsewhere" && FIXTURE_FAIL=1 HPS_SIGNING_SECRET="$TK_SECRET" bash "$TOKEN_HELPER" "$TK_TMP/pkg" "$TK_TMP/fail.json" "$TK_TMP/fail.err" --instructor t --cohorts c --profiles p 2>&1)" || RC=$?
+if [[ $RC -eq 1 ]] && grep -q -F 'instructor token issue failed' <<<"$OUT" && grep -q -F 'boom' <<<"$OUT" \
+   && grep -q -F '<redacted>' <<<"$OUT" && ! grep -q -F "$TK_SECRET" <<<"$OUT" && ! grep -q 'eyJhbGci' <<<"$OUT"; then
+  ok "56: failing issuer shows its error with secret and JWT redacted, exit 1"
+else
+  fail "56: failure not shown or secret leaked (rc=$RC)"
+fi
+
+# 57. A missing loader is reported, not swallowed inside command substitution.
+RC=0
+OUT="$(cd "$TK_TMP/elsewhere" && HPS_SIGNING_SECRET="$TK_SECRET" bash "$TOKEN_HELPER" "$TK_TMP/noloader" "$TK_TMP/nl.json" "$TK_TMP/nl.err" --instructor t --cohorts c --profiles p 2>&1)" || RC=$?
+if [[ $RC -eq 1 ]] && grep -q -F 'instructor token issue failed' <<<"$OUT" && grep -q -E 'ERR_MODULE_NOT_FOUND|Cannot find' <<<"$OUT"; then
+  ok "57: missing loader is shown with the redacted error and exit 1"
+else
+  fail "57: missing loader not reported (rc=$RC)"
+fi
+
+# 58. review-pr.sh routes the token step through the helper and keeps stdout free of the token.
+if grep -q 'review-pr-issue-token.sh' "$SCRIPT" && grep -q 'rm -f "\$TOKEN_JSON_TMP" "\$TOKEN_ERR_TMP"' "$SCRIPT"; then
+  ok "58: review-pr.sh uses the token helper and removes its temp files"
+else
+  fail "58: token helper or temp-file cleanup missing from review-pr.sh"
+fi
+
+# 59. No bare testkit import remains: every 'node --import @hypeproof/' is cd-wrapped.
+BARE="$(grep -n 'node --import @hypeproof/' "$SCRIPT" | grep -v 'cd "\$WORKTREE_DIR" && node --import' || true)"
+if [[ -z "$BARE" ]]; then
+  ok "59: no bare @hypeproof/service-testkit import in review-pr.sh"
+else
+  fail "59: bare testkit import remains: $BARE"
+fi
+
+# 60. Syntax of the token helper under macOS /bin/bash.
+if /bin/bash -n "$TOKEN_HELPER" 2>/dev/null; then
+  ok "60: review-pr-issue-token.sh syntax (/bin/bash -n)"
+else
+  fail "60: review-pr-issue-token.sh syntax error"
+fi
+rm -rf "$TK_TMP"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"
 [[ $FAIL -eq 0 ]]

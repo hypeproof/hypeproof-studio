@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {delegationGroups,groupDelegations,delegationRowId,delegationChildId} from '../src/delegationRow.ts';
+const row=(id,state='running')=>({id,role:'tool',tool:{state,label:'도우미 · 작업',icon:'🤝'}});
+const messages=[row(delegationRowId('a','one'),'done'),row(delegationRowId('b','one')),row(delegationRowId('c','two')),row(delegationChildId('a','child'),'done'),row('plain'),row(delegationRowId('legacy'))];
+const view=groupDelegations(messages,'two'),groups=delegationGroups(view.rows);
+assert.equal(groups.size,3);assert.deepEqual([...groups.values()].map(g=>g.length),[2,1,1]);
+assert.equal(groups.get(delegationRowId('a','one'))[0].children.length,1);
+assert.equal(groups.get(delegationRowId('a','one'))[1].status,'stopped');
+assert.equal(groups.get(delegationRowId('c','two'))[0].status,'running');
+assert.equal([...groups.values()].flat().filter(v=>v.status==='done').length,1);
+assert.ok(!view.grouped.has('plain'));assert.equal(delegationGroups(new Map()).size,0);
+console.log('PASS delegation groups: stream-bound summaries, completed count, retained children, legacy isolation, empty and plain negatives');

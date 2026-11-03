@@ -81,7 +81,7 @@ try {
   // ── 3. The Service's first action is the one primary ──
   await row('A1').locator('.seat-open').click();
   assert.equal(await primaries().count(), 1, 'one primary CTA on the screen'); const first = page.locator('#ops-actions .primary');
-  assert.equal(await first.evaluate((e) => e.tagName), 'A'); assert.equal(await first.getAttribute('href'), '/authoring', 'a lesson class re-issues on the lesson code page'); assert.equal(await first.innerText(), '참여 코드 재발급'); assert.match(await first.getAttribute('title'), new RegExp('강의 ' + local.lesson.version.replaceAll('.', '\\.') + ' 유지'));
+  assert.equal(await first.evaluate((e) => e.tagName), 'A'); assert.equal(await first.getAttribute('href'), '/authoring', 'a lesson class re-issues on the lesson code page'); assert.equal(await first.innerText(), '참여 코드 재발급'); assert.match(await first.getAttribute('data-hp-tooltip'), new RegExp('강의 ' + local.lesson.version.replaceAll('.', '\\.') + ' 유지'));
   assert.equal(await first.getAttribute('target'), '_blank', 'opening it keeps this page');
   assert.deepEqual(await first.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).color, e.getBoundingClientRect().height >= 44]), ['rgb(42, 196, 217)', 'rgb(8, 19, 26)', true], 'the link looks like the one primary button (it was dark-on-dark before the style covered links)');
   await page.locator('.detail-more > summary').click(); assert.equal(await page.getByRole('button', { name: '진단 다시 실행' }).evaluate((e) => e.classList.contains('primary')), false, 'diagnostics is not the first step for a rejected token');

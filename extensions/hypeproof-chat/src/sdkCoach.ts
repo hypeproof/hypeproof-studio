@@ -1,3 +1,5 @@
+import {DelegationStop, type DelegationStopState} from "./delegationStop";
+import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
 // chatPanelProvider can route to it behind the `hypeproofChat.coachRuntime`
@@ -13,6 +15,13 @@
 // SdkUnavailableError so the caller falls back to the proxy path instead of
 // surfacing a raw error to the student (REQ-M7).
 
+import { accessRemovedFeatures } from './accessClient.ts';
+import { folderRemovedFeatures } from './folderConsent.ts';
+import { sdkPromptWithImages } from "./visionInput.ts";
+import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
+import { SdkWebCitations } from './sdkWebCitations';
+import { canonicalizeExistingPath } from "./workspaceRouting.ts";
+import { isWriteToolName, withResolvedWritePath, WRITE_SCOPE_CHANGED_MESSAGE, writeScopeCovered, writeScopeKeys } from "./writeApprovalPaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -48,10 +57,14 @@ import {
 } from "./proxyClientHelpers";
 import { WORLD_ARCHIVE_DIR, filterCoachVisibleFiles } from "./chatPanelHelpers";
 import { stallNotice } from "./coachIdentity.ts";
+import { profileAudience, rateLimitStallText } from "./seatVocabulary.ts";
 import {
   buildSdkQueryOptions,
   consumeSdkStream,
+  extractSdkActivity,
   evaluateSdkToolUse,
+  isMinorProfile,
+  sdkProviderErrorFriendly,
   SDK_STALL_FRIENDLY,
   SDK_STREAM_STALL_MS,
   absolutizeToolPaths,
@@ -154,6 +167,9 @@ export interface SdkCoachArgs {
   systemPrompt: string;
   history: { role: string; content: string }[];
   userText: string;
+  toolMode?: TurnToolMode;
+  /** Actual current-turn pixels, including explicit workspace reference re-reads. */
+  images?: string[];
   signal: AbortSignal;
   /**
    * #747 — the AI's display name for this seat, so student-facing failure copy
@@ -169,12 +185,17 @@ export interface SdkCoachArgs {
    */
   previewUrl?: string;
   onDelta: (delta: string) => void;
+  /** Explicit model refusal, never inferred from generated text. */
+  onRefusal?: () => void;
   /**
    * #414 — what the coach is DOING (thinking / tool calls / results), so the
    * student sees real work instead of a static "만드는 중" line. Optional: the
    * proxy path has no equivalent, and a caller that omits it loses nothing else.
    */
   onActivity?: (activity: SdkActivity) => void;
+  onDelegationControl?: (stop: (() => void) | null) => void;
+  onDelegationStop?: (state: DelegationStopState) => void;
+  processes?: { registry: import("./runningProcesses").RunningProcesses; prefix: string };
   /**
    * #580 — 토큰 usage 탭 (요청 단위 assistant usage / result 턴 합계).
    * Optional: 스풀을 안 쓰는 호출자·테스트는 그대로 동작한다.
@@ -183,7 +204,7 @@ export interface SdkCoachArgs {
   onCitations: (citations: Citation[]) => void;
   onAssetScore: (score: AssetScoreChunk) => void;
   /** Manual-approve gate. Resolves true to allow the tool. */
-  requestApproval: (action: CoachToolAction) => Promise<boolean | {approved: boolean; actor: 'user'|'policy'}>;
+  requestApproval: (action: CoachToolAction) => Promise<boolean | {approved: boolean; actor: 'user'|'policy'; denialSource?: import('./denialSource').DenialSource}>;
   /**
    * #282 P2 slice 2 — host capabilities behind the in-process "hypeproof" MCP
    * browser tools. Optional: when absent (or the profile doesn't grant
@@ -202,6 +223,13 @@ export interface SdkCoachArgs {
    */
   orchestrator?: OrchestratorHostArgs;
   /**
+   * REQ-STUDIO-TRIAL-BUSY — where the busy notice (SDK_BUSY_NOTICE) goes on a seat that
+   * has a busy policy but no orchestrator turn (a native-trial seat). Optional: absent,
+   * the notice is dropped and the bounded abort still ends the turn. An orchestrator
+   * turn keeps its own timeline notice and does not read this.
+   */
+  onNotice?: (text: string) => void;
+  /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
    * HPS_SDK_BINARY → seeded location → node_modules (REQ-M24).
@@ -215,6 +243,22 @@ export interface SdkCoachArgs {
   stallTimeoutMs?: number;
   /** Test seam: inject a pre-computed binary resolution (skip fs probes). */
   binaryResolution?: SdkBinaryResolution;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — this turn's prompt carries the learner's memory, which lives only in the
+   * activity folder (DEC-01). The CLI otherwise writes the whole prompt (and the system prompt) into a session transcript
+   * under the seat's config dir, where no memory delete reaches it, so the turn runs with `persistSession: false`.
+   * Measured 2026-11-01 on SDK 0.3.299: default → both in `projects/<cwd>/<session>.jsonl`; false → neither anywhere
+   * under CLAUDE_CONFIG_DIR. Nothing resumes a session: every turn passes its history in the prompt.
+   */
+  ephemeralSession?: boolean;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — the learner's memory for this turn, kept out of the prompt. The Service takes the
+   * last user message's text as the turn's prompt (`lastUserMessageText`), screens it and, on cohorts with
+   * `analytics.log_user_messages`, stores it; memory must not ride there (DEC-01). It goes in as the UserPromptSubmit
+   * hook's additionalContext, which the CLI sends as its own `role: "system"` message (measured on SDK 0.3.299); the
+   * gateway hands that to the model as `<system-context>` (normalizeSystemRoleMessages) and does not store it.
+   */
+  memoryContext?: string;
   /** Test seam: inject a fake SDK module instead of importing the real one. */
   sdk?: AgentSdkModule;
   /** Test seam: inject a fake zod instead of importing the real one. */
@@ -236,7 +280,7 @@ export interface AgentSdkModule {
   query(input: {
     prompt: string | AsyncIterable<unknown>;
     options?: Options;
-  }): AsyncIterable<Record<string, unknown>>;
+  }): AsyncIterable<Record<string, unknown>> & {stopTask?: (id: string) => Promise<void>};
   /**
    * In-process MCP server factory functions (#282 P2 slice 2). Optional on
    * the seam: an older/fake module without them simply gets no browser MCP
@@ -320,22 +364,7 @@ function coachVisibleWorkspaceFiles(
  * EXISTING ancestor (target may not exist yet — new-file writes) and re-append
  * the tail. Twin of chatPanelProvider.canonicalizeForCompare.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 async function loadSdk(): Promise<AgentSdkModule> {
   // #282 W4b — prefer the vendored SDK JS under <dist>/vendor (packaged
@@ -524,6 +553,8 @@ function abortError(): Error {
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const diagnostic = (phase: SdkDiagnosticPhase) => { try { args.onDiagnostic?.(phase); } catch { /* Diagnostics cannot break a turn. */ } };
   diagnostic('starting');
+  const mode = turnToolMode(args.toolMode);
+  requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
   // await — so a stop during loadSdk() still cancels. (addEventListener added
   // after the signal already fired would never run.)
@@ -558,7 +589,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = args.orchestrator;
+  const orchestratorHost = mode === 'auto' ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -568,12 +599,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A roster was served and refused here: "configured but inert" must leave a trace.
     console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
   }
-  const opts = profileToAgentOptions(
+  const opts = toolsForTurn(profileToAgentOptions(
     args.profile,
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
-  );
+  ), mode, profileAudience(args.profile));
+  const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
       ? startOrchestratorTurn({
@@ -600,7 +632,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // Compose the transcript into a single prompt string for now. A follow-up
   // switches to the SDK streaming-input session API to preserve real history.
   const transcript = args.history.map((m) => `${m.role}: ${m.content}`).join("\n");
-  const prompt = transcript ? `${transcript}\nuser: ${args.userText}` : args.userText;
+  const userText = userTextForTurn(args.userText, mode);
+  const promptText = transcript ? `${transcript}\nuser: ${userText}` : userText;
+  const prompt = sdkPromptWithImages(promptText, args.images);
 
   // #282 P2 slice 2 — register the in-process "hypeproof" browser MCP server
   // ONLY when (a) the worker profile grants it (permittedMcpTools non-empty —
@@ -719,6 +753,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // ANTHROPIC_BASE_URL derived from proxyUrl, ANTHROPIC_API_KEY scrubbed) is
   // locked by unit tests via buildSdkQueryOptions (REQ-M5/M6/M13); the two
   // host-bound fields are attached here. `Options` is the REAL SDK type.
+  let delegationStop: DelegationStop | undefined;
   const options: Options = {
     ...buildSdkQueryOptions(opts, {
       proxyUrl: args.gatewayUrl,
@@ -758,10 +793,19 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // absent for ungranted cohorts, so the model never even sees the tools.
     ...(mcpServers ? { mcpServers } : {}),
     canUseTool: async (name, input, options) => {
-      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy') => {
-        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,at:Date.now()});
+      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy', denialSource?: import('./denialSource').DenialSource, denialDetail?: import('./denialNotice').DenialDetail) => {
+        if (!allowed) { webCitations.deny(options.toolUseID);delegationStop?.refused(options.toolUseID); }
+        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,...(denialSource ? { denialSource } : {}),...(denialDetail ? { denialDetail } : {}),at:Date.now()});
       };
+      if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       lastToolCallAt = Date.now();
+      // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
+      // a preview, or a delegated task. The existing capability/approval gates still run.
+      if (args.browserHost?.generalBrowserRequest &&
+          (name !== MCP_BROWSER_OPEN || (input?.url !== undefined && input.url !== "about:blank"))) {
+        decision(false);
+        return { behavior: "deny" as const, message: "브라우저만 열어 달라는 요청이에요. browser_open에서 url을 생략해 빈 브라우저를 열어 주세요." };
+      }
       // 상대경로를 먼저 흡수한다. 벤더 SDK 의 파일 도구는 절대경로만 받으므로
       // (`sdk-tools.d.ts`: "must be absolute, not relative") `Read("agent.md")` 는
       // 파일이 있어도 거부된다. 코치는 그걸 "파일이 없다"로 읽고 `find ~` 로
@@ -790,6 +834,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         // containment and EVERY coach write auto-denies. Twin of
         // chatPanelProvider.canonicalizeForCompare.
         canonicalize: canonicalizeFsPath,
+        // REQ-STUDIO-DENIAL-SOURCE — solo seats get no teacher sentence in the deny copy.
+        audience: profileAudience(args.profile),
+        minor: isMinorProfile(args.profile),
+        // Feature keys the selected 이용권 removed: those denies are 이용권 선택, not 수업 설정.
+        accessRemoved: accessRemovedFeatures(args.profile),
+        // REQ-STUDIO-FOLDER-CONSENT — what the learner's folder choice removed: 폴더 권한.
+        folderRemoved: folderRemovedFeatures(args.profile),
       });
       if (verdict.decision === "deny") {
         if (verdict.drift) {
@@ -807,9 +858,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
               `handle this tool, or leave it denied deliberately.`,
           );
         } else {
-          console.warn(`[coach] tool denied: ${name} — ${verdict.reason}`);
+          console.warn(`[coach] tool denied (${verdict.source}): ${name} — ${verdict.reason}`);
         }
-        decision(false);
+        // #3224 — a path outside the work folder says so in the learner's step, not only to the coach.
+        decision(false, 'policy', verdict.source, verdict.cause === 'path_outside_workspace' ? 'outside_folder' : undefined);
         return { behavior: "deny" as const, message: verdict.friendly };
       }
       if (verdict.decision === "allow") {
@@ -827,7 +879,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           (input as { url?: unknown } | undefined)?.url);
         // CR-11 — with the switch on, an out-of-scope open is denied with its reason, not asked.
         const crRefused = openUrl ? await crBrowserOpenRefusal(args.browserHost, openUrl) : null;
-        if (crRefused) { decision(false); return { behavior: "deny" as const, message: crRefused }; }
+        if (crRefused) { decision(false, 'policy', 'safety'); return { behavior: "deny" as const, message: crRefused }; }
         if (alreadyOpen) { decision(true); return { behavior: "allow" as const, updatedInput: input }; }
       }
       // #403 — the modal blocks the SDK stream for as long as the human takes
@@ -835,14 +887,19 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // doesn't read that (correct) silence as a wedged turn.
       awaitingUser += 1;
       let ok: boolean;
+      // REQ-E1 / CGP-AGENT-R-005 — a write approval covers exactly the paths the modal listed. The approver gets a
+      // copy (it cannot change what runs), and the scope is re-derived after the answer: a path that now resolves
+      // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
+      const writeScope = isWriteToolName(name) ? writeScopeKeys(name, input, args.cwd) : null;
       try {
         const approval = await args.requestApproval({
           toolName: name,
-          input,
+          // A JSON copy: tool inputs are JSON, and some hosts (vm-bundled tests) have no structuredClone.
+          input: writeScope ? (JSON.parse(JSON.stringify(input)) as typeof input) : input,
           ...(verdict.destructive ? { destructive: true } : {}),
         });
         ok = typeof approval === 'boolean' ? approval : approval.approved;
-        decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor);
+        decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor, typeof approval === 'boolean' ? undefined : approval.denialSource);
       } finally {
         awaitingUser -= 1;
         // The tool runs from NOW, not from when it was requested. Without this restamp a long
@@ -850,15 +907,35 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
         lastToolCallAt = Date.now();
       }
+      if (ok && writeScope && !writeScopeCovered(writeScope, writeScopeKeys(name, input, args.cwd))) {
+        console.warn(`[coach] write refused after approval: ${name} no longer writes the approved path`);
+        return { behavior: "deny" as const, message: WRITE_SCOPE_CHANGED_MESSAGE };
+      }
+      // The CLI writes the resolved path the gate judged, not the spelling it was given: no link or `..` in the
+      // spelling can be read differently by the CLI than by the gate (CGP-AGENT-R-005 verify 2 F1).
+      if (ok && writeScope) input = withResolvedWritePath(input, writeScope) as typeof input;
+      if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };
     },
     abortController,
+    ...(args.ephemeralSession ? { persistSession: false } : {}),
   };
+  if (args.memoryContext) {
+    const additionalContext = args.memoryContext;
+    options.hooks = {
+      ...options.hooks,
+      UserPromptSubmit: [...(options.hooks?.UserPromptSubmit ?? []), { hooks: [async () => ({ hookSpecificOutput: { hookEventName: "UserPromptSubmit" as const, additionalContext } })] }],
+    };
+  }
 
   diagnostic('query_options_ready');
   const stream = sdk.query({ prompt, options });
+  delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
+  if(stream.stopTask)args.onDelegationControl?.(()=>delegationStop?.request());
+  // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
+  // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
   diagnostic('query_created');
   const diagnosedStream = (async function* () {
     let first = true;
@@ -867,12 +944,25 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       yield event;
     }
   })();
-  // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
-  // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
-  const observed = orchestratorTurn ? orchestratorTurn.tap(diagnosedStream) : diagnosedStream;
-  // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
-  // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
-  const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
+  const tapped = orchestratorTurn ? orchestratorTurn.tap(diagnosedStream) : diagnosedStream;
+  const processes = args.processes ? new SdkProcesses(args.processes.registry, args.processes.prefix, stream.stopTask?.bind(stream)) : undefined;
+  const observed = (async function* () {
+    try { for await (const event of tapped) {
+      processes?.observe(event);
+      for(const a of extractSdkActivity(event as unknown as Record<string,unknown>)){if(a.kind==="tool_use")delegationStop?.tool(a.id,a.name);else if(a.kind==="tool_result"&&!a.launched)delegationStop?.result(a.id);}
+      delegationStop?.observe(event);
+      const citations = args.signal.aborted ? [] : webCitations.observe(event);
+      if (citations.length) args.onCitations?.(citations);
+      yield event;
+    } } finally { processes?.close(); }
+  })();
+  // A2/A4 — one busy notice per turn and a bounded busy wait. An orchestrator turn posts
+  // the notice as its timeline line. A native-trial seat (REQ-STUDIO-TRIAL-BUSY) gets the
+  // same bound: its `429 trial_busy` lease refusal is otherwise retried by the CLI until
+  // it prints its raw "API Error" line. sdkBusyPolicyFor answers undefined elsewhere.
+  const busy = orchestratorTurn
+    ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text))
+    : sdkBusyPolicyFor({ activityKind: args.profile.activity_kind }, (text) => args.onNotice?.(text));
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
@@ -894,8 +984,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   //   that simply never produces a token) left the student on "생각하는 중… ✨"
   //   with no error and no way out. After stallTimeoutMs of no progress we
   //   abort the query and surface a retry-me message.
-  // (onCitations / onAssetScore are wired for parity but the SDK stream
-  // mapping for those lands in a later phase.)
+  // Citations above come only from matched typed tool results; asset scores
+  // remain outside this runtime's stream mapping.
   const stallMs = args.stallTimeoutMs ?? SDK_STREAM_STALL_MS;
   return await consumeSdkStream(observed, {
     isAborted: () => args.signal.aborted,
@@ -918,6 +1008,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         : new ProxyAuthError("other", GATEWAY_BAD_REQUEST_FRIENDLY);
     },
     onDelta: args.onDelta,
+    onRefusal: args.onRefusal,
     ...(args.onActivity ? { onActivity: args.onActivity } : {}),
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,
@@ -928,7 +1019,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
           `Likely a gateway retry storm (429/529/5xx) or a first turn that never produced a token.`,
       );
-      return new CoachStallError(status===429?'요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)':status&&status>=500?'AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. ('+status+')':stallNotice(args.coachName), status);
+      return new CoachStallError(status===429?rateLimitStallText(profileAudience(args.profile)):status&&status>=500?sdkProviderErrorFriendly(status):stallNotice(args.coachName), status);
     },
     // Silence that is NOT a stall: an open modal, or a tool the SDK is still
     // running (one budget of slack after the decision — a long subagent gets
@@ -941,10 +1032,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
     // The value and the error pass through as they are.
     (end) => {
+      delegationStop?.end(); args.onDelegationControl?.(null);
       orchestratorTurn?.end(end);
       return end;
     },
     (err: unknown) => {
+      delegationStop?.end(); args.onDelegationControl?.(null);
       orchestratorTurn?.end(null);
       throw err;
     },

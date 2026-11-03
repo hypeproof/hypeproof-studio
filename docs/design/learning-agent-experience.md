@@ -1,8 +1,8 @@
 # 수업별 Agent 경험 — 학습 흐름·실행 계약·검증 전략
 
-상태: 제안, 구현·운영 정책으로 아직 채택하지 않음. 날짜: 2026-09-08 · [#746](https://github.com/jayleekr/hypeproof-studio/issues/746).
+상태: 제안, 구현·운영 정책으로 아직 채택하지 않음. 날짜: 2026-09-08 · [#746](https://github.com/hypeproof/hypeproof-studio/issues/746).
 근거: [경쟁 분석 및 직접 캡처](../research/agent-experience-2026-09-08/README.md).
-철학의 원본은 [Lab PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/6845cdb4391273d16ed09419eee806b0c03c04f9/PHILOSOPHY.md)다.
+철학의 원본은 [Lab PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/6845cdb4391273d16ed09419eee806b0c03c04f9/PHILOSOPHY.md)다.
 [2026-09-08 개정 적용](philosophy-alignment-2026-09-08.md), [자산 참조/호환 인덱스](../seven-assets.md),
 [Vessel 배치](../plan/vessel-and-modules.md)를 따른다.
 
@@ -407,8 +407,8 @@ Computer Use를 “SDK 기능 켜기”로 처리하지 않는다. 제공자가 
 |---|---|---|
 | [session-design 검증](../../worker/src/lib/session-design.ts), [lesson delivery](../../worker/src/lib/lesson-delivery.ts) | 정확한 필드만 받는 콘텐츠 schema, 서명된 수업 버전·digest 전달 | 단계별 기능·도움·검수 revision을 연결할 실행 binding |
 | [ChatPanel](../../extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx) | 수업 펼침·과제 입력, 이름, Stop·입력 대기열 | 과제/결과 연결, 도움 전환, 상태별 다음 행동 |
-| [native observation 계약](https://github.com/jayleekr/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/extensions/hypeproof-chat/src/nativeObservationContract.ts) | `hps-observation/1`, 역할별 event ID·파일 해시·도움 출처·불완전 기록 표시 | 수업 작업/기준/검수의 연결. 기존 event에 임의 필드 추가 금지 |
-| [native trial 실행 기록](https://github.com/jayleekr/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/docs/testing/studio-native-trial-results-2026-09-08.md) | 실제 Mac·모델·관찰 흐름과 개인 이용 한도에 대한 별도 증거 | 학급 예산·수업 전이·사람의 학습 효과. 체험 검증을 AE 테스트 PASS로 복사하지 않음 |
+| [native observation 계약](https://github.com/hypeproof/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/extensions/hypeproof-chat/src/nativeObservationContract.ts) | `hps-observation/1`, 역할별 event ID·파일 해시·도움 출처·불완전 기록 표시 | 수업 작업/기준/검수의 연결. 기존 event에 임의 필드 추가 금지 |
+| [native trial 실행 기록](https://github.com/hypeproof/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/docs/testing/studio-native-trial-results-2026-09-08.md) | 실제 Mac·모델·관찰 흐름과 개인 이용 한도에 대한 별도 증거 | 학급 예산·수업 전이·사람의 학습 효과. 체험 검증을 AE 테스트 PASS로 복사하지 않음 |
 | [classroom sharing](../requirements/classroom-admin.md) | 명시적 공유·수신자·감사·철회·학생 해결 확인 | Studio 작업과 원래 실행 근거 연결. 메타데이터 권한으로 원문을 열지 않음 |
 
 2026-09-08의 후속 구현 검수는 원 연구와 구분해 보존한다. [기능 B 실제 앱 기록](../research/agent-experience-acceptance-2026-09-08/feature-b/README.md)은

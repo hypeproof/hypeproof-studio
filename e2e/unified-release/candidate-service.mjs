@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 export function candidateService(directory, pin) {
+  if (!directory) throw Error('Pinned Service checkout is required; set HPS_SERVICE_SOURCE');
   if (pin.repository !== 'hypeproof/hypeproof-service' || !/^[a-f0-9]{40}$/.test(pin.sha)) throw Error('Invalid deployment Service pin');
   const git = (...args) => execFileSync('git', args, { cwd: directory, encoding: 'utf8' }).trim();
   if (git('rev-parse', 'HEAD') !== pin.sha) throw Error('Candidate Service must be clean and match the deployment pin');

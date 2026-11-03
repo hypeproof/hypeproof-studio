@@ -27,6 +27,8 @@ try {
   const page = await browser.newPage({viewport:{width:900,height:800}});
   page.on('pageerror', e => errors.push(e.message));
   await page.setContent('<!doctype html><html><body><p>합성 UI 인수 · 실제 마이크/설치앱 아님</p><div id="root"></div></body></html>');
+  // Token definitions first: styles.css resolves every size through them (CGP-DS-R-001).
+  await page.addStyleTag({content:await fs.readFile(`${repo}/extensions/hypeproof-chat/webview-ui/src/designTokens.css`,'utf8')});
   await page.addStyleTag({content:await fs.readFile(`${repo}/extensions/hypeproof-chat/webview-ui/src/styles.css`,'utf8')});
   await page.addScriptTag({content:result.outputFiles[0].text});
   await page.getByRole('dialog').waitFor();

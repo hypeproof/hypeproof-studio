@@ -27,7 +27,7 @@ registerHooks({
 const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
 const { VerifySession } = await import("../src/verifySession.ts");
 const { permittedMcpToolsFor } = await import("../src/sdkCoachHelpers.ts");
-const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
+const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS } = await import("../src/browserMcp.ts");
 const { BrowserControl } = await import("../src/browserControl.ts");
 const vscode = await import(stub);
 
@@ -63,7 +63,7 @@ assert.ok(plant((m) => (cmd(m).enablement = `true || ${CR_CONTEXT_KEY}`)).some((
 assert.ok(plant((m) => (cmd(m).command = "hypeproof-chat.renamed")).some((p) => /not declared/.test(p)));
 ok("commands: the manifest gates every inventoried CR command; planted ungated variants are caught");
 // Every command handler re-checks the served switch (a command runs without its menu).
-assert.match(providerSrc, /async pickElement\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
+assert.match(providerSrc, /async pickElement\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async showBrowserResults\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async testMyProduct\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async publishTestVersion\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
@@ -123,13 +123,13 @@ ok("commands: the delete command is the listed switch-off exception, gated on ex
 const adult = { game: { template_tier: "website" }, sdk_tools: { browser: true }, minor_cohort: false };
 const off = permittedMcpToolsFor(adult);
 const on = permittedMcpToolsFor({ ...adult, curriculum_runtime: { enabled: true } });
-assert.deepEqual(off, [...MCP_BROWSER_TOOLS], "switch off: the existing grant, unchanged");
+assert.deepEqual(off, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "switch off: the existing grant, unchanged");
 assert.deepEqual(off.filter((t) => CR_SURFACES.mcpTools.includes(t)), []);
 assert.deepEqual(on.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort());
 // A kids-quest tier that opts into browser tools gets them (the flag decides), but no CR tool:
 // the CR surfaces need a web-app tier.
 const kidsTier = permittedMcpToolsFor({ ...adult, game: { template_tier: "kids-quest" }, curriculum_runtime: { enabled: true } });
-assert.deepEqual(kidsTier, [...MCP_BROWSER_TOOLS], "the browser grant follows the flag; no CR tool on a non-web-app tier");
+assert.deepEqual(kidsTier, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "the browser grant follows the flag; no CR tool on a non-web-app tier");
 // A 14-17 workshop-tier cohort (served minor flag true) gets every CR tool (2026-10-05).
 const teen = permittedMcpToolsFor({ ...adult, minor_cohort: true, curriculum_runtime: { enabled: true } });
 assert.deepEqual(teen.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort(), "every CR tool for a 13-17 cohort");
@@ -183,7 +183,9 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
     assert.match(r.content[0].text, new RegExp(`알 수 없는 도구: ${name}`), `${name} is unknown with the switch off`);
   }
   assert.deepEqual(CR_SURFACES.proxyTools.filter((n) => !isCrBrowserTool(n) && !isCrVerifyTool(n)), [], "every inventoried proxy tool is a CR browser or verify tool");
-  await assert.rejects(control.pickElement({ root: null }), /요소 고르기를 쓸 수 없어요/);
+  // REQ-STUDIO-DENIAL-SOURCE: switch off is a lesson setting, said as one. This backstop does
+  // not know the seat, so it uses the neutral wording (no teacher sentence).
+  await assert.rejects(control.pickElement({ root: null }), { message: "지금 활동에서는 요소 고르기를 쓰지 않도록 정해져 있어요. 다른 방법으로 이어서 해 볼 수 있어요." });
   const legacy = await control.execute({ id: "t", name: "browser_navigate", input: { url: "https://example.com/" } });
   assert.doesNotMatch(legacy.content[0].text, /범위 밖/, "switch off: the pre-CR navigate path, no origin scope");
   enabled = true;
@@ -195,7 +197,9 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
   ok("proxy tools: unknown with the switch off, routed to the CR executor with it on (read per call)");
   // cr-verify — the verify tools never reach BrowserControl: the proxy loop and the SDK host
   // send them to the session only while the switch is on, and the session refuses them off.
-  assert.match(providerSrc, /const tr = isCrVerifyTool\(fixed\.call\.name\) && this\.isCurriculumRuntimeEnabled\(\)\s*\? await this\.runVerifyTool\(/);
+  // The browser-only intent guard may reject a tool first; accepted verify tools
+  // still require the live CR switch before they can reach the session.
+  assert.match(providerSrc, /: isCrVerifyTool\(fixed\.call\.name\) && this\.isCurriculumRuntimeEnabled\(\)\s*\? await this\.runVerifyTool\(/);
   assert.match(providerSrc, /const answer = !this\.isCurriculumRuntimeEnabled\(\)\s*\? \{ isError: true, text: `알 수 없는 도구: \$\{short\}` \}/);
   {
     let on = false;
@@ -255,9 +259,14 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
 // ── webview messages ───────────────────────────────────────────────────────
 for (const t of CR_SURFACES.webviewMessages) {
   assert.match(protocolSrc, new RegExp(`\\{ type: "${t}"[ ;}]`), `${t} is a declared webview message`);
-  if (t === "removeElementContext") {
+  if (t === "annotationAction") {
+    assert.match(providerSrc, /case "annotationAction":[\s\S]{0,850}await this\.pickElement\(msg\.action\)/);
+  } else if (t === "removeElementContext") {
     const handler = new RegExp(`case "${t}":[\\s\\S]{0,200}?this\\.clearElementContext\\(\\)`);
     assert.match(providerSrc, handler, `${t} only removes CR state; it has nothing to reach with the switch off`);
+  } else if (t === "styleTweakSet") {
+    // CGP-ART-R-006 — the tweak message goes to one handler that checks the switch before anything else.
+    assert.match(providerSrc, /case "styleTweakSet":[\s\S]{0,200}?await this\.handleStyleTweakMessage\(msg\)/, `${t} is handled by handleStyleTweakMessage`);
   } else if (t === "reviewOpen" || t === "reviewPrepare") {
     // cr-review — the student's review messages go to one handler that checks the switch before anything else.
     assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,200}?await this\\.handleReviewMessage\\(msg\\)`), `${t} is handled by handleReviewMessage`);
@@ -281,17 +290,18 @@ for (const t of CR_SURFACES.webviewMessages) {
     assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,300}?await this\\.handleVerifyMessage\\(msg\\)`), `${t} is handled by handleVerifyMessage`);
   }
 }
-assert.match(providerSrc, /private async handlePublishMessage\([\s\S]{0,600}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "publishState", view: null/, "the publish handler re-checks the switch first");
-assert.match(providerSrc, /private async handleVerifyMessage\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "verifyState", view: null/, "the verify handler re-checks the switch first");
-assert.match(providerSrc, /private async handleSkillsMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "skillsState", view: null/, "the skills handler re-checks the switch first");
-assert.match(providerSrc, /private async handleReviewMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "reviewState", view: null/, "the student's review handler re-checks the switch first");
+assert.match(providerSrc, /private async handlePublishMessage\([\s\S]{0,600}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "publishState", view: null/, "the publish handler re-checks the switch first");
+assert.match(providerSrc, /private async handleVerifyMessage\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "verifyState", view: null/, "the verify handler re-checks the switch first");
+assert.match(providerSrc, /private async handleSkillsMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "skillsState", view: null/, "the skills handler re-checks the switch first");
+assert.match(providerSrc, /private async handleReviewMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "reviewState", view: null/, "the student's review handler re-checks the switch first");
 assert.match(providerSrc, /private async handleReviewDirectorMessage\([\s\S]{0,500}?\): Promise<void> \{\s*if \(!\(await this\.refreshCrDirectorContext\(\)\)\) \{\s*await this\.post\(\{ type: "reviewState", view: null/, "the director's review handler re-checks the switch through the Service first");
-assert.match(providerSrc, /private async handleMemoryMessage\([\s\S]{0,400}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "memoryState", view: null/, "the memory handler re-checks the switch first");
-assert.match(providerSrc, /private async handleEvidenceMessage\([\s\S]{0,900}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "evidenceState", view: null/, "the evidence handler re-checks the switch first");
+assert.match(providerSrc, /private async handleMemoryMessage\([\s\S]{0,400}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "memoryState", view: null/, "the memory handler re-checks the switch first");
+assert.match(providerSrc, /private async handleEvidenceMessage\([\s\S]{0,900}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "evidenceState", view: null/, "the evidence handler re-checks the switch first");
+assert.match(providerSrc, /private async handleStyleTweakMessage\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*this\.clearElementContext\(\);/, "the style tweak handler re-checks the switch first");
 // The queue's behaviour is test/cr-host.smoke.mjs; here, that the provider uses it: one
 // writer (attachElementContext), and the turn takes it through the switch.
 assert.equal((providerSrc.match(/this\.elementQueue\.attach\(/g) ?? []).length, 1, "one writer of the element queue");
-assert.match(providerSrc, /const element = this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\)\);/, "a queued element is not sent after the switch turns off");
+assert.match(providerSrc, /const element = this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\), text\);/, "a queued element is not sent after the switch turns off");
 ok("webview: CR messages are declared, handled, and nothing CR is sent with the switch off");
 
 console.log(`\n${passed} cr-switch checks passed`);

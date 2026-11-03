@@ -41,7 +41,14 @@ export interface PublishView {
   /** The last publish's timing (CR-64): under 10 s, or a recorded miss with its cause. */
   timing: { ms: number; ok: boolean; cause: string | null } | null;
   notice: string | null;
+  /** The Service read failed: the sharing state is unknown (never a failed publish). Set with a read-specific `reason`. */
+  read_failed?: boolean;
+  /** With `read_failed`: the rows above are the last good read, taken at this time. Absent when there was none. */
+  stale_at?: number | null;
 }
+
+/** CGP-ART-R-011: what the panel says when the sharing state could not be read. */
+export const SHARING_UNKNOWN = "공유 상태를 확인하지 못했어요";
 
 /** What the student fills in to start a test (CR-39 fields the student owns). */
 export interface PublishForm {

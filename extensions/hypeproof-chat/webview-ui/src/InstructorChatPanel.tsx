@@ -7,6 +7,7 @@ import { useState, useRef } from "react";
 import type { ChatConfig, ChatMessage } from "../../src/protocol";
 import { postToHost } from "./vscode";
 import { ChatPanel } from "./ChatPanel";
+import { imeComposing } from "./imeGuard";
 
 interface Props {
   config: ChatConfig | null;
@@ -24,7 +25,18 @@ interface Props {
   onPublish: () => void;
   streaming: boolean;
   streamingId: string | null;
+  /** REQ-STUDIO-DELEGATION-ROW — passed through to ChatPanel. */
+  runningStreamId?: string | null;
+  progressSince?: number;
+  progressApprovalPending?: boolean;
+  /** REQ-STUDIO-COACH-RUN-STATE — passed through to ChatPanel. */
+  lastOutcome?: import("../../src/taskRunState").TaskTurnOutcome;
+  /** REQ-STUDIO-COACH-RUN-STATE: the product test run (내 제품 테스트) is running. */
+  verifyRunning?: boolean;
+  refusal?: boolean;
+  onDismissRefusal?: () => void;
   error: string | null;
+  activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;
   canRetryLast: boolean;
@@ -44,6 +56,10 @@ interface Props {
   onDismissUpdate: (version: string) => void;
   /** cr-review — the director's Weekly Review panel (null = hidden); passed to the chat panel like the student's CR panels. */
   verifyPanel?: import("react").ReactNode;
+  /** CGP-CHAT-D-012 — the user message the host is answering, passed through to ChatPanel so a steered send can fade. */
+  streamFor?: string | null;
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id, passed through to ChatPanel. */
+  trimBoundaryId?: string | null;
 }
 
 export function InstructorChatPanel(props: Props) {
@@ -73,6 +89,8 @@ export function InstructorChatPanel(props: Props) {
   }
 
   function handleDirectKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // CGP-DS-R-027: a half-composed model ID is never submitted or cleared.
+    if (imeComposing(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       handleDirectSubmit();

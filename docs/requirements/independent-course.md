@@ -1,6 +1,6 @@
 # 독립 강의 개설 요구사항
 
-상태: 구현 계약 · 2026-09-13 · [#1006](https://github.com/jayleekr/hypeproof-studio/issues/1006).
+상태: 구현 계약 · 2026-09-13 · [#1006](https://github.com/hypeproof/hypeproof-studio/issues/1006).
 상위: [Product Intent](../PRODUCT-INTENT.md)의 useful work first와 권한 경계.
 기존 [Chalk](chalk-authoring.md)의 CH-01/04, VER-01, RUN-03과
 [AE](learning-agent-experience.md)의 AE-09/11/26을 확장한다.

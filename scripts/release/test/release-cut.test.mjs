@@ -3,11 +3,12 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
-import {classify, howToCheck, parseTitle, render, smokeOf} from '../checklist.mjs';
+import {classify, howToCheck, managerCheckOf, parseTitle, render, smokeOf} from '../checklist.mjs';
 import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
 import {judge} from '../smoke/checks/s5-candidate-ci.mjs';
+import {runSmokeChecks} from '../smoke/smoke.mjs';
 
 const pr = (number, title, files = [], extra = {}) => ({
   number, title, body: '', author: {login: 'dev'},
@@ -68,20 +69,20 @@ Answer yes for Smoke when this adds a dependency on another repository or a serv
 
 const FILLED = `## Release check
 
-How to verify: Chalk → create a track plan → the plan lists three sessions
-Smoke: yes — calls the Chalk server for the plan
-Smoke check: scripts/release/smoke/checks/s2-chalk-health.mjs
+How to verify: Service → POST /v1/chat/completions → returns a streaming response
+Smoke: yes — calls the Service API for the plan
+Smoke check: scripts/release/smoke/checks/s1-service-health.mjs
 
 ## Checklist`;
 
 test('howToCheck: the Release check first line drops its label; the unfilled template is not a check', () => {
-  assert.equal(howToCheck(FILLED), 'Chalk → create a track plan → the plan lists three sessions');
+  assert.equal(howToCheck(FILLED), 'Service → POST /v1/chat/completions → returns a streaming response');
   assert.equal(howToCheck(TEMPLATE), null);
 });
 
 test('smokeOf: reads the answer, reason and check; null for the unfilled template', () => {
-  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Chalk server for the plan',
-    check: 'scripts/release/smoke/checks/s2-chalk-health.mjs'});
+  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Service API for the plan',
+    check: 'scripts/release/smoke/checks/s1-service-health.mjs'});
   assert.deepEqual(smokeOf('## Release check\nHow to verify: a → b → c\nSmoke: no — UI copy only, nothing external\n'),
     {answer: 'no', reason: 'UI copy only, nothing external', check: null});
   assert.equal(smokeOf(TEMPLATE), null);
@@ -91,17 +92,17 @@ test('smokeOf: reads the answer, reason and check; null for the unfilled templat
 test('render shows the linked issue and the smoke decision for features and dependency PRs', () => {
   const closes = {closingIssuesReferences: {nodes: [{number: 77}]}};
   const {groups} = classify([
-    pr(1, 'feat(chalk): plan', [], {body: FILLED, ...closes}),
+    pr(1, 'feat(service): health', [], {body: FILLED, ...closes}),
     pr(2, 'feat(start): copy'),
     pr(3, 'chore(deploy): pin', ['.github/workflows/deploy-worker.yml'], {body: FILLED, ...closes}),
   ]);
   const {features, dependency} = render({groups});
-  assert.match(features, /#1 feat\(chalk\): plan — @dev · closes #77/);
-  assert.match(features, /smoke: yes — calls the Chalk server for the plan \(check: scripts\/release\/smoke\/checks\/s2-chalk-health\.mjs\)/);
+  assert.match(features, /#1 feat\(service\): health — @dev · closes #77/);
+  assert.match(features, /smoke: yes — calls the Service API for the plan \(check: scripts\/release\/smoke\/checks\/s1-service-health\.mjs\)/);
   assert.match(features, /#2 feat\(start\): copy — @dev · _no linked issue_/);
   assert.match(features, /smoke: _not given by the author_/);
   assert.match(dependency, /#3 chore\(deploy\): pin — @dev · closes #77/);
-  assert.match(dependency, /how to check: Chalk → create a track plan/);
+  assert.match(dependency, /how to check: Service → POST \/v1\/chat\/completions/);
   assert.match(dependency, /smoke: yes —/);
 });
 
@@ -126,7 +127,7 @@ test('S1 passes a healthy versioned Service and fails the rest', async () => {
 test('S5 leaves out the release-cut run itself, and only that run', () => {
   const run = (name, status, conclusion, id) => ({name, status, conclusion, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
   const done = run('build', 'completed', 'success', 100);
-  const self = run('dry-run', 'in_progress', '', 200);
+  const self = run('cut', 'in_progress', '', 200);
   // the bug: our own job counted as still running
   assert.equal(judge([done, self], undefined).result, 'NOT_RUN');
   assert.equal(judge([done, self], '200').result, 'PASS');
@@ -137,8 +138,184 @@ test('S5 leaves out the release-cut run itself, and only that run', () => {
   assert.equal(judge([done, run('lint', 'in_progress', '', 2001)], '200').result, 'NOT_RUN');
 });
 
+test('S5 leaves out GitHub dynamic runs such as Dependabot updates', () => {
+  const run = (name, conclusion, id, event) => ({name, status: 'completed', conclusion, event, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
+  const ci = run('studio-pr-ci', 'success', 100, 'push');
+  // 2026-10-29: three failed Dependabot updates on main's head stopped the cut
+  assert.equal(judge([ci, run('Dependabot', 'failure', 300, 'dynamic'), run('Dependabot', 'failure', 301, 'dynamic')]).result, 'PASS');
+  // negative control: a failed push run with the same name still fails
+  assert.equal(judge([ci, run('Dependabot', 'failure', 302, 'push')]).result, 'FAIL');
+  assert.equal(judge([run('Dependabot', 'success', 303, 'dynamic')]).result, 'NOT_RUN');
+});
+
 test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin password', async () => {
   const env = {HPS_ADMIN_PASSWORD: 'x'};
   assert.equal((await s3.run({env})).result, 'NOT_RUN');
   assert.equal((await s4.run({env, studioDir: '.', serviceUrl: 'http://127.0.0.1:1'})).result, 'NOT_RUN');
+});
+
+test('S5 supersedes only the same workflow/job, using run order, not completion order', () => {
+  const run = (workflowId, runNumber, conclusion, extra = {}) => ({id: runNumber, workflowId, runNumber,
+    runAttempt: 1, name: 'deploy', status: 'completed', conclusion, url: `https://github.com/o/r/actions/runs/${runNumber}/job/1`, ...extra});
+  const old = run(1, 10, 'failure'), current = run(1, 11, 'success');
+  assert.equal(judge([current, old]).result, 'PASS');
+  assert.equal(judge([old, current]).result, 'PASS');
+  assert.equal(judge([old, {...current, status: 'in_progress', conclusion: ''}]).result, 'NOT_RUN');
+  assert.equal(judge([old, current, run(2, 9, 'failure')]).result, 'FAIL');
+  assert.equal(judge([current, run(1, 9, 'failure', {name: 'macOS'})]).result, 'FAIL');
+  assert.equal(judge([current, run(undefined, 9, 'failure')]).result, 'FAIL');
+  assert.equal(judge([current, {...current, id: 12, runAttempt: 2, conclusion: 'failure'}]).result, 'FAIL');
+  // without the workflow id, leaving out only the current run keeps the older run of that job
+  assert.equal(judge([old, current], '11').result, 'FAIL');
+});
+
+test('S5 leaves out earlier runs of the release-cut workflow itself (#1845)', () => {
+  const run = (workflowId, runNumber, name, conclusion, status = 'completed') => ({id: runNumber, workflowId, runNumber,
+    runAttempt: 1, name, status, conclusion, url: `https://github.com/o/r/actions/runs/${runNumber}/job/1`});
+  const build = run(5, 3, 'build', 'success');
+  const failedCut = run(7, 6, 'create', 'failure');
+  const self = run(7, 7, 'create', '', 'in_progress');
+  // the bug: run 6 of the same release-cut workflow stayed the latest 'create' after run 7 was left out
+  assert.equal(judge([build, failedCut, self], '7').result, 'FAIL');
+  assert.equal(judge([build, failedCut, self], '7', 7).result, 'PASS');
+  // negative controls: other workflows still block, failed or pending
+  assert.equal(judge([build, failedCut, self, run(5, 2, 'test', 'failure')], '7', 7).result, 'FAIL');
+  assert.equal(judge([build, failedCut, self, run(9, 1, 'macos', '', 'in_progress')], '7', 7).result, 'NOT_RUN');
+  // a check-run without a workflow id is never matched by the workflow filter
+  assert.equal(judge([build, {...failedCut, workflowId: undefined}], '7', 7).result, 'FAIL');
+});
+
+test('S3 binds a fresh synthetic token and requires successful cleanup, without admin or force', async () => {
+  const {checkCohort} = await import('../smoke/checks/s3-cohort-token.mjs');
+  async function probe({wrongProfile = false, closeFailure = false, busy = false, delayed = false} = {}) {
+    const calls = []; let polls = 0;
+    const result = await checkCohort({env: {HPS_ACCEPTANCE_ISSUER: 'scoped-secret', HPS_ADMIN_PASSWORD: 'admin-secret'},
+      serviceUrl: 'https://example.invalid', sleep: async () => {}, fetchImpl: async (url, init) => {
+        const body = init.body ? JSON.parse(init.body) : null;
+        calls.push({url, body, auth: init.headers.authorization});
+        if (url.endsWith('/session/open')) {
+          assert.equal(body.force, false);
+          assert.equal(body.profile_id, 'synthetic-release-acceptance');
+          assert.match(body.user, /^synthetic-smoke-/);
+          return Response.json(busy ? {} : {token: 'student-secret', jti: 'test-jti', exp: 2000000000,
+            cohort: body.profile_id, profile: body.profile_id, user: body.user}, {status: busy ? 409 : 200});
+        }
+        if (url.endsWith('/v1/profile')) {
+          assert.equal(init.headers.authorization, 'Bearer student-secret');
+          if (delayed && ++polls === 1) return Response.json({}, {status: 403});
+          return Response.json({profile_id: wrongProfile ? 'wrong' : 'synthetic-release-acceptance', activity_kind: 'classroom', activity_id: 'activity'});
+        }
+        assert.ok(url.endsWith('/session/close'));
+        assert.equal(body.jti, 'test-jti');
+        return Response.json({ok: true, revoked: closeFailure ? null : body.jti});
+      }});
+    assert.doesNotMatch(JSON.stringify(result), /scoped-secret|student-secret|admin-secret/);
+    assert.ok(calls.every(c => c.auth !== 'Basic admin-secret'));
+    return {result, calls};
+  }
+  assert.equal((await probe({delayed: true})).result.result, 'PASS');
+  const wrong = await probe({wrongProfile: true});
+  assert.equal(wrong.result.result, 'FAIL');
+  assert.ok(wrong.calls.at(-1).url.endsWith('/session/close'));
+  assert.equal((await probe({closeFailure: true})).result.result, 'FAIL');
+  const busy = await probe({busy: true});
+  assert.equal(busy.result.result, 'FAIL');
+  assert.equal(busy.calls.length, 1); // An existing session is neither replaced nor closed.
+  const transport = await checkCohort({env: {HPS_ACCEPTANCE_ISSUER: 'secret'}, serviceUrl: 'https://example.invalid',
+    fetchImpl: async () => { throw Error('secret'); }});
+  assert.equal(transport.result, 'FAIL');
+  assert.doesNotMatch(transport.detail, /secret/);
+});
+
+// Stub check factory for smoke order tests.
+const stub = (id, result, detail = '') => ({id, name: id, run: async () => ({result, detail})});
+const ctx = {};
+
+test('smoke runs read-only checks (S1, S5) before session-opening checks (S3, S4)', async () => {
+  const order = [];
+  const tracked = id => ({id, name: id, run: async () => { order.push(id); return {result: 'PASS', detail: ''}; }});
+  await runSmokeChecks([tracked('S4'), tracked('S3'), tracked('S5'), tracked('S1')], ctx);
+  assert.deepEqual(order.slice(0, 2).sort(), ['S1', 'S5']);
+  assert.deepEqual(order.slice(2).sort(), ['S3', 'S4']);
+});
+
+test('smoke skips S3 and S4 with NOT_RUN when S1 fails', async () => {
+  const checks = await runSmokeChecks([stub('S1', 'FAIL'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  assert.equal(byId.S3.result, 'NOT_RUN');
+  assert.equal(byId.S4.result, 'NOT_RUN');
+  assert.match(byId.S3.detail, /skipped: S1 failed/);
+  assert.match(byId.S4.detail, /skipped: S1 failed/);
+});
+
+test('smoke skips S3 and S4 with NOT_RUN when S5 fails', async () => {
+  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'FAIL')], ctx);
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  assert.equal(byId.S3.result, 'NOT_RUN');
+  assert.equal(byId.S4.result, 'NOT_RUN');
+  assert.match(byId.S3.detail, /skipped: S5 failed/);
+  assert.match(byId.S4.detail, /skipped: S5 failed/);
+});
+
+const MANAGER_NO = `## Release check
+
+Release manager check: no — release tooling only
+Smoke: no — internal change
+`;
+
+const MANAGER_YES = `## Release check
+
+Release manager check: yes — user sees the change in the App
+How to verify: App → start screen → the new onboarding flow appears
+Smoke: no — no server dependency
+`;
+
+const MANAGER_MISSING = `## Release check
+
+How to verify: App → start screen → something
+Smoke: no — no server dependency
+`;
+
+test('managerCheckOf: parses yes, no and absent', () => {
+  assert.deepEqual(managerCheckOf(MANAGER_NO), {answer: 'no', reason: 'release tooling only'});
+  assert.deepEqual(managerCheckOf(MANAGER_YES), {answer: 'yes', reason: 'user sees the change in the App'});
+  assert.equal(managerCheckOf(MANAGER_MISSING), null);
+  assert.equal(managerCheckOf(''), null);
+});
+
+test('classify: Release manager check no forces automatic regardless of title type or paths', () => {
+  // fix(release) would normally be a feature; no overrides it
+  const fixRelease = {number: 1, title: 'fix(release): adjust smoke order', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  // workflow path would normally be dependency; no overrides it
+  const workflowPath = {number: 2, title: 'ci(release): update yml', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: [{path: '.github/workflows/release-cut.yml'}]}, closingIssuesReferences: {nodes: []}};
+  // yes keeps today's grouping for a feature PR
+  const featureYes = {number: 3, title: 'feat(start): new onboarding', body: MANAGER_YES,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  // missing uses today's heuristics (fix = feature)
+  const missingFix = {number: 4, title: 'fix(chat): button color', body: MANAGER_MISSING,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+
+  const {groups} = classify([fixRelease, workflowPath, featureYes, missingFix]);
+  assert.deepEqual(groups.automatic.map(p => p.number).sort(), [1, 2]);
+  assert.deepEqual(groups.features.map(p => p.number).sort(), [3, 4]);
+  assert.deepEqual(groups.dependency, []);
+});
+
+test('render: no-check PRs appear in automatic with reason; rest stay in summary', () => {
+  const noCheck1 = {number: 10, title: 'fix(release): smoke order', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const noCheck2 = {number: 11, title: 'ci: update actions', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const regular = {number: 12, title: 'chore: bump dep', body: '',
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const {groups} = classify([noCheck1, noCheck2, regular]);
+  const {automatic} = render({groups});
+  assert.match(automatic, /No release manager check needed/);
+  assert.match(automatic, /#10 fix\(release\): smoke order — @dev \(release tooling only\)/);
+  assert.match(automatic, /#11 ci: update actions — @dev \(release tooling only\)/);
+  // regular chore stays in the collapsible summary
+  assert.match(automatic, /#12/);
+  assert.match(automatic, /details/);
 });

@@ -82,14 +82,17 @@ injects the cohort's system prompt and enforces the session window.
 
 ## Install
 
-> For workshop participants — the one-line installer (published at release).
-> Full guide: [docs/INSTALL.md](./docs/INSTALL.md).
+> This repository is private, so the installer is fetched with the GitHub CLI.
+> First accept the `hypeproof` organization invitation, install `gh`, and run
+> `gh auth login --hostname github.com` with the invited account. A class
+> participant or pass buyer without an invitation installs with their
+> participation code at https://hypeproof-ai.xyz/studio/install instead. Full guide: [docs/INSTALL.md](./docs/INSTALL.md).
 
 <details>
 <summary>macOS</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-mac.sh | bash
+gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > /tmp/hps-bootstrap.sh && bash /tmp/hps-bootstrap.sh
 ```
 </details>
 
@@ -97,9 +100,13 @@ curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/
 <summary>Windows</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-win.ps1 | iex
+gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" | Out-File "$env:TEMP/hps-bootstrap.ps1" -Encoding utf8; if ($LASTEXITCODE -eq 0) { powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP/hps-bootstrap.ps1"; "exit code: $LASTEXITCODE" } else { Write-Error "GitHub 로그인과 조직 초대 수락을 확인하세요." }
 ```
 </details>
+
+These are the two commands the member install page serves: `ONELINER_MAC` and
+`ONELINER_WIN` in `web/src/lib/studio-install.ts` of `hypeproof/hypeprooflab`.
+Change them there and here together.
 
 Once installed, Studio updates itself in place — it checks GitHub Releases on
 launch and applies the new build the next time you reopen the app. Found a bug
@@ -107,6 +114,10 @@ in the running Studio? Open the Command Palette → **HypeProof Chat: 문제
 신고하기** to send it (with cohort + request ID) straight to the maintainers.
 
 ## Quickstart (contributors)
+
+Needs Node 22.22.1 (the version `scripts/setup.sh` and `scripts/check-env.sh`
+check for) and `gh auth login` with an account that can read
+`hypeproof/hypeproof-service`.
 
 ```bash
 git clone --recursive git@github.com:hypeproof/hypeproof-studio.git
@@ -124,6 +135,11 @@ them only in ignored `.private-service-cache/`. Run bootstrap before installing 
 consumer package. CI uses the existing `HYPEPROOF_READ_TOKEN` with Service contents
 read access; missing access or mismatched bytes fail closed. Package source and
 tarballs must not be committed to Studio or copied into its releases.
+
+`npm run bootstrap:service` runs the same script. If you skip it, `npm ci` ends
+in `npm error code ENOENT` on a `.private-service-cache/*.tgz` path and does not
+mention the bootstrap. The cache belongs to one checkout, so a new clone or
+worktree needs its own bootstrap.
 
 Worker dev runs at `http://localhost:8787` (admin UI at `/`). Cloned without
 `--recursive`? Run `git submodule update --init`.
@@ -148,14 +164,18 @@ and failure modes: [.claude/rules/build-pipeline.md](.claude/rules/build-pipelin
 |---|---|
 | `vscodium-base/` | **Submodule** → [`jayleekr/vscodium`](https://github.com/jayleekr/vscodium) `@hps/main`. Pointer is pinned — bump deliberately only ([policy](.claude/rules/build-pipeline.md)). Never edit upstream files; add a patch under `vscodium-base/patches/`. |
 | `extensions/hypeproof-chat/` | The chat-panel extension (React webview). Bundled as a built-in extension by `scripts/inject-builtin-extensions.sh`. |
-| `worker/` | Cloudflare Worker `api.hypeproof-ai.xyz` — model proxy, per-cohort profiles, token auth, classroom operations. Production. |
 | `chalk/` | Chalk instructor surface, a separate Cloudflare Worker at `chalk.hypeproof-ai.xyz` (registered in `products.yaml`, layer `c`). |
-| `proxy-poc/` | Python proxy from early iteration (superseded by `worker/`). |
+| `proxy-poc/` | Python proxy from early iteration (superseded by the Worker). |
 | `scripts/` | Build wrappers — `run-build.sh`, `dev-stack.sh`, `generate-platform-icons.sh`, `verify-branding.sh`. |
 | `skills/` | Public Agent Skills and [current measurement guidance](./skills/README.md); HAIN7 is retained for historical replay only. |
 | `e2e/` | Playwright suite driving the built `.app`. |
 | `docs/` | INSTALL, COHORT-AUTHORING, 7 AI Native Assets, release guides. |
 | `METAPLAN.md` | Phased build plan — the source of truth. Cross-reference by §N. |
+
+There is no `worker/` directory here any more. The Worker behind
+`api.hypeproof-ai.xyz` moved to `hypeproof/hypeproof-service` (private) in #1587.
+Studio's tests and dev scripts use it through the pinned
+`@hypeproof/service-testkit` package that the Quickstart bootstrap downloads.
 
 ## Upstream sync model
 

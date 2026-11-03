@@ -7,10 +7,17 @@ description: Prepare and create PRs in hypeproof-harness, hypeprooflab, hypeproo
 
 Use the repository's `scripts/hype-pr/pr.py` entrypoint. It delegates to the canonical
 Harness checkout, found as a sibling of the main consumer checkout or through
-`HYPEPROOF_HARNESS`. If missing, clone `jayleekr/hypeproof-harness` into that sibling
-location (or use an existing checkout via the environment variable). If the entrypoint
-reports an outdated Harness, update a clean main checkout with a fast-forward pull,
-or use a separate updated checkout; preserve existing work. Python 3.11+,
+`HYPEPROOF_HARNESS`. If missing, clone `hypeproof/hypeproof-harness` into that sibling
+location (or use an existing checkout via the environment variable). The sibling
+checkout is only read and fetched, never switched or fast-forwarded: the engine runs
+from a launcher-owned detached worktree at `origin/main`
+(`~/.cache/hypeproof/harness-engine`, override with `HYPEPROOF_ENGINE_DIR`), so a
+session developing Harness in that checkout keeps its branch. `HYPEPROOF_HARNESS=<path>`
+only says where the canonical checkout is; the engine is still made and refreshed from
+it. Set `HYPEPROOF_HARNESS_PIN=1` only to run the canonical checkout itself as it is
+(no fetch, no engine), e.g. to test unmerged Harness changes. If the entrypoint says
+the engine has local changes, move them out and remove that worktree; never discard
+them. Preserve existing work. Python 3.11+,
 PyYAML are required. Local execution uses authenticated `gh`; Work can use the
 connected GitHub tools through the explicit host transport in
 `docs/HYPE-PR.ko.md` → `Work GitHub transport`. Both paths execute the same
@@ -70,6 +77,26 @@ uncommitted text. Read working changes directly when developing.
    again and reconsider the judgments; do not merely transplant a fingerprint.
    No additional model-provider key is needed: the coding agent performs reasoning.
 
+   **Assessment rules.** `prepare` checks all of these and lists every failure with
+   its JSON path (for example `validation[0].evidence: 14 chars, needs >= 20`). The
+   template carries the same list under `_rules`; top-level `_` keys are ignored.
+   - `summary`, every `reason` and every `evidence`: at least 20 characters.
+   - `reviews`: exactly one entry per affected node in the report, no other IDs.
+     `disposition` is one of `change-required`, `no-impact`, `satisfied`, `unknown`.
+   - `unknown` and `change-required` need `followups`: a non-empty list of
+     `https://github.com/<owner>/<repo>/issues/<n>` or `/pull/<n>` URLs in a
+     registered repository.
+   - `path_links`: exactly one entry per unmapped watched path. `kind` is one of
+     `implementation`, `supporting`, `editorial`; `nodes` is a non-empty list of node
+     IDs registered in the report; `implementation` needs a requirement and a test node.
+   - `validation`: a non-empty list; each entry has a `check`, a `result` of `pass` or
+     `not-applicable`, and `evidence`.
+
+   A stale assessment or receipt names what moved (`head`, `base_tip`,
+   `source_commits[<repo>]`, `tool_version`, branch or repository). Inspect again
+   and reassess. Pass `--base` as a bare branch name (`main`, not `origin/main`);
+   inspect fetches the base once when its remote tip is not in the checkout yet.
+
 3. Bind the assessment to the current revisions:
 
    ```bash
@@ -81,13 +108,82 @@ uncommitted text. Read working changes directly when developing.
    reports and reasoning out of tracked/public files. Another commit, base movement,
    dependency revision, or policy/tool change invalidates preparation.
 
-4. Push the prepared branch, then create through the guarded command:
+4. If the target repository commits `config/pr-body-contract.json` with
+   `release_check.enforced: true`, write a `## Release check` section. Read both the
+   linked issue body (the intent) and the code change, then write:
+
+   ```markdown
+   ## Release check
+   How to verify: <where> → <what to click or run> → <expected result>
+   Smoke: yes|no — <reason>
+   Smoke check: <file under the contract's smoke_check_prefix, or #follow-up-issue>
+   ```
+
+   `How to verify` is the first line because the release manager reads that line.
+   Answer `Smoke: yes` when the change adds a dependency on another repository or a
+   server. `Smoke check` is required only for `yes`. When the linked issue answered
+   "Smoke needed?" with yes and the PR says no, add
+   `Smoke differs from issue: <reason>`. `create --apply` refuses a body that is
+   missing any of these, keeps a placeholder, or has fewer than three verify parts.
+
+   When the contract also sets `release_check.manager_check: true`, the section
+   starts with `Release manager check: yes|no — <reason>`:
+   - `yes` only when a user sees or meets changed behavior in the rc App (a screen,
+     a reply, an install step). `How to verify` follows on the next line.
+   - `no` otherwise, with the reason; `How to verify` is then not asked. Examples:
+     release tooling only, CI only, vendored tooling only, docs only.
+   - `Smoke` is answered either way. A hotfix ignores this line.
+
+   If the contract on the default branch declares a `hotfix` lane, a PR whose
+   `--base` starts with its `base_prefix` (for example `hotfix/v2026.1013.0`, cut
+   from the last v tag) is a hotfix: `create` adds the `hotfix` label, refuses
+   `--auto-merge`, and asks only for the Smoke lines (the release manager's
+   checklist is skipped, smoke is not). Put several hotfixes from the same tag on
+   the same `hotfix/<tag>` branch. The hotfix PR cannot close its issue, so bring
+   the fix to the default branch in a second PR with `--forward-of <hotfix PR>`
+   and a `Forward-port of #N` line; that PR gets `hotfix-forward`, a normal
+   Release check, and closes the issue. `hotfix` on a PR into main is refused.
+
+5. Push the prepared branch, then create through the guarded command:
 
    ```bash
    python3 scripts/hype-pr/pr.py create --repo OWNER/REPO --head BRANCH \
      --title 'feat(scope): 한글 요약' --body-file /tmp/pr-body.md --author LOGIN \
      --issue ISSUE_NUMBER --preparation RECEIPT_PATH --apply
    ```
+
+   **Agent identity (local runs).** Use the canonical Harness local Git wrapper
+   for agent-authored commits and rebases. It needs no key, login, token or network.
+   Use the authenticated wrapper for network writes and pass the App author:
+
+   ```bash
+   AGENT_GIT="$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh"
+   AGENT="$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh"
+   "$AGENT_GIT" commit -m 'fix: 설명'
+   "$AGENT_GIT" rebase origin/main
+   "$AGENT" git push -u origin BRANCH
+   "$AGENT" python3 scripts/hype-pr/pr.py create ... --author 'hypeproof-agent[bot]' --apply
+   ```
+
+   Legacy authenticated-wrapper calls for local Git commands dispatch tokenlessly.
+   Preserve genuine human commits; correct only commits actually authored by agents.
+   Before the first network write, the agent runs `agent-auth.py ensure --repo
+   hypeproof/<target> --json` from the canonical Harness. Follow the state handling
+   and initial credential-transfer consent in `docs/AGENT-GUIDE.ko.md` §2a.
+   Execute setup on behalf of the member; do not hand them a list of commands.
+   Only after informed consent use `--accept-github-login`; reuse existing consent.
+   `ready` means live repository access was checked and the probe token revoked.
+   It does not create the PR or grant merge approval. Missing GitHub login requires
+   browser sign-in; other failures block writes without personal-token fallback.
+   Keep local work. Members never need an organization PEM or a new GitHub App.
+   Request a single repository from `--repo`, origin or explicit
+   `HYPEPROOF_AGENT_REPOSITORY=hypeproof/<repo>`. Workflow writes require
+   `HYPEPROOF_AGENT_WORKFLOWS=1` and the user's OAuth `workflow` scope.
+   Preparation GETs and fixed Git fetches may read other private canonical repos
+   with the member's existing stored gh/Git login. Mutations retain the single-repo
+   App token. Missing read access blocks preparation; never widen the write grant.
+   The human remains a separate reviewer; approval and merge rules still apply,
+   and a push after approval makes that approval stale.
 
    The PR body must close that issue and no other issue. Omit `--apply` for a command
    preview. The apply path verifies that the target is an existing open same-repository

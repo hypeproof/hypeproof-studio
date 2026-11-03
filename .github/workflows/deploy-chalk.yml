@@ -72,6 +72,12 @@ jobs:
         working-directory: chalk
         run: npm ci
 
+      # Same step as pr-ci's chalk-test job: chalk/test/authoring-ui.test.mjs
+      # imports extension source that needs the App's private packages.
+      - name: Install App dependencies for cross-product contract tests
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts --omit=optional
+
       - name: Chalk tests
         working-directory: chalk
         run: npm test

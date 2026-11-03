@@ -1,7 +1,10 @@
+import { responseEvidence, type FailureEvidence } from "./activityAvailability.ts";
+import { proxyUserContent } from "./visionInput.ts";
 import type { AssetScoreChunk, ChatMessage, Citation, ResolvedProfile } from "./protocol";
 
 import {
   buildProxyHeaders,
+  clientTurnIdHeader,
   observationHeaders,
   classifyProfileFailure,
   friendlyTransportMessage,
@@ -14,6 +17,9 @@ import {
   type ProxyStreamUsage,
 } from "./proxyClientHelpers.ts";
 import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
+import { SdkRequiredError, trialRequiresSdkMessage } from "./sdkRequiredHelpers.ts";
+import { parseModerationBlock, ModerationBlockError } from "./safetyNotice.ts";
+import { transportFailureText, type SeatAudience } from "./seatVocabulary.ts";
 
 /**
  * A5 (orchestrator spec §2.2 condition 4, §2.3, §4.1) — this build's capability declaration on
@@ -44,6 +50,7 @@ export class ProxyAuthError extends Error {
     | "session_window"
     | "not_in_roster"
     | "other";
+  evidence?: FailureEvidence;
   friendly: string;
   requestId?: string;        // S-07 / #49 — surfaced in webview ErrorBanner
   runbookUrl?: string;       // #165 — when present, banner renders as clickable link
@@ -68,9 +75,12 @@ export class ProxyAuthError extends Error {
  * can paste it into a DM and Jay greps Workers Logs.
  */
 export class ProxyTransportError extends Error {
+  evidence?: FailureEvidence;
   requestId?: string;
-  constructor(message: string, requestId?: string) {
+  constructor(message: string, requestId?: string, evidence?: FailureEvidence) {
+    // Keep cause evidence separate from friendly copy.
     super(message);
+    this.evidence = evidence;
     this.requestId = requestId;
   }
 }
@@ -153,6 +163,12 @@ interface ProxyChatArgs {
   history: ChatMessage[];
   userText: string;
   /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — the learner's memory for this turn, sent as its own user message right before
+   * the turn. The Service takes only the LAST user message as the turn's prompt (`lastUserMessageText`: screened, and
+   * stored on cohorts with `analytics.log_user_messages`), so memory never lands in that record (DEC-01).
+   */
+  contextText?: string;
+  /**
    * Pasted-image data URLs attached to THIS user turn (website-copyclone).
    * Only the current turn carries images — `history` is mapped text-only
    * below, so a screenshot is injected to the model exactly once.
@@ -168,6 +184,8 @@ interface ProxyChatArgs {
   toolTurns?: Array<{ role: "user" | "assistant"; content: unknown }>;
   signal: AbortSignal;
   onDelta: (delta: string) => void;
+  /** Explicit model refusal, never inferred from generated text. */
+  onRefusal?: () => void;
   /** #173 — fires for each citations chunk in the SSE stream. */
   onCitations?: (citations: Citation[]) => void;
   /** #204 — fires when the worker emits the final 7-asset score chunk. */
@@ -187,6 +205,8 @@ interface ProxyChatArgs {
   coachPersonality?: string;
   /** #507 — 지금 떠 있는 라이브 서버 주소(없으면 생략). 워커가 문구를 만든다. */
   previewUrl?: string;
+  /** Trial diagnosis D3 — picks the generic failure card's remedy. Omitted → classroom copy. */
+  audience?: SeatAudience;
 }
 
 // Streaming OpenAI-compatible chat completion call against the HypeProof Proxy.
@@ -215,18 +235,13 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
   // turns); the only multimodal turn is the current one. When images are
   // attached, the user turn becomes OpenAI-style content blocks — a text
   // block (only if there's text) plus one image_url block per pasted image.
-  const userContent =
-    images && images.length > 0
-      ? [
-          ...(userText ? [{ type: "text", text: userText }] : []),
-          ...images.map((url) => ({ type: "image_url", image_url: { url } })),
-        ]
-      : userText;
+  const userContent = proxyUserContent(userText, images);
   const messages = [
     // #503 — 툴 줄(role:"tool")은 화면·히스토리 전용이다. 호출부(handleSend)에서
     // 이미 걸러 오지만, 이 함수는 모델로 나가는 마지막 문이라 여기서도 막는다.
     ...history.filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role, content: m.content })),
+    ...(args.contextText ? [{ role: "user", content: args.contextText }] : []),
     { role: "user", content: userContent },
     // #278 Phase 3 — the loop's scratch tool_use/tool_result turns (if any).
     ...(toolTurns ?? []),
@@ -236,7 +251,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
   const headers = buildProxyHeaders({ token, coachName, coachPersonality, previewUrl });
 
   if (args.effort) headers['x-hps-effort'] = args.effort;
-  if (args.turnId) headers['x-hps-turn-id'] = args.turnId;
+  Object.assign(headers, clientTurnIdHeader(args.turnId));
   if (args.lessonBinding && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(args.lessonBinding)) headers['x-hps-lesson-binding'] = args.lessonBinding;
   if (args.lessonStep && /^[a-zA-Z0-9_-]{1,64}$/.test(args.lessonStep)) {
     headers['x-hps-lesson-step'] = args.lessonStep;
@@ -256,16 +271,25 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
     const authErr = classifyError(res.status, text);
     if (authErr) {
       authErr.requestId = rid;
+      authErr.evidence = responseEvidence(res.status, text);
       throw authErr;
     }
+    // REQ-CGP-LEARN-13 — a minor-cohort moderation block is not a crash: the turn handler draws
+    // the Service's calm sentence (and, when allowed, the help lines) instead of the red card.
+    const block = parseModerationBlock(res.status, text);
+    if (block) throw new ModerationBlockError(block, rid);
+    // REQ-M45 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
+    // Service sentence, add the cause and the install remedy, and offer no retry.
+    const sdkRequired = trialRequiresSdkMessage(res.status, text);
+    if (sdkRequired) throw new SdkRequiredError(sdkRequired, rid);
     // #358 — a few non-auth statuses have a specific, friendlier message than
-    // the generic card (today: 413 = oversized pasted image). Fall back to the
+    // the generic card (413: oversized image, 429: request limit). Fall back to the
     // generic copy otherwise. Never dump raw JSON at a 9-10 year old; the
     // request_id is appended so the operator can DM a single string.
     throw new ProxyTransportError(
-      friendlyTransportMessage(res.status) ??
-        "문제가 발생했습니다. 다시 시도하거나 운영 담당자에게 문의해 주세요.",
+      friendlyTransportMessage(res.status, res.headers.get("retry-after")) ?? transportFailureText(args.audience ?? "classroom"),
       rid,
+      responseEvidence(res.status, text),
     );
   }
 
@@ -379,6 +403,8 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
           toolUses.push(block);
           onToolUse?.(block);
         }
+        if (c0?.finish_reason === "refusal" || c0?.finish_reason === "content_filter" ||
+            (typeof choice?.refusal === "string" && choice.refusal.length > 0)) args.onRefusal?.();
         if (typeof c0?.finish_reason === "string") finishReason = c0.finish_reason;
       } catch (err) {
         // stream_error 는 위에서 의도적으로 던진 것 — 삼키면 끊긴 응답이
@@ -387,6 +413,15 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
         // ignore malformed line
       }
     }
+  }
+  // Transport EOF alone does not prove the answer finished. Keep the legacy
+  // usage-only EOF contract and explicit finish reasons, but surface a truncated
+  // response through the existing partial-history and explicit-retry path.
+  if (!finishReason && !lastUsage) {
+    throw new ProxyTransportError(
+      "앗, 응답이 중간에 끊겼어요. 다시 한 번 보내볼까요?",
+      chunkRequestId ?? res.headers.get("x-request-id") ?? undefined,
+    );
   }
   return result();
 }
@@ -455,7 +490,10 @@ export async function verifyActivity(args: FetchProfileArgs, expectedId: string)
       signal:AbortSignal.timeout(15_000),
     });
   } catch { throw new ProxyTransportError(profileNetworkFailure().friendly); }
-  if (!response.ok) throw new ProxyTransportError(classifyProfileFailure(response.status,await response.text()).friendly);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ProxyTransportError(classifyProfileFailure(response.status,text).friendly, response.headers.get('x-request-id') ?? undefined, responseEvidence(response.status,text));
+  }
   let body: {activity_id?:string};
   try { body=await response.json() as {activity_id?:string}; } catch { throw new ProxyTransportError('서버의 활동 응답을 읽지 못했습니다. 다시 연결해 주세요.'); }
   if (!expectedId || body.activity_id !== expectedId) throw new ProxyTransportError('활동 정보가 바뀌었습니다. 참여 코드를 다시 확인해 주세요.');

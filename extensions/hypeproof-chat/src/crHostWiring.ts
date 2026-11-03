@@ -18,6 +18,7 @@
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import { MCP_CR_BROWSER_TOOLS } from "./browserMcp.ts";
 import { elementContextText, type ElementContext } from "./elementPick.ts";
+import { chooseStyle, resetAll, styleEditRequestText, styleTweakSendText, styleTweakView, type ChooseResult, type StyleTweakState } from "./styleTweak.ts";
 import {
   browserResultParts,
   browserResultEventText,
@@ -61,14 +62,20 @@ export type { ElementPreview };
 
 export class ElementQueue {
   private pending: QueuedElement | null = null;
+  /** CGP-ART-R-006 — the style tweak offered for the queued element, bound to it. */
+  private tweakState: StyleTweakState | null = null;
+  /** Counts picks, so a read started for an earlier pick of the same node is refused. */
+  private pickSeq = 0;
 
-  /** Queue a picked element, replacing any earlier one; returns its preview. */
+  /** Queue a picked element, replacing any earlier one (and its tweak); returns its preview. */
   attach(ctx: ElementContext, opts: { imagesAllowed: boolean }): ElementPreview {
     this.pending = {
       context: ctx,
       text: elementContextText(ctx),
       image: ctx.crop && opts.imagesAllowed ? `data:${ctx.crop.mimeType};base64,${ctx.crop.data}` : null,
     };
+    this.tweakState = null;
+    this.pickSeq++;
     return this.preview()!;
   }
 
@@ -76,6 +83,8 @@ export class ElementQueue {
   clear(): boolean {
     const had = this.pending !== null;
     this.pending = null;
+    this.tweakState = null;
+    this.pickSeq++;
     return had;
   }
 
@@ -83,9 +92,51 @@ export class ElementQueue {
     return this.pending !== null;
   }
 
+  /** The current pick's number; an offer must carry it back (`setTweak`). */
+  get pick(): number {
+    return this.pickSeq;
+  }
+
+  /** CGP-ART-R-006 — offer a tweak; only for the pick it was read for, still queued, same node and document. */
+  setTweak(state: StyleTweakState, pick: number = this.pickSeq): boolean {
+    const c = this.pending?.context;
+    if (pick !== this.pickSeq || !c || c.backendNodeId !== state.backendNodeId || c.documentGeneration !== state.documentGeneration) return false;
+    this.tweakState = state;
+    return true;
+  }
+
+  get tweak(): StyleTweakState | null {
+    return this.tweakState;
+  }
+
+  /** The learner's choice, validated against the offer (stale id or a value outside it is refused). */
+  chooseStyle(id: unknown, prop: unknown, value: unknown): ChooseResult {
+    const r = chooseStyle(this.tweakState, id, prop, value);
+    if (r.ok) this.tweakState = r.state;
+    return r;
+  }
+
+  /** Drop every choice but keep the offer (the page changed under the preview). */
+  resetTweak(): void {
+    if (this.tweakState) this.tweakState = resetAll(this.tweakState);
+  }
+
+  /**
+   * The text a send carries for the element. The style request rides only on the tweak's own
+   * send: the learner's message is exactly the summary of the current choices. Any other
+   * message carries the element alone, as the chip shows it.
+   */
+  private textFor(userText: string | null): string {
+    const e = this.pending;
+    if (!e) return "";
+    const request = styleEditRequestText(this.tweakState);
+    return request && userText !== null && userText === styleTweakSendText(this.tweakState) ? `${e.text}\n\n${request}` : e.text;
+  }
+
   preview(): ElementPreview | null {
     const e = this.pending;
     if (!e) return null;
+    const view = styleTweakView(this.tweakState);
     return {
       ref: e.context.ref,
       tag: e.context.tag,
@@ -93,13 +144,19 @@ export class ElementQueue {
       source: e.context.source === "unmapped" ? "unmapped" : `${e.context.source.file}:${e.context.source.line}`,
       sentText: e.text,
       imageDataUrl: e.image,
+      styleTweak: view && { ...view, requestText: view.changes ? this.textFor(view.sendText) : "" },
     };
   }
 
-  /** Consume the queued element for this turn; with the switch off nothing is sent (and it is dropped). */
-  take(switchOn: boolean): QueuedElement | null {
-    const e = this.pending;
+  /**
+   * Consume the queued element for this turn; with the switch off nothing is sent (and it is
+   * dropped). `userText` is the learner's message: the style request goes only with the tweak send.
+   */
+  take(switchOn: boolean, userText: string | null = null): QueuedElement | null {
+    const e = this.pending ? { ...this.pending, text: this.textFor(userText) } : null;
     this.pending = null;
+    this.tweakState = null;
+    this.pickSeq++;
     return switchOn ? e : null;
   }
 }

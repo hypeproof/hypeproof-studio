@@ -3,12 +3,21 @@
 // start.css (StartPage) → styles.css (last, explicit import).
 import "./tokens.css";
 import { AutomationSurface } from "./AutomationSurface";
+import "./focusGeometry.css";
 import { LocalReview } from "./LocalReview";
 import { createRoot } from "react-dom/client";
 import { StartPage } from "./StartPage";
 import { App } from "./App";
+import { installImeHostBarrier } from "./imeGuard";
 import "./styles.css";
+import "./chatDetails.css";
+import "./tooltips.css";
+import { installTooltips } from "./tooltips";
+import "./koreanProse.css";
 
+installImeHostBarrier(document);
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root element");
 createRoot(container).render(document.documentElement.dataset.surface === "automation" ? <AutomationSurface /> : document.documentElement.dataset.surface === "local-review" ? <LocalReview /> : document.documentElement.dataset.surface === "start" ? <StartPage /> : <App />);
+
+installTooltips(document);

@@ -174,7 +174,7 @@ follow-up. Console audit observed External/Testing, two test users, empty brandi
 URLs/domains and empty declared scope tables. The runtime does request scopes;
 an empty console declaration is not absence of granted user permissions.
 
-## Shared runner isolation gate (EA-11, DEC-023)
+## Shared runner isolation gate (EA-11, DEC-026)
 
 Root ran `node --test scripts/google-runner-probe/probe.test.mjs`: six passed.
 These are local safety/contract checks, not live Google identity evidence.
@@ -193,7 +193,7 @@ Studio integration subsequently passed native local and Windows shared-preview
 acceptance on 2026-10-15 (source `ab0a13a7`). Shared-runner live mail delivery
 remains NOT RUN.
 
-## Shared-runner default (DEC-023)
+## Shared-runner default (DEC-026)
 
 The current host uses the packaged `resources/google-shared-runner.json` for
 Apps Script activities and fails closed when it is absent. No workspace setting,

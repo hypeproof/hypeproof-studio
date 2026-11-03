@@ -82,6 +82,8 @@ function deps(gh, root, extra = {}) {
   const c = clock();
   let n = 0;
   const d = {
+    previewVisitor: async () => true,
+    confirmContent: async () => true,
     fetch: gh.fetch,
     sleep: c.sleep,
     now: c.now,
@@ -179,6 +181,24 @@ const tree = (gh, name) => {
   const secret = preflightSite(site({ "index.html": "x", "k.js": "\n\nconst t='ghp_" + "z".repeat(36) + "'" })).issues[0];
   assert.match(secret.message_ko, /k\.js 3번째 줄/);
   assert.doesNotMatch(secret.message_ko, /ghp_/);
+  const budget = 2 * 1024 * 1024;
+  assert.equal(preflightSite(site({ "index.html": "x", "plain.txt": "a".repeat(budget) })).blocked, false, "text at the scan limit is inspected");
+  const padded = "ghp_" + "Z".repeat(36) + "\n" + "a".repeat(budget);
+  const paddedReport = preflightSite(site({ "index.html": "x", "config.json": padded }));
+  assert.equal(paddedReport.blocked, true, "padding cannot turn a secret-bearing file into an allowed upload");
+  assert.ok(paddedReport.issues.some((i) => i.code === "text_unscanned" && i.severity === "block" && i.file === "config.json"));
+  assert.doesNotMatch(JSON.stringify(paddedReport.issues), /ghp_/);
+  assert.equal(preflightSite(site({ "index.html": "x", "photo.jpg": "a".repeat(budget + 1) })).blocked, false, "binary media retain their existing size limit");
+  if (process.platform !== "win32" && process.getuid?.() !== 0) {
+    const unreadable = site({ "index.html": "x", "locked.txt": "private" });
+    const file = path.join(unreadable, "locked.txt");
+    fs.chmodSync(file, 0);
+    try {
+      const denied = preflightSite(unreadable);
+      assert.equal(denied.blocked, true);
+      assert.ok(denied.issues.some((i) => i.code === "text_unscanned" && i.file === "locked.txt"));
+    } finally { fs.chmodSync(file, 0o600); }
+  }
   ok("preflight: blocks preview-works/Pages-breaks and leaks; warns otherwise; never echoes a secret");
 }
 
@@ -418,6 +438,9 @@ const tree = (gh, name) => {
   assert.equal(r.error.code, "preflight_blocked");
   assert.match(r.error.message_ko, /슬래시/);
   assert.equal(gh.state.log.length, 0, "nothing leaves the machine before preflight passes");
+  const padded = await runPublishSite({}, deps(gh, site({ "index.html": "x", "config.json": "ghp_" + "Z".repeat(36) + "\n" + "x".repeat(2 * 1024 * 1024) })));
+  assert.equal(padded.error?.code, "preflight_blocked");
+  assert.equal(gh.state.log.length, 0, "unscanned text blocks before any GitHub request");
   ok("failure: preflight blocks before any request");
 }
 {
@@ -489,7 +512,7 @@ const tree = (gh, name) => {
   const gh = createMockGitHub({ faults: { pagesNeverWorkflow: true } });
   const r = await runPublishSite({}, deps(gh, site(GOOD_SITE)));
   assert.equal(r.error?.code, "pages_not_ready", JSON.stringify(r));
-  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/neo-dental/pages").length, 1 + 12, "the skill's bounded 12 reads");
+  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/neo-dental/pages").length, 2 + 12, "consent lookup plus initial read and bounded 12 retries");
   assert.ok(!gh.state.log.some((l) => l.startsWith("PATCH ")), "the workflow file is NOT pushed when Pages never read back as workflow");
   ok("failure: Pages build_type never becomes workflow → bounded, nothing pushed");
 }
@@ -615,6 +638,37 @@ const tree = (gh, name) => {
   finish();
   assert.equal(await a.done, true);
 
+  // Native Windows gh 2.102.0 copies the code itself and prints a different label.
+  // Both fresh sign-in and scope refresh must deliver that code, even across chunks.
+  for (const signedIn of [false, true]) {
+    let finishWindows;
+    const windows = fakeExec((file, args, child, cb) => {
+      if (file === "gh") return cb(Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }), "", "");
+      if (args[0] === "--version") return cb(null, "gh version 2.102.0 (2026-09-30)\r\n", "");
+      if (args[1] === "token") return cb(new Error("not logged in"), "", "no oauth token found for github.com");
+      finishWindows = () => cb(null, "", "");
+      child.stderr.emit("data", "diagnostic ABCD-1234\r\n! One-time code (BAD1-0000) copied into clipboard\r\n! One-time code (WIN1-");
+      child.stderr.emit("data", "TEST) copied to clip");
+      child.stderr.emit("data", "board\r\nOpen this URL to continue in your web browser: https://github.com/login/device\r\n");
+    });
+    const provider = createGhCliAuthProvider({ execFile: windows.fn, platform: "win32" });
+    assert.equal(await provider.token(), null);
+    const pending = await provider.beginUserAuth(["repo", "workflow"], signedIn);
+    assert.equal(pending.code, "WIN1-TEST", "ignore unrelated and malformed labels; join fragmented CRLF output");
+    assert.equal(pending.verificationUri, "https://github.com/login/device");
+    const bin = "C:\\Program Files\\GitHub CLI\\gh.exe";
+    assert.equal(await provider.bin(), bin, "resolve Windows installation when gh is absent from PATH");
+    assert.deepEqual(windows.calls.at(-1), signedIn
+      ? [bin, "auth", "refresh", "--hostname", "github.com", "--scopes", "repo,workflow"]
+      : [bin, "auth", "login", "--web", "--hostname", "github.com", "--git-protocol", "https", "--scopes", "repo,workflow"]);
+    const joined = await provider.beginUserAuth(["repo", "workflow"], signedIn);
+    assert.equal(joined.joined, true);
+    assert.equal(joined.code, pending.code);
+    finishWindows();
+    assert.equal(await pending.done, true);
+  }
+  ok("gh provider: Windows clipboard output, fragmented CRLF, fresh login and scope refresh");
+
   const garbage = fakeExec((file, args, child, cb) => (args[0] === "--version" ? cb(null, "gh version 2.89.0", "") : cb(null, "To get started with GitHub CLI, please run: gh auth login\n", "")));
   assert.equal(await createGhCliAuthProvider({ execFile: garbage.fn, platform: "darwin" }).token(), null, "non-token output is not a token");
   ok("gh provider: resolution, token, device code parse, joined flow");
@@ -625,3 +679,75 @@ assert.equal(gitBlobSha(new TextEncoder().encode("hello\n")), "ce013625030ba8dba
 ok("git blob sha matches `git hash-object`");
 
 console.log("\n✓ publish-site smoke 통과");
+
+// REQ-KNOW-09: every publish, including a registered repository, asks about this frozen set.
+{
+ const gh=createMockGitHub(),root=site({...GOOD_SITE,'notes/private.txt':'PRIVATE','wiki/memory.md':'MEMORY'});let shown;
+ const no=await runPublishSite({},deps(gh,root,{confirmContent:async m=>(shown=m,false)}));
+ assert.equal(no.error?.code,'declined');assert.ok(!gh.state.log.some(l=>/^(POST|PUT|PATCH)/.test(l)));
+ assert.ok(shown.recipient.includes('github.com/octo-clinic/neo-dental'));assert.ok(shown.recipient.includes(new URL(gh.pagesBase()).host));assert.ok(shown.items.every(i=>!i.name.startsWith('notes/')&&!i.name.startsWith('wiki/')));
+ assert.equal(shown.items.find(i=>i.name==='index.html').bytes,Buffer.byteLength(GOOD_SITE['index.html']));
+ const absent=await runPublishSite({},deps(gh,root,{confirmContent:undefined}));assert.equal(absent.error?.code,'declined');
+ const yes=await runPublishSite({stage:'save'},deps(gh,root,{confirmContent:async()=>{fs.writeFileSync(path.join(root,'index.html'),'UNAPPROVED');return true;}}));
+ assert.equal(yes.ok,true);assert.ok(!JSON.stringify([...gh.repo('neo-dental').blobs.values()]).includes('UNAPPROVED'));
+ ok('per-send content consent: Cancel/default refuse before writes; private stores excluded; frozen bytes');
+}
+
+// REQ-KNOW-51 (CGP-KNOW-R-033): site publish has no learner file choice, so memory files never go; the dialog names them.
+{
+ const gh=createMockGitHub(),root=site({...GOOD_SITE,'notes/private.txt':'PRIVATE','wiki/memory.md':'MEMORY','journal/today.md':'JOURNAL'});let shown;
+ assert.equal((await runPublishSite({},deps(gh,root,{privateDirectories:['journal'],confirmContent:async m=>(shown=m,false)}))).error?.code,'declined');
+ assert.equal(shown.notes.length,1);assert.match(shown.notes[0],/^AI 기억 파일은 올리지 않아요: /);
+ assert.deepEqual(shown.notes[0].replace('AI 기억 파일은 올리지 않아요: ','').split(', ').sort(),['journal','notes','wiki'],'every memory store left out is named, the configured one included');
+ assert.ok(shown.items.every(i=>!/^(notes|wiki|journal)\//.test(i.name)),'no memory path among the items');
+ const yes=await runPublishSite({stage:'save'},deps(gh,root,{privateDirectories:['journal'],confirmContent:async()=>true}));assert.equal(yes.ok,true);
+ assert.deepEqual([...tree(gh,'neo-dental').keys()].filter(p=>/^(notes|wiki|journal)\//.test(p)),[],'pushed tree: no memory path');
+ const plain=createMockGitHub();let plainShown;await runPublishSite({},deps(plain,site({...GOOD_SITE}),{confirmContent:async m=>(plainShown=m,false)}));
+ assert.equal(plainShown.notes,undefined,'no memory store: no note');
+ ok('site publish: memory stores left out and named in the confirmation');
+}
+
+// CGP-KNOW-R-007: destination disclosure follows publication, not classroom membership.
+{
+ const gh=createMockGitHub(), root=site(GOOD_SITE); let shown;
+ const capture=async m=>(shown=m,false);
+ await runPublishSite({stage:'save'},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental');
+ assert.equal(shown.public,true,'save still exposes a public repository');
+ await runPublishSite({},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,`GitHub · github.com/octo-clinic/neo-dental · 사이트 ${new URL(gh.pagesBase()).host}`);assert.equal(shown.public,true,'site publish declares a public audience');
+ await runPublishSite({custom_domain:'www.example.org'},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental · 사이트 www.example.org');
+ await runPublishSite({custom_domain:'www.example.org'},deps(gh,root));
+ await runPublishSite({},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental · 사이트 www.example.org','existing CNAME is disclosed on republish');assert.equal(shown.public,true,'republishing an already-public site asks the public step again');
+ ok('public destination hosts: save, planned Pages, custom domain and existing CNAME');
+}
+
+// REQ-KNOW-63: preview is before every remote write, including an already registered repo.
+{
+ for (const previewVisitor of [undefined, async () => false]) {
+  const gh=createMockGitHub();
+  const result=await runPublishSite({},deps(gh,site({...GOOD_SITE}),{previewVisitor}));
+  assert.equal(result.error?.code,'declined');
+  assert.equal(gh.state.log.filter(l=>/^(POST|PUT|PATCH|DELETE)/.test(l)).length,0,'preview refusal makes no GitHub mutation');
+ }
+ // The preview names the same destination as the send consent, repository included, plus the
+ // public audience; and its files are exactly the pushed tree, generated files included.
+ for (const input of [{}, {custom_domain:'www.neodental.co.kr'}]) {
+  let preview, shown;
+  const gh=createMockGitHub();
+  const r=await runPublishSite(input,deps(gh,site({...GOOD_SITE}),{previewVisitor:async s=>{preview={...s,files:s.files.map(f=>({path:f.path,data:Buffer.from(f.data)}))};return true;},confirmContent:async m=>{shown=m;return true;}}));
+  assert.equal(r.ok,true,JSON.stringify(r.error));
+  assert.equal(preview.entry,'index.html');
+  assert.match(shown.recipient,/github\.com\/octo-clinic\/neo-dental/);
+  assert.equal(preview.audience,`${shown.recipient} · 인터넷의 누구나`,'preview audience = consent recipient (repo and host) + public');
+  const pushed=tree(gh,'neo-dental');
+  const previewed=new Map(preview.files.map(f=>[f.path,f.data.toString('utf8')]));
+  assert.deepEqual([...previewed.keys()].sort(),[...pushed.keys()].sort(),'previewed paths = pushed tree');
+  for(const [path,text] of pushed)assert.equal(previewed.get(path),text,`previewed bytes = pushed bytes: ${path}`);
+  for(const generated of ['.nojekyll','.github/workflows/pages.yml','hps-build.txt',...(input.custom_domain?['CNAME']:[])])assert.ok([...previewed.keys()].some(p=>p.startsWith(generated)),`generated file previewed: ${generated}`);
+  assert.deepEqual(shown.items.map(i=>i.name).sort(),[...pushed.keys()].sort(),'consent list = pushed tree');
+ }
+ console.log('PASS visitor preview: site gate, audience equals recipient, files equal pushed tree');
+}

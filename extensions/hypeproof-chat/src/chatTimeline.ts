@@ -1,3 +1,4 @@
+import { elapsedWorkLabel } from './turnElapsed.ts';
 // #503 — 대화와 툴 실행을 **하나의 타임라인**으로 합치는 순수 리듀서.
 //
 // 왜 이 모듈이 별도로 있나: 같은 규칙을 두 곳이 써야 한다.
@@ -15,17 +16,26 @@
 // 한 메시지가 텍스트와 툴을 동시에 내는 일이 없다. 즉 도착순 = 발생순이다.
 
 import type { ChatMessage } from "./protocol";
+import { storedDenialNotice } from "./denialNotice.ts";
 
 export interface ToolEntry {
+  shell?: import("./shellPresentation").ShellPresentation;
   id: string;
   icon: string;
   label: string;
   state: "running" | "done" | "error";
+  denial?: import("./denialNotice").DenialNotice;
   /** SDK 가 실어 보낸 자기 시각(ISO). 없으면 호출자가 시계를 준다. */
   at?: number;
+  /** REQ-STUDIO-LONG-STEP-HINT — the step in learner words and when it began (host clock, ms). */
+  step?: string;
+  since?: number;
 }
 
 export interface TimelineState {
+  /** Optional monotonic clock supplied by a live observer; history alone cannot start a timer. */
+  startedClock?: number;
+  startedIndex?: number;
   /** 화면에 그려지는 단일 타임라인. user / assistant / tool 이 섞여 있다. */
   items: ChatMessage[];
   /** 지금 텍스트가 쌓이고 있는 어시스턴트 말풍선. 닫혀 있으면 null. */
@@ -62,7 +72,7 @@ function toolMessage(e: ToolEntry, now: number): ChatMessage {
     role: "tool",
     content: "",
     createdAt: e.at ?? now,
-    tool: { icon: e.icon, label: e.label, state: e.state },
+    tool: { ...(e.shell ? { shell: e.shell } : {}), icon: e.icon, label: e.label, state: e.state, ...(e.step !== undefined && e.since !== undefined ? { step: e.step, since: e.since } : {}) },
   };
 }
 
@@ -93,9 +103,12 @@ export function timelineStart(
   state: TimelineState,
   messageId: string,
   now: number,
+  clock?: number,
 ): TimelineState {
   return {
     ...state,
+    startedClock: clock,
+    startedIndex: clock === undefined ? undefined : state.items.length,
     items: [
       ...state.items,
       { id: messageId, role: "assistant", content: "", createdAt: now },
@@ -163,7 +176,8 @@ export function timelineTool(
   if (state.pending.some((p) => p.id === entry.id)) {
     return {
       ...state,
-      pending: state.pending.map((p) => (p.id === entry.id ? { ...p, ...entry } : p)),
+      // A step ends when an update carries none (REQ-STUDIO-LONG-STEP-HINT).
+      pending: state.pending.map((p) => (p.id === entry.id ? { ...p, ...entry, step: entry.step, since: entry.since } : p)),
     };
   }
   const open = state.openId ? state.items.find((m) => m.id === state.openId) : undefined;
@@ -198,9 +212,23 @@ export function timelineCitations(
 }
 
 /** 턴 종료. 펜스가 끝내 안 닫혔더라도 보류분은 반드시 흘려 넣는다. */
-export function timelineEnd(state: TimelineState, now: number): TimelineState {
-  const flushed = flushPending(state, now);
-  return { ...closeOpen(flushed), baseId: null, seg: 0 };
+export function timelineEnd(state: TimelineState, now: number, outcome?: 'done' | 'stopped', clock?: number): TimelineState {
+  const closed = closeOpen(flushPending(state, now));
+  const ms = state.startedClock !== undefined && clock !== undefined ? clock - state.startedClock : NaN;
+  const label = outcome ? elapsedWorkLabel(ms, outcome) : null;
+  const items = [...closed.items];
+  if (state.baseId && outcome && label) {
+    if (state.startedIndex !== undefined && items.length > state.startedIndex) {
+      const last = items.length - 1;
+      items[last] = { ...items[last], elapsedTurn: { anchorId: items[last].id, ms, outcome } };
+    } else {
+      const id = `${state.baseId}#elapsed`;
+      items.push({ id, role: 'system', content: '', createdAt: now,
+        elapsedTurn: { anchorId: id, ms, outcome } });
+    }
+  }
+  const { startedClock: _clock, startedIndex: _index, ...rest } = closed;
+  return { ...rest, items, baseId: null, seg: 0 };
 }
 
 /** 히스토리 교체 / Clear — 타임라인을 통째로 갈아끼운다. */
@@ -214,7 +242,11 @@ export function timelineReset(items: ChatMessage[]): TimelineState {
  * `role:"tool"` 이 섞여 들어가면 400 이거나 조용히 무시된다.
  */
 export function modelHistory(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => m.role === "user" || m.role === "assistant");
+  return messages.filter((m) => m.role === "user" || m.role === "assistant").map(message => {
+    if (!message.elapsedTurn) return message;
+    const { elapsedTurn: _receipt, ...spoken } = message;
+    return spoken;
+  });
 }
 
 /**
@@ -237,6 +269,13 @@ export function hasActivityThisTurn(messages: ChatMessage[]): boolean {
 }
 
 /**
+ * Spoken messages (user/assistant) kept in workspaceState and sent to the model per turn.
+ * Lives here, not in chatPanelHelpers, so the webview can derive the trim marker
+ * (contextTrim.ts) from the same number without importing host code.
+ */
+export const HISTORY_MAX = 200;
+
+/**
  * #503 — 히스토리 상한. 툴 줄이 기록의 일부가 되면서 "메시지 200개"를 그대로
  * 세면 SDK 턴 한 번이 수십 줄을 먹어 **대화가 서너 턴 만에 잘려 나간다**. 상한은
  * 지금까지대로 **말한 것(user/assistant) 기준**으로 세고, 그 구간에 섞인 툴 줄은
@@ -255,6 +294,6 @@ export function clampTimeline(items: ChatMessage[], maxSpoken: number): ChatMess
     }
   }
   let out = items.slice(cut);
-  while (out.length > 0 && out[0].role === "tool") out = out.slice(1);
+  while (out.length > 0 && out[0].role === "tool" && !(out[0].tool?.state === "error" && storedDenialNotice(out[0].tool.label))) out = out.slice(1);
   return out;
 }

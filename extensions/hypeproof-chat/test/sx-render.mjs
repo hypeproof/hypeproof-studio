@@ -71,6 +71,8 @@ export const COMPONENTS = {
   // open, which a server render never is). Both live on props: the goal the host sent, this view's note, the fields.
   StudentGoal: { from: "./src/StudentGoal.tsx", exportName: "StudentGoal" },
   GoalEditor: { from: "./src/StudentGoal.tsx", exportName: "GoalEditor" },
+  // REQ-L12 ⑫ (ot-conversation-carryover) — the trial carry-over offer and read-only transcript.
+  TrialCarryover: { from: "./src/TrialCarryover.tsx", exportName: "TrialCarryover" },
 };
 
 /**

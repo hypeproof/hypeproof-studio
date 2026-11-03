@@ -133,7 +133,7 @@ const MEMORY = {
     const anchor = "    if (!r.ok) return none(msg(r));\n";
     assert.ok(original.includes(anchor), "control: the planting anchor is in the real view()");
     const planted = original
-      .replace(/from "\.\/(galleryPublish|memoryView)\.ts"/g, (_m, f) => `from ${JSON.stringify(new URL(`${f}.ts`, src).href)}`)
+      .replace(/from "\.\/(galleryPublish|memoryView|denialSource)\.ts"/g, (_m, f) => `from ${JSON.stringify(new URL(`${f}.ts`, src).href)}`)
       .replace(anchor, `${anchor}    for (const t of ((this.ports as any).chatMessages?.() ?? []) as string[]) r.body.memory.decisions.push({ id: "chat-" + t, statement: t, actor: "student", shown_as: "team_decision", no_evidence: true, decided_at: 0, resulting_version_id: null, affected_deck_slides: [], evidence: [], assumptions: [] });\n`);
     writeFileSync(join(dir, "memorySession.ts"), planted);
     const { MemorySession: Planted } = await import(pathToFileURL(join(dir, "memorySession.ts")).href);
@@ -192,7 +192,7 @@ if (!status.available) {
   assert.match(text, /돈 내는 사람 \(가정\)/);
   assert.match(text, /혼자 주문 완료: 3세션 \(실제 기록 3개\) · 연습·가상 기록은 세지 않았어요/);
   assert.match(text, /AI 제안 \(팀 결정 아님\) · 버튼을 키운다/, "the timeline names an AI suggestion as such");
-  const off = await renderComponent("MemoryPanel", props({ available: false, memory: null, diff: null, notice: "이 수업에서는 프로젝트 기억을 쓸 수 없어요." }));
+  const off = await renderComponent("MemoryPanel", props({ available: false, memory: null, diff: null, notice: "이 수업에서는 프로젝트 기억을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." }));
   assert.doesNotMatch(off, /memory-decision/);
   // Negative control through the real panel: an answer that mislabels the AI suggestion as the
   // team's decision is drawn as such, and the check above would catch it.

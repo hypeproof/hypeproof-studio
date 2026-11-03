@@ -1,10 +1,30 @@
+# Dispatch only since 2026-10-19: Studio releases are Mac only for now
+# (config/release-platforms.json). A v* tag push no longer starts this build,
+# and release-cut dispatches only the configured platforms. Run it by hand:
+#   gh workflow run build-windows.yml --ref <tag>        # attach Windows packages to that release draft
+#   gh workflow run build-windows.yml --ref main         # artifact only, no release upload
+# To ship Windows again, add "win32-x64" to config/release-platforms.json; the
+# unified acceptance and mirror gates then require the Windows packages again.
+# See docs/dev/fast-mac-release.md.
 name: Build Windows
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch or tag to build"
+        description: "Ref to build (default: workflow ref; release-cut passes the full candidate SHA)"
+        required: false
+        default: ""
+      candidate_sha:
+        description: "Expected full candidate SHA; must equal ref, checkout and publication tag"
+        required: false
+        default: ""
+      managed_draft:
+        description: "Build final-version bytes into an RC draft; stop before acceptance and publication"
+        type: boolean
+        default: false
+      release_version:
+        description: "Managed draft only: final vX.Y.Z matching the workflow's vX.Y.Z-rc.N tag"
         required: false
         default: ""
       # dag.yaml task D / #676 — mirror of build-mac.yml. Only meaningful
@@ -15,9 +35,6 @@ on:
         description: "Publish even if a class is live (stable tag refs only; recorded in the job summary)"
         type: boolean
         default: false
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write # create/upload the GitHub Release on tag builds
@@ -56,7 +73,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref_name }}
+          ref: ${{ inputs.candidate_sha || inputs.ref || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -75,6 +92,16 @@ jobs:
           # not the floating "22.x", so Windows builds are reproducible against
           # the same toolchain as Mac.
           node-version: "22.22.1"
+
+      - name: Verify candidate and resolve build identity
+        id: contract
+        shell: bash
+        env:
+          HPS_BUILD_REF: ${{ inputs.ref }}
+          HPS_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HPS_MANAGED_DRAFT: ${{ inputs.managed_draft }}
+          HPS_RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node scripts/release/build-contract.mjs preflight "$RUNNER_TEMP/hps-build-contract.json"
 
       # dag.yaml task D (#676) — live-class release freeze, fail-fast half.
       # Same contract as build-mac.yml: a stable `v*` tag publishes a
@@ -148,25 +175,6 @@ jobs:
             echo "CI_BUILD=$CI_BUILD"
           } >> "$GITHUB_ENV"
 
-      - name: Resolve release version
-        shell: bash
-        # On a tag build, the tag (v0.1.10) is the version source of truth and
-        # must reach product.json + the bundled extension's package.json (#206).
-        # Untagged builds fall back to the extension package.json version inside
-        # resolve-version.sh.
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "HPS_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
-            echo "Tag build → HPS_VERSION=${GITHUB_REF#refs/tags/v}"
-          else
-            echo "Untagged build → HPS_VERSION unset, falling back to extension package.json"
-          fi
-          # Real commit for product.json.commit. This Windows job sources
-          # version.sh directly (not run-build.sh), so without this it would hash
-          # an empty RELEASE_VERSION to the adc83b19… placeholder (#206).
-          echo "BUILD_SOURCEVERSION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "BUILD_SOURCEVERSION set to $(git rev-parse HEAD)"
-
       - name: Install brand assets
         shell: bash
         run: bash scripts/install-brand-assets.sh
@@ -195,6 +203,9 @@ jobs:
         working-directory: vscodium-base
         run: |
           set -euo pipefail
+          # Stage the Studio-owned fix through the fork's patch pipeline.
+          cp ../scripts/patches/windows-policy-locales.patch patches/windows/99-hps-policy-locales.patch
+          bash ../scripts/stage-core-patches.sh
           bash prepare_vscode.sh
 
       - name: Apply product.json overrides
@@ -266,24 +277,33 @@ jobs:
           HPS_VER="${HPS_VERSION:-$(bash ../scripts/resolve-version.sh)}"
           if [ -n "$HPS_VER" ] && [ -f "$PKG_PRODUCT" ]; then
             tmp=$(mktemp)
-            jq --arg v "$HPS_VER" '.version = $v' "$PKG_PRODUCT" > "$tmp" && mv "$tmp" "$PKG_PRODUCT"
+            # #3212: no upstream releaseNotesUrl, so no VS Code release notes after an update.
+            jq --arg v "$HPS_VER" '.version = $v | del(.releaseNotesUrl)' "$PKG_PRODUCT" > "$tmp" && mv "$tmp" "$PKG_PRODUCT"
             echo "Stamped packaged product.json.version → $HPS_VER"
           else
             echo "::warning::skipped Windows version stamp (HPS_VER='$HPS_VER', product='$PKG_PRODUCT')"
           fi
+          node ../scripts/patches/core/korean/install.mjs "VSCode-win32-${VSCODE_ARCH}/resources/app"
           bash prepare_assets.sh
 
       - name: Locate artifacts
         id: artifacts
         shell: bash
         working-directory: vscodium-base
+        env:
+          HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           mkdir -p ../dist
+          search_root=.
+          search_depth=4
+          # prepare_assets.sh writes the three distributable packages here.
+          # A whole-tree search also sees unpacked App/helper executables.
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then search_root=assets; search_depth=1; fi
           while IFS= read -r -d '' f; do
             cp -v "$f" ../dist/
-          done < <(find . -maxdepth 4 -type f \( -name '*.exe' -o -name '*.zip' \) -print0)
+          done < <(find "$search_root" -maxdepth "$search_depth" -type f \( -name '*.exe' -o -name '*.zip' \) -print0)
           ls -la ../dist || true
           if ! find ../dist -type f \( -name '*.exe' -o -name '*.zip' \) | grep -q .; then
             echo "::error::Windows build produced no .exe or .zip artifacts"
@@ -454,6 +474,37 @@ jobs:
 
           Write-Host "HypeProof Studio.exe exited cleanly during launch smoke."
 
+      - name: Record managed draft artifact identity
+        if: steps.contract.outputs.managed_draft == 'true'
+        shell: bash
+        run: |
+          node scripts/release/build-contract.mjs record "$RUNNER_TEMP/hps-build-contract.json" \
+            win32-x64 dist "$RUNNER_TEMP/hps-smoke"
+
+      # studio#3396 item 3 — the packaged webview must not loop on Windows metrics. On 2026-11-02 a
+      # Windows seat on v2026.1029.0 hit React #185 in the composer's auto-resize: Windows draws
+      # classic scrollbars, which the measure depended on. This runs the composer width sweep against
+      # the webview THIS build packaged (not the source), in headless Chrome with the runner's own
+      # Segoe UI / Malgun Gothic and classic scrollbars. A #185, the error card, or a held layout
+      # loop fails the build, so the release cannot be promoted. Budget: at most 10 minutes per
+      # release (cost-first). Korean and English only, 2 px steps where the composer turns
+      # multi-line, 20 px above, stop at the first failure; emoji and code drafts stay in the PR smoke.
+      - name: Composer layout-loop gate (packaged webview)
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          HEADLESS_CHROMIUM: C:\Program Files\Google\Chrome\Application\chrome.exe
+          FOCUS_REQUIRE_BROWSER: "1"
+          COMPOSER_METRICS: native
+          COMPOSER_DRAFTS: ko,en
+          COMPOSER_RANGES: 280-640:2,660-1200:20
+          COMPOSER_MAX_FAILURES: "1"
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "hps-smoke"
+          $env:COMPOSER_WEBVIEW_DIST = Join-Path $smokeRoot "resources/app/extensions/hypeproof-chat/webview-ui/dist"
+          if (-not (Test-Path (Join-Path $env:COMPOSER_WEBVIEW_DIST "index.html"))) { throw "packaged webview not found at $env:COMPOSER_WEBVIEW_DIST" }
+          node extensions/hypeproof-chat/test/composer-expand-oscillation-browser.smoke.mjs
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -482,27 +533,31 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
         run: |
           set -euo pipefail
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then
+            node scripts/release/build-contract.mjs check-upload "$RUNNER_TEMP/hps-build-contract.json" \
+              win32-x64 dist "$RUNNER_TEMP/hps-smoke"
+          fi
           TAG="${GITHUB_REF#refs/tags/}"
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
-          gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
-            --generate-notes --verify-tag $PRERELEASE_FLAG 2>/dev/null || true
-          # Both builds may create the draft. Never replace bytes of a public release.
-          [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
           shopt -s nullglob
           assets=(dist/*.zip dist/*.exe)
           (( ${#assets[@]} > 0 )) || exit 1
-          gh release upload "$TAG" "${assets[@]}"
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then assets+=(dist/draft-build-win32-x64.json); fi
+          node scripts/release/release-draft.mjs --tag "$TAG" $PRERELEASE_FLAG "${assets[@]}"
 
       # workflow_dispatch is explicit because GITHUB_TOKEN release events do
       # not trigger another workflow. Both builders dispatch; concurrency serializes.
       - name: Trigger both-activity release acceptance
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.contract.outputs.auto_acceptance == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVERRIDE_LIVE_SESSION: ${{ inputs.override_live_session || false }}
         run: |
           set -euo pipefail
           gh workflow run verify-unified-release.yml --repo "$GITHUB_REPOSITORY" \
-            -f tag="${GITHUB_REF#refs/tags/}"
+            -f tag="${GITHUB_REF#refs/tags/}" \
+            -f override_live_session="${OVERRIDE_LIVE_SESSION}"

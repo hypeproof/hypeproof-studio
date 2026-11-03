@@ -1,6 +1,6 @@
 # 체험·수업 통합 수용 테스트
 
-2026-09-10 · [Intent/Epic #915](https://github.com/jayleekr/hypeproof-studio/issues/915)
+2026-09-10 · [Intent/Epic #915](https://github.com/hypeproof/hypeproof-studio/issues/915)
 상태: 전체 수용은 미완료. 아래 US-T01~21의 전체 판정과 부분 실행은 구분한다. 문서 검사·기존 단위 테스트의
 통과를 이 시나리오의 PASS로 옮기지 않는다. 제품 책임 Jay (`jayleekr`).
 
@@ -33,7 +33,7 @@
 |---|---|---|---|---|---|
 | US-T01 | US-01 | 같은 OS의 최종 App으로 체험과 수업을 각각 실행. 실패 대조는 체험 바로가기만 옛 사본/주입 번들로 변경. | 실제 실행 경로·App/확장 버전·번들 hash가 의도한 공통 산출물과 일치. 다른 사본을 전달 PASS로 인정하지 않음. | 패키지 + 실제 OS | NOT RUN |
 | US-T02 | US-02 | 두 활동의 공개 후보 Service 연결 확인. 실패 대조는 trial만 stale localhost, 다른 origin, health 버전 미확인. | 실제 endpoint·revision과 인증된 profile을 확인. 개발/미확인을 공개 최신 상태로 판정하지 않음. | API + 실제 App | NOT RUN |
-| US-T03 | US-03 | 최초 실행/재방문/활동 없음에서 키보드와 클릭으로 시작·이어가기. 좁은 창과 확대 글자도 검사. | 숨은 팔레트 없이 접근, 올바른 포커스·읽기 순서·loading/오류. 활동 선택만으로 LLM 요청이나 index.html 생성 없음. | React + Electron | NOT RUN |
+| US-T03 | US-03 | 최초 실행/재방문/활동 없음에서 키보드와 클릭으로 시작·이어가기. 파일 보기를 선택해 Explorer를 열고, 일반 파일과 브라우저 미리보기(활성·비활성 탭)를 연 뒤 프로젝트 전환·창 새로고침·앱 재시작. 좁은 창과 확대 글자도 검사. | 숨은 팔레트 없이 접근, 올바른 포커스·읽기 순서·loading/오류. Explorer는 각 진입에서 닫혀 있고 파일 보기를 직접 선택하면 열린다. 이전 브라우저 미리보기는 닫히고 이후 미리보기 요청은 열리며 일반 파일은 보존된다. 탭 닫기 실패가 앱 진입을 막지 않는다. 활동 선택만으로 LLM 요청이나 index.html 생성 없음. | React + Electron | NOT RUN |
 | US-T04 | US-04 | 기존 체험·수업 코드 성공, 잘못된 코드 실패. 공개 발급에는 합성 승인 정책으로 중복 클릭·응답 유실·같은 사용자의 재진입·미확정 정책 대조. | 유효한 본인 권한만 발급/연결, 중복·한도 초기화 없음. 미확정/실패는 실제 이유와 다음 행동, 성공처럼 진입하지 않음. | Service + UI + 앱 | NOT RUN |
 | US-T05 | US-05 | 다른 이름·coach·권한·비용 출처를 가진 체험/A/B를 연결. profile 누락·사용량 stale 응답 대조. | 현재 활동과 다음 실행의 지원 범위·출처를 설명할 수 있는 표시. 누락은 미확인, 이전 활동 이름/사용량을 현재 값으로 보이지 않음. | 계약 + React + 앱 | NOT RUN |
 | US-T06 | US-06 | 본인 A/B 정상 선택. 타 사용자 ID/다른 수업/폐기 자격/동일 이름의 다른 사용자로 UI·API 변조. | 서버에서 거부, B 세션·쓰기·예산 예약이 생기지 않음. 정상 A/B 권한은 작동. | API 실패/정상 + 앱 | NOT RUN |
@@ -52,6 +52,7 @@
 | US-T19 | US-01/14/15 | 지원 OS별 최종 App 후보×현재/후보 Service, 공개 App×후보 Service를 체험/수업 각각 실행. 고정 Module v1 중 v2 발행, 미지원 조합 대조. | 지원 조합 진입·실제 대화·파일/도구·전환·복귀 성공. 미지원은 원인 표시, v1 수업 유지. Windows 설치/실행 미관측은 BLOCKED. | 패키지 + 실제 OS + API | NOT RUN |
 | US-T20 | US-16 | 배포 기록의 정상/누락 revision/옛 번들/다른 endpoint 대조. 비운영 후보에서 App/Service/Module 각 정상 복귀와 데이터 재열기. | 관측 대상과 증거 일치, 머지/빌드/공개/사용자 적용 구분. 복귀 버전에서 파일·참여 호환 확인. 예전 기록 재라벨링으로 PASS 생성 금지. | 릴리스 기록 + 실제 복구 | NOT RUN |
 | US-T21 | US-03/05/10/17 | 동의한 신규 사용자 및 체험 후 수업 사용자에게 자기 과제로 시작·전환·복귀·다음 실행 출처 설명 요청. 진행자 도움은 기록. | 잘못된 앱/활동 선택과 도움 필요 지점을 실제 행동으로 기록. 기술 PASS와 사용자 이해를 별도 판단, 자동 페르소나를 사람 관측으로 쓰지 않음. | 사람 사용성 관찰 | NOT RUN |
+| US-T22 | US-01 | 릴리스 자산 목록과 바이트 검사(`scripts/release/test/sdk-seed-assets.test.mjs`, 로컬 fixture registry, 네트워크 없음). 정상 대조는 두 플랫폼 seed+sha256+manifest. 실패 대조는 seed 누락·sha256 누락·다른 SDK 버전 seed·바이트 변조·sha512 불일치·플랫폼 바이너리 없는 tarball, 그리고 App 안에 native 패키지/seed가 든 합성 번들(`verify-branding.sh`). | 정상은 PASS, 각 실패 대조는 해당 사유로 FAIL. 공개 릴리스의 실제 자산 목록은 `verify-unified-release.yml`이 draft 해제 전에 같은 판정기로 확인한다. 단위 PASS를 공개 체험 실행 PASS로 옮기지 않는다. | 스크립트 + 릴리스 워크플로 | 단위 PASS / 릴리스 NOT RUN |
 
 ## 실행 순서와 비용
 

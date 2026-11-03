@@ -449,7 +449,7 @@ if [ "$SKIP_STUDIO" != "1" ]; then
       ok "Studio app: /Applications/HypeProof Studio.app"
     else
       fail "Studio app not found in /Applications" \
-           "re-run the installer:  curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install.sh | bash"
+           "re-run the installer:  curl -fsSL https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install.sh | bash"
     fi
   else
     info "Studio desktop app check skipped on $OS (no first-class build / path varies)"

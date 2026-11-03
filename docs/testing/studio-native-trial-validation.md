@@ -181,7 +181,7 @@ merge, Worker 배포, App 배포, Lab 안내 배포를 각각 기록한다.
 
 ```json
 {
-  "epic": "jayleekr/hypeproof-studio#744",
+  "epic": "hypeproof/hypeproof-studio#744",
   "commit": "실행한 SHA",
   "app_version": "실제 확인값",
   "sdk_version": "실제 확인값",

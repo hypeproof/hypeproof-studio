@@ -177,7 +177,7 @@ const { worldEngineUrls, filterCoachVisibleFiles, openWorldNotice, WORLD_ARCHIVE
   );
   assert.ok(
     provider.indexOf("archiveCurrentWorld(checked.html") <
-      provider.indexOf("await this.saveGameToWorkspace(checked.html)"),
+      provider.indexOf("await this.saveGameToWorkspace(checked.html, opts?.streamId)"),
     "보관이 저장보다 뒤에 있으면 보관본이 새 세상이 된다",
   );
   assert.ok(
@@ -194,12 +194,12 @@ const { worldEngineUrls, filterCoachVisibleFiles, openWorldNotice, WORLD_ARCHIVE
   // 갈아 끼우면 보관본에 **다음 세상** 스프라이트가 들어가 어차피 깨진다.
   assert.ok(
     provider.indexOf("archiveCurrentWorld(checked.html") <
-      provider.indexOf("if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs)"),
+      provider.indexOf("if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs, opts?.streamId)"),
     "엔진 교체가 보관보다 앞서면 보관본에 다음 세상 엔진이 들어간다",
   );
   assert.ok(
-    provider.indexOf("if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs)") <
-      provider.indexOf("await this.saveGameToWorkspace(checked.html)"),
+    provider.indexOf("if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs, opts?.streamId)") <
+      provider.indexOf("await this.saveGameToWorkspace(checked.html, opts?.streamId)"),
     "엔진과 index.html 은 한 짝으로 붙어서 저장돼야 한다",
   );
   // (d) 연타로 세상 열기가 겹치면 보관·index.html 쓰기가 경합한다.

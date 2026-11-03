@@ -21,16 +21,16 @@ construct audit 후에 한다. 공개 이름은 개념 검토 후 범위별로 �
 
 | 추적 | 사용자가 얻는 결과 | 요구·검증 | 완료 경계 |
 |---|---|---|---|
-| [Lab #777](https://github.com/jayleekr/hypeprooflab/issues/777) | 고정 개수 대신 반증 가능한 Human Capability Research 철학 | normative/empirical 분리, 후보 정의·원자료 보존 | Jay의 개념 채택과 문서 정합성. 사람 연구 완료와 별개 |
-| [Lab #778](https://github.com/jayleekr/hypeprooflab/issues/778) | 후보별 근거와 기존 지표 감사 | 13항목 dossier, 5축 상태, keep/merge/split 등 판정 | 실제 문헌·지표 전수 검토. 현재 계획 문서로 완료하지 않음 |
-| [#852](https://github.com/jayleekr/hypeproof-studio/issues/852) | 과거 기록을 지키며 새 해석을 구분 | HC-01~08, CA-T15~18 | Service/App/export 호환·actor/버전 실증 |
-| [#853](https://github.com/jayleekr/hypeproof-studio/issues/853) | 수업·개인·기관·BYO의 포함 범위와 출처 | AB-01~05/14/18 | 합성 계약 게시·권한·갱신·결합 사례 |
-| [#854](https://github.com/jayleekr/hypeproof-studio/issues/854) | 실제 시도별 비용과 미정산 사유 | AB-07~10/15/16 | SDK/proxy/유료 도구/지연 보고·청구 대조 |
-| [#855](https://github.com/jayleekr/hypeproof-studio/issues/855) | 공용 예산과 개인 상한의 강제 집행 | AB-04/06/09/10/13/15/18 | 실제 D1 경쟁·장애/복구·이전 앱 우회 검증 |
-| [#856](https://github.com/jayleekr/hypeproof-studio/issues/856), 기존 [#847](https://github.com/jayleekr/hypeproof-studio/issues/847) | 강사·운영자 예산과 학생 이용 안내 연결 | AB-11~13/15/17 | 실제 Mac/Chalk 캡처·좁은 화면·권한 음성 대조 |
-| [#857](https://github.com/jayleekr/hypeproof-studio/issues/857) | 검증된 운영 범위와 포함량 결정 근거 | CA-T01~15 통합 + 실제 수업 비용 관측 | 가격 정본·배포·운영 인수. 학생 역량 성장을 확정하지 않음 |
-| [Lab #779](https://github.com/jayleekr/hypeprooflab/issues/779) | 독립 평가·전이·유지의 실제 연구 근거 | CA-T19, Lab 연구 프로토콜 | 실제 사람·원판정/불일치; 미실행 연구는 미실행 |
-| [Lab #780](https://github.com/jayleekr/hypeprooflab/issues/780) | 제품·공개 표현·registry의 일관된 채택 | 참조 인벤토리/분류/최신 impact wave | 승인 범위별 채택·실제 화면 검증. 일괄 rename 금지 |
+| [Lab #777](https://github.com/hypeproof/hypeprooflab/issues/777) | 고정 개수 대신 반증 가능한 Human Capability Research 철학 | normative/empirical 분리, 후보 정의·원자료 보존 | Jay의 개념 채택과 문서 정합성. 사람 연구 완료와 별개 |
+| [Lab #778](https://github.com/hypeproof/hypeprooflab/issues/778) | 후보별 근거와 기존 지표 감사 | 13항목 dossier, 5축 상태, keep/merge/split 등 판정 | 실제 문헌·지표 전수 검토. 현재 계획 문서로 완료하지 않음 |
+| [#852](https://github.com/hypeproof/hypeproof-studio/issues/852) | 과거 기록을 지키며 새 해석을 구분 | HC-01~08, CA-T15~18 | Service/App/export 호환·actor/버전 실증 |
+| [#853](https://github.com/hypeproof/hypeproof-studio/issues/853) | 수업·개인·기관·BYO의 포함 범위와 출처 | AB-01~05/14/18 | 합성 계약 게시·권한·갱신·결합 사례 |
+| [#854](https://github.com/hypeproof/hypeproof-studio/issues/854) | 실제 시도별 비용과 미정산 사유 | AB-07~10/15/16 | SDK/proxy/유료 도구/지연 보고·청구 대조 |
+| [#855](https://github.com/hypeproof/hypeproof-studio/issues/855) | 공용 예산과 개인 상한의 강제 집행 | AB-04/06/09/10/13/15/18 | 실제 D1 경쟁·장애/복구·이전 앱 우회 검증 |
+| [#856](https://github.com/hypeproof/hypeproof-studio/issues/856), 기존 [#847](https://github.com/hypeproof/hypeproof-studio/issues/847) | 강사·운영자 예산과 학생 이용 안내 연결 | AB-11~13/15/17 | 실제 Mac/Chalk 캡처·좁은 화면·권한 음성 대조 |
+| [#857](https://github.com/hypeproof/hypeproof-studio/issues/857) | 검증된 운영 범위와 포함량 결정 근거 | CA-T01~15 통합 + 실제 수업 비용 관측 | 가격 정본·배포·운영 인수. 학생 역량 성장을 확정하지 않음 |
+| [Lab #779](https://github.com/hypeproof/hypeprooflab/issues/779) | 독립 평가·전이·유지의 실제 연구 근거 | CA-T19, Lab 연구 프로토콜 | 실제 사람·원판정/불일치; 미실행 연구는 미실행 |
+| [Lab #780](https://github.com/hypeproof/hypeprooflab/issues/780) | 제품·공개 표현·registry의 일관된 채택 | 참조 인벤토리/분류/최신 impact wave | 승인 범위별 채택·실제 화면 검증. 일괄 rename 금지 |
 
 ## 현재 구현과 구분
 

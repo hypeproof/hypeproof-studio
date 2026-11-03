@@ -23,7 +23,7 @@ async function fails(overrides, response, pattern, options) {
   await assert.rejects(readFile(dest), { code: 'ENOENT' });
 }
 try {
-  for (const url of ['http://github.com/x', 'https://github.com.evil.test/x', 'https://github.com/other/repo/releases/download/x', 'https://user@github.com/jayleekr/hypeproof-studio-releases/releases/download/x']) {
+  for (const url of ['http://github.com/x', 'https://github.com.evil.test/x', 'https://github.com/other/repo/releases/download/x', 'https://user@github.com/hypeproof/hypeproof-studio-releases/releases/download/x']) {
     assert.equal(trustedUpdateUrl(url), false);
   }
   assert.equal(trustedUpdateUrl(asset.downloadUrl), true);

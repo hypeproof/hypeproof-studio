@@ -1,6 +1,6 @@
 // Credential changes must not inherit a previously authenticated instructor session.
 import assert from "node:assert/strict";
-import { InstructorModeManager } from "../src/chalk/instructorMode.ts";
+import { InstructorModeManager } from "../src/instructorMode.ts";
 const originalFetch = globalThis.fetch;
 try {
   for (const failure of ["network", "500", "429"]) {

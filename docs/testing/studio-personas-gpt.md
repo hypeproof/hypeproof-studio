@@ -1,6 +1,6 @@
 # 실사용 흐름 페르소나와 GPT 실습
 
-관련: [#828](https://github.com/jayleekr/hypeproof-studio/issues/828),
+관련: [#828](https://github.com/hypeproof/hypeproof-studio/issues/828),
 [NAT-03](../requirements/studio-native-trial.md), [REQ-M36/M39](../studio-requirements.md).
 기존 Product Intent를 유지한다. 다음 행동에 정보가 충분하면 바로 실행하고,
 부족할 때만 필요한 질문을 한다. 별도 Intent 설문을 통과 조건으로 만들지 않는다.
@@ -120,14 +120,14 @@ Claude는 Haiku로 사용자 5턴에 upstream `/v1/messages` 10회를 사용했�
 
 ### 공개 원본 앱·배포 추가 검증 (#831)
 
-[#829](https://github.com/jayleekr/hypeproof-studio/pull/829)는 CI 17개 통과 후
+[#829](https://github.com/hypeproof/hypeproof-studio/pull/829)는 CI 17개 통과 후
 `78f322102462c344b7ec1c9f60c686af79cfbed9`로 머지했다.
-[Service 배포](https://github.com/jayleekr/hypeproof-studio/actions/runs/34277612112)는
+[Service 배포](https://github.com/hypeproof/hypeproof-studio/actions/runs/34277612112)는
 운영 세션 보호를 유지하고 production 검증과 SDK canary 계약까지 성공했다.
 운영 health의 버전은 `w0.0.0-dev+78f3221`, Cloudflare 버전은
 `1fef6446-45f0-48cd-82b4-ba1c857c7577`이다. 이 canary 검증 호출은 위 로컬 Claude 10회와 별도다.
 
-기존 공개 [v0.1.56](https://github.com/jayleekr/hypeproof-studio-releases/releases/tag/v0.1.56)을
+기존 공개 [v0.1.56](https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.56)을
 내려받아 원본 그대로 실행했다. 새 전체 앱 빌드는 하지 않았다.
 Mac ZIP의 SHA-256 `96d4cb31c3845370dc5ba8794a0bfd7682063579b0549bc94b4c19cfb9ad9526`은
 소스 릴리스와 공개 미러의 값에 일치했다. 앱 코드 SHA는 `f5939d9cf6bbf42588eacd370e2faf9cde7c53bc`다.
@@ -145,7 +145,7 @@ Mac ZIP의 SHA-256 `96d4cb31c3845370dc5ba8794a0bfd7682063579b0549bc94b4c19cfb9ad
 기존 CLI 확인 1회는 별도다. 원본 결과와 무효 판정 근거를 삭제하거나 덮어쓰지 않았다.
 
 운영 시크릿 이름 목록에서도 OpenAI API 키 부재를 확인했다. 공개 GPT API 인수는
-[#830](https://github.com/jayleekr/hypeproof-studio/issues/830)에서 키 연결을 기다린다.
+[#830](https://github.com/hypeproof/hypeproof-studio/issues/830)에서 키 연결을 기다린다.
 이 공개 앱 검사의 GPT upstream 역시 로컬 Codex 구독 연결이므로 공개 API 검증은 아니다.
 
 ### 재현 기록

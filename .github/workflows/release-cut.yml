@@ -5,9 +5,19 @@
 # create (mode=create only, write permissions): scripts/release/create.mjs creates what the plan says —
 # the rc tag, the rc builds, branch release/<version> and the release PR, or the smoke-failure issue.
 # The v tag and publication come after a member approves the release PR (approval workflow, follow-up).
+#
+# Daily schedule (docs/operations/release-casebook/README.md): 17:00 KST every day. The gate job
+# (scripts/release/daily-gate.mjs) skips the run when no app path changed since the last stable tag
+# or a class is live (the same check-live-sessions.mjs freeze the app builds use, fail closed), and
+# otherwise cuts with mode=create. A manual dispatch keeps its inputs and defaults to dry-run.
+# Pause the schedule: set the repository variable RELEASE_CUT_DAILY=off
+# (gh variable set RELEASE_CUT_DAILY --body off --repo hypeproof/hypeproof-studio); =dry-run keeps
+# the daily cut as a dry run only; delete the variable or set it to create to resume.
 name: release-cut
 
 on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC = 17:00 KST
   workflow_dispatch:
     inputs:
       mode:
@@ -27,6 +37,10 @@ on:
         description: "create only: cut even when a smoke check is NOT_RUN (the PR shows it)"
         type: boolean
         default: false
+      managed_draft:
+        description: "create only: build final-version bytes into RC drafts; no automatic acceptance or publication"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,7 +53,82 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dry-run:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      mode: ${{ steps.decide.outputs.mode }}
+      alarm: ${{ steps.decide.outputs.alarm }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Scheduled runs only. A failed or blocked check leaves decision empty or "blocked", and the
+      # gate skips the cut: a class that might be live is never cut over.
+      - name: Live-class freeze (scheduled run)
+        id: live
+        if: github.event_name == 'schedule'
+        env:
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_CONTEXT: daily release cut (pre-cut gate)
+        run: node scripts/check-live-sessions.mjs || true
+
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
+          DAILY: ${{ vars.RELEASE_CUT_DAILY }}
+          LIVE: ${{ steps.live.outputs.decision }}
+          LIVE_REASON: ${{ steps.live.outputs.reason }}
+        run: node scripts/release/daily-gate.mjs --event "$EVENT" --mode "${MODE:-dry-run}" --switch "${DAILY:-}" --live "${LIVE:-}" --live-reason "${LIVE_REASON:-}"
+
+  # A skip the gate cannot explain (the live check failed, or app changes have waited too long for an rc
+  # tag) must be loud: one open issue that each failing day updates, an optional #alerts post, and a red run.
+  alarm:
+    needs: gate
+    if: needs.gate.outputs.alarm == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the release-cut alarm issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REASON: ${{ needs.gate.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Daily release cut skipped: needs attention"
+          body="$(date -u +%F) — ${REASON}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"The gate skips the cut until this is fixed. See scripts/release/daily-gate.mjs."
+          n=$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then gh issue comment "$n" --repo "$REPO" --body "$body"; else gh issue create --repo "$REPO" --title "$title" --body "$body"; fi
+      - name: Post to #alerts (when the webhook secret is set)
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
+          REASON: ${{ needs.gate.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK_ALERTS not set; issue only"; exit 0; fi
+          jq -n --arg c "Studio daily release cut skipped: ${REASON} ${RUN_URL}" '{content:$c}' | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
+      - name: Fail the run
+        env:
+          REASON: ${{ needs.gate.outputs.reason }}
+        run: |
+          echo "::error::Daily release cut skipped: ${REASON}"
+          exit 1
+
+  cut:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -54,19 +143,19 @@ jobs:
           node-version: "22"
 
       - name: Controls
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs
 
       - name: Release cut
         id: cut
         env:
           GH_TOKEN: ${{ github.token }}
           # Smoke credentials, scoped to non-production cohorts only (docs/dev/06-release-process.md#smoke).
-          # S4 opens a 1 h session on canary-internal; S3 reads its issuer when it is implemented.
+          # S4 opens a 1 h canary session; S3 opens/closes only an idle synthetic acceptance cohort.
           # Without a secret the check reports NOT_RUN. The admin password is never passed here.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
-          MODE: ${{ inputs.mode }}
-          CANDIDATE: ${{ inputs.candidate }}
+          MODE: ${{ needs.gate.outputs.mode }}
+          CANDIDATE: ${{ inputs.candidate || 'origin/main' }}
           SINCE: ${{ inputs.since }}
         run: |
           set +e
@@ -87,6 +176,28 @@ jobs:
           if [[ $code -eq 1 && "$MODE" != create ]]; then exit 1; fi
           exit 0
 
+      # Safety net for job cancellation (SIGKILL skips the trap in run-sdk-contract.sh).
+      # S4 calls run-sdk-contract.sh via spawnSync; a hard kill of this runner bypasses
+      # that script's EXIT trap and leaves canary-internal open. The close endpoint
+      # accepts a call without a jti and ends any open session on the cohort.
+      - name: Close canary session (always)
+        if: always()
+        env:
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+        run: |
+          [[ -z "${HPS_CANARY_ISSUER:-}" ]] && exit 0
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            -X POST "https://api.hypeproof-ai.xyz/admin/cohorts/canary-internal/session/close" \
+            -H "Authorization: Bearer $HPS_CANARY_ISSUER" \
+            -H 'content-type: application/json' \
+            -d '{}' 2>/dev/null)"
+          if [[ "$code" == "200" ]]; then
+            echo "canary session closed (or already closed — endpoint is idempotent)"
+          else
+            echo "::error::canary session close returned HTTP $code"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,8 +207,8 @@ jobs:
           retention-days: 14
 
   create:
-    needs: dry-run
-    if: inputs.mode == 'create' && needs.dry-run.result == 'success'
+    needs: [gate, cut]
+    if: needs.gate.outputs.mode == 'create' && needs.cut.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -119,10 +230,22 @@ jobs:
           name: release-cut
           path: ${{ runner.temp }}/release-cut
 
+      # The release PR is opened with the org bot App, not the workflow token: the org keeps
+      # "Allow GitHub Actions to create and approve pull requests" off, because that switch
+      # also lets workflows approve PRs. An App-opened PR also starts its pull_request checks.
+      - name: Bot token (hypeproof-org-lab-bot)
+        id: bot
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+
       - name: Create from the plan
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
+          MANAGED_DRAFT: ${{ inputs.managed_draft }}
         run: |
           set -euo pipefail
           plan="$RUNNER_TEMP/release-cut/plan.json"
@@ -132,4 +255,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           flags=()
           if [[ "$ACCEPT_NOT_RUN" == true ]]; then flags+=(--accept-not-run); fi
+          if [[ "$MANAGED_DRAFT" == true ]]; then flags+=(--managed-draft); fi
           node scripts/release/create.mjs --plan "$plan" "${flags[@]}"

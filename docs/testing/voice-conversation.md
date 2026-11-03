@@ -17,7 +17,7 @@ PASS/FAIL/BLOCKED/NOT RUN을 분리하고 사람 평가에서 근거가 부족�
 - **수정 전 FAIL, 합성 소스 실행**: `node e2e/voice-conversation/probe-lifecycle.mjs`.
   Node 24.4.1에서 실제 voiceProbe.ts를 실행했다. 즉시 마이크 grant는 track ended로 통과했다.
   4000ms 타임아웃 이후 grant는 timeout 보고 뒤 track live로 남아 해제 단언에 실패했다.
-  [Claude 수정 인계](https://github.com/jayleekr/hypeproof-studio/issues/897#issuecomment-5621701562).
+  [Claude 수정 인계](https://github.com/hypeproof/hypeproof-studio/issues/897#issuecomment-5621701562).
   이 결과는 VO-T09 수명 관리의 선행 결함이며 실제 장치 재현 또는 VO-T09 전체 실행을 뜻하지 않는다.
 - **수정 후 PASS, 합성 소스 실행**: #929의 `c6a943b` 및 후속 `c0a2232`에서
   동일한 `probe-lifecycle.mjs`를 독립 실행해 immediate → granted/ended,
@@ -33,7 +33,7 @@ PASS/FAIL/BLOCKED/NOT RUN을 분리하고 사람 평가에서 근거가 부족�
   거부되는 것은 아니다. V4가 이 범위와 비용 집행을 결정해야 한다.
 - OfflineAudioContext 렌더링은 실제 스피커 출력/오디오 왕복 증거가 아니다.
 
-## V0 — [[Voice V0] 실제 Studio 음성 타당성·통합 계약·요구사항 연결](https://github.com/jayleekr/hypeproof-studio/issues/897)
+## V0 — [[Voice V0] 실제 Studio 음성 타당성·통합 계약·요구사항 연결](https://github.com/hypeproof/hypeproof-studio/issues/897)
 
 ### VO-T01 → VO-01 · 실기
 실제 macOS/Windows 설치본에서 허용·거부·장치 없음·권한 철회를 재현한다. 오디오 왕복과 해제 증거를 남긴다. 브라우저 데모 성공을 설치본 PASS로 대체하지 않는다.
@@ -60,7 +60,7 @@ PASS/FAIL/BLOCKED/NOT RUN을 분리하고 사람 평가에서 근거가 부족�
 
 상태: NOT RUN.
 
-## V1 — [[Voice V1] 양방향 음성 세션·말 끊기·마이크 수명 관리](https://github.com/jayleekr/hypeproof-studio/issues/898)
+## V1 — [[Voice V1] 양방향 음성 세션·말 끊기·마이크 수명 관리](https://github.com/hypeproof/hypeproof-studio/issues/898)
 
 ### VO-T06 → VO-06 · 통합/실기
 시작 전/종료 후 캡처·전송 없음, 시작 후 실제 오디오 왕복, 상태와 장치 동작 일치를 관측한다. 장식용 파형만으로 PASS하지 않는다.
@@ -87,7 +87,7 @@ PASS/FAIL/BLOCKED/NOT RUN을 분리하고 사람 평가에서 근거가 부족�
 
 상태: NOT RUN.
 
-## V2 — [[Voice V2] 목적 구체화·화면 맥락·음성/텍스트 연속성](https://github.com/jayleekr/hypeproof-studio/issues/899)
+## V2 — [[Voice V2] 목적 구체화·화면 맥락·음성/텍스트 연속성](https://github.com/hypeproof/hypeproof-studio/issues/899)
 
 ### VO-T11 → VO-11 · 행동/실기
 명확한 요청, 모호한 요청, 질문 건너뛰기, 목적 변경 네 시나리오를 실행한다. 충분한 정보인데 인터뷰를 반복하거나 건너뛰기를 막으면 실패다.
@@ -114,7 +114,7 @@ AI의 잘못된 대상 제안→사용자 정정→브리프 저장→재열기�
 
 상태: NOT RUN.
 
-## V3 — [[Voice V3] 도구 실행·승인·중단·재연결의 일관성](https://github.com/jayleekr/hypeproof-studio/issues/900)
+## V3 — [[Voice V3] 도구 실행·승인·중단·재연결의 일관성](https://github.com/hypeproof/hypeproof-studio/issues/900)
 
 ### VO-T16 → VO-16 · 권한/통합
 허용된 정상 도구, 금지 도구, 타인 작업 ID, 프롬프트를 통한 권한 확대를 비교한다. UI 없이 직접 호출해도 서버가 차단해야 한다.
@@ -141,7 +141,7 @@ AI의 잘못된 대상 제안→사용자 정정→브리프 저장→재열기�
 
 상태: NOT RUN.
 
-## V4 — [[Voice V4] 인증·음성 원가·예산 집행·기록 경계](https://github.com/jayleekr/hypeproof-studio/issues/901)
+## V4 — [[Voice V4] 인증·음성 원가·예산 집행·기록 경계](https://github.com/hypeproof/hypeproof-studio/issues/901)
 
 ### VO-T21 → VO-21 · 권한/통합
 정상/만료/철회/타 사용자/다른 수업/미지원 모델을 검사한다. 탈취된 다른 세션 식별자로 도구나 결과에 접근할 수 없어야 한다.
@@ -168,7 +168,7 @@ AI의 잘못된 대상 제안→사용자 정정→브리프 저장→재열기�
 
 상태: NOT RUN.
 
-## V5 — [[Voice V5] 접근성·실제 설치 앱·지연/안정성 통합 인수](https://github.com/jayleekr/hypeproof-studio/issues/902)
+## V5 — [[Voice V5] 접근성·실제 설치 앱·지연/안정성 통합 인수](https://github.com/hypeproof/hypeproof-studio/issues/902)
 
 ### VO-T26 → VO-26 · 접근성/실기
 키보드만, 화면 읽기, 음성 출력 꺼짐, 200% 확대에서 시작→중단→전환→결과 저장을 실행한다. 포커스 유실/접근 불가 조작은 실패다.
@@ -195,7 +195,7 @@ macOS/Windows 목표 설치본과 내장/헤드셋 조합의 지원 행렬을 �
 
 상태: NOT RUN.
 
-## V6 — [[Voice V6] 사람 파일럿·대조 과제·총원가와 사업 ROI 판정](https://github.com/jayleekr/hypeproof-studio/issues/903)
+## V6 — [[Voice V6] 사람 파일럿·대조 과제·총원가와 사업 ROI 판정](https://github.com/hypeproof/hypeproof-studio/issues/903)
 
 ### VO-T31 → VO-31 · 사람 연구
 동등 난이도 과제와 순서 교차 배정, 동일 자료/모델 조건 또는 차이 기록, 산출물 품질 평가자를 정의한다. 기준은 실행 전에 고정한다.
@@ -244,7 +244,7 @@ usage에서 세션별 known/partial 총원가와 p50/p95를 산출하고 사용 
 - 렌더 콘솔 오류 0. 최초 검증 환경의 React 버전 혼합은 react/react-dom을 동일
   webview 의존성으로 고정한 뒤 재실행했으며 제품 결함으로 세지 않았다.
 
-수정/재검증 추적: [#962](https://github.com/jayleekr/hypeproof-studio/issues/962).
+수정/재검증 추적: [#962](https://github.com/hypeproof/hypeproof-studio/issues/962).
 위는 부분 브라우저 관측이고 아래 전체 VO-T36–47 실기 수용 기준은 NOT RUN으로 유지한다.
 
 

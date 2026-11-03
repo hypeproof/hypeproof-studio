@@ -120,6 +120,7 @@ export async function buildElementContext(
   backendNodeId: number,
   deps: {
     root: string | null;
+    snapshotRefs?: Map<string, number>;
     artifactVersion(url: string): Promise<ArtifactVersionRef>;
     refFor(backendNodeId: number): string | null;
     adopt(refs: Map<string, number>, generation: string): void;
@@ -132,8 +133,8 @@ export async function buildElementContext(
   // The ref: the observation's own label for this node, else a pick-only label in the same
   // table. It is `p<node>`, never `e<N+1>`: a later snapshot with N+1 entries hands out
   // `e<N+1>` for another node, and a stale pick label must be refused, not rebound.
-  const ax = await cdp.send("Accessibility.getFullAXTree", {});
-  const { refs } = buildAxSnapshot(Array.isArray(ax?.nodes) ? ax.nodes : []);
+  const ax = deps.snapshotRefs ? null : await cdp.send("Accessibility.getFullAXTree", {});
+  const refs = new Map(deps.snapshotRefs ?? buildAxSnapshot(Array.isArray(ax?.nodes) ? ax.nodes : []).refs);
   let ref: string | null = null;
   for (const [r, id] of refs) if (id === backendNodeId) ref = r;
   if (!ref) {

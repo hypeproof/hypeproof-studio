@@ -18,6 +18,12 @@ Quick map:
 | Land a code change | DEV-GUIDE §6 (`/hype-open-pr` skill) |
 | Run several issues in parallel | DEV-GUIDE §7 (`claude -w`) |
 
+Before any `npm ci`: use Node 22.22.1, run `gh auth login` with an account that
+can read the private `hypeproof/hypeproof-service`, then run
+`npm run bootstrap:service`. Without that step `npm ci` ends in `ENOENT` on a
+`.private-service-cache/*.tgz` path and does not say why. `scripts/setup.sh`
+runs the same steps; the full order is in [AGENTS.md](./AGENTS.md#install-order).
+
 No terminal? File issues via the web forms
 ([feature](.github/ISSUE_TEMPLATE/feature_request.yml) ·
 [ux](.github/ISSUE_TEMPLATE/ux_suggestion.yml) ·

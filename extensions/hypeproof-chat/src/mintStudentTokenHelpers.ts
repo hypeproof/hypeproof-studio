@@ -1,7 +1,7 @@
 // Pure helpers for the mint-student-token command (#66). Kept vscode-free so
 // they can be unit-tested under plain Node — mirrors updateCheckerHelpers.ts.
 
-import { adminBaseFrom } from "./chalk/serverBase.ts";
+import { adminBaseFrom } from "./serverBase.ts";
 
 export const ISSUER_TOKEN_KEY = "hypeproofChat.issuerToken";
 
@@ -20,7 +20,7 @@ export interface MintResponse {
 
 /** Derive the admin-endpoint origin from the OpenAI-style proxyUrl.
  *  proxyUrl: https://api.hypeproof-ai.xyz/v1   →   https://api.hypeproof-ai.xyz
- *  Delegates to adminBaseFrom (chalk/serverBase.ts) — single canonical impl.
+ *  Delegates to adminBaseFrom (serverBase.ts) — single canonical impl.
  */
 export function adminBaseFor(proxyUrl: string): string {
   return adminBaseFrom(proxyUrl);

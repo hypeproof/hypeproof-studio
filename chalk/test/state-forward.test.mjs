@@ -45,3 +45,13 @@ test('transport failure stays unavailable and does not invent empty state', asyn
     assert.ok(!('roster_size' in body));
   } finally { globalThis.fetch = previous; }
 });
+
+test('an upstream redirect is refused, not followed', async () => {
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: 'https://elsewhere.test/' } });
+  try {
+    const res = await state.fetch(request(), env);
+    assert.equal(res.status, 502);
+    assert.equal((await res.json()).error.type, 'upstream');
+  } finally { globalThis.fetch = previous; }
+});

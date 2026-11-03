@@ -90,7 +90,7 @@ function make(answers, opts = {}) {
 {
   const off = make({}, { on: false });
   assert.equal((await off.session.studentView()).available, false);
-  assert.deepEqual(await off.session.prepare(), { ok: false, message: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+  assert.deepEqual(await off.session.prepare(), { ok: false, message: "이 수업에서는 주간 리뷰를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." });
   assert.deepEqual([off.calls.length, off.completions.length], [0, 0], "switch off: nothing sent, no model call");
   const signedOut = make({}, { token: null });
   assert.equal((await signedOut.session.studentView()).notice, "참여 코드를 먼저 입력해 주세요.");
@@ -293,7 +293,7 @@ if (!status.available) {
   const missing = visibleText(await renderComponent("ReviewPanel", student({ ...REVIEW, status: "missing", stale_sections: [], pack: null })));
   assert.match(missing, /이 팀은 2주차 리뷰를 아직 준비하지 않았어요/);
   // Unavailable (switch off): nothing of a pack is drawn.
-  const off = await renderComponent("ReviewPanel", props({ mode: "student", available: false, notice: "이 수업에서는 주간 리뷰를 쓸 수 없어요.", review: null, teams: null, running: false, timing: null, refused: null }));
+  const off = await renderComponent("ReviewPanel", props({ mode: "student", available: false, notice: "이 수업에서는 주간 리뷰를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요.", review: null, teams: null, running: false, timing: null, refused: null }));
   assert.doesNotMatch(off, /review-section|review-prepare/);
   // The director: overview first, then the pack with the form; a director decision drawn under it.
   const teams = [{ project_id: "prj-1", title: "1팀", cohort_id: "c", members: 2, week: 2, status: "fresh", stale_sections: [], revision: 3, prepared_at: 1 }, { project_id: "prj-2", title: "2팀", cohort_id: "c", members: 2, week: 2, status: "missing", stale_sections: [], revision: null, prepared_at: null }];

@@ -137,13 +137,21 @@ const fromProxy = (id, r) => {
 };
 const viaSdk = await run(fromMcp);
 const viaProxy = await run(fromProxy);
-assert.deepEqual(viaSdk, viaProxy, "the five calls give identical results through both adapters");
+// The two runs capture at different instants. Verify, then normalize only that
+// clock field; URL, state, viewport, image bytes and their digest must still match.
+const normalizeCaptureTime = results => results.map(r => ({ ...r, blocks: r.blocks.map(b => b[0] !== 'text' ? b :
+  ['text', b[1].replace(/<reference-capture>\n([^\n]+)\n<\/reference-capture>/g, (_whole, text) => {
+    const metadata = JSON.parse(text);
+    assert.equal(new Date(metadata.capturedAt).toISOString(), metadata.capturedAt);
+    return '<reference-capture>\n' + JSON.stringify({ ...metadata, capturedAt: 'verified-clock' }) + '\n</reference-capture>';
+  })]) }));
+assert.deepEqual(normalizeCaptureTime(viaSdk), normalizeCaptureTime(viaProxy), "the five calls give identical results through both adapters");
 assert.ok(viaSdk.every((r) => !r.error && r.blocks.some((b) => b[0] === "image")), "and each one carries its observation");
 ok("CR-T03 positive: the same five-call script gives identical tool results through the SDK and proxy adapters");
 
 // Negative control for the parity instrument: an adapter that drops the image is caught.
 const lossy = (id, r) => { const x = fromProxy(id, r); return { ...x, blocks: x.blocks.filter((b) => b[0] !== "image") }; };
-assert.notDeepEqual(await run(lossy), viaSdk);
+assert.notDeepEqual(normalizeCaptureTime(await run(lossy)), normalizeCaptureTime(viaSdk));
 ok("CR-T03 negative: an adapter that changes a result is caught by the parity check");
 
 // ── CR-11 parity: both runtimes refuse an external origin, with the same reason ──

@@ -22,8 +22,8 @@ process.env.HPS_RELEASE_TOKEN = "test-private-release-token";
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 const originalArch = Object.getOwnPropertyDescriptor(process, 'arch');
 const release = {
-  tag_name: 'v0.1.51', html_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/tag/v0.1.51',
-  assets: [{ url: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
+  tag_name: 'v0.1.51', html_url: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.51',
+  assets: [{ url: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
 };
 try {
   Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -55,7 +55,7 @@ try {
     callbacks[0].fn();
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(banners, [], 'network failure must not clear the banner or claim latest');
-    assert.equal(callbacks[1].ms, 24 * 60 * 60_000);
+    assert.equal(callbacks[1].ms, 4 * 60 * 60_000, "#3411: every 4 hours");
     globalThis.fetch = async () => Response.json(release);
     await callbacks[1].fn();
     await new Promise(resolve => setImmediate(resolve));
@@ -66,7 +66,34 @@ try {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(banners.length, count);
   } finally { globalThis.setTimeout = realTimeout; globalThis.setInterval = realInterval; }
-  console.log('PASS actual update orchestrator: check failures, platform, version, assets, cadence, banner retention and disposal');
+
+  // REQ-STUDIO-START-UPDATE-NOTICE — a transient failure retries after 15 minutes (at most 3 per
+  // 4-hour cycle, #3411) instead of waiting for the next check; a success needs no retry, and dispose cancels a pending one.
+  {
+    const timers = [], seen = [], realClear = globalThis.clearTimeout;
+    const flush = () => new Promise(r => setImmediate(r));
+    try {
+      globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms, kind: 'timeout' }); return timers.length; };
+      globalThis.setInterval = (fn, ms) => { timers.push({ fn, ms, kind: 'interval' }); return timers.length; };
+      globalThis.clearTimeout = () => {};
+      globalThis.fetch = async () => new Response('', { status: 503 });
+      const sch = scheduleUpdateChecks({ currentVersion: '0.1.50', context: { globalState: { get: () => ({}) } }, pushUpdateBanner: b => seen.push(b) });
+      timers[0].fn(); await flush(); await flush();
+      const retries = () => timers.filter(t => t.kind === 'timeout' && t.ms === 15 * 60_000);
+      assert.equal(retries().length, 1, 'a transient failure schedules one retry');
+      assert.deepEqual(seen, [], 'the failure still clears nothing (REQ-I11)');
+      for (let i = 0; i < 4; i++) { retries().at(-1).fn(); await flush(); await flush(); }
+      assert.equal(retries().length, 3, 'at most three retries per cycle');
+      timers.find(t => t.kind === 'interval').fn(); await flush(); await flush();
+      assert.equal(retries().length, 4, 'the next daily check starts a new retry budget');
+      globalThis.fetch = async () => Response.json(release);
+      retries().at(-1).fn(); await flush(); await flush();
+      assert.equal(seen.at(-1)?.version, '0.1.51', 'the retry finds the release the failed check missed');
+      assert.equal(retries().length, 4, 'a success schedules no retry');
+      sch.dispose();
+    } finally { globalThis.setTimeout = realTimeout; globalThis.setInterval = realInterval; globalThis.clearTimeout = realClear; }
+  }
+  console.log('PASS actual update orchestrator: check failures, platform, version, assets, cadence, banner retention and disposal, bounded retry after a transient failure');
 } finally {
   globalThis.fetch = originalFetch;
   if (originalToken === undefined) delete process.env.HPS_RELEASE_TOKEN; else process.env.HPS_RELEASE_TOKEN = originalToken;

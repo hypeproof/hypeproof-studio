@@ -254,7 +254,8 @@ test('valid, invalid, network and non-paid controls keep generic authentication 
     assert.equal(r.requests.length, expectedReads, `${label}: paid proof lookup count`);
     assert.equal(r.posts[0].error, error.friendly, `${label}: no refund claim`);
     assert.equal(errorBannerPresentation(r.posts[0].error).title, '잠시 멈춰요', `${label}: generic UI remains`);
-    assert.deepEqual(r.commands, [['hypeproof-chat.setToken']], `${label}: existing generic recovery remains`);
+    assert.deepEqual(r.commands, [], `${label}: recovery is an explicit status-screen action`);
+    assert.equal(r.posts[0].activityUnavailable.cause, 'auth', `${label}: bare 401 never implies expiry`);
     assert.equal(r.secrets.deletes, 0, `${label}: status-only 401 never deletes the code`);
   }
 });

@@ -91,7 +91,7 @@ AE-T36은 종단 연결 검사다. 그 한 번의 성공으로 연결된 요구�
 
 ## 실행 준비와 증거 계약
 
-1. 기존 [native Studio 노트북 실행 절차](https://github.com/jayleekr/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/docs/testing/studio-native-trial-laptop.md)를 먼저 확인한다.
+1. 기존 [native Studio 노트북 실행 절차](https://github.com/hypeproof/hypeproof-studio/blob/7f41c104d9201765a14d8030cca787b612d04794/docs/testing/studio-native-trial-laptop.md)를 먼저 확인한다.
    해당 스크립트를 AE 테스트 실행기라고 부르지 않는다. 설치 앱 확인·실제 모델 연결·증거 디렉터리 관행을 재사용하고 구현 시 소유 테스트에 연결한다.
 2. 강사 2명·성인 학생 2명·서로 다른 수업/프로젝트, 합성 병원 자료, 정상/결함 예제,
    독립 공지 과제를 준비한다. 자료 A/B는 해시로 고정하고 공유·제거 시험에는 합성 식별 표식을 사용한다.
@@ -226,7 +226,7 @@ E7의 고정/제한 선택은 AE-T19~21/25와 기존 모델 정규화 회귀가 
 
 <a id="goal-20261006"></a>
 
-## AE-01 — 내 목표와 수업 기준 · 2026-10-06 ([#554](https://github.com/jayleekr/hypeproof-studio/issues/554))
+## AE-01 — 내 목표와 수업 기준 · 2026-10-06 ([#554](https://github.com/hypeproof/hypeproof-studio/issues/554))
 
 범위: 수업이 서빙된 학생 좌석. 학생이 자기 목표 한 문장과 개인 완료 기준(다섯 줄까지)을 적고 고친다. 저장한 목표는 영역 A의
 수업 완료 조건 아래에 두 줄까지(넘치면 줄임, 전체는 rail에서) 헤더와 함께 고정되고, 기준과 고치는 칸은 영역 A 바로 아래 rail에 접혀 있다.

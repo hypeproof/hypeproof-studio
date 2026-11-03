@@ -5,7 +5,7 @@ doc_type: requirements
 status: canonical
 owner: core
 version: 0.1.5
-last_reviewed: 2026-09-13
+last_reviewed: 2026-10-16
 audience: maintainers
 source_paths:
   - docs/studio-requirements.md
@@ -46,6 +46,7 @@ expanded WAJ packages repeat the gate after implementation. New acceptance is NO
 | REQ-STUDIO-PREVIEW | generated artifact | last HTML opens in sandboxed preview and writes workspace `index.html` | `previewProvider.ts`, `cspBuilder.ts` |
 | REQ-STUDIO-ISSUER | workshop token mint | issuer token is stored, invalidated on auth failure, and never leaked | `mintStudentToken.ts`, `worker/src/routes/admin.ts` |
 | REQ-STUDIO-REPORT | support report | member report includes safe metadata and request id without raw JTI | `reportProblem.ts`, `worker/src/routes/report.ts` |
+| REQ-STUDIO-PROBLEM-REPORT | problem reporting | automatic content-free signal (default off), in-panel report form with explicit conversation opt-in, offer after a repeated failure or frustration; REQ-H10–H12 | `problemReport.ts`, `problemReportHost.ts`, `ProblemReportDialog.tsx`, Service `worker/src/routes/problem-signals.ts` |
 | REQ-STUDIO-RELEASE | installable app | display name, bundle id, data folder, and branding pass verification | `scripts/verify-branding.sh` |
 | REQ-STUDIO-DEV-SUBSCRIPTION | isolated developer runtime | macOS arm64/Windows app copies use explicitly selected CLI subscriptions with local Service authorization, existing approvals, credential isolation and cancellation | `scripts/studio-dev.py`, `src/localRuntime/`, `scripts/test-studio-dev.py`, `test/local-runtime.smoke.mjs` |
 
@@ -233,3 +234,41 @@ three documents and the ledger agree; it does not check implementation.
 This extends the existing #751/#732 work and covers activation, whole-class state,
 command receipts, preserving reset and collection/report/delivery jobs. New
 behavior is planned; existing baseline tests do not mark these scenarios passed.
+
+
+## Feedback delivery contracts (2026-10-16)
+
+The working FB/OC/DL labels refine existing domains; they do not assign new
+approval authority. [The acceptance map](../testing/studio-feedback-owner-console.md)
+binds the frozen T01–T30 criteria to these contracts and the existing US, MU,
+REQ-L5 and AB requirements. The implementation, candidate-app, release and human
+gates remain separate.
+
+| ID | Area | Acceptance criteria | Primary paths |
+|---|---|---|---|
+| REQ-STUDIO-EXTERNAL-INSTRUCTIONS | FB-03: public instruction snapshots | Preview source, immutable revision, license, file hashes and declared capabilities before workspace-local selection. Selected Markdown reaches the current SDK/proxy user turn; update/revert/remove preserve user files. No scripts, hooks, MCP installation, curriculum registration or extra permission. | `externalInstructionSkills.ts`, `externalSkillCommands.ts`, `chatPanelProvider.ts` |
+| REQ-STUDIO-REFERENCE-IMAGES | FB-04: observable reference pixels | Current-turn images reach SDK/proxy as image blocks. Only explicit previous-image requests re-read active-workspace files under `input.image_paste`; denied/missing/linked/unsupported assets produce visible limits. Capture metadata and brief provenance distinguish observation, request, inference and unknown. | `visionInput.ts`, `referenceImages.ts`, `referenceDesign.ts`, `browserControl.ts`, `browserMcp.ts` |
+| REQ-STUDIO-IMAGE-EDIT | FB-05: original-preserving edit | An explicit profile grant and configured Service are required. Keep original bytes, stable job identity and a new validated PNG; show before/after and explicit adopt/restore selection. Cancelled/late/unknown jobs are not auto-applied. Service owns provider, authorization, idempotency, retention and cost evidence. | `imageEditClient.ts`, `imageEditAssets.ts`, `imageEditPng.ts`; candidate `imageEditCommands.ts`; Service `worker/src/routes/image-edits.ts` |
+| REQ-STUDIO-FEEDBACK-EVIDENCE | DL-01/02: reviewable results and manual | A portable HTML report uses frozen criteria, implementation revisions and hashed evidence; absent, stale and blocked results cannot become PASS. The Korean manual states actual controls and recovery paths; a person's observed task is required for human acceptance. | candidate `scripts/feedback-report.py`, `scripts/test-feedback-report.py`, `e2e/feedback-report/run.mjs`; `docs/manual/studio-feedback-20261016/` |
+
+FB-01/02 refine `ST-REQ-UNIFIED` / US-03/07–10/12/18 and the existing activity
+binding design (ADR 0008): each launch and workspace activation starts with
+Explorer closed; the explicit file-view action opens it for that session.
+Restored native browser previews also start closed; later preview requests remain
+available, and normal document/chat restoration is preserved.
+Controlled folder changes use the
+existing destination-bound activity connection and one-shot resume checkpoint.
+`studioNavigation.ts`, `activityConnections.ts` and `workspaceRouting.ts` own
+these App behaviors; no replacement file tree, login or history store is added.
+
+OC-01/02 remain Service-owned model-usage/cost observation under MU-02/04/06,
+REQ-L5 and AB-05–09/15. OC-03 is the Lab member-authenticated Owner read surface
+and the Service's dedicated Owner-read authorization. Existing SSO does not grant
+other administrator routes. Server-unobserved personal-provider traffic and
+missing historical/invoice data remain outside confirmed coverage. See the
+acceptance map for repository paths and executable checks; no duplicate Studio
+cost ledger or authentication authority is introduced here.
+
+CGP-SHELL-R-006 is owned by `REQ-STUDIO-KOREAN-SHELL` in
+`docs/studio-requirements.md`: bundled native Korean labels and learner settings,
+with startup/menu-expression tests and separate packaged-device screenshots.

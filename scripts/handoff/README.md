@@ -1,6 +1,6 @@
 # handoff — 에이전트 인계 큐
 
-> "너한테 온 일" 을 한 군데 모아 둔다. 저장소는 [#896](https://github.com/jayleekr/hypeproof-studio/issues/896) 본문의 구분된 블록.
+> "너한테 온 일" 을 한 군데 모아 둔다. 저장소는 [#896](https://github.com/hypeproof/hypeproof-studio/issues/896) 본문의 구분된 블록.
 
 ## 왜 있나
 
@@ -46,7 +46,7 @@ python3 scripts/handoff/handoff.py selftest
 python3 scripts/handoff/mutate_selftest.py
 ```
 
-`--repo` / `--issue` 로 다른 이슈를 쓸 수 있다(기본값 `jayleekr/hypeproof-studio` #896). `--no-verify` 는 ref 존재 확인을 건너뛴다.
+`--repo` / `--issue` 로 다른 이슈를 쓸 수 있다(기본값 `hypeproof/hypeproof-studio` #896). `--no-verify` 는 ref 존재 확인을 건너뛴다.
 
 ## 규칙
 
@@ -98,7 +98,7 @@ REST `repos/{repo}/issues/{n}` 를 쓴다 — **이 경로는 PR 도 돌려준�
 첫 판은 `gh api` 의 **비정상 종료를 곧 "없다"** 로 읽었다. 그리고 바로 당했다: 같은 세션의 다른 감시 루프가 요청을 몰아쳐 GitHub 이 403 으로 막은 순간, **실재하는 #898 이 "존재하지 않는 지목" 으로 거부됐다.**
 
 ```
-거부: 존재하지 않는 지목 — jayleekr/hypeproof-studio#898      ← #898 은 멀쩡하다
+거부: 존재하지 않는 지목 — hypeproof/hypeproof-studio#898      ← #898 은 멀쩡하다
 ```
 
 검증기가 **자기 고장을 제품 결함으로 보고한** 것이다. `.claude/rules/verification.md` 의 규칙 6(실패가 뜨면 계측기를 먼저 의심한다)과 "401 을 만료로 읽지 마라" 와 같은 계열이고, 하필 그 규칙을 지키라고 만든 도구에서 났다.

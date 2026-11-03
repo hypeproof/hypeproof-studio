@@ -3,7 +3,7 @@
 > 작성일 2026-09-08 · 상태: 활성 · 구현 이슈 #763
 
 `config/traceability.json`은 이 저장소의 정본 위치·고정 ID·상위 연결을 등록한다. 공통 엔진과
-실행 정책은 [hypeproof-harness](https://github.com/jayleekr/hypeproof-harness/issues/120)에 있다.
+실행 정책은 [hypeproof-harness](https://github.com/hypeproof/hypeproof-harness/issues/120)에 있다.
 제품 내용은 이 저장소에 유지하며 공유 규칙을 복사하지 않는다.
 
 - 철학·Mission 변경뿐 아니라 Intent·REQ·Design·Test·Validation 변경도 검토를 시작한다.

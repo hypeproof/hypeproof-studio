@@ -1,0 +1,57 @@
+{"case":"A2 clean AI doc, two participants (trim + final newline), forced Cmd+S"}
+{"ev":"open","f":"a2.html","scheme":"file"}
+{"ev":"change","f":"a2.html","scheme":"file","dirty":false,"n":1,"text":"<p>AI page</p>"}
+{"ev":"change","f":"a2.html","scheme":"file","dirty":true,"n":0,"text":"<p>AI page</p>"}
+{"ev":"change","f":"a2.html","scheme":"file","dirty":true,"n":1,"text":"<p>AI page</p>\n"}
+{"ev":"willSave","f":"a2.html","scheme":"file","dirty":true,"reason":1,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a2.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a2.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"didSave","f":"a2.html","scheme":"file","dirty":false,"text":"<p>AI page</p>\n"}
+{"disk":"<p>AI page</p>\n"}
+{"case":"A3 clean AI doc, one participant (final newline only), forced Cmd+S"}
+{"ev":"open","f":"a3.html","scheme":"file"}
+{"ev":"change","f":"a3.html","scheme":"file","dirty":false,"n":1,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a3.html","scheme":"file","dirty":true,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"willSave","f":"a3.html","scheme":"file","dirty":true,"reason":1,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a3.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a3.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"didSave","f":"a3.html","scheme":"file","dirty":false,"text":"<p>AI page</p>\n"}
+{"disk":"<p>AI page</p>\n"}
+{"case":"P1 single paste then Cmd+S"}
+{"ev":"open","f":"p1.html","scheme":"file"}
+{"ev":"change","f":"p1.html","scheme":"file","dirty":false,"n":1,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"ev":"change","f":"p1.html","scheme":"file","dirty":true,"n":0,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"ev":"willSave","f":"p1.html","scheme":"file","dirty":true,"reason":1,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"ev":"change","f":"p1.html","scheme":"file","dirty":false,"n":0,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"ev":"change","f":"p1.html","scheme":"file","dirty":false,"n":0,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"ev":"didSave","f":"p1.html","scheme":"file","dirty":false,"text":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"disk":"<p>v0</p>\n<b>pasted block</b>\n"}
+{"case":"K1 typed two keystrokes then Cmd+S"}
+{"ev":"open","f":"k1.html","scheme":"file"}
+{"ev":"change","f":"k1.html","scheme":"file","dirty":false,"n":1,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"k1.html","scheme":"file","dirty":true,"n":0,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"k1.html","scheme":"file","dirty":true,"n":1,"text":"ab<p>v0</p>\n"}
+{"ev":"willSave","f":"k1.html","scheme":"file","dirty":true,"reason":1,"text":"ab<p>v0</p>\n"}
+{"ev":"change","f":"k1.html","scheme":"file","dirty":false,"n":0,"text":"ab<p>v0</p>\n"}
+{"ev":"change","f":"k1.html","scheme":"file","dirty":false,"n":0,"text":"ab<p>v0</p>\n"}
+{"ev":"didSave","f":"k1.html","scheme":"file","dirty":false,"text":"ab<p>v0</p>\n"}
+{"disk":"ab<p>v0</p>\n"}
+{"case":"K0 typed one keystroke then Cmd+S"}
+{"ev":"open","f":"k0.html","scheme":"file"}
+{"ev":"change","f":"k0.html","scheme":"file","dirty":false,"n":1,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"k0.html","scheme":"file","dirty":true,"n":0,"text":"a<p>v0</p>\n"}
+{"ev":"willSave","f":"k0.html","scheme":"file","dirty":true,"reason":1,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"k0.html","scheme":"file","dirty":false,"n":0,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"k0.html","scheme":"file","dirty":false,"n":0,"text":"a<p>v0</p>\n"}
+{"ev":"didSave","f":"k0.html","scheme":"file","dirty":false,"text":"a<p>v0</p>\n"}
+{"disk":"a<p>v0</p>\n"}
+{"case":"S1 typed two keystrokes then Save without Formatting"}
+{"ev":"open","f":"s1.html","scheme":"file"}
+{"ev":"change","f":"s1.html","scheme":"file","dirty":false,"n":1,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"s1.html","scheme":"file","dirty":true,"n":0,"text":"a<p>v0</p>\n"}
+{"ev":"change","f":"s1.html","scheme":"file","dirty":true,"n":1,"text":"ab<p>v0</p>\n"}
+{"ev":"change","f":"s1.html","scheme":"file","dirty":false,"n":0,"text":"ab<p>v0</p>\n"}
+{"ev":"change","f":"s1.html","scheme":"file","dirty":false,"n":0,"text":"ab<p>v0</p>\n"}
+{"ev":"didSave","f":"s1.html","scheme":"file","dirty":false,"text":"ab<p>v0</p>\n"}
+{"disk":"ab<p>v0</p>\n"}
+{"done":true}

@@ -1,0 +1,102 @@
+name: Feedback native candidate (dedicated desktop)
+on:
+  pull_request:
+    paths:
+      - 'e2e/feedback-native/**'
+      - 'e2e/feedback-live/**'
+      - '.github/workflows/feedback-candidate.yml'
+      - 'scripts/studio-dev.py'
+      - 'scripts/studio-dev-vendor.mjs'
+  workflow_dispatch:
+    inputs:
+      public_app_tag:
+        description: Published official Studio shell tag (empty uses latest stable)
+        required: false
+        default: ''
+      service_sha:
+        description: Optional assertion of config/service-deployment.json SHA
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: feedback-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.4.1'
+      - name: Require frozen Service revision and read credential
+        id: pin
+        shell: bash
+        env:
+          SERVICE_SHA: ${{ inputs.service_sha }}
+          READ_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: |
+          pin="$(node -e 'const p=require("./config/service-deployment.json");if(p.repository!=="hypeproof/hypeproof-service"||!(/^[a-f0-9]{40}$/.test(p.sha)))process.exit(1);process.stdout.write(p.sha)')"
+          test -z "$SERVICE_SHA" || test "$SERVICE_SHA" = "$pin" || { echo 'BLOCKED: requested SHA differs from deployment pin'; exit 1; }
+          echo "sha=$pin" >> "$GITHUB_OUTPUT"
+          test -n "$READ_TOKEN" || { echo 'BLOCKED: HYPEPROOF_READ_TOKEN missing'; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.pin.outputs.sha }}
+          path: feedback-service
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          persist-credentials: false
+      - name: Bootstrap pinned private packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install extension, webview and actual Service dependencies
+        shell: bash
+        run: |
+          npm ci --prefix extensions/hypeproof-chat
+          npm ci --prefix extensions/hypeproof-chat/webview-ui
+          npm --prefix feedback-service run setup:packages -- worker
+      - name: Install headless browser for render-feedback controls
+        shell: bash
+        run: |
+          npm ci --prefix e2e
+          npm --prefix e2e exec -- playwright install chromium
+      - name: Run background-safe harness regressions
+        run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/*.test.mjs
+      - name: Probe actual Service before desktop preparation
+        shell: bash
+        env:
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
+          HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
+        run: |
+          node --input-type=module -e '
+            import path from "node:path";
+            import {hostedCommands} from "./e2e/feedback-native/hosted-shell.mjs";
+            hostedCommands(process.cwd()).run(process.execPath, ["--experimental-strip-types", "--experimental-sqlite", "e2e/feedback-native/service.mjs", path.join(process.env.RUNNER_TEMP, "feedback-native-private-probe"), "--probe"]);
+          '
+      - name: Prepared candidate on dedicated hosted desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
+          HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
+          PUBLIC_APP_TAG: ${{ inputs.public_app_tag }}
+          HPS_NATIVE_DELAYED_RESUME: '1'
+        run: node e2e/feedback-native/hosted.mjs "$PUBLIC_APP_TAG"
+      - name: Upload partial candidate evidence (no private token directory)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feedback-native-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/feedback-native/evidence
+          if-no-files-found: warn

@@ -137,6 +137,36 @@ B, 기본 수업 복귀 뒤 다시 미션 없음. 완료 조건은 모두 ☐. A
 **NOT RUN**: 실제 모델이 미션을 어떻게 가르치는지, 설치본 Keychain, Windows·여러 기기·학교 네트워크, 운영 활성화, 사용자 시각 인수,
 `observe`·`never` 등의 편집 칸, 나머지 다섯 작업 화면, G3.
 
+<a id="t-47-instruction-diff"></a>
+
+### T-47 확정 전 안내 문구 줄 비교 (VER-03) · 2026-10-20
+
+| ID | 요구 | 시나리오 | 기대 | 결과 · 증거 |
+|---|---|---|---|---|
+| T-47 | VER-03 | 같은 문구, 줄 추가·삭제, 긴 변경 없는 구간, CRLF·끝 줄바꿈·NFD 한글, 공백만 바뀐 줄, 단계 끼워 넣기, 3000줄 수업의 첫·끝 줄 수정과 전부 다른 3000줄을 순수 함수로 비교. 브라우저: 정상 비교, 기준 읽기 502, 기준 응답 형식 이상, 잘린 목록, 완전한 목록의 첫 확정, 비교 뒤 다른 탭에서 확정된 기준, `<img onerror>` 줄 | 같은 문구·줄바꿈·NFC 차이는 줄 0개. Myers 결과는 무작위 2000쌍에서 최소 편집. 3000줄 첫·끝 수정은 3/3줄(전체 교체 아님), 2000줄 초과 변경은 “생략” 표시. 줄마다 “추가:/삭제:” 읽기 말 + `+`/`−` + 밑줄/취소선, 줄 글은 글자 그대로(마크업 아님), 접힘 줄과 펼치기, “공백만 바뀜”. 실패·형식 이상·잘린 목록은 확정 잠금(점선 모양), 완전한 목록의 첫 확정만 잠금 없음. 기준이 바뀌면 확정 요청 없이 거절·재비교, 다시 누르면 `compared_with`로 새 기준을 보냄 | PASS (단위) `chalk/test/instruction-diff.test.mjs` 11건. PASS (브라우저, Service 대역, Chalk 전달 경로 포함) `e2e/chalk-authoring/confirm-diff.mjs` 4건, 1280·800px. 변형 검사: 화면 변형 10종(실패를 준비로, 잠금 조건 제거, `innerHTML`, 읽기 말 제거, 접힘 줄 미표시, 밑줄·취소선 제거, 잘린 목록을 첫 확정으로, 기준 재확인 제거, 공백 표시 제거, 꺼진 모양 제거)과 함수 변형 6종이 각각 시험을 실패시킴. Service의 `compared_with` 검사는 **미구현**, 실제 Service와 강사 실사용 **NOT RUN** |
+
+<a id="t-48-first-run-audience"></a>
+
+### T-48 첫 실행 기본 대상 (CH-01) · 2026-10-26
+
+| ID | 요구 | 시나리오 | 기대 | 결과 · 증거 |
+|---|---|---|---|---|
+| T-48 | CH-01 | 실제 `/authoring` 페이지를 로컬 http 출처로 띄운 headless Chromium: 첫 방문, ‘나중에’ 후 새로고침과 새 강의, 초 3–4 + 과학 + 직접 추가한 과목(양방향·폭 없는 문자·줄 구분 문자 포함, 중복 추가) → 저장 → 새로고침 → 새 강의, 학년대 6종의 단계, 저장된 이상값·깨진 값, 연 초안, 다시 열기 + ‘나중에’, 저장소 없는 출처, 375·1280px | 첫 방문에만 질문. 건너뛰면 대상 ''·`audience_tier` 키 없음. 답하면 대상 `초 3–4 · 과학, 코딩`, 단계 `lv1`, 고칠 수 있고 비운 단계는 키를 보내지 않음. 유아는 단계 없음. 연 초안은 채우지 않고 모르는 단계 값은 보존. 이상값은 아무것도 채우지 않고 깨진 값은 다시 질문. 선택지·버튼 44px 이상, 선택지 글자 14px 이상, 가로 스크롤 없음, ‘나중에’는 바탕과 보이는 테두리가 없는 글자 버튼이고 ‘저장’은 채운 버튼. 두 너비 모두 질문은 정확히 두 개(학년대·과목)이고 둘 다 ‘저장’·‘나중에’와 함께 보이며, 숨은 단계·‘다음’ 버튼·모달이 없고, 포커스한 선택지에 2px 이상 링(DES-CGP-LEARN-14, CGP-LEARN-D-014) | PASS `chalk/test/first-run-audience.browser.mjs` 97건(FOCUS_REQUIRE_BROWSER=1). 변이 5종(글자 버튼 규칙 제거·세 번째 질문·숨은 단계+다음·dialog 역할·포커스 링 제거) 모두 실패. 실제 강사 사용 **NOT RUN** |
+
+<a id="t-49-completion-checklist"></a>
+
+### T-49 완료 조건 도우미 (CGP-LEARN-R-015) · 2026-10-26
+
+| ID | 요구 | 시나리오 | 기대 | 결과 · 증거 |
+|---|---|---|---|---|
+| T-49 | OUT-05, CGP-LEARN-R-015 | 순수 함수: 차이점·점검·점선·관점·추가점검이 든 깨끗한 문장(양성 대조군)과 10점·전각 １０점·점수·만점·등급·우수·미흡·SX-35 라벨·폭 없는/양방향/줄 구분 문자로 쪼갠 말, 낱말 안의 공백·탭·줄바꿈·전각 공백(`만 점`·`등 급`·`점 수`·`우 수`), 백점·열 점 같은 한글 수 + 점, 학점, pts/point(s), 点(음성 대조군). 공백을 모두 지운 글에도 같은 검사를 하며, 차이점 수·점검·관점은 그대로 통과. 도우미: 만들 것 → “…을/를 만들면 끝”, 문장은 거절. 전달기: 걸린 초안 PUT(`만 점` 등 띄어 쓴 말 포함), 깨끗한 초안 PUT, JSON 아닌 본문. 실제 `/authoring` 페이지(헤드리스 Chromium): 저장 검사와 도우미 버튼 | 양성 통과, 음성 거절. 걸린 초안은 422이고 Service 호출 0회, 깨끗한 초안은 그대로 전달. 페이지는 걸린 칸을 가리키며 막고 버튼이 문장을 쓴다 | `chalk/test/completion-checklist.test.mjs` (브라우저가 없으면 NOT RUN, `FOCUS_REQUIRE_BROWSER=1`이면 실패) |
+
+### T-50 완료 조건 목록 표시 (DES-CGP-LEARN-15) · 2026-10-27
+
+| ID | 요구 | 시나리오 | 기대 | 결과 · 증거 |
+|---|---|---|---|---|
+| T-50 | CGP-LEARN-D-015 | 실제 `/authoring` 페이지(헤드리스 Chromium, 1420·375px)에 완료 조건 3개짜리 초안을 연다. 항목마다 `points`·`level`·`score`·`grade` 같은 엉뚱한 키를 심는다(음성 시료). 목록의 계산된 배치·요소·글자를 잰다. 저장 본문과 버전 요약 줄도 본다 | 항목 하나가 목록 행 하나다. 행은 한 열로 위아래로 쌓이고, 행마다 문장 칸과 근거 기록 칸만 있다. 숫자 칸·표·격자·열 머리글·목록 안 머리글이 없다. 행과 고를 수 있는 기록 종류에 점수·수준 말이 없다. 심은 키는 그려지지도 저장되지도 않는다. 요약 줄은 ‘완료 조건 N개’로 개수만 센다 | `chalk/test/checklist-output.browser.mjs` (브라우저가 없으면 NOT RUN, `FOCUS_REQUIRE_BROWSER=1`이면 실패) |
+
 ## 검증 환경과 증거
 
 - 합성 병원 자료와 가상 학생 두 명, 강사 두 명 사용. 운영 데이터·운영 토큰 사용 금지.
@@ -208,7 +238,7 @@ This is local evidence; production deployment and live classroom behavior are se
 
 ## Feedback loop — a person's feedback, the learner's answer, the retrospective and the next draft (#1013) · 2026-10-05
 
-First slice of ledger item `feedback-loop` ([#1013](https://github.com/jayleekr/hypeproof-studio/issues/1013)): AE-42/AE-43 in
+First slice of ledger item `feedback-loop` ([#1013](https://github.com/hypeproof/hypeproof-studio/issues/1013)): AE-42/AE-43 in
 [learning-agent-experience](../requirements/learning-agent-experience.md) and CH-05/EDU-03 here. The requirement rows are not
 changed; this section records what was built and what was run. Everything sits behind the Service switch
 `HPS_FEEDBACK_LOOP=enabled`. Unset (the default), the new routes answer 404 `feedback_loop_unavailable`, no 0039 table is read or
@@ -397,7 +427,7 @@ names the draft revision it started). Share content stays in `classroom_shares` 
 
 ## Feedback loop, slice 2 — the learner's independent-task record and self-reliance (#1013) · 2026-10-06
 
-Second slice of ledger item `feedback-loop` ([#1013](https://github.com/jayleekr/hypeproof-studio/issues/1013)): EDU-04 and EDU-05
+Second slice of ledger item `feedback-loop` ([#1013](https://github.com/hypeproof/hypeproof-studio/issues/1013)): EDU-04 and EDU-05
 here, and the part of AE-42 that reports help use. The requirement rows are not changed. Everything stays behind
 `HPS_FEEDBACK_LOOP=enabled`, and no migration is added: both records live inside the share the learner chooses to send. This
 supersedes slice 1's "EDU-04/05 not built"; the human parts below are still NOT RUN.

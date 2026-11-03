@@ -1,0 +1,174 @@
+{
+ "source": "Recorded 2026-10-18: the vendored Agent SDK 0.3.299 (+ native CLI) against a local gateway answering /v1/messages with the Service bodies recorded from hypeproof-service a08cf7a. rawTypes are the SDK messages as the stream tap summarised them; the SDK then threw sdkThrew.",
+ "scenarios": {
+  "exhausted": {
+   "sdkVersion": "0.3.299",
+   "serviceStatus": 429,
+   "serviceBody": {
+    "error": {
+     "code": "trial_exhausted",
+     "type": "rate_limit_error",
+     "message": "개인 체험의 총 요청 한도에 도달했습니다."
+    }
+   },
+   "rawTypes": [
+    {
+     "type": "system",
+     "subtype": "init",
+     "text": ""
+    },
+    {
+     "type": "assistant",
+     "model": "<synthetic>",
+     "error": "rate_limit",
+     "text": "API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다."
+    },
+    {
+     "type": "result",
+     "subtype": "success",
+     "text": "",
+     "is_error": true
+    }
+   ],
+   "sdkThrew": "Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.",
+   "recordedBubble": "API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.\n\n---\n\n작업이 끝까지 가지 못했어요. **저장된 변경이 있는지 작업 파일을 확인해 주세요.** 다시 한 번 부탁하거나, 무엇을 하려던 것인지 알려주세요 🔧",
+   "recordedBanner": "Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다."
+  },
+  "expired": {
+   "sdkVersion": "0.3.299",
+   "serviceStatus": 403,
+   "serviceBody": {
+    "error": {
+     "code": "trial_expired",
+     "type": "session_window",
+     "message": "개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다."
+    }
+   },
+   "rawTypes": [
+    {
+     "type": "system",
+     "subtype": "init",
+     "text": ""
+    },
+    {
+     "type": "assistant",
+     "model": "<synthetic>",
+     "error": "authentication_failed",
+     "text": "Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다."
+    },
+    {
+     "type": "result",
+     "subtype": "success",
+     "text": "",
+     "is_error": true
+    }
+   ],
+   "sdkThrew": "Claude Code returned an error result: Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.",
+   "recordedBubble": "Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.\n\n---\n\n작업이 끝까지 가지 못했어요. **저장된 변경이 있는지 작업 파일을 확인해 주세요.** 다시 한 번 부탁하거나, 무엇을 하려던 것인지 알려주세요 🔧",
+   "recordedBanner": "Claude Code returned an error result: Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다."
+  },
+  "busy": {
+   "sdkVersion": "0.3.299",
+   "serviceStatus": 429,
+   "serviceBody": {
+    "error": {
+     "code": "trial_busy",
+     "type": "rate_limit_error",
+     "message": "이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요."
+    }
+   },
+   "rawTypes": [
+    {
+     "type": "system",
+     "subtype": "init",
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "system",
+     "subtype": "api_retry",
+     "error": "rate_limit",
+     "error_status": 429,
+     "text": ""
+    },
+    {
+     "type": "assistant",
+     "model": "<synthetic>",
+     "error": "rate_limit",
+     "text": "API Error: Request rejected (429) · 이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요."
+    },
+    {
+     "type": "result",
+     "subtype": "success",
+     "text": "",
+     "is_error": true
+    }
+   ],
+   "sdkThrew": "Claude Code returned an error result: API Error: Request rejected (429) · 이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요.",
+   "recordedBubble": "API Error: Request rejected (429) · 이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요.\n\n---\n\n작업이 끝까지 가지 못했어요. **저장된 변경이 있는지 작업 파일을 확인해 주세요.** 다시 한 번 부탁하거나, 무엇을 하려던 것인지 알려주세요 🔧",
+   "recordedBanner": "Claude Code returned an error result: API Error: Request rejected (429) · 이미 실행 중인 요청이 있습니다. 완료한 뒤 다시 시도해 주세요."
+  }
+ }
+}

@@ -27,6 +27,13 @@ extensions/hypeproof-chat/
 - Extension itself is bundled with esbuild (per VS Code extension convention).
 - During Phase 5 the whole folder gets injected into VS Code source as a built-in extension; until then iterate as a standalone extension (`F5` debug in Extension Development Host).
 
+## Render tests (`test/*.test.tsx`)
+
+- New render tests: drop `test/<name>.test.tsx`; no package.json edit. `npm test` runs every one through `scripts/run-tsx-tests.mjs`.
+- One test: `node scripts/run-tsx-tests.mjs <name>` (the older `npm run test:<name>` scripts call the same thing).
+- A test that needs a different window stub or esbuild flag goes in the runner's `OVERRIDES` map, not in a new script.
+- Bundles go to a fresh `mkdtemp` directory, never a fixed `/tmp/<name>.test.cjs`. Fixed paths let two worktrees overwrite each other and fail with `SyntaxError`.
+
 ## Proxy contract
 
 Webview talks to the Service (`worker/`, deployed at api.hypeproof-ai.xyz); `proxy-poc/` is the retired PoC. Endpoint is OpenAI-compatible (`/v1/chat/completions`, SSE streaming). Workshop token is supplied via the UI and stored in `secrets` (VS Code SecretStorage API) — never in plaintext settings.

@@ -1,4 +1,5 @@
 import { AUTOMATION_OPS_CAPABILITY, automationOpsRuntime, type AutomationOpsObservation, type AutomationOpsProgress } from './automationOps';
+import { confirmOutbound } from "./outboundConsentHost.ts";
 // Host adapter for remote classroom operations (#751). VS Code, SecretStorage,
 // disk and fetch live here; every decision lives in classroomOps.ts.
 //
@@ -20,7 +21,7 @@ import {
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, boundSetting, emptyView, inboxPresence, markSettingBound, mayHideInbox, pendingSetting, pointerIsStale, type InboxView, type LessonRef } from "./classroomInbox";
 import { InboxSession, InboxStore, inboxDir, inboxView } from "./classroomInboxStore";
 
-const CREDENTIAL_KEY = "hypeproof.classroomOps.credential";
+export const CREDENTIAL_KEY = "hypeproof.classroomOps.credential";
 const META_KEY = "hypeproof.classroomOps.connection";
 /**
  * Which inbox the learner is shown: the one of the connection that is valid now, or of the last one that ended the
@@ -155,11 +156,14 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     return { grant_id: m.grant_id, class_run_id: m.class_run_id, seat_id: m.seat_id, student: m.student, activity: m.lesson ? { course_id: m.lesson.course_id, version: m.lesson.version } : null, run: m.run };
   }
   private snapshotDeps(consent: { purpose: string; notice_version: string } | null = null, kinds: CollectKind[] | null = null): SnapshotDeps {
+    const generation = this.generation, credential = this.credential, base = this.base();
+    const current = () => generation === this.generation && credential === this.credential && base === this.base();
     const dir = path.join(this.context.globalStorageUri.fsPath, "classroom-snapshots"), safe = (s: string) => s.replace(/[^A-Za-z0-9-]/g, "");
     const stateFile = (b: string) => path.join(dir, `${safe(b)}.state.json`), copyDir = (b: string, r: number) => path.join(dir, safe(b), `r${r}`);
-    const call = async (url: string, init: RequestInit) => { try { const res = await fetch(`${this.base()}/classroom/ops/collect/${url}`, { ...init, signal: AbortSignal.timeout(30000), headers: { authorization: `Bearer ${this.credential}`, ...(init.headers ?? {}) } }); const j = (await res.json().catch(() => ({}))) as Record<string, string>; return { status: res.status, reason: j.reason, receipt_id: j.receipt_id, coverage: j.coverage, coverage_reason: j.coverage_reason }; } catch { return { status: 0 }; } };
+    const call = async (url: string, init: RequestInit) => { try { if (!current()) return { status: 403, reason: "not_connected" }; const res = await fetch(`${base}/classroom/ops/collect/${url}`, { ...init, signal: AbortSignal.timeout(30000), headers: { authorization: `Bearer ${credential}`, ...(init.headers ?? {}) } }); const j = (await res.json().catch(() => ({}))) as Record<string, string>; return { status: res.status, reason: j.reason, receipt_id: j.receipt_id, coverage: j.coverage, coverage_reason: j.coverage_reason }; } catch { return { status: 0 }; } };
     return {
-      scope: () => this.scope(),
+      confirm: async (items) => current() && await confirmOutbound({ recipient: `수업 기록 운영자 · ${new URL(base).host}`, items }) && current(),
+      scope: () => current() ? this.scope() : null,
       // The immutable copy: written once per (batch, revision) and only ever read back afterwards — with the binding it was frozen under.
       copy: async (b, r) => {
         const target = copyDir(b, r), bindingFile = path.join(target, "binding.json");
@@ -526,7 +530,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       await store.reconcile(Date.now()).catch((err) => this.log(`[inbox] reconcile: ${(err as Error).message}`));
       if (!live()) { runner.close(); return; }
       inbox = new InboxSession({ store, alive: live, clock: { mono: () => performance.now(), wall: () => Date.now() }, log: this.log, changed: () => { if (live()) this.inboxChanged(true); } });
-      this.inbox = inbox; this.inboxStore = store; this.inboxChanged(false);
+      this.inbox = inbox; this.inboxStore = store; // listeners are told once, below, after the loop is assigned
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
@@ -541,6 +545,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       // Normal expiry keeps the credential for the upload-only afterlife; a revoked or replaced connection is dropped outright.
       onDisconnected: (reason) => { if (!live()) return; this.log(`[ops] disconnected: ${reason}`); if (reason === "ops_grant_expired") { void this.inboxExpired(); const stopped = this.stopConnection(), stopGeneration = this.generation; void stopped.then(() => { if (stopGeneration === this.generation) return this.resumeUploadOnly(meta, credential); }).catch((err) => this.log(`[ops] expiry shutdown: ${(err as Error).message}`)); } else { void this.hideInbox(meta.grant_id); void this.forget().catch((err) => this.log(`[ops] disconnect shutdown: ${(err as Error).message}`)); } },
     }, meta.poll_after_ms);
+    this.inboxChanged(false); // One publish, after loop assignment: helpConnection() is only non-null from here, so the class window reaches the open panel.
     this.context.subscriptions.push({ dispose: () => this.loop?.stop() });
     // The usual order in a class is "token first, pair later": the token was verified BEFORE this connection existed, so that
     // result had nowhere to go and the board would show the token as unknown until some later refresh. Ask once, now.

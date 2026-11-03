@@ -1,3 +1,4 @@
+import { pageResultState } from '../src/pageCardPresentation.ts';
 // AI Verify over the Experiment Browser (cr-verify #1392), App half at the smoke layer.
 // The runner and the session drive the real CR executor over a scripted kiosk page (the
 // fake CDP page of the cr-browser smokes) and write to a real NativeObservationRecorder
@@ -320,6 +321,9 @@ await test("CR-T16 + CR-T76: fail → fix request (report, criterion 2, v0) → 
   view = await s.session.view();
   assert.deepEqual(view.report.criteria.map((c) => c.id), [c1.id, c2.id], "the re-test is the whole set");
   assert.equal(view.verification.state, "verified");
+  assert.equal(pageResultState(vid("b"), vid("b"), events), "verified", "result card accepts the actual validated all-pass report");
+  assert.equal(pageResultState(vid("b"), vid("c"), events), "previous");
+  assert.equal(pageResultState(vid("c"), vid("c"), events), "unchecked");
 });
 
 await test("CR-T16 negative: a fix request without its report or criterion is refused and nothing is sent or recorded", async () => {
@@ -868,7 +872,7 @@ const WIRING = {
   // The turn's finally closes the run, so a later turn cannot test on its own.
   endTurn: /this\.activeStreams\.delete\(streamId\);\s*\/\/[^\n]*\n\s*this\.verifySession\?\.endTurn\(\);\s*this\.verifyTurnRecorder = null;/,
   // A send while a re-test drives the tab is refused before the turn starts.
-  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*await this\.post\(\{type:"inputRejected",text,images\}\);[\s\S]{0,200}?return;\s*\}[\s\S]{0,600}?this\.pendingSends\+\+;/,
+  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*const mode = turnToolMode\(requestedMode\);\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*await this\.post\(\{type:"inputRejected",text,images,toolMode:mode\}\);[\s\S]{0,200}?return;\s*\}\s*this\.pendingSends\+\+;/,
   // Start, fix and re-test are refused while a turn streams (all three come after this line).
   verifyWhileTurn: /if \(this\.pendingSends > 0 \|\| this\.activeStreams\.size > 0\) return this\.postVerifyState\(\{ error: refusalText\("turn_running"\) \}\);\s*if \(msg\.type === "verifyStart"\)/,
   // The coach's verify calls write to the turn's own recorder.
@@ -909,7 +913,8 @@ await test("the session's switch check refuses runTool on its own, with nothing 
   const calls = s.page.calls.length;
   const r = await s.session.runTool({ criterion_id: c.id, plan: PLAN(PLAN_START) });
   assert.equal(r.isError, true);
-  assert.match(r.text, /쓸 수 없어요/);
+  // REQ-STUDIO-DENIAL-SOURCE: the switch-off tool result names its source (a lesson setting).
+  assert.equal(r.text, "[수업 설정] 이 수업에서는 제품 테스트를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요.");
   assert.equal(s.recorder.batch.events.length, before);
   assert.equal(s.page.calls.length, calls, "the tab was not touched");
   // Control: switched back on, the same open run is tested.
@@ -978,5 +983,69 @@ await test("CR-T03: the same verify call gives identical results through the SDK
   assert.equal(toMcpToolResult(refused).isError, true);
   assert.equal(toProxyToolResult("t", refused).is_error, true);
 });
+
+// CGP-SHELL-R-011 N1 — a handed-back test turn the webview could not send (offline) is parked:
+// the next unrelated turn carries no test context and opens no run, and the learner's next press
+// of the same button resumes it without recording the criteria or the fix request again.
+const criterionSets = (s) => valid(s.recorder).events.filter((e) => e.kind === "criterion_set").length;
+await test("N1 control: without parking, a dropped start leaves its context for the next unrelated turn", async () => {
+  const s = seat();
+  await s.session.start([{ text: "음료 고르기가 보인다" }]);
+  // The webview dropped the handed-back turn; the learner then sends "버튼 색 바꿔줘".
+  assert.ok(s.session.takeCoachContext(), "the leak this fix closes is real");
+});
+await test("N1: a parked start rides with no unrelated turn and resumes once without a second record", async () => {
+  const s = seat();
+  const r = await s.session.start([{ text: "음료 고르기가 보인다" }, { text: "주문하면 완료 화면이 보인다" }]);
+  assert.equal(r.ok, true);
+  assert.equal(criterionSets(s), 2);
+  assert.equal(s.session.park(), true);
+  assert.equal(s.session.takeCoachContext(), null, "the next unrelated turn carries no test context");
+  assert.equal(s.session.activeRun, null, "and no run the coach could execute");
+  assert.equal((await s.session.runTool({ criterion_id: "x", plan: "{}" })).isError, true);
+  const again = s.session.resume();
+  assert.deepEqual(again, { ok: true, sendText: r.sendText }, "the same turn comes back");
+  assert.equal(criterionSets(s), 2, "nothing recorded twice");
+  assert.ok(s.session.takeCoachContext(), "the context goes with the resumed turn");
+  assert.ok(s.session.activeRun, "and its run is open again");
+  assert.deepEqual(s.session.resume(), { ok: false, code: "nothing_parked" }, "a resume is used once");
+});
+await test("N1: a parked fix request resumes without recording the fix request again", async () => {
+  const s = seat({ page: kiosk({ noDone: true }) });
+  await s.session.start([{ text: "음료 고르기가 보인다" }, { text: "완료 화면이 보인다" }]);
+  const [c1, c2] = s.session.activeRun.criteria;
+  await s.session.runTool({ criterion_id: c1.id, plan: PLAN(PLAN_START) });
+  await s.session.runTool({ criterion_id: c2.id, plan: PLAN(PLAN_ORDER) });
+  s.session.takeCoachContext();
+  s.session.endTurn();
+  const changes = () => valid(s.recorder).events.filter((e) => e.evidence_type === "change").length;
+  const fix = await s.session.fix(c2.id, "주문하기를 누르면 완료 화면이 나오게 고쳐 주세요");
+  assert.equal(fix.ok, true);
+  const recorded = changes();
+  assert.equal(s.session.park(), true);
+  assert.equal(s.session.takeCoachContext(), null);
+  assert.deepEqual(s.session.resume(), { ok: true, sendText: fix.sendText });
+  assert.equal(changes(), recorded, "the fix request is not recorded twice");
+  assert.ok(s.session.takeCoachContext());
+});
+await test("N1: a new start or fix replaces a parked turn; park with nothing pending parks nothing", async () => {
+  const s = seat();
+  assert.equal(s.session.park(), false);
+  await s.session.start([{ text: "음료 고르기가 보인다" }]);
+  s.session.park();
+  const fresh = await s.session.start([{ text: "주문하면 완료 화면이 보인다" }]);
+  assert.equal(fresh.ok, true);
+  assert.deepEqual(s.session.resume(), { ok: false, code: "nothing_parked" }, "the older parked turn is gone");
+  assert.ok(s.session.takeCoachContext().includes(s.session.activeRun.criteria[0].id), "the live context is the new run's");
+});
+{
+  const provider = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  await test("N1 wiring: the host parks and resumes through the verify handler; resume posts the turn back like start", async () => {
+    assert.match(provider, /msg\.type === "verifyPark"\)[\s\S]{0,120}?this\.verifySession\.park\(\)/);
+    assert.match(provider, /msg\.type === "verifyResume"\)[\s\S]{0,200}?this\.verifySession\.resume\(\)[\s\S]{0,200}?sendText: r\.sendText, requestId/);
+    const park = provider.indexOf('msg.type === "verifyPark"'), busy = provider.indexOf('refusalText("turn_running")');
+    assert.ok(park > 0 && park < busy, "parking is never refused as busy");
+  });
+}
 
 console.log(`\n${passed} cr-verify checks passed`);

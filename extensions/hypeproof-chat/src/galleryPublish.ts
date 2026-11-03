@@ -1,3 +1,5 @@
+import type { VisitorPreview } from "./visitorPreview.ts";
+import { contentBytes, type OutboundConfirmation, type OutboundItem } from "./outboundConsent.ts";
 // 갤러리 발행 — "갤러리에 올리기" 의 네트워크 절반.
 //
 // 아이가 만든 세상 HTML 한 장을 lab 사이트(`hypeproof-ai.xyz`)의
@@ -12,11 +14,14 @@
 //
 // `vscode` 를 import 하지 않는다 — 순수 로직이라 플레인 Node + 주입 fetch 로
 // 검증한다 (spoolUploader.ts 와 같은 규율).
+import { denialCopy } from "./denialSource.ts";
 
 /** lab 사이트. 설정으로 덮을 수 있다 — 로컬 dev 서버(:3000)에 붙여 보기 위함. */
 export const SITE_BASE_PROD = "https://hypeproof-ai.xyz";
 
 export interface PublishInput {
+  // Required key (REQ-KNOW-63): a caller that forgets the wiring fails to compile, not closed at run time.
+  previewVisitor: VisitorPreview;
   siteBase: string;
   /** 학생 워크숍 토큰. 이것이 신원의 유일한 출처다. */
   token: string;
@@ -114,6 +119,34 @@ export function galleryPublishAllowed(
   return { ok: true };
 }
 
+/**
+ * The session record that goes with a publish (2026-08-21 operations decision: the "this far" log snapshot survives on the
+ * server even when the learner misses "기록 보내기"). REQ-KNOW-09: it is its own block in the same confirmation — recipient,
+ * items and sizes — and `send` uploads exactly the bytes that were listed. It runs only after the page itself is published.
+ */
+/**
+ * The client never sends a name (identity comes from the token), but the gallery route looks the learner up on the
+ * distribution board and shows that name on the public page (see the header). The dialog says so (REQ-KNOW-09, F7).
+ */
+export const GALLERY_NAME_NOTE = "공개 페이지에 내 이름이 함께 보여요 (수업 명단에 적힌 이름을 갤러리가 붙여요)";
+export interface GalleryRecord { recipient: string; items: readonly OutboundItem[]; send(): Promise<unknown> }
+
+/** User-facing gate over a frozen page; the transport remains usable by Service contract tests. */
+export async function publishWorldConfirmed(input: PublishInput, confirm: OutboundConfirmation, current: () => Promise<boolean>, record: GalleryRecord | null = null): Promise<PublishResult> {
+  const frozen = { ...input };
+  if (!await current()) return { ok: false, status: 0, message: "활동이 바뀌어서 보내지 않았어요." };
+  // REQ-KNOW-63: one recipient string feeds the preview audience and the send consent.
+  const recipient = `갤러리 · ${new URL(frozen.siteBase).host}`;
+  if (!await frozen.previewVisitor?.({ entry: "index.html", audience: `${recipient} · 인터넷의 누구나`, files: [{ path: "index.html", data: Buffer.from(frozen.html) }] }) || !await current()) return { ok: false, status: 0, message: "미리보기를 확인하지 않아 보내지 않았어요." };
+  const metadata = { worldId: frozen.worldId, title: frozen.title, ...(frozen.sessionId ? { sessionId: frozen.sessionId } : {}) };
+  const also = record ? [{ recipient: record.recipient, items: record.items }] : undefined;
+  if (!await confirm({ recipient, public: true, notes: [GALLERY_NAME_NOTE], items: [{ name: "index.html (화면과 실행 코드)", bytes: contentBytes(frozen.html) }, { name: "작품 제목·종류·세션 연결 정보", bytes: contentBytes(JSON.stringify(metadata)) }], ...(also ? { also } : {}) }) || !await current()) return { ok: false, status: 0, message: "보내지 않았어요." };
+  const result = await publishWorld(frozen);
+  // Fire-and-forget, as before: the page is already up; a record failure is not put on the learner's screen.
+  if (result.ok && record) void record.send().catch(() => undefined);
+  return result;
+}
+
 export async function publishWorld(input: PublishInput): Promise<PublishResult> {
   const doFetch = input.fetchImpl ?? fetch;
   const url = `${input.siteBase.replace(/\/+$/, "")}/api/gallery/publish`;
@@ -188,7 +221,9 @@ export type CurriculumResult<T> =
 
 /** Korean words for the Service's refusal codes (the code stays on the result for the record). */
 const CURRICULUM_MESSAGES: Record<string, string> = {
-  not_found: "이 프로젝트를 찾지 못했거나, 이 수업에서는 사용자 테스트 공개를 쓸 수 없어요.",
+  // REQ-STUDIO-DENIAL-SOURCE — a 404 cannot tell a missing project from the switch being
+  // off: the source is unknown, never a guessed lesson setting.
+  not_found: denialCopy({ source: "unknown", feature: "사용자 테스트 공개", reason: "이 프로젝트를 찾지 못했거나 이 수업에서 꺼져 있는지 확인하지 못했어요" }, "neutral"),
   expiry_required: "링크를 언제까지 열어 둘지 골라 주세요.",
   invalid_expiry: "링크 기간은 지금부터 90일 안에서 골라 주세요.",
   invalid_channel: "채널 이름은 40자까지 쓸 수 있어요.",

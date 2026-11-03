@@ -56,7 +56,8 @@ try {
     await win.keyboard.press('Escape');
     await win.locator('.monaco-workbench .part.titlebar').first().click({ position: { x: 10, y: 10 }, force: true });
     await win.keyboard.press('Meta+Shift+P');
-    await input.fill('>HypeProof Chat: Focus');
+    const focusTitle = JSON.parse(readFileSync(resolve(root, 'extensions/hypeproof-chat/package.json'), 'utf8')).contributes.commands.find(c => c.command === 'hypeproof-chat.focus').title;
+    await input.fill(`>${focusTitle}`);
     await win.waitForTimeout(300);
     await win.keyboard.press('Enter');
     const chat = win.frameLocator('iframe.webview.ready[src*="purpose=webviewView"]').first().frameLocator('#active-frame');

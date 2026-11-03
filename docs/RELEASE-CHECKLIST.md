@@ -19,7 +19,7 @@ The previous checklist for v0.1.0 is archived in
 1. Open the Actions tab of `hypeproof/hypeproof-studio`.
 2. Select the `release-cut` workflow.
 3. Click **Run workflow**. Set `mode` to `create`.
-4. If a smoke credential is not available, set `accept_not_run`. The release PR then shows
+4. Check scoped credentials before the cut. S3 requires `HPS_ACCEPTANCE_ISSUER` (missing as of 2026-10-16); S4 requires `HPS_CANARY_ISSUER`. Provision missing credentials and rerun. Only an explicitly approved exception may set `accept_not_run`. The release PR then shows
    the `NOT_RUN` checks.
 5. Wait for the run to finish. Read the job summary.
 
@@ -33,8 +33,22 @@ The rc builds take one to two hours for each OS. They run the automatic E2E on m
 Windows. Then they publish the rc as a prerelease.
 
 - [ ] Make sure that `verify-unified-release` passed for the rc tag.
-- [ ] Download the rc build from the prerelease page. The release PR has the link.
-- [ ] Install it. Make sure that the product version is the rc version.
+- [ ] Install the rc build with the one-liner at the top of the prerelease notes. It
+      installs beside the main App, in `~/Applications/HypeProof-RC-<version>/` with its own
+      profile, and checks the zip's SHA-256 and the product version:
+
+      ```bash
+      curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/<rc tag>/install-mac.sh | bash
+      ```
+
+- [ ] Testers who want double-click files get `HypeProof-<rc tag>-Test-Kit.zip` from the
+      same page. A browser download of a Mac zip is quarantined; the one-liner is not.
+- [ ] Windows testers run the PowerShell line from the notes (or double-click
+      `update-windows.cmd` on the rc page). It replaces the installed App:
+
+      ```powershell
+      irm https://github.com/hypeproof/hypeproof-studio/releases/download/<rc tag>/update-windows.cmd -OutFile "$env:TEMP\hps-update.cmd"; & "$env:TEMP\hps-update.cmd"
+      ```
 
 Installed Apps do not update to a prerelease. Install the rc build by hand.
 

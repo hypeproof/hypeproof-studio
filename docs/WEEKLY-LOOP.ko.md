@@ -1,5 +1,7 @@
 # How HypeProof Lab Works — 주간 운영 루프
 
+> 갱신일 2026-10-20 · 상태: 활성 (daily live gate retired 2026-10-20)
+
 > **목적**: AI Native하게 일하기 위한 기반. AI가 실행을 나르는 조직에서
 > 속도를 결정하는 것은 실행이 아니라 사람 사이의 이해 전달이다. 이 루프는
 > 그 병목을 없애고 전원이 같은 그림을 보게(sync) 만든다 — 누구에게 묻지
@@ -10,7 +12,7 @@
 > 흐름 전체를 다룬다. *"이번 주 루프 돌려줘"* 라고 에이전트에게 말하면 각
 > 단계가 실제 명령으로 실행된다.
 
-> **출처(provenance)**: `jayleekr/hypeproof-harness:docs/WEEKLY-LOOP.ko.md`
+> **출처(provenance)**: `hypeproof/hypeproof-harness:docs/WEEKLY-LOOP.ko.md`
 > 의 vendored 사본. 직접 수정하지 말 것 — 변경은 harness에서 PR로.
 
 ---
@@ -62,11 +64,12 @@ cycle의 이름은 **다음 회의 날짜**다. 라벨 `weekly-YYYY-MM-DD`가 �
 
    **지금 이 원칙이 강제되는 범위는 정확히 이만큼이다**: `check.py`가 cycle 라벨이
    붙은 closed 이슈를 기계적으로 검사하고, `Evidence:` 참조도 면제도 없으면
-   non-zero로 실패한다. 이 검사는 이제 두 곳에 배선돼 있다 —
-   `repo-governance live audit` 워크플로의 `weekly-loop-gate` job이 매일
-   03:17 UTC에 세 repo의 살아있는 이슈를 검사하고 위반이 있으면 red가 되며,
-   PR CI(`test.yml`)는 고정된 적대적 코퍼스로 게이트 코드 자체를 검사해
-   우회 경로가 다시 열리면 머지를 막는다. **적용 대상은 2026-07-22 00:00 KST
+   non-zero로 실패한다. PR CI(`test.yml`)는 고정된 적대적 코퍼스로 게이트 코드
+   자체를 검사해 우회 경로가 다시 열리면 머지를 막는다.
+   **Retired 2026-10-20 (Jay):** the daily live run (`weekly-loop-gate` job in
+   `repo-governance live audit`) was removed. No `weekly-*` issues are being filed,
+   so it examined nothing and failed every night, burying the drift audit next to it.
+   `check.py` still runs on demand. **적용 대상은 2026-07-22 00:00 KST
    이후에 닫힌 이슈다** (§6.1).
 5. **문서 single source — members 포털 + harness canonical.** 프로세스
    문서는 harness가 원천이고, 멤버가 읽는 곳은 members 포털과 vendored
@@ -82,12 +85,18 @@ cycle의 이름은 **다음 회의 날짜**다. 라벨 `weekly-YYYY-MM-DD`가 �
 | 액션 아이템 성격 | Repo |
 |---|---|
 | 공개 사이트 · 콘텐츠 · 운영 · 멤버/커뮤니티 | **`hypeprooflab`** |
-| Studio 제품 (VSCodium fork · 워크숍 도구 · Worker) | **`hypeproof-studio`** |
+| Studio 제품 (VSCodium fork · 워크숍 도구 · Worker 배포) | **`hypeproof-studio`** |
+| Worker 런타임 코드 · 측정 엔진/기준 · 측정 패키지 | **`hypeproof-service`** |
 | 지식 DB · ingest · SaaS 백엔드/프론트 | **`sediment`** |
 | 공유 규약 · 스킬 · 프로세스 자체의 변경 | `hypeproof-harness` (PR로) |
 
 애매하면 **산출물이 최종적으로 사는 repo**를 고른다. 여러 repo에 걸치면
 repo별로 이슈를 쪼갠다 — 하나의 이슈는 하나의 repo에서 닫혀야 한다.
+
+`check.py` · `burndown.py` · `announce.py`가 `--repo` 없이 보는 대상은
+`hypeprooflab` · `hypeproof-studio` · `sediment` 셋이다. `hypeproof-service`나
+`hypeproof-harness`에 cycle 이슈를 냈으면 `--repo hypeproof/<repo>`를 대상마다
+적는다. `--repo`를 하나라도 주면 기본 셋은 빠지므로 그 셋도 같이 적는다.
 
 ---
 
@@ -194,8 +203,8 @@ python3 scripts/weekly-harness/check.py --cycle weekly-2026-07-21
 | **만료(stale)** | claim 코멘트가 **24시간** 넘게 지난 `wip`은 죽은 선점이다. 코멘트로 회수 사실을 남기고 다시 잡아도 된다 |
 
 ```bash
-gh issue edit <N> --repo jayleekr/<repo> --add-label wip --add-assignee @me
-gh issue comment <N> --repo jayleekr/<repo> --body "claim: <세션 이름> / branch: <브랜치>"
+gh issue edit <N> --repo hypeproof/<repo> --add-label wip --add-assignee @me
+gh issue comment <N> --repo hypeproof/<repo> --body "claim: <세션 이름> / branch: <브랜치>"
 ```
 
 코멘트가 라벨과 짝이 되어야 하는 이유는 **만료 판정 때문이다.** 라벨에는
@@ -213,7 +222,7 @@ gh issue comment <N> --repo jayleekr/<repo> --body "claim: <세션 이름> / bra
 이슈를 닫기 전에, 본문이나 **닫는 코멘트**에 한 줄을 남긴다:
 
 ```
-Evidence: https://github.com/jayleekr/sediment/pull/42
+Evidence: https://github.com/hypeproof/sediment/pull/42
 ```
 
 `증거:` 도 같다. URL은 **GitHub 퍼머링크 3종** 중 하나여야 한다 — 새 ID 체계를
@@ -329,7 +338,7 @@ python3 scripts/weekly-harness/check.py --cycle weekly-2026-07-21
 |---|---|
 | 규칙이 코드로 존재하고 non-zero로 실패하는가 | **그렇다** (open: Owner/ETA · closed: Evidence) |
 | 테스트로 덮여 있는가 | **그렇다** (`tests/weekly_loop/`, CI에서 pytest로 실행) |
-| **누가 실행하는가** | **매일 자동으로 돈다.** `repo-governance live audit` 워크플로의 `weekly-loop-gate` job (03:17 UTC, `workflow_dispatch`로 수동 실행 가능) |
+| **누가 실행하는가** | On demand only, since 2026-10-20 (the daily `weekly-loop-gate` job was retired by Jay; it examined 0 issues every night) |
 | 게이트 코드 자체는 누가 지키는가 | PR CI(`test.yml` → `repo-governance` job)가 고정 코퍼스로 재현 — 주입한 위반 19건 검출 · clean 16건 통과가 정확히 맞아야 머지된다 |
 | 우회로 | `--skip-evidence-gate`는 `CI` / `GITHUB_ACTIONS` / `HYPEPROOF_ENFORCE`가 켜져 있으면 **exit 2로 거부된다.** 로컬 분류 작업 전용 |
 
@@ -373,7 +382,7 @@ A. 먼저 `wip`을 단 쪽이 임자다. 나중에 본 쪽은 그 이슈를 놓�
 claim 코멘트가 24시간을 넘겼으면 죽은 선점이니 회수 코멘트를 남기고 가져간다.
 
 **Q. 라벨을 잘못 만들었으면?**
-A. `gh label delete weekly-<잘못된 날짜> --repo jayleekr/<repo>` 후 다시.
+A. `gh label delete weekly-<잘못된 날짜> --repo hypeproof/<repo>` 후 다시.
 라벨 형식은 `weekly-YYYY-MM-DD` — 항상 **다음 회의 날짜**다.
 
 ---

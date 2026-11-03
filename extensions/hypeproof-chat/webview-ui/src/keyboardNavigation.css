@@ -1,0 +1,28 @@
+/* CGP-SHELL-R-012: keyboard entry and panel sizing, shared by every chat seat.
+ * The focus ring is the shared one (focusGeometry.css, forced colours included); nothing here
+ * redraws it. Sizes come from the spacing ladder and the control ladder in tokens.css. */
+.hps-skip-input {
+  position: fixed; z-index: 20; top: var(--hp-space-2); left: var(--hp-space-2);
+  transform: translateY(calc(-100% - var(--hp-space-4)));
+  display: inline-flex; align-items: center; box-sizing: border-box;
+  min-height: var(--hp-control-min); padding: var(--hp-space-2) var(--hp-space-3); font-size: var(--hp-font-caption);
+  background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default);
+}
+.hps-skip-input:focus { transform: none; }
+/* A splitter's hit target is a control-height strip that starts at the panel edge and reaches into the
+ * panel on its right, so it never covers the conversation's scrollbar. Only the thin line shows. */
+.tw-splitter {
+  position: absolute; z-index: 2; top: 0; bottom: 0; width: var(--hp-control-min);
+  cursor: col-resize; touch-action: none; user-select: none; background: transparent;
+}
+.tw-splitter::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--hp-space) / 2);
+  background: transparent;
+}
+.tw-splitter:hover::before { background: var(--hp-bg-control-hover); }
+.tw-splitter:active::before { background: var(--hp-bg-control-pressed); }
+.tw-splitter-rail { left: var(--tw-rail-width); }
+.tw-splitter-sources { right: calc(var(--tw-source-width) - var(--hp-control-min)); }
+@media (forced-colors: active) {
+  .hps-skip-input { background: Canvas; color: CanvasText; }
+}

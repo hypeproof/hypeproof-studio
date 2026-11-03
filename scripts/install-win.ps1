@@ -9,25 +9,79 @@ $Tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("hps-" + [Guid]:
 function Say($msg) { Write-Host "`n▶ $msg" -ForegroundColor Magenta }
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
+# One release API answer as an object, or $null when gh fails.
+function Get-ReleaseJson([string]$url) {
+    $raw = & gh api $url
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+    return (($raw -join "`n") | ConvertFrom-Json)
+}
+
+# The per-user installer, else the machine installer, or $null.
+function Select-WindowsAsset($release) {
+    if (-not $release -or -not $release.PSObject.Properties['assets']) { return $null }
+    foreach ($pattern in @("UserSetup.*x64.*\.exe$", "Setup.*x64.*\.exe$")) {
+        $hit = @($release.assets) | Where-Object { $_ -and $_.PSObject.Properties['name'] -and ([string]$_.name) -match $pattern } | Select-Object -First 1
+        if ($hit) { return $hit }
+    }
+    return $null
+}
+
+# /releases/latest when it has a Windows installer; otherwise the newest published
+# release (no drafts, no prereleases, ordered by created_at like /releases/latest)
+# that has one. Returns @{ release; asset; latest_tag } or throws.
+function Find-WindowsRelease {
+    $latest = Get-ReleaseJson "https://api.github.com/repos/$Repo/releases/latest"
+    $latestTag = if ($latest -and $latest.PSObject.Properties['tag_name']) { [string]$latest.tag_name } else { "" }
+    $hit = Select-WindowsAsset $latest
+    if ($hit) { return @{ release = $latest; asset = $hit; latest_tag = $latestTag } }
+    $published = @()
+    $read = $false
+    for ($page = 1; $page -le 10; $page++) {
+        $list = Get-ReleaseJson "https://api.github.com/repos/$Repo/releases?per_page=100&page=$page"
+        if ($null -eq $list) { break }
+        $read = $true
+        # foreach, not @(): Windows PowerShell 5.1 emits a parsed JSON array as one object.
+        $items = @(); foreach ($x in $list) { $items += $x }
+        foreach ($r in $items) {
+            if (-not $r -or -not $r.PSObject.Properties['tag_name']) { continue }
+            if ($r.PSObject.Properties['draft'] -and $r.draft) { continue }
+            if ($r.PSObject.Properties['prerelease'] -and $r.prerelease) { continue }
+            $published += $r
+        }
+        if ($items.Count -lt 100) { break }
+    }
+    if (-not $latest -and -not $read) { throw "Release access failed. Run gh auth login with an organization member account." }
+    $sorted = @($published | Sort-Object -Property @{ Expression = { if ($_.PSObject.Properties['created_at']) { [string]$_.created_at } else { "" } } } -Descending)
+    foreach ($r in $sorted) {
+        $hit = Select-WindowsAsset $r
+        if ($hit) { return @{ release = $r; asset = $hit; latest_tag = $latestTag } }
+    }
+    throw "No release in $Repo has a Windows x64 installer yet. Ask the operator for a Windows build."
+}
+
 try {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "Install GitHub CLI, then run gh auth login." }
     if ($env:HPS_RELEASE_TOKEN) { $env:GH_TOKEN = $env:HPS_RELEASE_TOKEN }
     # 1. Resolve release
-    $api = if ($Tag -eq "latest") {
-        "https://api.github.com/repos/$Repo/releases/latest"
+    # A pinned HPS_VERSION installs exactly that tag. Without one, take the newest
+    # release that has a Windows installer: releases can be macOS only
+    # (config/release-platforms.json in hypeproof-studio), so /releases/latest
+    # alone would leave new Windows installs with nothing to install.
+    if ($Tag -eq "latest") {
+        Say "Looking up the newest release with a Windows installer..."
+        $found = Find-WindowsRelease
+        $release = $found.release
+        $asset = $found.asset
+        if ($found.latest_tag -and $found.latest_tag -ne [string]$release.tag_name) {
+            Write-Host "   The newest release $($found.latest_tag) is macOS only; installing $($release.tag_name)." -ForegroundColor Yellow
+        }
     } else {
-        "https://api.github.com/repos/$Repo/releases/tags/$Tag"
+        Say "Looking up release ($Tag)..."
+        $release = Get-ReleaseJson "https://api.github.com/repos/$Repo/releases/tags/$Tag"
+        if (-not $release) { throw "Release access failed. Run gh auth login with an organization member account." }
+        $asset = Select-WindowsAsset $release
+        if (-not $asset) { Fail "No Windows x64 installer .exe found in $Tag release. Unset HPS_VERSION to install the newest release that has one." }
     }
-
-    Say "Looking up release ($Tag)..."
-    $raw = & gh api $api
-    if ($LASTEXITCODE -ne 0) { throw "Release access failed. Run gh auth login with an organization member account." }
-    $release = $raw | ConvertFrom-Json
-    $asset = $release.assets | Where-Object { $_.name -match "UserSetup.*x64.*\.exe$" } | Select-Object -First 1
-    if (-not $asset) {
-        $asset = $release.assets | Where-Object { $_.name -match "Setup.*x64.*\.exe$" } | Select-Object -First 1
-    }
-    if (-not $asset) { Fail "No Windows x64 installer .exe found in $Tag release. Visit https://github.com/$Repo/releases" }
 
     # 2. Download
     $installer = Join-Path $Tmp.FullName $asset.name

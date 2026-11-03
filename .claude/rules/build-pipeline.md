@@ -88,6 +88,19 @@ Discovered during Phase 1: missing any of these causes silent or confusing failu
 | `Request https://api.github.com/repos/.../releases/tags/v0.1.0 failed with status code: 404` during `bundle-marketplace-extensions-build` | Extension listed in `product.json.builtInExtensions` triggers a marketplace/GH download. The download target doesn't exist (no release yet) | Don't list bundled extensions in `builtInExtensions`. Place them in `vscode/extensions/` only — VSCodium picks them up automatically as built-ins (same as `git`, `npm`, etc.) |
 | `npm error ELSPROBLEMS / missing: <pkg>, required by hypeproof-chat` during `vscode-min-prepack` (#349, killed the v0.1.17 tag builds) | The injected extension ships pre-built with NO `node_modules`, but its `package.json` declared a runtime `dependencies` entry — `npm list --production` then fails on the copy | Runtime deps of hypeproof-chat must live in `devDependencies`; the packaged build loads them from `dist/vendor` (#343). Never add a `dependencies` entry to the extension |
 
+## Per-release Mac installer
+
+Every published release carries `install-mac.sh` and `HypeProof-<tag>-Test-Kit.zip`,
+rendered by `scripts/release/install-kit.mjs` in `verify-unified-release.yml` from
+`scripts/release/templates/`. Edit the templates, not a generated copy. The installer must
+keep reusing `scripts/seed-sdk-binary.sh` for the SDK seed; never inline seeding. Details:
+`docs/dev/fast-mac-release.md` "Per-release Mac installer and Test Kit".
+
+Windows releases also carry `update-windows.cmd` (template `update-windows.cmd`, pinned to the
+tag and the accepted `HypeProof.StudioUserSetup-x64-*.exe` SHA-256). Notes carry both commands
+between `hps-install-mac:v1` / `hps-install-windows:v1` markers; the publish step runs
+`install-kit.mjs check` and refuses a release whose platforms lack them.
+
 ## Restarting a stuck/failed build
 
 ```bash
@@ -152,12 +165,53 @@ proxy-only.
 - **Phase 2+**: `hypeproof-studio.env` must be sourced before any `prepare_*` or `build.sh` call.
 - **Phase 5**: bundling `hypeproof-chat` as built-in needs the extension folder injected into VS Code source during `prepare_vscode.sh`. Do not add a `product.json.builtInExtensions` entry.
 
+## Studio-owned core patches (`scripts/patches/core/`)
+
+A VS Code core change that ships with a Studio change (for example the quit guard,
+REQ-STUDIO-QUIT-GUARD) lives here instead of in the fork, so it is reviewed in the same PR.
+`scripts/stage-core-patches.sh` copies each `*.patch` to `vscodium-base/patches/user/99-*`;
+`run-build.sh` and both build workflows call it before `prepare_vscode.sh`. The patch is
+generated: edit `scripts/patches/core/src/` or the hooks in `build_quit_guard_patch.py`, then
+`python3 scripts/patches/core/build_quit_guard_patch.py vscodium-base/vscode`.
+
 ## Adding a new patch
 
 1. Make the change against the unpacked `vscode/` tree.
 2. `cd vscode && git diff > ../patches/NN-<topic>.patch` (NN = next free prefix).
 3. Verify it applies cleanly: `cd vscode && git apply --check ../patches/NN-<topic>.patch`.
 4. Document the patch's purpose in a one-line header comment inside the file.
+
+## Fast Mac repack (CI release path, 2026-10-19)
+
+`build-mac.yml` skips the 1–2 h VS Code build when the base is unchanged and only
+rebuilds `extensions/hypeproof-chat`. Details and operator commands:
+[docs/dev/fast-mac-release.md](../../docs/dev/fast-mac-release.md).
+
+- **Base key** = `scripts/mac-base-key.sh`: git objects of the `vscodium-base` pin,
+  `hypeproof-studio.env.example`, `apply-product-overrides.sh`, `install-brand-assets.sh`,
+  `run-build.sh`, `stage-core-patches.sh`, `scripts/patches/core/`, `assets/brand/`, plus
+  `MAC_BASE_EPOCH`. **Bump `MAC_BASE_EPOCH`** when a
+  `build-mac.yml` change alters the base (runner, Node pin, env block, brew deps). Add a
+  path to `INPUTS` when a new file starts shaping the base app.
+- **Base source**: Actions cache (unsigned full-build output, saved by the full path) →
+  else a published release with the same key (downloaded, signature stripped) → else full.
+  Cache entries saved on a tag are visible to that tag only; seed from `main` with
+  `full_build=true`.
+- **Shared, not duplicated**: `repack-mac.sh` reuses `inject-builtin-extensions.sh`
+  (`VSCODE_TREE` pointed at the app) and `stamp-mac-app.sh`; sign, verify-branding,
+  package and upload are the same workflow steps for both paths.
+- **Checksums**: product.json `checksums` cover only `out/vs/**` core files, never
+  built-in extensions; `check-mac-checksums.mjs` (verify-branding check 12) proves it per build.
+- **Not rewritten**: `CFBundleVersion` and product.json `.date` are base properties; the
+  full path never changes them per release either.
+- **Notarization**: none exists in either path today (ad-hoc or self-signed only).
+- `full_build=true` on dispatch forces the full path.
+
+## Release platforms (Mac only since 2026-10-19)
+
+`config/release-platforms.json` decides which builders release-cut dispatches and which
+packages acceptance, publish and mirror require (read at the release's own commit; absent
+→ both). `build-windows.yml` is dispatch-only: no `v*` tag trigger.
 
 ## Submodule (`vscodium-base`) bump policy
 
@@ -176,4 +230,16 @@ Rules:
 
 ## CI (Phase 6)
 
-Windows build runs in GitHub Actions only. Local Windows reproduction is out of scope. The workflow file lives at `.github/workflows/build-windows.yml` (Phase 6 — not yet created).
+Windows build runs in GitHub Actions only. Local Windows reproduction is out of scope. The workflow file is `.github/workflows/build-windows.yml`; since 2026-10-19 it runs only on `workflow_dispatch` (see "Release platforms" above).
+
+## Bundled Korean shell (CGP-SHELL-R-006)
+
+`hps-korean-shell.patch` selects packaged `out/nls.messages.ko.json` independent
+of the OS and user language packs. `scripts/patches/core/korean/install.mjs`
+generates it from the build's own NLS keys/messages and vendored translations.
+`stamp-mac-app.sh` (full and repack) and Windows packaging run it before signing
+or archive creation. Missing native translations fail packaging. The entire
+`core/` tree is already in the Mac base key, so changing translations or the
+startup patch invalidates reuse of older shell bases. Development with
+`VSCODE_DEV` retains the upstream loader; this does not claim localized dev-shell
+source runs. No release or full shell build is performed by the row's unit tests.

@@ -17,8 +17,10 @@ Captain. A persistent five-role relay is not the default.
 
 ## Verification
 
-Independent verification starts only for a changed implementation SHA or acceptance
-revision. The verifier records the exact revisions, reuses unaffected evidence, and
+Independent verification starts for a changed claim identity: source SHA, package
+digest, test/acceptance revision, OS/architecture, Service or relevant environment
+(including theme, certificate trust and account capabilities). The verifier records
+that identity, reuses unaffected evidence, and
 reports PASS, FAIL, BLOCKED, or NOT RUN directly to the Captain. A review comment or
 status change alone does not justify same-SHA retesting. The verifier never edits the
 author branch or acts as a human approver.
@@ -47,4 +49,8 @@ subtask. Specialists begin work immediately, run relevant tests, return a commit
 SHA and evidence, and stop. They do not discover the global backlog, poll, merge,
 deploy, or create coordination state.
 
-Use English for engineering and GitHub records. Report to Jay in Korean.
+Use English for engineering and GitHub records. Report to the requesting user in Korean.
+
+For release preparation and rotating managers, use `hype-release`. Its shared
+state records operational ownership and observations; the product engine retains
+signed acceptance and the repository publisher retains publication authority.

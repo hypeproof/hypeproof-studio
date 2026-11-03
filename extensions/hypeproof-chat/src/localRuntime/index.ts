@@ -4,11 +4,6 @@ import type { CoachToolAction, SdkActivity } from "../sdkCoachHelpers.ts";
 import { workspaceTools } from "./tools.ts";
 import { localEmailTools, localTurnBudget } from "./emailTools.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
-import {
-  CHALK_TOOL_DEFINITIONS,
-  callChalkTool,
-  type ChalkToolContext,
-} from "../chalk/tools.ts";
 import { CodexLocalClient } from "./codexClient.mjs";
 import { runClaude } from "./claudeClient.mjs";
 import { startToolServer } from "./toolServer.mjs";
@@ -63,29 +58,27 @@ export function localModelSelection(
     choices: [{ alias: config.model, id: config.model, label: config.label }],
   };
 }
-/**
- * 워크스페이스 도구에 Chalk 도구를 붙인다(강사 모드만). 순수 함수 — 테스트 가능.
- * definitions 배열에 chalk_* 가 추가되면 Claude(toolServer)·Codex(dynamicTools) 모두
- * 같은 목록을 받는다.
- */
-export function mergeChalkTools(
-  workTools: {
-    definitions: { name: string; description: string; inputSchema: unknown }[];
-    call: (n: string, i: unknown) => Promise<string>;
-  },
-  chalkCtx?: ChalkToolContext,
-): {
+export interface ExtraTools {
   definitions: { name: string; description: string; inputSchema: unknown }[];
   call: (n: string, i: unknown) => Promise<string>;
-} {
-  const chalkDefs: { name: string; description: string; inputSchema: unknown }[] =
-    chalkCtx ? CHALK_TOOL_DEFINITIONS : [];
+}
+
+/**
+ * 워크스페이스 도구에 추가 도구 묶음을 붙인다. 추가 도구는 호출자가 넘긴다
+ * (강사 모드의 Chalk 도구는 chalk/tools.ts 의 chalkExtraTools). 순수 함수 — 테스트 가능.
+ * definitions 배열에 추가 도구가 붙으면 Claude(toolServer)·Codex(dynamicTools) 모두
+ * 같은 목록을 받는다.
+ */
+export function mergeExtraTools(
+  workTools: ExtraTools,
+  extra?: ExtraTools,
+): ExtraTools {
+  if (!extra) return workTools;
+  const extraNames = new Set(extra.definitions.map((d) => d.name));
   return {
-    definitions: [...workTools.definitions, ...chalkDefs],
+    definitions: [...workTools.definitions, ...extra.definitions],
     call: async (name: string, input: unknown) => {
-      if (chalkCtx && CHALK_TOOL_DEFINITIONS.some((d) => d.name === name)) {
-        return callChalkTool(chalkCtx, name, input as Record<string, unknown>);
-      }
+      if (extraNames.has(name)) return extra.call(name, input);
       return workTools.call(name, input);
     },
   };
@@ -134,15 +127,16 @@ export async function runLocalCoach(args: {
   userText: string;
   signal: AbortSignal;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   onActivity?: (a: SdkActivity) => void;
   requestApproval: (
     a: CoachToolAction,
-  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy" }>;
+  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy"; denialSource?: import("../denialSource").DenialSource }>;
   // #1298 — when set, overrides the default student-coach system prompt.
   // Used by instructor mode to inject the versioned instructor-brief.
   systemPrompt?: string;
-  /** 강사 모드일 때만 넘긴다. 없으면 Chalk 도구를 AI 에 붙이지 않는다(SUB-06). */
-  chalkCtx?: ChalkToolContext;
+  /** 강사 모드일 때만 넘긴다. 없으면 추가 도구를 AI 에 붙이지 않는다(SUB-06). */
+  extraTools?: ExtraTools;
   /** 강사 모드 browser tools (live_preview_start + browser_open). 없으면 붙이지 않는다. */
   browserTools?: BrowserToolsForLocal;
   emailAutomationHost?: GoogleAutomationMcpHost;
@@ -161,8 +155,8 @@ export async function runLocalCoach(args: {
     activity: args.onActivity,
   });
 
-  // Chalk 도구는 강사 모드(chalkCtx 있음)에서만 붙는다(SUB-06).
-  const withChalk = mergeChalkTools(workTools, args.chalkCtx);
+  // 추가 도구는 강사 모드(extraTools 있음)에서만 붙는다(SUB-06).
+  const withChalk = mergeExtraTools(workTools, args.extraTools);
   // Browser tools (live_preview_start + browser_open)은 강사 모드에서만 붙는다.
   const withBrowser = mergeBrowserTools(withChalk, args.browserTools);
   const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });
@@ -215,6 +209,7 @@ export async function runLocalCoach(args: {
           messages,
           signal,
           onDelta: args.onDelta,
+          onRefusal: args.onRefusal,
           toolServer: server,
           timeout: 0, // The shared active-time budget owns cancellation while questions wait.
         });

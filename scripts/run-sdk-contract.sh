@@ -55,15 +55,26 @@ else
 fi
 JTI=""
 
-# Always close the session, even when the tests fail or the runner is cancelled.
-# A canary session left open is harmless (empty roster) but it would make the
-# next run's open-guard 409.
+# Always close the canary session, even when tests fail or the script exits unexpectedly.
+# A session left open is NOT harmless: check-live-sessions.mjs counts canary-internal as
+# a live class and blocks stable-tag builds and publication until the 1 h window expires.
+# The close endpoint accepts a call without a jti and ends any open session on the cohort,
+# so we always call it — even when the open response was unparseable and JTI is empty.
 cleanup() {
-  [[ -z "$JTI" ]] && return 0
+  trap - EXIT INT TERM  # prevent re-entry if INT/TERM fires while we are in the trap
   note "closing canary session"
-  curl -sS -X POST "$PROD/admin/cohorts/$COHORT/session/close" \
+  local body="{}"
+  [[ -n "$JTI" ]] && body="{\"jti\":\"$JTI\"}"
+  CLOSE_HTTP="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    -X POST "$PROD/admin/cohorts/$COHORT/session/close" \
     -H "Authorization: $AUTH" -H 'content-type: application/json' \
-    -d "{\"jti\":\"$JTI\"}" >/dev/null 2>&1 && ok "canary session closed + token revoked"
+    -d "$body" 2>/dev/null)"
+  if [[ "$CLOSE_HTTP" == "200" ]]; then
+    ok "canary session closed + token revoked"
+  else
+    printf '\033[31m✗ canary session close failed (HTTP %s) — the live-session freeze will count it until the 1 h window expires\033[0m\n' "$CLOSE_HTTP" >&2
+    exit 1
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -71,7 +82,7 @@ note "opening a 1h canary session ($COHORT / $PROFILE)"
 # force:true — a previous run that was hard-killed before its trap could leave a
 # live session behind. Clobbering is safe HERE and only here: nobody is on this
 # cohort's roster. Never pass force on a real cohort (#291).
-OPEN="$(curl -sS -X POST "$PROD/admin/cohorts/$COHORT/session/open" \
+OPEN="$(curl -sS --max-time 30 -X POST "$PROD/admin/cohorts/$COHORT/session/open" \
   -H "Authorization: $AUTH" -H 'content-type: application/json' \
   -d "{\"profile_id\":\"$PROFILE\",\"user\":\"$USER_ID\",\"session_hours\":1,\"token_hours\":1,\"force\":true}")" \
   || die "session/open request failed"
@@ -92,7 +103,7 @@ ok "canary session open"
 note "waiting for the session to become readable (KV is eventually consistent)"
 READY=""
 for attempt in $(seq 1 20); do
-  CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$PROD/v1/profile" \
+  CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$PROD/v1/profile" \
     -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo 000)"
   if [[ "$CODE" == "200" ]]; then READY="$attempt"; break; fi
   sleep 1

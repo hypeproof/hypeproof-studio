@@ -40,7 +40,8 @@ const { browserToolLogLine } = await import("../src/chatPanelHelpers.ts");
   assert.equal(browserToolLogLine("browser_select", { ref: "e2", value: "tea" }).label, 'e2에서 "tea" 고르기');
 
   // Unknown tool → generic.
-  assert.deepEqual(browserToolLogLine("weird_tool", {}), { icon: "🤖", label: "weird_tool" });
+  // #2788 — an unknown tool is named neutrally, never by its identifier.
+  assert.deepEqual(browserToolLogLine("weird_tool", {}), { icon: "🔧", label: "도구 사용 중" });
   console.log("✓ browserToolLogLine: per-tool icon+label, host extraction, truncation, unknown fallback");
 }
 

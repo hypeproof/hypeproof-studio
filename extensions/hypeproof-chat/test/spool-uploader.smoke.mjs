@@ -100,7 +100,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "hps-upl-"));
   const root = tmp();
   const dir = makeSession(root, "2026-08-18", SID, { events: "line1\nline2\n" });
   const { fn, calls } = fakeFetch();
-  const r = await uploadSession({
+  const r = await uploadSession({ confirm: async () => true,
     session: { dir, day: "2026-08-18", sessionId: SID },
     baseUrl: "https://api.test/v1", token: "tok.sig", fetchFn: fn, now: FIXED_NOW,
   });
@@ -135,7 +135,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "hps-upl-"));
   const { fn, calls } = fakeFetch((call, n) =>
     n === 2 ? { status: 503, body: '{"error":{"message":"upstream busy"}}' } : { status: 200 },
   );
-  const r = await uploadSession({
+  const r = await uploadSession({ confirm: async () => true,
     session: { dir, day: "2026-08-18", sessionId: SID },
     baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW,
   });
@@ -154,7 +154,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "hps-upl-"));
   const root = tmp();
   const dir = makeSession(root, "2026-08-18", SID);
   const fn = async () => { throw new Error("ECONNREFUSED"); };
-  const r = await uploadSession({
+  const r = await uploadSession({ confirm: async () => true,
     session: { dir, day: "2026-08-18", sessionId: SID },
     baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW,
   });
@@ -174,12 +174,56 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "hps-upl-"));
     if (call.url.includes(SID) && !failedOnce) { failedOnce = true; return { status: 500, body: "{}" }; }
     return { status: 200 };
   });
-  const results = await uploadAllPending(root, {
+  const results = await uploadAllPending(root, { confirm: async () => true,
     baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW,
   });
   assert.equal(results.length, 2);
   assert.equal(results.filter((r) => r.ok).length, 1, "실패 1 + 성공 1 — 중단 없이 계속");
   console.log("✓ uploadAllPending — 부분 실패에도 나머지 진행");
+}
+
+// ─── REQ-KNOW-09 (F7): several pending sessions → ONE confirmation, one block per session ─────────────
+{
+  const SID3 = "cccccccc-dddd-4eee-8fff-000000000000";
+  const root = tmp();
+  makeSession(root, "2026-08-16", SID, { events: "a\n" });
+  makeSession(root, "2026-08-17", SID2, { events: "bb\n" });
+  makeSession(root, "2026-08-18", SID3, { events: "ccc\n" });
+  const asks = [];
+  let { fn, calls } = fakeFetch(() => ({ status: 200 }));
+  const cancelled = await uploadAllPending(root, { confirm: async (m) => { asks.push(m); return false; }, baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW });
+  assert.equal(asks.length, 1, "three pending sessions ask once, not three times");
+  assert.equal(calls.length, 0, "Cancel sends no session");
+  assert.deepEqual(cancelled.map((r) => r.failedAt), ["consent", "consent", "consent"]);
+  const m = asks[0], blocks = [{ recipient: m.recipient, items: m.items }, ...(m.also ?? [])];
+  assert.equal(blocks.length, 3, "one block per session");
+  for (const [i, [day, sid, events]] of [["2026-08-16", SID, "a\n"], ["2026-08-17", SID2, "bb\n"], ["2026-08-18", SID3, "ccc\n"]].entries()) {
+    const b = blocks[i], tag = `세션 ${i + 1} (${day} · ${sid.slice(0, 8)}) · `;
+    assert.equal(b.recipient, "수업 기록 운영자 · api.test", "each session names its recipient");
+    assert.deepEqual(b.items.map((x) => x.name), [tag + "session.meta.json · 세션 정보 (내 계정·수업 ID, 앱 버전, OS, 시작 시각)", tag + "events.jsonl · 내 대화 기록 (주고받은 말, 만든 HTML, 사용량, 작업 단계)", tag + "manifest.json · 파일 목록"], "events.jsonl is named as the learner's conversation record");
+    assert.equal(b.items[1].bytes, Buffer.byteLength(events), "each file's own size");
+  }
+  const { outboundDetails } = await import("../src/outboundConsent.ts");
+  const text = outboundDetails(m);
+  assert.equal((text.match(/받는 곳: 수업 기록 운영자 · api\.test/g) ?? []).length, 3, "the dialog text shows all three blocks: " + text);
+  // Approve: the bytes listed are the bytes sent, even if a session grows while the dialog is open.
+  ({ fn, calls } = fakeFetch(() => ({ status: 200 })));
+  let approvals = 0;
+  const done = await uploadAllPending(root, { confirm: async () => { approvals++; fs.appendFileSync(path.join(root, "2026-08-16", SID, "events.jsonl"), "LATER\n"); return true; }, baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW });
+  assert.equal(approvals, 1, "approving sends all three after one dialog"); assert.equal(done.filter((r) => r.ok).length, 3);
+  assert.equal(calls.filter((c) => c.method === "PUT").length, 9, "3 files × 3 sessions");
+  assert.equal(Buffer.from(calls.find((c) => c.url.includes(SID) && c.url.includes("events.jsonl")).body).toString(), "a\n", "exactly the listed bytes");
+  console.log("✓ uploadAllPending — 한 번의 확인에 세션별 받는 곳·파일·크기, 취소면 0건, 승인하면 나열한 바이트만");
+  // No confirmation adapter wired (a caller that forgot it) is a refusal, never a send.
+  const root2 = tmp();
+  makeSession(root2, "2026-08-16", SID, { events: "a\n" });
+  makeSession(root2, "2026-08-17", SID2, { events: "bb\n" });
+  ({ fn, calls } = fakeFetch(() => ({ status: 200 })));
+  const unwired = await uploadAllPending(root2, { baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW });
+  assert.equal(calls.length, 0, "no confirm function: zero PUTs");
+  assert.equal(unwired.length, 2, "both pending sessions are reported");
+  assert.ok( unwired.every((r) => !r.ok && r.failedAt === "consent"), "every result is a consent refusal");
+  console.log("✓ uploadAllPending — 확인 함수가 없으면 보내지 않는다");
 }
 
 // ─── buildManifest — meta 없는 세션(쓰기 실패 케이스)도 성립 ─────────────────
@@ -201,7 +245,7 @@ console.log("spool-uploader.smoke.mjs — all green");
   const [session] = scanUploadableSessions(root);
   fs.rmSync(path.join(dir, "events.jsonl")); // 다른 창의 스윕이 지운 상황
   const { fn, calls } = fakeFetch();
-  const r = await uploadSession({
+  const r = await uploadSession({ confirm: async () => true,
     session, baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW,
   });
   assert.equal(r.ok, false);
@@ -236,7 +280,7 @@ console.log("spool-uploader.smoke.mjs — all green");
     }
     return { status: 200 };
   });
-  const r = await uploadSession({
+  const r = await uploadSession({ confirm: async () => true,
     session: { dir, day: "2026-08-18", sessionId: SID },
     baseUrl: "https://api.test/v1", token: "t.s", fetchFn: fn, now: FIXED_NOW,
   });
@@ -266,7 +310,7 @@ console.log("spool-uploader.smoke.mjs — all green");
     calls.push({ url: String(url), method: init.method });
     return new Response(JSON.stringify({ key: "k" }), { status: 200 });
   };
-  const r = await uploadSessionSnapshot({
+  const r = await uploadSessionSnapshot({ confirm: async () => true,
     session: { dir, day: "2026-08-21", sessionId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
     baseUrl: "https://api.example/v1", token: "T", fetchFn,
   });

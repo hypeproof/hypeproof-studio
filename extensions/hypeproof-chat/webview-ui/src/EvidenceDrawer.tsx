@@ -1,4 +1,7 @@
+import { compareTurnText } from "../../src/turnReviewView";
+import { DiffLines } from "./DiffLines";
 import { useState } from "react";
+import { StatusChip } from "./StatusChip";
 import {
   EVIDENCE_TYPE_LABELS,
   PROVENANCE_FIELDS,
@@ -14,7 +17,6 @@ import {
   partitionBySourceState,
   provenanceLine,
   shortRevision,
-  sourceStateLabel,
   type EvidenceRowView,
 } from "./evidenceDrawerLogic";
 import type { SourceKind } from "@hypeproof/measurement-core/learning-events";
@@ -85,7 +87,10 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
       )}
 
       {/* SX-16 — before/after view. Opens the AI draft, the student's revision and the expected condition of that moment together. */}
-      {beforeAfterOf(rows).map((pair) => (
+      {beforeAfterOf(rows).map((pair) => {
+        // Missing history is not an empty file. Only compare two recorded snapshots.
+        const comparison = pair.before ? compareTurnText(pair.before.text, pair.after.text) : null;
+        return (
         <details key={pair.id} className="hp-evidence-diff">
           <summary>변경 전후 보기</summary>
           {pair.criterionText ? (
@@ -93,12 +98,13 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
           ) : (
             <p className="hp-evidence-diff-criterion">그때 적어 둔 기대 조건이 없어요</p>
           )}
+          {comparison?.unavailable && <p className="hp-evidence-diff-note">{comparison.unavailable}</p>}
           <div className="hp-evidence-compare">
             <section>
               <h5>AI 초안</h5>
               {pair.before ? (
                 <>
-                  <pre>{pair.before.text || "본문 없음"}</pre>
+                  <pre>{comparison?.lines?.length ? <DiffLines lines={comparison.lines} side="before" /> : pair.before.text || "본문 없음"}</pre>
                   <small>{shortRevision(pair.before.sha256)} 판</small>
                 </>
               ) : (
@@ -108,12 +114,12 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
             </section>
             <section>
               <h5>내가 바꾼 것</h5>
-              <pre>{pair.after.text || "본문 없음"}</pre>
+              <pre>{comparison?.lines?.length ? <DiffLines lines={comparison.lines} side="after" /> : pair.after.text || "본문 없음"}</pre>
               <small>{shortRevision(pair.after.sha256)} 판</small>
             </section>
           </div>
         </details>
-      ))}
+      ); })}
 
       <form
         className="hp-evidence-form"
@@ -288,7 +294,7 @@ function renderRow(row: EvidenceRowView) {
       <p className="hp-evidence-meta">
         <span>{SOURCE_KIND_LABELS[row.source_kind] ?? SOURCE_KIND_LABELS.none}</span>
         <span>{provenanceLine(row)}</span>
-        <span className="hp-evidence-state">{sourceStateLabel(state)}</span>
+        <StatusChip state={state} className="hp-evidence-state" />
       </p>
       {row.adopted_from && <p className="hp-evidence-adopted">코치가 제안한 문장을 받아서 적었어요</p>}
     </li>

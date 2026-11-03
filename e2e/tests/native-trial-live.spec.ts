@@ -1,6 +1,7 @@
 // Executed only by the isolated native-trial-live workflow. No production token.
 import { test, expect } from '@playwright/test';
 import { launchApp, closeApp, chatFrame, startFrame } from '../fixtures/app';
+import { openCodeEntry } from '../fixtures/start-actions';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { hasClosingTime } from '../native-trial-checks.mjs';
@@ -14,7 +15,9 @@ test('native trial: enter code, use real API, create and revise an actual work f
   let stopped = false;
   let connected = false;
   let stage = 'code-entry';
-  // Synthetic participant approves this test's requested local file operations.
+  // Synthetic participant approves this test's requested local file operations, and on a
+  // trial seat the folder consent question (REQ-STUDIO-FOLDER-CONSENT, #2065) with the
+  // choice that lets the turn write.
   // This does not count as evidence of a human's delegation ability.
   const approvals = (async () => {
     while (!stopped) {
@@ -22,7 +25,7 @@ test('native trial: enter code, use real API, create and revise an actual work f
         const box = ctx.win.locator('.monaco-dialog-box').first();
         if (await box.isVisible().catch(() => false)) {
           const copy = (await box.textContent()) || '';
-          const allowed = /restart to take effect/i.test(copy) ? /^Cancel$/i : /^(저장|읽기|Approve|승인)$/;
+          const allowed = /restart to take effect/i.test(copy) ? /^Cancel$/i : /^(저장|읽기|Approve|승인|읽기·고치기·명령 실행 모두 허용)$/;
           const button = box.locator('.monaco-button').filter({ hasText: allowed }).first();
           if (await button.isVisible().catch(() => false)) await button.click();
         }
@@ -32,11 +35,11 @@ test('native trial: enter code, use real API, create and revise an actual work f
   })();
   try {
     const start = await startFrame(ctx.win);
-    if (await start.getByRole('button', { name: '수업에 참여하기', exact: true }).isVisible()) await start.getByRole('button', { name: '수업에 참여하기', exact: true }).click();
-    await start.getByLabel('수업 참여 코드', { exact: true }).fill('synthetic-invalid-code');
+    await openCodeEntry(start, 'classroom');
+    await start.locator('#course-code').fill('synthetic-invalid-code');
     await start.getByRole('button', { name: /^(?:코드 확인하기|수업 확인하기)$/ }).click();
     await expect(start.locator('.studio-error')).toBeVisible();
-    await start.getByLabel('수업 참여 코드', { exact: true }).fill(ctx.token);
+    await start.locator('#course-code').fill(ctx.token);
     await start.getByRole('button', { name: /^(?:코드 확인하기|수업 확인하기)$/ }).click();
     await expect(start.locator('.studio-course')).toContainText('Studio · 내 삶에 AI 더하기');
     await expect(start.locator('input[type=password]')).toHaveCount(0);
@@ -101,8 +104,8 @@ test('native trial: enter code, use real API, create and revise an actual work f
       const entry=await startFrame(ctx.win);
       // Test credentials intentionally use in-memory secret storage. Re-enter the
       // same code after a real process restart, then inspect persisted workspaceState.
-      if(await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).isVisible().catch(()=>false))await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).click();if(await entry.getByRole('button',{name:'수업에 참여하기',exact:true}).isVisible())await entry.getByRole('button',{name:'수업에 참여하기',exact:true}).click();
-      await entry.getByLabel('수업 참여 코드',{exact:true}).fill(ctx.token);
+      if(await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).isVisible().catch(()=>false))await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).click();await openCodeEntry(entry,'classroom');
+      await entry.locator('#course-code').fill(ctx.token);
       await entry.getByRole('button',{name: /^(?:코드 확인하기|수업 확인하기)$/}).click();
       await expect(entry.locator('.studio-course')).toContainText('Studio · 내 삶에 AI 더하기');
       await entry.getByRole('button',{name: /^(?:이어서 하기|수업 시작하기|이 활동 시작하기)$/}).click();

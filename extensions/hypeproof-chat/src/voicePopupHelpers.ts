@@ -435,6 +435,76 @@ export const COMPACT_CONTROLS = ['mute', 'stop', 'expand'] as const;
 export type CompactControl = (typeof COMPACT_CONTROLS)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CGP-VOICE-R-008 (REQ-CGPV-12, VO-47) — the compact control moves between the four
+// viewport corners by keyboard. Only corners exist: there is no free position, so the
+// control can never be parked half off-screen, and there is no drag (no drag-to-hide).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const COMPACT_CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
+export type CompactCorner = (typeof COMPACT_CORNERS)[number];
+/** Home corner. Top right keeps the composer and its send button (bottom) uncovered. */
+export const COMPACT_HOME_CORNER: CompactCorner = 'top-right';
+/** Per-window key: webview sessionStorage lives as long as this window's webview. */
+export const COMPACT_CORNER_STORAGE_KEY = 'hps.voice.compactCorner';
+export const COMPACT_MOVE_LABEL = '옮기기';
+export const COMPACT_MOVE_HELP = '화살표 키로 네 모서리 중 한 곳으로 옮겨요. Home 키를 누르면 처음 자리로 돌아가요.';
+
+const CORNER_NAMES: Record<CompactCorner, string> = {
+  'top-left': '왼쪽 위',
+  'top-right': '오른쪽 위',
+  'bottom-left': '왼쪽 아래',
+  'bottom-right': '오른쪽 아래',
+};
+
+export function compactCornerName(corner: CompactCorner): string {
+  return CORNER_NAMES[corner];
+}
+
+/** Spoken after a move. Says only where it went; nothing about the session changes. */
+export function compactCornerAnnouncement(corner: CompactCorner): string {
+  return `음성 컨트롤을 ${CORNER_NAMES[corner]}로 옮겼어요`;
+}
+
+/** Stored text → a corner. Anything that is not exactly one of the four is the home corner. */
+export function parseCompactCorner(raw: unknown): CompactCorner {
+  return typeof raw === 'string' && (COMPACT_CORNERS as readonly string[]).includes(raw) ? (raw as CompactCorner) : COMPACT_HOME_CORNER;
+}
+
+export interface CornerKey {
+  key: string;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  isComposing?: boolean;
+}
+
+/**
+ * The corner a key moves the control to, or null when the key is not ours.
+ * Up/Down change the vertical side and keep the horizontal one; Left/Right the reverse;
+ * Home returns to the home corner. A modified key or an open IME composition is never
+ * taken: those belong to app shortcuts and Korean input.
+ */
+export function compactCornerForKey(current: CompactCorner, e: CornerKey): CompactCorner | null {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing) return null;
+  const [v, h] = current.split('-') as ['top' | 'bottom', 'left' | 'right'];
+  switch (e.key) {
+    case 'ArrowUp': return `top-${h}`;
+    case 'ArrowDown': return `bottom-${h}`;
+    case 'ArrowLeft': return `${v}-left`;
+    case 'ArrowRight': return `${v}-right`;
+    case 'Home': return COMPACT_HOME_CORNER;
+    default: return null;
+  }
+}
+
+/** Pressing the move button (pointer or Enter) steps clockwise, so a mouse user can move it too. */
+export function nextCompactCorner(current: CompactCorner): CompactCorner {
+  const ring: CompactCorner[] = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+  return ring[(ring.indexOf(current) + 1) % ring.length];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VO-41 — 종료. 네 갈래가 **같은 해제**로 수렴하고, 부분 전사는 자동 전송되지 않는다.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -735,4 +805,58 @@ const FAILURE_TEXT: Record<VoiceFailureKind, { text: string; retry: boolean; rel
 export function failureView(kind: VoiceFailureKind): FailureView {
   const f = FAILURE_TEXT[kind];
   return { text: f.text, offersRetry: f.retry, mustReleaseCapture: f.release, offersTextFallback: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CGP-VOICE-R-009 (REQ-CGPV-14 / DES-CGPV-14) — "보여주기". The learner explicitly picks one
+// Studio-owned thing to show: the open editor file (with its revision) or the integrated preview
+// tab. The closed list below IS the contract: there is no whole-screen, window or OS capture
+// target, and no code path that could add one at runtime (the host refuses any other string).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SHOW_THIS_TARGETS = ['editor_file', 'preview_tab'] as const;
+export type ShowThisTarget = (typeof SHOW_THIS_TARGETS)[number];
+export const SHOW_THIS_BUTTON = '보여주기';
+/** Labels live here, never in a host payload: the menu cannot be renamed into something else. */
+export const SHOW_THIS_LABEL: Readonly<Record<ShowThisTarget, string>> = { editor_file: '열린 파일', preview_tab: '미리보기 화면' };
+export const SHOW_THIS_UNKNOWN_REASON = '지금은 확인하지 못했어요. 메뉴를 다시 열어 주세요.';
+
+export interface ShowThisItem {
+  readonly target: ShowThisTarget;
+  readonly label: string;
+  readonly enabled: boolean;
+  /** Why the item cannot be used. Always present when disabled; null when enabled. */
+  readonly reason: string | null;
+}
+
+export function isShowThisTarget(v: unknown): v is ShowThisTarget {
+  return typeof v === 'string' && (SHOW_THIS_TARGETS as readonly string[]).includes(v);
+}
+
+/** Request ids are opaque tokens from the panel; anything else is refused. */
+export function isShowThisRequestId(v: unknown): v is string {
+  return typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(v);
+}
+
+/** Control, bidi and line/paragraph separators never reach learner copy from a payload. */
+function cleanReason(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const s = v.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s ? s.slice(0, 200) : null;
+}
+
+/**
+ * The menu the panel draws, from whatever the host sent. Always exactly the two targets in a fixed
+ * order with Studio's own labels. A missing, malformed or extra entry never adds an item: an
+ * unknown state is a disabled item with a reason, and an enabled item carries no reason.
+ */
+export function showThisMenuView(raw: unknown): readonly ShowThisItem[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return SHOW_THIS_TARGETS.map((target) => {
+    const found = list.find((e) => !!e && typeof e === 'object' && (e as { target?: unknown }).target === target) as { enabled?: unknown; reason?: unknown } | undefined;
+    const enabled = found?.enabled === true;
+    const reason = enabled ? null : cleanReason(found?.reason) ?? SHOW_THIS_UNKNOWN_REASON;
+    return { target, label: SHOW_THIS_LABEL[target], enabled, reason };
+  });
 }

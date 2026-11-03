@@ -19,11 +19,20 @@ import { build } from "esbuild";
 import { chatPanelProps, resolvedProfile } from "./sx-screen-fixtures.mjs";
 
 const RECORD = process.env.HPS_A5_RECORD_BASE === "1";
+// The DEC-35 classroom screens show Service's confirmation time (local clock); pin the zone so their
+// digests are the same on every machine and in CI.
+process.env.TZ = "UTC";
 let passed = 0;
 const ok = (name) => {
   passed++;
   console.log(`✓ ${name}`);
 };
+// D020's empty recovery containers are covered by attachment-error-design, not A5.
+const withoutEmptyRecovery = html => html
+  .replaceAll('<div class="hps-attachment-failures" aria-label="다시 확인할 첨부 파일"></div>', '')
+  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '')
+  // CGP-CHAT-R-029: the persistent, empty 되돌리기 live region; stripping this exact node reproduces every prior digest.
+  .replace('<div class="hps-undo-toast" role="status" aria-live="polite" aria-atomic="true" data-testid="undo-toast" data-shown="false"></div>', '');
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 // ── The render instrument: the real components, bundled once ────────────────
@@ -194,6 +203,10 @@ const TOOL_LINES = [
   { id: "rev_1", role: "tool", content: "", createdAt: 3, tool: { icon: "🖼️", label: "미리보기 여는 중", state: "running" } },
 ];
 
+/** A classroom's selected class funding as Service's /v1/access returns it (DEC-35 class seats). */
+const CLASS_FUNDED = { status: "ready", selected: "class-1", view: { schema: "hps-access-view/1", configured: true, as_of: "2026-10-20T06:42:00Z", choices: [{
+  id: "class-1", label: "수업 지원", source_kind: "cohort", mode: "included", active: true, available: true, state: "ready", ends_at: 1_800_000_000_000, can_request: false,
+  allowed: { models: [], efforts: [], features: [], runtimes: [] }, resources: [{ meter: "requests:count", remaining: 37, held: 3, unresolved: 2, spent: 10, limit: 50, overrun: 0, shared: false }] }] } };
 /** name → props: every screen whose markup must not move for an old profile. */
 const OLD_SCREENS = {
   "ChatPanel/adult-plain": () => ["ChatPanel", chatPanelProps({ config: adultConfig() })],
@@ -205,22 +218,89 @@ const OLD_SCREENS = {
   "EffortControl/unknown": () => ["EffortControl", { config: adultConfig({ effortResult: { state: "unknown", requests: [] } }), post() {} }],
   "EffortControl/observed-truncated": () => ["EffortControl", { config: adultConfig({ effortResult: { state: "observed", requests: ROWS, truncated: true } }), post() {} }],
   "EffortControl/nothing": () => ["EffortControl", { config: adultConfig(), post() {} }],
+  // DEC-35 class seats (Jay 2026-10-19: the remaining count applies to pass and class seats): a
+  // classroom with Service class funding shows the class line in its header, and an unreachable
+  // Service shows 남은 요청 미확인. Recorded on this branch (CGP-SHELL-R-029); not main before A5.
+  "ChatPanel/classroom-class-funded": () => ["ChatPanel", chatPanelProps({ config: adultConfig({ access: CLASS_FUNDED }) })],
+  "ChatPanel/classroom-access-unknown": () => ["ChatPanel", chatPanelProps({ config: adultConfig({ access: { status: "unknown", selected: "class-1", notice: "사용량 미확인 · 새로고침해 주세요." } }) })],
 };
 
 /**
  * Taken on main before A5 with HPS_A5_RECORD_BASE=1: on 21bd15ba, and again on fbde0482 (#1527, the
  * branch's rebase base), where they were identical. Two runs on each gave the same digests.
+ * The four ChatPanel digests were re-taken for trial diagnosis D9 (REQ-L14): the markup differs
+ * from the earlier base only in the send button label, "Send" → "보내기" (diffed with HPS_A5_DUMP_DIR).
+ * Re-taken again for CGP-CHAT-R-001: the only added markup is the empty response-announcer live
+ * region `<div class="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer"></div>`
+ * (diffed with HPS_A5_DUMP_DIR against origin/main).
  */
+// Attachment guidance: only the persistent empty attachment-announcer is added;
+// stripping that exact element reproduces all nine prior digests.
+// REQ-STUDIO-STROKE-ICONS re-took the four ChatPanel digests: the only change is each status glyph
+// becoming its stroke icon (☐ mission marks → <svg data-icon="square" role="img" aria-label="아직">,
+// tool-row 🔧/🖼️ → <span data-glyph> + <svg aria-hidden>, ✓/⚠️/… marks → named <svg>, the header's ⚙ →
+// <svg data-icon="settings" aria-hidden> inside the aria-label="설정" button). Substituting
+// the old glyph markup back into the HPS_A5_DUMP_DIR dumps reproduces all four prior digests.
+// CGP-CHAT-D-001: moved only the invisible response-announcer outside the transcript.
+// Before/after markup is byte-identical after removing that one exact node.
+// CGP-DS-D-021: the six ChatPanel digests were re-taken because title= became data-hp-tooltip=; the
+// dumps of main and this branch are byte-identical once every data-hp-tooltip= is read back as title=.
+// CGP-DS-D-015: only ChatPanel/adult-timeline was re-taken; the `dots` icon is now three filled circles
+// (<g fill="currentColor" stroke="none"> with three <circle r="1.5">) instead of a 2.6-stroke <path>.
+// The dumps of main and this branch differ only in that one element (diffed with HPS_A5_DUMP_DIR).
+// CGP-SHELL-R-006: only the effort labels change to Korean in five affected renders.
+// CGP-DS-D-022: the six ChatPanel digests were re-taken (TZ=UTC) because the footer now always mounts one
+// empty polite status region and one empty assertive region so copy results are announced. The dumps of
+// main and this branch (HPS_A5_DUMP_DIR) differ only by those nodes: div.hps-copy-feedback wrapping
+// div[role=status][aria-live=polite].hps-sr-only and div[aria-live=assertive][aria-atomic=true].hps-sr-only. The EffortControl digests are unchanged.
+// CGP-LEARN-R-016: the six ChatPanel digests were re-taken (TZ=UTC) because the header now always draws one
+// coach run state (span.hps-run-state[role=status][aria-live=polite] with a 20px svg and the label 준비됨). The
+// HPS_A5_DUMP_DIR dumps of main and this branch are byte-identical once that one span is removed; the
+// five EffortControl digests are unchanged.
+// CGP-LEARN-R-001: the six ChatPanel digests were re-taken (TZ=UTC) because the lesson step's work form now carries
+// its block identity (data-hps-material, data-hps-material-step, data-hps-material-version). The HPS_A5_DUMP_DIR dumps of
+// main and this branch are byte-identical once those three attributes are removed; the five EffortControl digests are unchanged.
+// CGP-LEARN-R-003: the six ChatPanel digests were re-taken (TZ=UTC) because the week-3 step's criterion block now draws its
+// live text equivalent: a section.hp-material (carrying the block identity, moved off the form) with an h3 title, a help
+// sentence and a polite status sentence, and aria-describedby on the field. The HPS_A5_DUMP_DIR dumps of main and this
+// branch are byte-identical once those nodes and that attribute are removed and the identity attributes are dropped from
+// main's form; the five EffortControl digests are unchanged.
+// CGP-LEARN-D-001: re-taken again (TZ=UTC) because that block is now a collapsible 자료 card whose head holds the thumbnail
+// (icon and 자료), the title, the live state line and the button. Removing the head's wrappers, the 자료 label and the button,
+// moving the state line back to the end of the unwrapped body and dropping the card classes/attributes from the
+// HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
+// CGP-LEARN-D-003: re-taken again (TZ=UTC) because the live state line (the block's caption) moved out of the head, from
+// under the title to after the card body, and the head's title wrapper div is gone. Putting the line back under the title in
+// a div.hp-block-card-title gives main's HPS_A5_DUMP_DIR dumps byte for byte; the five EffortControl digests are unchanged.
+// CGP-LEARN-D-002: the six ChatPanel digests were re-taken (TZ=UTC) because the criterion card's thumbnail icon is now
+// `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
+// flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "10df95da41ec08638d40440233fc00c6f843bc6bcd35a9c328413b06d442fdb8",
-  "ChatPanel/adult-effort-observed": "2ba790f80c7bdad44fe675b27e2d6973bb318f6e37fc15a40595991726c0dfd4",
-  "ChatPanel/adult-timeline": "48fec8151b904cea8dc4df64d6801771bca33e170bd15545284ca8857d3f0a22",
-  "ChatPanel/kids": "cba8c09433b9aa505124027b568348897a3ae0387a33be438612a0e39c8c7a44",
-  "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
-  "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
-  "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
-  "EffortControl/observed-truncated": "38784f908976a596bc7605c7cf68bf3238c8650b8c4272a495f91f42267d28c6",
+  "ChatPanel/adult-plain": "427f0c868f9d2e001363b83c5190c5a5729e94f8a0cf114d141d28317f3a9559",
+  "ChatPanel/adult-effort-observed": "b8e77396817764c7e48fde595175c028c1379ce20c1faeda67b0cae8a4dc26a8",
+  "ChatPanel/adult-timeline": "746ff8aba3c47e0b4ec57cd3337d043b29a27b3ab23ac4c1c4bc53dcfedded1b",
+  "ChatPanel/kids": "18e9f1e42d8f055b519aaa791866ff81625543b31406f0d12b0d83c53ab93122",
+  "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
+  "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
+  "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
+  "EffortControl/observed-truncated": "90816b9acd113cdb1719bfd17b7fe52276c950d7df6455e84c734296edf3a721",
   "EffortControl/nothing": "4a3c092bd66e1aa89b05f7e4c0444694fbaefce76613185e7cfdc18ea30feeef",
+  // DEC-35 class seats (CGP-SHELL-R-029): recorded on this branch with HPS_A5_RECORD_BASE=1 (TZ=UTC).
+  // The class-funded header reads "수업·기관 지원 · 남은 요청 37회 · 06:42 확인"; the unreachable one
+  // "남은 요청 미확인". The nine digests above are unchanged: none of those screens carries access data.
+  // Re-recorded after the rebase onto CGP-CHAT-D-001 (#2187): the only change from the earlier pair is
+  // that invisible response-announcer node moving, the same move main's nine digests took
+  // (identical markup after removing that one node, diffed with HPS_A5_DUMP_DIR).
+  // Re-recorded for CGP-SHELL-D-028 (TZ=UTC): the header line now pairs the model label with the
+  // remaining-requests chip (a button that opens the usage detail). The detail dialog is mounted only
+  // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
+  // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
+  // only markup change (diffed with HPS_A5_DUMP_DIR).
+  // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
+  // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
+  // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
+  "ChatPanel/classroom-class-funded": "61420c8f9534433a714f3c8fb97b580e2a7c1ecd5d2f7d1d358fb2b0f4a22dcc",
+  "ChatPanel/classroom-access-unknown": "fd91be632341e1d826f3c03ffd69d8ee3b803a9fac10b1e9d355e6f16e15cf87",
 };
 
 const status = rendererStatus();
@@ -234,7 +314,7 @@ if (!status.available) {
   for (const [name, make] of Object.entries(OLD_SCREENS)) {
     const [component, props] = make();
     const html = await render(component, props);
-    digests[name] = sha(html);
+    digests[name] = sha(withoutEmptyRecovery(html));
     if (dumpDir) {
       const fs = await import("node:fs");
       fs.mkdirSync(dumpDir, { recursive: true });
@@ -248,7 +328,7 @@ if (!status.available) {
   for (const [name, digest] of Object.entries(digests)) {
     assert.equal(digest, BASE[name], `${name}: an old profile renders differently from main before A5`);
   }
-  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal main before A5`);
+  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal their recorded base (main before A5; the two DEC-35 classroom screens on this branch)`);
 }
 
 // ── 2. The capability header on GET /v1/profile (spec §2.2 condition 4, §4.1) ─
@@ -980,7 +1060,7 @@ if (!status.available) {
   // Control: a real abort (the learner pressed stop) shows nothing.
   const abort = new Error("aborted");
   abort.name = "AbortError";
-  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, abort, "s-stop");
+  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, abort, "s-stop", { signal: AbortSignal.abort() });
   assert.equal(banners.length, 1);
   ok("SdkBusyAbortError reaches the learner as the generic banner with its Korean line (control: a stop shows none)");
 }
@@ -1023,11 +1103,14 @@ if (!status.available) {
         return null;
       },
       archiveAdultPage: P.ChatPanelProvider.prototype.archiveAdultPage,
+      // REQ-STUDIO-FOLDER-CONSENT — this seat's own folder: the folder guard allows every write.
+      folderWriteBlocked: () => false,
       saveEngineToWorkspace: async () => order.push("engine"),
       saveGameToWorkspace: async (html) => {
         const kept = history();
         order.push(`save(archived=${kept ? kept.length : "none"})`);
         fsm.writeFileSync(pathm.join(ws, "index.html"), html);
+        return true;
       },
       isLiveServerPreview: () => false,
       openInLiveServer: async () => false,
@@ -1106,15 +1189,15 @@ if (status.available) {
   const items = (html) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visibleText(m[1]));
   const html = await render("EffortControl", effortProps(ATTRIBUTED, { orchestrator: ROSTER }));
   assert.deepEqual(items(html), [
-    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "보조 작업 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ], "one agent label per request, before the model (spec §5.2's copy)");
   assert.deepEqual([...html.matchAll(/data-agent="([^"]+)"/g)].map((m) => m[1]), ["coach", "design-reviewer", "aux", "design-reviewer"]);
-  assert.match(html, /<details><summary>Effort 설정 확인<\/summary>/, "closed until opened: visible on demand");
+  assert.match(html, /<details><summary>생각 깊이 설정 확인<\/summary>/, "closed until opened: visible on demand");
   // The untitled row took its title from the served roster; without the roster it shows the wire name.
-  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패");
+  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패");
   // A helper model the learner's menu does not list is named by the roster, else by its id (as before).
   const noHaiku = { model_selection: { ...MODEL_SELECTION, choices: [CHOICES[0]] } };
   assert.match(items(await render("EffortControl", effortProps([ATTRIBUTED[1]], { ...noHaiku, orchestrator: ROSTER })))[0], /^검토 도우미 · Claude Haiku 5\.5:/);
@@ -1122,10 +1205,10 @@ if (status.available) {
   // Negative control: the same rows without the agent fields read exactly as today.
   const bare = ATTRIBUTED.map(({ agent, agent_title, request_class, ...r }) => r);
   assert.deepEqual(items(await render("EffortControl", effortProps(bare, { orchestrator: ROSTER }))), [
-    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ]);
   assert.doesNotMatch(await render("EffortControl", effortProps(bare)), /data-agent/);
   // A served roster changes no screen by itself (it is labels for attributed rows, never UI):
@@ -1134,7 +1217,7 @@ if (status.available) {
     for (const [name, make] of Object.entries(OLD_SCREENS)) {
       const [component, props] = make();
       const withServed = { ...props, config: { ...props.config, profile: { ...props.config.profile, orchestrator: served } } };
-      assert.equal(sha(await render(component, withServed)), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
+      assert.equal(sha(withoutEmptyRecovery(await render(component, withServed))), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
     }
   }
   // The timeline draws the host's lines as designed (spec §5.2 examples), through ChatPanel.
@@ -1148,16 +1231,18 @@ if (status.available) {
     P.orchestratorToolEntry({ kind: "check", id: "check:a1", name: "archive", verdict: "archived", summary: "", path: "index.html", state: "done", icon: "🗂", label: "🗂 이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html", at: 5 }, "t"),
   ];
   const panel = await render("ChatPanel", chatPanelProps({ config: adultConfig(), messages: entries.map(toMessage) }));
-  const shown = [...panel.matchAll(/<div class="hps-tool-log-line hps-tool-(\w+)"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => `${visibleText(m[2])} [${m[1]}]`);
+  // REQ-STUDIO-STROKE-ICONS: icons are stroke svgs now; each is read back as (its data-icon name).
+  const iconsAsText = (html) => html.replace(/<svg [^>]*data-icon="([a-z-]+)"[^>]*>[\s\S]*?<\/svg>/g, "($1)");
+  const shown = [...panel.matchAll(/<div class="hps-tool-log-line hps-tool-(\w+)"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => `${visibleText(iconsAsText(m[2]))} [${m[1]}]`);
   assert.deepEqual(shown, [
-    "🔎검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개✓ [done]",
-    "📏390·1280px 확인 — 통과✓ [done]",
-    "📏390px에서 2곳 넘침✓ [done]",
-    "📏미확인(미리보기 꺼짐)✓ [done]",
-    "🗂이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html✓ [done]",
+    "(search)검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개(check) [done]",
+    "(ruler)390·1280px 확인 — 통과(check) [done]",
+    "(ruler)390px에서 2곳 넘침(check) [done]",
+    "(ruler)미확인(미리보기 꺼짐)(check) [done]",
+    "(folder)이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html(check) [done]",
   ]);
-  assert.doesNotMatch(panel, /🔎\s*🔎|📏\s*📏|🗂\s*🗂/, "no icon twice");
-  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
+  assert.doesNotMatch(visibleText(panel), /🔎|📏|🗂/, "no icon drawn as an emoji, and none twice (data-glyph keeps the key, unseen)");
+  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 11 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
 } else {
   console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);
 }
@@ -1231,11 +1316,11 @@ if (status.available) {
     assert.deepEqual(items(await listOf(failed)), ["검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음 · 요청 실패"]);
     // The unknown reason marks its own row; the rows around it read as before.
     assert.deepEqual(items(await listOf(mixed)), [
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게",
       "검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음",
-      "Claude Sonnet 5.5: 요청 Low → 적용 High · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 깊게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 적용 이유 미확인",
     ]);
     // S4's own agent values, without a title: worded, never shown as English wire values.
     const worded = observedEffortResult({ requests: [

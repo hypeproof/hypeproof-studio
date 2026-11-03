@@ -24,7 +24,9 @@
 // evidence is the one thing this product must most avoid.
 
 import { useEffect, useRef } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { ResolvedProfile } from "../../src/protocol";
+import { STEP_JUMP_LABEL } from "../../src/lessonStepMarks";
 import { actionsFrom, completionMet, resumeStepOf, stepsRemaining, type LessonStep as Step } from "./missionHeaderLogic";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -69,6 +71,11 @@ export interface MissionHeaderProps {
    * Editing lives in the rail (StudentGoal.tsx).
    */
   goal?: string | null;
+  /**
+   * CGP-CHAT-R-023 — "지금 단계로": scrolls the transcript to the divider of the step on screen. Absent or null when that
+   * step has no divider yet (no turn served under it); then there is no button. It never changes the step.
+   */
+  onJumpToStep?: (() => void) | null;
 }
 
 export function MissionHeader(props: MissionHeaderProps) {
@@ -187,7 +194,7 @@ export function MissionHeader(props: MissionHeaderProps) {
                     carries its state for a screen reader too, now that marks differ. The rehearsal
                     read-back (LessonStepPanel `drawnMission`) reads only the `-text` span, so the
                     condition's wording stays exactly what the design file says. */}
-                <span className="hp-mark" role="img" aria-label={met ? "확인됨" : "아직"}>{met ? "☑" : "☐"}</span>
+                <span className="hp-mark"><ChatIcon kind={met ? "check-square" : "square"} size={16} label={met ? "확인됨" : "아직"} /></span>
                 <span className="hp-mission-completion-text">{item.text}</span>
               </li>
             );
@@ -196,7 +203,7 @@ export function MissionHeader(props: MissionHeaderProps) {
             <span className="hp-mark" aria-hidden="true">·</span>
             <span>
               {props.missing
-                ? "☑ 표시는 내가 남긴 기록에서 확인된 것이에요."
+                ? <><ChatIcon kind="check-square" size={16} label="확인됨" /> 표시는 내가 남긴 기록에서 확인된 것이에요.</>
                 : "확인 표시는 직접 적고 시험한 기록이 쌓일 때 붙습니다. 지금은 아직 확인 전입니다."}
             </span>
           </li>
@@ -227,6 +234,9 @@ export function MissionHeader(props: MissionHeaderProps) {
 
       <p className="hp-mission-foot">
         {steps.length ? <span className="hp-mission-remaining">남은 단계 {remaining}</span> : null}
+        {props.onJumpToStep ? (
+          <button type="button" className="hp-cta-quiet hp-mission-jump" onClick={props.onJumpToStep}>{STEP_JUMP_LABEL}</button>
+        ) : null}
         <button type="button" className="hp-mission-growth" onClick={props.onOpenGrowth}>
           나의 변화 기록 ›
         </button>

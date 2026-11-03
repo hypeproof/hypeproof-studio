@@ -4,7 +4,7 @@
 // opens with the hypeproofChat query pre-filtered.
 
 import { test, expect } from "@playwright/test";
-import { chatFrame, closeApp, launchApp } from "../fixtures/app";
+import { chatFrame, closeApp, launchApp, settingLabel } from "../fixtures/app";
 
 test("REQ-K2: ⚙ click opens Settings editor pre-filtered to hypeproofChat", async () => {
   const ctx = await launchApp({
@@ -13,19 +13,20 @@ test("REQ-K2: ⚙ click opens Settings editor pre-filtered to hypeproofChat", as
   });
   try {
     const cf = await chatFrame(ctx.win);
-    const cog = cf.locator("button:has-text('⚙')").first();
+    // REQ-STUDIO-STROKE-ICONS: the cog is a stroke icon now; the button keeps its Korean name.
+    const cog = cf.getByRole("button", { name: "설정", exact: true }).first();
     await cog.waitFor({ state: "visible", timeout: 15_000 });
     await cog.click();
 
     // The Settings editor opens in the editor area with our 3 settings
     // visible (filtered by "hypeproofChat" query). VS Code's display labels
-    // come from the `title` field in package.json (`HypeProof Chat`).
+    // come from the Korean shell patch (settingLabel), not the manifest titles.
     await expect(ctx.win.locator(".monaco-workbench"))
-      .toContainText("Hypeproof Chat: Model", { timeout: 15_000 });
+      .toContainText(settingLabel("hypeproofChat.model"), { timeout: 15_000 });
     await expect(ctx.win.locator(".monaco-workbench"))
-      .toContainText("Hypeproof Chat: Proxy Url");
+      .toContainText(settingLabel("hypeproofChat.proxyUrl"));
     await expect(ctx.win.locator(".monaco-workbench"))
-      .toContainText("Hypeproof Chat: Require Approval For");
+      .toContainText(settingLabel("hypeproofChat.requireApprovalFor"));
   } finally {
     await closeApp(ctx);
   }

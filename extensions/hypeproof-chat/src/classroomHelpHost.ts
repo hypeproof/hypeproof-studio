@@ -204,7 +204,11 @@ export class ClassroomHelpHost {
     } finally { this.busy = false; }
   }
 
-  /** A request whose answer was lost and that the Service does not list is retried with the same id and envelope. */
+  /**
+   * A request whose answer was lost and that the Service does not list is offered again, never re-sent on its own
+   * (REQ-KNOW-09: a retry needs a new confirmation). The same id and content go back to `prepared`, so the preview, its
+   * recipient, sizes and exclusion line and an unticked consent box are shown again; only a fresh "동의하고 보내기" sends it.
+   */
   async retry(key: string): Promise<void> {
     await this.ready(); const w = await this.who(); if (!w.binding || draftKey(w.binding) !== key) return;
     const sk = sendKey(w.binding), e = await this.envelopeOf(sk); if (!e || e.state === "prepared") return;
@@ -212,7 +216,8 @@ export class ClassroomHelpHost {
     if (!(await this.still(sk))) { await this.refresh(); return; }
     if (listed.status === 200 && Array.isArray(listed.json?.shares) && listed.json.shares.some((x: ShareRecord) => x.id === e.request_id)) { await this.refresh(null, sk); return; }
     if (listed.status !== 200) { await this.refresh("지금은 서버에 확인할 수 없습니다. 보낸 요청은 이 기기에 그대로 있습니다.", sk); return; }
-    await this.send(key, e.request_id, true);
+    const reopened = await this.setEnvelope(sk, (x) => (x?.request_id === e.request_id && x.state !== "prepared" ? { ...x, state: "prepared" } : undefined));
+    await this.refresh(reopened === true ? "서버에 저장되지 않았습니다. 아래 내용을 다시 확인하고 동의해야 보냅니다(같은 요청이라 두 번 저장되지 않습니다)." : "미리 본 내용이 바뀌었습니다. 다시 확인해 주세요.", sk);
   }
 
   async confirm(key: string, id: string, revision: number): Promise<void> {

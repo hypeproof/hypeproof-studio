@@ -1,6 +1,6 @@
 # Shared Google runner: real two-account isolation
 
-Date: 2026-10-14. Decision: DEC-023 / EA-11. Source: Studio `68c37857`,
+Date: 2026-10-14. Decision: DEC-026 / EA-11. Source: Studio `68c37857`,
 `scripts/google-runner-probe/`. Root performed the actual Google calls; these are
 not the subagent's simulated results. No mail was sent and no paid AI was called.
 

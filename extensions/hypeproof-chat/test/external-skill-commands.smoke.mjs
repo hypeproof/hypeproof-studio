@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import vm from 'node:vm';
+import {createRequire} from 'node:module';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+const require=createRequire(import.meta.url),tmp=await fs.mkdtemp(path.join(os.tmpdir(),'hps-skill-command-'));
+let root=path.join(tmp,'workspace'),trusted=true,revision='a'.repeat(40),content='---\nname: demo-skill\ndescription: Keep the requested keyboard recognizable.\nlicense: MIT\ncapabilities: [read]\n---\nPreserve the keyboard shape.\n',failFetch=false;
+await fs.mkdir(root);await fs.writeFile(path.join(root,'learner.md'),'original result');const originalRoot=root;
+const map=new Map(),events=[],quick=[],inputs=[],confirms=[],warnings=[];let handler,fetches=0;
+const vscode={workspace:{get isTrusted(){return trusted;},get workspaceFolders(){return [{uri:{scheme:'file',fsPath:root}}];},openTextDocument:async x=>{events.push({type:'document',text:x.content});return x;}},window:{showQuickPick:async items=>{const pick=quick.shift();return typeof pick==='string'?items.find(i=>typeof i==='string'?i===pick:i.label.replace(/^✓ /,'')===pick):pick?.(items);},showInputBox:async()=>inputs.shift(),showInformationMessage:async(...args)=>{events.push({type:'confirm',text:args[0]});const result=confirms.shift();return typeof result==='function'?result():result;},showTextDocument:async()=>events.push({type:'preview'}),showWarningMessage:async x=>warnings.push(x),withProgress:async(_options,task)=>task({}, {isCancellationRequested:false,onCancellationRequested:()=>({dispose(){}})})},ProgressLocation:{Notification:1},commands:{registerCommand:(name,run)=>{assert.equal(name,'hypeproof-chat.externalSkills');handler=run;return {dispose(){}};}}};
+const ctx={globalStorageUri:{fsPath:path.join(tmp,'host-storage')},subscriptions:[],workspaceState:{get:(k,d)=>map.has(k)?structuredClone(map.get(k)):d,update:async(k,v)=>{events.push({type:'write'});map.set(k,structuredClone(v));}}};
+const bundle=await build({entryPoints:[new URL('../src/externalSkillCommands.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const mod={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,Buffer,URL,TextDecoder,AbortController,setTimeout,clearTimeout,structuredClone,fetch:async(url,init)=>{
+ fetches++;assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');assert.equal(Object.keys(init.headers).some(k=>/authorization/i.test(k)),false);if(failFetch)throw Error('network interrupted');
+ if(url.includes('/commits/'))return new Response(JSON.stringify({sha:revision,commit:{tree:{sha:'c'.repeat(40)}}}));
+ if(url.endsWith('/git/trees/'+'c'.repeat(40)))return new Response(JSON.stringify({tree:[{path:'skill',type:'tree',mode:'040000',sha:'d'.repeat(40)}]}));
+ if(url.includes('/git/trees/'))return new Response(JSON.stringify({tree:[{path:'SKILL.md',type:'blob',mode:'100644',sha:createHash('sha1').update(`blob ${Buffer.byteLength(content)}\0`).update(content).digest('hex'),size:Buffer.byteLength(content)}]}));
+ assert.ok(url.includes('/'+revision+'/skill/SKILL.md'));return new Response(content);
+}});
+const {registerExternalSkillCommands,selectedExternalInstructions}=mod.exports;
+registerExternalSkillCommands(ctx);
+const beginImport=()=>{quick.push('GitHub에서 가져오기');inputs.push('https://github.com/example/skills','main','skill');};
+try {
+ beginImport();confirms.push(undefined);await handler();assert.equal(map.size,0,'dismissing preview confirmation cannot register or select');assert.ok(events.some(e=>e.type==='preview'));
+ events.length=0;beginImport();confirms.push('선택하여 사용');await handler();
+ assert.equal(warnings.length,0);assert.ok(events.findIndex(e=>e.type==='preview')<events.findIndex(e=>e.type==='write'),'preview precedes explicit selection persistence');
+ const first=await selectedExternalInstructions(ctx,root);assert.ok(first.text.includes('keyboard shape'));assert.equal(first.provenance[0].revision,'a'.repeat(40));
+ const beforeOffline=fetches;quick.push('demo-skill','내용과 출처 보기');await handler();assert.equal(fetches,beforeOffline,'preview stored copy is offline');
+ quick.push('demo-skill','사용 해제');await handler();assert.equal((await selectedExternalInstructions(ctx,root)).text,'');
+ quick.push('demo-skill','선택하여 사용');confirms.push('선택하여 사용');await handler();assert.ok((await selectedExternalInstructions(ctx,root)).text);
+ revision='b'.repeat(40);content=content.replace('Preserve the keyboard shape.','Keep the keys and shadow.');quick.push('demo-skill','업데이트 확인');inputs.push('https://github.com/example/skills','main','skill');confirms.push('선택하여 사용');await handler();
+ assert.equal((await selectedExternalInstructions(ctx,root)).provenance[0].revision,revision);assert.ok(events.some(e=>e.type==='document'&&e.text.includes('업데이트 변경 내용')&&e.text.includes('Keep the keys and shadow.')));
+ quick.push('demo-skill','이전 revision 복구',items=>items.find(i=>i.label==='a'.repeat(12)));confirms.push('이 revision 사용');await handler();assert.equal((await selectedExternalInstructions(ctx,root)).provenance[0].revision,'a'.repeat(40));
+ const stable=(await selectedExternalInstructions(ctx,root)).text;failFetch=true;quick.push('demo-skill','업데이트 확인');inputs.push('https://github.com/example/skills','main','skill');await handler();failFetch=false;assert.equal((await selectedExternalInstructions(ctx,root)).text,stable);assert.ok(warnings.length);
+ trusted=false;const prior=fetches;await handler();assert.equal(fetches,prior);assert.equal((await selectedExternalInstructions(ctx,root)).text,'');trusted=true;
+ const nextRoot=path.join(tmp,'other-workspace');await fs.mkdir(nextRoot);quick.push('demo-skill','목록에서 제거');confirms.push(()=>{root=nextRoot;return '제거';});await handler();root=originalRoot;assert.equal((await selectedExternalInstructions(ctx,root)).text,stable,'workspace change cannot mutate a prior workspace selection');
+ quick.push('demo-skill','목록에서 제거');confirms.push('제거');await handler();assert.equal((await selectedExternalInstructions(ctx,root)).text,'');assert.equal(await fs.readFile(path.join(root,'learner.md'),'utf8'),'original result');
+ console.log('PASS actual registered command: preview/cancel/explicit select/offline preview/disable/reselect/update diff/revert/remove, interrupted download, trust and workspace-change boundaries');
+} finally {await fs.rm(tmp,{recursive:true,force:true});}

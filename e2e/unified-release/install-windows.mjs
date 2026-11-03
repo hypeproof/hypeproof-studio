@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {sha256,treeHash} from './artifact.mjs';
+import {sha256,treeHash,INSTALLER_PRODUCT_JSON,installerTarget,installerProductMatches} from './artifact.mjs';
 if(process.platform!=='win32'||process.env.GITHUB_ACTIONS!=='true')throw Error('Windows disposable CI runner required');
 const [assets,portable]=process.argv.slice(2);
 const names=fs.readdirSync(assets).filter(n=>/Setup.*\.exe$/.test(n));
@@ -14,7 +14,12 @@ const installers=[];
 for(const name of names){
  const destination=fs.mkdtempSync(path.join(os.tmpdir(),'hps-installer-'));
  execFileSync(path.resolve(assets,name),['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/MERGETASKS=!runcode,!desktopicon,!quicklaunchicon',`/DIR=${destination}`],{stdio:'pipe',timeout:180000});
- for(const file of files)if(sha256(path.join(portable,file))!==sha256(path.join(destination,file)))throw Error('Installer payload differs: '+name+' / '+file);
+ for(const file of files){
+  if(INSTALLER_PRODUCT_JSON.test(file)){
+   const why=installerProductMatches(fs.readFileSync(path.join(portable,file),'utf8'),fs.readFileSync(path.join(destination,file),'utf8'),installerTarget(name));
+   if(why)throw Error('Installer payload differs: '+name+' / '+file+': '+why);
+  }else if(sha256(path.join(portable,file))!==sha256(path.join(destination,file)))throw Error('Installer payload differs: '+name+' / '+file);
+ }
  installers.push({name,sha256:sha256(path.join(assets,name)),payloadMatches:true});
  // CI runner disposal cleans installed applications/registry; don't invoke user uninstallers.
 }

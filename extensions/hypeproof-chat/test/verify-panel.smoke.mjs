@@ -32,18 +32,21 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   assert.match(html, /data-testid="verify-status" data-state="verified"/);
   assert.match(text, /검증됨 · 이 버전에서 기대 조건을 모두 통과했어요/);
   assert.match(text, /이 버전의 테스트 결과/);
-  assert.equal((html.match(/data-status="pass"/g) ?? []).length, 3);
+  assert.equal((html.match(/data-testid="[^"]+" data-status="pass"/g) ?? []).length, 3);
+  // CGP-DS-R-006: each verdict is a success status chip (icon + 통과), one per row.
+  assert.equal((html.match(/class="hp-status-chip hps-verify-badge" data-status="pass" data-intent="success"><svg [^>]*data-icon="check"/g) ?? []).length, 3);
   assert.doesNotMatch(html, /verify-fix"/, "nothing to fix");
   // The evidence is in Korean: no raw step action or citation kind reaches the student.
-  assert.match(text, /✓ 이동/);
+  // REQ-STUDIO-STROKE-ICONS: the step mark is a stroke icon named in Korean, then the Korean action.
+  assert.match(html, /role="img" aria-label="성공">(?:(?!<\/svg>)[\s\S])*<\/svg> 이동/);
   assert.match(text, /근거\(화면 내용\)/);
-  assert.doesNotMatch(text, /✓ navigate|근거\((?:snapshot|record|screenshot|route)\)/);
+  assert.doesNotMatch(text, /navigate|근거\((?:snapshot|record|screenshot|route)\)/);
   assert.doesNotMatch(html, /verify-expectations/, "control: no expectations, no list");
   // The coach wrote the expectations, so each result shows what it was judged on.
   const judged = report(V0, [crit("c1", "주문하면 완료 화면이 보인다", "pass", { expectations: [{ kind: "text", ok: true, detail: "보이지 않아야 함: 주문 오류" }] })]);
   const shown = await render(view({ verification: { state: "verified", run_id: "run-1", open: [] }, report: judged }));
   assert.match(shown.html, /data-testid="verify-expectations"/);
-  assert.match(shown.text, /✓ 확인한 것: 보이지 않아야 함: 주문 오류/);
+  assert.match(shown.html, /role="img" aria-label="맞음">(?:(?!<\/svg>)[\s\S])*<\/svg> 확인한 것: 보이지 않아야 함: 주문 오류/);
   ok("CR-T76 UI positive: a version with a three-pass report bound to it shows 검증됨 with each result");
 }
 {
@@ -114,18 +117,21 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   const free = await renderComponent("ChatPanel", withDraft({}));
   assert.ok(sendButton(free), "control: the Send button is drawn");
   assert.doesNotMatch(sendButton(free), /disabled/, "control: with the same draft and no test, Send is enabled");
+  const pending = await renderComponent("ChatPanel", withDraft({ sendPending: true }));
+  assert.match(sendButton(pending), /disabled/, "Send stays disabled until the host accepts or rejects a pending request");
   const chatSrc = readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
   const appSrc = readFileSync(new URL("../webview-ui/src/App.tsx", import.meta.url), "utf8");
   const LOCKS = {
-    submit: /\|\| streaming \|\| unavailable \|\| props\.sendLocked\) return;/,
+    submit: /\|\| streaming \|\| unavailable \|\| props\.sendLocked \|\| props\.sendPending\) return false;/,
     parked: /if \(props\.sendLocked\) \{ restoreQueuedToDraft\(\); return; \}\s*const text = queued as string;/,
-    app: /sendLocked=\{!!state\.verify\?\.running(?: \|\| !!automationQuestion)?\}/,
+    app: /sendLocked=\{!!state\.verify\?\.running \|\| !!workspace\?\.error(?: \|\| !!automationQuestion)?\}/,
   };
   const lockProblems = (chat, app) => Object.entries(LOCKS).filter(([k, re]) => !re.test(k === "app" ? app : chat)).map(([k]) => k);
   assert.deepEqual(lockProblems(chatSrc, appSrc), []);
-  assert.ok(lockProblems(chatSrc.replace(" || props.sendLocked) return;", ") return;"), appSrc).includes("submit"));
+  assert.ok(lockProblems(chatSrc.replace(" || props.sendLocked || props.sendPending) return false;", " || props.sendPending) return false;"), appSrc).includes("submit"));
+  assert.ok(lockProblems(chatSrc.replace(" || props.sendPending) return false;", ") return false;"), appSrc).includes("submit"));
   assert.ok(lockProblems(chatSrc.replace("if (props.sendLocked) { restoreQueuedToDraft(); return; }", ""), appSrc).includes("parked"));
-  assert.ok(lockProblems(chatSrc, appSrc.replace("!!state.verify?.running", "false")).includes("app"));
+  assert.ok(lockProblems(chatSrc, appSrc.replace(/sendLocked=\{!!state\.verify\?\.running[^}]*\}/, "")).includes("app"));
   ok("composer lock: Send disabled while a test runs (rendered), the parked message returns to the draft, App wires the host's running");
 }
 console.log(`\n${passed} verify panel checks passed`);

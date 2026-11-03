@@ -132,10 +132,35 @@ function Write-Err2([string]$m)  { Write-Host ("    XX  {0}" -f $m) -ForegroundC
 
 function Confirm-Or([string]$prompt, [bool]$default = $true) {
     if ($NonInteractive) { return $default }
-    $suffix = if ($default) { '[Y/n]' } else { '[y/N]' }
-    $ans = Read-Host ("    {0} {1}" -f $prompt, $suffix)
-    if ([string]::IsNullOrWhiteSpace($ans)) { return $default }
-    return ($ans -match '^(y|yes)$')
+    $suffix = if ($default) { '(Y/n, 그냥 Enter = 예)' } else { '(y/N, 그냥 Enter = 아니오)' }
+    for ($tries = 1; $tries -le 3; $tries++) {
+        $ans = Read-Host ("    {0} {1}" -f $prompt, $suffix)
+        switch (Get-ConfirmAnswer $ans) {
+            'empty' { return $default }
+            'yes'   { return $true }
+            'no'    { return $false }
+        }
+        # Not understood: ask again, and after three tries take the safe answer (no).
+        if ($tries -lt 3) {
+            Write-Host "    '예' 또는 '아니요'로 답해 주세요."
+        }
+    }
+    Write-Host "    답을 알아듣지 못해서 '아니요'로 처리합니다."
+    return $false
+}
+
+# Get-ConfirmAnswer <reply> -> 'yes' / 'no' / 'empty' / 'unknown'.
+# The prompt is Korean, so learners answer in Korean, and a learner with the
+# Korean IME on who presses y or n types the jamo on that key (y -> ㅛ, n -> ㅜ).
+# Kept in sync with confirm_answer in install.sh; scripts/test-installer-answers.sh
+# tests both. -match is case-insensitive.
+function Get-ConfirmAnswer([string]$reply) {
+    $a = ([string]$reply) -replace '\s', ''
+    $a = $a -replace '[.!?~]$', ''
+    if ($a -eq '') { return 'empty' }
+    if ($a -match '^(y|yes|ㅛ|ㅛㄷㄴ|네|넵|넹|예|응|ㅇ|ㅇㅇ)$') { return 'yes' }
+    if ($a -match '^(n|no|ㅜ|ㅜㅐ|아니.*|ㄴ|ㄴㄴ|싫어.*)$') { return 'no' }
+    return 'unknown'
 }
 
 # ----------------------------------------------------------------------------
@@ -679,12 +704,71 @@ function Invoke-ToolPost($tool) {
 # ----------------------------------------------------------------------------
 # 8. POSIX shell guarantee (Git Bash, else WSL)
 # ----------------------------------------------------------------------------
+#
+# Where Git Bash can live. Install-WingetPackage asks for USER scope first, and a
+# user-scope Git.Git lands in %LOCALAPPDATA%\Programs\Git, not Program Files.
+# Checking only C:\Program Files\Git sent those participants into the WSL
+# install prompt (admin + reboot) on a machine that already had Git Bash
+# (trial diagnosis I11, PRA-12). The git.exe on PATH covers a custom install dir.
+# C:\Windows\System32\bash.exe is the WSL launcher, not Git Bash, and is never a
+# candidate. String concatenation, not Join-Path: Join-Path resolves PSDrives
+# and throws on a host without the drive (see Update-ProcessPath).
+function Get-GitBashCandidates {
+    $c = New-Object System.Collections.Generic.List[string]
+    foreach ($root in @($env:ProgramFiles, $env:ProgramW6432, ${env:ProgramFiles(x86)})) {
+        if ($root) { $c.Add($root.TrimEnd('\') + '\Git\bin\bash.exe') }
+    }
+    if ($env:LOCALAPPDATA) {
+        $c.Add($env:LOCALAPPDATA.TrimEnd('\') + '\Programs\Git\bin\bash.exe')
+    }
+    $git = Resolve-ToolCommand 'git'
+    if ($git -and $git.Source) {
+        $m = [regex]::Match([string]$git.Source, '^(?<root>.+?)\\(cmd|bin|mingw64\\bin)\\git\.exe$', 'IgnoreCase')
+        if ($m.Success) { $c.Add($m.Groups['root'].Value + '\bin\bash.exe') }
+    }
+    $c.Add('C:\Program Files\Git\bin\bash.exe')
+    $seen = @{}
+    foreach ($p in $c) {
+        $k = $p.ToLowerInvariant()
+        if ($seen.ContainsKey($k)) { continue }
+        $seen[$k] = $true
+        $p
+    }
+}
+
+function Find-GitBash {
+    foreach ($p in @(Get-GitBashCandidates)) {
+        if (Test-Path -LiteralPath $p -PathType Leaf) { return $p }
+    }
+    return $null
+}
+
+# Installed WSL distributions. The inbox wsl.exe exists on every Windows 10/11
+# machine; with no distro, `wsl -l -q` prints help text and exits non-zero. So
+# "wsl resolves" is not a shell, and non-empty output is not a distro list
+# unless the exit code is 0. Output is UTF-16; Windows PowerShell 5.1 keeps the
+# NULs, which are stripped before comparing.
+function Get-WslDistroNames {
+    $wsl = Resolve-ToolCommand 'wsl'
+    if (-not $wsl) { return @() }
+    try {
+        $global:LASTEXITCODE = 0
+        $out = & $wsl.Source -l -q 2>$null
+        if ($LASTEXITCODE -ne 0) { return @() }
+    } catch { return @() }
+    return @($out | ForEach-Object { ([string]$_ -replace "`0", '').Trim() } | Where-Object { $_ })
+}
+
+function Test-WslDistro {
+    return (@(Get-WslDistroNames).Count -gt 0)
+}
+
 function Ensure-PosixShell {
     param($receipt)
-    $gitBash = 'C:\Program Files\Git\bin\bash.exe'
-    if (Test-Path $gitBash) {
+    $gitBash = Find-GitBash
+    if ($gitBash) {
         Write-Ok "POSIX shell available: Git Bash ($gitBash)"
-        Add-ToUserPath 'C:\Program Files\Git\bin' $receipt
+        Add-ToUserPath ($gitBash.Substring(0, $gitBash.LastIndexOf('\'))) $receipt
         # Sanity: the bundled skills need real bash idioms ([[ ]], set -euo pipefail).
         try {
             $v = & $gitBash -c 'echo $BASH_VERSION'
@@ -696,16 +780,13 @@ function Ensure-PosixShell {
     Write-Warn2 'Git Bash not found (Git.Git should have provided it).'
     # WSL fallback - heavier; only if Git Bash truly unavailable.
     if (Test-Command 'wsl') {
-        try {
-            $distros = (& wsl -l -q) 2>$null
-            if ($distros) {
-                Write-Ok 'WSL present with a distro - POSIX shell available via wsl.'
-                return $true
-            }
-        } catch { }
-        if (Confirm-Or 'Install Ubuntu on WSL as the POSIX shell fallback?' $false) {
+        if (Test-WslDistro) {
+            Write-Ok 'WSL present with a distro - POSIX shell available via wsl.'
+            return $true
+        }
+        if (Confirm-Or 'Git Bash를 찾지 못했습니다. 대신 WSL에 Ubuntu를 설치할까요?' $false) {
             & wsl --install -d Ubuntu 2>&1 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
-            Write-Warn2 'WSL/Ubuntu install may require a reboot to finish.'
+            Write-Warn2 'WSL/Ubuntu 설치를 마치려면 컴퓨터를 다시 시작해야 할 수 있습니다.'
             return $true
         }
     }
@@ -737,6 +818,65 @@ function Configure-Git {
 # ----------------------------------------------------------------------------
 # 10. Studio app download + install (per-user, no admin)
 # ----------------------------------------------------------------------------
+# One release API answer as an object, or $null when gh fails or answers nothing.
+function Get-StudioReleaseJson([string]$url) {
+    try {
+        $raw = & gh api $url
+        if ($LASTEXITCODE -eq 0 -and $raw) { return (($raw -join "`n") | ConvertFrom-Json) }
+    } catch { }
+    return $null
+}
+
+# The release's Windows installer by the manifest globs, in glob order, or $null.
+# Probes members instead of dereferencing them: Main runs under StrictMode.
+function Select-StudioWindowsAsset($rel, $globs) {
+    if (-not $rel -or -not $rel.PSObject.Properties['assets']) { return $null }
+    foreach ($g in $globs) {
+        $a = @($rel.assets) | Where-Object { $_ -and $_.PSObject.Properties['name'] -and ([string]$_.name) -like $g } | Select-Object -First 1
+        if ($a) { return $a }
+    }
+    return $null
+}
+
+# Newest release that carries a Windows installer. Releases can be macOS only
+# (config/release-platforms.json, docs/dev/fast-mac-release.md), so /releases/latest
+# is not enough: when it has no Windows installer, walk the published releases and
+# take the newest one that has. Drafts and prereleases are skipped, as
+# /releases/latest skips them. Returns @{ release; asset; latest_tag } or throws.
+function Find-WindowsStudioRelease([string]$repo, $globs) {
+    $latest = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases/latest"
+    $latestTag = if ($latest -and $latest.PSObject.Properties['tag_name']) { [string]$latest.tag_name } else { '' }
+    $asset = Select-StudioWindowsAsset $latest $globs
+    if ($asset) { return @{ release = $latest; asset = $asset; latest_tag = $latestTag } }
+
+    $published = @()
+    $read = $false
+    for ($page = 1; $page -le 10; $page++) {
+        $list = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases?per_page=100&page=$page"
+        if ($null -eq $list) { break }
+        $read = $true
+        # foreach, not @(): Windows PowerShell 5.1 emits a parsed JSON array as one object.
+        $items = @(); foreach ($x in $list) { $items += $x }
+        foreach ($r in $items) {
+            if (-not $r -or -not $r.PSObject.Properties['tag_name']) { continue }
+            if ($r.PSObject.Properties['draft'] -and $r.draft) { continue }
+            if ($r.PSObject.Properties['prerelease'] -and $r.prerelease) { continue }
+            $published += $r
+        }
+        if ($items.Count -lt 100) { break }
+    }
+    if (-not $latest -and -not $read) {
+        throw "Could not read the releases of $repo. Run gh auth login with an organization member account."
+    }
+    # /releases/latest orders by created_at; use the same order here.
+    $sorted = @($published | Sort-Object -Property @{ Expression = { if ($_.PSObject.Properties['created_at']) { [string]$_.created_at } else { '' } } } -Descending)
+    foreach ($r in $sorted) {
+        $a = Select-StudioWindowsAsset $r $globs
+        if ($a) { return @{ release = $r; asset = $a; latest_tag = $latestTag } }
+    }
+    throw "No Studio release in $repo has a Windows installer (looked for [$($globs -join ', ')]). Ask the operator for a Windows build."
+}
+
 function Resolve-StudioAsset {
     param($manifest)
     # Class kit: the installer is in the kit folder, so the release API is not asked.
@@ -744,29 +884,38 @@ function Resolve-StudioAsset {
     $repo = $manifest.studio.releases_repo
     if ($repo -eq 'jayleekr/hypeproof-studio-releases') { $repo = 'hypeproof/hypeproof-studio-releases' }
     if ($repo -ne 'hypeproof/hypeproof-studio-releases') { throw 'Untrusted Studio release repository' }
-    $ver  = $manifest.studio.version
-    $tag  = "v$ver"
+    $globs = @($manifest.studio.asset_glob, $manifest.studio.asset_glob_fallback)
+    $ver  = [string]$manifest.studio.version
     $rel = $null
-    foreach ($u in @(
-        "https://api.github.com/repos/$repo/releases/tags/$tag",
-        "https://api.github.com/repos/$repo/releases/latest"
-    )) {
-        try { $raw = & gh api $u; if ($LASTEXITCODE -eq 0) { $rel = ($raw -join "`n") | ConvertFrom-Json; if ($rel) { break } } } catch { }
+    $asset = $null
+
+    # A pinned version installs exactly that release. If it has no Windows
+    # installer that is an error, not a reason to install something else.
+    if ($ver -and $ver -ne 'latest') {
+        $rel = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases/tags/v$ver"
+        if ($rel) {
+            $asset = Select-StudioWindowsAsset $rel $globs
+            if (-not $asset) {
+                throw "Studio $ver has no Windows installer (looked for [$($globs -join ', ')]). Pin a version that has Windows packages, or unset HPS_STUDIO_VERSION to get the newest one."
+            }
+        } else {
+            Write-Warn2 "Studio release v$ver was not found; using the newest release that has a Windows installer."
+        }
     }
-    if (-not $rel) { throw "No release found for $repo ($tag / latest)." }
+    if (-not $rel) {
+        $found = Find-WindowsStudioRelease $repo $globs
+        $rel = $found.release
+        $asset = $found.asset
+        if ($found.latest_tag -and $found.latest_tag -ne [string]$rel.tag_name) {
+            Write-Info ("The newest release {0} is macOS only; installing {1}, the newest release with a Windows installer." -f $found.latest_tag, $rel.tag_name)
+        }
+    }
 
     # Write the tag we actually resolved back into the manifest. With
-    # version='latest' the tag lookup 404s and we fall through to /releases/latest,
-    # so without this the receipt and the idempotent-skip compare would keep
-    # seeing the literal string 'latest' and reinstall on every run.
+    # version='latest' (or a fallback) the receipt and the idempotent-skip compare
+    # would otherwise keep seeing the literal string 'latest' and reinstall on every run.
     if ($rel.tag_name) { $manifest.studio.version = ($rel.tag_name -replace '^v', '') }
-
-    $globs = @($manifest.studio.asset_glob, $manifest.studio.asset_glob_fallback)
-    foreach ($g in $globs) {
-        $a = $rel.assets | Where-Object { $_.name -like $g } | Select-Object -First 1
-        if ($a) { return $a }
-    }
-    throw "No Studio asset matched globs [$($globs -join ', ')] in release $($rel.tag_name)."
+    return $asset
 }
 
 # Is the Studio APP actually on this machine? Presence only - never the receipt.
@@ -996,7 +1145,7 @@ function Seed-Sdk {
 # ----------------------------------------------------------------------------
 function Invoke-Doctor {
     param($manifest, $receipt)
-    Write-Head 'hps doctor - fail-closed manifest re-verification'
+    Write-Head '마지막 점검 (doctor)'
     Update-ProcessPath
     $fail = @()
     $missingOptional = @()
@@ -1019,12 +1168,15 @@ function Invoke-Doctor {
         Write-Ok ("{0}: {1}" -f $tool.id, (($ver -split "`n")[0]).Trim())
     }
 
-    # POSIX shell must exist.
-    $gitBash = 'C:\Program Files\Git\bin\bash.exe'
-    if ((Test-Path $gitBash) -or (Test-Command 'wsl')) {
-        Write-Ok 'POSIX shell: available'
+    # POSIX shell must exist: Git Bash in any scope, or WSL with a distro. The
+    # inbox wsl.exe stub alone is not a shell (PRA-12).
+    $gitBash = Find-GitBash
+    if ($gitBash) {
+        Write-Ok "POSIX shell: Git Bash ($gitBash)"
+    } elseif (Test-WslDistro) {
+        Write-Ok 'POSIX shell: WSL distro'
     } else {
-        $fail += 'POSIX shell: neither Git Bash nor WSL available'
+        $fail += 'POSIX shell: no Git Bash and no WSL distro (wsl.exe without a distro is not a shell)'
     }
 
     # git config.
@@ -1067,7 +1219,9 @@ function Invoke-Doctor {
     # resting on "click-install already provided a Studio that self-seeds its
     # SDK" - a premise nothing implements: the native claude.exe is deliberately
     # excluded from the app bundle (verify-branding.sh fails the build if it
-    # leaks in), and there is no in-app seeder yet. So a participant who
+    # leaks in). The in-app on-demand seeder (sdkSeedFetch.ts, REQ-M46) runs only
+    # when it is switched on for the seat and the learner confirms it, so it is
+    # not a reason to skip this check either. So a participant who
     # installed via the .exe and then ran the coach's "환경 세팅 점검"
     # (workshop-setup skill -> HPS_SKIP_STUDIO=1) got "doctor: ALL CHECKS PASSED"
     # on a machine with no claude.exe. Studio then fell back to the proxy coach
@@ -1087,21 +1241,21 @@ function Invoke-Doctor {
         # 실패다(#476 — 앱도 SDK 도 없는 기기가 초록을 받았다). 필수는 다 됐다는
         # 것과 전부 깔렸다는 것은 다른 말이고, 화면에서도 달라야 한다.
         if ($missingOptional.Count -gt 0) {
-            Write-Host ('==> doctor: REQUIRED CHECKS PASSED (optional missing: {0})' -f ($missingOptional -join ', ')) -ForegroundColor Green
+            Write-Host ('==> 점검(doctor): 필수 항목 통과 (없는 선택 도구: {0})' -f ($missingOptional -join ', ')) -ForegroundColor Green
             Write-Info '수업 진행에는 문제가 없습니다 - 위 도구는 학생 트랙에서 쓰이지 않습니다.'
             Write-Info '나중에 필요해지면 이 설치기를 다시 돌리면 됩니다(멱등).'
         } else {
-            Write-Host '==> doctor: ALL CHECKS PASSED' -ForegroundColor Green
+            Write-Host '==> 점검(doctor): 모든 항목 통과' -ForegroundColor Green
         }
         return 0
     }
-    Write-Host '==> doctor: FAILURES (fail-closed)' -ForegroundColor Red
+    Write-Host '==> 점검(doctor): 해결되지 않은 항목이 있습니다' -ForegroundColor Red
     foreach ($f in $fail) { Write-Err2 $f }
     Write-Host ''
-    Write-Host '    Remediation:' -ForegroundColor Yellow
-    Write-Host '      - Open a NEW terminal so freshly-installed tools land on PATH, then re-run.' -ForegroundColor Yellow
-    Write-Host '      - Re-run this installer (idempotent): irm .../install.ps1 | iex' -ForegroundColor Yellow
-    Write-Host '      - For gh: run `gh auth login`.' -ForegroundColor Yellow
+    Write-Host '    해결 방법:' -ForegroundColor Yellow
+    Write-Host '      - 새 터미널을 열어 방금 설치한 도구가 PATH에 잡히게 한 뒤 다시 실행하세요.' -ForegroundColor Yellow
+    Write-Host '      - 이 설치기는 다시 실행해도 안전합니다(끝난 단계는 건너뜁니다): irm .../install.ps1 | iex' -ForegroundColor Yellow
+    Write-Host '      - gh 오류라면 `gh auth login` 을 실행하세요.' -ForegroundColor Yellow
     return 1
 }
 
@@ -1110,7 +1264,7 @@ function Invoke-Doctor {
 # ----------------------------------------------------------------------------
 function Main {
     Write-Host ''
-    Write-Host 'HypeProof Windows bootstrap (install.ps1)' -ForegroundColor Magenta
+    Write-Host 'HypeProof 설치 (Windows, install.ps1)' -ForegroundColor Magenta
     Write-Host '=========================================' -ForegroundColor Magenta
 
     $arch = Get-Arch
@@ -1118,7 +1272,7 @@ function Main {
     $receipt.arch = $arch
     $manifest = $EMBEDDED_MANIFEST
 
-    Write-Head 'Detect environment'
+    Write-Head '이 컴퓨터 확인'
     Write-Info ("OS   : Windows {0}" -f [Environment]::OSVersion.Version)
     Write-Info ("Arch : {0}" -f $arch)
     Write-Info ("PS   : {0}" -f $PSVersionTable.PSVersion)
@@ -1131,7 +1285,7 @@ function Main {
     if ($script:KitDir) {
         # Class kit: the kit pins the Studio version. The remote manifest is read
         # for nothing else, so it is not fetched (it would need a GitHub login).
-        Write-Head 'Check the class kit'
+        Write-Head '수업 키트 확인'
         Use-ClassKit $manifest
     } else {
         Sync-ManifestVersions $manifest $ManifestUrl
@@ -1143,31 +1297,31 @@ function Main {
         return
     }
 
-    Write-Head 'Ensure package manager (winget)'
+    Write-Head '설치 도구 준비 (winget)'
     if (-not (Ensure-Winget)) {
-        Write-Err2 'Cannot proceed without winget.'
+        Write-Err2 'winget 없이는 계속할 수 없습니다.'
         $script:ExitCode = 2
         return
     }
 
-    Write-Head 'Install runtime dependencies (manifest tools)'
+    Write-Head '필요한 도구 확인과 설치'
     $anyRequiredFailed = $false
     foreach ($tool in $manifest.tools) {
         $ok = Ensure-Tool $tool $receipt
         if (-not $ok -and $tool.required) { $anyRequiredFailed = $true }
     }
 
-    Write-Head 'Guarantee a POSIX shell for bundled skills'
+    Write-Head '명령 실행 환경 준비 (Git Bash)'
     Ensure-PosixShell $receipt | Out-Null
 
-    Write-Head 'Configure git (CRLF + long paths)'
+    Write-Head 'git 설정 (줄바꿈, 긴 경로)'
     Configure-Git
 
     if ($SkipStudio) {
-        Write-Head 'Install HypeProof Studio app'
+        Write-Head 'HypeProof Studio 앱 설치'
         Write-Warn2 'HPS_SKIP_STUDIO=1 - skipping the Studio app install (deps only)'
     } else {
-        Write-Head 'Install HypeProof Studio app'
+        Write-Head 'HypeProof Studio 앱 설치'
         try { Install-Studio $manifest $receipt | Out-Null }
         catch { Write-Err2 "Studio install error: $($_.Exception.Message)" }
     }
@@ -1182,7 +1336,7 @@ function Main {
     # participants were missing. Seed-Sdk is idempotent - an already-seeded
     # machine short-circuits on the trusted marker, so re-running stays cheap
     # and safe, which is what the skill promises participants.
-    Write-Head 'Seed native SDK binary (claude.exe)'
+    Write-Head '코치 도구(SDK) 준비'
     try { Seed-Sdk $manifest $receipt | Out-Null }
     catch { Write-Err2 "SDK seed error: $($_.Exception.Message)" }
 
@@ -1197,9 +1351,9 @@ function Main {
 
     Write-Host ''
     if ($script:ExitCode -eq 0) {
-        Write-Host 'HypeProof is ready. Launch "HypeProof Studio" from the Start menu.' -ForegroundColor Green
+        Write-Host 'HypeProof 준비가 끝났습니다. 시작 메뉴에서 "HypeProof Studio"를 여세요.' -ForegroundColor Green
     } else {
-        Write-Host 'Setup incomplete - see doctor failures above. Open a new terminal and re-run.' -ForegroundColor Red
+        Write-Host '설치가 끝나지 않았습니다. 위 점검 결과를 확인하고 새 터미널을 열어 다시 실행하세요.' -ForegroundColor Red
     }
 }
 

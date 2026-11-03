@@ -15,7 +15,7 @@ import { test, expect } from "@playwright/test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chatFrame, closeApp, launchApp, runCommand } from "../fixtures/app.ts";
+import { chatFrame, closeApp, launchApp, runCommandById } from "../fixtures/app.ts";
 
 // Single source of truth — the exact disclosure copy is read straight from
 // chatPanelHelpers.ts at load time, not duplicated here. A direct import won't
@@ -96,7 +96,7 @@ test("REQ-C14: AI disclosure banner shows once at session start, persists across
     await win.screenshot({ path: "test-results/ai-disclosure-post-turn.png", fullPage: true });
 
     // ---- 3. Clear Conversation → new session → banner re-appears ----------
-    await runCommand(win, "HypeProof Chat: Clear Conversation");
+    await runCommandById(win, "hypeproof-chat.clearHistory");
 
     // Poll: the seeded turn clears and the banner is re-posted by the host's
     // noticeForHistoryClear(); it must land exactly once, still at the top.

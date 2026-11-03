@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { FOLLOW_IDLE, followSnippet, type FollowState } from "./liveFollow.ts";
 
 // Pure (vscode-free) core of the live server: path resolution, traversal guard,
 // content-type, live-reload injection, and static file serving. Split out so
@@ -8,9 +9,6 @@ import * as path from "node:path";
 
 export const LIVERELOAD_PATH = "/__hp_livereload";
 
-const LIVERELOAD_SNIPPET =
-  `<script>(function(){try{var s=new EventSource(${JSON.stringify(LIVERELOAD_PATH)});` +
-  `s.onmessage=function(e){if(e.data==="reload")location.reload();};}catch(e){}})();</script>`;
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -66,11 +64,18 @@ export function resolveWithinRoot(root: string, urlPath: string): string | null 
   return resolved;
 }
 
-/** Inject the live-reload SSE client into an HTML document (before </body>). */
-export function injectLiveReload(html: string): string {
-  return html.includes("</body>")
-    ? html.replace("</body>", `${LIVERELOAD_SNIPPET}</body>`)
-    : html + LIVERELOAD_SNIPPET;
+/**
+ * Inject the live-reload SSE client into an HTML document. The client also carries 따라 보기
+ * (CGP-ART-R-017, liveFollow.ts); `state` is the host's state at serve time and `token` lets the
+ * client persist the learner's choice with the host. It goes first in the document (right after
+ * the doctype, which keeps standards mode), so it runs before any page script and captures the
+ * DOM primitives it uses before the page can replace them. Served HTML is sent with
+ * `charset=utf-8` in the header, so moving a `<meta charset>` past the first 1024 bytes is harmless.
+ */
+export function injectLiveReload(html: string, state: FollowState = FOLLOW_IDLE, token = ""): string {
+  const snippet = followSnippet(LIVERELOAD_PATH, state, token);
+  const lead = /^\uFEFF?\s*(?:<!--[\s\S]*?-->\s*)*<!doctype[^>]*>/i.exec(html);
+  return lead ? lead[0] + snippet + html.slice(lead[0].length) : snippet + html;
 }
 
 export interface ServeResult {
@@ -106,7 +111,7 @@ export function staticResponseHeaders(contentType: string): Record<string, strin
  * to `index.html`; HTML gets the live-reload snippet injected. Returns a
  * 403 on traversal, 404 on miss. Pure + synchronous (real fs), no http/vscode.
  */
-export function serveStatic(root: string, urlPath: string): ServeResult {
+export function serveStatic(root: string, urlPath: string, state: FollowState = FOLLOW_IDLE, token = ""): ServeResult {
   if (urlPath.split("?")[0] === "/__hp_viewport") return serveViewport(root, urlPath);
   const resolved = resolveWithinRoot(root, urlPath);
   if (!resolved) {
@@ -128,7 +133,7 @@ export function serveStatic(root: string, urlPath: string): ServeResult {
   }
   const type = contentTypeFor(filePath);
   if (type === "text/html") {
-    buf = Buffer.from(injectLiveReload(buf.toString("utf8")), "utf8");
+    buf = Buffer.from(injectLiveReload(buf.toString("utf8"), state, token), "utf8");
   }
   const charset = type.startsWith("text/") || type === "image/svg+xml" ? "; charset=utf-8" : "";
   return { status: 200, contentType: type + charset, body: buf };

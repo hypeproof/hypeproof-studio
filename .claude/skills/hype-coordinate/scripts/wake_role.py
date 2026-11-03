@@ -22,7 +22,7 @@ ROLE_CONFIG = {
     "x2": ("codex-2", "$hype-verify"),
 }
 WORK_URL = re.compile(
-    r"https://github\.com/jayleekr/"
+    r"https://github\.com/hypeproof/"
     r"(?:hypeproof-harness|hypeproof-studio|hypeprooflab)/"
     r"(?:issues|pull)/[0-9]+\Z"
 )

@@ -1,7 +1,7 @@
 # 측정 코어 개발 순서
 
 상태: Intent·요구사항 작성 단계. 구현 전. 2026-09-13. Owner: jayleekr.
-[Epic #1020](https://github.com/jayleekr/hypeproof-studio/issues/1020) / [기준 정의 #1021](https://github.com/jayleekr/hypeproof-studio/issues/1021).
+[Epic #1020](https://github.com/hypeproof/hypeproof-studio/issues/1020) / [기준 정의 #1021](https://github.com/hypeproof/hypeproof-studio/issues/1021).
 
 ## 결정
 
@@ -32,7 +32,7 @@
 
 ## 기존 작업과 관계
 
-[#852](https://github.com/jayleekr/hypeproof-studio/issues/852)는 양쪽 validator·legacy 호환·모델 버전 계약을 다룬다. 여섯 모델 채택에 대한 Jay의 이번 결정을 반영하되 원자료 보존·행위자 구분·새 해석의 버전화를 유지한다. #852를 중복 완료 처리하거나 새 문서로 구현을 대체하지 않는다.
+[#852](https://github.com/hypeproof/hypeproof-studio/issues/852)는 양쪽 validator·legacy 호환·모델 버전 계약을 다룬다. 여섯 모델 채택에 대한 Jay의 이번 결정을 반영하되 원자료 보존·행위자 구분·새 해석의 버전화를 유지한다. #852를 중복 완료 처리하거나 새 문서로 구현을 대체하지 않는다.
 
 기존 Studio/Chalk 작업과 수업 정책을 보존한다. 전체 앱 빌드·production 배포 없이 시작하며, 필요한 설치·extension 연결 검증을 먼저 수행한다. 제품 출시 단계에서 실제 앱 배포가 필요하면 기존 release 절차를 따른다.
 

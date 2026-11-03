@@ -2,6 +2,8 @@
 // from plain Node. The orchestration that touches the VS Code API + file
 // system + child processes lives in updateChecker.ts.
 
+import { profileAudience, seatAudience } from "./seatVocabulary.ts";
+
 /**
  * Compare two HypeProof Studio versions. Returns:
  *   > 0  if a > b
@@ -51,6 +53,8 @@ export interface UpdateInfo {
   notes: string;              // raw markdown
   sizeBytes: number;
   digest?: string;
+  /** Where the release was read: the member mirror or the public release (D19). */
+  source?: "member" | "public";
 }
 
 export type ReleaseAsset = GhRelease["assets"][number];
@@ -125,6 +129,22 @@ export interface WindowsUpdateWrapperInput {
  */
 export const WINDOWS_UPDATE_WRAPPER_BOM = "\uFEFF";
 
+/**
+ * #3210 — variables the extension host sets for itself that must not reach the relaunched app.
+ * With `ELECTRON_RUN_AS_NODE=1` the Studio binary starts as plain Node and exits about 3 s later
+ * with no window (Jay 2026-10-29, 2026.1020.2 → 2026.1029.0); the `VSCODE_*` IPC and entry-point
+ * variables belong to the old process too. The installer is spawned without them and the scripts
+ * clear them again before relaunching, so either guard alone is enough.
+ */
+export const INHERITED_HOST_ENV = /^(ELECTRON_|VSCODE_)/i;
+
+/** A copy of `env` without the extension host's own variables (spawn env for the installers). */
+export function installerEnv(env: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) if (value !== undefined && !INHERITED_HOST_ENV.test(key)) out[key] = value;
+  return out;
+}
+
 export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): string {
   const { appProcessName, installerPath, installerArgs, maxWaitMs = 60000 } = input;
   // PowerShell single-quote escaping: double any embedded single quote.
@@ -136,13 +156,19 @@ export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): st
     "# Waits for the app to fully exit, THEN runs the installer, so the",
     "# post-install relaunch does not race the old single-instance lock.",
     "$ErrorActionPreference = 'Stop'",
+    "# #3210: the relaunched app must not inherit the extension host's ELECTRON_*/VSCODE_* variables.",
+    "Get-ChildItem Env: | Where-Object { $_.Name -match '^(ELECTRON_|VSCODE_)' } | ForEach-Object { Remove-Item -LiteralPath (\"Env:\" + $_.Name) }",
     `$name = ${ps(appProcessName)}`,
     `$deadline = (Get-Date).AddMilliseconds(${Math.max(0, Math.floor(maxWaitMs))})`,
     "while ((Get-Process -Name $name -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 400 }",
     "if (Get-Process -Name $name -ErrorAction SilentlyContinue) { throw 'Studio is still running; update cancelled without installing.' }",
     "# Grace for the OS to release the single-instance lock after the last exit.",
     "Start-Sleep -Milliseconds 1200",
-    `Start-Process -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
+    "# Hold the handoff lease until Setup itself exits. Not -Wait: that also waits for",
+    "# descendants, and Setup relaunches Studio after an explicit restart, so the wrapper",
+    "# would stay alive for the whole relaunched session and block the next update.",
+    `$setup = Start-Process -PassThru -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
+    "$setup.WaitForExit()",
     "",
   ].join("\r\n");
 }
@@ -245,6 +271,12 @@ export interface InstallerScriptInput {
   oldVersion: string;
   // Where to write the per-run log (full path).
   logPath: string;
+  /**
+   * Natural quit must not reopen the app. Explicit restart keeps the default.
+   * "background" (#3411 idle restart) reopens without bringing Studio to the front
+   * (`open -g`), so an automatic update never takes focus from another app.
+   */
+  relaunch?: boolean | "background";
 }
 
 /**
@@ -280,6 +312,13 @@ export function renderInstallerScript(input: InstallerScriptInput): string {
 # Performs an in-place .app swap from <old> → <new>, preserving Gatekeeper trust.
 
 set -uo pipefail
+
+# #3210: drop the extension host's own variables before anything relaunches the app.
+# With ELECTRON_RUN_AS_NODE=1 inherited through \`open\`, Studio starts as plain Node and exits.
+for __hps_var in $(compgen -e); do
+  case "$__hps_var" in ELECTRON_*|VSCODE_*) unset "$__hps_var" ;; esac
+done
+unset __hps_var
 
 NEW_APP=${shJsonString(newAppPath)}
 OLD_APP=${shJsonString(oldAppPath)}
@@ -343,7 +382,7 @@ restore_on_exit() {
   status=$?
   if [[ $status -ne 0 && -d "$BACKUP_PATH" && ! -e "$OLD_APP" ]]; then
     mv "$BACKUP_PATH" "$OLD_APP" || { echo "[RECOVERY] previous app retained at $BACKUP_PATH"; exit 1; }
-    open "$OLD_APP" || true
+    ${input.relaunch === false ? ": # stay closed after a user quit" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || true`}
   fi
   # Preserve any backup for manual recovery, including a failed relaunch.
   if [[ ! -d "$BACKUP_PATH" ]]; then rm -rf "$STAGE"; fi
@@ -363,8 +402,8 @@ xattr -dr com.apple.quarantine "$OLD_APP" 2>/dev/null || true
 echo "[ok] stripped quarantine"
 
 # Reopen
-open "$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"
-echo "[ok] launched updated app"
+${input.relaunch === false ? ": # next launch is user initiated" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"`}
+echo "[ok] ${input.relaunch === false ? 'ready for next launch' : 'launched updated app'}"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] update complete"
 exit 0
 `;
@@ -438,4 +477,51 @@ export function pickInflight<T>(
   const p = factory().finally(() => map.delete(key));
   map.set(key, p);
   return p;
+}
+
+// ---------------------------------------------------------------------------
+// Release access (REQ-I14). The release mirror is private: only members with a
+// GitHub login can read it. Everyone else — including no-code trial users —
+// gets new builds from the homepage download page, so the copy says exactly
+// that instead of a developer instruction or a "try again later" promise that
+// can never come true.
+
+/**
+ * CGP-SHELL-R-001: no update install while a class seat is active. A restart mid-lesson costs
+ * the learner the lesson, so a classroom activity holds the install until the class seat is no
+ * longer the active one; the banner only says when it can be installed. The client does not yet
+ * receive the class window's end time (DEC-25), so the whole class seat counts as the window.
+ */
+export function classUpdateHold(
+  profile: { activity_kind?: string | null; pass?: unknown } | null | undefined,
+  activity?: { kind?: string | null; pass?: unknown } | null,
+): boolean {
+  // Fail closed with the seat-vocabulary rule: a missing kind is a class (older Service). With no
+  // profile (fetch failed, other Service) the saved activity decides; with no seat at all nothing
+  // is held.
+  if (profile) return profileAudience(profile) === "classroom";
+  if (activity) return seatAudience(activity) === "classroom";
+  return false;
+}
+export const CLASS_UPDATE_HOLD_COPY = "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요.";
+
+export const UPDATE_DOWNLOAD_URL = "https://hypeproof-ai.xyz/download";
+export const UPDATE_ACCESS_NOTICE_KEY = "hypeproofChat.updateAccessNotice";
+
+/** Student-facing copy (Korean is the product; see CLAUDE.md §Language). */
+export const UPDATE_ACCESS_MANUAL_COPY =
+  "이 Studio에서는 앱 안에서 새 버전을 확인할 수 없어요. 새 버전은 홈페이지에서 받을 수 있어요.";
+export const UPDATE_ACCESS_PASSIVE_COPY = "새 버전은 홈페이지에서 받을 수 있어요.";
+export const UPDATE_OPEN_HOMEPAGE_LABEL = "홈페이지 열기";
+
+/**
+ * Manual check while the anonymous public check is rate limited (D19). Calm and
+ * true: the anonymous budget refills within the hour. Not a warning, no error banner.
+ */
+export const UPDATE_DEFERRED_MANUAL_COPY =
+  "지금은 새 버전을 확인할 수 없어요. 한 시간쯤 뒤에 다시 확인해 주세요.";
+
+/** Show the passive homepage line at most once per installed app version. */
+export function shouldShowAccessNotice(lastNoticedVersion: unknown, currentVersion: string): boolean {
+  return lastNoticedVersion !== currentVersion;
 }

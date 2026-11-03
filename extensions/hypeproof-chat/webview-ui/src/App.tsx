@@ -1,5 +1,28 @@
+import { FolderConsentDialog } from './FolderConsentDialog';
+import { DoctorNoticeLine, ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import type { DoctorNotice } from '../../src/studioDoctor';
+import type { OfferReason, ProblemReportFormView } from '../../src/problemReport';
+import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
+import {BrowserApprovalDialog} from './BrowserApprovalDialog';
+import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
+import type {DelegationStopState} from "../../src/delegationStop";
+import {CommandApprovalDialog} from './CommandApprovalDialog';
+import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
+import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
+import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
+import { retainElapsedReceipts } from '../../src/turnElapsed';
+import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
+import { RunningProcessesPanel } from "./RunningProcesses";
+import { applyMotionPreference } from "./motion";
+import {WriteApprovalDialog} from "./WriteApprovalDialog";
+import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
+import {isPublicAudiencePrompt, type AnyOutboundPrompt} from "../../src/outboundApproval";
+import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
+import { storedDenialNotice } from "../../src/denialNotice";
+import { isDownloadNoticeLabel } from "../../src/browserDownloadNotice";
+import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
-import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage } from "../../src/protocol";
+import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
 import {
   emptyTimeline,
   timelineCitations,
@@ -16,20 +39,34 @@ import { runVoiceCapabilityProbe } from "./voiceProbe";
 import { UserQuestionCard } from "./UserQuestionCard";
 import type { AutomationQuestion } from "../../src/automationProtocol";
 import { ChatPanel } from "./ChatPanel";
+import { TaskWorkspaceFrame } from './TaskWorkspace';
+import { askAboutFileAllowed } from './askAboutFile';
+import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
+import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
+import { PanelBoundary } from "./PanelBoundary";
 import { VerifyPanel } from "./VerifyPanel";
 import { PublishPanel } from "./PublishPanel";
 import { EvidencePanel } from "./EvidencePanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { TrialCarryover } from "./TrialCarryover";
 import { pressDecision, reviewPanelReducer, type ReviewPanelAction, type ReviewPanelState } from "./reviewPanelState";
 import type { SkillsView } from "../../src/skillView";
 import type { MemoryView } from "../../src/memoryView";
 import type { EvidenceView } from "../../src/evidenceView";
 import type { PublishView } from "../../src/publishView";
 import type { VerifyView } from "../../src/verifyView";
+import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
+import { useOnline, guardSend } from "./connectivity";
+import { settleUndo } from "./UndoToast";
+import { verifyPressAction, verifyNote } from "./verifyOffline";
+import { activityLabel } from "./activityLabel";
+import { activityTitleText } from "./activityHome";
+import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
+import { acceptMemoryUseMarks } from "./MemoryUseChip";
 
 interface State {
   config: ChatConfig | null;
@@ -39,12 +76,30 @@ interface State {
    */
   timeline: TimelineState;
   streamId: string | null;
+  /** Last accepted visible event in the active turn, using this webview clock. */
+  progressSince?: number;
   error: string | null;
+  errorRetryable: boolean;
+  activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
+  /** TUX-COND-07 — the inline end-of-trial card the host sent with this turn's ending (drawn instead of the banner). */
+  trialEndCard: TrialEndCardView | null;
+  /** REQ-CGP-LEARN-13 — a moderation block is drawn as a calm notice instead of the error card. */
+  safetyNotice: import("../../src/safetyNotice").SafetyNoticeView | null;
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
+  errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
+  annotationsEnabled: boolean;
+  annotations: import("../../src/annotationBatch").AnnotationView[];
+  /** CGP-ART-R-007 — page text queued for the next turn. */
+  pageAttachment: import('../../src/pageContext').PageAttachmentPreview | null;
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, and why the last pick was refused. */
+  fileAttachment: import('../../src/protocol').FileAttachmentPreview | null;
+  fileAttachError: string | null;
+  /** CGP-CHAT-R-011 — a one-line notice (a retry did not resend the file). */
+  fileAttachNotice: string | null;
   /** cr-verify — the "내 제품 테스트" panel as the host computed it; null = hidden. */
   verify: VerifyView | null;
   verifyError: string | null;
@@ -61,7 +116,11 @@ interface State {
   /** cr-review — the "주간 리뷰" panel (reviewPanelState.ts). */
   review: ReviewPanelState;
   aiNotice: string | null;          // #320 — AI disclosure at session start (host-gated)
+  /** REQ-STUDIO-STEER-NOW — the learner request the current turn answers (host streamStart), if any. */
+  streamFor: string | null;
   stopNotice: string | null;        // #497 — Stop 을 눌러 턴이 끊겼음을 알리는 인라인 안내
+  /** REQ-STUDIO-TASK-RUN-STATE — how this view's last turn ended; null until one ends here. */
+  lastOutcome: TaskTurnOutcome;
   /** #649 — 지금 열려 있는 세상 id. 친구 스트립이 이 버튼을 강조한다(aria-pressed). */
   openWorldId: string | null;
   /**
@@ -74,14 +133,20 @@ interface State {
 }
 
 type Action =
+  | { type: "visibleProgress" }
   | { type: "config"; config: ChatConfig }
   | { type: "history"; messages: ChatMessage[] }
-  | { type: "streamStart"; streamId: string; messageId: string }
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; delta: string }
   | { type: "streamCitations"; citations: Citation[] }
   | { type: "toolLog"; entry: ToolEntry }
+  // CGP-KNOW-D-021 — a download line lands like a tool row but is not turn progress (no long-step reset).
+  | { type: "downloadLine"; entry: ToolEntry }
   | { type: "pageAttached"; label: string }
+  | { type: "annotations"; enabled: boolean; annotations: import("../../src/annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
+  | { type: "pageAttachment"; attachment: import('../../src/pageContext').PageAttachmentPreview | null }
+  | { type: "fileAttachment"; attachment: import('../../src/protocol').FileAttachmentPreview | null; error?: string; notice?: string }
   | { type: "verifyState"; view: VerifyView | null; sendText?: string; error?: string }
   | { type: "verifyClose" }
   | { type: "testPublishState"; view: PublishView | null; error?: string; errorLines?: string[]; shareUrl?: string }
@@ -95,13 +160,15 @@ type Action =
   | ReviewPanelAction
   | { type: "verifySent" }
   | { type: "aiDisclosure"; text: string }
-  | { type: "streamEnd" }
+  /** `failed` — the host closed the stream but the turn's result was a failure (#751 U4). `dismissed` — the learner closed the error banner; the outcome stays. */
+  | { type: "streamEnd"; failed?: boolean; dismissed?: boolean }
   | { type: "streamStopped"; by?: "instructor" }
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
-  | { type: "userSent"; text: string; images?: string[] }
+  | { type: "streamError"; error: string; activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView; safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView }
+  | { type: "answerAttemptSelected"; root: ChatMessage }
+  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string; editOf?: string; retryOf?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
 
@@ -116,10 +183,18 @@ const initialState: State = {
   timeline: emptyTimeline(),
   streamId: null,
   error: null,
+  errorRetryable: true,
   errorRequestId: null,
   errorRunbookUrl: null,
+  errorRetry: true,
+  trialEndCard: null,
+  safetyNotice: null,
   pageNotice: null,
-  elementPreview: null,
+  elementPreview: null, annotations: [], annotationsEnabled: false,
+  pageAttachment: null,
+  fileAttachment: null,
+  fileAttachError: null,
+  fileAttachNotice: null,
   verify: null,
   testPublish: null,
   evidence: null,
@@ -129,7 +204,9 @@ const initialState: State = {
   verifyError: null,
   verifySend: null,
   aiNotice: null,
+  streamFor: null,
   stopNotice: null,
+  lastOutcome: null,
   openWorldId: null,
   publish: null,
 };
@@ -137,35 +214,49 @@ const initialState: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "config":
-      return { ...(state.config?.activity?.id === action.config.activity?.id ? state : initialState), config: action.config };
+      return { ...(state.config?.activity?.id === action.config.activity?.id && state.config?.taskWorkspace?.activeTaskId === action.config.taskWorkspace?.activeTaskId ? state : initialState), config: action.config };
+    case "answerAttemptSelected":
+      return { ...state, timeline: { ...state.timeline, items: applyAttemptSelection(state.timeline.items, action.root) } };
     case "history":
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
       // 배열 하나를 갈아끼우면 끝이다.
-      return { ...state, timeline: timelineReset(action.messages), error: null };
+      return { ...state, timeline: timelineReset(retainElapsedReceipts(action.messages, state.timeline.items)), error: null };
     case "streamStart":
       return {
         ...state,
         streamId: action.streamId,
+        progressSince: Date.now(),
+        streamFor: action.userMessageId ?? null,
         error: null,
         stopNotice: null,   // #497 — 새 턴이 시작되면 이전 중지 안내는 사라진다
+        lastOutcome: null,
         // #503 — 직전 턴의 툴 줄을 **비우지 않는다**. 예전에는 여기서 toolLog 를
         // [] 로 밀어서, 다음 턴이 시작되는 순간 이전 턴이 무슨 도구를 썼는지가
         // 통째로 증발했다(스크롤을 올려도 말풍선만 남았다).
-        timeline: timelineStart(state.timeline, action.messageId, Date.now()),
+        timeline: timelineStart(state.timeline, action.messageId, Date.now(), performance.now()),
       };
+    case "visibleProgress":
+      return state.streamId ? { ...state, progressSince: Date.now() } : state;
     case "streamChunk":
-      return { ...state, timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
+      return { ...state, ...(action.delta ? { progressSince: Date.now() } : {}), timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
     case "streamCitations":
       return { ...state, timeline: timelineCitations(state.timeline, action.citations) };
     case "toolLog":
       // 같은 id 는 제자리 갱신(running → done/error), 새 id 는 지금 이 자리에 삽입.
+      return { ...state, progressSince: Date.now(), timeline: timelineTool(state.timeline, action.entry, Date.now()) };
+    case "downloadLine":
       return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
       return { ...state, pageNotice: action.label };
+    case "annotations": return { ...state, annotations: action.annotations, annotationsEnabled: action.enabled };
     case "elementAttached":
       return { ...state, elementPreview: action.element };
+    case "pageAttachment":
+      return { ...state, pageAttachment: action.attachment };
+    case "fileAttachment":
+      return { ...state, fileAttachment: action.attachment, fileAttachError: action.error ?? null, fileAttachNotice: action.notice ?? (action.attachment ? null : state.fileAttachNotice) };
     case "verifyState":
       return { ...state, verify: action.view, verifyError: action.error ?? null, verifySend: action.sendText ?? state.verifySend };
     case "verifyClose":
@@ -214,10 +305,13 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         streamId: null,
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), action.failed || action.dismissed ? undefined : "done", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
+        trialEndCard: null,
+        safetyNotice: null,
+        lastOutcome: action.dismissed ? state.lastOutcome : action.failed ? "error" : "done",
       };
     case "streamStopped":
       // #497 — 턴이 완주한 게 아니라 사용자가 끊은 것. streamEnd 와 같은 상태
@@ -229,11 +323,12 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         // #503 — 끊긴 턴도 타임라인은 닫는다: 보류된 툴 줄이 남아 있으면
         // 흘려 넣고 말풍선을 닫는다. 스트리밍된 부분 답변은 그대로 둔다.
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), "stopped", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
         stopNotice: action.by === "instructor" ? INSTRUCTOR_STOP_NOTICE : STOP_NOTICE,
+        lastOutcome: "stopped",
       };
     case "streamError":
       return {
@@ -241,8 +336,14 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         timeline: timelineEnd(state.timeline, Date.now()),
         error: action.error,
+        activityUnavailable: action.activityUnavailable,
+        errorRetryable: action.retryable !== false,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
+        errorRetry: action.retry !== false,
+        trialEndCard: action.trialEndCard ?? null,
+        safetyNotice: action.safetyNotice ?? null,
+        lastOutcome: "error",
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
@@ -259,15 +360,23 @@ function reducer(state: State, action: Action): State {
         ...state,
         pageNotice: null,   // #308 — clear the "붙였어요" notice once the user sends
         elementPreview: null, // CR-09 — the picked element went with this turn
+        // CGP-ART-R-007 / CGP-CHAT-R-011 — the page and file chips are host-owned: the host clears them
+        // when a model turn actually takes them, so a send turned away earlier leaves them visible.
+        fileAttachError: null,
+        fileAttachNotice: null,
         stopNotice: null,   // #497 — 다시 입력했으면 중지 안내는 역할을 다했다
+        lastOutcome: null,
         timeline: {
           ...state.timeline,
           items: [
-            ...state.timeline.items,
+            ...state.timeline.items.map(message => action.retryOf === message.id ? { ...message, visibleAttemptId: action.id } : message),
             {
-              id: `local-${Date.now()}`,
+              id: action.id ?? `local-${Date.now()}`,
               role: "user",
               content: action.text,
+              ...(action.toolMode ? { toolMode: action.toolMode } : {}),
+              ...(action.editOf ? { editOf: action.editOf } : {}),
+              ...(action.retryOf ? { retryOf: action.retryOf } : {}),
               createdAt: Date.now(),
               ...(action.images && action.images.length > 0 ? { images: action.images } : {}),
             },
@@ -277,13 +386,66 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+/** Exported for the reducer contract tests (test/sdk-required.test.mjs); not a runtime API. */
+export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
+
+/** CGP-KNOW-D-002 — the title above the 작업/자료 tabs: the activity's name, or its kind when the name is blank. */
+function homeTitle(activity: ChatConfig["activity"]): string | undefined {
+  if (!activity) return undefined;
+  return activityTitleText(activity.name) || activityLabel(activity.kind, activity.pass, undefined, !!activity.free);
+}
+
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   // Private setup and previews never enter the message timeline or composer.
   const [automationQuestion, setAutomationQuestion] = useState<AutomationQuestion | null>(null);
   const automationEnabled = useRef(false);
+  const [runningProcesses, setRunningProcesses] = useState<import("../../src/runningProcesses").RunningProcess[]>([]);
+  const [refusal, setRefusal] = useState(false);
+  const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
+  const delegationStreams=useRef(new Set<string>());
   const scope = useRef<string | undefined>();
+  const taskScope = useRef<string | undefined>();
+  // The bridge can deliver an old turn after Stop. Update this synchronously,
+  // before React renders, so a late terminal event cannot end the next turn.
+  const activeStream = useRef<string | null>(null);
+  const pendingSend = useRef(false);
+  const [sendPending, setSendPending] = useState(false);
+  // CGP-SHELL-R-011 — the product-test start/fix also starts a chat turn: same offline gate as ChatPanel.
+  const online = useOnline();
+  const [verifyHeld, setVerifyHeld] = useState(false);
+  const verifyWhenOnline = (post: () => void) => { if (guardSend(online, post, () => setVerifyHeld(true))) setVerifyHeld(false); };
+  // N1 — which press the last handed-back turn came from, and the one parked on the host (if any).
+  const lastVerifyKey = useRef<string | null>(null);
+  const [parkedVerify, setParkedVerify] = useState<string | null>(null);
+  const pressAction = (key: string) => { const action = verifyPressAction(parkedVerify, key); setParkedVerify(null); lastVerifyKey.current = key; return action; };
+  // CGP-CHAT-R-005 — the active task's verdicts as the host last confirmed them (drawn optimistically on click).
+  const [verdicts, setVerdicts] = useState<VerdictMap>({});
+  // REQ-STUDIO-CONTEXT-TRIM-MARKER — computed by the host from the saved history it sends.
+  const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
+  // CGP-CHAT-R-023 — served lesson step per user message id (host-owned), for the transcript's step dividers.
+  const [stepMarks, setStepMarks] = useState<LessonStepMarks>(() => acceptStepMarks(null));
+  // CGP-KNOW-R-026 — answer id → number of memory items its request carried (the open task, from the host).
+  const [memoryUse, setMemoryUse] = useState<Record<string, number>>(() => acceptMemoryUseMarks(null));
+  const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
+  const latestVerdictRequests = useRef(new Map<string, string>());
+  const ownVerdictRequests = useRef(new Set<string>());
   const [shouldCrash, setShouldCrash] = useState(false);
+  const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [historySaveError, setHistorySaveError] = useState<string | null>(null);
+  // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
+  const [approvalPending, setApprovalPending] = useState(false);
+  const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
+  const [commandApproval,setCommandApproval]=useState<CommandApprovalPrompt|null>(null);
+  const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
+  const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
+  const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
+  const [problemForm,setProblemForm]=useState<ProblemReportFormView|null>(null);
+  const [problemOffer,setProblemOffer]=useState<OfferReason|null>(null);
+  const [doctorNotice,setDoctorNotice]=useState<DoctorNotice|null>(null);
+  const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -293,18 +455,80 @@ export function App() {
   };
   // #384 — image handed over from the host (an image opened in an editor tab).
   // nonce forces ChatPanel's effect to re-run even for the same dataUrl.
-  const [incomingImage, setIncomingImage] = useState<{ dataUrl: string; nonce: number } | null>(null);
+  const [incomingImage, setIncomingImage] = useState<{ dataUrl: string; nonce: number; name?: string } | null>(null);
 
   useEffect(() => {
     const off = onHostMessage((msg: HostMessage) => {
       if (msg.type === "config") {
-        if (scope.current !== msg.config.activity?.id) { setIncomingImage(null); setAutomationQuestion(null); }
+        setWorkspace(msg.config.taskWorkspace);
+        setWorkspaceError(null);
         automationEnabled.current = msg.config.profile?.automations?.enabled === true;
         if (!automationEnabled.current) setAutomationQuestion(null);
+        if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
+          setDraftSaveError(null);
+          setHistorySaveError(null);
+          setIncomingImage(null);
+          setAutomationQuestion(null);
+          verifyRequests.current.clear();
+          pendingVerdicts.current.clear();
+          latestVerdictRequests.current.clear();
+          ownVerdictRequests.current.clear();
+          activeStream.current = null;
+          setRefusal(false);
+          setDelegationStops({});delegationStreams.current.clear();
+          setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null); setRunningProcesses([]);
+        }
         scope.current = msg.config.activity?.id;
+        taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if(msg.type==='delegationStopState'){
+        if(delegationStreams.current.has(msg.streamId))setDelegationStops(old=>({...old,[msg.streamId]:msg.state}));
+        return;
+      }
+      if ("streamId" in msg) {
+        if (msg.type === "streamStart") {
+          // One turn owns this view; a repeated start must not clear its text.
+          if (activeStream.current !== null) return;
+          activeStream.current = msg.streamId;
+          delegationStreams.current.add(msg.streamId);
+          setRefusal(false);
+        } else if (msg.streamId !== activeStream.current) {
+          // These host refusal codes are emitted before streamStart. They still
+          // need to explain an idle preflight failure, never terminate a live turn.
+          const preflight = msg.type === "streamError" && activeStream.current === null
+            && ["tools", "connection", "activity"].includes(msg.streamId);
+          if (!preflight) return;
+        }
+        if (["streamEnd", "streamStopped", "streamError"].includes(msg.type)) activeStream.current = null;
+      }
+      if (["streamStart", "inputRejected", "streamError", "streamEnd", "streamStopped"].includes(msg.type)) {
+        pendingSend.current = false; setSendPending(false);
+        // A modal never outlives its turn; a turn boundary is never "waiting for approval".
+        setApprovalPending(false); setWriteApproval(null);
+      }
       switch (msg.type) {
         case "automationQuestion": if (automationEnabled.current || msg.question === null) setAutomationQuestion(msg.question); break;
+        case "streamRefusal": setRefusal(true); return;
+        case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
+        case 'commandApprovalPrompt': setCommandApproval(msg.prompt); return;
+        case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
+        case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
+        case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
+        case 'problemReportForm': setProblemForm(msg.form); if (msg.form) setProblemOffer(null); return;
+        case 'problemReportOffer': setProblemOffer(msg.offer?.reason ?? null); return;
+        case 'doctorNotice': setDoctorNotice(msg.notice ?? null); return;
+        case 'outboundPrompt': setOutbound(msg.prompt); return;
+        case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
+        case 'taskWorkspaceError':
+          if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
+          setWorkspaceError(msg.error);
+          if (msg.historySaveFailed) setHistorySaveError(msg.error);
+          // A list/config refresh is not proof that the current draft reached disk.
+          // Only a successful draft acknowledgement or a new scope releases this warning.
+          if (msg.draftSaveFailed) setDraftSaveError(msg.error);
+          else if (msg.error === null) setDraftSaveError(null);
+          return;
         // #897 (VO-01) — 음성 capability 프로브. **원시 관측만** 돌려보내고 판정은
         // 호스트가 한다. 화면에 아무것도 바꾸지 않는다 — 이건 계측기다.
         case "probeVoiceCapability": {
@@ -317,15 +541,45 @@ export function App() {
           });
           break;
         }
+        case "runningProcesses": setRunningProcesses(msg.entries); break;
         case "config":      dispatch({ type: "config", config: msg.config }); break;
-        case "history":     dispatch({ type: "history", messages: msg.messages }); break;
-        case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId }); break;
+        case "answerAttemptSelected": dispatch({type: "answerAttemptSelected", root: msg.root}); break;
+        case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
+        case "contextTrim": setTrimBoundaryId(msg.boundaryId); break;
+        case "answerVerdicts": {
+          const latest = msg.messageId ? latestVerdictRequests.current.get(msg.messageId) : undefined;
+          if (latest && msg.requestId && ownVerdictRequests.current.has(msg.requestId) && latest !== msg.requestId) break;
+          if (msg.messageId && pendingVerdicts.current.get(msg.messageId)?.requestId === msg.requestId) pendingVerdicts.current.delete(msg.messageId);
+          const next = { ...msg.verdicts };
+          // A saved snapshot must not replace a newer choice whose write is still pending.
+          for (const [id, pending] of pendingVerdicts.current) {
+            if (pending.value) next[id] = pending.value;
+            else delete next[id];
+          }
+          setVerdicts(next);
+          break;
+        }
+        case "streamStart":
+          dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId });
+          if (msg.userMessageId && validStepMark(msg.lessonStep)) { const id = msg.userMessageId, mark = msg.lessonStep; setStepMarks(prev => rememberStepMark(prev, id, mark)); }
+          break;
+        case "lessonStepMarks": { const post = { marks: msg.marks, forget: msg.forget }; setStepMarks(prev => nextStepMarks(prev, post)); break; }
+        case "memoryUseMarks": setMemoryUse(acceptMemoryUseMarks(msg.marks)); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
-        case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}) } }); break;
+        case "toolLog": dispatch({ type: "toolLog", entry: { ...(msg.shell ? { shell: msg.shell } : {}), id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
+        case "denialNotice":
+          if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
+          break;
+        case "downloadNotice":
+          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "downloadLine", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
+          break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
+        case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
+        case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
+        case "fileAttachment": dispatch({ type: "fileAttachment", attachment: msg.attachment, error: msg.error, notice: msg.notice }); break;
         // Every chat view gets the post; only the one whose panel asked sends the sentence.
         case "verifyState": dispatch({ type: "verifyState", view: msg.view, sendText: msg.sendText && msg.requestId && verifyRequests.current.delete(msg.requestId) ? msg.sendText : undefined, error: msg.error }); break;
         case "publishState": dispatch({ type: "testPublishState", view: msg.view, error: msg.error, errorLines: msg.errorLines, shareUrl: msg.shareUrl }); break;
@@ -336,11 +590,11 @@ export function App() {
         case "aiDisclosure": dispatch({ type: "aiDisclosure", text: msg.text }); break;
         case "worldOpened": dispatch({ type: "worldOpened", id: msg.id }); break;
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
-        case "streamEnd":   dispatch({ type: "streamEnd" }); break;
+        case "streamEnd":   dispatch({ type: "streamEnd", failed: msg.failed === true }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, activityUnavailable: msg.activityUnavailable, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard, safetyNotice: msg.safetyNotice }); break;
         case "actionResult": /* not yet routed to UI */ break;
-        case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
+        case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now(), name: msg.name }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
       }
     });
@@ -356,56 +610,76 @@ export function App() {
   // 전에 role:"tool" 이 걸러진다(chatTimeline.modelHistory).
   const messages = state.timeline.items;
 
-  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>, attachments?: Array<{ id: string }>) => {
+  useEffect(() => { pendingSend.current = false; setSendPending(false); }, [state.config?.activity?.id, state.config?.taskWorkspace?.activeTaskId]);
+  // CGP-DS-R-015: follow a reduce-motion change without reloading the panel.
+  useEffect(() => {
+    if (!state.config) return;
+    applyMotionPreference(state.config.reduceMotion);
+  }, [state.config?.reduceMotion, !!state.config]);
+  const beginRequest = () => {
+    if (pendingSend.current || state.streamId) return false;
+    pendingSend.current = true; setSendPending(true); return true;
+  };
+  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>, attachments?: Array<{ id: string }>, toolMode: TurnToolMode = 'auto') => {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
     const hasAttachments = !!attachments && attachments.length > 0;
-    if ((!trimmed && !hasImages && !hasAttachments) || state.streamId || automationQuestion) return;
+    if ((!trimmed && !hasImages && !hasAttachments) || automationQuestion || !beginRequest()) return false;
     // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
-    dispatch({ type: "userSent", text: trimmed, images });
-    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
+    dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
+    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
   // out through the ordinary send path (the host attaches the coach context, model-only).
+  // L1 — any answer from the host replaces the held note (declared before the hand-back effect, so a
+  // hold that effect sets in the same commit survives).
+  useEffect(() => setVerifyHeld(false), [state.verify, state.verifyError]);
   useEffect(() => {
     if (!state.verifySend || state.streamId) return;
     const text = state.verifySend;
     dispatch({ type: "verifySent" });
-    send(text);
+    // N1 — not sent (offline): park it on the host so no unrelated turn carries its context; the
+    // learner's next press of the same button resumes it. Never sent on reconnect by itself.
+    const sent = guardSend(online, () => send(text), () => setVerifyHeld(true));
+    if (!sent) { postToHost({ type: "verifyPark" }); setParkedVerify(lastVerifyKey.current); }
   }, [state.verifySend, state.streamId]);
 
   const verifyPanel = state.verify ? (
-    <VerifyPanel
+    <PanelBoundary panel="verify"><VerifyPanel
       view={state.verify}
-      error={state.verifyError}
+      error={verifyNote(verifyHeld, state.verifyError)}
       busy={!!state.streamId}
-      onStart={(criteria) => postToHost({ type: "verifyStart", requestId: verifyRequest(), criteria })}
-      onRetest={() => postToHost({ type: "verifyRetest" })}
-      onFix={(criterionId, text) => postToHost({ type: "verifyFix", requestId: verifyRequest(), criterionId, text })}
-      onClose={() => dispatch({ type: "verifyClose" })}
-    />
+      onStart={(criteria) => verifyWhenOnline(() => { const requestId = verifyRequest(); postToHost(pressAction(`start:${JSON.stringify(criteria)}`) === "resume" ? { type: "verifyResume", requestId } : { type: "verifyStart", requestId, criteria }); })}
+      onRetest={() => { setVerifyHeld(false); postToHost({ type: "verifyRetest" }); }}
+      onFix={(criterionId, text) => verifyWhenOnline(() => { const requestId = verifyRequest(); postToHost(pressAction(`fix:${JSON.stringify([criterionId, text])}`) === "resume" ? { type: "verifyResume", requestId } : { type: "verifyFix", requestId, criterionId, text }); })}
+      onClose={() => { setVerifyHeld(false); dispatch({ type: "verifyClose" }); }}
+    /></PanelBoundary>
   ) : null;
 
   const publishPanel = state.testPublish ? (
-    <PublishPanel
+    <PanelBoundary panel="publish"><PublishPanel
       view={state.testPublish.view}
       error={state.testPublish.error}
       errorLines={state.testPublish.errorLines}
       shareUrl={state.testPublish.shareUrl}
       busy={!!state.streamId}
+      onCopy={(versionId) => postToHost({ type: "publishCopy", versionId })}
+      onRefresh={() => postToHost({ type: "publishRefresh" })}
       onManifest={(manifest) => postToHost({ type: "publishOpen", manifest })}
       onSubmit={(form) => postToHost({ type: "publishSubmit", form })}
       onLink={(experimentId, channel, expiresInDays) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
-      onClose={() => dispatch({ type: "testPublishClose" })}
-    />
+      onClose={() => { postToHost({ type: "publishClose" }); dispatch({ type: "testPublishClose" }); }}
+    /></PanelBoundary>
   ) : null;
 
   const evidencePanel = state.evidence ? (
-    <EvidencePanel
+    <PanelBoundary panel="evidence-panel"><EvidencePanel
       view={state.evidence.view}
       error={state.evidence.error}
       done={state.evidence.done}
@@ -416,11 +690,11 @@ export function App() {
       onReview={(experimentId, draftId, revision, actions) => postToHost({ type: "evidenceReview", experimentId, draftId, revision, actions })}
       onDelete={(experimentId, sessionId) => postToHost({ type: "evidenceDelete", experimentId, ...(sessionId ? { sessionId } : {}) })}
       onClose={() => dispatch({ type: "evidenceClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const memoryPanel = state.memory ? (
-    <MemoryPanel
+    <PanelBoundary panel="memory"><MemoryPanel
       view={state.memory.view}
       error={state.memory.error}
       done={state.memory.done}
@@ -429,11 +703,11 @@ export function App() {
       onDiff={(from, to) => postToHost({ type: "memoryDiff", from, to })}
       onDecide={(form) => postToHost({ type: "memoryDecision", form })}
       onClose={() => dispatch({ type: "memoryClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const skillsPanel = state.skills ? (
-    <SkillsPanel
+    <PanelBoundary panel="skills"><SkillsPanel
       view={state.skills.view}
       error={state.skills.error}
       done={state.skills.done}
@@ -441,11 +715,15 @@ export function App() {
       onRefresh={() => postToHost({ type: "skillsOpen" })}
       onRun={(skill, form) => postToHost({ type: "skillRun", skill, form })}
       onClose={() => dispatch({ type: "skillsClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
+  // REQ-L12 ⑫ — the trial carry-over offer / read-only trial transcript (host-gated on the Service offer).
+  const carryoverPanel = state.config?.carryover ? (
+    <PanelBoundary panel="carryover"><TrialCarryover view={state.config.carryover} busy={!!state.streamId} onDecide={(decision) => postToHost({ type: "carryoverDecision", decision })} /></PanelBoundary>
+  ) : null;
   const reviewPanel = state.review ? (
-    <ReviewPanel
+    <PanelBoundary panel="review"><ReviewPanel
       view={state.review.view}
       error={state.review.error}
       done={state.review.done}
@@ -456,21 +734,49 @@ export function App() {
       onOpenTeam={(projectId) => postToHost({ type: "reviewDirectorOpen", projectId })}
       onDecide={(projectId, week, revision, form) => pressDecision(dispatch, postToHost, { type: "reviewDecision", projectId, week, revision, form })}
       onClose={() => dispatch({ type: "reviewClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
-  const retry = (prompt: string) => {
-    if (state.streamId) return;
-    // Re-send the same user prompt to get a fresh assistant variant.
-    dispatch({ type: "userSent", text: prompt });
-    postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages });
+  const retry = (prompt: string, source?: ChatMessage) => {
+    if (!beginRequest()) return;
+    const toolMode = source?.toolMode ?? 'auto';
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === source?.id))?.root;
+    settleUndo();
+    dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images, retryOf: root?.id, editOf: root?.editOf });
+    postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
+  };
+
+  // CGP-CHAT-R-002 — the edited text of the latest prompt goes out as a NEW request: a new id,
+  // the original's tool mode (REQ-STUDIO-CHAT-REFERENCE) and the images the learner kept. The
+  // original stays in the transcript as version 1; the host re-checks the target and the gates.
+  const editResend = (original: ChatMessage, editOf: string, text: string, images: string[]) => {
+    const trimmed = text.trim();
+    if (!trimmed || !beginRequest()) return false;
+    const toolMode = original.toolMode ?? 'auto';
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    const kept = images.length > 0 ? images : undefined;
+    settleUndo();
+    dispatch({ type: "userSent", text: trimmed, images: kept, toolMode, id: userMessageId, editOf });
+    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images: kept, editOf });
+    return true;
+  };
+
+  // CGP-CHAT-R-005 — a verdict is drawn at once and confirmed (or put back) by the host's answer.
+  const judgeAnswer = (messageId: string, next: VerdictState | null) => {
+    const requestId = crypto.randomUUID();
+    ownVerdictRequests.current.add(requestId);
+    latestVerdictRequests.current.set(messageId, requestId);
+    pendingVerdicts.current.set(messageId, { requestId, value: next });
+    setVerdicts(({ [messageId]: _previous, ...rest }) => next ? { ...rest, [messageId]: next } : rest);
+    postToHost({ type: "answerVerdict", requestId, messageId, verdict: next?.verdict ?? null, ...(next?.reason ? { reason: next.reason } : {}), ...(next?.note ? { note: next.note } : {}) });
   };
 
   // S-04 (#48): "다시 보내기" on a stream error reuses the LAST user prompt
   // that's already in history. The worker idempotently writes turn rows so
   // a retry doesn't double-count.
   const retryLast = () => {
-    if (state.streamId) return;
+    if (state.streamId || pendingSend.current) return;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m && m.role === "user") {
@@ -479,14 +785,20 @@ export function App() {
         // 받았어요" even though the student did paste one. Images live only on
         // the in-memory message (single-shot, REQ-C11), which is exactly what a
         // same-session retry needs.
-        const images = m.images && m.images.length > 0 ? m.images : undefined;
-        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, images });
+        // Same body as retry(): this runs only behind ChatPanel's guarded onRetryLast press.
+        const toolMode = m.toolMode ?? 'auto';
+        const userMessageId = `local-${crypto.randomUUID()}`;
+        const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === m.id))?.root;
+        if (!beginRequest()) return;
+        settleUndo();
+        dispatch({ type: "userSent", text: m.content, toolMode, id: userMessageId, images: m.images, retryOf: root?.id, editOf: root?.editOf });
+        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, toolMode, sourceMessageId: m.id, userMessageId, images: m.images });
         return;
       }
     }
   };
 
-  const dismissError = () => dispatch({ type: "streamEnd" });
+  const dismissError = () => dispatch({ type: "streamEnd", dismissed: true });
 
   const cancel = () => {
     if (state.streamId) postToHost({ type: "cancelStream", streamId: state.streamId });
@@ -495,10 +807,35 @@ export function App() {
   // streamEnd dispatches don't carry error info; clear-on-end is fine because
   // the existing reducer only sets error on streamError, never on streamEnd.
   const hasLastUserPrompt = messages.some((m) => m.role === "user");
+  // REQ-STUDIO-COACH-RUN-STATE: one approval flag for every prompt that waits on the learner, so the
+  // header's run state, the task rail's chip and the idle hint never disagree about it.
+  const anyApprovalPending = approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent || !!commandApproval;
+  const runState = deriveTaskRunState({
+    preparing: sendPending,
+    running: !!state.streamId || !!state.verify?.running,
+    approvalPending: anyApprovalPending,
+    lastOutcome: state.lastOutcome,
+  });
 
-  return (
+  return (<>
+    {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up
+        (the card's 문제 신고하기 opens them), so they render beside the boundary, behind a panel boundary of their own. */}
+    <PanelBoundary panel="report">
+      {problemForm && <ProblemReportDialog key={problemForm.id} form={problemForm} textSize={state.config?.textSize} onAnswer={(id,answer)=>{postToHost({type:'problemReportAnswer',id,answer});setProblemForm(null);}} onAutoReport={enabled=>postToHost({type:'problemReportAutoSetting',enabled})}/>}
+      {outbound && (isPublicAudiencePrompt(outbound)
+        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
+        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
+    </PanelBoundary>
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {doctorNotice && !problemForm && <DoctorNoticeLine notice={doctorNotice} onAnswer={fix=>{postToHost({type:'doctorNoticeAnswer',id:doctorNotice.id,fix});setDoctorNotice(null);}}/>}
+      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
+      {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
+      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}} onDiff={(id,index)=>postToHost({type:'writeApprovalDiff',id,index})}/>}
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor} activityTitle={homeTitle(state.config?.activity)}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel
@@ -506,6 +843,7 @@ export function App() {
           incomingImage={incomingImage}
           config={state.config}
           messages={messages}
+          trimBoundaryId={trimBoundaryId}
           pageNotice={state.pageNotice}
           aiNotice={state.aiNotice}
           stopNotice={state.stopNotice}
@@ -517,10 +855,19 @@ export function App() {
           }}
           streaming={!!state.streamId}
           streamingId={state.timeline.openId}
+          runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
+          refusal={refusal}
+          onDismissRefusal={() => setRefusal(false)}
           error={state.error}
+          activityUnavailable={state.error ? state.activityUnavailable : undefined}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
-          canRetryLast={hasLastUserPrompt && !state.streamId}
+          canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
+          streamFor={state.streamFor}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -534,30 +881,50 @@ export function App() {
           onSaveCoach={(name, personality) =>
             postToHost({ type: "saveCoach", name, personality })
           }
-          onReportProblem={() => postToHost({ type: "openReportModal" })}
+          onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
           onInstallUpdate={() => postToHost({ type: "installUpdate" })}
           onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
           // cr-review — a director signed in with an issuer token opens the Weekly Review here.
-          verifyPanel={reviewPanel}
+          verifyPanel={<><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{reviewPanel}</>}
         />
       ) : (
       <ChatPanel
-        key={state.config?.activity?.id ?? "disconnected"}
+        delegationStops={delegationStops}
+        onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
+        key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
         incomingImage={incomingImage}
         config={state.config}
         messages={messages}
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
-        verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        pageAttachment={state.pageAttachment}
+        onRemovePageAttachment={(undoId) => {
+          dispatch({ type: "pageAttachment", attachment: null });
+          postToHost({ type: "removePageContext", ...(undoId ? { undoId } : {}) });
+        }}
+        fileAttachment={state.fileAttachment}
+        fileAttachError={state.fileAttachError}
+        fileAttachNotice={state.fileAttachNotice}
+        onAttachFile={() => postToHost({ type: "attachWorkspaceFile" })}
+        onRemoveFileAttachment={(undoId) => {
+          dispatch({ type: "fileAttachment", attachment: null });
+          postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
+        }}
+        verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         questionId={automationQuestion?.id}
         questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
-        sendLocked={!!state.verify?.running || !!automationQuestion}
+        sendLocked={!!state.verify?.running || !!workspace?.error || !!automationQuestion}
+        annotationsEnabled={state.annotationsEnabled}
+        annotations={state.annotations}
+        onAnnotationAction={(action, number, comment) => postToHost({type:'annotationAction', action, number, comment})}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });
         }}
+        onStyleTweakSet={(id, prop, value) => postToHost({ type: "styleTweakSet", id, prop, value })}
         aiNotice={state.aiNotice}
         stopNotice={state.stopNotice}
+        streamFor={state.streamFor}
         openWorldId={state.openWorldId}
         publish={state.publish}
         onPublish={() => {
@@ -570,13 +937,37 @@ export function App() {
         onSwitchProject={() => postToHost({ type: "switchProject" })}
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
+        runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
+        refusal={refusal}
+        onDismissRefusal={() => setRefusal(false)}
         error={state.error}
-        errorRequestId={state.errorRequestId}
+        activityUnavailable={state.error ? state.activityUnavailable : undefined}
+          errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
-        canRetryLast={hasLastUserPrompt && !state.streamId}
+        trialEndCard={state.trialEndCard}
+        safetyNotice={state.error ? state.safetyNotice : null}
+        onTrialEndCardPasses={() => postToHost({ type: "trialEndCardPasses" })}
+        canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
         onSend={send}
+        sendPending={sendPending}
         onRetry={retry}
         onRetryLast={retryLast}
+        onSelectAttempt={(rootId, attemptId, choose) => {
+          if (state.streamId || pendingSend.current) return;
+          postToHost({ type: 'selectAnswerAttempt', activityId: state.config?.activity?.id,
+            taskId: state.config?.taskWorkspace?.activeTaskId ?? undefined, rootId, attemptId, choose });
+        }}
+        onEditResend={editResend}
+        verdicts={verdicts}
+        trimBoundaryId={trimBoundaryId}
+        stepMarks={stepMarks}
+        memoryUse={memoryUse}
+        onVerdict={judgeAnswer}
+        onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}
         onCancel={cancel}
         onClear={() => postToHost({ type: "clearHistory" })}
@@ -587,13 +978,15 @@ export function App() {
         onSaveCoach={(name, personality) =>
           postToHost({ type: "saveCoach", name, personality })
         }
-        onReportProblem={() => postToHost({ type: "openReportModal" })}
+        onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
       />
       )}
+      </TaskWorkspaceFrame>
     </ChatErrorBoundary>
-  );
+  </>);
 }
 
 /**

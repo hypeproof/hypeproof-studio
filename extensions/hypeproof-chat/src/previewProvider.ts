@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { buildPreviewShellCsp, PREVIEW_IFRAME_ALLOW, PREVIEW_IFRAME_SANDBOX } from "./cspBuilder";
 import { sanitizeArtifactEntry, ARTIFACT_FILES, applyPlaceholderDefaults } from "./previewArtifacts";
 import { injectBaseHref, injectInnerCsp } from "./previewHtml";
+import { noteHostWrite } from "./artifactProvenance";
 
 /**
  * HTML preview for AI-generated webapps + user-opened .html files.
@@ -19,8 +20,9 @@ import { injectBaseHref, injectInnerCsp } from "./previewHtml";
  *    intersect with parent.
  *  - `localResourceRoots` is the workspace folders ∪ the previewed file's
  *    parent dir only — webview refuses to serve anything outside that set.
- *  - Host message handler still routes ONLY `previewReady` +
- *    `preview_request_action` + `preview_result`; the first of those two only
+ *  - The trusted header has a revision-bound `preview_ask_file` callback. The
+ *    inner document can only forward `preview_request_action` + `preview_result`;
+ *    the action handler only
  *    acts on `append_artifact` and only after a modal confirm, writing to
  *    `workshop-output/` (#155). `preview_result` (kids-quest `hp:result`) never
  *    touches disk — it is a plain-data event the chat panel folds into the
@@ -40,11 +42,29 @@ export class PreviewProvider {
   private panel: vscode.WebviewPanel | undefined;
   private ready = false;
   private pendingHtml: string | null = null;
+  private askAboutFile: (() => Promise<void>) | undefined;
+  private askEnabled = false;
+  private previewRevision = 0;
+  private asking = false;
+
+  /** Visibility follows the resolved file-attach grant; the action rechecks it. */
+  setAskAboutFileEnabled(enabled: boolean): void {
+    this.askEnabled = enabled;
+    this.postAskState();
+  }
+
+  private postAskState(): void {
+    if (this.ready) void this.panel?.webview.postMessage({
+      type: "previewAskState", revision: this.previewRevision,
+      enabled: this.askEnabled && !!this.askAboutFile && !this.asking,
+    });
+  }
   // For the "preview .html file" path: watched file URI + its parent dir.
   // On save we re-read and re-render. Cleared when panel disposes or user
   // previews a different file.
   private watchedFile: vscode.Uri | undefined;
   private watchedBase: vscode.Uri | undefined;
+  private watchedRead: (() => Promise<string | null>) | undefined;
   private saveSubscription: vscode.Disposable | undefined;
   private labels: { title: string; placeholder: string; emoji: string } = {
     title: "🎮 내 게임",
@@ -66,24 +86,33 @@ export class PreviewProvider {
   /** Use the existing work canvas beside the chat, not a third editor group. */
   async showAutomation(html: string): Promise<void> {
     const column = this.releaseAutomationEntry?.() ?? this.panel?.viewColumn ?? vscode.ViewColumn.One;
-    await this.show(html, undefined, column);
+    await this.show(html, undefined, undefined, false, column);
   }
+  /** REQ-STUDIO-FOLDER-CONSENT — the chat host's write question; null = may write. */
+  private writeRefusal: (target: string) => string | null = () => null;
+  setWriteGuard(guard: (target: string) => string | null): void { this.writeRefusal = guard; }
 
   /**
    * Re-render the preview every time `fileUri` is saved. Called by the
    * `hypeproof-chat.previewActiveFile` command. Calling again with a
    * different URI swaps the watch target; the previous one stops firing.
    */
-  watchForReload(fileUri: vscode.Uri): void {
+  watchForReload(fileUri: vscode.Uri, read?: () => Promise<string | null>): void {
     this.watchedFile = fileUri;
     this.watchedBase = vscode.Uri.joinPath(fileUri, "..");
+    // REQ-STUDIO-PAGE-CARD — a caller with its own checked read (handle-based, no links) supplies it; null skips the reload.
+    this.watchedRead = read;
     if (this.saveSubscription) return; // single subscription, gated on watchedFile
     this.saveSubscription = vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (!this.watchedFile) return;
       if (doc.uri.fsPath !== this.watchedFile.fsPath) return;
+      const revision = this.previewRevision;
+      const base = this.watchedBase;
+      const ask = this.askAboutFile;
       try {
-        const buf = await vscode.workspace.fs.readFile(this.watchedFile);
-        await this.show(Buffer.from(buf).toString("utf8"), this.watchedBase);
+        const html = this.watchedRead ? await this.watchedRead() : Buffer.from(await vscode.workspace.fs.readFile(this.watchedFile)).toString("utf8");
+        if (html === null || revision !== this.previewRevision) return;
+        await this.show(html, base, ask, true);
       } catch { /* file may have been deleted; ignore */ }
     });
   }
@@ -116,7 +145,15 @@ export class PreviewProvider {
    * back to `about:srcdoc` and relative paths remain dead (matches old
    * behavior, just doesn't crash).
    */
-  async show(html: string, basePath?: vscode.Uri, viewColumn?: vscode.ViewColumn): Promise<void> {
+  async show(html: string, basePath?: vscode.Uri, askAboutFile?: () => Promise<void>, reload = false, viewColumn?: vscode.ViewColumn): Promise<void> {
+    this.previewRevision++;
+    this.askAboutFile = askAboutFile;
+    // An unrelated/generated preview must not retain the previous file's save watcher.
+    if (!reload) {
+      this.watchedFile = undefined;
+      this.watchedBase = undefined;
+      this.watchedRead = undefined;
+    }
     // Replace any unresolved `%%KEY%%` with sensible defaults (#161). Lets
     // partial LLM responses still render a recognizable V1.
     html = applyPlaceholderDefaults(html);
@@ -144,10 +181,19 @@ export class PreviewProvider {
       this.panel.webview.onDidReceiveMessage((msg) => {
         if (msg?.type === "previewReady") {
           this.ready = true;
+          this.postAskState();
           if (this.pendingHtml !== null) {
-            this.panel?.webview.postMessage({ type: "renderPreview", html: this.pendingHtml });
+            this.panel?.webview.postMessage({ type: "renderPreview", revision: this.previewRevision, html: this.pendingHtml });
             this.pendingHtml = null;
           }
+        } else if (msg?.type === "preview_ask_file") {
+          if (msg.revision !== this.previewRevision || !this.askEnabled || !this.askAboutFile || this.asking) return;
+          this.asking = true;
+          this.postAskState();
+          void this.askAboutFile().catch(() => undefined).finally(() => {
+            this.asking = false;
+            this.postAskState();
+          });
         } else if (msg?.type === "preview_request_action") {
           void this.handlePreviewRequestAction(msg);
         } else if (msg?.type === "preview_result") {
@@ -156,10 +202,13 @@ export class PreviewProvider {
       });
       this.panel.onDidDispose(() => {
         this.panel = undefined;
+        this.askAboutFile = undefined;
+        this.previewRevision++;
         this.ready = false;
         this.pendingHtml = null;
         this.watchedFile = undefined;
         this.watchedBase = undefined;
+        this.watchedRead = undefined;
         this.saveSubscription?.dispose();
         this.saveSubscription = undefined;
       });
@@ -184,8 +233,9 @@ export class PreviewProvider {
       : html;
     const renderedHtml = injectInnerCsp(baseAware, this.panel.webview.cspSource);
 
+    this.postAskState();
     if (this.ready) {
-      this.panel.webview.postMessage({ type: "renderPreview", html: renderedHtml });
+      this.panel.webview.postMessage({ type: "renderPreview", revision: this.previewRevision, html: renderedHtml });
     } else {
       this.pendingHtml = renderedHtml;
     }
@@ -228,6 +278,12 @@ export class PreviewProvider {
 
     const folderUri = vscode.Uri.joinPath(ws.uri, "workshop-output");
     const fileUri = vscode.Uri.joinPath(folderUri, target);
+    const folderRefusal = this.writeRefusal(fileUri.fsPath);
+    if (folderRefusal) {
+      vscode.window.showWarningMessage(folderRefusal);
+      this.panel?.webview.postMessage({ type: "previewActionResult", action: "append_artifact", artifact, ok: false });
+      return;
+    }
 
     const pick = await vscode.window.showWarningMessage(
       `다음 ${target} 항목을 저장할까요?\n\n${safeEntry}`,
@@ -254,6 +310,7 @@ export class PreviewProvider {
     const line = `- ${stamp} · ${safeEntry}\n`;
     const next = existing ? existing + line : `# ${path.basename(target)}\n\n${line}`;
     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(next, "utf8"));
+    noteHostWrite([{ absPath: fileUri.fsPath, data: next }], "studio"); // REQ-STUDIO-ARTIFACT-PROVENANCE
 
     this.panel?.webview.postMessage({ type: "previewActionResult", action: "append_artifact", artifact, ok: true });
     vscode.window.showInformationMessage(`HypeProof: ${target}에 저장됐어요.`);
@@ -272,30 +329,67 @@ export class PreviewProvider {
   <style>
     html, body { margin: 0; height: 100%; background: #1b1b2a; color: #ddd;
                  font-family: var(--vscode-font-family, sans-serif); }
+    body { display: flex; flex-direction: column; }
+    #preview-header[hidden] { display: none; }
+    #preview-header { padding: 4px 8px; background: var(--vscode-editor-background, #1b1b2a); }
+    #ask-file { min-height: 44px; min-width: 44px; padding: 8px 12px; font: inherit; font-size: 14px;
+      color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c);
+      border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+    #ask-file:focus-visible { outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
+    @media (forced-colors: active) { #ask-file { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
     #placeholder { display:flex; flex-direction:column; align-items:center;
                    justify-content:center; height:100%; opacity:0.7; gap:8px; }
     #placeholder .big { font-size: 40px; }
-    iframe { width: 100%; height: 100vh; border: 0; background: #fff; display: block; }
+    iframe { width: 100%; flex: 1; min-height: 0; border: 0; background: #fff; display: block; }
   </style>
 </head>
 <body>
+  <header id="preview-header" hidden><button id="ask-file" type="button">이 파일에 대해 묻기</button></header>
   <div id="placeholder">
     <div class="big">${this.labels.emoji}</div>
     <div>${this.labels.placeholder}</div>
   </div>
   <iframe id="frame" style="display:none" sandbox="${PREVIEW_IFRAME_SANDBOX}" allow="${PREVIEW_IFRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>
   <script>
+  (() => {
     const vscode = acquireVsCodeApi();
     const frame = document.getElementById("frame");
     const placeholder = document.getElementById("placeholder");
+    const header = document.getElementById("preview-header");
+    const ask = document.getElementById("ask-file");
+    let revision = null;
+    let renderedRevision = null;
+    let enabled = false;
+    const updateHeader = () => {
+      header.hidden = !enabled || revision !== renderedRevision;
+      ask.disabled = header.hidden;
+    };
+    ask.addEventListener("click", () => {
+      if (header.hidden || ask.disabled || revision === null) return;
+      ask.disabled = true;
+      vscode.postMessage({ type: "preview_ask_file", revision });
+    });
 
+    // Only the outer VS Code webview frame may drive the shell: it delivers host
+    // messages with contentWindow.postMessage, so ev.source === window.parent.
+    // Everything else (the preview page, frames nested in it, detached frames whose
+    // parent is null, a null source) is untrusted.
     // host → shell → inner iframe
     window.addEventListener("message", (ev) => {
       const m = ev.data || {};
-      if (m.type === "renderPreview" && typeof m.html === "string") {
+      const trusted = ev.source === window.parent && ev.source !== window;
+      if (trusted && m.type === "previewAskState") {
+        revision = m.revision;
+        enabled = m.enabled === true;
+        updateHeader();
+        return;
+      }
+      if (trusted && m.type === "renderPreview" && typeof m.html === "string") {
         placeholder.style.display = "none";
         frame.style.display = "block";
         frame.srcdoc = m.html;
+        renderedRevision = m.revision;
+        updateHeader();
         return;
       }
       // Inner iframe (cross-document postMessage from srcdoc) → forward to host (#155).
@@ -321,6 +415,7 @@ export class PreviewProvider {
     });
 
     vscode.postMessage({ type: "previewReady" });
+  })();
   </script>
 </body>
 </html>`;

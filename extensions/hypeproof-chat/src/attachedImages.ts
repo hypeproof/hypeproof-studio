@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { attachmentReadFailure } from "./attachmentFailure.ts";
 // Photos attached to a chat message as files (hype-dental D-028, issue #1611).
 //
 // A cohort with `input.image_files` takes photos dropped or pasted into the chat as files,
@@ -118,6 +120,7 @@ export function stagingRootFor(tmpDir: string, pid: number, nonce: string): { ro
 interface Staged {
   file: string;
   name: string;
+  saved?: { root: string; relative: string; hash: string };
 }
 
 /**
@@ -160,6 +163,9 @@ export class ImageStaging {
     }
   }
 
+  has(id: string): boolean { return this.staged.has(id); }
+  name(id: string): string { return this.staged.get(id)?.name ?? "사진"; }
+
   count(): number {
     return this.staged.size;
   }
@@ -186,36 +192,87 @@ export class ImageStaging {
 
   /**
    * Move the staged photos into `<cwd>/images/`, in the order given. Returns the workspace-
-   * relative paths saved and how many could not be. Staged files are removed either way.
+   * relative paths saved and how many could not be. Failed staged files remain; successful destinations are cached until discard.
    */
-  commit(ids: readonly string[], cwd: string): { relPaths: string[]; failed: number } {
+  commit(ids: readonly string[], cwd: string, directory: string = ATTACHED_IMAGE_DIR): { relPaths: string[]; failed: number; failures: { id: string; name: string; reason: string }[] } {
+    if (!["images", "assets"].includes(directory)) throw new Error("Invalid attachment directory");
     const relPaths: string[] = [];
     let failed = 0;
-    const dir = path.join(cwd, ATTACHED_IMAGE_DIR);
-    for (const id of ids) {
+    const failures: { id: string; name: string; reason: string }[] = [];
+    for (const id of [...new Set(ids)]) {
       const s = this.staged.get(id);
       if (!s) {
-        failed++;
+        failed++; failures.push({ id, name: "사진", reason: "사진 준비 기록이 없어요. 이 사진을 다시 골라 주세요." });
         continue;
       }
-      this.staged.delete(id);
+      let destination: string | undefined;
+      let destinationFd: number | undefined;
+      let saved = false;
       try {
+        const workspace = fs.realpathSync(cwd);
+        if (s.saved) {
+          const previous = path.join(workspace, s.saved.relative);
+          if (s.saved.root !== workspace || fs.lstatSync(path.dirname(previous)).isSymbolicLink() || fs.lstatSync(previous).isSymbolicLink() || createHash("sha256").update(fs.readFileSync(previous)).digest("hex") !== s.saved.hash) throw new Error("Prepared photo changed");
+          relPaths.push(s.saved.relative); continue;
+        }
+        const workspaceEntry = fs.statSync(workspace, { bigint: true });
+        const dir = path.join(workspace, directory);
         fs.mkdirSync(dir, { recursive: true });
         const name = freeAttachedImageName(s.name, (n) => fs.existsSync(path.join(dir, n)));
-        // copy + remove rather than rename: the temp folder may sit on another volume.
-        fs.copyFileSync(s.file, path.join(dir, name), fs.constants.COPYFILE_EXCL);
-        relPaths.push(`${ATTACHED_IMAGE_DIR}/${name}`);
-      } catch {
-        failed++;
-      } finally {
-        try {
-          fs.rmSync(s.file, { force: true });
-        } catch {
-          /* removed with the folder on dispose */
+        // Check the actual destination before exclusive creation. lstat also rejects
+        // Windows directory junctions; a workspace opened through a link remains valid.
+        const entry = fs.lstatSync(dir, { bigint: true });
+        if (!entry.isDirectory() || entry.isSymbolicLink() || path.relative(workspace, fs.realpathSync(dir)) !== directory) {
+          throw new Error("Photo destination is not a workspace directory");
         }
+        destination = path.join(dir, name);
+        // O_EXCL never replaces an existing file or final-component link. Opening
+        // creates an empty placeholder only: no photo bytes precede validation.
+        destinationFd = fs.openSync(destination, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0));
+        const opened = fs.fstatSync(destinationFd, { bigint: true });
+        // Node has no portable directory-relative open/unlink. These rechecks
+        // detect boundary substitutions, not atomic protection from all OS renames.
+        const validate = (size: number) => {
+          const rootNow = fs.statSync(workspace, { bigint: true });
+          const parentNow = fs.lstatSync(dir, { bigint: true });
+          const fileNow = fs.lstatSync(destination!, { bigint: true });
+          const handleNow = fs.fstatSync(destinationFd!, { bigint: true });
+          if (fs.realpathSync(cwd) !== workspace || rootNow.dev !== workspaceEntry.dev || rootNow.ino !== workspaceEntry.ino ||
+              !parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== entry.dev || parentNow.ino !== entry.ino || path.relative(workspace, fs.realpathSync(dir)) !== directory ||
+              !handleNow.isFile() || handleNow.nlink !== 1n || handleNow.size !== BigInt(size) || handleNow.dev !== opened.dev || handleNow.ino !== opened.ino ||
+              !fileNow.isFile() || fileNow.isSymbolicLink() || fileNow.dev !== opened.dev || fileNow.ino !== opened.ino || path.relative(destination!, fs.realpathSync(destination!)) !== "") {
+            throw new Error("Photo destination changed during commit");
+          }
+        };
+        validate(0);
+        const bytes = fs.readFileSync(s.file);
+        validate(0);
+        fs.writeFileSync(destinationFd, bytes);
+        validate(bytes.length);
+        saved = true;
+        relPaths.push(`${directory}/${name}`);
+        s.saved = { root: workspace, relative: `${directory}/${name}`, hash: createHash("sha256").update(bytes).digest("hex") };
+      } catch (error) {
+        failed++; failures.push({ id, name: s.name, reason: attachmentReadFailure(error) });
+      } finally {
+        if (destinationFd !== undefined) {
+          if (!saved) {
+            // Only this exclusive creation is ours. Clear its bytes even if a
+            // concurrent rename made its new name unknowable, then unlink only
+            // when the current path still names that same opened inode.
+            try { fs.ftruncateSync(destinationFd, 0); } catch { /* best effort */ }
+            try {
+              const own = fs.fstatSync(destinationFd, { bigint: true });
+              const current = fs.lstatSync(destination!, { bigint: true });
+              if (current.isFile() && !current.isSymbolicLink() && current.dev === own.dev && current.ino === own.ino) fs.unlinkSync(destination!);
+            } catch { /* a renamed path must never authorize deleting another file */ }
+          }
+          fs.closeSync(destinationFd);
+        }
+        if (saved) { try { fs.rmSync(s.file, { force: true }); } catch { /* disposed later */ } }
       }
     }
-    return { relPaths, failed };
+    return { relPaths, failed, failures };
   }
 
   /** Remove everything this panel staged (panel closed, window closing). */

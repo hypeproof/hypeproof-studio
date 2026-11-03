@@ -1,7 +1,7 @@
 # Conversational automation quests on Google Apps Script
 
 Approved direction: TJ, 2026-10-13. Extends Epic #1603 / implementation #1604.
-Current direction (DEC-023): the shared runner is the default; personal Apps Script
+Current direction (DEC-026): the shared runner is the default; personal Apps Script
 export is deferred. Local/Windows shared preview and graph acceptance passed at
 `ab0a13a7`; see [current evidence](google-shared-runner-isolation-evidence.md) and
 [remaining delivery plan](email-automation-next-steps.md). The owner-script flow

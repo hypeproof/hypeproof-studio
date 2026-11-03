@@ -153,6 +153,8 @@ try {
     function git { if ($args -contains 'core.autocrlf') { 'false' } elseif ($args -contains 'core.longpaths') { 'true' } }
     function Test-Command($name) { return $true }
     function Get-SeededSdk { return @{ version = '0.3.207' } }
+    # PRA-12: the doctor now requires a POSIX shell; this fixture is about tool versions, so Git Bash is present.
+    function Find-GitBash { return 'C:\Program Files\Git\bin\bash.exe' }
     function Get-ToolVersion($tool) { return $global:FixtureToolVersions[$tool.id] }
     $doctorManifest = @{ studio = @{ version = '9.9.9' }; tools = @(
         @{ id = 'git'; cmd = 'git'; min = '2.30'; required = $true },

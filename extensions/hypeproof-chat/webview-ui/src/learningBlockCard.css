@@ -1,0 +1,41 @@
+/* CGP-LEARN-D-001 (DES-CGP-LEARN-01): the confirmed step's learning block as a collapsible 자료 card in the
+   coach rail, under the current step. Closed it is one row: a 48px thumbnail, the title and 열어 보기 (a 44px
+   target), at most 72px tall. Opening expands the block in place, in flow: nothing is positioned, so the card
+   pushes what follows it down and never covers it. Panel background and Ink text come from the theme tokens. */
+.hp-material.hp-block-card {
+  /* Both classes: R-003 lays out .hp-material as a flex column in styles.css, which loads after this file. */
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+  /* CGP-LEARN-D-003: the head is `display: contents`, so the card's own grid places the caption (the state line, which comes
+     after the body in the markup). Closed it is lifted under the title, beside the thumbnail; open it runs under the body. */
+  grid-template-areas: "thumb name toggle" "thumb state toggle";
+  column-gap: var(--hp-space-2); row-gap: 0; min-width: 0; box-sizing: border-box;
+  padding: var(--hp-space-1) var(--hp-space-2);
+  background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default);
+  border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-12);
+}
+.hp-material.hp-block-card[data-block-open] { grid-template-areas: "thumb name toggle" "body body body" "state state state"; row-gap: var(--hp-space-2); }
+.hp-block-card-head { display: contents; }
+/* The 자료 label sits inside the 48px tile under the icon, so the title and the live state line get the row's width. */
+.hp-block-card-thumb {
+  grid-area: thumb;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; overflow: hidden;
+  width: var(--hp-control-lg); height: var(--hp-control-lg);
+  border-radius: var(--hp-radius-8); background: var(--hp-bg-app-default); color: var(--hp-text-accent-default);
+}
+.hp-block-card-kicker { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-primary-default); }
+/* R-003's live state line is the caption: never in the hidden body, so it is drawn and announced while the card is closed. Closed
+   it is one line under the title (the card stays <= 72px); open it is the whole sentence under the work surface, wrapping at any
+   width (200 % zoom included) instead of scrolling sideways. Two classes beat koreanProse.css's `p:lang(ko)` wrapping rule. */
+.hp-block-card .hp-block-card-state { grid-area: state; align-self: start; margin: 0; min-width: 0; line-height: var(--hp-leading-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-block-card[data-block-open] .hp-block-card-state { overflow: visible; white-space: normal; }
+/* One line: two classes beat koreanProse.css's `:lang(ko) h3 { text-wrap: balance }`, which would turn wrapping back on. */
+.hp-block-card .hp-block-card-name { grid-area: name; align-self: end; margin: 0; min-width: 0; line-height: var(--hp-leading-label); font-weight: var(--hp-weight-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-block-card[data-block-open] .hp-block-card-name { align-self: center; }
+.hp-block-card-head > button { grid-area: toggle; min-width: var(--hp-control-min); min-height: var(--hp-control-min); font-size: var(--hp-font-caption); white-space: nowrap; }
+.hp-block-card-body { grid-area: body; min-width: 0; }
+/* Learner floor (14px) over the rail's 12px note style: the saved-work line and the undrawable notice inside a block. */
+.hp-block-card .hp-rail-lesson-note { font-size: var(--hp-font-caption); }
+.hp-block-card-body[hidden] { display: none; }
+@media (forced-colors: active) {
+  .hp-block-card, .hp-block-card-thumb { border-color: CanvasText; }
+}

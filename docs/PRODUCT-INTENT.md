@@ -1,7 +1,7 @@
 # HypeProof Studio — Product Intent
 
 > Status: working product-intent layer
-> Upstream merged: [Lab #782 · 1de0d9b8](https://github.com/jayleekr/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/PHILOSOPHY.md), Human Capability Research. 유지보수자의 이번 머지 승인으로 문서 기준을 연결했다. 후보 역량 타당화·측정/UI migration·판매 조건 확정은 별도다.
+> Upstream merged: [Lab #782 · 1de0d9b8](https://github.com/hypeproof/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/PHILOSOPHY.md), Human Capability Research. 유지보수자의 이번 머지 승인으로 문서 기준을 연결했다. 후보 역량 타당화·측정/UI migration·판매 조건 확정은 별도다.
 > Downstream: [Studio behavior requirements](studio-requirements.md) and feature-specific specs
 
 [철학 개정 적용 기록](design/philosophy-alignment-2026-09-08.md)은 Lab 원본의 의미를
@@ -121,7 +121,7 @@ Judgment, Verify, Orchestrate, Adapt, Ownership은 이를 연구할 잠정 후�
 자원 안에서 여러 수업의 도움과 실행 범위를 조절할 수 있어야 한다.**
 
 상품 의도 INT-ACCESS-01~08의 원본은 Lab의
-[이용 권한·pricing Intent](https://github.com/jayleekr/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/products/studio/access-and-pricing-intent.md)에 둔다.
+[이용 권한·pricing Intent](https://github.com/hypeproof/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/products/studio/access-and-pricing-intent.md)에 둔다.
 이 문서는 다음 제품 원칙으로 번역하며, 실제 금액은 Lab pricing.ts의 버전별 계약을 따른다.
 
 - 수업·구독이 겹쳐도 사용 출처를 명시하며 한 요청을 두 번 차감하거나 개인 비용으로 자동 전환하지 않는다.

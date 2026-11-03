@@ -131,3 +131,21 @@ async function runProxyChat(response) {
 }
 
 console.log("proxy-chat-usage.smoke.mjs — all green");
+
+// EOF without completion evidence must use the interrupted-response path.
+{
+  for (const lines of [[DELTA], []]) {
+    await assert.rejects(
+      runProxyChat(sseResponse(lines, { "x-request-id": "truncated-request" })),
+      (error) => error instanceof ProxyTransportError
+        && error.requestId === "truncated-request"
+        && error.message.includes("응답이 중간에 끊겼어요"),
+    );
+  }
+  const finished = JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] });
+  const { result, fired } = await runProxyChat(sseResponse([DELTA, finished]));
+  assert.equal(result.text, "안녕");
+  assert.equal(result.finishReason, "stop");
+  assert.equal(fired.length, 0, "Completion evidence must not fabricate usage");
+  console.log("✓ Truncated EOF rejected; explicit finish without DONE retained");
+}

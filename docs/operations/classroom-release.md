@@ -10,7 +10,7 @@ Do not claim the API is deployed because the PRD page is reachable.
 2. Dispatch the existing Service workflow. Keep the live-session override false:
 
    ```sh
-   gh workflow run deploy-worker.yml --repo jayleekr/hypeproof-studio --ref main -f ref=REVIEWED_MERGE_SHA -F dry_run=false -F verify_prod=true -F override_live_session=false
+   gh workflow run deploy-worker.yml --repo hypeproof/hypeproof-studio --ref main -f ref=REVIEWED_MERGE_SHA -F dry_run=false -F verify_prod=true -F override_live_session=false
    ```
 
    The workflow applies only additive migration 0003 after the live-session freeze.
@@ -19,7 +19,7 @@ Do not claim the API is deployed because the PRD page is reachable.
 3. Dispatch Chalk at the same reviewed SHA, then check its exact run and `/health`:
 
    ```sh
-   gh workflow run deploy-chalk.yml --repo jayleekr/hypeproof-studio --ref main -f ref=REVIEWED_MERGE_SHA -F dry_run=false
+   gh workflow run deploy-chalk.yml --repo hypeproof/hypeproof-studio --ref main -f ref=REVIEWED_MERGE_SHA -F dry_run=false
    ```
 
 4. Verify `/manage` and `/sharing` serve HTML. An unauthenticated GET to

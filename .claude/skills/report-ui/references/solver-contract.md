@@ -7,7 +7,7 @@ issue-solving skill (e.g. `/orbit` ops flavor, or the `issue-explorer` /
 ## Discovery
 
 ```bash
-gh issue list --repo jayleekr/hypeproof-studio \
+gh issue list --repo hypeproof/hypeproof-studio \
   --label solver:ready --state open --json number,title,labels
 ```
 
@@ -24,7 +24,7 @@ Filter by work type via the `type:feature` / `type:ux` / `type:bug` label.
 Parse env JSON:
 
 ```bash
-gh issue view <N> --repo jayleekr/hypeproof-studio --json body -q .body \
+gh issue view <N> --repo hypeproof/hypeproof-studio --json body -q .body \
   | sed -n '/HPS-ENV-START/,/HPS-ENV-END/p' \
   | sed -n '/```json/,/```/p' | sed '1d;$d'
 ```
@@ -33,7 +33,7 @@ gh issue view <N> --repo jayleekr/hypeproof-studio --json body -q .body \
 
 Screenshot lives at `evidence/<slug>.png` on the orphan `contrib-evidence`
 branch (never on `main`). Raw URL:
-`https://github.com/jayleekr/hypeproof-studio/blob/contrib-evidence/evidence/<slug>.png?raw=true`
+`https://github.com/hypeproof/hypeproof-studio/blob/contrib-evidence/evidence/<slug>.png?raw=true`
 
 ## Solver handshake (suggested)
 

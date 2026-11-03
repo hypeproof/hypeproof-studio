@@ -48,6 +48,32 @@ tracked. Deploy the Service read endpoints before activating the corresponding
 Chalk artifact. The `c*` train still deploys only Chalk and observes the Service
 version before and after.
 
+## BOA token distribution
+
+For the workshop identified by Lab's public routing metadata, console issuance must publish the
+same student credentials on Lab's `/live/boa` participant board (BOA-DIST-01).
+Chalk discovers eligible cohort/profile pairs with `GET /workshop/boa-tokens`,
+without forwarding issuer credentials on that public metadata read. It forwards
+`POST /workshop/boa-tokens` server-side to the fixed Lab
+`POST /api/workshop/boa-tokens` endpoint with the instructor Bearer. Lab owns
+temporary board registration; Service retains issuer authorization, roster and
+token signatures. Other cohorts keep the existing Service-only issuance path.
+
+Issuer credentials must never enter participant HTML, board responses or links
+(BOA-DIST-02). The public instructor widget stays available with a masked,
+initially empty input and no credential persistence/restoration. Chalk retains its
+existing tab-scoped instructor session. Failed or uncertain distribution must be
+reported without claiming successful publication or that no token was issued
+(BOA-DIST-03). Named batches join the track's existing board, preserving other
+students' seats and claims. Reissuing one handle replaces only that seat's token
+and clears that claim; individual issuance failures and board errors stay visible.
+
+Transport tests cover authorization, header filtering, fixed production origin,
+Service/Lab errors and redirects. Cross-product browser acceptance uses actual
+Chalk → Lab → Service HTTP handlers and an isolated board store, then compares the
+console-issued credential with the student's claimed/copied credential. Production
+deployment and clean-machine Studio installation remain separate observations.
+
 ## Development and verification
 
 ```bash

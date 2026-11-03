@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {BrowserApprovalRequest} from '../src/browserApprovalPrompt.ts';
+const prompt={id:'one',title:'브라우저를 열까요?',host:'example.com',label:'인터넷',place:'internet',rememberLabel:'이 사이트는 항상 허용 (example.com)'};
+let scope='one',shown=[];const request=new BrowserApprovalRequest({scope:()=>scope,present:async p=>(shown.push(p),true)},1000);
+let pending=request.confirm(prompt);assert.equal(await request.confirm({...prompt,id:'other'}),'deny');request.respond('wrong','open');assert.equal(shown.at(-1).id,'one');request.respond('one','remember');assert.equal(await pending,'remember');
+pending=request.confirm({...prompt,id:'file',rememberLabel:null});request.respond('file','remember');assert.equal(shown.at(-1).id,'file');request.respond('file','deny');assert.equal(await pending,'deny');
+pending=request.confirm({...prompt,id:'stale'});scope='two';request.respond('stale','open');assert.equal(await pending,'deny');
+pending=request.confirm({...prompt,id:'close'});request.cancel();assert.equal(await pending,'deny');
+assert.equal(await new BrowserApprovalRequest({scope:()=>scope,present:async()=>false}).confirm(prompt),'deny');assert.equal(await new BrowserApprovalRequest({scope:()=>scope,present:async()=>true},5).confirm(prompt),'deny');
+console.log('PASS browser approval request: bound id, overlap, no file remember, scope, cancel, unavailable, timeout');

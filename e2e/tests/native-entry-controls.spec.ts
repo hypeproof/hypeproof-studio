@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchApp, closeApp, startFrame, chatFrame, runCommand } from '../fixtures/app';
+import { launchApp, closeApp, startFrame, chatFrame, runCommand, runCommandById } from '../fixtures/app';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -31,7 +31,7 @@ test('trial entry: real explorer, settings, folder cancellation, disconnect and 
     await start.getByRole('button', { name: '연결 해제', exact: true }).click();
     await expect(start.getByRole('button', { name: '수업에 참여하기', exact: true })).toBeVisible();
     // Reveal the existing disconnected conversation without changing its connection.
-    await runCommand(ctx.win, 'HypeProof Chat: Focus');
+    await runCommandById(ctx.win, 'hypeproof-chat.focus');
     await chat.getByRole('button', { name: /시작 화면 열기/ }).click();
     await expect(start.getByRole('button', { name: '수업에 참여하기', exact: true })).toBeVisible();
     if (await start.getByRole('button', { name: '수업에 참여하기', exact: true }).isVisible()) await start.getByRole('button', { name: '수업에 참여하기', exact: true }).click();

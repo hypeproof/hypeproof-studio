@@ -1,0 +1,9 @@
+{
+  "id": "diagnosis-1",
+  "billingMode": "subscription",
+  "scope": "diagnosis",
+  "inputTokens": null,
+  "outputTokens": null,
+  "observedAt": "REPLACE_WITH_UTC_TIME",
+  "evidence": "Provider observation; unknown counts are null, not zero"
+}

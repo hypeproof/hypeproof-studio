@@ -7,6 +7,7 @@
 //   - "Done" is the Service's verified receipt. A 2xx on a file PUT is not.
 //   - Only allowlisted spool files are read. Nothing is executed or rendered.
 // No `vscode` import: file access, HTTP and storage are injected.
+import type { OutboundItem } from "./outboundConsent.ts";
 import { createHash } from "crypto";
 
 export const SNAPSHOT_SCHEMA = "hps-classroom-snapshot/2";
@@ -195,6 +196,7 @@ export interface SnapshotFile { name: string; bytes: number; sha256: string; upl
 export interface SnapshotState { batch_id: string; revision: number; files: SnapshotFile[]; scope?: { grant_id: string; class_run_id: string; seat_id: string; student: { u: string; c: string; p: string } }; binding?: SnapshotBinding; collection?: CollectionBinding; receipt_id?: string; coverage?: string; coverage_reason?: string; result?: string }
 export type SnapshotCopy = { files: Array<{ name: string; data: Uint8Array }>; binding?: SnapshotBinding; collection?: CollectionBinding };
 export interface SnapshotDeps {
+  confirm?(items: readonly OutboundItem[]): Promise<boolean>;
   /** Take (or re-open) the immutable copy for this batch+revision, with the binding it was frozen under. */
   copy(batchId: string, revision: number): Promise<SnapshotCopy | { code: string } | null>;
   /** The connection this upload runs under. A stored state frozen for another grant is not this learner's to send. */
@@ -230,6 +232,7 @@ export async function uploadSnapshot(batchId: string, deps: SnapshotDeps): Promi
   // contract is never sent with this credential. It is left exactly where it is.
   if (state && (!state.scope || !(state.binding || state.collection) || state.scope.grant_id !== scope.grant_id || state.scope.student.u !== scope.student.u || state.scope.class_run_id !== scope.class_run_id)) return { ok: false, code: "foreign_pending_copy" };
   if (state?.receipt_id) return { ok: true, code: "receipt_verified" }; // already proven; never re-sent as a new input
+  if (state?.result === "consent_declined") return { ok: false, code: state.result };
   for (let attempt = 0; attempt < 3; attempt++) {
     const revision = state?.revision ?? 1;
     const copy = await deps.copy(batchId, revision);
@@ -240,6 +243,11 @@ export async function uploadSnapshot(batchId: string, deps: SnapshotDeps): Promi
     if (!state) { state = stateFor(batchId, revision, copy, scope); await deps.saveState(state); }
     // The copy must still be the bytes that were hashed: a changed copy is a new revision, never a quiet overwrite.
     if (allowed.some((f) => state!.files.find((x) => x.name === f.name)?.sha256 !== sha(f.data))) { state = await nextRevision(batchId, revision, deps, scope); if (!state) return { ok: false, code: "nothing_recorded" }; continue; }
+    const listed = state.files.map((f) => ({ name: f.name, bytes: f.bytes, sha256: f.sha256 }));
+    const manifest = state.collection ? { schema: SNAPSHOT_SCHEMA_V3, files: listed, collection: state.collection } : { schema: SNAPSHOT_SCHEMA, files: listed, binding: state.binding };
+    const items = [...allowed.map(f => ({ name: f.name, bytes: f.data.byteLength })), { name: "manifest.json", bytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength }];
+    if (!await deps.confirm?.(items)) return await refused(state, "consent_declined", "consent_declined", deps);
+    if (JSON.stringify(deps.scope()) !== JSON.stringify(scope)) return { ok: false, code: "not_connected" };
     let moved = false;
     for (const f of allowed) {
       const entry = state.files.find((x) => x.name === f.name)!;
@@ -251,8 +259,7 @@ export async function uploadSnapshot(batchId: string, deps: SnapshotDeps): Promi
       entry.uploaded = true; await deps.saveState(state);
     }
     if (moved) { state = await nextRevision(batchId, revision, deps, scope); if (!state) return { ok: false, code: "nothing_recorded" }; continue; }
-    const listed = state.files.map((f) => ({ name: f.name, bytes: f.bytes, sha256: f.sha256 }));
-    const sealed = await deps.seal(batchId, revision, state.collection ? { schema: SNAPSHOT_SCHEMA_V3, files: listed, collection: state.collection } : { schema: SNAPSHOT_SCHEMA, files: listed, binding: state.binding });
+    const sealed = await deps.seal(batchId, revision, manifest);
     if (sealed.status === 0 || sealed.status >= 500) return { ok: false, code: "offline_pending" };
     if ((sealed.status === 200 || sealed.status === 201) && sealed.receipt_id) { state.receipt_id = sealed.receipt_id; state.coverage = sealed.coverage; if (sealed.coverage_reason) state.coverage_reason = sealed.coverage_reason; state.result = "receipt_verified"; await deps.saveState(state); return { ok: true, code: "receipt_verified" }; }
     return await refused(state, sealed.reason, "verify_failed", deps);

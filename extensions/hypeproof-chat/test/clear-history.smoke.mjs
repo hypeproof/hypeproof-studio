@@ -15,3 +15,12 @@ choice='대화 지우기';await clear.call(host);assert.equal(writes.length,1);a
 streaming=true;const before=modalCount;await clear.call(host);assert.equal(modalCount,before,'cannot clear an active conversation');streaming=false;
 choice='wait';const pending=clear.call(host);await clear.call(host);assert.equal(modalCount,before+1,'duplicate opens no second dialog');key='participant-b';release('대화 지우기');await pending;assert.equal(writes.length,1,'identity change cannot clear either history');
 console.log('PASS clear history: explicit confirmation, cancellation, duplicate, active-stream and identity-change protection');
+
+// Task transitions are already asynchronous before the confirmation can open.
+const transitionDialogs=modalCount;host.taskChanging=true;await clear.call(host);assert.equal(modalCount,transitionDialogs);host.taskChanging=false;
+let activeTask='a',fail=true;const cleared=[];
+host.currentTaskStore=()=>store;const store={getView:()=>({activeTaskId:activeTask}),clearHistory:async id=>{if(fail)throw new Error('/private/sensitive/store');cleared.push(id);}};
+choice='대화 지우기';const beforeFailure=writes.length;await clear.call(host);assert.equal(writes.length,beforeFailure);assert.equal(cleared.length,0);assert.equal(posts.at(-1).type,'taskWorkspaceError');assert.match(posts.at(-1).error,/다시 시도/);assert.ok(!posts.at(-1).error.includes('/private'));assert.equal(host.clearingHistory,false);
+fail=false;await clear.call(host);assert.deepEqual(cleared,['a'],'explicit retry clears original task');
+choice='wait';const scoped=clear.call(host);activeTask='b';release('대화 지우기');await scoped;assert.deepEqual(cleared,['a'],'confirmation never retargets another task');
+console.log('PASS clear history failure feedback, retry and task-scope guards');

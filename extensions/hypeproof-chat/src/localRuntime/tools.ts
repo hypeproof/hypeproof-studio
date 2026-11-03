@@ -5,9 +5,14 @@ import type { ResolvedProfile } from "../protocol";
 import {
   evaluateSdkToolUse,
   permittedToolsFor,
+  toolFeatureKey,
   type CoachToolAction,
   type SdkActivity,
 } from "../sdkCoachHelpers.ts";
+import { denialFor, denialToolText, toolFeatureName } from "../denialSource.ts";
+import { profileAudience } from "../seatVocabulary.ts";
+import { folderRemovedFeatures } from "../folderConsent.ts";
+import { canonicalizeExistingPath } from "../workspaceRouting.ts";
 
 const LIMIT = 200_000;
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
@@ -43,15 +48,10 @@ const DEFINITIONS = [
   },
 ];
 
+// Where the write really lands (CGP-AGENT-R-005 verify F1): the shared resolver follows a symlink even when it
+// dangles, so `<ws>/page.html -> <outside>/x` is judged outside instead of by the link's own name.
 async function canonical(target: string): Promise<string> {
-  try {
-    return await fs.realpath(target);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    const parent = path.dirname(target);
-    if (parent === target) throw e;
-    return path.join(await canonical(parent), path.basename(target));
-  }
+  return canonicalizeExistingPath(target);
 }
 
 export function workspaceTools(args: {
@@ -60,43 +60,46 @@ export function workspaceTools(args: {
   signal: AbortSignal;
   approve: (
     a: CoachToolAction,
-  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy" }>;
+  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy"; denialSource?: import("../denialSource").DenialSource }>;
   activity?: (a: SdkActivity) => void;
 }) {
   const permitted = permittedToolsFor(args.profile);
+  const audience = profileAudience(args.profile);
   const definitions = DEFINITIONS.filter((t) => permitted.includes(t.name));
   let queue: Promise<unknown> = Promise.resolve();
   async function execute(name: string, raw: unknown): Promise<string> {
     const id = randomUUID();
     const input = raw as Record<string, unknown>;
-    if (
-      !input ||
-      typeof input.file_path !== "string" ||
-      !definitions.some((t) => t.name === name)
-    )
-      throw Error("이 수업에서 사용할 수 없는 파일 도구입니다.");
-    const file = path.resolve(args.cwd, input.file_path);
-    const root = await canonical(path.resolve(args.cwd));
-    const gate = async () => {
-      if (args.signal.aborted) throw Error("요청이 중지되었습니다.");
-      const actual = await canonical(file);
-      const verdict = evaluateSdkToolUse({
-        toolName: name,
-        input: { ...input, file_path: actual },
-        permittedTools: permitted,
-        workspaceRoot: root,
-      });
-      if (verdict.decision === "deny") throw Error(verdict.friendly);
-      return actual;
-    };
-    const actual = await gate();
-    args.activity?.({
-      kind: "tool_use",
-      id,
-      name,
-      input: { ...input, file_path: actual },
-    });
     try {
+      // REQ-STUDIO-DENIAL-SOURCE — the two refusals have different sources: an ungranted
+      // tool is the lesson setting; a call without a path is malformed (source unknown).
+      // REQ-STUDIO-FOLDER-CONSENT — a write the learner's folder choice removed is 폴더 권한.
+      if (!definitions.some((t) => t.name === name))
+        throw Error(denialToolText(denialFor(folderRemovedFeatures(args.profile).has(toolFeatureKey(name) ?? "") ? "folder_choice_narrowed" : "profile_tool_not_granted", { feature: toolFeatureName(name) }), audience));
+      if (!input || typeof input.file_path !== "string")
+        throw Error(denialToolText(denialFor("malformed_call", { feature: toolFeatureName(name), reason: "파일 경로가 비어 있었어요" }), audience));
+      const file = path.resolve(args.cwd, input.file_path);
+      const root = await canonical(path.resolve(args.cwd));
+      const gate = async () => {
+        if (args.signal.aborted) throw Error("요청이 중지되었습니다.");
+        const actual = await canonical(file);
+        const verdict = evaluateSdkToolUse({
+          toolName: name,
+          input: { ...input, file_path: actual },
+          permittedTools: permitted,
+          workspaceRoot: root,
+          audience,
+        });
+        if (verdict.decision === "deny") throw Error(verdict.friendly);
+        return actual;
+      };
+      const actual = await gate();
+      args.activity?.({
+        kind: "tool_use",
+        id,
+        name,
+        input: { ...input, file_path: actual },
+      });
       if (name !== "Read") {
         const approval = await args.approve({
           toolName: name,
@@ -111,6 +114,7 @@ export function workspaceTools(args: {
           input,
           allowed,
           actor: typeof approval === "boolean" ? "user" : approval.actor,
+          denialSource: typeof approval === "boolean" ? undefined : approval.denialSource,
         });
         if (!allowed) throw Error("사용자가 파일 변경을 허용하지 않았습니다.");
       }

@@ -65,7 +65,7 @@ Chalk: 선택적 수업·목적 맥락 입력. 코어 실행의 필수 의존성
 
 ## 기본 모델은 여섯 개
 
-**Jay의 2026-09-13 결정으로 새 제품의 기본은 6개 모델이다.** 정의의 출발점은 Lab [PHILOSOPHY.md §6](https://github.com/jayleekr/hypeprooflab/blob/b081a790cee1a8efa4b6c98dc3cfdf549bd7f3bf/PHILOSOPHY.md) Candidate Capability Model v1이다. 아래 행동·반례는 P0 해석을 위한 초기 운영 정의이며 연구 결과가 아니다. 최초 패키지에 정본 source commit·정의 revision과 함께 고정한다.
+**Jay의 2026-09-13 결정으로 새 제품의 기본은 6개 모델이다.** 정의의 출발점은 Lab [PHILOSOPHY.md §6](https://github.com/hypeproof/hypeprooflab/blob/b081a790cee1a8efa4b6c98dc3cfdf549bd7f3bf/PHILOSOPHY.md) Candidate Capability Model v1이다. 아래 행동·반례는 P0 해석을 위한 초기 운영 정의이며 연구 결과가 아니다. 최초 패키지에 정본 source commit·정의 revision과 함께 고정한다.
 
 | 모델 항목 / 화면 이름 | 초기 관찰 기준 | 긍정 사례 | 이것만으로는 부족한 사례 |
 |---|---|---|---|

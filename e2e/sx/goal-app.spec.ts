@@ -43,7 +43,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type AppContext, chatFrame, closeApp, launchApp, runCommand } from "../fixtures/app";
+import { type AppContext, chatFrame, closeApp, launchApp, runCommand, showChatViewLabel } from "../fixtures/app";
 import { previewUrl, screenLocked } from "../curriculum-runtime/app-helpers";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -511,7 +511,7 @@ test("AE-01 goal: kept beside the lesson's criteria through a change, the previe
   // ── Two chat views: the sidebar chat beside the editor chat ──
   const [editorName] = await chatFrameNames(ctx.win);
   expect(editorName, "no chat frame before the sidebar opened").toBeTruthy();
-  await runCommand(ctx.win, "View: Show HypeProof Chat");
+  await runCommand(ctx.win, showChatViewLabel());
   await expect.poll(async () => (await chatFrameNames(ctx!.win)).length, { timeout: 30_000, message: "the sidebar chat did not open beside the editor chat" }).toBe(2);
   const sidebarName = (await chatFrameNames(ctx.win)).find((name) => name !== editorName)!;
   const editor = frameNamed(ctx.win, editorName);

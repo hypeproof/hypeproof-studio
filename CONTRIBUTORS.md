@@ -13,6 +13,6 @@ HypeProof Studio is built by this team. Thank you.
 
 <!--
 Keep this list in sync when collaborators are added/removed.
-Source of truth for access: `gh api /repos/jayleekr/hypeproof-studio/collaborators`.
+Source of truth for access: `gh api /repos/hypeproof/hypeproof-studio/collaborators`.
 Add a row when an invite is sent; names are GitHub profile display names.
 -->

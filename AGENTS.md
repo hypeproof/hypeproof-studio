@@ -49,12 +49,24 @@
 | DEC-021 | 짬통과 backlog의 구분 | 짬통은 불필요하거나 과거에 쓰였지만 현재 사용하지 않는 것이 확인된 코드를 복구 가능하게 옮겨 보관하는 곳이다. 사용 여부·필요성이 애매한 코드는 먼저 backlog에서 검토한다. 제품 통합·리팩터링·운영·이력 같은 후속 업무도 backlog이며 폐기 코드로 취급하지 않는다. 방금 이전하려던 후보들은 우선 backlog에 유지한다. DEC-020의 “애매한 코드 식별·보관 위치” 정의는 이 결정으로 대체하되 Worker 분리 우선과 짬통 작업 중단은 유지한다. | 사용자가 “짬통은 불필요한 코드를 정리하는 곳, 옛날에 있었는데 지금은 안쓰는 코드들을 옮기는 곳이고. 애매한 것들은 백로그에 남기는 것으로 생각해야한다.”라고 정정했다. |
 | DEC-022 | 최종 PR 보고 시점과 칸반 갱신 순서 | 최종 PR 주소는 필요한 검사와 의존 정리가 끝나 인간이 바로 머지할 수 있는 상태에서 보고한다. 코드 테스트 통과나 draft PR 생성만으로 전체 완료를 보고하지 않는다. 인간에게 PR을 보고한 뒤 머지하는 동안 칸반 상태·근거를 갱신하며, 실제 병합 상태를 확인한 뒤 반영한다. 에이전트가 대신 병합하지 않는다. | 사용자가 “다 되면 최종 PR 주소와 함께 보고해라. 내가 바로 머지하면 되는 상태가 되었을 때 보고하고, 내가 머지하는동안 칸반 업데이트를 진행하도록 해라.”라고 지시했다. |
 
+### 확정 기록 — 2026-10-12
+
+| ID | 에이전트의 제안·선택지 | 인간이 최종 확정한 결정 | 확정 근거 |
+|---|---|---|---|
+| DEC-023 | Service 레포와 개발 패키지의 공개 범위 | `hypeproof/hypeproof-service`와 Service 개발 패키지는 비공개로 유지한다. | 조직 소유자의 2026-10-12 결정이다. 기록 위치는 `hypeproof/hypeproof-harness`의 `policy/repos.yaml`(“Owner decision 2026-10-12: retain private visibility on GitHub Free”)과 이 레포의 [PRA-07](docs/requirements/private-release-access.md)이다. 이 행은 두 기록을 옮긴 것이며 기록자가 직접 받은 발언이 아니다. 이 결정이 DEC-001·DEC-002의 ‘공개’ 부분을 대체한다는 것은 기록자의 해석이다. |
+
+### 확정 기록 — 2026-10-27 모바일 동반 작업
+
+| ID | 제안·선택지 | 인간의 최종 결정 | 확정 근거 |
+|---|---|---|---|
+| DEC-DMC-20261027 | 모바일 수업·업무의 원본 위치와 실행 방식 | 컴퓨터에서 로컬 작업 공간을 먼저 준비하고 모바일을 연결한다. 로컬 자원을 실행하고 서비스는 중계한다. 아이들 웹 작품 제작을 우선하며 성인 실무 자동화에도 재사용한다. 모바일 범위를 넘는 작업은 컴퓨터에서 이어가도록 하네스가 안내한다. | 사용자가 “컴퓨터를 먼저 시작하고 그다음에 모바일로 연동”, “워크스페이스가 클라우드에 있는게 아니라 로컬”, “성인 실무 자동화에서도 유리”라고 명시하고 “좋아 이런걸 계획에 담자… REA하고나서” 구현 우선화를 요청했다. 구현·운영 완료나 네이티브 프레임워크·보존기간 확정을 뜻하지 않는다. |
 ### Confirmed Google automation decision — 2026-10-14
 
 | ID | Proposal | Human decision | Evidence |
 |---|---|---|---|
-| DEC-023 | Managed shared Google executor versus learner-owned Apps Script | Default to the shared executor; defer personal Apps Script export. First verify two distinct Google users without company Cloud IAM and isolate their data. Real mail requires separate explicit approval. | TJ: “공통 실행기를 기본으로 가자. 개인 Apps Script 내보내기는 나중에 추가하고 ... 회사 관리 권한 없이 서로 다른 구글 계정으로 실행되고 데이터가 분리되는지부터 직접 검증해.” |
+| DEC-026 | Managed shared Google executor versus learner-owned Apps Script | Default to the shared executor; defer personal Apps Script export. First verify two distinct Google users without company Cloud IAM and isolate their data. Real mail requires separate explicit approval. | TJ: “공통 실행기를 기본으로 가자. 개인 Apps Script 내보내기는 나중에 추가하고 ... 회사 관리 권한 없이 서로 다른 구글 계정으로 실행되고 데이터가 분리되는지부터 직접 검증해.” |
 
+Recorded as DEC-023 on the automation branch; renumbered DEC-026 when merged because main's DEC-023 already records the Service visibility decision.
 This changes the intended commercial execution contract. It does not claim the
 shared runner is integrated, accepted, or released. Existing owner-script MVP
 evidence remains historical evidence of that implementation only.
@@ -65,8 +77,8 @@ evidence remains historical evidence of that implementation only.
 |---|---|---|---|
 | DEC-024 | Extend the email-only journey into reusable workplace automation | Update the design to cover conversational problem definition; proactive structure negotiation with two choices per decision; one final-outcome image inside the template; a visual quest roadmap; and iterative improvement. Prefer automatic Google integration and learner-owned Apps Script web-app deployment as the destination. Incorporate the supplied curriculum's ten needs, six assets and personal-account background processing. | TJ's explicit five-part design-update request and the curriculum response supplied in the same message on 2026-10-15. |
 
-DEC-024 supersedes DEC-023's personal-script/scheduling deferral **for the expanded
-design destination**. DEC-023 still describes the existing shared email runner.
+DEC-024 supersedes DEC-026's personal-script/scheduling deferral **for the expanded
+design destination**. DEC-026 still describes the existing shared email runner.
 This does not authorize unattended customer mail, claim new scope consent, or
 mark the expanded runtime implemented. The four-template taxonomy and detailed
 UX are design proposals under this direction, not separately confirmed human
@@ -167,11 +179,34 @@ release gates. Keep those rules in their existing canonical documents.
 - Chalk authoring proposal: [product requirements](docs/requirements/chalk-authoring.md)
   and [test requirements](docs/testing/chalk-authoring.md).
 
-Read the scoped AGENTS.md before changing chalk/, worker/, or the Studio extension.
+Read the scoped AGENTS.md before changing chalk/ or the Studio extension. The
+Worker is not in this repository: change it in `hypeproof/hypeproof-service` and
+read that repository's AGENTS.md first.
 Inspect existing implementations before creating another store, validator, or
 authentication path. Declare planned behavior as planned; a documented test is
 not an executed test. Keep changes in a focused branch and PR following the dev
 guide. Do not change production state merely to validate documentation.
+
+## Install order
+
+`hypeproof/hypeproof-service` is private (DEC-023). The `@hypeproof/*`
+dependencies in this repository are `file:` paths into `.private-service-cache/`,
+which Git ignores and which does not exist in a new clone or worktree.
+
+1. Use Node 22.22.1. `scripts/setup.sh` and `scripts/check-env.sh` accept only
+   that version.
+2. Run `gh auth login` once with an account that can read
+   `hypeproof/hypeproof-service`.
+3. Run `npm run bootstrap:service` at the repository root. It prints
+   `Verified 5 pinned private Service packages in ignored local cache.`
+4. Only then run `npm ci`, at the root or in the package you work on.
+
+If step 3 is skipped, `npm ci` ends in `npm error code ENOENT` on a
+`.private-service-cache/*.tgz` path and does not mention the bootstrap. If `gh`
+is missing or cannot read the Service repository, the bootstrap prints
+`Private Service package download failed. Authenticate gh with Service read access.`
+The cache belongs to one checkout and the bootstrap is safe to repeat: run it in
+every new worktree and again when `config/service-packages.json` changes.
 
 <!-- hype-pr-skill:start -->
 ## Agent PR preparation

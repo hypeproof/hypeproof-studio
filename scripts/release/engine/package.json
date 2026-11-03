@@ -1,0 +1,28 @@
+{
+  "name": "@hypeproof/release-engine-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synchronous, provider-independent HypeProof release decisions",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./core.mjs",
+    "./core": "./core.mjs"
+  },
+  "files": [
+    "core.mjs",
+    "provenance.json",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hypeproof/hypeproof-studio.git",
+    "directory": "scripts/release/engine"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "miniflare": "5.20261006.1-alpha"
+  }
+}

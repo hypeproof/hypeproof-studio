@@ -1,0 +1,16 @@
+/* CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY): the 인용하기 button under the answer that holds the selection. */
+.hps-quote-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-quoteaction-space-15); margin-top: var(--ds-c-studio-quoteaction-space-13); animation: hps-quote-in var(--hp-dur-content) var(--hp-ease); }
+.hps-quote-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--ds-c-studio-quoteaction-size-8); min-width: var(--ds-c-studio-quoteaction-size-8); box-sizing: border-box; padding: 0 var(--ds-c-studio-quoteaction-space-1);
+  border: 0; border-radius: var(--ds-c-studio-quoteaction-radius-10);
+  background: var(--vscode-button-secondaryBackground, var(--ds-c-studio-quoteaction-surface-9));
+  color: var(--vscode-button-secondaryForeground, var(--ds-c-studio-quoteaction-ink-1));
+  font: inherit; font-size: var(--ds-c-studio-quoteaction-type-9); cursor: pointer;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-quote-action:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-quote-action:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-quote-action:disabled { cursor: default; opacity: .6; }
+.hps-quote-note { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-quoteaction-type-1); }
+@keyframes hps-quote-in { from { opacity: 0; } to { opacity: 1; } }

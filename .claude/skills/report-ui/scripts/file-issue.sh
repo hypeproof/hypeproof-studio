@@ -12,7 +12,7 @@
 #   If that fails, the screenshot path is printed for manual drag-and-drop.
 set -euo pipefail
 
-REPO_SLUG="jayleekr/hypeproof-studio"
+REPO_SLUG="hypeproof/hypeproof-studio"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 
 TYPE="" TITLE="" NARRATIVE="" SHOT=""

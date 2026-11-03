@@ -3,7 +3,7 @@
 Updated: 2026-10-16 KST. Sponsor: TJ. The sponsor authorized continuing
 implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
-Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
+Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-026.
 
 Current checkpoint (2026-10-16): development/test ceiling is USD10, including
 historical charges and unresolved holds. The reconciled maximum exposure is

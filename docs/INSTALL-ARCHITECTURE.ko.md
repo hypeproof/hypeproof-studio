@@ -51,7 +51,7 @@ exit 0으로 끝난다.
 ## 2. 원라인 커맨드
 
 > **호스팅 주의.** 아래 URL은 스크립트가 실제로 존재하는 트리
-> (`jayleekr/hypeproof-studio` — public)를 가리킨다. 릴리스 저장소
+> (`hypeproof/hypeproof-studio` — public)를 가리킨다. 릴리스 저장소
 > (`hypeproof-studio-releases`)에는 Studio 바이너리와 구형 `install-mac.sh` /
 > `install-win.ps1`만 있고 `install.sh` / `install.ps1` / `seed-sdk-binary.*` /
 > `dependencies.yaml`은 없다(404). 짧은 신뢰 도메인(`hypeproof.ai`) 미러는 §9의
@@ -60,7 +60,7 @@ exit 0으로 끝난다.
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install.sh | bash
 ```
 
 버전 고정 실행(선택):
@@ -72,7 +72,7 @@ curl -fsSL …/install.sh | bash -s 0.1.33
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install.ps1 | iex
 ```
 
 플래그를 쓰려면 먼저 내려받아 실행:
@@ -192,7 +192,7 @@ flowchart TD
 
 ### Studio 앱 / SDK
 
-- **Studio:** releases_repo `jayleekr/hypeproof-studio-releases`, version `0.1.33`.
+- **Studio:** releases_repo `hypeproof/hypeproof-studio-releases`, version `0.1.33`.
   asset glob — darwin-arm64(1급 타깃), darwin-x64(없을 수 있음 → fail-closed),
   win32-x64(`*UserSetup-x64-*.exe`, fallback `*Setup-x64-*.exe`).
 - **SDK:** npm 패키지 `@anthropic-ai/claude-code`, Studio 기대치
@@ -236,10 +236,12 @@ flowchart TD
 
 하드 실패가 하나라도 있으면 doctor는 실패 목록과 조치 명령("새 터미널을 열어
 PATH를 반영하고 재실행", "설치기 재실행(idempotent)", "`gh auth login`")을 출력하고
-non-zero로 종료한다. 성공하면 `doctor: ALL CHECKS PASSED`.
+non-zero로 종료한다. 성공하면 `점검(doctor): 모든 항목 통과`.
+학생이 답하는 질문과 단계 제목, doctor 판정은 두 설치기 모두 한국어다(PRA-13,
+`scripts/check-installer-korean.py`). 패키지 관리자 출력과 진단 로그는 그대로 둔다.
 
-> **경계선.** doctor는 gh **인증 상태**나 SDK 자가치유(Studio 첫 실행 시 self-heal)
-> 같은 항목은 warn으로만 둔다. 하드 fail은 "이게 없으면 harness 스크립트가 못
+> **경계선.** doctor는 gh **인증 상태** 같은 항목은 warn으로만 둔다. SDK seed 누락은
+> macOS(`install.sh`)와 Windows(`install.ps1`) 설치기에서 하드 fail이다 — Studio에는 SDK를 스스로 받는 기능이 없다(2026-10-18, I7). Linux는 Studio 앱을 설치하지 않으므로 warn으로 남는다. 하드 fail은 "이게 없으면 harness 스크립트가 못
 > 돈다"는 항목에 한정한다.
 
 ---

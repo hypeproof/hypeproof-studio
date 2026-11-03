@@ -1,3 +1,5 @@
+import { renderBoardStatusPage } from "./lib/board-status.ts";
+import { renderSafetySignal } from "./lib/safety-signal.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import budgetsHtml from './ui/budgets.html';
 // Chalk — the instructor surface (docs/plan/vessel-and-modules.md §1, layer
@@ -22,10 +24,15 @@ import budgetsHtml from './ui/budgets.html';
 // outside the instructor surface.
 
 import { Hono } from "hono";
+import { withCopyFeedback } from "./lib/copy-feedback.ts";
+import { withListRows } from "./lib/list-rows.ts";
+import { withTooltips } from "./lib/tooltips.ts";
+import { withDesignTokens } from "./lib/design-tokens.ts";
 import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
 import { makeErrorBody, requestId } from "./middleware.ts";
 import { state } from "./routes/state.ts";
 import { board } from "./routes/board.ts";
+import { labTokens } from './routes/lab-tokens.ts';
 import { logsAdmin } from "./routes/logs-admin.ts";
 import { forwardInstructorWrite } from "./routes/forward.ts";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -36,6 +43,9 @@ import issuerHtml from "./ui/issuer.html";
 import boardHtml from "./ui/board.html";
 // @ts-ignore — bundled as text by wrangler rules.
 import authoringHtml from "./ui/authoring.html";
+import { INSTRUCTION_DIFF_SCRIPT } from "./lib/instruction-diff.ts";
+import { COMPLETION_CHECKLIST_SCRIPT } from "./lib/completion-checklist.ts";
+import { ROSTER_CSV_SCRIPT } from "./lib/roster-csv.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import manageHtml from "./ui/manage.html";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -59,26 +69,34 @@ app.get("/health", (c) =>
 );
 
 const page = (html: unknown) =>
-  new Response(html as string, { headers: { "content-type": "text/html; charset=utf-8" } });
+  new Response(withCopyFeedback(withTooltips(withDesignTokens(withListRows(html as string)))), { headers: { "content-type": "text/html; charset=utf-8" } });
 
 app.get("/", (c) => c.redirect("/console", 302));
 // Pages are public; every API call they make carries the instructor's Bearer
 // issuer token and is scope-checked by the Service for reads and writes.
 // Pages remain reachable when Service configuration is unavailable.
-app.get("/console", () => page(consoleHtml));
+// The roster CSV kit (parse, preview, per-row results) is shared with the tests; it is inlined in place of its marker.
+const consolePage = (consoleHtml as unknown as string).replace("/*@roster-csv*/", () => ROSTER_CSV_SCRIPT);
+app.get("/console", () => page(consolePage));
 app.get("/start", () => page(startHtml));
 app.get("/issuer", () => page(issuerHtml));
-app.get("/board", () => page(boardHtml));
-app.get("/authoring", () => page(authoringHtml));
-app.get("/manage", () => page(manageHtml));
+app.get("/board", () => page(renderBoardStatusPage(boardHtml)));
+// The confirm step's instruction diff is a pure helper shared with the tests; it is inlined in place of its marker.
+// The completion checklist kit (CGP-LEARN-R-015) is inlined the same way; the forwarder runs the same kit server-side.
+const authoringPage = (authoringHtml as unknown as string).replace("/*@instruction-diff*/", () => INSTRUCTION_DIFF_SCRIPT).replace("/*@completion-checklist*/", () => COMPLETION_CHECKLIST_SCRIPT);
+app.get("/authoring", () => page(authoringPage));
+app.get("/manage", () => page(renderSafetySignal(renderBoardStatusPage(manageHtml))));
 app.get("/budgets", () => page(budgetsHtml));
 app.get("/sharing", () => page(sharingHtml));
 app.get('/learn', () => page(learnHtml));
 app.get('/v1/profile', forwardInstructorWrite);
+app.post('/workshop/boa-tokens', forwardInstructorWrite);
+app.get('/workshop/boa-tokens', forwardInstructorWrite);
 app.all("/v1/classroom/*", forwardInstructorWrite);
 
 app.route("/admin", state);
 app.route("/admin", board);
+app.route('/admin', labTokens);
 // #680 — studio-logs read path. Mounted before the forwarder so these reads are
 // forwarded through the dedicated read contract before instructor writes.
 app.route("/admin", logsAdmin);

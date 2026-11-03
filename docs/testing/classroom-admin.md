@@ -334,7 +334,7 @@ npm --prefix chalk run typecheck
 
 ### 리뷰 반영과 CI 실패 수정 · 2026-09-19
 
-[#1119](https://github.com/jayleekr/hypeproof-studio/pull/1119)~[#1121](https://github.com/jayleekr/hypeproof-studio/pull/1121) 리뷰(JinyongShin)와 GitHub CI 실패를 스택 아래에서부터 고치고 위 브랜치로 merge했다. 2026-09-18 기록의 "exit 0"은 로컬 결과였고 CI에서는 재현되지 않았다.
+[#1119](https://github.com/hypeproof/hypeproof-studio/pull/1119)~[#1121](https://github.com/hypeproof/hypeproof-studio/pull/1121) 리뷰(JinyongShin)와 GitHub CI 실패를 스택 아래에서부터 고치고 위 브랜치로 merge했다. 2026-09-18 기록의 "exit 0"은 로컬 결과였고 CI에서는 재현되지 않았다.
 
 - **CI `worker / test`:** AT-33 시험이 `git show 75fe6e4:worker/schema.sql`에 기대 얕은 checkout에서 실패했다. 0011 이전 schema를 `worker/test/fixtures/schema-pre-0011.sql`로 체크인했다. main이 `schema.sql`을 바꾸면 이 fixture를 같이 갱신해야 시험이 통과한다.
 - **CI `extension / smoke`:** 확장 smoke 2개가 worker harness(hono)를 import해 extension job에서 `ERR_MODULE_NOT_FOUND`였다. 기기↔Service 왕복은 `worker/test/classroom-ops-device.test.mjs`, `classroom-ops-snapshot-device.test.mjs`로 옮겼다. `worker/node_modules`를 숨긴 상태에서 확장 ops smoke 3개 exit 0을 확인했다.
@@ -1459,3 +1459,45 @@ local fixture; hosted R2/D1, a released App, Windows, school networks, real lear
 and production deployment are NOT RUN. The change adds no retention duration,
 consent grant or migration. Unrequested bytes are rejected under the existing
 collection contract.
+
+<a id="adm-09-attention-copy-run"></a>
+
+## 주의 항목 문구 · 2026-10-20 (ADM-09 · CGP-AGENT-R-013)
+
+요구: [주의 항목 문구](../requirements/classroom-admin.md#adm-09-attention-copy). 문자열만 바꿨다. 데이터·endpoint·판정은 그대로다.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/attention-copy.test.mjs` (`chalk` `npm test`에 포함) | `manage.html`의 `reasonLabels` 21종 제목·요약 전체 목록을 고정한다. 문구 검사: 제목 4–20자, 요약 40자 이하, 내부 코드·HTTP 번호·SDK 없음, 업데이트·완료·참고 없음, ‘~습니다/~십시오’ 없음, ‘확인 불가’는 `stale_signal` 제목에만. 승인 대기 행이 같은 제목을 읽는지, 옛 문구가 남지 않았는지 | PASS. 대조군: 나쁜 문구 8종을 검사기가 모두 잡음. 옛 `manage.html`(`origin/main`)로 돌리면 실패 |
+| `e2e/classroom/attention-copy.mjs` (`npm run test:classroom-attention-copy`) | 실제 Chalk 화면·전달 경로·Service 라우터 + SQLite, Chromium 1280·800px. 21개 좌석에 원인을 하나씩(`/status` 응답만 화면 쪽에서 바꿈) | PASS. 모든 행의 ‘지금 상태’가 그 원인의 제목과 같고 잘리지 않으며 한 줄. 가로 넘침 없음. 공통 장애 줄 `AI 제공자 쪽 장애 · 영향 3명`. 1280px에서 21개 상세 모두 `앱이 보고한 상태: <제목> — <요약>` |
+| 기존 브라우저 시험의 고정 문구 갱신 | `ops.mjs`, `ops-g1-layout.mjs`, `ops-roster.mjs` | PASS (문구만 바꿈, 판정 그대로) |
+
+**NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).
+
+<a id="adm-01-roster-csv-run"></a>
+
+## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
+
+요구: [명단 CSV 가져오기](../requirements/classroom-admin.md#adm-01-roster-csv). Service endpoint는 기존 `roster/append` 그대로다.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/roster-csv.test.mjs` (`chalk` `npm test`에 포함) | 순수 kit(`chalk/src/lib/roster-csv.ts`)를 페이지와 같은 코드로: BOM·CRLF·CR·따옴표·`""`·한국어 이름(NFD 포함)·빈 줄, UTF-8 BOM과 CP949 바이트, 열 계약(모르는 열·중복·머리글 없음·따옴표 오류), 200줄 경계와 201줄 거부, 수식 칸 7종 거부와 본문에 없음, 줄 검사(한국어 handle·대문자·중복·칸 수·줄바꿈·이름 길이), 본문 = `{users}`만, 응답→줄별 결과(추가됨/이미 있음, `added` 없음·남의 handle·5xx·네트워크·4xx·상한·synthetic), 다시 보내기는 실패한 줄만, 서빙된 `/console`이 시험한 kit를 그대로 inline | PASS 10/10. 대조군: 다른 `added` 목록이면 상태가 바뀜, 수식 규칙이 없으면 통과할 `82` 이름, UTF-8로만 읽으면 CP949가 깨짐, 보이지 않는 zero-width space 머리글은 거부. 페이지 연결 전 `/console` 시험은 실패(red) |
+| `e2e/classroom/roster-csv.mjs` (`npm run test:classroom-roster-csv`) | 실제 Chalk `/console`·전달 경로·Service 라우터(roster append·issuer 검증·KV 명단), Chromium 1280·800px. 통제: 페이지가 여는 Lab 배부 조회(빈 목록)와 첫 append 하나를 브라우저 route에서 끊음 | PASS (두 폭). 파일 → 표·“정상 4 · 확인 필요 3”, 이때 요청 0건 · 확인 전 버튼 꺼짐 · Space/Tab/Enter로 보냄 · 본문 `{users:[4개]}`에 이름 없음 · 끊긴 응답 → 실패 4줄과 사유 · ‘실패한 줄만 다시’ → 같은 4개만 보내 “추가됨 2 · 이미 있음 2”(Service 명단에 새 handle 한 번씩) · 다시 보내기 버튼 사라짐 · 201줄 붙여넣기 거부와 요청 0건 · 가로 넘침 없음 · 페이지 오류 없음. `origin/main`의 `console.html`로 돌리면 실패(red) |
+| 검증 후속 (M1·M2·L1–L4) | 단위: 보이지 않는/전각 접두어 수식 6종 거부와 대조군(가운데 문자·전각 글자 이름은 통과), 이름의 bidi·zero-width 제거, 본문 함수가 행 객체·이름 문자열을 예외로 거부, 서빙된 페이지의 가져오기 단계에 요청 1개·본문 1개(`rosterCsv.requestBody(handles)`), 예시 `s01`·완화한 문구. 브라우저: 결과 줄 이름이 `<bdi>` 안, 보내는 동안 파일 입력·붙여넣기 잠금(입력 무시), 보낸 뒤 같은 CSV는 ‘추가’ 꺼짐(다시 미리 보기해도), 결과 유지, 바꾼 CSV는 다시 켜짐. CI: `classroom-ops.yml` `classroom / browser`가 `test:classroom-roster-csv`를 돌리고 스크린샷을 올린다 | PASS 15/15 · 두 폭 PASS. 변이 8종(각 수정을 하나씩 되돌림) 모두 해당 시험이 실패: M1 이름 정리→단위 12, M1 `<bdi>`→브라우저, M2 본문 함수 검사→단위 13, M2 페이지 본문에 이름 추가→단위 14, L1 잠금→브라우저, L2 보낸 뒤 잠금→브라우저, L3→단위 11, L4→단위 15 |
+| 화면 확인 | 스크린샷 미리 보기·실패·결과 × 1280·800 | 눈으로 확인: handle 한 줄, 확인 필요 줄 주황 띠 + ! + 사유, 결과 줄 아이콘 + 글 |
+| 검증 후속 (CGP-SHELL-D-031) | 브라우저: s02의 이름이 마크업(`<img … onerror=…>이서준`)이어도 미리 보기 표와 결과 줄에 글자 그대로 보이고, `img` 요소가 생기지 않으며 스크립트가 돌지 않는다. 본문에 이름·마크업 없음 | PASS (두 폭). 변이: 표 칸·결과 줄 이름을 `innerHTML`로 바꾸면 실패 |
+
+**NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
+
+<a id="help-queue-keyboard-triage-run"></a>
+
+## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)
+
+요구: [도움 요청 키보드 분류](../requirements/classroom-admin.md#help-queue-keyboard-triage).
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/help-triage.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 CDP 키 입력으로: J·↓·K·↑·ㅓ 이동과 끝에서 멈춤, keyCode 229·`isComposing`·Ctrl+J 무시, 10초 갱신 재그리기 뒤 초점 유지, 열린 요청 없이 E, Enter로 열기, 다음 조치 없이 E, 글상자 안의 J·E·?와 CDP 한글 조합 입력, E로 `answered` 저장(revision 포함)과 다음 요청 열기, 저장 중 두 번 누르기, 저장 중 다른 기록을 연 경우, 마지막 요청, `?` 목록 열고 닫기·버튼으로 열고 닫기, 선택 행 2px·3:1, 모든 동작 버튼 44×44px·12px 이상·가운데를 누르면 그 버튼, 가로 넘침 없음(1420·800 어두운·밝은 화면 요청, 강제 색상). DES-CGP-LEARN-17(2026-10-27): 터치 흉내(`pointer: coarse`)에서 버튼 크기·가림 없음, 탭으로 단축키 목록 열고 닫기·요청 열기·답변 완료 후 다음 요청 | PASS (200개 확인). 대조군 10종: 키 처리기 연결·조합 검사·글상자 검사·행 테두리·다음 요청 열기·늦은 저장 검사·두 번 누르기 검사·재그리기 초점 유지·다음 조치 검사·`?` 목록을 하나씩 되돌리면 각각 실패. DES 대조군 6종(2026-10-27, 이전 시험은 모두 통과시킴): 밝은 화면 요청에서만 테두리 대비 1.5:1, ‘요청 열기’ 폭 40px, ‘답변 완료…’ `pointer-events:none`, 단축키 버튼이 열기만 함, 터치 화면에서만 ‘답변 완료…’ 높이 30px, 터치 화면에서만 단축키 버튼 숨김 — 각각 실패 |
+
+**NOT RUN**: 실제 강사·운영 Service, Windows 브라우저, 화면 읽기 프로그램 실기, 실제 macOS 한글 입력기(조합은 CDP `imeSetComposition`으로만), 밝은 테마(Chalk는 어두운 화면만 제공 — 밝은 화면 요청에서도 같은 어두운 화면이 그려지는지와 테두리 대비는 측정함), 실제 터치 기기(CDP 터치 흉내와 탭 제스처로만).

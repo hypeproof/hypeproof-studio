@@ -55,6 +55,12 @@ const {
   limitReachedPlan,
   applyInstructorOverrides,
   failureView,
+  COMPACT_CORNERS,
+  COMPACT_HOME_CORNER,
+  compactCornerForKey,
+  nextCompactCorner,
+  parseCompactCorner,
+  compactCornerAnnouncement,
 } = await import("../src/voicePopupHelpers.ts");
 
 const { initialVoiceSession, voiceTransition, runVoiceEvents, assertVoiceInvariants } =
@@ -439,6 +445,44 @@ const startInputs = (over = {}) => ({
   // 취소 뒤 늦게 온 허용은 **반드시** 받은 stream 을 닫는다.
   assert.equal(failureView("late_permission_after_cancel").mustReleaseCapture, true, "늦은 허용의 마이크가 남는다 (VO-42)");
   assert.equal(failureView("permission_denied").mustReleaseCapture, false, "열린 적 없는 캡처를 해제 대상으로 적는다");
+}
+
+// --- §15 CGP-VOICE-R-008: compact control corners (REQ-CGPV-12) ---------------
+// Pure decision table. The computed placement is in test/voice-compact-corner.smoke.mjs.
+{
+  assert.deepEqual([...COMPACT_CORNERS].sort(), ["bottom-left", "bottom-right", "top-left", "top-right"]);
+  assert.equal(COMPACT_HOME_CORNER, "top-right");
+  const k = (key, extra = {}) => ({ key, ...extra });
+  // Every corner x every arrow lands on the expected corner (positive control).
+  const expected = {
+    "top-left": { ArrowUp: "top-left", ArrowDown: "bottom-left", ArrowLeft: "top-left", ArrowRight: "top-right" },
+    "top-right": { ArrowUp: "top-right", ArrowDown: "bottom-right", ArrowLeft: "top-left", ArrowRight: "top-right" },
+    "bottom-left": { ArrowUp: "top-left", ArrowDown: "bottom-left", ArrowLeft: "bottom-left", ArrowRight: "bottom-right" },
+    "bottom-right": { ArrowUp: "top-right", ArrowDown: "bottom-right", ArrowLeft: "bottom-left", ArrowRight: "bottom-right" },
+  };
+  for (const [from, moves] of Object.entries(expected)) {
+    for (const [key, to] of Object.entries(moves)) assert.equal(compactCornerForKey(from, k(key)), to, `${from} + ${key}`);
+    assert.equal(compactCornerForKey(from, k("Home")), "top-right", `${from} + Home resets`);
+  }
+  // Negative controls: keys that are not ours, modified keys and an open IME composition.
+  for (const key of ["Enter", " ", "Tab", "End", "PageUp", "a", "Escape"]) assert.equal(compactCornerForKey("bottom-left", k(key)), null, key);
+  for (const mod of ["altKey", "ctrlKey", "metaKey", "shiftKey", "isComposing"]) {
+    assert.equal(compactCornerForKey("bottom-left", k("ArrowUp", { [mod]: true })), null, `${mod}+ArrowUp is taken`);
+    assert.equal(compactCornerForKey("bottom-left", k("Home", { [mod]: true })), null, `${mod}+Home is taken`);
+  }
+  // The button steps clockwise through all four and comes back.
+  let c = "top-left";
+  const seen = [];
+  for (let i = 0; i < 4; i++) { c = nextCompactCorner(c); seen.push(c); }
+  assert.deepEqual(seen, ["top-right", "bottom-right", "bottom-left", "top-left"]);
+  // Stored values: exact matches only; everything else is the home corner.
+  for (const corner of COMPACT_CORNERS) assert.equal(parseCompactCorner(corner), corner);
+  for (const bad of [null, undefined, "", "TOP-LEFT", " top-left", "top-left\u2028", "center", "{\"x\":9999}", 3, {}, ["top-left"]]) {
+    assert.equal(parseCompactCorner(bad), "top-right", `stored ${JSON.stringify(bad)} is not a corner`);
+  }
+  // Each corner has its own announcement.
+  assert.equal(new Set(COMPACT_CORNERS.map(compactCornerAnnouncement)).size, 4);
+  assert.equal(compactCornerAnnouncement("bottom-left"), "음성 컨트롤을 왼쪽 아래로 옮겼어요");
 }
 
 // ─── §14 순수 계층 유지 — vscode / DOM 을 끌어들이지 않는다 ─────────────────

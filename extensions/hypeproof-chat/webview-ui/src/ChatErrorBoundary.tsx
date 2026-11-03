@@ -12,6 +12,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { postToHost } from "./vscode";
+import { ChatIcon } from "./ChatDetails";
 
 interface Props {
   children: ReactNode;
@@ -60,7 +61,7 @@ export class ChatErrorBoundary extends Component<Props, State> {
     return (
       <div className="hps-shell">
         <div className="hps-fatal">
-          <div className="hps-fatal-icon">⚠️</div>
+          <div className="hps-fatal-icon"><ChatIcon kind="alert" size={24} /></div>
           <h2 className="hps-fatal-title">화면을 그리다가 멈췄어요</h2>
           <p className="hps-fatal-sub">
             대화는 안전하게 저장됐어요. 아래 버튼으로 다시 열 수 있어요.
@@ -70,10 +71,14 @@ export class ChatErrorBoundary extends Component<Props, State> {
             <button className="hps-fatal-btn" onClick={this.reload}>
               다시 열기
             </button>
+            {/* REQ-STUDIO-REPORT-LOGS: the report form opens beside this card, with the crash and the logs box ticked. */}
+            <button className="hps-fatal-btn-ghost" data-crash-report onClick={() => postToHost({ type: "openReportModal", source: "crash" })}>
+              문제 신고하기
+            </button>
             <button
               className="hps-fatal-btn-ghost"
               onClick={() => postToHost({ type: "openSettings" })}
-              title="문제가 계속되면 설정 → 다시 시작"
+              data-hp-tooltip="문제가 계속되면 설정 → 다시 시작"
             >
               설정 열기
             </button>

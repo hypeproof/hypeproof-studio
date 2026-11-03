@@ -70,10 +70,12 @@ Configuration has a purple DEV title with branch and Service mode.
 The shell/helper names must be preserved. Renaming `package.json.name` or
 `CFBundleName` without rebuilding Helpers causes Electron's
 `Unable to find helper app` fatal error. Only development identity/display
-metadata is changed. New runtime dependencies are not silently packaged: an
-unbundled runtime dependency mismatch against the base app is refused. Pure JS
-dependencies proven fully included by esbuild can be used with an older shell;
-external dependencies and new SDK trees are not silently packaged.
+metadata is changed. The current lockfile-verified SDK and its JavaScript runtime
+dependencies are copied into the owned candidate and imported before preparation
+completes. Their file hashes are recorded in the receipt. The native SDK binary
+still requires the existing version-matched verified seed. Other unbundled runtime
+dependency mismatches against the base app are refused; pure JavaScript dependencies
+proven fully included by esbuild can be used with an older shell.
 
 ## Local subscriptions
 

@@ -2,9 +2,10 @@
 #
 # The actual tag build is split by platform:
 # - build-mac.yml: v* tag -> Mac arm64 artifact -> GitHub Release upload
-# - build-windows.yml: v* tag -> Windows x64 artifact -> GitHub Release upload
+# - build-windows.yml: dispatch only (Mac-only releases since 2026-10-19,
+#   config/release-platforms.json); a dispatch on a tag ref uploads to that release
 # - mirror-release.yml: explicit dispatch -> mirror source release assets to
-#   jayleekr/hypeproof-studio-releases after operator dry-run
+#   hypeproof/hypeproof-studio-releases after operator dry-run
 #
 # This dispatch-only workflow prevents the old Phase 6 TODO placeholder from
 # drifting back in and gives operators a cheap way to verify the release wiring
@@ -32,21 +33,45 @@ jobs:
           grep -Fq '"v*"' .github/workflows/build-mac.yml
           grep -q 'Upload draft candidate' .github/workflows/build-mac.yml
 
-          grep -q 'tags:' .github/workflows/build-windows.yml
-          grep -Fq '"v*"' .github/workflows/build-windows.yml
+          grep -q 'workflow_dispatch:' .github/workflows/build-windows.yml
           grep -q 'Upload draft candidate' .github/workflows/build-windows.yml
+          node scripts/release/platforms.mjs list HEAD
+          node --test scripts/release/test/platforms.test.mjs
 
           grep -q 'workflow_dispatch:' .github/workflows/mirror-release.yml
           grep -q 'MIRROR_RELEASE_PAT' .github/workflows/mirror-release.yml
           node e2e/unified-release/gate.test.mjs
           grep -q 'check-unified-release.mjs' .github/workflows/mirror-release.yml
           grep -q 'Candidate App against the current public Service' .github/workflows/verify-unified-release.yml
+          # studio-public-sdk-seed: the public release carries the native SDK seed.
+          grep -q 'Attach the public native SDK seed' .github/workflows/verify-unified-release.yml
+          grep -q 'sdk-seed-assets.mjs list' .github/workflows/verify-unified-release.yml
+          grep -q 'sdk-seed-assets.mjs check' .github/workflows/mirror-release.yml
+          # The seed follows the release's platforms, never a fixed pair (#1872).
+          grep -qF 'sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"' .github/workflows/verify-unified-release.yml
+          grep -qF 'sdk-seed-assets.mjs list "$version" "$platforms"' .github/workflows/verify-unified-release.yml
+          if grep -qF 'for platform in darwin-arm64 win32-x64' .github/workflows/verify-unified-release.yml; then
+            echo "::error::the native SDK seed hard-codes both platforms"; exit 1
+          fi
+          node --test scripts/release/test/sdk-seed-assets.test.mjs
+          # Every published release carries its own pinned install-mac.sh + Test Kit.
+          grep -q 'install-kit.mjs render' .github/workflows/verify-unified-release.yml
+          grep -q 'dist/install-mac.sh' .github/workflows/mirror-release.yml
+          # ... and its pinned Windows update-windows.cmd (2026-11-02); publishing refuses a
+          # release whose platforms lack their install command asset or notes section.
+          grep -q 'install-kit.mjs render-windows' .github/workflows/verify-unified-release.yml
+          grep -q 'install-kit.mjs check' .github/workflows/verify-unified-release.yml
+          grep -q 'install-kit.mjs announce' .github/workflows/notify-release-published.yml
+          grep -q 'dist/update-windows.cmd' .github/workflows/mirror-release.yml
+          test -f scripts/release/templates/update-windows.cmd
+          node --test scripts/release/test/install-kit.test.mjs
 
       - name: Summary
         run: |
           {
             echo "## Release readiness"
             echo "- build-mac.yml has v* tag trigger and GitHub Release upload"
-            echo "- build-windows.yml has v* tag trigger and GitHub Release upload"
+            echo "- build-windows.yml is dispatch-only; release platforms: $(node scripts/release/platforms.mjs list HEAD)"
             echo "- mirror-release.yml remains explicit dispatch with PAT-gated writes"
+            echo "- verify-unified-release.yml attaches the native SDK seed + sha256 before publishing"
           } >> "$GITHUB_STEP_SUMMARY"

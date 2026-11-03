@@ -11,5 +11,6 @@ export function runClaude(args: {
   signal: AbortSignal;
   timeout?: number;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   toolServer: { url: string; token: string };
 }): Promise<{ model: string; usage: unknown }>;

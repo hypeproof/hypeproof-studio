@@ -24,12 +24,12 @@ err() { printf "\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
 #    x86_64 install would otherwise fail later at download with a confusing
 #    "Could not find darwin-x64.zip" (hypeproof-studio#347-class silent gap).
 #    Fail early with a clear message. Intel support is an open OS-scope decision
-#    (jayleekr/hypeproof-studio#331) — turn this into a darwin-x64 suffix once a
+#    (hypeproof/hypeproof-studio#331) — turn this into a darwin-x64 suffix once a
 #    matching asset is produced.
 ARCH="$(uname -m)"
 case "$ARCH" in
   arm64)  ASSET_SUFFIX="darwin-arm64.zip" ;;
-  x86_64) err "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: jayleekr/hypeproof-studio#331)" ;;
+  x86_64) err "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: hypeproof/hypeproof-studio#331)" ;;
   *) err "Unsupported architecture: $ARCH" ;;
 esac
 
@@ -81,8 +81,9 @@ cat <<EOF
 
 ✅ $APP_NAME 설치 완료.
 
-처음 실행 시 macOS 보안 경고가 나오면:
-  시스템 설정 → 개인정보 보호 및 보안 → "확인 없이 열기" 클릭
+이 빌드는 아직 Apple 공증(notarization)을 받지 않았습니다. 이 명령은 터미널로 받아 설치해서
+보통 경고 없이 열립니다. macOS가 앱을 막으면 보안 설정을 바꾸거나 우회하지 말고, 이 설치 명령을
+한 번 더 실행하세요.
 
 문제가 있으면: https://github.com/$REPO/issues
 EOF

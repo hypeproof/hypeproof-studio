@@ -23,20 +23,20 @@ operators, or production reliability.
 - Windows: use `HypeProof.StudioUserSetup-x64-*.exe` for a per-user install, or
   `HypeProof.StudioSetup-x64-*.exe` for a machine install.
 - One-line installers resolve from the mirror repo:
-  `jayleekr/hypeproof-studio-releases`.
+  `hypeproof/hypeproof-studio-releases`.
 - If this release changes endpoint defaults, clear any temporary
   `hypeproofChat.proxyUrl` override after updating.
 
 macOS one-liner:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-mac.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hypeproof/hypeproof-studio-releases/main/install-mac.sh | bash
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install-win.ps1 | iex
+irm https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install-win.ps1 | iex
 ```
 
 ## Included Assets
@@ -67,3 +67,15 @@ irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/ins
 - PR / issue links:
 - Full changelog:
 ```
+
+## Learner lines (in-app "새로운 기능")
+
+The release page above is for staff. Learners see a separate, shorter set inside Studio after they
+update (REQ-STUDIO-WHATS-NEW, CGP-SHELL-R-035). Before the release cut, edit
+`extensions/hypeproof-chat/src/learnerReleaseNotes.ts`:
+
+- At most 3 lines, at most 40 characters each, in Korean a learner can read.
+- Only features every learner seat has in this build; no capability or score labels.
+- Change `id` when the lines change. An unchanged `id` shows nothing new; a new `id` shows the
+  panel once to every learner who updates. `test/whats-new.test.tsx` fails on a line that breaks
+  these caps.

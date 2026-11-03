@@ -1,0 +1,11 @@
+{
+  "status": "UNCONFIRMED",
+  "kind": "build",
+  "candidateDigest": "COPY_FROM_PLAN",
+  "requestDigest": "COPY_FROM_PLAN",
+  "upperBoundUsd": null,
+  "paidFallback": false,
+  "observedAt": "REPLACE_WITH_UTC_TIME",
+  "expiresAt": "REPLACE_WITH_UTC_TIME",
+  "evidence": "Fresh provider quota and bounded workflow execution evidence"
+}

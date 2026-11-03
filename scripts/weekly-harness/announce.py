@@ -15,7 +15,7 @@ publish as an Artifact and to post to Discord.
 USAGE:
     announce.py --cycle weekly-2026-07-27
     announce.py --cycle weekly-2026-07-27 --prev-cycle weekly-2026-07-20
-    announce.py --cycle weekly-2026-07-27 --milestone-repo jayleekr/hypeproof-studio
+    announce.py --cycle weekly-2026-07-27 --milestone-repo hypeproof/hypeproof-studio
     announce.py --cycle weekly-2026-07-27 --issues-json fixtures.json  # offline
 
 `--prev-cycle` defaults to the Monday one week before the cycle date, so the
@@ -39,9 +39,9 @@ import sys
 from pathlib import Path
 
 DEFAULT_REPOS = [
-    "jayleekr/hypeprooflab",
-    "jayleekr/hypeproof-studio",
-    "jayleekr/sediment",
+    "hypeproof/hypeprooflab",
+    "hypeproof/hypeproof-studio",
+    "hypeproof/sediment",
 ]
 
 CYCLE_RE = re.compile(r"^weekly-(\d{4})-(\d{2})-(\d{2})$")

@@ -5,11 +5,14 @@ doc_type: release
 status: canonical
 owner: core
 version: 0.1.5
-last_reviewed: 2026-10-15
+last_reviewed: 2026-10-29
 audience: release managers, developers
 source_paths:
   - scripts/release/release-cut.mjs
   - scripts/release/create.mjs
+  - scripts/release/promote.mjs
+  - scripts/release/build-contract.mjs
+  - .github/workflows/release-promote.yml
   - scripts/release/version.mjs
   - scripts/release/smoke/smoke.mjs
   - .github/workflows/release-cut.yml
@@ -18,6 +21,8 @@ source_paths:
   - scripts/resolve-version.sh
   - config/pr-body-contract.json
   - docs/RELEASE-CHECKLIST.md
+  - release.json
+  - chalk/release.json
 quality_gates:
   - version-documented
   - rollback-documented
@@ -56,7 +61,7 @@ the release cut runs on a schedule.
 
 ## Status
 
-Not all parts of this process exist yet. This table shows the state on 2026-10-15.
+Not all parts of this process exist yet. This table shows the state on 2026-10-29.
 
 | Part | State | Reference |
 |---|---|---|
@@ -65,33 +70,46 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-1
 | Release check section in PRs and issues | In `main`, not enforced | #1680, #1682 |
 | `hype-pr` checks the Release check section | In `main`, not enforced in Studio | hypeproof-harness#324 |
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
-| Publish gate (rule 5) | Pull request open | #1683, #1684 |
-| Approval workflow: approval → `v` tag | Not started | — |
-| Smoke credentials for S3 and S4 | Not available | — |
+| Publish gate (rule 5) | In `main` (merged 2026-10-18) | #1683, #1684 |
+| Approval workflow: approval → `v` tag, promotion without a rebuild, merge, publish | Merged with #3172, not run on Actions yet | #3170, #3172 |
+| Smoke credentials | S4 available; S3 missing as observed 2026-10-16 | #1704 |
 
-Until the approval workflow exists, a member pushes the `v` tag by hand after the approval.
-See [Approval](#approval).
+The approval workflow (`release-promote.yml`) only promotes an rc cut with final-version
+bytes, that is an rc cut after #3172 merged. See [Promotion](#promotion).
 
 ## Flow
 
 1. The release cut fixes the candidate commit. The candidate is `origin/main` at that time.
    Later merges go to the next release.
 2. The release cut calculates the range: all commits after the last stable `v` tag.
-3. Smoke runs against the production Service and Chalk.
+3. Smoke runs against the production Service (checks S1, S3, S4 and S5).
 4. If smoke fails, the release cut opens an issue and stops. It does not create a tag or a PR.
+   If an issue for the same version is already open, it comments on that issue instead.
 5. If smoke passes, the release cut creates the rc tag and starts the rc builds. It also opens
-   the release PR.
-6. The rc builds run the automatic E2E on macOS and Windows. Then they publish the rc as a
-   prerelease.
+   the release PR. Then it closes the open smoke-failure issues of this version or a lower one,
+   each with a comment that links the release PR. A failed close is a warning in the step summary,
+   not a failed release.
+6. The rc builds run on every platform in `config/release-platforms.json` (macOS and
+   Windows since 2026-10-20). They embed the final version (`vX.Y.Z`, not `-rc.N`), see
+   [Version](#version). The automatic E2E runs on the rc packages. Then the rc is published
+   as a prerelease. The Mac build reuses the previous base app when the base is unchanged.
 7. The release manager installs the rc build and does the checks in the release PR.
 8. A member with write access approves the release PR.
-9. The `v` tag goes on the same commit as the rc tag.
-10. The `v` tag builds run the automatic E2E again.
+9. `release-promote.yml` puts the `v` tag on the rc commit and copies the rc's accepted
+   packages and acceptance receipts to the `v` draft, byte for byte. Nothing is built again.
+10. It merges the release PR and starts `verify-unified-release.yml` for the `v` tag. That run
+    reuses the rc's acceptance when the bytes and the public Service did not change.
 11. The publish gate checks the approval. Then the release becomes public.
 
 ## Version
 
-The git tag gives the version. CI sets `HPS_VERSION` from the tag.
+The git tag gives the version. CI sets `HPS_VERSION` from the tag. An rc tag that
+`release-cut` creates is annotated with `hps-release-candidate/1` (source commit, rc tag,
+final version). For such a tag, `scripts/release/build-contract.mjs` sets `HPS_VERSION` to the
+final version, so the rc App already reports `X.Y.Z` and its packages can become the `v`
+release unchanged. An rc tag without the annotation (cut before #3172) keeps its rc version.
+`build-contract.mjs app-version <tag>` prints the version a tag's packages must carry;
+`verify-unified-release.yml` checks the packages against it.
 `scripts/resolve-version.sh` writes it into `product.json`, `Info.plist` and the bundled
 `hypeproof-chat` extension. For untagged local builds, the version comes from
 `extensions/hypeproof-chat/package.json`.
@@ -120,18 +138,40 @@ Do not change this format without a reason that covers all of these limits:
 A tag with `-` (for example `-rc.1`) is a prerelease. The updater does not install
 prereleases.
 
+## Release dependency check
+
+`release.json` (Studio) and `chalk/release.json` (Chalk) declare the Service contracts that
+each product needs. The check itself is the Harness engine, not code in this repository:
+`scripts/release-deps/` in `hypeproof/hypeproof-harness` (see its README). It answers
+whether every live release, plus the candidate, has a live provider for each requirement.
+
+- Studio requires `studio-api` at the line of `@hypeproof/service-contracts` pinned in
+  `extensions/hypeproof-chat/package.json`. That is the package bundled into the App. The
+  root `package.json` is test tooling and is not shipped.
+- Chalk requires `chalk-admin` at the line pinned in `chalk/package.json`.
+- The App sends its version without the `v` in `x-hps-client-version`. Tag `v2026.1017.0`
+  is reported as `2026.1017.0`. See [Version](#version).
+- When you change one of these pins, keep it in `config/service-packages.json`.
+  `scripts/release/test/release-manifest.test.mjs` fails otherwise.
+
 ## Release check in PRs
 
 Every PR body has a `## Release check` section. The release cut copies it into the release
 PR checklist. Write three lines:
 
 ```text
+Release manager check: yes|no — <reason>
 How to verify: <where> → <what to click or run> → <expected result>
 Smoke: <yes|no> — <reason>
 Smoke check: <scripts/release/smoke/checks/sN-*.mjs or #issue, only for yes>
 ```
 
-- Keep `How to verify` on the first line. The release manager reads it.
+- Write `Release manager check` on the first line.
+- Answer `yes` when a user can see or meet the changed behavior in the rc App.
+- Answer `no` when the PR changes release tooling, CI, vendored tooling, or docs only.
+  A `no` answer puts the PR in the automatic group regardless of its title type or files.
+  The reason is shown in the release PR to explain why no check is needed.
+- `How to verify` is required only when the answer is `yes`. The release manager reads it.
 - Write all three parts of `How to verify`. The release manager must be able to do it
   without the author.
 - Answer `Smoke: yes` when the PR adds a dependency on another repository or a server
@@ -156,10 +196,18 @@ result of the smoke.
 | Check | What it checks | Needs |
 |---|---|---|
 | S1 | Service `/v1/health` is ok and has a version | — |
-| S2 | Chalk `/health` is ok and has a version | — |
-| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`. Not implemented yet |
+| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`, scoped only to `synthetic-release-acceptance` |
 | S4 | Chat API through `scripts/run-sdk-contract.sh` | `HPS_CANARY_ISSUER` |
 | S5 | CI check-runs on the candidate commit | — |
+
+S2 (Chalk `/health`) and S6 (Chalk Lab tokens) were removed: the web Chalk (`chalk.hypeproof-ai.xyz`) will be retired soon, and the `chalk/` code is planned to move to its own repository with its own release smoke. The Studio App does not call Chalk.
+
+The runner executes checks in this order:
+
+1. S1, S5 — read-only. These checks do not open a session.
+2. S3, S4 — these checks open a live session.
+
+If S1 or S5 is `FAIL`, the runner marks S3 and S4 as `NOT_RUN` and does not open a session.
 
 - `NOT_RUN` means that the check could not run. It is not a pass.
 - A smoke credential must have the smallest scope. For S4, use an issuer token for the
@@ -169,12 +217,24 @@ result of the smoke.
 
 ## Release cut
 
-Run the `release-cut` workflow from the Actions tab. It has two modes.
+The `release-cut` workflow runs every day at 17:00 KST (08:00 UTC). Its `gate` job
+(`scripts/release/daily-gate.mjs`) skips the scheduled run when no app path changed since the last
+stable `v` tag, when the live-class freeze does not answer `proceed`, or when the repository
+variable `RELEASE_CUT_DAILY` is `off`; otherwise it cuts with `create` (`dry-run` when the variable
+is `dry-run`). Pause the schedule with
+`gh variable set RELEASE_CUT_DAILY --body off --repo hypeproof/hypeproof-studio`; delete the variable
+to resume. The release PR also carries the black-box cases selected for this candidate; the process
+is in the [release casebook](../operations/release-casebook/README.md).
+
+You can also run it from the Actions tab. A manual run has two modes.
 
 | Mode | What it does | Permissions |
 |---|---|---|
 | `dry-run` (default) | Calculates the range, runs smoke and writes the release PR body as an artifact | Read |
 | `create` | Also creates the rc tag, the rc builds, branch `release/<version>` and the release PR, or the smoke failure issue | Write, in a separate job |
+
+The run has two jobs. The `cut` job runs in both modes and has read permissions only. The
+`create` job runs only in `create` mode, after `cut` passes. A `create` run shows both jobs.
 
 - `since` is for a trial only. It moves the baseline back in time. `create` refuses it.
 - `accept_not_run` lets `create` continue when a smoke check is `NOT_RUN`. The release PR
@@ -186,23 +246,59 @@ Run the `release-cut` workflow from the Actions tab. It has two modes.
 
 ## Approval
 
-1. Open the release PR. Do the checks on the rc build.
+1. Open the release PR. Install the rc with the one-liner at the top and do the checks on it,
+   including the black-box cases in section 4 that an agent pre-test comment did not already pass.
 2. Mark each item as checked, as not possible with a reason, or as a problem with an issue
-   number.
+   number. Any P0 black-box case FAIL means no approval
+   ([judgement rules](../operations/release-casebook/README.md#판정-규칙)).
 3. Approve the release PR with an account that has write access.
 
-Until the approval workflow exists, also do these steps:
-
-4. Push the `v` tag on the rc commit:
-   `git tag <version> <version>-rc.N^{} && git push origin <version>`
-5. Merge the release PR. It adds only `releases/<version>.md`.
+Do not push the `v` tag and do not merge the release PR by hand. The approval starts
+[promotion](#promotion). A hand-pushed `v` tag starts the tag builds and creates a `v` draft
+with other bytes; promotion then refuses that draft.
 
 Make sure that the approval is on the latest commit of the release PR. A later rc moves
 the release branch, and an approval of an earlier candidate does not count.
 
+## Promotion
+
+This part merged with #3172. It has not run on Actions yet.
+
+Builds are the largest cost of a release (macOS 0.08 USD per minute; an rc build takes
+30–57 minutes, a Windows build 38 minutes). Promotion makes the `v` release from the rc's
+packages, so an approval starts no build on any OS.
+
+`release-promote.yml` runs when a review that approves a PR with the `release` label and a
+`release/v*` branch is submitted. It runs `scripts/release/promote.mjs` from the default branch:
+
+1. **Check.** The approval is from a member with write access, on the PR's current head (the
+   same rule as the publish gate). The head is one commit on the rc commit that changes only
+   `releases/<version>.md` and records `<version>-rc.N`. That rc tag is on the rc commit. The
+   rc release is published (its acceptance passed). Its packages carry `<version>` and match
+   its acceptance receipts (`scripts/check-unified-release.mjs`).
+2. **Tag.** `<version>` on the rc commit, pushed with the workflow token. A push with that
+   token starts no workflow, so `build-mac.yml` and `build-windows.yml` do not run.
+3. **Draft.** The `<version>` draft gets the rc's App packages and `unified-acceptance.json`.
+   Per-tag files (Mac installer, Test Kit, Agent SDK seed) are made again by the publish job.
+4. **Merge.** The release PR is squash-merged, only at the approved head.
+5. **Publish.** `verify-unified-release.yml` runs for `<version>`. Its candidate job reuses the
+   rc's acceptance when the draft's receipts are the published rc's receipts, still match the
+   bytes, and the public Service version did not change. Otherwise acceptance runs again on the
+   same bytes. Then the live-class freeze and the publish gate run, and the release becomes
+   public and is mirrored.
+
+Every step can run again. If the rc was still in acceptance at approval time, or a step failed,
+run `gh workflow run release-promote.yml -f pr=<number>`. Promotion refuses, and does nothing,
+when:
+
+- the rc was cut before #3172 and its packages carry `-rc.N`. Cut a new rc with
+  `release-cut` (`mode=create`); promotion never rebuilds;
+- the `v` tag exists on another commit, or the `v` draft holds packages with other bytes (for
+  example from a hand-pushed tag). Delete that draft, then run it again.
+
 ## Publish gate
 
-This part is in pull request #1684. It is not in `main` yet.
+This part merged in pull request #1684 on 2026-10-18.
 
 Pushing a tag cannot be prevented: the repository plan (GitHub Free, private) has no tag
 protection. The gate is in `verify-unified-release.yml`, right before the release becomes
@@ -304,6 +400,68 @@ If one entry path is old or not tested, report the delivery as incomplete. Name 
 path and the action. See NAT-01/12 and the
 [native trial laptop checks](../testing/studio-native-trial-laptop.md).
 
+## Managed candidate drafts (#1758)
+
+This opt-in build handoff stops at draft assets. It does not activate the daily
+release engine, collect installed-App acceptance, approve a candidate or promote a
+channel. The ordinary release flow above remains the default. Its Mac dispatch
+now defaults to the workflow ref instead of silently checking out `main`.
+
+After checking the actual account's public standard-runner eligibility and remaining
+artifact/storage allowance, select `mode=create`, `managed_draft=true` in the existing
+`release-cut` workflow. Its `create.mjs --managed-draft` path reuses version planning,
+tags and release PRs. Both existing OS workflows receive the full candidate SHA as
+`ref` and `candidate_sha`. Before any remote mutation, the candidate must contain the
+exact reviewed `build-contract.mjs`, its artifact-identity helper and both builder
+workflows. An older candidate is refused because its workflow code could ignore the
+new inputs. No new provider, runner tier, service or model credential is introduced.
+
+The annotated `vX.Y.Z-rc.N` tag stores `hps-managed-draft/1` with the candidate SHA,
+that publication tag and final `vX.Y.Z` version. Both workflows check actual checkout,
+workflow SHA and peeled tag SHA before build preparation. The annotation is
+authoritative for managed mode: tag pushes and retries with missing or false inputs
+still stop before automatic acceptance. Partial/malformed markers fail closed.
+Conflicting version/ref inputs are rejected; inputs enter the shell through environment
+variables, never interpolated shell source. The final version reaches the existing
+pre-sign/pre-package stamping path; no post-sign version rewrite is added.
+
+The managed draft contains the original packages and `draft-build-<platform>.json`.
+That inventory binds source SHA, annotated tag object, final embedded App/extension
+version, package name, byte size and SHA256. Windows requires the portable ZIP and
+both User/System installers. Mac identity is read from the new ZIP's extracted App;
+Windows identity is read from the portable smoke's extracted App. Before uploading,
+the workflow compares the inventory again and checks the remote tag object and peeled
+commit. It refuses published releases and never uses upload `--clobber`.
+
+The inventory's `acceptance: NOT_RUN` and `promotion: NOT_AUTHORIZED` are deliberate.
+An extracted App identity plus package hashes does not prove installer payload equality,
+installed-App behavior, N-1→N update, signing/notarization, public Service behavior,
+model budget, release-manager approval or same-byte channel promotion. It is not a
+signed verifier receipt or a remote authorization boundary. Those require the release
+engine's later evidence and publisher adapters. Do not manually start the existing
+model-backed acceptance workflow for this draft: its current tag-version contract
+expects the RC suffix and this managed handoff does not reserve model spend.
+
+Use the release-cut workflow's `GITHUB_TOKEN` path for this handoff. Local/PAT tag pushes
+can start a push build in addition to an explicit dispatch; this change does not promise
+exactly-once builds, resumable dispatch or a measured zero-cost run. The durable tag
+marker keeps both paths draft-only, but build deduplication and account quota reservations
+belong to the subsequent engine adapter. Unknown quota or possible incremental spend
+means do not start an operational build. Rebuilding a stable tag is not same-byte
+promotion and remains outside this slice.
+
+Offline controls (no GitHub CLI/API, OS build or model call):
+
+```bash
+node --test scripts/release/test/build-contract.test.mjs scripts/release/test/create.test.mjs scripts/release/test/release-cut.test.mjs
+python3 scripts/check-workflow-shells.py
+python3 scripts/docs-harness/check.py --min-score 95
+```
+
+Actual Mac/Windows build, install/update, manager approval, quota observation and
+publication are **NOT_RUN** for this implementation. Standard-runner selection alone
+is not proof that an account has no incremental charge.
+
 ## Rollback
 
 If a public release is broken:
@@ -323,3 +481,20 @@ profile compatibility. If the App changed preview or storage behavior, the rollb
 keep the member's local `~/HypeProofGames` directory. Do not delete generated work.
 
 This rollback process is a recommendation. The team has not confirmed it yet.
+
+### S3 and S5 failure handling
+
+S3 requires an issuer scoped only to the synthetic acceptance cohort/profile, with
+`can_start_session`, `max_session_hours >= 1`, and `max_hours >= 1`. It opens a fresh
+synthetic classroom seat for one hour, checks its served profile and activity binding,
+and closes the session and confirms token revocation in `finally`. It sends no model
+requests. It refuses an existing live session (`force: false`); rerun after that session
+finishes. A cleanup failure is FAIL. There is no administrator-credential fallback.
+The check remains NOT_RUN until the scoped secret is provisioned and does not prove
+App installation or classroom rehearsal.
+
+S5 selects the latest run/attempt for each workflow ID and job name. A superseded
+failure in the same job is retained in GitHub history but does not fail the new result.
+Different workflows with the same job name, missing jobs in newer runs, and external
+checks remain independent. The selected pending run remains NOT_RUN; a selected
+failure remains FAIL. Only the current release-cut run itself is omitted.

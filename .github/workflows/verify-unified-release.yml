@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   actions: write
+  pull-requests: read
 concurrency:
   group: unified-release-${{ inputs.tag }}
   cancel-in-progress: false
@@ -20,12 +21,36 @@ jobs:
     timeout-minutes: 165
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
+      version: ${{ steps.candidate.outputs.version }}
       published: ${{ steps.candidate.outputs.published }}
+      matrix: ${{ steps.candidate.outputs.matrix }}
+      accepted: ${{ steps.reuse.outputs.accepted }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Wait for both candidate packages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      # Check both gates before the long asset wait so a missing approval or a
+      # live class is caught in seconds, not after 165 min + acceptance.
+      # Both checks run again in the publish job (state can change during the wait).
+      - name: Live-session freeze — early check before acceptance wait
+        env:
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_OVERRIDE: ${{ inputs.override_live_session }}
+          HPS_FREEZE_CONTEXT: Unified Studio candidate (pre-acceptance check)
+          TAG: ${{ inputs.tag }}
+        run: bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
+      - name: Publish gate — early check before acceptance wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/release/publish-gate.mjs --tag "$TAG"
+      # Which OS packages to wait for, test and require comes from the tag's own
+      # config/release-platforms.json (scripts/release/platforms.mjs). Mac only
+      # since 2026-10-19; a tag without that file requires both.
+      - name: Wait for every configured candidate package
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,34 +60,54 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
           sha="$(git rev-parse "$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # The App version the packages carry: the final version for an rc cut with
+          # final-version bytes (#3172), otherwise the tag without its v.
+          version="$(node scripts/release/build-contract.mjs app-version "$TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "expected App version: $version"
+          echo "matrix=$(node scripts/release/platforms.mjs matrix "$sha")" >> "$GITHUB_OUTPUT"
+          echo "release platforms: $(node scripts/release/platforms.mjs list "$sha")"
           for attempt in $(seq 1 150); do
             gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/candidate.json"
             # Duplicate builder dispatch after successful promotion is read-only.
             if jq -e '.isDraft == false' "$RUNNER_TEMP/candidate.json" >/dev/null; then
               gh release download "$TAG" --dir "$RUNNER_TEMP/already-published"
-              node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "${TAG#v}"
+              node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "$version"
               echo 'published=true' >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            if jq -e '[.assets[].name] | any(. == "HypeProof-Studio-darwin-arm64.zip") and any(test("win32-x64.*\\.zip$")) and any(test("UserSetup.*\\.exe$")) and any(test("(?<!User)Setup.*\\.exe$"))' "$RUNNER_TEMP/candidate.json" >/dev/null; then exit 0; fi
+            # set -e + pipefail: a helper failure stops the job; empty output = complete.
+            jq -r '.assets[].name' "$RUNNER_TEMP/candidate.json" | node scripts/release/platforms.mjs missing "$sha" > "$RUNNER_TEMP/missing.txt"
+            if [[ ! -s "$RUNNER_TEMP/missing.txt" ]]; then exit 0; fi
             sleep 60
           done
-          echo 'Both OS packages did not arrive; candidate remains draft.' >&2
+          echo "Configured OS packages did not arrive (missing: $(paste -sd, "$RUNNER_TEMP/missing.txt")); candidate remains draft." >&2
           exit 1
+      # A v draft made by release-promote.yml holds the approved rc's packages and its acceptance
+      # receipts. When those receipts are the published rc's, still match these bytes and the public
+      # Service has not changed, acceptance is not run again. Otherwise accepted=false and it runs.
+      - name: Reuse the approved rc's acceptance (promoted release)
+        id: reuse
+        if: steps.candidate.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" == *-* ]]; then echo "accepted=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh release download "$TAG" --dir "$RUNNER_TEMP/promoted"
+          node scripts/release/promote.mjs reuse-acceptance --tag "$TAG" --sha "$SHA" --version "$VERSION" --dir "$RUNNER_TEMP/promoted" | tee -a "$GITHUB_STEP_SUMMARY"
   acceptance:
     needs: candidate
-    if: needs.candidate.outputs.published != 'true'
+    if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.accepted != 'true'
     strategy:
       fail-fast: false
       # One session key per cohort: each OS run opens and closes the synthetic
       # acceptance session (#1404), so the two must not overlap.
       max-parallel: 1
-      matrix:
-        include:
-          - os: macos-15
-            platform: darwin-arm64
-          - os: windows-latest
-            platform: win32-x64
+      matrix: ${{ fromJSON(needs.candidate.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -86,6 +131,19 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --prefix e2e
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - name: Install candidate Service dependencies
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
       - name: Download untouched candidate
         shell: bash
         env:
@@ -108,7 +166,7 @@ jobs:
           Expand-Archive -LiteralPath $asset[0].FullName -DestinationPath "$env:RUNNER_TEMP/candidate-app"
           node e2e/unified-release/install-windows.mjs "$env:RUNNER_TEMP/candidate-assets" "$env:RUNNER_TEMP/candidate-app"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      # jayleekr/hypeprooflab#997: same per-machine SDK binary precondition as
+      # hypeproof/hypeprooflab#997: same per-machine SDK binary precondition as
       # verify-service-activities.yml; run.mjs refuses to start without it.
       - name: Seed the Agent SDK binary the candidate expects
         if: runner.os == 'macOS'
@@ -125,13 +183,15 @@ jobs:
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
-          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/candidate-assets" "$RUNNER_TEMP/unified-evidence" "$SOURCE_SHA" "${TAG#v}"
+          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/candidate-assets" "$RUNNER_TEMP/unified-evidence" "$SOURCE_SHA" "$VERSION"
       - name: Candidate App against the current public Service
         shell: bash
         env:
@@ -147,11 +207,12 @@ jobs:
           HPS_ACCEPTANCE_CLASSROOM_CODE: ${{ secrets.HPS_ACCEPTANCE_CLASSROOM_CODE }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
-          node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "${TAG#v}"
+          node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "$VERSION"
       - name: Upload synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -162,15 +223,22 @@ jobs:
           retention-days: 14
   publish:
     needs: [candidate, acceptance]
-    if: needs.candidate.outputs.published != 'true'
+    # A promoted release skips acceptance (candidate.outputs.accepted) and publishes on the rc's receipts.
+    if: >-
+      always() && needs.candidate.result == 'success' && needs.candidate.outputs.published != 'true' &&
+      (needs.acceptance.result == 'success' ||
+       (needs.acceptance.result == 'skipped' && needs.candidate.outputs.accepted == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
       - uses: actions/download-artifact@v4
+        if: needs.candidate.outputs.accepted != 'true'
         with:
           pattern: unified-*
           path: receipts
@@ -179,16 +247,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+          REUSED: ${{ needs.candidate.outputs.accepted }}
         run: |
           set -euo pipefail
           mkdir dist
           gh release download "$TAG" --dir dist
-          node --input-type=module <<'NODE'
+          if [[ "$REUSED" == true ]]; then
+            # Promoted: dist/unified-acceptance.json is the approved rc's; check it against these bytes.
+            node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "$VERSION"
+            exit 0
+          fi
+          PLATFORMS="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")" node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const receipts=['darwin-arm64','win32-x64'].map(os=>JSON.parse(fs.readFileSync('receipts/unified-'+os+'/receipt.json','utf8')));
+          const receipts=JSON.parse(process.env.PLATFORMS).map(os=>JSON.parse(fs.readFileSync('receipts/unified-'+os+'/receipt.json','utf8')));
           fs.writeFileSync('dist/unified-acceptance.json',JSON.stringify({schema:'hps-unified-release/1',receipts},null,2));
           NODE
-          node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "${TAG#v}"
+          node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "$VERSION"
       - name: Confirm the public Service still matches acceptance
         run: |
           node --input-type=module <<'NODE'
@@ -204,13 +279,119 @@ jobs:
           HPS_FREEZE_CONTEXT: Unified Studio accepted candidate publication
           TAG: ${{ inputs.tag }}
         run: bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
+      # A tag can be pushed by anyone with write access (no tag protection on this plan).
+      # A stable tag is published only with an approved release PR or as a hotfix; otherwise
+      # the release stays a draft. Rerun this workflow after the approval to publish it.
+      - name: Publish gate — approved release PR or hotfix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/release/publish-gate.mjs --tag "$TAG"
+      # studio-public-sdk-seed (US-01). The zips vendor the Agent SDK JS but never
+      # the native `claude` binary, and verify-branding.sh keeps it that way. A
+      # public-zip user has no installer to seed it, so the release carries the
+      # unmodified npm tarball for each App platform, a sha256 file beside it and
+      # sdk-seed.json. Attached while still a draft: a public release never
+      # appears without its seed, and a failure here leaves the draft unpublished.
+      # The seed covers the platforms this release ships (config/release-platforms.json at
+      # the release's own commit, like the gates above): a Mac-only release carries only
+      # the darwin-arm64 seed. The App reads only its own platform's entry, and Windows
+      # installs fall back to the newest release with Windows assets and its own seed.
+      - name: Attach the public native SDK seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          meta="$RUNNER_TEMP/sdk-meta" seed="$RUNNER_TEMP/sdk-seed"
+          mkdir -p "$meta"
+          platforms="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")"
+          echo "native SDK seed platforms: $platforms"
+          vendored='extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json'
+          metas=()
+          for platform in $(jq -r '.[]' <<<"$platforms"); do
+            case "$platform" in
+              darwin-arm64)
+                unzip -p dist/HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app/Contents/Resources/app/$vendored" > "$meta/$platform.json" ;;
+              win32-x64)
+                win_zips=(dist/HypeProof.Studio-win32-x64-*.zip)
+                [[ ${#win_zips[@]} -eq 1 && -f "${win_zips[0]}" ]] || { echo "::error::expected one Windows zip in the release"; exit 1; }
+                unzip -p "${win_zips[0]}" "resources/app/$vendored" > "$meta/$platform.json" ;;
+              *) echo "::error::no seed recipe for platform $platform"; exit 1 ;;
+            esac
+            metas+=("$meta/$platform.json")
+          done
+          # The version the shipped Apps vendor, not the one main pins today.
+          version="$(node scripts/release/sdk-seed-assets.mjs app-version "${metas[@]}")"
+          pinned="$(git show "$TAG:extensions/hypeproof-chat/src/sdkBinaryManifest.ts" | sed -n 's/^export const SDK_BINARY_VERSION = "\([0-9.]*\)";.*/\1/p')"
+          [[ "$version" == "$pinned" ]] || { echo "::error::Apps vendor Agent SDK $version but $TAG pins SDK_BINARY_VERSION=$pinned"; exit 1; }
+          # --version: the pinned sha512 when main pins the same version, npm's
+          # dist.integrity otherwise. Either way the bytes are npm's.
+          for platform in $(jq -r '.[]' <<<"$platforms"); do
+            bash scripts/seed-sdk-binary.sh --platform "$platform" --version "$version" --download-only "$seed"
+          done
+          node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"
+          gh release upload "$TAG" "$seed"/* --clobber
+          gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version" "$platforms"
+      # Per-release Mac installer (2026-10-20), rc and stable alike. The zip is not
+      # notarized, so a browser download is quarantined and Gatekeeper refuses it; curl
+      # adds no quarantine flag. install-mac.sh is pinned to this tag and to the accepted
+      # zip's SHA-256 (dist/ was just checked against the receipts), seeds the coach SDK
+      # from the seed attached above and is the release body's one-liner. The Test Kit zip
+      # wraps the same script in INSTALL/START .command files with a Korean READ-ME.
+      # check-unified-release.mjs leaves the kit zip out of the accepted bytes. Attached
+      # while still a draft, so a published release never lacks its installer.
+      # Windows (2026-11-02): update-windows.cmd, pinned to this tag and to the accepted
+      # HypeProof.StudioUserSetup-x64-*.exe's SHA-256, closes Studio and installs silently.
+      # The notes carry both commands; the publish step refuses a release without them.
+      - name: Attach the per-release Mac and Windows install commands
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          PRODUCT_VERSION: ${{ needs.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          platforms="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")"
+          out="$RUNNER_TEMP/install-kit"
+          sections=()
+          zip=dist/HypeProof-Studio-darwin-arm64.zip
+          if [[ -f "$zip" ]]; then
+            seeds=("$RUNNER_TEMP"/sdk-seed/claude-agent-sdk-darwin-arm64-*.tgz)
+            [[ ${#seeds[@]} -eq 1 && -f "${seeds[0]}" ]] || { echo "::error::expected one darwin-arm64 SDK seed"; exit 1; }
+            node scripts/release/install-kit.mjs render --tag "$TAG" --source-sha "$SOURCE_SHA" \
+              --product-version "$PRODUCT_VERSION" --mac-zip "$zip" --zip-sha256 "$(sha256sum "$zip" | cut -d' ' -f1)" \
+              --seed-name "$(basename "${seeds[0]}")" --seed-sha256 "$(sha256sum "${seeds[0]}" | cut -d' ' -f1)" \
+              --seeder-sha256 "$(git show "$SOURCE_SHA:scripts/seed-sdk-binary.sh" | sha256sum | cut -d' ' -f1)" \
+              --out "$out"
+            sections+=(--mac)
+            echo "macOS: curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install-mac.sh | bash" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no Mac package in $TAG; no Mac installer"
+          fi
+          if jq -e 'index("win32-x64")' <<<"$platforms" >/dev/null; then
+            exes=(dist/HypeProof.StudioUserSetup-x64-*.exe)
+            [[ ${#exes[@]} -eq 1 && -f "${exes[0]}" ]] || { echo "::error::expected one Windows per-user installer in $TAG"; exit 1; }
+            node scripts/release/install-kit.mjs render-windows --tag "$TAG" --user-setup "${exes[0]}" --out "$out"
+            sections+=(--windows)
+            printf 'Windows: irm https://github.com/%s/releases/download/%s/update-windows.cmd -OutFile "$env:TEMP\\hps-update.cmd"; & "$env:TEMP\\hps-update.cmd"\n' "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          [[ ${#sections[@]} -gt 0 ]] || { echo "no installer to attach"; exit 0; }
+          gh release upload "$TAG" "$out"/* --clobber
+          gh release view "$TAG" --json body --jq .body | node scripts/release/install-kit.mjs notes --tag "$TAG" "${sections[@]}" > "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           set -euo pipefail
           gh release view "$TAG" --json isDraft --jq .isDraft | grep -qx true
+          # Every platform of the release has its install command asset and notes section.
+          gh release view "$TAG" --json body,assets | node scripts/release/install-kit.mjs check --tag "$TAG" \
+            --platforms "$(node scripts/release/platforms.mjs list "$SOURCE_SHA")"
           gh release upload "$TAG" dist/unified-acceptance.json --clobber
           gh release edit "$TAG" --draft=false
           gh workflow run mirror-release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false

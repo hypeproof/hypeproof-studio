@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
-import {launchApp,closeApp,startFrame,chatFrame} from '../fixtures/app';
+import {launchApp,closeApp,startFrame,chatFrame,readAcrossReload} from '../fixtures/app';
+import {chatMenuAction,chooseChatModel} from '../fixtures/chat-actions';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -28,15 +29,26 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await expect(start.getByRole('button',{name:'이 활동 시작하기',exact:true})).toBeVisible();
  };
  const begin=async()=>{const start=await startFrame(ctx.win);await start.getByRole('button',{name:'이 활동 시작하기',exact:true}).click();};
- const turn=async(chat:Awaited<ReturnType<typeof chatFrame>>,root:string,marker:string)=>{
-  await chat.getByRole('combobox',{name:'대화 모델'}).selectOption('hypeproof-fast');
+ type Chat=Awaited<ReturnType<typeof chatFrame>>;
+ const turn=async(chat:Chat,root:string,marker:string)=>{
+  await chooseChatModel(chat,'hypeproof-fast');
   const prompt=`합성 릴리스 검사입니다. 이 폴더에 acceptance.md 파일을 만들고 내용은 ${marker} 한 줄만 넣어 주세요. 다른 파일을 읽거나 바꾸지 말고, 셸·브라우저·네트워크 도구도 사용하지 마세요.`;
   const input=chat.getByRole('textbox',{name:/보낼 메시지/});await input.fill(prompt);await input.press('Enter');
+  // REQ-STUDIO-FOLDER-CONSENT (#2065): a trial seat whose picked folder is outside its served
+  // home asks once per activity and folder before the first model call. A classroom seat
+  // never asks. The turn writes a file, so the synthetic learner allows everything.
+  // Since #2656 (2026-10-24) the question is a dialog in the chat panel, answered with 믿고 열기.
+  const consent=chat.locator('dialog.hps-folder-consent');
+  if(managed){
+   await expect(consent).toBeVisible({timeout:20000});
+   await consent.locator('[data-folder-full]').click();
+   await expect(consent).toHaveCount(0);
+  }
   await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});
   await expect(chat.locator('.hps-error-banner')).toHaveCount(0);
   await expect.poll(()=>existsSync(join(root,'acceptance.md'))).toBe(true);
   expect(readFileSync(join(root,'acceptance.md'),'utf8').trim()).toBe(marker);
-  turns.push({prompt,reply:await chat.locator('.hps-msg-assistant').last().innerText(),tools:await chat.locator('.hps-tool-label').allTextContents()});
+  turns.push({prompt,folder_consent:managed?'full':'not-asked',reply:await chat.locator('.hps-msg-assistant').last().innerText(),tools:await chat.locator('.hps-tool-label').allTextContents()});
  };
   writeFileSync(join(ctx.wsDir,'original-a.txt'),'synthetic activity A');
   writeFileSync(join(second,'original-b.txt'),'synthetic activity B');
@@ -52,31 +64,35 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
     input.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
   });
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);
-  await chat.getByRole('button',{name:'활동 변경',exact:true}).click();
+  await chatMenuAction(chat,'활동 변경');
   await connect(alternate);await pick(ctx.wsDir);await begin();
   const blocked=await startFrame(ctx.win);await expect(blocked.getByRole('alert')).toContainText('다른 활동');
   await ctx.win.screenshot({path:join(out,'shared-root-blocked.png')});
   await pick(second);
   const oldViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));
   await begin();
-  await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,oldViews)).toBe(0);
-  await expect.poll(()=>ctx.win.title()).toContain('activity-b');
-  // A real window reload restores B's binding; no test token is preseeded.
-  const bStart=await startFrame(ctx.win);
-await bStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  // begin() reloads the workbench into the new folder. A read inside that reload is
+  // pending, not a failure (rc.2 acceptance run 39269616136 failed exactly there).
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,oldViews),-1)).toBe(0);
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.title(),'')).toContain('activity-b');
+  // The pending activity intent resumes B directly after the real folder
+  // reload. Do not wait for the transient start page after chat has opened.
   chat=await chatFrame(ctx.win);
   await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('');
   await expect(chat.locator('.hps-attachment')).toHaveCount(0);
   if(live)await turn(chat,second,'SYNTHETIC_ACTIVITY_B_ONLY');
   await chat.getByRole('textbox',{name:/보낼 메시지/}).fill('B에서 작성 중인 합성 초안');
   await ctx.win.screenshot({path:join(out,'activity-b.png')});
-  await chat.getByRole('button',{name:'활동 변경',exact:true}).click();
+  await chatMenuAction(chat,'활동 변경');
   const list=await startFrame(ctx.win);const saved=list.getByRole('navigation',{name:'저장된 활동'}).getByRole('button');
-  await expect(saved).toHaveCount(2);await saved.filter({hasText:ctx.wsDir}).click();
+  await expect(saved).toHaveCount(2);
+  // Since #2776 (2026-10-25) a saved activity shows a short workspace; the full path is in its title (substring: macOS may prefix /private).
+  await saved.and(list.locator(`[title*=${JSON.stringify(ctx.wsDir)}]`)).click();
   const bViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));await begin();
-  await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews)).toBe(0);
-  await expect.poll(()=>ctx.win.title()).not.toContain('activity-b');
-  const aStart=await startFrame(ctx.win);await aStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews),-1)).toBe(0);
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.title(),'activity-b')).not.toContain('activity-b');
+  // Choosing saved activity A and 이 활동 시작하기 is the pending intent: like B above, A
+  // resumes straight into chat after the folder reload, with no 이어서 하기 step.
   chat=await chatFrame(ctx.win);await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('A에서 작성 중인 합성 초안');
   expect(readFileSync(join(ctx.wsDir,'original-a.txt'),'utf8')).toBe('synthetic activity A');
   expect(readFileSync(join(second,'original-b.txt'),'utf8')).toBe('synthetic activity B');
@@ -93,7 +109,8 @@ await bStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);
   const userDataDir=ctx.userDataDir;await ctx.app.close();
   ctx=await launchApp({reuseUserDataDir:userDataDir,preseedToken:false,stayOnStart:true,persistentTestSecrets:true,simpleFileDialog:true});
-  const restart=await startFrame(ctx.win);await restart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  // A stored activity bound to this server also resumes after revalidation on
+  // cold start; the assertions below still require encrypted persisted state.
   chat=await chatFrame(ctx.win);
   await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('A에서 작성 중인 합성 초안');
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);

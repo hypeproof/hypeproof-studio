@@ -84,7 +84,21 @@ digest_of() {
 }
 case "$1 ${2:-}" in
   "auth status") exit 0 ;;
-  "release view") echo "v9.9.9"; exit 0 ;;
+  "release view")
+    if [ "${STUB_MAC_ONLY_LATEST:-0}" = "1" ]; then echo "v9.9.10"; else echo "v9.9.9"; fi
+    exit 0 ;;
+  "api repos/hypeproof/hypeproof-studio-releases/releases/tags/v9.9.10")
+    # A macOS-only release: the darwin archive and nothing for Windows.
+    f="$(asset_file "$api_base/102")"
+    printf '%s\t%s\t%s\n' "$(basename "$f")" "$api_base/102" "$(digest_of "$f")"
+    exit 0 ;;
+  "api repos/hypeproof/hypeproof-studio-releases/releases?per_page=100")
+    # The release list, filtered by the script's own --jq expression through a real
+    # jq, so the expression is measured rather than mirrored by the stub.
+    filter=""; prev=""
+    for a in "$@"; do [ "$prev" = "--jq" ] && filter="$a"; prev="$a"; done
+    [ -n "$filter" ] && [ -n "${STUB_JQ:-}" ] || { echo "stub gh: list needs --jq and STUB_JQ" >&2; exit 96; }
+    "$STUB_JQ" -r "$filter" "$STUB_RELEASES"; exit $? ;;
   "api repos/hypeproof/hypeproof-studio-releases/releases/tags/v9.9.9")
     for id in 101 102 103; do
       f="$(asset_file "$api_base/$id")"
@@ -120,6 +134,9 @@ stub python3  'echo "Python 3.12.4"'
 stub jq       'echo "jq-1.7.1"'
 stub curl     'if [ "${1:-}" = "--version" ]; then echo "curl 8.7.1"; exit 0; fi; printf "%s\n" "$*" >> "$STUB_LOG/curl.log"; exit 22'
 stub defaults 'sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" "$2" | head -n1'
+# open: the installer opens Studio at the end of an interactive install. A test run
+# is unattended and uses HPS_APPS_DIR, so it must never get here; the log proves it.
+stub open     'printf "%s\n" "$*" >> "$STUB_LOG/open.log"; exit 0'
 # macOS mktemp prefers the per-user temp folder over TMPDIR, and the member path
 # never removes its fetched seeder. Keep every temp file inside this test's folder.
 stub mktemp   'case "${1:-}" in -d) exec /usr/bin/mktemp -d "$STUB_TMP/tmp.XXXXXXXXXX" ;; -t) exec /usr/bin/mktemp "$STUB_TMP/$2.XXXXXXXXXX" ;; *) exec /usr/bin/mktemp "$@" ;; esac'
@@ -206,7 +223,7 @@ else printf '%s\n' "$out"; bad "kit install failed"; fi
 if [ -f "$APPS/HypeProof Studio.app/Contents/Info.plist" ]; then pass "app copied from the kit archive"
 else bad "app was not installed"; fi
 
-for line in 'class kit verified: Studio 9.9.9' "SDK version the installed app loads: ${SDK_VERSION}" 'Already seeded and verified' 'SDK seeded (canonical seeder)' 'doctor: all manifest checks passed'; do
+for line in '설치 파일 확인' '확인 완료 (Studio 9.9.9)' "설치된 앱이 쓰는 SDK 버전: ${SDK_VERSION}" 'AI 코치 실행 파일이 이미 준비되어 있습니다' 'SDK 준비 완료' '점검(doctor): 모든 항목 통과'; do
   if printf '%s' "$out" | grep -q -F "$line"; then pass "output has: $line"
   else bad "output lacks: $line"; fi
 done
@@ -217,6 +234,16 @@ else bad "unexpected gh calls: $(gh_calls_beyond_version | tr '\n' ';')"; fi
 
 if [ -e "$LOG/curl.log" ] || [ -e "$LOG/brew.log" ]; then bad "the installer tried a download or a brew call"
 else pass "no download and no brew call"; fi
+
+if [ -e "$LOG/open.log" ]; then bad "an unattended test install tried to open Studio: $(cat "$LOG/open.log")"
+else pass "an unattended install with the HPS_APPS_DIR seam does not open Studio"; fi
+
+# A learner who is not a member reads this output: no class wording, no English
+# status lines that the Korean install used to leak (2026-10-20).
+for leak in '수업' 'HypeProof bootstrap' '(unattended mode)' 'class kit verified' 'Already seeded and verified' 'Using the verified archive'; do
+  if printf '%s' "$out" | grep -q -F -- "$leak"; then bad "output still has: $leak"
+  else pass "output no longer has: $leak"; fi
+done
 
 reset_logs
 if out="$(sandboxed "$WORK/apps-piped" STUB_GH_FORBID=1 -- bash -s -- --kit "$KIT" < "$KIT/install.sh" 2>&1)" \
@@ -309,6 +336,68 @@ for call in 'auth status' 'release view' 'releases/tags/v9.9.9' '--jq .digest' '
   if grep -q -F -- "$call" "$LOG/gh.log" 2>/dev/null; then pass "gh log has: $call"
   else bad "gh log lacks: $call (the member path changed, or the log is blind)"; fi
 done
+
+# ---------------------------------------------------------------------------- #
+echo
+echo "=== 5. A macOS-only latest release: the kit falls back for Windows ==="
+# ---------------------------------------------------------------------------- #
+# Releases can be macOS only (config/release-platforms.json). Without --version the
+# kit must pack the newest published release that has every requested platform,
+# skipping newer drafts and prereleases, in created_at order, not list order.
+REAL_JQ="$(command -v jq || true)"
+if [ -z "$REAL_JQ" ]; then
+  echo "  SKIP jq not found; the release-list filter cannot be measured"
+else
+  d() { printf '{"name":"%s","url":"%s/%s","digest":"sha256:%064d"}' "$1" \
+    "https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets" "$2" 0; }
+  rel() { printf '{"tag_name":"%s","created_at":"%s","draft":%s,"prerelease":%s,"assets":[%s]}' "$@"; }
+  MAC="$(d HypeProof-Studio-darwin-arm64.zip 102)"
+  WIN="$(d HypeProof.StudioUserSetup-x64-9.9.9.exe 103)"
+  printf '[%s,%s,%s,%s,%s]\n' \
+    "$(rel v9.9.8 2026-09-01T00:00:00Z false false "$MAC,$WIN")" \
+    "$(rel v9.9.12 2026-10-21T00:00:00Z true false "$MAC,$WIN")" \
+    "$(rel v9.9.11-rc.1 2026-10-20T00:00:00Z false true "$MAC,$WIN")" \
+    "$(rel v9.9.10 2026-10-19T00:00:00Z false false "$MAC")" \
+    "$(rel v9.9.9 2026-10-10T00:00:00Z false false "$MAC,$WIN")" > "$WORK/releases.json"
+  printf '[%s,%s,%s]\n' \
+    "$(rel v9.9.12 2026-10-21T00:00:00Z true false "$MAC,$WIN")" \
+    "$(rel v9.9.11-rc.1 2026-10-20T00:00:00Z false true "$MAC,$WIN")" \
+    "$(rel v9.9.10 2026-10-19T00:00:00Z false false "$MAC")" > "$WORK/releases-no-win.json"
+  kit_info_version() { sed -n 's/^studio_version=//p' "$1/kit-info.txt" 2>/dev/null; }
+
+  out="$(sandboxed "$WORK/apps-unused" STUB_MAC_ONLY_LATEST=1 STUB_JQ="$REAL_JQ" STUB_RELEASES="$WORK/releases.json" \
+    -- bash "$REPO_ROOT/scripts/make-class-kit.sh" --out "$WORK/kit-fallback" 2>&1)"
+  if [ "$(kit_info_version "$WORK/kit-fallback")" = "9.9.9" ] && [ -f "$WORK/kit-fallback/HypeProof.StudioUserSetup-x64-9.9.9.exe" ]; then
+    pass "latest v9.9.10 is macOS only: both-platform kit packs v9.9.9, past a newer draft and prerelease"
+  else printf '%s\n' "$out" | tail -n 5; bad "macOS-only latest did not fall back to v9.9.9 (got '$(kit_info_version "$WORK/kit-fallback")')"; fi
+  if printf '%s\n' "$out" | grep -q -- '--platform darwin-arm64'; then pass "the operator is told how to pack the newest macOS build"
+  else bad "the fallback was silent"; fi
+
+  out="$(sandboxed "$WORK/apps-unused" STUB_MAC_ONLY_LATEST=1 STUB_JQ="$REAL_JQ" STUB_RELEASES="$WORK/releases.json" \
+    -- bash "$REPO_ROOT/scripts/make-class-kit.sh" --out "$WORK/kit-mac-latest" --platform darwin-arm64 2>&1)"
+  if [ "$(kit_info_version "$WORK/kit-mac-latest")" = "9.9.10" ]; then pass "a macOS-only kit stays on the latest release v9.9.10"
+  else printf '%s\n' "$out" | tail -n 5; bad "a macOS-only kit left the latest release"; fi
+
+  reset_logs
+  out="$(sandboxed "$WORK/apps-unused" STUB_JQ="$REAL_JQ" STUB_RELEASES="$WORK/releases.json" \
+    -- bash "$REPO_ROOT/scripts/make-class-kit.sh" --out "$WORK/kit-latest-win" 2>&1)"
+  if [ "$(kit_info_version "$WORK/kit-latest-win")" = "9.9.9" ] && ! grep -q -F 'releases?per_page' "$LOG/gh.log" 2>/dev/null; then
+    pass "control: latest has Windows, so the latest is packed and the list is never read"
+  else bad "latest with Windows still read the release list"; fi
+  reset_logs
+
+  if out="$(sandboxed "$WORK/apps-unused" STUB_MAC_ONLY_LATEST=1 STUB_JQ="$REAL_JQ" STUB_RELEASES="$WORK/releases-no-win.json" \
+    -- bash "$REPO_ROOT/scripts/make-class-kit.sh" --out "$WORK/kit-no-win" 2>&1)" || [ -e "$WORK/kit-no-win" ]; then
+    bad "no release with Windows still produced a kit"
+  elif printf '%s\n' "$out" | grep -q 'No published release .* has every requested platform'; then
+    pass "negative control: no release with Windows gives a clear error and no kit"
+  else printf '%s\n' "$out" | tail -n 3; bad "no-Windows error was not clear"; fi
+
+  if out="$(sandboxed "$WORK/apps-unused" STUB_MAC_ONLY_LATEST=1 STUB_JQ="$REAL_JQ" STUB_RELEASES="$WORK/releases.json" \
+    -- bash "$REPO_ROOT/scripts/make-class-kit.sh" --out "$WORK/kit-pinned" --version 9.9.10 2>&1)" || [ -e "$WORK/kit-pinned" ]; then
+    bad "a pinned macOS-only version silently packed something else"
+  else pass "a pinned version without Windows fails instead of falling back"; fi
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then

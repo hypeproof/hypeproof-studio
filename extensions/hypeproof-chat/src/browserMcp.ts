@@ -1,3 +1,4 @@
+import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture } from "./referenceDesign.ts";
 // #282 Phase 2 slice 2 — PURE builder for the in-process "hypeproof" SDK MCP
 // server that exposes the native integrated browser (#309/#278) to the Agent
 // SDK coach as tools:
@@ -32,7 +33,8 @@
 // `node --experimental-strip-types` (smoke tests), which resolves ESM
 // specifiers literally. esbuild + tsc (allowImportingTsExtensions) accept it.
 import {
-  safeNavigateUrl,
+  BLANK_BROWSER_URL,
+  browserOpenUrl,
   isSameBrowserUrl,
   isLoopbackUrl,
   resolveLivePreviewUrl,
@@ -40,6 +42,11 @@ import {
 import { MCP_PUBLISH_SITE, PUBLISH_SITE_TOOL_NAME, type PublishSiteInput } from "./publish/publishContract.ts";
 // Type only (erased): the site-check runner's page port, which the host implements here.
 import type { SiteCheckPage } from "./siteCheckRunner.ts";
+import { classifyDenial, denialToolText } from "./denialSource.ts";
+
+/** REQ-STUDIO-DENIAL-SOURCE — this host did not wire the tool: the app/environment decided. */
+const HOST_LACKS = (feature: string): string =>
+  denialToolText({ source: "runtime", feature, reason: `이 연결에서는 ${feature} 도구가 준비되지 않았어요`, next: "코치 혼자 이어서 해 주세요" });
 
 /** Server key in the SDK `mcpServers` option → tool prefix `mcp__hypeproof__`. */
 export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
@@ -48,6 +55,9 @@ export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
 export const MCP_BROWSER_OPEN = "mcp__hypeproof__browser_open";
 export const MCP_BROWSER_SCREENSHOT = "mcp__hypeproof__browser_screenshot";
 export const MCP_LIVE_PREVIEW_START = "mcp__hypeproof__live_preview_start";
+// #3221 — PDF of a work-folder HTML page, printed by Studio's own browser (pagePdf.ts). The coach used to run Chrome's
+// binary for this, and macOS denied App Management to Studio (2026-10-29).
+export const MCP_PAGE_PDF_SAVE = "mcp__hypeproof__page_pdf_save";
 // #457 — 검사(inspect) 3종. 스크린샷만으로는 "버튼이 실제로 눌리는가"를 알 수
 // 없다. 큐시트 Loop Engineering(20:05–20:35)은 "검사 → 수정 → 재검사" 반복이고,
 // 클릭이 없으면 그 검사가 반쪽이다. 2026-07-26 실사용에서 코치가 "제가 직접
@@ -68,6 +78,12 @@ export const MCP_BROWSER_TOOLS = [
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
 ] as const;
+/**
+ * #3221 — tools granted with the browser capability that are not browser control: the Service's SDK
+ * browser contract (browser-contract.test) describes MCP_BROWSER_TOOLS, and page_pdf_save carries its
+ * own description instead.
+ */
+export const MCP_BROWSER_EXTRA_TOOLS = [MCP_PAGE_PDF_SAVE] as const;
 
 /**
  * Curriculum Runtime Experiment Browser tools (CR-04, CR-06). Granted only when the
@@ -126,6 +142,7 @@ export interface McpToolResult {
 export interface BrowserScreenshot {
   imageBase64: string;
   mimeType: string;
+  capture?: ReferenceCapture;
   url?: string;
   title?: string;
 }
@@ -155,6 +172,8 @@ export interface BrowserOpenOutcome {
  * failures into isError tool results the model can react to in Korean.
  */
 export interface BrowserMcpHost {
+  /** Current turn asks only for a general browser. This is not a capability grant. */
+  generalBrowserRequest?: boolean;
   /**
    * Open (or reveal) the integrated browser at an already-policy-checked URL.
    *
@@ -166,11 +185,19 @@ export interface BrowserMcpHost {
   screenshot(): Promise<BrowserScreenshot | null>;
   /** Ensure the #309 live server + open the browser; returns the URL or null. */
   startLivePreview(): Promise<string | null>;
+  /** #3221 — print a work-folder HTML page (path relative to the work folder) to <name>.pdf beside it. */
+  savePagePdf?(path: string): Promise<{ ok: boolean; text: string }>;
   /**
    * HEAD-check a URL before opening it, so browser_open can surface a 404
    * instead of opening a blank or error page. Optional — absent means skip check.
    */
   fetchHead?(url: string): Promise<{ ok: boolean; status: number }>;
+  /**
+   * #3425 — one coach-facing line naming a loopback server's address/port, the folder it serves and the
+   * file a visitor gets at `/` (previewServerFacts.ts). Null when nothing answers there. Optional: a host
+   * without it just omits the line.
+   */
+  previewServerFacts?(url: string): Promise<string | null>;
   /**
    * #507 — 지금 **떠 있는** 라이브 서버의 주소 (안 떠 있으면 null). 시작시키지
    * 않는다 — "주소가 뭐냐"를 묻는 것이 서버를 켜는 부작용을 가지면 안 된다.
@@ -441,10 +468,11 @@ export class SiteCheckViewports<Tab> {
 export const BROWSER_OPEN_TOOL_DEF = {
   name: "browser_open",
   description:
-    "통합 브라우저에서 URL을 연다. 학생의 라이브 프리뷰나 참고 사이트를 보여줄 때 사용. " +
-    "http(s)/localhost/file 주소만 허용되며, 실행 전 학생의 승인을 받는다. " +
+    "일반 웹 탐색이나 브라우저 열기 요청에 사용한다. URL이 없으면 url을 생략해 빈 통합 브라우저를 연다. " +
+    "브라우저만 열어 달라는 요청에 파일을 만들거나 live_preview_start를 호출하지 않는다. " +
+    "URL이 있으면 http(s)/localhost/file 주소 또는 about:blank만 허용되며, 실행 전 학생의 승인을 받는다. " +
     "이미 같은 주소가 열려 있으면 다시 열지 않는다(탭 중복·승인 모달 반복 방지).",
-  inputSchema: { type: "object" as const, properties: { url: { type: "string" } }, required: ["url"], additionalProperties: false },
+  inputSchema: { type: "object" as const, properties: { url: { type: "string" } }, required: [], additionalProperties: false },
 } as const;
 
 /**
@@ -454,6 +482,7 @@ export const BROWSER_OPEN_TOOL_DEF = {
 export const LIVE_PREVIEW_START_TOOL_DEF = {
   name: "live_preview_start",
   description:
+    "사용자가 만들거나 수정한 작업 폴더의 HTML을 미리 볼 때만 사용한다. 일반 브라우저 열기나 웹 탐색에는 browser_open을 사용한다. " +
     "학생 워크스페이스를 로컬 라이브 서버(127.0.0.1)로 서빙하고 통합 브라우저에서 연다. " +
     "파일이 바뀌면 자동 새로고침된다. 브라우저까지 열리므로 뒤이어 browser_open 을 부를 필요가 없다.",
   inputSchema: { type: "object" as const, properties: {}, required: [], additionalProperties: false },
@@ -515,12 +544,15 @@ export async function resolveAlreadyOpen(
   host: BrowserMcpHost,
   rawUrl: unknown,
 ): Promise<AlreadyOpenVerdict> {
-  const raw = safeNavigateUrl(typeof rawUrl === "string" ? rawUrl : "");
+  const raw = browserOpenUrl(rawUrl);
   if (!raw) return { url: null, current: undefined, alreadyOpen: false };
   // #507 — 추측된 루프백 포트를 **실제로 떠 있는** 라이브 서버로 교정한다.
   // 판정 함수 안에서 하는 이유: 승인 모달(canUseTool)과 핸들러가 같은 주소를
   // 봐야 한다. 갈라지면 모달에 뜬 주소와 실제로 여는 주소가 달라진다.
-  const target = resolveLivePreviewUrl(raw, (await readLivePreviewUrl(host)) ?? null);
+  let target = resolveLivePreviewUrl(raw, (await readLivePreviewUrl(host)) ?? null);
+  // #3425 — #507 corrects a *guessed* port, one nobody listens on. A port that answers is a server the
+  // learner (or a command they approved) started — e.g. `python -m http.server 9000` — and is opened as asked.
+  if (target?.redirected && (await loopbackAnswers(host, raw))) target = { url: raw, redirected: false };
   const url = target?.url ?? raw;
   const redirectedFrom = target?.redirected ? target.requested : undefined;
   const current = await readCurrentPage(host);
@@ -542,6 +574,30 @@ export async function resolveAlreadyOpen(
  * 모름과 없음을 뭉개면 안 된다: "모른다"에서 서버를 띄우거나 주소를 교정하면
  * 그게 곧 짐작이다.
  */
+/**
+ * #3425 — does a server answer at this loopback address? Any HTTP status counts (a 404 is still a server);
+ * only "no answer" (status 0, a throw, no fetchHead) is false. Never asked for a non-loopback address.
+ */
+export async function loopbackAnswers(host: BrowserMcpHost, url: string): Promise<boolean> {
+  if (!isLoopbackUrl(url) || typeof host.fetchHead !== "function") return false;
+  try {
+    return (await host.fetchHead(url)).status > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** #3425 — the served-folder line for a loopback address, or "" (no host support, not loopback, failure). */
+async function serverFactsLine(host: BrowserMcpHost, url: string): Promise<string> {
+  if (!isLoopbackUrl(url) || typeof host.previewServerFacts !== "function") return "";
+  try {
+    const line = await host.previewServerFacts(url);
+    return line ? `\n${line}` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function readLivePreviewUrl(host: BrowserMcpHost): Promise<string | null | undefined> {
   if (typeof host.livePreviewUrl !== "function") return undefined;
   try {
@@ -695,11 +751,17 @@ export function toMcpToolResult(r: {
  * correction, #415 duplicate suppression, #526 slot-displaced notice) without
  * duplicating it. The MCP server factory.tool callback delegates here.
  */
-export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise<McpToolResult> {
+export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promise<McpToolResult> {
   const { url, current, alreadyOpen, redirectedFrom } = await resolveAlreadyOpen(host, raw);
   if (!url) {
     return {
-      content: [{ type: "text", text: `이 주소는 열 수 없어요: ${raw}` }],
+      content: [{ type: "text", text: denialToolText({ source: classifyDenial("url_policy"), reason: `열 수 없는 주소예요: ${raw}` }) }],
+      isError: true,
+    };
+  }
+  if (host.generalBrowserRequest && url !== BLANK_BROWSER_URL) {
+    return {
+      content: [{ type: "text", text: "주소 없는 일반 브라우저 열기 요청이에요. 주소를 추측하지 말고 browser_open에서 url을 생략하세요." }],
       isError: true,
     };
   }
@@ -712,7 +774,7 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
       focused ?? current ?? null,
     );
   }
-  if (isLoopbackUrl(url) && (await readLivePreviewUrl(host)) === null) {
+  if (isLoopbackUrl(url) && (await readLivePreviewUrl(host)) === null && !(await loopbackAnswers(host, url))) {
     const started = await host.startLivePreview();
     if (started) {
       return withPageState(
@@ -723,7 +785,8 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
               text:
                 `${url} 은(는) 이 Studio 의 주소가 아니에요 — 라이브 서버 포트는 실행할 때마다 ` +
                 `무작위로 정해집니다. 라이브 서버를 시작하고 브라우저에 열었어요: ${started}. ` +
-                `앞으로 미리보기는 이 주소를 그대로 쓰세요(포트를 추측하거나 참가자에게 묻지 마세요).`,
+                `앞으로 미리보기는 이 주소를 그대로 쓰세요(포트를 추측하거나 참가자에게 묻지 마세요).` +
+                (await serverFactsLine(host, started)),
             },
           ],
         },
@@ -741,7 +804,7 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
       if (!head.ok) {
         return withPageState(
           {
-            content: [{ type: "text", text: `파일이 없어요: ${url} (HTTP ${head.status}). chalk_open_course로 파일을 먼저 만드세요.` }],
+            content: [{ type: "text", text: `파일이 없어요: ${url} (HTTP ${head.status}). chalk_open_course로 파일을 먼저 만드세요.${await serverFactsLine(host, url)}` }],
             isError: true,
           },
           await readCurrentPage(host),
@@ -761,13 +824,34 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
     ? `${redirectedFrom} 이 아니라 실제 라이브 서버 주소로 열었어요: ${url} ` +
       `(포트는 실행할 때마다 달라집니다 — 추측하지 말고 이 주소를 쓰세요).`
     : `브라우저에서 열었어요: ${url}`;
-  const text = replaced
+  const facts = await serverFactsLine(host, url);
+  const text = (replaced
     ? `${opened}\n` +
       `(참고: 같은 자리에 있던 ${replaced} 는 이 주소로 이동했어요 — ` +
       `결과물 1개 · 참고 사이트 1개까지만 동시에 띄울 수 있어요. ` +
       `둘을 비교하려면 번갈아 열어야 합니다.)`
-    : opened;
+    : opened) + facts;
   return withPageState({ content: [{ type: "text", text }] }, { url });
+}
+
+/** Tool name, description and JSON inputSchema for page_pdf_save (#3221). */
+export const PAGE_PDF_SAVE_TOOL_DEF = {
+  name: "page_pdf_save",
+  description:
+    "작업 폴더의 HTML 파일(.html/.htm)을 PDF로 저장한다. PDF가 필요하면 이 도구만 쓴다: Studio 안의 브라우저로 인쇄하므로 " +
+    "Chrome·wkhtmltopdf 같은 다른 앱이나 다른 앱 안의 프로그램을 실행하지 않는다(그런 실행은 막혀 있다). " +
+    "path 는 작업 폴더 기준 상대 경로이고, 결과는 같은 폴더에 같은 이름의 .pdf 로 저장된다. " +
+    "작업 폴더 밖의 파일은 저장할 수 없으니, 먼저 작업 폴더 안에 HTML을 만든다.",
+  inputSchema: { type: "object" as const, properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+} as const;
+
+/** Core handler for page_pdf_save. */
+export async function runPagePdfSave(host: BrowserMcpHost, input: { path?: unknown }): Promise<McpToolResult> {
+  const p = typeof input?.path === "string" ? input.path.trim() : "";
+  if (!p || p.length > 300) return { content: [{ type: "text", text: "path 에 작업 폴더 안 HTML 파일의 상대 경로를 적어 주세요." }], isError: true };
+  if (!host.savePagePdf) return { content: [{ type: "text", text: HOST_LACKS("PDF로 저장") }], isError: true };
+  const r = await host.savePagePdf(p);
+  return { content: [{ type: "text", text: r.text }], ...(r.ok ? {} : { isError: true }) };
 }
 
 /**
@@ -775,6 +859,12 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
  * path can reuse the same logic. The MCP server factory.tool callback delegates here.
  */
 export async function runLivePreviewStart(host: BrowserMcpHost): Promise<McpToolResult> {
+  if (host.generalBrowserRequest) {
+    return {
+      content: [{ type: "text", text: "일반 브라우저 열기 요청에는 browser_open에서 url을 생략하세요. 작업 폴더 미리보기나 파일 생성은 요청되지 않아 시작하지 않았어요." }],
+      isError: true,
+    };
+  }
   const url = await host.startLivePreview();
   if (!url) {
     return withPageState(
@@ -788,7 +878,7 @@ export async function runLivePreviewStart(host: BrowserMcpHost): Promise<McpTool
     );
   }
   return withPageState(
-    { content: [{ type: "text", text: `라이브 프리뷰를 시작하고 브라우저에 열었어요: ${url}` }] },
+    { content: [{ type: "text", text: `라이브 프리뷰를 시작하고 브라우저에 열었어요: ${url}${await serverFactsLine(host, url)}` }] },
     { url },
   );
 }
@@ -810,8 +900,8 @@ export function buildHypeproofMcpServer(
   const browserOpen = factory.tool(
     BROWSER_OPEN_TOOL_DEF.name,
     BROWSER_OPEN_TOOL_DEF.description,
-    { url: z.string() },
-    async (args) => runBrowserOpen(host, typeof args["url"] === "string" ? (args["url"] as string) : ""),
+    { url: optionalSchema(z.string()) },
+    async (args) => runBrowserOpen(host, args["url"]),
   );
 
   const browserScreenshot = factory.tool(
@@ -853,6 +943,9 @@ export function buildHypeproofMcpServer(
           content: [
             { type: "image", data: shot.imageBase64, mimeType: shot.mimeType || "image/jpeg" },
             ...(label ? [{ type: "text", text: label } as const] : []),
+            { type: "text", text: referenceCaptureText(shot.capture ?? referenceCaptureMetadata({
+              data: shot.imageBase64, mime: shot.mimeType || "image/jpeg", url: shot.url, title: shot.title,
+            })) },
           ],
         },
         // 캡처한 탭이 곧 현재 페이지. 호스트 재조회 없이 그대로 상태로 쓴다.
@@ -866,6 +959,13 @@ export function buildHypeproofMcpServer(
     LIVE_PREVIEW_START_TOOL_DEF.description,
     {},
     async () => runLivePreviewStart(host),
+  );
+
+  const pagePdfSave = factory.tool(
+    PAGE_PDF_SAVE_TOOL_DEF.name,
+    PAGE_PDF_SAVE_TOOL_DEF.description,
+    { path: z.string() },
+    async (input: { path?: unknown }) => runPagePdfSave(host, input),
   );
 
   // ── #457 검사 3종 ─────────────────────────────────────────────────────────
@@ -892,7 +992,7 @@ export function buildHypeproofMcpServer(
 
   /** cr-verify — delegated to the host's VerifySession, the one the proxy path runs (CR-03). */
   const verifyOrFail = async (name: string, input: Record<string, unknown>): Promise<McpToolResult> =>
-    host.verify ? host.verify(name, input) : { content: [{ type: "text", text: "지금은 제품 테스트를 쓸 수 없어요." }], isError: true };
+    host.verify ? host.verify(name, input) : { content: [{ type: "text", text: HOST_LACKS("제품 테스트") }], isError: true };
 
   const browserRead = factory.tool(
     "browser_read",
@@ -1018,14 +1118,14 @@ export function buildHypeproofMcpServer(
           ...(typeof z.boolean === "function" ? { check_only: optionalSchema(z.boolean()) } : {}),
         },
         async (args: Record<string, unknown>) => {
-          if (!host.publishSite) return { content: [{ type: "text", text: "지금은 홈페이지 올리기를 쓸 수 없어요." }], isError: true };
+          if (!host.publishSite) return { content: [{ type: "text", text: HOST_LACKS("홈페이지 올리기") }], isError: true };
           return host.publishSite(publishInputFromArgs(args));
         },
       ),
     );
   }
 
-  const browserTools = opts.browser === false ? [] : [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, ...crTools];
+  const browserTools = opts.browser === false ? [] : [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, pagePdfSave, ...crTools];
   return factory.createSdkMcpServer({
     name: HYPEPROOF_MCP_SERVER_NAME,
     version: "1.0.0",

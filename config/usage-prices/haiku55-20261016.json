@@ -1,0 +1,53 @@
+{
+  "schema": "hps-usage-price/1",
+  "revision": "anthropic-haiku55-standard-global-20261016-draft",
+  "publication": "approved",
+  "source": {
+    "url": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "revision": "observed-20261016",
+    "checked_at": 1792114959900
+  },
+  "provider": "anthropic",
+  "model": "claude-haiku-5-5",
+  "protocol": "anthropic-messages",
+  "service_tier": "standard",
+  "region": "global",
+  "starts_at": 1792108800000,
+  "ends_at": 1792195200000,
+  "currency": "USD",
+  "rounding": "ceil-per-meter",
+  "rates": {
+    "tokens:input": {
+      "numerator": 1,
+      "denominator": 10
+    },
+    "tokens:output": {
+      "numerator": 1,
+      "denominator": 2
+    },
+    "tokens:cache_read": {
+      "numerator": 1,
+      "denominator": 100
+    },
+    "tokens:cache_write:5m": {
+      "numerator": 1,
+      "denominator": 8
+    },
+    "tokens:cache_write:1h": {
+      "numerator": 1,
+      "denominator": 5
+    }
+  },
+  "bounds": {
+    "tokens:input": 100000,
+    "tokens:output": 4096,
+    "tokens:cache_read": 100000,
+    "tokens:cache_write:5m": 100000,
+    "tokens:cache_write:1h": 100000
+  },
+  "context_window": {
+    "min_input_tokens": 0,
+    "max_input_tokens": 100001
+  },
+  "fx": null
+}

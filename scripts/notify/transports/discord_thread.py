@@ -37,7 +37,7 @@ import httpx
 
 
 MAX_BODY = 1900   # Discord 2000-char ceiling minus safety margin
-USER_AGENT = "hypeproof-notify/0.2 (+https://github.com/jayleekr/hypeproof-harness)"
+USER_AGENT = "hypeproof-notify/0.2 (+https://github.com/hypeproof/hypeproof-harness)"
 
 
 async def send(url: str, content: str) -> tuple[int, str]:

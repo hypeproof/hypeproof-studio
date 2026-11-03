@@ -29,7 +29,7 @@ Issue #83 의 cross-platform 운영 엣지케이스 테스트 번들.
 ### 2. 이 디렉토리 위치 잡기
 
 ```
-git clone https://github.com/jayleekr/hypeproof-studio.git
+git clone https://github.com/hypeproof/hypeproof-studio.git
 cd hypeproof-studio/tests/rehearsal
 ```
 

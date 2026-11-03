@@ -20,7 +20,7 @@ PR-side counterpart of `/report-ui`. Wraps the deterministic harness
 `scripts/open-pr.sh` and adds the part a bare script can't: filling the PR
 body *with* the contributor.
 
-Repo: `jayleekr/hypeproof-studio`. Policy: **PR-first, review optional**;
+Repo: `hypeproof/hypeproof-studio`. Policy: **PR-first, review optional**;
 direct `main` push is maintainer-only (DEV-GUIDE §6).
 
 ## Preconditions

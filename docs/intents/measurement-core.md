@@ -1,7 +1,7 @@
 # 공통 측정 코어 — Product Intent
 
 상태: 개발 기준 제안, 구현·실사용 검증 전. 2026-09-13.
-Owner: jayleekr (기존 Studio capability 도메인). [Epic #1020](https://github.com/jayleekr/hypeproof-studio/issues/1020), [기준 정의 #1021](https://github.com/jayleekr/hypeproof-studio/issues/1021).
+Owner: jayleekr (기존 Studio capability 도메인). [Epic #1020](https://github.com/hypeproof/hypeproof-studio/issues/1020), [기준 정의 #1021](https://github.com/hypeproof/hypeproof-studio/issues/1021).
 
 ## Product Intent
 
@@ -48,7 +48,7 @@ Studio 내부에 있는 측정 기능만으로는 다른 AI 도구에서 수행�
 
 원격 자동 업로드, 숫자 종합점수, 다른 사람과의 순위, 모든 앱 대화 감시, ChatGPT 일반 웹 UI 확장은 P0에 포함하지 않는다. 여기서 Codex와 일반 ChatGPT 앱은 같은 호스트로 취급하지 않는다.
 
-전 멤버 설치는 P0 범위 밖이었으나 2026-10-01 Jay 결정으로 **필수**가 되었다([#1377](https://github.com/jayleekr/hypeproof-studio/issues/1377)). HypeProof 작업 저장소(studio · lab · harness) 최소 1개를 등록하고 그 이상은 자발이다. 데이터는 계측기 점검에만 쓰며 평가·보수·KPI에 쓰지 않는다. [#1249](https://github.com/jayleekr/hypeproof-studio/issues/1249) P2·P3 출시 전에는 프로필 점수를 보여주거나 비교하지 않는다. 원시 기록은 운영자(Jay)와 연구 담당(조민한 · 태봉호)이 열람할 수 있다. 이 조건의 정본은 [요구사항 §멤버 설치 의무](../requirements/measurement-core.md#멤버-설치-의무--2026-10-01-결정)다. #1377의 목적은 N=1 표본으로는 가릴 수 없는 계측기 결함을 확인하는 것이다. 이 문서의 첫 사용자와 P0 수용 기준(Jay)은 바뀌지 않는다.
+전 멤버 설치는 P0 범위 밖이었으나 2026-10-01 Jay 결정으로 **필수**가 되었다([#1377](https://github.com/hypeproof/hypeproof-studio/issues/1377)). HypeProof 작업 저장소(studio · lab · harness) 최소 1개를 등록하고 그 이상은 자발이다. 데이터는 계측기 점검에만 쓰며 평가·보수·KPI에 쓰지 않는다. [#1249](https://github.com/hypeproof/hypeproof-studio/issues/1249) P2·P3 출시 전에는 프로필 점수를 보여주거나 비교하지 않는다. 원시 기록은 운영자(Jay)와 연구 담당(조민한 · 태봉호)이 열람할 수 있다. 이 조건의 정본은 [요구사항 §멤버 설치 의무](../requirements/measurement-core.md#멤버-설치-의무--2026-10-01-결정)다. #1377의 목적은 N=1 표본으로는 가릴 수 없는 계측기 결함을 확인하는 것이다. 이 문서의 첫 사용자와 P0 수용 기준(Jay)은 바뀌지 않는다.
 
 ## 파생 계약
 
@@ -56,4 +56,4 @@ Studio 내부에 있는 측정 기능만으로는 다른 AI 도구에서 수행�
 
 이번 제품의 기본 모델은 Jay의 2026-09-13 결정에 따라 **Framing, Judgment, Orchestrate, Verify, Adapt, Ownership의 6개**로 시작한다. 제품 채택은 이번 개발에 포함하고, 관찰을 통해 정의와 경계를 계속 수정한다. 기존 7개는 역사적 기록을 읽는 legacy 모델로 보존한다.
 
-상위 [HC-01–08](../requirements/capability-model-contract.md)와 [#852](https://github.com/jayleekr/hypeproof-studio/issues/852)의 legacy·모델 계약을 따른다. 6개 모델의 제품 채택 결정은 기록하되, 구현·인간 연구·운영 데이터 정책 변경 완료로 취급하지 않는다.
+상위 [HC-01–08](../requirements/capability-model-contract.md)와 [#852](https://github.com/hypeproof/hypeproof-studio/issues/852)의 legacy·모델 계약을 따른다. 6개 모델의 제품 채택 결정은 기록하되, 구현·인간 연구·운영 데이터 정책 변경 완료로 취급하지 않는다.

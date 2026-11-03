@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 
 const {
   isDestructiveCommand,
+  isDestructiveByNormalisedWords,
   commandSignature,
   describeCommandForApproval,
   scrubSecrets,
@@ -384,12 +385,18 @@ console.log("✓ shell-policy smoke passed");
   console.log(`✓ Windows shells — ${destructive.length} destructive forms flagged, ${ordinary.length} ordinary commands not`);
 }
 
-// ─── Unix verdicts are exactly the v0.1.56 verdicts ──────────────────────────
+// ─── Unix verdicts only add to the v0.1.56 verdicts ──────────────────────────
 //
 // The Windows pass may only add flags, and only to Windows forms. The oracle is
 // isDestructiveCommand as shipped in v0.1.56 (unchanged at bcfe8ebd), copied
 // with its tables and without comments. Do not edit it to make this pass: a
 // Unix verdict that changes is a policy change and needs its own decision.
+//
+// That decision was taken once, in REQ-M4a (2026-10-20): the shell-normalised
+// pass reads quoted, escaped, env-prefixed and wrapped forms the raw-word rules
+// missed, and fails closed on what it cannot read. So the check below is
+// "never removes a v0.1.56 flag, and every flag it adds comes from that pass",
+// not equality.
 const v0156IsDestructive = (() => {
   const DESTRUCTIVE_COMMANDS = new Set([
     "rm", "rmdir", "shred", "unlink", "sudo", "su", "doas", "dd", "mkfs", "diskutil", "fdisk",
@@ -480,16 +487,25 @@ const v0156IsDestructive = (() => {
   }
 
   let flagged = 0;
+  let added = 0;
   for (const c of corpus) {
     const want = v0156IsDestructive(c);
-    if (want) flagged++;
-    assert.equal(isDestructiveCommand(c), want, `Unix verdict changed from v0.1.56: ${JSON.stringify(c)}`);
+    const got = isDestructiveCommand(c);
+    if (want) {
+      flagged++;
+      assert.equal(got, true, `a v0.1.56 flag was removed: ${JSON.stringify(c)}`);
+    } else if (got) {
+      added++;
+      assert.equal(isDestructiveByNormalisedWords(c), true, `a flag added outside the REQ-M4a pass: ${JSON.stringify(c)}`);
+    }
   }
-  // Controls on the instrument: the corpus exercises both verdicts, and the
-  // oracle is not the function under test (it does not know Windows verbs).
+  // Controls on the instrument: the corpus exercises both verdicts, the oracle
+  // is not the function under test (it does not know Windows verbs), and the
+  // added flags leave most of the old "not destructive" commands alone.
   assert.ok(flagged > corpus.length * 0.2 && flagged < corpus.length * 0.8, `corpus covers both verdicts: ${flagged}/${corpus.length}`);
   assert.equal(v0156IsDestructive("Remove-Item -Recurse -Force .\\site"), false, "oracle is the old function");
-  console.log(`✓ Unix verdicts unchanged from v0.1.56 on ${corpus.length} generated commands (${flagged} destructive)`);
+  assert.ok(added < (corpus.length - flagged) / 2, `REQ-M4a adds flags to a minority of the old passes: ${added}/${corpus.length - flagged}`);
+  console.log(`✓ Unix verdicts keep every v0.1.56 flag on ${corpus.length} generated commands (${flagged} destructive; REQ-M4a adds ${added})`);
 }
 
 // ─── Wiring: a Windows destructive command reaches the strong confirm ────────

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "repository": "jayleekr/hypeproof-studio",
+  "repository": "hypeproof/hypeproof-studio",
   "scope": "Current member feature catalog requirement families plus independent course intent #1006. Baseline docs/studio-requirements.md remains an upstream behavioral contract, not a claim of whole-product fulfillment.",
   "requirement_globs": [
     "docs/requirements/*.md"
@@ -8,7 +8,7 @@
   "excluded": {
     "docs/requirements/studio-trial.md": {
       "reason": "선택형 웹 프로토타입의 역사 기록. 현재 실제 체험은 studio-native-trial.md가 대체하며 해당 문서를 원장에 포함한다.",
-      "sha256": "a34f930b06b151b00e47be9de64e0c9e5784a6610f8b6066995c80116fa6f24d"
+      "sha256": "1c4345c878ca05c026e0a84b3d0a7e5c0afa9ed04b997d8413d2e797cf6ffaef"
     },
     "docs/requirements/local-task-review.md": {
       "reason": "#1020 로컬 검토 슬라이스의 서술형 계약. 자체 요구사항 번호 없이 measurement-core.md의 MC-07·MC-21–25·MC-27–32·MC-34–35를 구현 범위로 인용하므로, 원장은 그 상위 문서를 센다.",
@@ -36,10 +36,11 @@
         "US-15",
         "US-16",
         "US-17",
-        "US-18"
+        "US-18",
+        "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "02eae495fb5ca9f8461f2b6e1ff7371ae4cdce94d6553aa157691ac2198549cf",
+      "sha256": "fdf5adc59ddc082db1dd88edf305948adb36f5bd57d9f170d45bd66fee063401",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",
@@ -64,7 +65,7 @@
       "inline_prefixes": [
         "NAT"
       ],
-      "sha256": "d8e3d7ff928993744c29c40cc94f6829033f70bf0eaf27deb92bb3a9fb77e093",
+      "sha256": "8ae569e681a4231083d132f2ee0fb2abc1ec3bc7f0248f0df5fa5340a3f7d6fa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/studio-native-trial.md",
@@ -119,7 +120,7 @@
         "AE-44"
       ],
       "inline_prefixes": [],
-      "sha256": "5937ee5091b447061a5873ca1866cbb28c8597ee23de83e4b6a560d068137c35",
+      "sha256": "e52fa8f0e63a5068af04021d2541b9d8fec9f4249dae197f9b2cc637aa284860",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/learning-agent-experience.md",
@@ -177,7 +178,7 @@
         "VO-47"
       ],
       "inline_prefixes": [],
-      "sha256": "a87be4ad9fe7799b6588c68930af1ed73a1c502bb67d02f311538fbdf3e33944",
+      "sha256": "528d874f79c5680ba3e032c7f0aa884dc77c6f225f21bcec73b863058afd0d63",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/voice-conversation.md",
@@ -278,6 +279,7 @@
         "SAVE-01",
         "VER-01",
         "VER-02",
+        "VER-03",
         "WEB-01",
         "WEB-02",
         "WEB-03",
@@ -289,7 +291,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "768aeca0ea452e8d00a275bf5630cc915f8f54b5a865f37d3c9d26113256420c",
+      "sha256": "0b8e0222540750aabaaca330c75ccab11de46ca2e85399e4f46857c1a49d8b1f",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -383,7 +385,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "1ccc63f3d7d98f4ecee3f158b31f6394ab4e0c9c34b7383768e58033f42541a1",
+      "sha256": "bea279a4ecc66363548ffa11dd85680af21300779535f4710c8cb30b962747ab",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -418,6 +420,8 @@
         "TUX-COND-04",
         "TUX-COND-05",
         "TUX-COND-06",
+        "TUX-COND-07",
+        "TUX-COND-08",
         "TUX-COPY-01",
         "TUX-HOST-01",
         "TUX-HOST-02",
@@ -446,12 +450,19 @@
         "TUX-SP-07",
         "TUX-SP-08",
         "TUX-SP-09",
-        "TUX-SP-10"
+        "TUX-SP-10",
+        "TUX-SP-12",
+        "TUX-SP-13",
+        "TUX-SP-14",
+        "TUX-SP-15",
+        "TUX-SP-16",
+        "TUX-SP-17",
+        "TUX-SP-18"
       ],
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "6c6226c5046db764db6fffd2b8e8464d0148ee2a3004242aee5aeb81579d2289",
+      "sha256": "d9ee86f93b8d83981aaed7efd674d737902d984b1dbdf0e7159752fe1a25f8af",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -474,7 +485,7 @@
         "DES-12"
       ],
       "inline_prefixes": [],
-      "sha256": "a3562f962fc2122b500352d755038885b0d854e03b53d30bedb4785d1d794870",
+      "sha256": "f7306e50dc1bdf735c4c495371251250236f30f3a2c112d932c30b7979bc23be",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-design.md",
@@ -510,7 +521,7 @@
         "IC-06",
         "IC-07"
       ],
-      "sha256": "a37e6962b46c19453fa3d1f74a40dd8ba9d2d345109047c6f13e46f8717a30c2",
+      "sha256": "181cf22cb50c7b3b14e2a9f2093ba9ba2cecf5cf4a44f263574649d6ddbc31c2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/independent-course.md",
@@ -569,7 +580,7 @@
         "MC-48"
       ],
       "inline_prefixes": [],
-      "sha256": "69d3dd2f9666cd4098fac7ff84e961cb2a611f69e6abb12fa47a0ea81a9132b2",
+      "sha256": "6452c4b3ffc9805fa9ded6ece07050c5769c5e910972582382b8e5f54953eb91",
       "owner": "jayleekr",
       "intent": "docs/intents/measurement-core.md",
       "design": "docs/design/measurement-core.md",
@@ -669,7 +680,7 @@
       "inline_prefixes": [
         "SX"
       ],
-      "sha256": "d41b8a55499baee011bcf2efebad8940521724c6f82ba8891878ff65aa194048",
+      "sha256": "6fece3ab5c2a3d7fd862b9888c139a8f4c43be000203bb160255fa372e994672",
       "owner": "jayleekr",
       "intent": "docs/intents/studio-learning-experience.md",
       "design": "docs/design/studio-learning-experience.md",
@@ -764,7 +775,7 @@
         "CR-84"
       ],
       "inline_prefixes": [],
-      "sha256": "52990af1bed3e94aedeb282d254aaaa152702006cf53a21909205c5e2328503e",
+      "sha256": "136af3fbc84940769f34ac722544aa4d9b31e3e9dc81524990ff0cd35bf7cc3f",
       "owner": "jayleekr",
       "intent": "docs/intents/curriculum-runtime.md",
       "design": "docs/plan/curriculum-runtime.md",
@@ -780,10 +791,16 @@
         "PRA-05",
         "PRA-06",
         "PRA-07",
-        "PRA-08"
+        "PRA-08",
+        "PRA-09",
+        "PRA-11",
+        "PRA-12",
+        "PRA-13",
+        "PRA-14",
+        "PRA-15"
       ],
       "inline_prefixes": [],
-      "sha256": "20204f24829ec89d30058fa9f020e7c2b5c63baa73fba95bae90781e89b66e9f",
+      "sha256": "1ca6952bc8b5ea4bd0a24336b57ab1ee1834ea7f92a3cef764b2a3ed5863078e",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -836,6 +853,51 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/workplace-automation-journey.md",
       "test": "docs/requirements/workplace-automation-journey.md"
+    },
+    {
+      "path": "docs/requirements/personal-claude-continuation.md",
+      "ids": [
+        "PCC-01",
+        "PCC-02",
+        "PCC-03",
+        "PCC-04",
+        "PCC-05",
+        "PCC-06",
+        "PCC-07",
+        "PCC-08"
+      ],
+      "inline_prefixes": [],
+      "sha256": "7b6c93345c77a55770c2224d371f6cc43ce3847d9961dd0e188572df2d80aa65",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/personal-claude-continuation.md",
+      "test": "docs/testing/personal-claude-continuation.md"
+    },
+    {
+      "path": "docs/requirements/desktop-mobile-companion.md",
+      "ids": [
+        "DMC-01",
+        "DMC-02",
+        "DMC-03",
+        "DMC-04",
+        "DMC-05",
+        "DMC-06",
+        "DMC-07",
+        "DMC-08",
+        "DMC-09",
+        "DMC-10",
+        "DMC-11",
+        "DMC-12",
+        "DMC-13",
+        "DMC-14",
+        "DMC-15"
+      ],
+      "inline_prefixes": [],
+      "sha256": "e446ded7df91bb55a80a06e5ac35a8dd74fcd38a2083858927898dd0a20ec6c0",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/plan/desktop-mobile-companion.md",
+      "test": "docs/testing/desktop-mobile-companion.md"
     }
   ],
   "work_items": [
@@ -1926,7 +1988,8 @@
             "US-15",
             "US-16",
             "US-17",
-            "US-18"
+            "US-18",
+            "US-19"
           ]
         }
       ],
@@ -2029,6 +2092,8 @@
             "TUX-COND-04",
             "TUX-COND-05",
             "TUX-COND-06",
+            "TUX-COND-07",
+            "TUX-COND-08",
             "TUX-COPY-01",
             "TUX-HOST-01",
             "TUX-HOST-02",
@@ -2057,7 +2122,14 @@
             "TUX-SP-07",
             "TUX-SP-08",
             "TUX-SP-09",
-            "TUX-SP-10"
+            "TUX-SP-10",
+            "TUX-SP-12",
+            "TUX-SP-13",
+            "TUX-SP-14",
+            "TUX-SP-15",
+            "TUX-SP-16",
+            "TUX-SP-17",
+            "TUX-SP-18"
           ]
         }
       ],
@@ -3861,7 +3933,8 @@
             "PRA-03",
             "PRA-04",
             "PRA-05",
-            "PRA-06"
+            "PRA-06",
+            "PRA-09"
           ]
         }
       ],
@@ -3878,12 +3951,15 @@
         "scripts/install.ps1",
         "scripts/install-mac.sh",
         "scripts/install-win.ps1",
-        ".github/workflows/requirement-work.yml"
+        ".github/workflows/requirement-work.yml",
+        "scripts/make-class-kit.sh"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/update-transport.smoke.mjs",
         "scripts/tests/install-win-fixture.ps1",
-        "scripts/tests/bootstrap-win-private-fixture.ps1"
+        "scripts/tests/bootstrap-win-private-fixture.ps1",
+        "scripts/tests/win-release-set.ps1",
+        "scripts/test-installer-kit.sh"
       ]
     },
     {
@@ -3918,6 +3994,133 @@
       "verification_inputs": [
         "scripts/test-installer-kit.sh",
         "scripts/tests/install-kit-fixture.ps1"
+      ]
+    },
+    {
+      "id": "installer-sdk-seed-fail-closed",
+      "title": "macOS installer fails closed on a missing SDK seed",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-11"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.sh change; run one member and one kit install on a clean Mac with registry.npmjs.org blocked and confirm the doctor stops with the stage and recovery command.",
+      "design_delta": "seed_sdk records the stage it stopped at; the doctor fails on a missing claude.verified.json with a Korean stop message naming that stage and the recovery command, matching install.ps1; the self-heal warning is removed.",
+      "positive_control": "A seeder that writes the verified marker passes the doctor with exit 0, as a member and as a kit; on Linux a failed seed leaves the doctor at exit 0 without a stop message or a claim that the install will stop (scripts/test-installer-sdk-seed.sh).",
+      "negative_control": "A seeder that fails, cannot be obtained, or exits 0 without a marker makes the doctor exit non-zero with the stage and recovery command, for a member and a kit; no installer text claims Studio repairs the SDK.",
+      "evidence_required": "Studio commit and the script test output. A real clean-Mac install with the seed blocked is required before completion; a stubbed seeder is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "docs/INSTALL-CLASS-KIT.ko.md"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-sdk-seed.sh"
+      ]
+    },
+    {
+      "id": "installer-korean-copy",
+      "title": "Learner-facing installer prompts, headers and doctor verdict in Korean",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-13"
+          ]
+        }
+      ],
+      "depends_on": [
+        "installer-sdk-seed-fail-closed"
+      ],
+      "next_action": "Merge after the SDK seed fail-closed change; run one Mac install without Homebrew and one Windows install without Git Bash and confirm the consent prompts, step headers and doctor verdict read in Korean.",
+      "design_delta": "install.sh and install.ps1 ask the Homebrew, nvm and WSL questions, print step headers, the doctor verdict and the final line in Korean, with Korean answer hints; tool output and diagnostic log lines stay as they are. Both installers read Korean and Korean-IME answers (아니요, ㄴ, ㅜ / 네, ㅇ, ㅛ) the way the learner meant; a not-understood answer is asked again and, after three tries, taken as no.",
+      "positive_control": "Korean prompts and headers that keep tool names pass, and both shipped installers pass with at least their known number of prompts and headers (scripts/test-check-installer-korean.py). Every yes answer, Korean, IME jamo or English, and Enter on a default-yes question is read as yes by both shipped parsers (scripts/test-installer-answers.sh).",
+      "negative_control": "English confirm/Confirm-Or/Read-Host prompts, step headers, [Y/n] answer hints and doctor verdicts are rejected (scripts/test-check-installer-korean.py). Every no answer, including 아니요 (which the old install.sh read as yes and so installed Homebrew), is read as no, and a not-understood answer is never read as yes (scripts/test-installer-answers.sh).",
+      "evidence_required": "Studio commit and the static check output. A real install on each platform is required before completion; a static check is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/check-installer-korean.py"
+      ],
+      "verification_inputs": [
+        "scripts/test-check-installer-korean.py",
+        "scripts/test-installer-answers.sh",
+        "scripts/test-installer-kit.sh"
+      ]
+    },
+    {
+      "id": "installer-windows-posix-shell-detect",
+      "title": "Windows installer finds user-scope Git Bash and rejects the bare WSL stub",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-12"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.ps1 change; run the manual winget-git-user-scope job once and install on a real Windows PC with only user-scope Git to confirm the doctor passes without the WSL offer.",
+      "design_delta": "Find-GitBash checks Program Files, %LOCALAPPDATA%\\Programs\\Git and the Git root of git.exe on PATH, never System32 bash.exe; WSL counts only when wsl -l -q exits 0 and lists a distribution.",
+      "positive_control": "Machine-scope Git, user-scope Git, a custom Git root from PATH and a WSL distro each pass the doctor (scripts/tests/install-posix-shell.Tests.ps1, mocked paths).",
+      "negative_control": "No Git with only the wsl.exe stub fails the doctor and still reaches the WSL offer; System32 bash.exe is not accepted as Git Bash; against the previous implementation the user-scope and stub cases fail.",
+      "evidence_required": "Studio commit, the Pester output, and the winget-git-user-scope job log. A real Windows install with user-scope Git is required before completion; mocked paths are not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.ps1",
+        ".github/workflows/private-installers.yml"
+      ],
+      "verification_inputs": [
+        "scripts/tests/install-posix-shell.Tests.ps1"
+      ]
+    },
+    {
+      "id": "installer-newcomer-output",
+      "title": "macOS installer writes PATH to the login shell rc, speaks to a newcomer and opens Studio at the end",
+      "issue": 2134,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-14",
+            "PRA-15"
+          ]
+        }
+      ],
+      "depends_on": [
+        "installer-korean-copy"
+      ],
+      "next_action": "Ship in the next Studio release, then run one Mac install from the release one-liner on a zsh account and confirm ~/.zprofile gets the PATH line, the output has no class or English status lines, and Studio opens once.",
+      "design_delta": "install.sh reads the account login shell (dscl/getent, $SHELL as fallback) for the PATH rc: zsh -> ${ZDOTDIR:-~}/.zprofile without duplicating a legacy ~/.zshrc line. The kit step is neutral, happy-path and seeder progress lines are Korean, Homebrew runs without auto-update or env hints, the PATH hint appears only after a PATH change, and an interactive macOS run opens Studio unless HPS_NO_OPEN=1, CI or the test seam is set.",
+      "positive_control": "A zsh account run under SHELL=/bin/bash gets ~/.zprofile; a bash account gets ~/.bash_profile whatever $SHELL says; ZDOTDIR is honoured; one PATH line after two runs; an interactive run calls a stub open -a once (scripts/test-installer-rc.sh).",
+      "negative_control": "The old $SHELL-only rule picks ~/.bash_profile for a zsh account (13 expected FAILs against the previous install.sh); unattended, CI, test-seam, HPS_NO_OPEN=1 and missing-app runs never call open; the kit install output has no class wording or old English lines and never calls open (scripts/test-installer-rc.sh, scripts/test-installer-kit.sh).",
+      "evidence_required": "Studio commit and the installer test output. A real Mac install from a published release is required before completion; a stubbed test is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/seed-sdk-binary.sh",
+        "scripts/release/templates/install-mac.sh"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-rc.sh",
+        "scripts/test-installer-kit.sh",
+        "scripts/release/test/install-kit.test.mjs"
       ]
     },
     {
@@ -4047,6 +4250,173 @@
       ],
       "verification_inputs": [
         "docs/requirements/workplace-automation-journey.md"
+      ]
+    },
+    {
+      "id": "chalk-confirm-instruction-diff",
+      "title": "확정 전 안내 문구 줄 비교 (CGP-AGENT-R-016)",
+      "issue": 2118,
+      "kind": "implementation",
+      "feature_ids": [
+        "design-session"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "ids": [
+            "VER-03"
+          ]
+        }
+      ],
+      "depends_on": [
+        "rehearsal"
+      ],
+      "next_action": "Review and merge feat/cgp-chalk-diff. Then add the Service half: the confirmation route rejects a compared_with that is not the newest confirmed version, and /versions exposes the newest confirmed version so a long course is not locked. Then build the grouped per-field change list of R-016.",
+      "design_delta": "The confirm step diffs the candidate's step titles and instructions against the newest confirmed version, client-side from existing reads (Myers line diff, CRLF/NFC/trailing-newline normalised, folds over 3 unchanged lines, whitespace-only pairs labelled, >2000 edits reported as skipped). Confirm stays locked while the diff loads, fails, has an unexpected shape, or the base cannot be proven; the base is re-read right before confirm and sent as compared_with.",
+      "positive_control": "Identical text draws no rows; a normal edit draws +/− rows with 추가/삭제 spoken words, underline/strike and a fold; a complete version list with no confirmed version is a first confirmation and does not lock (chalk/test/instruction-diff.test.mjs, e2e/chalk-authoring/confirm-diff.mjs).",
+      "negative_control": "A failed or malformed base read, or a truncated list without a confirmed version, keeps confirm locked; a base confirmed elsewhere after the review refuses the confirm and re-diffs; markup in lesson text never renders; a 3000-line lesson with two edits is not drawn as a full replace.",
+      "evidence_required": "Studio commit, unit and browser test output with the mutation list, screenshots at 1280/800px. The Service-side compared_with check and a real instructor confirm are separate evidence.",
+      "implementation_paths": [
+        "chalk/src/lib/instruction-diff.ts",
+        "chalk/src/ui/authoring.html",
+        "chalk/src/index.ts"
+      ],
+      "verification_inputs": []
+    },
+    {
+      "id": "class-join-link",
+      "title": "Chalk class join link opens the Studio join form; the code is never in the link (CGP-SHELL-R-005)",
+      "issue": 2123,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "ids": [
+            "ADM-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Review and merge feat/cgp-join-link; then open a Chalk-copied link in an installed Studio (macOS and Windows) during a turn, with another class stored, and with a malformed link, and record the screens.",
+      "design_delta": "Chalk /manage copies hypeproof-studio://hypeproof.hypeproof-chat/join?class=<cohort id> (no code). Studio's single URI handler reads only `class` ([A-Za-z0-9_-]{1,128}), logs only a count of ignored parameters, keeps one confirm in flight, and opens the ordinary join form with the class named; the learner types the code and starts the class themselves.",
+      "positive_control": "A valid link preselects the class with an empty focused code field and no fetch or write; the linked class's code previews as usual; Chalk copies the class-only link (128-character id accepted).",
+      "negative_control": "code=/token=/identity parameters and name-position values never leave the parser or the log; 13 malformed links refused; ten links in a row give one dialog; declining opens nothing; another class's code on the link form is refused before any Service call; leaving the form drops the link; Chalk refuses invalid ids and never adds a code.",
+      "evidence_required": "Studio commit, extension/Chalk test output (join-link.smoke.mjs, chalk/test/join-link.test.mjs, e2e/start-page/join-link.mjs) and screenshots. An installed-app URL dispatch on macOS and Windows is required before completion; the Chromium webview run is not an installed-app result.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/joinLink.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "chalk/src/ui/manage.html"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/join-link.smoke.mjs",
+        "chalk/test/join-link.test.mjs",
+        "e2e/start-page/join-link.mjs"
+      ]
+    },
+    {
+      "id": "personal-claude-customer-continuation",
+      "title": "Preserve personal work through reviewed official Claude Code handoff",
+      "issue": 2485,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/personal-claude-continuation.md",
+          "ids": [
+            "PCC-01",
+            "PCC-02",
+            "PCC-03",
+            "PCC-04",
+            "PCC-05",
+            "PCC-06",
+            "PCC-07",
+            "PCC-08"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Integrate the reviewed public manual handoff, then verify its clipboard and same-task import in an isolated installed Studio. Keep automatic subscription inference Dev-only until provider distribution eligibility is confirmed. Do not record native/customer acceptance from synthetic checks.",
+      "design_delta": "After an eligible personal free end card, review selected text and explicitly copy it to the clipboard; independently use the official client and explicitly import a reply. Automated text-only calls require exact Dev identity plus opt-in, with account/payload consent and no tools or fallback.",
+      "positive_control": "Eligible personal free task copies exactly the reviewed selected payload once and explicitly imports one reply into that same task; Dev identity plus opt-in activates the isolated experimental adapter.",
+      "negative_control": "Minor/class/paid or stale seats, changed task or credential, unchecked/expired/reused consent, wrong nonce and cancelled callbacks cannot transfer or append; public Studio never inspects or invokes the CLI, even with the experiment environment flag.",
+      "evidence_required": "Exact source, focused host/CLI/entry controls and headless browser evidence; separately record installed-app clipboard and task persistence. Real provider use and automated distribution approval are separate, currently blocked/unrun boundaries.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/personalContinuation",
+        "extensions/hypeproof-chat/src/personalContinuationHost.ts",
+        "extensions/hypeproof-chat/src/personalContinuationView.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-continuation-core.smoke.mjs",
+        "extensions/hypeproof-chat/test/personal-continuation-cli.smoke.mjs",
+        "extensions/hypeproof-chat/test/customer-claude-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/trial-end-card-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/trial-end-card-dismiss.test.tsx",
+        "e2e/customer-claude/run.mjs"
+      ]
+    },
+    {
+      "id": "desktop-mobile-companion",
+      "title": "Desktop-owned workspace and bounded mobile companion acceptance",
+      "issue": 2803,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/desktop-mobile-companion.md",
+          "ids": [
+            "DMC-01",
+            "DMC-02",
+            "DMC-03",
+            "DMC-04",
+            "DMC-05",
+            "DMC-06",
+            "DMC-07",
+            "DMC-08",
+            "DMC-09",
+            "DMC-10",
+            "DMC-11",
+            "DMC-12",
+            "DMC-13",
+            "DMC-14",
+            "DMC-15"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Routing, workspace preparation and selected-artifact dispatch have bounded source/fixture evidence; preparation also has isolated native evidence with a synthetic profile. Preserve both mappings. Full DMC-1 ownership/capabilities and connected DMC-3 remain open. Integrate authenticated host authority, explicit current-scope consent and bounded Service/mobile transport without treating preparation or pairing as execution authority. Preserve cloud-record experiments and do not close Studio #2803/#3072 for these partial seams.",
+      "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
+      "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
+      "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
+      "evidence_required": "Exact source and test contracts; actual Service/host/mobile transport plus persistence and device evidence. Routing-unit tests alone do not fulfill any complete DMC requirement. Real classroom/adult external-effect acceptance is separate.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/companionRouting.ts",
+        "extensions/hypeproof-chat/src/companionHostDispatch.ts",
+        "extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+        "extensions/hypeproof-chat/src/fileAttachment.ts",
+        "extensions/hypeproof-chat/src/companionWorkspace.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/src/companionRouting.ts",
+        "extensions/hypeproof-chat/test/companion-routing.smoke.mjs",
+        "scripts/companion-routing-demo.mjs",
+        "extensions/hypeproof-chat/src/companionHostDispatch.ts",
+        "extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+        "extensions/hypeproof-chat/src/fileAttachment.ts",
+        "extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs",
+        "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs",
+        "extensions/hypeproof-chat/test/file-attachment.smoke.mjs",
+        "extensions/hypeproof-chat/src/companionWorkspace.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
+        "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
+        "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
       ]
     }
   ]

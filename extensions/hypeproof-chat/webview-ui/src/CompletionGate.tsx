@@ -9,6 +9,7 @@
 // draws them.
 
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
+import { ChatIcon } from "./ChatDetails";
 
 export function CompletionGate(props: { learning: LearningStatePayload; onSubmit: () => void }) {
   const { learning } = props;
@@ -19,7 +20,7 @@ export function CompletionGate(props: { learning: LearningStatePayload; onSubmit
     <div className="hp-complete">
       {submitted ? (
         <p className="hp-complete-done" role="status" data-task-phase={learning.phase}>
-          <span className="hp-mark" aria-hidden="true">☑</span>
+          <span className="hp-mark"><ChatIcon kind="check-square" size={16} /></span>
           <span>이 과제를 제출했어요</span>
         </p>
       ) : (
@@ -34,7 +35,7 @@ export function CompletionGate(props: { learning: LearningStatePayload; onSubmit
       {!submitted && !learning.complete.ok && learning.complete.reasons.length > 0 && (
         <ul className="hp-complete-why">
           {learning.complete.reasons.map((reason) => (
-            <li key={reason}>☐ {reason}</li>
+            <li key={reason}><ChatIcon kind="square" size={16} /> {reason}</li>
           ))}
         </ul>
       )}

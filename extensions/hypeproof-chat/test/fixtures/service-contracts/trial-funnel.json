@@ -1,0 +1,1116 @@
+{
+  "schema": "studio-consumer-fixture/trial-funnel/1",
+  "provenance": {
+    "repository": "hypeproof/hypeproof-service",
+    "branch": "feat/conv-funnel-events-first10",
+    "commit": "03e225b",
+    "note": "Captured from the Service branch commit by running its parseAppEvent (samples[].accepted is the real parser verdict). Regenerate when the Service contract changes.",
+    "sources": {
+      "worker/src/lib/trial-funnel.ts": "e5e326b27c8a208e45dc3c2b4e60a6ab9d13d3a18005d452500024e129d9875b",
+      "worker/src/routes/trial-events.ts": "958c3d873e02d977265c94f97205237c1796a3b42ad04a599fab1ad6b5fe2a0c",
+      "worker/src/index.ts": "ccac852f330bc1ad6b5d7e46421ec02e1accfe2f06b1ea372e983981d73913a6"
+    }
+  },
+  "route": {
+    "mount": "/v1/trial",
+    "path": "/v1/trial/events",
+    "send": "POST",
+    "discovery": "GET",
+    "body_max_bytes": 2048,
+    "top_level_keys": [
+      "type",
+      "fields"
+    ]
+  },
+  "probe": {
+    "status": 200,
+    "body": {
+      "schema": "hps-trial-funnel/1",
+      "events": [
+        "trial_entry",
+        "trial_tool_result",
+        "offer_viewed",
+        "offer_clicked",
+        "offer_dismissed",
+        "pass_list_viewed",
+        "checkout_opened",
+        "sign_in_started",
+        "sign_in_completed"
+      ]
+    }
+  },
+  "probe_off": {
+    "status": 404,
+    "body": {
+      "error": {
+        "message": "not found",
+        "type": "not_found"
+      }
+    }
+  },
+  "version_re": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$",
+  "app_events": {
+    "trial_entry": {
+      "outcome": {
+        "kind": "enum",
+        "values": [
+          "granted",
+          "reused",
+          "signed_in"
+        ],
+        "required": true
+      },
+      "app_version": {
+        "kind": "version",
+        "required": false
+      },
+      "os": {
+        "kind": "enum",
+        "values": [
+          "darwin",
+          "win32",
+          "linux"
+        ],
+        "required": false
+      }
+    },
+    "trial_tool_result": {
+      "kind": {
+        "kind": "enum",
+        "values": [
+          "write",
+          "edit",
+          "preview",
+          "publish"
+        ],
+        "required": true
+      },
+      "ok": {
+        "kind": "bool",
+        "required": true
+      }
+    },
+    "offer_viewed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page"
+        ],
+        "required": true
+      }
+    },
+    "offer_clicked": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page"
+        ],
+        "required": true
+      }
+    },
+    "offer_dismissed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page"
+        ],
+        "required": true
+      }
+    },
+    "pass_list_viewed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "checkout_opened": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "sign_in_started": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "sign_in_completed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    }
+  },
+  "samples": [
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.61-rc.2"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "0.1.61-rc.2"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "2026.1019.0"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.61-rc.2"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "0.1.61-rc.2"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "2026.1019.0"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "win32"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.60",
+          "os": "linux"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.61-rc.2"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "0.1.61-rc.2"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "2026.1019.0"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": true
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": true
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": false
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": false
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "edit",
+          "ok": true
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "edit",
+          "ok": true
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "edit",
+          "ok": false
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "edit",
+          "ok": false
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "preview",
+          "ok": true
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "preview",
+          "ok": true
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "preview",
+          "ok": false
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "preview",
+          "ok": false
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "publish",
+          "ok": true
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "publish",
+          "ok": true
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "publish",
+          "ok": false
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "publish",
+          "ok": false
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_clicked",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_clicked",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_clicked",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_clicked",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_dismissed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_dismissed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "offer_dismissed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "offer_dismissed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "event": "trial_entry_viewed",
+        "app_version": "0.1.60",
+        "os": "mac"
+      },
+      "accepted": false,
+      "message": "unknown key: event"
+    },
+    {
+      "body": {
+        "type": "trial_entry_viewed",
+        "fields": {
+          "app_version": "0.1.60",
+          "os": "mac"
+        }
+      },
+      "accepted": false,
+      "message": "unknown event type"
+    },
+    {
+      "body": {
+        "type": "trial_age_answered",
+        "fields": {
+          "age_band": "14_17"
+        }
+      },
+      "accepted": false,
+      "message": "unknown event type"
+    },
+    {
+      "body": {
+        "type": "account_sign_in_started",
+        "fields": {}
+      },
+      "accepted": false,
+      "message": "unknown event type"
+    },
+    {
+      "body": {
+        "type": "account_sign_in_completed",
+        "fields": {}
+      },
+      "accepted": false,
+      "message": "unknown event type"
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "start_page",
+          "guardian": false
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: guardian"
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "os": "mac"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: os"
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "dev"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: app_version"
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "20261.1019.0"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: app_version"
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "refused"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: outcome"
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "bash",
+          "ok": true
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: kind"
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": "yes"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: ok"
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "fields": {
+          "kind": "write",
+          "ok": true,
+          "file_path": "/x/index.html"
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: file_path"
+    },
+    {
+      "body": {
+        "type": "trial_tool_result",
+        "kind": "write",
+        "ok": true
+      },
+      "accepted": false,
+      "message": "unknown key: kind"
+    },
+    {
+      "body": {
+        "type": "trial_first_message",
+        "fields": {}
+      },
+      "accepted": false,
+      "message": "unknown event type"
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "chat"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: surface"
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "menu"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: surface"
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card",
+          "product_id": "lite"
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: product_id"
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card",
+          "account_id": "acct-1"
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: account_id"
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {}
+      },
+      "accepted": false,
+      "message": "missing field: surface"
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        },
+        "order_id": "ord-1"
+      },
+      "accepted": false,
+      "message": "unknown key: order_id"
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: surface"
+    }
+  ]
+}

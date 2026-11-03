@@ -15,6 +15,7 @@
 //
 // Run: node --experimental-strip-types test/student-goal.smoke.mjs
 
+import "./goal-status-css.smoke.mjs";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import vm from "node:vm";
@@ -350,7 +351,14 @@ function makeHost(context, profile, provider = proto) {
     getCoach: () => ({ name: "코치", personality: "", configured: true }),
     // postConfig asks whether the one-click publish button may show (src/publish/).
     sitePublisher: () => ({ available: () => false }),
+    // CGP-ART-R-001 — postConfig re-posts the annotation tray state (off and never shown here: no message).
+    postAnnotations: () => {},
+    // CGP-KNOW-D-015 — postConfig narrows the preview header's file grant.
+    preview: { setAskAboutFileEnabled() {} },
+    // CGP-KNOW-R-029 — postConfig says whether this seat may open a "기록 없이 묻기" task.
+    temporaryTaskAllowed: () => false,
     post: async (msg) => { posts.push(msg); return true; },
+    handleSend: (...args) => effects.push(["runtime-send", ...args]),
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.
     spool: { recordWorkflow: (r) => effects.push(["spool", r.event]) },
     opsObserver: { lessonStep: (...a) => effects.push(["ops.lessonStep", ...a]) },
@@ -396,6 +404,28 @@ async function twoViewsSave(module) {
 }
 
 try {
+  await test("host: goal status is learner-only, scoped, persisted and never starts a turn", async () => {
+    const store = new Map();
+    const context = new ActivityConnections(raw(root, store)).wrap();
+    const {host, posts, effects} = makeHost(context, profileA);
+    // A direct host-method probe covers the recheck after the serialized queue starts.
+    const scope = null;
+    const request = {type:"goalSave", activityId:scope, lesson:LESSON_A.sha256, goal:GOAL, criteria:[], base:0, status:"complete", requestId:"status-1"};
+    await proto.handleMessage.call(host, request);
+    assert.equal(goalStates(posts).at(-1).view.status, "complete");
+    assert.equal(G.goalViewOf(LESSON_A, scope, store.get(G.STUDENT_GOAL_KEY)).status, "complete");
+    assert.deepEqual(effects, [], "goal status is not task completion or a runtime send");
+    const before = JSON.stringify([...store]);
+    for (const invalid of [{...request,base:1,activityId:undefined}, {...request,base:1,activityId:"old-activity"}, {...request,base:1,lesson:LESSON_B.sha256}, {...request,base:1,status:"model_says_done"}]) {
+      await proto.saveGoal.call(host, invalid);
+      assert.ok(goalStates(posts).at(-1).error);
+      assert.equal(JSON.stringify([...store]), before);
+    }
+    host._instructorMode.isInstructor = true;
+    await proto.saveGoal.call(host, {...request,base:1,status:"active"});
+    assert.ok(goalStates(posts).at(-1).error);
+    assert.equal(JSON.stringify([...store]), before, "instructor cannot change learner status");
+  });
   await test("host: a save is stored for this lesson and activity and every chat view gets the same goal", async () => {
     const { host, posts } = makeHost(ctxA, profileA);
     await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: GOAL, criteria: CRITERIA, base: 0, requestId: "kq1-first" });
@@ -692,8 +722,8 @@ await test("screen: the open editor holds the stored goal and saves only a chang
     return m ? !!m[1] : null;
   };
   const same = await render(fields);
-  assert.match(same, new RegExp(`<textarea maxLength="${G.GOAL_TEXT_MAX}" rows="2">${GOAL}</textarea>`), "the goal field does not hold the stored goal");
-  assert.ok(same.includes(`<textarea rows="3">${CRITERIA.join("\n")}</textarea>`), "the criteria field does not hold the stored criteria");
+  assert.match(same, new RegExp(`<textarea name="goal" maxLength="${G.GOAL_TEXT_MAX}" rows="2">${GOAL}</textarea>`), "the goal field does not hold the stored goal");
+  assert.ok(same.includes(`<textarea name="criteria" rows="3">${CRITERIA.join("\n")}</textarea>`), "the criteria field does not hold the stored criteria");
   assert.equal(disabled(same), true, "nothing changed, yet the save button can be pressed");
   assert.equal(disabled(await render({ ...fields, goal: "새 목표" })), false, "a change cannot be saved");
   assert.equal(disabled(await render({ ...fields, goal: "새 목표" }, true)), true, "a second save while the first is unanswered");

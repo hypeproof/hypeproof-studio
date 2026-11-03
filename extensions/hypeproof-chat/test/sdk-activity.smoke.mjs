@@ -67,8 +67,9 @@ const apiRetry = (error_status) => ({
 
 // ─── extractSdkActivity: tool_result (user 메시지로 되돌아온다) ─────────────
 {
+  // REQ-STUDIO-DELEGATION-ROW — the raw result rides along (read only for a delegation's final response).
   assert.deepEqual(extractSdkActivity(userBlocks({ type: "tool_result", tool_use_id: "toolu_1", content: "ok" })), [
-    { kind: "tool_result", id: "toolu_1", isError: false },
+    { kind: "tool_result", id: "toolu_1", isError: false, content: "ok" },
   ]);
   // 실패도 '진행'이다 — 읽기전용 경로에 막힌 Write 는 반드시 ⚠️ 로 보여야 한다.
   assert.deepEqual(

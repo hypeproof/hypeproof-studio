@@ -1,0 +1,26 @@
+/* CGP-LEARN-R-016 (CGP-LEARN-D-016): one coach run state in the chat header. A static 20px stroke
+   icon and a text label at the 14px floor; the colour is only reinforcement, the words carry the state. */
+.hps-run-state {
+  display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--ds-c-studio-coachrunstate-space-2);
+  min-width: 0; white-space: nowrap;
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default);
+}
+.hps-run-state > .hps-icon { flex: 0 0 auto; }
+.hps-run-state[data-run-state="approval"], .hps-run-state[data-run-state="error"] { color: var(--hp-text-primary-default); }
+.hps-run-state[data-run-state="approval"] > .hps-icon { color: var(--hp-text-accent-default); }
+.hps-run-state[data-run-state="error"] > .hps-icon { color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
+/* A narrow pane has no room for the words beside the header's controls: the state takes a band of
+   its own under them, so its words are never cut and the page never scrolls. The band is reserved as
+   the header's bottom padding and the state is placed in it, out of the flex row. The row itself does
+   not wrap: a wrapping row breaks lines on the items' natural widths before the title can shrink, so
+   a wider font or a longer title would drop the menu to a second row. Without wrapping, the controls
+   share one row exactly as they do without a run state. */
+@media (max-width: 480px) {
+  .tw-heading:has(.hps-run-state), .hps-header:has(> .hps-run-state) {
+    position: relative;
+    padding-bottom: calc(var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2));
+  }
+  .tw-heading .hps-run-state, .hps-header > .hps-run-state {
+    position: absolute; inset-inline: var(--ds-c-studio-coachrunstate-space-1); bottom: var(--ds-c-studio-coachrunstate-space-2);
+  }
+}

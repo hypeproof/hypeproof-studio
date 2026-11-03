@@ -4,7 +4,7 @@
 // installers do). On a fresh runner nothing is seeded, so a native trial turn
 // falls back to the proxy runtime and the Service answers 409 trial_requires_sdk
 // before any model call. The check then timed out on a Stop button that existed
-// for milliseconds (jayleekr/hypeprooflab#997). This module names the version the
+// for milliseconds (hypeproof/hypeprooflab#997). This module names the version the
 // App expects and refuses to start acceptance until that binary is seeded.
 import fs from 'node:fs';
 import os from 'node:os';

@@ -1,6 +1,6 @@
 # 체험 대화·GitHub UX 인수 검사
 
-상태: 계획. [요구사항](../design/trial-conversation-experience.md) · [에픽 #844](https://github.com/jayleekr/hypeproof-studio/issues/844).
+상태: 계획. [요구사항](../design/trial-conversation-experience.md) · [에픽 #844](https://github.com/hypeproof/hypeproof-studio/issues/844).
 작성일 2026-09-08. 아래 표는 테스트 정의이며 실행 결과가 아니다.
 
 | ID | 조건과 확인할 결과 | 요구사항 | 상태 |

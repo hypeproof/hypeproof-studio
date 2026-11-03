@@ -1,3 +1,4 @@
+import { responseEvidence } from "./activityAvailability.ts";
 // #282 — PURE mapping from a resolved cohort profile to Claude Agent SDK
 // options, plus the SDK-tool → host-approval mapping. No `vscode`, no SDK
 // import: safe to unit-test and typecheck standalone (extension pure/
@@ -13,6 +14,7 @@
 // Type-only import — erased at build/strip time, so this file stays a leaf
 // module that Node can run standalone in the smoke tests.
 import { stallNotice } from "./coachIdentity.ts";
+import { rateLimitStallText, TRANSPORT_FAILURE_SOLO, type SeatAudience } from "./seatVocabulary.ts";
 import type {
   AgentDefinition,
   HookCallback,
@@ -26,7 +28,13 @@ import * as path from "node:path";
 // Explicit .ts specifiers: the leaf/pure-module graph must load under
 // `node --experimental-strip-types` (smoke tests) which resolves specifiers
 // literally; esbuild + tsc (allowImportingTsExtensions) accept them.
-import { safeNavigateUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
+import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
+import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
+import { writeTargetsOf } from "./writeApprovalPaths.ts";
+import { writeEditOf } from "./writeApprovalChange.ts";
+import { relativeEscapes } from "./workspaceRouting.ts";
+import { runsAppBundleProgram } from "./appBundleExec.ts";
+import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -35,16 +43,20 @@ import {
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
   MCP_LIVE_PREVIEW_START,
+  MCP_PAGE_PDF_SAVE,
+  MCP_BROWSER_EXTRA_TOOLS,
   MCP_CR_BROWSER_TOOLS,
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
 import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
+import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
+import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
  * The only permission mode a coach session runs in. It must be passed
@@ -360,8 +372,8 @@ export function permittedMcpToolsFor(
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
     tools.push(
       ...(isCurriculumRuntimeEnabled(profile)
-        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-        : MCP_BROWSER_TOOLS),
+        ? [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]),
     );
   }
   const orchestrator = orchestratorBindingFor(profile, roster);
@@ -1188,7 +1200,9 @@ export function buildSdkGatewayEnv(
     custom.push(`x-hps-lesson-step: ${args.lessonStep}`);
     if (args.helpMode && /^[a-z_]{1,32}$/.test(args.helpMode)) custom.push(`x-hps-help-mode: ${args.helpMode}`);
   }
-  if (args.turnId && /^[a-zA-Z0-9_-]{1,128}$/.test(args.turnId)) custom.push(`x-hps-turn-id: ${args.turnId}`);
+  // REQ-STUDIO-TURN-ID — ANTHROPIC_CUSTOM_HEADERS is fixed for the CLI process, i.e. for
+  // the turn, so every request the CLI makes for this user message carries the same id.
+  if (validClientTurnId(args.turnId)) custom.push(`${CLIENT_TURN_ID_HEADER}: ${args.turnId}`);
   if (args.workspace?.trim()) {
     custom.push(`x-hps-workspace: ${encodeURIComponent(args.workspace.trim())}`);
   }
@@ -1427,7 +1441,7 @@ export function buildSdkQueryOptions(
     ...(args.pathToClaudeCodeExecutable
       ? { pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable }
       : {}),
-    env: buildSdkGatewayEnv(args.baseEnv, {
+    env: foregroundHelpers(agentTools, buildSdkGatewayEnv(args.baseEnv, {
       proxyUrl: args.proxyUrl,
       effort: args.effort,
       turnId: args.turnId,
@@ -1442,9 +1456,19 @@ export function buildSdkQueryOptions(
       ...(args.workspaceFiles ? { workspaceFiles: args.workspaceFiles } : {}),
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
       ...(orchestrator ? { orchestrator } : {}),
-    }),
+    })),
     ...(hooks ? { hooks } : {}),
   };
+}
+
+/**
+ * REQ-STUDIO-DELEGATION-ROW — a seat that may delegate keeps its helpers in the foreground, inside
+ * the turn the learner watches and Stop aborts (the orchestrator seat pins the same variable in
+ * buildSdkGatewayEnv). A backgrounded helper would return a placeholder as its answer.
+ */
+function foregroundHelpers(agentTools: readonly string[], env: Record<string, string | undefined>): Record<string, string | undefined> {
+  if (agentTools.length > 0) env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+  return env;
 }
 
 /**
@@ -1640,15 +1664,22 @@ export interface SdkBusyPolicy {
 }
 
 /**
- * The busy policy for this seat: only an orchestrator seat gets one (spec
- * §13.2 row A2). Undefined elsewhere, so consumeSdkStream behaves exactly as
- * before.
+ * The busy policy for this seat. Two kinds of seat get one:
+ * - an orchestrator seat (spec §13.2 row A2);
+ * - a native-trial seat (`activity_kind: "trial"`, which a bought pass also is;
+ *   REQ-STUDIO-TRIAL-BUSY). The Service holds one lease per trial grant and
+ *   refuses an overlapping request with `429 trial_busy` and no
+ *   `x-should-retry`, so the CLI retried it 11 times over 186 s and then showed
+ *   its raw "API Error: Request rejected (429)" line (observed 2026-10-18).
+ *   The trial profile serves `orchestrator.enabled: false`, so the A2 gate alone
+ *   never reached it.
+ * Undefined elsewhere, so consumeSdkStream behaves exactly as before.
  */
 export function sdkBusyPolicyFor(
-  agent: Pick<AgentCoachOptions, "orchestrator">,
+  agent: Pick<AgentCoachOptions, "orchestrator"> & { activityKind?: string | null },
   onNotice: (text: string) => void,
 ): SdkBusyPolicy | undefined {
-  return agent.orchestrator ? { onNotice } : undefined;
+  return agent.orchestrator || agent.activityKind === "trial" ? { onNotice } : undefined;
 }
 
 /**
@@ -1731,6 +1762,21 @@ export const SDK_TRUNCATED_FRIENDLY =
   "\"더 간결하게 다시 만들어줘\" 라고 요청하거나, 만들던 파일을 열어 어디까지 됐는지 확인해 주세요.";
 
 /**
+ * CGP-AGENT-R-008 — the model declined the request (`stop_reason: "refusal"`).
+ *
+ * 5.5 models return a refusal as HTTP 200 with that stop reason and usually no text
+ * (docs/requirements/learning-agent-experience.md, "거절"). The proxy route appends the
+ * Worker's `REFUSAL_NOTICE`; `/v1/messages` passes SSE through untouched, so on the SDK
+ * path the learner got an empty turn. The fact sentence is shared with the Worker and
+ * drift-checked by the smoke test; the next step adds the file check every SDK result
+ * notice gives, because tools may already have run earlier in the same run (#968).
+ */
+export const SDK_REFUSED_FRIENDLY =
+  "\n\n---\n⚠️ **AI가 안전 기준에 따라 이 요청에는 답하지 않았습니다.**\n" +
+  "무엇을 하려는지 조금 더 설명해서 다시 요청해 주세요. **저장된 변경이 있는지 작업 파일을 확인해 주세요.** " +
+  "계속 같은 답이 나오면 강사에게 알려 주세요.";
+
+/**
  * 이 `result` 가 학생에게 보여줄 종료 안내가 있는지. 없으면 null(정상 종료).
  *
  * `is_error` 를 함께 보는 이유: subtype 이름 규칙에만 기대면 SDK 가 규칙을 바꾸는
@@ -1742,6 +1788,8 @@ export function sdkResultNotice(msg: Record<string, unknown>): string | null {
   // 잘림을 **먼저** 본다. 성공 result 에도 붙을 수 있고, 그때 학생에게 중요한
   // 사실은 "왜 끝났나"가 아니라 "문서가 완성되지 않았다"이기 때문이다.
   if (msg["stop_reason"] === "max_tokens") return SDK_TRUNCATED_FRIENDLY;
+  // A refusal can arrive on a success result; checking error subtypes alone misses it.
+  if (msg["stop_reason"] === "refusal") return SDK_REFUSED_FRIENDLY;
   if (subtype === "error_max_turns") return SDK_MAX_TURNS_FRIENDLY;
   const known = SDK_RESULT_ERROR_FRIENDLY[subtype];
   if (known) return known;
@@ -1766,15 +1814,25 @@ const STALLED = Symbol("sdk-stream-stalled");
 // loop already renders.
 
 export type SdkActivity = (
-  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean }
+  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource; denialDetail?: import('./denialNotice').DenialDetail }
   /** Running token estimate while the model thinks (Claude Code's "✻ …" counter). */
   | { kind: "thinking_tokens"; tokens: number }
   /** A completed thinking block. Raw model text — NOT translated (it is usually English). */
   | { kind: "thinking"; text: string }
-  /** The coach is about to run a tool. `id` pairs with the matching tool_result. */
-  | { kind: "tool_use"; id: string; name: string; input: unknown }
-  /** That tool finished. */
-  | { kind: "tool_result"; id: string; isError: boolean; reason?: string }
+  /**
+   * The coach is about to run a tool. `id` pairs with the matching tool_result. `parent` is the
+   * SDK's parent_tool_use_id: set when a helper started by that Task/Agent call made this call
+   * (REQ-STUDIO-DELEGATION-ROW).
+   */
+  | { kind: "tool_use"; id: string; name: string; input: unknown; parent?: string }
+  /**
+   * That tool finished. `content` is the raw result, read only for a delegation's final response.
+   * `launched` marks a helper the SDK put in the background (`tool_use_result.status`
+   * async_launched / remote_launched): its content is a placeholder, not the helper's answer.
+   */
+  | { kind: "tool_result"; id: string; isError: boolean; reason?: string; parent?: string; content?: unknown; launched?: true }
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the CLI compacted earlier context (`system/compact_boundary`). */
+  | { kind: "compaction" }
 ) & {
   /**
    * #503 — SDK 가 이벤트마다 실어 보내는 자기 시각(ms). 단일 타임라인이 영속화될
@@ -1869,6 +1927,8 @@ export function summarizeToolInput(
   input: unknown,
   max = 60,
   workspaceRoot?: string,
+  // REQ-E3 / CGP-AGENT-R-006 — learner-facing lines pass true: a `url` shows as `host · label`, never the full URL.
+  opts: { urlHostOnly?: boolean } = {},
 ): string {
   if (!input || typeof input !== "object") return "";
   const rec = input as Record<string, unknown>;
@@ -1881,6 +1941,7 @@ export function summarizeToolInput(
   for (const key of ["file_path", "path", "command", "url", "query", "pattern", "prompt", "description"]) {
     const v = rec[key];
     if (typeof v === "string" && v.length > 0) {
+      if (key === "url" && opts.urlHostOnly) return clip(browserTargetInline(v, { workspaceRoot: workspaceRoot ?? null }));
       if (key !== "file_path" && key !== "path") return clip(v);
       // 파일 읽기는 **어디를 읽었는지**까지 보여 준다. 큰 파일을 다룰 때 코치는
       // Grep 으로 위치를 찾고 그 구간만 읽는 것이 정상 패턴인데(Claude Code 자신도
@@ -1910,12 +1971,18 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
     const tokens = msg["estimated_tokens"];
     return typeof tokens === "number" ? [stamp({ kind: "thinking_tokens", tokens })] : [];
   }
+  if (type === "system" && msg["subtype"] === "compact_boundary") return [stamp({ kind: "compaction" })];
 
   // tool_use rides on assistant messages; tool_result comes back on user ones.
   if (type !== "assistant" && type !== "user") return [];
   const content = (msg["message"] as Record<string, unknown> | undefined)?.["content"];
   if (!Array.isArray(content)) return [];
 
+  // REQ-STUDIO-DELEGATION-ROW — a helper's own events carry the Task/Agent call that started it.
+  const parentId = msg["parent_tool_use_id"];
+  const parent = typeof parentId === "string" && parentId ? { parent: parentId } : {};
+  const toolUseStatus = (msg["tool_use_result"] as { status?: unknown } | undefined)?.status;
+  const launched = toolUseStatus === "async_launched" || toolUseStatus === "remote_launched" ? { launched: true as const } : {};
   const out: SdkActivity[] = [];
   for (const raw of content) {
     if (!raw || typeof raw !== "object") continue;
@@ -1929,7 +1996,7 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
       case "tool_use": {
         const id = typeof b["id"] === "string" ? b["id"] : "";
         const name = typeof b["name"] === "string" ? b["name"] : "";
-        if (id && name) out.push(stamp({ kind: "tool_use", id, name, input: b["input"] }));
+        if (id && name) out.push(stamp({ kind: "tool_use", id, name, input: b["input"], ...parent }));
         break;
       }
       case "tool_result": {
@@ -1941,7 +2008,7 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
         // 연속 실패했는데 사유를 알 길이 없어 소스를 읽어 추정해야 했다. 짧게 실어
         // 보낸다(성공 결과는 길고 대부분 노이즈이므로 실패일 때만).
         const reason = isError ? toolResultText(b["content"]) : undefined;
-        out.push(stamp({ kind: "tool_result", id, isError, ...(reason ? { reason } : {}) }));
+        out.push(stamp({ kind: "tool_result", id, isError, ...(reason ? { reason } : {}), ...parent, ...(b["content"] !== undefined ? { content: b["content"] } : {}), ...launched }));
         break;
       }
       default:
@@ -2061,6 +2128,8 @@ export interface SdkStreamHandlers {
   /** Build the student-friendly auth error thrown on a fatal 400/401. */
   makeFatalAuthError: (status: number) => Error;
   onDelta: (delta: string) => void;
+  /** Explicit model refusal, never inferred from generated text. */
+  onRefusal?: () => void;
   /**
    * #414 — everything the coach is DOING (thinking, tool calls, their results).
    * Optional so the fast-fail/stall tests can ignore it; when absent the stream
@@ -2131,6 +2200,102 @@ export function sdkTerminalFailure(msg: Record<string, unknown>, standingRetrySt
   return { failed: true, subtype: /^[a-z_]{1,40}$/.test(subtype) ? subtype : "unknown", ...(status !== undefined ? { status } : {}) };
 }
 
+// ── REQ-M44 — the CLI's own API-error line is not the coach speaking ──────────
+//
+// When the gateway refuses a request (the Service's 401/403/409/429, a provider 5xx), the CLI prints the refusal
+// as an assistant message of its own: `error` set and/or the `<synthetic>` model, text such as
+// "API Error: Request rejected (429) · <Service sentence>" or "Failed to authenticate. API Error: 403 <sentence>".
+// Then it ends the turn with an `is_error` result and query() throws
+// "Claude Code returned an error result: <the same line>" (recorded 2026-10-18 on SDK 0.3.299,
+// test/fixtures/sdk-gateway-errors.json). Before this, the line went into the coach's bubble AND the banner, so
+// the learner read English plumbing twice and the Service's sentence twice. Now the bubble stays silent and the
+// banner shows the Service's sentence once.
+
+/** The App's generic Korean line for a refusal that carries no sentence a person can read. */
+export const SDK_ERROR_GENERIC_FRIENDLY = "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";
+/** Shared with the stall watchdog (sdkCoach.ts), so one event reads the same whichever way the turn ended. */
+export const SDK_RATE_LIMIT_FRIENDLY =
+  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+/**
+ * The request was over a size limit (the Service's per-request input bound for trial, free and pass seats answers
+ * 413). The CLI ignores the 413 body and prints its own English line, "Request too large (max 32MB). Accumulated
+ * images and attachments…" (recorded 2026-10-29 on SDK 0.3.299), which names neither the real limit nor a fix.
+ * Each turn starts from the visible conversation, so asking again with less material read works.
+ */
+export const SDK_REQUEST_TOO_LARGE_FRIENDLY =
+  "이번 작업에서 읽은 내용이 너무 많아 AI에게 보내지 못했어요. 만든 파일은 그대로 있어요. 큰 파일은 필요한 부분만 읽어 달라고 하거나, 일을 작게 나눠 다시 부탁해 주세요.";
+const SDK_REQUEST_TOO_LARGE_TEXT = /Request too large|request_too_large/;
+export const sdkProviderErrorFriendly = (status: number): string =>
+  `AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. (${status})`;
+
+/** Text the CLI produces itself (not the model) when a request or the process fails. */
+const SDK_CLI_ERROR_TEXT = /Claude Code returned an error result|Claude Code process (?:exited|terminated)|API Error:|Failed to authenticate/;
+
+/** The text of a CLI-generated API-error assistant message, or null for anything the model said. */
+export function sdkCliErrorLine(msg: Record<string, unknown>): string | null {
+  if (msg["type"] !== "assistant") return null;
+  const synthetic = (msg["message"] as { model?: unknown } | undefined)?.model === "<synthetic>";
+  if (msg["error"] === undefined && !synthetic) return null;
+  const text = extractSdkText(msg);
+  // `<synthetic>` alone also carries non-error lines ("No response requested."); only an error line is hidden.
+  if (msg["error"] === undefined && !/API Error:|Failed to authenticate/.test(text)) return null;
+  return text;
+}
+
+/** The HTTP status an "API Error: …" line names, if it names one. */
+export function sdkCliErrorStatus(text: string): number | undefined {
+  const m = /API Error:\s*(?:Request rejected\s*)?\(?(\d{3})\)?/.exec(text);
+  return m ? Number(m[1]) : undefined;
+}
+
+/** The human sentence inside a CLI error text (the Service's Korean message), or "" when there is none. */
+export function sdkServiceSentence(text: string): string {
+  let rest = text.trim();
+  for (let i = 0; i < 6; i++) {
+    const before = rest;
+    rest = rest
+      .replace(/^Claude Code returned an error result:\s*/, "")
+      .replace(/^Failed to authenticate\.?\s*/, "")
+      .replace(/^API Error:\s*(?:Request rejected\s*)?(?:\(\d{3}\)|\d{3})?\s*[·:-]?\s*/, "")
+      .trim();
+    if (rest === before) break;
+  }
+  // A body the CLI did not unwrap: take the Service's own message field.
+  if (rest.startsWith("{")) {
+    try {
+      const body = JSON.parse(rest) as { error?: { message?: unknown } | string; message?: unknown };
+      const inner = typeof body.error === "object" && body.error ? body.error.message : body.message;
+      rest = typeof inner === "string" ? inner : "";
+    } catch {
+      rest = "";
+    }
+  }
+  // The [hps:<code>] tag is for bindingRefusalCode, never for the learner; "(status 500)" is plumbing.
+  rest = rest.replace(/\s*\[hps:[a-z_]+\]/g, "").replace(/\s*\(status \d{3}\)\.?/g, "").trim();
+  return /[가-힣]/.test(rest) ? rest : "";
+}
+
+/**
+ * The banner text for a failed turn (handleSendError's generic branch). The App's own errors are already Korean
+ * and pass through unchanged; a CLI/SDK error text becomes the Service's sentence, else a Korean line by status.
+ */
+export function sdkErrorDisplayText(err: unknown, audience: SeatAudience = "classroom"): string {
+  // Trial diagnosis D3 (REQ-L14): a solo seat has no staff or instructor to ask, so its fallback lines drop them.
+  const generic = audience === "solo" ? TRANSPORT_FAILURE_SOLO : SDK_ERROR_GENERIC_FRIENDLY;
+  if (!(err instanceof Error)) return generic;
+  const line = (err as { sdkErrorLine?: unknown }).sdkErrorLine;
+  const own = typeof line === "string" ? line : "";
+  if (!SDK_CLI_ERROR_TEXT.test(err.message) && !own) return err.message;
+  const sentence = sdkServiceSentence(err.message) || sdkServiceSentence(own);
+  if (sentence) return sentence;
+  const s = (err as { status?: unknown }).status;
+  const status = typeof s === "number" ? s : sdkCliErrorStatus(own) ?? sdkCliErrorStatus(err.message);
+  if (status === 429) return audience === "solo" ? rateLimitStallText("solo") : SDK_RATE_LIMIT_FRIENDLY;
+  if (status === 413 || SDK_REQUEST_TOO_LARGE_TEXT.test(err.message) || SDK_REQUEST_TOO_LARGE_TEXT.test(own)) return SDK_REQUEST_TOO_LARGE_FRIENDLY;
+  if (status !== undefined && status >= 500) return sdkProviderErrorFriendly(status);
+  return generic;
+}
+
 export async function consumeSdkStream(
   stream: AsyncIterable<unknown>,
   h: SdkStreamHandlers,
@@ -2142,6 +2307,19 @@ export async function consumeSdkStream(
   let progressAt = Date.now();
   let lastRetryStatus: number | undefined;
   let end: SdkTurnEnd = { failed: false };
+  /** REQ-M44 — the CLI's API-error line still standing (no model answer after it). Never shown in the bubble. */
+  let cliError: string | undefined;
+  /** The refusal as the real SDK throws it, so passSpentNotice / bindingRefusalCode / the spool read the same. */
+  const cliRefusal = (text: string, status: number | undefined): Error => {
+    const err = new Error(`Claude Code returned an error result: ${text}`);
+    if (status !== undefined) {
+      Object.defineProperty(err, "status", { value: status, enumerable: false });
+      // This is a CLI-generated error, never model text. Only parse a complete JSON body.
+      const bodyAt = text.indexOf('{');
+      Object.defineProperty(err, "evidence", {value: responseEvidence(status, bodyAt < 0 ? '' : text.slice(bodyAt))});
+    }
+    return err;
+  };
   /**
    * The blocked state is only sampled when the budget expires, so a modal that
    * closes mid-window would otherwise leave the coach ~0ms to answer. One grace
@@ -2220,7 +2398,11 @@ export async function consumeSdkStream(
   try {
     for (;;) {
       const step = await nextEvent();
-      if (step.done) return end;
+      if (step.done) {
+        // The CLI refused and the stream just ended: the refusal is the turn's end, not silence.
+        if (cliError !== undefined) throw cliRefusal(cliError, (end.failed ? end.status : undefined) ?? lastRetryStatus ?? sdkCliErrorStatus(cliError));
+        return end;
+      }
       // Check BEFORE emitting so a chunk isn't flushed to the webview after stop.
       if (h.isAborted()) throw h.makeAbortError();
       const msg = (step.value ?? {}) as Record<string, unknown>;
@@ -2250,6 +2432,8 @@ export async function consumeSdkStream(
         // …and ends a busy episode: the next rush counts from zero again.
         busyRetries = 0;
         busySince = undefined;
+        // …and answers an earlier CLI error line too.
+        cliError = undefined;
       }
       const fatal = sdkFatalAuthStatus(msg);
       if (fatal !== null) {
@@ -2306,7 +2490,10 @@ export async function consumeSdkStream(
         if (usage) h.onUsage(usage);
       }
       const type = String(msg["type"] ?? "");
-      if (type === "assistant" || type === "text" || type === "content_block_delta") {
+      const cliLine = sdkCliErrorLine(msg);
+      // REQ-M44 — the CLI's API-error line is plumbing, not the coach: keep it for the banner, out of the bubble.
+      if (cliLine !== null) cliError = cliLine;
+      else if (type === "assistant" || type === "text" || type === "content_block_delta") {
         const delta = extractSdkText(msg);
         if (delta) h.onDelta(delta);
       }
@@ -2318,6 +2505,11 @@ export async function consumeSdkStream(
       // 대신 폴백으로 떨어진다.
       const failure = sdkTerminalFailure(msg, lastRetryStatus);
       if (failure) end = failure;
+      // REQ-M44 — a turn the gateway refused ends in the banner with the Service's sentence, once. The generic
+      // REQ-M39 notice ("다시 한 번 부탁하거나…") would only add a second, futile message to the bubble.
+      if (failure && cliError !== undefined) throw cliRefusal(cliError, failure.status ?? sdkCliErrorStatus(cliError));
+      if ((type === "result" && msg["stop_reason"] === "refusal") ||
+          (type === "system" && msg["subtype"] === "model_refusal_no_fallback")) h.onRefusal?.();
       const notice = sdkResultNotice(msg);
       if (notice) {
         console.warn(`[coach] SDK 종료 오류 subtype=${String(msg["subtype"] ?? "(none)")}`);
@@ -2335,6 +2527,11 @@ export async function consumeSdkStream(
     const standing = end.failed ? end.status ?? lastRetryStatus : lastRetryStatus;
     if (standing !== undefined && err instanceof Error && (err as { status?: unknown }).status === undefined) {
       try { Object.defineProperty(err, "status", { value: standing, enumerable: false }); } catch { /* a frozen error stays unclassified */ }
+    }
+    // REQ-M44 — the SDK threw on its own ("Claude Code process exited with code 1") after a CLI error line: carry
+    // that line so the banner can still show the Service's sentence instead of the process message.
+    if (cliError !== undefined && err instanceof Error && (err as { sdkErrorLine?: unknown }).sdkErrorLine === undefined) {
+      try { Object.defineProperty(err, "sdkErrorLine", { value: cliError, enumerable: false }); } catch { /* frozen: the generic line */ }
     }
     throw err;
   }
@@ -2444,6 +2641,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   if (sdkDeniedToolReason(toolName) !== undefined) return true;
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
+    (MCP_BROWSER_EXTRA_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
     (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName) ||
@@ -2460,9 +2658,9 @@ export interface CoachToolAction {
   input: unknown;
   /**
    * epic #431 — carried from the policy verdict so the host can pick the
-   * strong confirm. Computed once in evaluateSdkToolUse rather than re-derived
-   * at the modal, so policy and UI can never disagree about what is
-   * destructive.
+   * strong confirm. Policy and UI read the same function (isDestructiveCommand),
+   * and since REQ-M4a the action mapping and the modal OR this flag with their
+   * own reading of the command: they may add the flag, never drop it.
    */
   destructive?: boolean;
 }
@@ -2500,10 +2698,12 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   // modal-gates it by default (requireApprovalFor includes "openBrowser").
   // Screenshot/live-preview auto-allow in evaluateSdkToolUse and never get here.
   if (action.toolName === MCP_BROWSER_OPEN) {
-    const url = firstString(action.input, ["url"]) ?? "";
+    const raw = action.input && typeof action.input === "object" ? (action.input as Record<string, unknown>).url : null;
+    const url = browserOpenUrl(raw) ?? "";
     return {
       kind: "openBrowser",
-      description: `브라우저 열기: ${url || safeStringify(action.input)}`,
+      // REQ-E3 / CGP-AGENT-R-006: host · label only. The payload keeps the real URL for the browser.
+      description: `브라우저 열기: ${url ? browserTargetInline(url) : UNKNOWN_HOST_TEXT}`,
       payload: { url },
     };
   }
@@ -2578,12 +2778,17 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   }
 
   if (SHELL_TOOLS.has(name)) {
-    const command = firstString(action.input, ["command"]) ?? safeStringify(action.input);
+    const given = firstString(action.input, ["command"]);
+    const command = given ?? safeStringify(action.input);
+    // REQ-M4a: the verdict's flag is ORed with the policy's own reading of the
+    // command, so the request the modal sees is flagged even when the caller
+    // dropped the verdict. A flag is only ever added here.
+    const destructive = action.destructive === true || (given !== undefined && isDestructiveCommand(given));
     return {
       kind: "executeShell",
       description: `${action.toolName}: ${command}`,
       payload: { command },
-      ...(action.destructive ? { destructive: true } : {}),
+      ...(destructive ? { destructive: true } : {}),
     };
   }
   if (WRITE_TOOLS.has(name)) {
@@ -2591,7 +2796,10 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     return {
       kind: "writeFile",
       description: path ? `${action.toolName} ${path}` : `${action.toolName} ${safeStringify(action.input)}`,
-      payload: { path },
+      // REQ-E1 / CGP-AGENT-R-005: every path the call writes, with 새 파일 / 바꿈 when the input says so.
+      // REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021): the text the call would write, so the approval can say how
+      // much of an existing file changes before the learner answers. Host-side only; never posted to the webview.
+      payload: { path, paths: writeTargetsOf(action.toolName, action.input), edit: writeEditOf(action.toolName, action.input) },
     };
   }
   if (READ_TOOLS.has(name)) {
@@ -2642,14 +2850,65 @@ export type SdkToolVerdict =
   // never classified (isClassifiedSdkToolName === false) — i.e. possible Agent
   // SDK tool drift, not a routine profile/policy denial. The caller logs the
   // two at different volume/severity; the deny itself is identical.
-  | { decision: "deny"; reason: string; friendly: string; drift?: boolean };
+  //
+  // `source` (REQ-STUDIO-DENIAL-SOURCE): who decided the deny — the lesson setting, a
+  // platform safety rule, or this app/runtime. `friendly` is the tagged learner copy the
+  // SDK returns to the coach as the tool_result (and the tool log shows).
+  //
+  // `cause` is the classifier input the deny came from; the host reads only `path_outside_workspace` (#3224).
+  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean; cause?: string };
 
-/** Student-facing copy for a policy deny (tool not granted / never grantable). */
-export const TOOL_DENIED_FRIENDLY = "이 도구는 지금 수업에서는 사용할 수 없어요.";
-/** Student-facing copy for a workspace path-escape deny. */
-export const PATH_ESCAPE_FRIENDLY = "작업 폴더 밖의 파일에는 접근할 수 없어요.";
-/** Student-facing copy for a browser_open URL the policy rejects (#282 P2 slice 2). */
-export const URL_POLICY_FRIENDLY = "이 주소는 열 수 없어요.";
+/** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
+export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
+export const LINK_OUTSIDE_REASON = "작업 폴더 밖을 가리키는 바로가기(링크)는 만들 수 없어요";
+/** #3221 — the learner-facing reason when the coach tries to run a program inside another app (Chrome etc.). */
+export const APP_BUNDLE_PROGRAM_REASON =
+  "다른 앱(예: Chrome) 안의 프로그램은 실행하지 않아요. macOS가 'App 관리' 권한으로 막아요. PDF가 필요하면 Studio의 'PDF로 저장'(page_pdf_save)을 써요";
+export const URL_POLICY_REASON = "열 수 없는 주소예요";
+export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
+export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
+export const TOOL_DRIFT_REASON = "이 앱이 아직 모르는 도구예요";
+export const MINOR_CLOSED_REASON = "어린이 학생에게는 열지 않는 도구예요";
+/**
+ * MCP tools the minor posture withholds whatever the profile says (permittedMcpToolsFor:
+ * publish via sitePublishAllowed(…, minor), consult/site_check via orchestratorBindingFor).
+ */
+const MINOR_CLOSED_MCP_TOOLS: ReadonlySet<string> = new Set([MCP_PUBLISH_SITE, MCP_CONSULT, MCP_SITE_CHECK]);
+
+/**
+ * The REQ-M38 feature key whose grant carries this tool (the keys accessProfile narrows), or
+ * undefined for tools no such key grants.
+ */
+export function toolFeatureKey(toolName: string): string | undefined {
+  const n = toolName.toLowerCase();
+  if ((SDK_READ_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "read";
+  if ((SDK_WRITE_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "write";
+  if (n === "bash" || n === "powershell") return "shell";
+  if ((SDK_AGENT_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "subagents";
+  if (n === "websearch" || n === "webfetch") return "web_search";
+  if (([...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
+  return undefined;
+}
+
+/** One deny verdict: the classifier picks the source from the observed cause. */
+function denyVerdict(
+  cause: DenialCause | "malformed_call" | "orchestrator_unbound",
+  reason: string,
+  toolName: string,
+  audience: SeatAudience | undefined,
+  learnerReason?: string,
+  drift?: boolean,
+): SdkToolVerdict {
+  const d = denialFor(cause, { feature: toolFeatureName(toolName), ...(learnerReason ? { reason: learnerReason } : {}) });
+  return {
+    decision: "deny",
+    reason,
+    friendly: denialToolText(d, audience),
+    source: d.source,
+    cause,
+    ...(drift ? { drift: true } : {}),
+  };
+}
 
 /**
  * Is `target` inside `workspaceRoot`? Relative targets resolve AGAINST the
@@ -2661,7 +2920,7 @@ export function isPathContained(workspaceRoot: string, target: string): boolean 
   const root = path.resolve(workspaceRoot);
   const resolved = path.isAbsolute(target) ? path.resolve(target) : path.resolve(root, target);
   const rel = path.relative(root, resolved);
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  return rel === "" || !relativeEscapes(rel);
 }
 
 const PATH_INPUT_KEYS = ["file_path", "path", "notebook_path"] as const;
@@ -2763,19 +3022,34 @@ export function evaluateSdkToolUse(args: {
    * default: identity (unit tests stay fs-free).
    */
   canonicalize?: (p: string) => string;
+  /** Seat wording for the learner copy (solo seats get no teacher sentence). Default classroom. */
+  audience?: SeatAudience;
+  /**
+   * The seat is a minor (isMinorProfile). Only used to name the source of a Gate 1 deny:
+   * the tools the minor posture closes whatever the lesson says are a safety rule, not a
+   * lesson setting. It never changes the verdict itself.
+   */
+  minor?: boolean;
+  /**
+   * REQ-M38 feature keys the selected access choice (이용권) removed (accessRemovedFeatures).
+   * Only names the source of a Gate 1 deny; never changes the verdict.
+   */
+  accessRemoved?: ReadonlySet<string>;
+  /**
+   * Feature keys the learner's folder choice removed (folderRemovedFeatures,
+   * REQ-STUDIO-FOLDER-CONSENT): `write`, `shell`, and `publish` for publish_site. Only names
+   * the source of a Gate 1 deny (폴더 권한); never changes the verdict.
+   */
+  folderRemoved?: ReadonlySet<string>;
 }): SdkToolVerdict {
-  const { toolName, input, permittedTools, workspaceRoot } = args;
+  const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
 
   // Gate 0 (A2) — built-ins that never run for learners, whatever the permitted
   // set says. A routine denial (classified), with the reason logged host-side.
   const neverReason = sdkDeniedToolReason(toolName);
   if (neverReason !== undefined) {
-    return {
-      decision: "deny",
-      reason: `tool "${toolName}" is never available to learners: ${neverReason}`,
-      friendly: TOOL_DENIED_FRIENDLY,
-    };
+    return denyVerdict("never_for_learners", `tool "${toolName}" is never available to learners: ${neverReason}`, toolName, audience, NEVER_FOR_LEARNERS_REASON);
   }
 
   // Gate 1 — the profile's permitted set. Bash/WebFetch/anything not granted
@@ -2788,18 +3062,26 @@ export function evaluateSdkToolUse(args: {
     // dropping it. Both fail closed, but they are flagged apart so the caller
     // can surface drift loudly instead of burying it in the routine stream.
     if (!isClassifiedSdkToolName(toolName)) {
-      return {
-        decision: "deny",
-        drift: true,
-        reason: `unclassified tool "${toolName}" — the Phase 2 policy matrix has no rule for this name (possible Agent SDK tool drift)`,
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      return denyVerdict("tool_drift", `unclassified tool "${toolName}" — the Phase 2 policy matrix has no rule for this name (possible Agent SDK tool drift)`, toolName, audience, TOOL_DRIFT_REASON, true);
     }
-    return {
-      decision: "deny",
-      reason: `tool "${toolName}" is not granted by the cohort profile`,
-      friendly: TOOL_DENIED_FRIENDLY,
-    };
+    if (args.minor === true && MINOR_CLOSED_MCP_TOOLS.has(toolName)) {
+      return denyVerdict("minor_protection", `tool "${toolName}" is closed to minor seats`, toolName, audience, MINOR_CLOSED_REASON);
+    }
+    const feature = toolFeatureKey(toolName);
+    // The folder choice is checked first: it is the narrower, later decision for this turn.
+    const folderKey = toolName === MCP_PUBLISH_SITE ? "publish" : feature;
+    if (folderKey && args.folderRemoved?.has(folderKey)) {
+      return denyVerdict("folder_choice_narrowed", `tool "${toolName}" (${folderKey}) was removed by the learner's folder choice`, toolName, audience);
+    }
+    if (feature && args.accessRemoved?.has(feature)) {
+      return denyVerdict("access_choice_narrowed", `tool "${toolName}" (${feature}) was removed by the selected access choice`, toolName, audience);
+    }
+    // consult/site_check follow the served roster, the host binding and the Service: the
+    // gate cannot tell which withheld them (consultTool treats the same state as unknowable).
+    if (toolName === MCP_CONSULT || toolName === MCP_SITE_CHECK) {
+      return denyVerdict("orchestrator_unbound", `tool "${toolName}" is not bound for this turn`, toolName, audience, "도우미 구성을 확인하지 못했어요");
+    }
+    return denyVerdict("profile_tool_not_granted", `tool "${toolName}" is not granted by the cohort profile`, toolName, audience);
   }
 
   const name = toolName.toLowerCase();
@@ -2821,11 +3103,8 @@ export function evaluateSdkToolUse(args: {
   if (SHELL_TOOLS.has(name)) {
     const command = firstString(input, ["command"]) ?? "";
     if (!command.trim()) {
-      return {
-        decision: "deny",
-        reason: "shell call carried no command string",
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      // A malformed call: no rule decided it, so the source is unknown (never a guess).
+      return denyVerdict("malformed_call", "shell call carried no command string", toolName, audience, "명령이 비어 있었어요");
     }
     // 되돌리기 어려운 명령만 묻는다 (원장 결정 2026-07-27).
     //
@@ -2838,7 +3117,19 @@ export function evaluateSdkToolUse(args: {
     // 학생 작업을 날릴 수 있는 것은 강한 확인을 유지하고(「항상 허용」도 안 준다),
     // 나머지는 자동 실행한다. 파일 쓰기는 이미 워크스페이스 containment 가 지키고,
     // 셸의 위험은 그 containment 밖으로 나가는 명령이다 — 그게 정확히 이 목록이다.
-    if (isDestructiveCommand(command)) {
+    // CGP-AGENT-R-005 verify F1-B / verify 2 F2 — a link is how a write that looks inside lands outside. A plainly
+    // readable `ln` whose target is outside the work folder (or cannot be decided) is refused; any other
+    // link-making command gets the strong confirm. The write gates' resolver is the real defence.
+    const link = linkCommandVerdict(command, workspaceRoot, canon);
+    if (link?.decision === "deny") {
+      return denyVerdict("path_outside_workspace", link.reason, toolName, audience, LINK_OUTSIDE_REASON);
+    }
+    // #3221 — running another app's bundled program makes macOS ask for (or deny) App Management on Studio.
+    if (runsAppBundleProgram(command)) {
+      return denyVerdict("app_bundle_program", "command runs a program inside an app bundle (.app/Contents/)", toolName, audience, APP_BUNDLE_PROGRAM_REASON);
+    }
+    // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
+    if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
       return { decision: "ask", destructive: true };
     }
     return { decision: "allow" };
@@ -2852,11 +3143,7 @@ export function evaluateSdkToolUse(args: {
     // (a general-purpose agent, a hallucinated name) dies here, fail closed.
     const subagentType = firstString(input, ["subagent_type"]) ?? "";
     if (!Object.prototype.hasOwnProperty.call(SUBAGENT_DEFINITIONS, subagentType)) {
-      return {
-        decision: "deny",
-        reason: `subagent_type "${subagentType || "(empty)"}" is not in the HypeProof subagent catalog`,
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      return denyVerdict("subagent_not_in_catalog", `subagent_type "${subagentType || "(empty)"}" is not in the HypeProof subagent catalog`, toolName, audience, SUBAGENT_CATALOG_REASON);
     }
     // Delegation → ALWAYS the approval modal (kind "delegateAgent") — the
     // student's approve/deny IS the delegation_judgment pedagogy. The
@@ -2887,15 +3174,12 @@ export function evaluateSdkToolUse(args: {
   // permittedMcpToolsFor withholds it otherwise).
   if (toolName === MCP_BROWSER_OPEN) {
     // URL policy: the SAME whitelist the #278 browser-control loop uses
-    // (safeNavigateUrl) — http(s)/localhost/file only; javascript:, vscode:,
-    // data:, bare local paths are rejected before any modal is shown.
-    const url = firstString(input, ["url"]) ?? "";
-    if (!safeNavigateUrl(url)) {
-      return {
-        decision: "deny",
-        reason: `browser_open URL rejected by policy: ${url || "(empty)"}`,
-        friendly: URL_POLICY_FRIENDLY,
-      };
+    // http(s)/localhost/file plus the exact inert about:blank page. Omission
+    // selects that blank page; hostile schemes and malformed inputs still fail.
+    const raw = input && typeof input === "object" ? (input as Record<string, unknown>).url : null;
+    const url = browserOpenUrl(raw);
+    if (!url) {
+      return denyVerdict("url_policy", `browser_open URL rejected by policy: ${url || "(empty)"}`, toolName, audience, URL_POLICY_REASON);
     }
     // 자기 워크스페이스를 보는 것은 바깥 행위가 아니다. live_preview_start 는
     // 이미 자동 허용인데(바로 아래), 그렇게 띄운 서버를 **열어서 보는 것**에
@@ -2938,7 +3222,9 @@ export function evaluateSdkToolUse(args: {
     const checkOnly = !!input && typeof input === "object" && (input as { check_only?: unknown }).check_only === true;
     return checkOnly ? { decision: "allow" } : { decision: "ask" };
   }
-  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START) {
+  // #3221 — page_pdf_save prints the student's own work-folder page with Studio's browser and writes the PDF beside it;
+  // the host re-checks the folder and its write consent. Like a preview, not an outward action.
+  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START || toolName === MCP_PAGE_PDF_SAVE) {
     // Auto-allow once the browser capability is granted: a screenshot of the
     // student's own tab / serving their own workspace locally is the coach
     // "looking at the page", not an outward delegation.
@@ -2955,11 +3241,7 @@ export function evaluateSdkToolUse(args: {
           ? canon(candidate)
           : candidate; // relative resolves against the (canonical) root inside isPathContained
         if (!isPathContained(canonRoot, canonCandidate)) {
-          return {
-            decision: "deny",
-            reason: `path escapes the workspace: ${candidate}`,
-            friendly: PATH_ESCAPE_FRIENDLY,
-          };
+          return denyVerdict("path_outside_workspace", `path escapes the workspace: ${candidate}`, toolName, audience, PATH_ESCAPE_REASON);
         }
       }
     }
@@ -2972,10 +3254,5 @@ export function evaluateSdkToolUse(args: {
 
   // Permitted but unclassified — should be unreachable; fail closed. If it ever
   // fires, the permitted set granted a name no gate handles: also drift (#375).
-  return {
-    decision: "deny",
-    drift: true,
-    reason: `unrecognized tool "${toolName}"`,
-    friendly: TOOL_DENIED_FRIENDLY,
-  };
+  return denyVerdict("tool_drift", `unrecognized tool "${toolName}"`, toolName, audience, TOOL_DRIFT_REASON, true);
 }

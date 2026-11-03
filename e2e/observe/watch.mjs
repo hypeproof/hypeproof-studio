@@ -100,7 +100,8 @@ const evalIn = async (conn, expr) => {
 const CHAT_SNAP = `JSON.stringify((() => {
   const lines = [...document.querySelectorAll('.hps-tool-log-line')].map((el, i) => ({
     i,
-    icon: ((el.querySelector('.hps-tool-icon')||{}).textContent || '').trim(),
+    // The row draws a stroke icon; the host's glyph key is kept in data-glyph (REQ-STUDIO-STROKE-ICONS).
+    icon: ((el.querySelector('.hps-tool-icon')||{}).dataset?.glyph || (el.querySelector('.hps-tool-icon')||{}).textContent || '').trim(),
     label: ((el.querySelector('.hps-tool-label')||{}).textContent || '').trim(),
     state: /hps-tool-error/.test(el.className) ? 'error'
          : /hps-tool-running/.test(el.className) ? 'running' : 'done',

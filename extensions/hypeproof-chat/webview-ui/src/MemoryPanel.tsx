@@ -5,7 +5,9 @@
 // reference resolves, what a decision rests on, why a belief changed, are the Service's. An AI
 // suggestion is drawn apart from the team's decisions (SX-45); a decision with no evidence says
 // so; a belief change with nothing linked reads "기록되지 않았어요", never a made-up reason.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { Confidence, DecisionForm, MemoryItemView, MemoryView } from "../../src/memoryView";
 import { CHANGE_LABEL, CONFIDENCE_LABEL, ENTRY_LABEL, ROLE_CONFIDENCE_SUFFIX, ROLE_LABEL, STATUS_LABEL, beliefSentence, decisionFormProblems, timelineRecord } from "../../src/memoryView";
 
@@ -51,6 +53,9 @@ export function MemoryPanel(props: {
   onDecide(form: DecisionForm): void;
   onClose(): void;
 }) {
+  // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
   const m = view.memory;
   const [form, setForm] = useState<DecisionForm>(EMPTY);
@@ -64,11 +69,11 @@ export function MemoryPanel(props: {
   const toggle = (key: "evidence_refs" | "assumption_refs", ref: string, on: boolean) => setForm((f) => ({ ...f, [key]: on ? [...f[key], ref] : f[key].filter((x) => x !== ref) }));
   const ready = decisionFormProblems(form).length === 0;
   return (
-    <section className="hps-evidence" data-testid="memory-panel" aria-label="프로젝트 기억">
+    <section ref={panel} className="hps-evidence" data-testid="memory-panel" aria-label="프로젝트 기억">
       <header>
         <strong>프로젝트 기억</strong>
         <button type="button" onClick={props.onRefresh} disabled={props.busy}>새로 불러오기</button>
-        <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
+        <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
       {view.notice && <p data-testid="memory-notice">{view.notice}</p>}
       {props.error && <div className="hps-publish-error" role="alert" data-testid="memory-error">{props.error}</div>}

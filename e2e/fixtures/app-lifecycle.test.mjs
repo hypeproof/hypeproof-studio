@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import test from 'node:test';
 
-import { evaluateDuringElectronStartup, failLaunchAfterCleanup } from './app.ts';
+import { evaluateDuringElectronStartup, failLaunchAfterCleanup, readAcrossReload } from './app.ts';
 
 const contextDestroyed = () => new Error(
   'electronApplication.evaluate: Execution context was destroyed, most likely because of a navigation.',
@@ -210,5 +210,23 @@ test('profile removal failures stay visible alongside the primary launch failure
       assert.match(error.message, /initialization failed.*remove failed/);
       return true;
     },
+  );
+});
+
+test('a workbench read inside a folder-switch reload is pending, then the real value', async () => {
+  let reads = 0;
+  const read = async () => {
+    reads += 1;
+    if (reads === 1) throw new Error('locator.evaluateAll: ' + contextDestroyed().message.split(': ')[1]);
+    return 0;
+  };
+  assert.equal(await readAcrossReload(read, -1), -1);
+  assert.equal(await readAcrossReload(read, -1), 0);
+});
+
+test('a workbench read keeps every other error', async () => {
+  await assert.rejects(
+    readAcrossReload(async () => { throw new Error('locator.evaluateAll: Target page, context or browser has been closed'); }, -1),
+    /has been closed/,
   );
 });

@@ -1,0 +1,25 @@
+.browser-error-container.hps-preview-error-host { padding: 0; align-items: center; }
+.hps-preview-error {
+ box-sizing: border-box; width: 100%; max-width: 36rem; margin: auto;
+ padding: 24px; color: var(--vscode-editor-foreground); font-family: var(--vscode-font-family);
+ overflow-wrap: anywhere;
+}
+.hps-preview-error-cause { font-size: 16px; line-height: 1.5; margin: 0 0 16px; }
+.hps-preview-error button {
+ min-height: 44px; max-width: 100%; padding: 8px 16px; font: inherit; font-size: 16px;
+ color: var(--vscode-button-foreground); background: var(--vscode-button-background);
+ border: 1px solid var(--vscode-button-border, transparent); border-radius: 4px; cursor: pointer;
+}
+.hps-preview-error button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+.hps-preview-error button:active:not(:disabled) { filter: brightness(.9); }
+.hps-preview-error button:disabled { cursor: wait; opacity: .65; }
+.hps-preview-error :is(button, summary):focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.hps-preview-error details { margin-top: 16px; font-size: 14px; line-height: 1.5; }
+.hps-preview-error summary { cursor: pointer; min-height: 44px; display: list-item; align-content: center; }
+.hps-preview-error code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-preview-error-note { font-size: 14px; line-height: 1.5; }
+.hps-preview-error-note:empty { display: none; }
+@media (forced-colors: active) {
+ .hps-preview-error button { border: 1px solid ButtonText; }
+ .hps-preview-error :is(button, summary):focus-visible { outline-color: Highlight; }
+}

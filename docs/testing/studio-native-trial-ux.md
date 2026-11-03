@@ -1,15 +1,18 @@
 # 개인 체험 UI·UX 테스트
 
-추적: [#758](https://github.com/jayleekr/hypeproof-studio/issues/758). 기준은 [화면별 조작 요구사항](../requirements/studio-native-trial-ux.md)의 `TUX-*` ID다. 상위 API·권한·관찰·사람 파일럿 테스트 [T01~25](studio-native-trial-validation.md)는 유지한다. 이 문서는 실행 계획과 판정 계약이며 PASS 보고서가 아니다. [2026-09-08 실행 결과](studio-native-trial-ux-results-2026-09-08.md)는 별도로 기록한다.
+추적: [#758](https://github.com/hypeproof/hypeproof-studio/issues/758). 기준은 [화면별 조작 요구사항](../requirements/studio-native-trial-ux.md)의 `TUX-*` ID다. 상위 API·권한·관찰·사람 파일럿 테스트 [T01~25](studio-native-trial-validation.md)는 유지한다. 이 문서는 실행 계획과 판정 계약이며 PASS 보고서가 아니다. [2026-09-08 실행 결과](studio-native-trial-ux-results-2026-09-08.md)는 별도로 기록한다.
 
 ## 실행 범위
 
 | ID 범위 | 최소 테스트 | 실제 결과를 확인할 위치 |
 |---|---|---|
 | TUX-SP-01~10 | 실제 React에서 입력·버튼·상태 분기 + Electron 연결/시작/폴더·패널 이동 | `e2e/trial-ux/run.mjs`, 기존 `e2e/tests/native-trial-live.spec.ts`, `startPage` 호스트 테스트 |
+| TUX-SP-12 | 실제 React: 알림 없음(코드 문장 있음·숫자 없음, 양성) · `code`+이용 범위(Service 값 그대로) · `open`(코드만 구현한 빌드라 코드 문장 유지, 선택 뒤 화면과 일치) + 호스트: 자격증명 없는 조회 1회, `/v1/profile` 0회 | `e2e/start-page/run.mjs`, `extensions/hypeproof-chat/test/trial-offer.smoke.mjs` |
+| TUX-SP-13 | 실제 React에서 처음(fresh)·한도 근처(near-limit)·다 씀(exhausted)·끝남(expired) 렌더와 음성 대조군(이용권·수업 좌석은 그대로) + 순수 함수 대조군 | `e2e/trial-ux/run.mjs` TUX-SP-13A/B/C/D/N, `extensions/hypeproof-chat/test/trial-status.smoke.mjs` |
+| TUX-SP-18 | 순수 함수: 다시 청구 판정(지남·앞으로·없음·사용 중·코드 체험)과 문구(시작 화면·채팅 끝 카드·안내·입력창 줄, `오늘 밤 12시까지`)의 양성·음성 대조군과 이전 Service 경우 + 호스트: 실행 때 다시 청구 → 같은 폴더 채팅, 반복 방지, 리필 전·`refills_at` 없음·코드 좌석·나이 없음·거절된 프로필 | `extensions/hypeproof-chat/test/free-daily-refill.smoke.mjs`, `extensions/hypeproof-chat/test/free-start-host.smoke.mjs`. 실제 앱·배포된 Service 는 NOT RUN |
 | TUX-CHAT-01~16 | 실제 React에서 전송·키보드·예약·이미지·코드·링크·오류 + 실제 호스트 전송/중지/삭제 | `e2e/trial-ux/run.mjs`, extension smoke, Electron 기록 |
 | TUX-OBS-01~10 | 실제 React에서 기록·동의·평가·정정·scope 전환 + 실제 평가 API/저장·재시작 | `e2e/trial-ux/run.mjs`, native observation 계약/실제 API, Electron 기록 |
-| TUX-COND-01~06 | 조건별 controlled host 이벤트로 실제 React 렌더 + 설치/복구 호스트 검증 | `e2e/trial-ux/run.mjs`, updater·error boundary smoke, 별도 앱 사본 |
+| TUX-COND-01~08 | 조건별 controlled host 이벤트로 실제 React 렌더 + 설치/복구 호스트 검증 | `e2e/trial-ux/run.mjs`, updater·error boundary smoke, 별도 앱 사본. TUX-COND-07 은 `e2e/trial-ux/run.mjs` TUX-COND-07(한도 시나리오)·TUX-COND-07N(작업 중 카드 없음), `test/trial-end-card.smoke.mjs`, `test/trial-end-card-host.smoke.mjs`, `test/start-page-purchase.smoke.mjs`. TUX-COND-08 은 `e2e/trial-ux/run.mjs` TUX-COND-08(이메일 구역·받기·그만 받기)·TUX-COND-08N(광고 없음·이미 냄), `test/notify-optin-host.smoke.mjs`(host→Service 경로, 저장 안 됨) |
 | TUX-HOST-01~08 | 실제 Electron·OS·파일시스템·로컬 신고 수신기 | `e2e/tests/native-trial-live.spec.ts`, `native-entry-controls.spec.ts`, `native-approval-controls.spec.ts`, `native-browser-input.spec.ts`, `26-report-resilience.spec.ts` 및 실제 앱 실행 기록 |
 | TUX-A11Y-01~04 | 브라우저 DOM/키보드/viewport + 실제 앱 focus·늦은 응답·좁은 패널 | `e2e/trial-ux/run.mjs`, Electron 화면·입력 기록 |
 

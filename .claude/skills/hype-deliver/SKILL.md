@@ -16,7 +16,9 @@ protected-branch rules.
 ## Delivery loop
 
 1. Define the smallest user-visible vertical result from the approved Epic or
-   active PR. Freeze only the acceptance conditions needed for that result.
+   active PR. Freeze only the acceptance conditions needed for that result. When the
+   product has `config/requirement-work.json`, take the slice from
+   `hype-align next --doc <epic>`, including an item it marks `REOPENED`.
 2. Within ten minutes, produce a code diff, a failing test, or a concrete
    reproduction. If no such output appears for twenty minutes without an external
    blocker, reset the bloated context or transfer the same branch to a capable
@@ -29,15 +31,18 @@ protected-branch rules.
    chain.
 5. Run focused tests first, then the repository-required checks. Create or update
    the PR and address reproducible findings on the same branch.
-6. Send independent verification only when the implementation SHA or acceptance
-   revision changes. Do not request a same-SHA recheck because a comment, status,
-   or reviewer opinion changed.
+6. Send independent verification when the claim identity changes: source, package
+   digest, host/Service environment, or test/acceptance revision. Reuse unaffected
+   evidence. A comment/status change alone does not require retesting. Use
+   `hype-verify` for these boundaries.
 7. When enforced checks and required verification pass, exact-head merge the PR.
    Do not request or wait for reviewers when GitHub does not enforce a human gate.
 8. Verify the merge SHA, main CI, deployment, and the actual production URL,
    installed App, or instructor flow. Mark unobserved claims `NOT RUN`.
 9. Update the feature map and Epic to the observed release state, then take the
-   next vertical slice.
+   next vertical slice. For a ledger work item, first run `hype-align record` and `check`
+   (that skill's "In the delivery loop", steps 2–3). Studio's feature map is hypeprooflab
+   `web/src/content/private/studio-prd/`.
 
 ## Keep the critical path short
 
@@ -50,6 +55,15 @@ While an active product critical path exists, do not start process, watcher, or
 coordination infrastructure work unless its failure directly prevents the current
 release.
 
-Use English for engineering work and GitHub records. Report outcomes to Jay in
+Use English for engineering work and GitHub records. Report outcomes to the requesting user in
 Korean. State what changed, how it was tested, what was merged or deployed, and
 which real-product observations remain.
+
+## Candidate handoff
+
+For RC delivery or rotating release ownership, use `hype-release` after the source
+is pinned. Include explicit source PRs, exact package identities, Before/After,
+actual native theme, participation-code access, test verdicts, costs and next action.
+Build/merge completion does not update an existing tag, its bytes or installed apps.
+Use the existing Studio approval engine and repository publisher; do not manufacture
+a second approval path or ask a teammate to test without working account access.

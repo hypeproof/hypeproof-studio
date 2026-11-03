@@ -1,6 +1,6 @@
 # 수업별 Agent 경험 요구사항
 
-상태: 제안 / NOT IMPLEMENTED AS A SET. 2026-09-08 · [#746](https://github.com/jayleekr/hypeproof-studio/issues/746).
+상태: 제안 / NOT IMPLEMENTED AS A SET. 2026-09-08 · [#746](https://github.com/hypeproof/hypeproof-studio/issues/746).
 근거: [비교 연구](../research/agent-experience-2026-09-08/README.md), [Intent·디자인](../design/learning-agent-experience.md).
 이 문서는 기존 기능을 없다고 선언하지 않는다. 아래는 기존 구현을 포함한 **새로운 종단 인수 목표**다.
 기존 REQ/ADM/CH/WEB/ENV/RUN/CLS/EDU 계약을 대체하지 않으며 정책 변경은 구현 PR에서 명시한다.
@@ -145,7 +145,7 @@ P1/P2 항목이 기본 경로에 활성화되면 해당 시나리오도 그 출�
 독립 과제에 진입하고 도움을 선택하는 P0 기능과 사람의 전이 학습을 관찰하는 AE-24는 별도다.
 
 계약 진화는 resolved profile의 실행 binding을 공통 참조로 설계하되 기존 관찰·공유·파일 복구를
-하나의 새 저장소로 합치지 않는다. [#745의 native observation 기반](https://github.com/jayleekr/hypeproof-studio/pull/745)을
+하나의 새 저장소로 합치지 않는다. [#745의 native observation 기반](https://github.com/hypeproof/hypeproof-studio/pull/745)을
 먼저 확인한다. 현재 schema에 새 필드를 임의로 넣지 않으며 구현 PR에서 양쪽 소비자·drift lock·구버전 처리와 연결한다.
 
 E1의 표시 개선만으로 E2의 권한 계약을 PASS로 만들지 않는다. 마찬가지로 SDK 단위 테스트와

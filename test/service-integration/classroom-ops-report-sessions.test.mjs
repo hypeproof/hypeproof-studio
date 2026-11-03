@@ -52,7 +52,7 @@ try {
   // The device half, as the host wires it: copy frozen once per (batch, revision) from the live spool, then PUT + seal.
   let puts = [];
   const device = (kinds, source = () => s2.readForCollection(since, ident)) => { const frozen = new Map(); let saved = null; return {
-    scope: () => scope,
+    confirm: async () => true, scope: () => scope,
     copy: async (b, rev) => { const k = b + ':' + rev; if (!frozen.has(k)) { const src = await source(); if (!src) return null; const fr = App.freezeCollection(src, scope, b, NOTICE, kinds, Date.now()); if (!fr.ok) return { code: fr.code }; frozen.set(k, { files: fr.files, collection: fr.binding }); } return frozen.get(k); },
     loadState: async () => (saved ? JSON.parse(saved) : null), saveState: async (s) => { saved = JSON.stringify(s); }, peek: () => JSON.parse(saved), frozen,
     put: async (b, rev, name, data) => { puts.push(name); const r = await f.app.fetch(new Request(`https://service.test/v1/classroom/ops/collect/snapshots/${b}/${rev}/${name}`, { method: 'PUT', headers: { authorization: 'Bearer ' + a1.credential }, body: data }), f.env, { waitUntil() {} }); const j = await r.json().catch(() => ({})); return { status: r.status, reason: j.reason }; },

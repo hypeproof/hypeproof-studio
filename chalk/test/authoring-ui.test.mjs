@@ -53,7 +53,7 @@ assert.doesNotMatch(authoring, /feature-allowed'\)\.innerHTML/, 'the feature lis
 // are carried inside learning exactly as loaded (carriedLearning), the same preservation rule one level down.
 assert.match(
   authoring,
-  /const formKeys=\['schema',\.\.\.fields,'steps','assistant','model','features','learning'\];/,
+  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','model','features','learning'\];/,
   'the form declares which top-level keys it owns, so everything else is an unknown key to preserve',
 );
 assert.match(authoring, /carriedLearning=l\?Object\.fromEntries\(Object\.entries\(l\)\.filter\(\(\[k\]\)=>!\['week','mission','completion'\]\.includes\(k\)\)\):\{\};/,
@@ -115,3 +115,6 @@ assert.match(learn, /'이 수업의 AI 이름: '\+c\.assistant\.display_name\+' 
 assert.doesNotMatch(learn, /innerHTML/, 'lesson text is never rendered as HTML');
 
 console.log('PASS authoring ui: mission/week/completion are edited and the rest of learning preserved, AI name round-trips, feature narrowing is opt-in and omitted when inheriting, unknown keys survive a save, learn page renders via textContent');
+
+const { runAuthoringSaveRecoveryBrowser } = await import('./authoring-save-recovery.browser.mjs');
+await runAuthoringSaveRecoveryBrowser();

@@ -22,6 +22,8 @@ const MACHINE_SCOPED = [
   "hypeproofChat.coachRuntime",
   "hypeproofChat.proxyUrl",
   "hypeproofChat.requireApprovalFor",
+  // REQ-M46: downloads and installs an executable.
+  "hypeproofChat.sdkSeedOnDemand",
 ];
 
 const props = pkg.contributes?.configuration?.properties ?? {};

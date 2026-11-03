@@ -23,7 +23,7 @@ try {
   let offline = 0, puts = [];
   const deps = (frozen = new Map()) => { let saved = null; return {
     // The copy is taken once per (batch, revision) and then never changes, whatever the live spool does.
-    scope: () => scope,
+    confirm: async () => true, scope: () => scope,
     copy: async (b, rev) => { const k = b + ":" + rev; if (!frozen.has(k)) { const fr = freezeSnapshot(Object.entries(spool).map(([name, text]) => ({ name, data: enc(text) })), scope, b, { purpose: "class_report", notice_version: "notice-v1" }, Date.now(), liveSource()); if (!fr.ok) return { code: fr.code }; frozen.set(k, { files: fr.files, binding: fr.binding }); } return frozen.get(k); },
     loadState: async () => (saved ? JSON.parse(saved) : null), saveState: async (s) => { saved = JSON.stringify(s); }, peek: () => JSON.parse(saved),
     put: async (b, rev, name, data) => { if (offline-- > 0) return { status: 0 }; puts.push(name); const r = await f.app.fetch(new Request(`https://service.test/v1/classroom/ops/collect/snapshots/${b}/${rev}/${name}`, { method: "PUT", headers: { authorization: "Bearer " + a1.credential }, body: data }), f.env, { waitUntil() {} }); const j = await r.json().catch(() => ({})); return { status: r.status, reason: j.reason }; },

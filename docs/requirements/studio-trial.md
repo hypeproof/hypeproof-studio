@@ -6,7 +6,7 @@
 
 > 작성일 2026-09-08 · 상태: 초안
 
-Product intent and UX requirements are delegated to `jayleekr/hypeprooflab:products/studio-trial/intent.md`, `design.md`, `requirements.md` (issue jayleekr/hypeprooflab#753). This repository implements R-04~09, R-15, R-17~18; it does not declare customer calibration complete.
+Product intent and UX requirements are delegated to `hypeproof/hypeprooflab:products/studio-trial/intent.md`, `design.md`, `requirements.md` (issue hypeproof/hypeprooflab#753). This repository implements R-04~09, R-15, R-17~18; it does not declare customer calibration complete.
 
 `REQ-STUDIO-TRIAL-EVIDENCE`: `hps-trial/1` curriculum plus version-matched structured session produces seven evidence summaries with item/choice provenance. Unknown evidence remains null; coaching never raises independent level; duplicate or malformed observations throw; first and new tasks remain separate. Levels 4/5 require actual work evidence beyond this static trial and cannot be awarded here.
 

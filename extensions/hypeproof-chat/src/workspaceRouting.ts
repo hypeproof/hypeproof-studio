@@ -23,7 +23,101 @@
 //   2. 호출부가 전환 직전에 목적지를 globalState 에 기록하고, 리로드 후 목적지가
 //      안 열렸으면 **재시도하지 않는다**. 실패는 한 번으로 끝난다.
 
+import * as fs from "node:fs";
 import * as path from "node:path";
+
+/**
+ * One spelling of a path for comparing locations: realpath the nearest EXISTING ancestor (the
+ * target may not exist yet — new-file writes), re-append the tail, and uppercase a Windows drive
+ * letter. JS realpath keeps the drive letter as given, and Studio sees both: `c:\…` from
+ * `workspaceFolders`, `C:\…` from `os.homedir()`. Compared as strings, one folder then differed
+ * from itself and "프로젝트 변경" refused in the very folder it should work in. Shared by every
+ * caller (#384 for the symlink half) so the copies cannot drift again.
+ */
+export function canonicalizeExistingPath(p: string): string {
+  return resolvePathThroughLinks(p) ?? unresolvablePath(p);
+}
+
+/**
+ * Does a `path.relative(root, target)` result leave `root`? By SEGMENT: `..` or `../x` leaves, `..notes.txt`
+ * (a file whose name starts with two dots) does not (CGP-AGENT-R-005 verify F3).
+ */
+export function relativeEscapes(rel: string): boolean {
+  return rel === ".." || rel.startsWith(`..${path.sep}`) || rel.startsWith("../") || path.isAbsolute(rel);
+}
+
+/** Filesystem calls the resolver needs; injectable so a test can count or vary them. */
+export interface LinkResolverFs {
+  realpath(p: string): string;
+  lstat(p: string): { isSymbolicLink(): boolean };
+  readlink(p: string): string;
+}
+// realpath.native: the on-disk case on a case-insensitive volume, as `canonicalFolder` (#2065) spells folders, so
+// the write modal and the SDK gate agree on `~/WS` vs `~/ws` (CGP-AGENT-R-005 verify 2 F5).
+const NODE_LINK_FS: LinkResolverFs = { realpath: (p) => fs.realpathSync.native(p), lstat: (p) => fs.lstatSync(p), readlink: (p) => fs.readlinkSync(p) };
+/** Links followed before giving up (the kernel's own limit on macOS and Linux is 32/40). */
+const MAX_LINK_HOPS = 40;
+
+const upperDrive = (p: string) => p.replace(/^[a-z]:/, (d) => d.toUpperCase());
+const isMissing = (e: unknown) => {
+  const code = (e as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+};
+const components = (p: string): string[] => p.split(/[\\/]+/).filter(Boolean);
+
+/**
+ * Where a write to `p` would really land (CGP-AGENT-R-005 verify F1, verify 2 F1). Walked the way the kernel walks
+ * it, component by component from a RESOLVED prefix, never as text:
+ *   - `.` is skipped; `..` goes to the parent of the resolved prefix (after the links before it were followed, so
+ *     `here/../x` with `here -> .` is the parent of the folder, not the folder);
+ *   - an existing entry is lstat-ed; a symlink — dangling or not — has its target's components spliced in front
+ *     of the remaining ones and the walk continues from the root (absolute target) or the link's own folder;
+ *   - a component that does not exist ends the walk and the rest is appended, unless a `..` follows it (the kernel
+ *     would fail there; it is not decided here);
+ *   - more than MAX_LINK_HOPS links (a loop), or a link that cannot be read: null, and callers refuse.
+ * A relative `p` is taken against the process's working directory without collapsing `..` first.
+ */
+export function resolvePathThroughLinks(p: string, io: LinkResolverFs = NODE_LINK_FS): string | null {
+  const start = path.isAbsolute(p) ? p : `${process.cwd()}${path.sep}${p}`;
+  const realRoot = (r: string) => { try { return io.realpath(r); } catch { return r; } };
+  let cur = realRoot(path.parse(start).root);
+  const queue = components(start.slice(path.parse(start).root.length));
+  let hops = 0;
+  while (queue.length > 0) {
+    const c = queue.shift() as string;
+    if (c === ".") continue;
+    if (c === "..") { cur = path.dirname(cur); continue; }
+    const next = path.join(cur, c);
+    let st: { isSymbolicLink(): boolean };
+    try { st = io.lstat(next); } catch (e) {
+      if (!isMissing(e)) return null;
+      if (queue.includes("..")) return null;
+      return upperDrive(path.join(next, ...queue.filter((q) => q !== ".")));
+    }
+    if (st.isSymbolicLink()) {
+      if (++hops > MAX_LINK_HOPS) return null;
+      let target: string;
+      try { target = io.readlink(next); } catch { return null; }
+      if (path.isAbsolute(target)) {
+        const root = path.parse(target).root;
+        cur = realRoot(root);
+        queue.unshift(...components(target.slice(root.length)));
+      } else {
+        queue.unshift(...components(target)); // relative to the link's folder, which is `cur`
+      }
+      continue;
+    }
+    // Not a link: its real spelling (on-disk case where realpath reports it).
+    try { cur = io.realpath(next); } catch { cur = next; }
+  }
+  return upperDrive(cur);
+}
+
+/** A spelling no work folder can contain, for a path the resolver could not decide: every containment check fails. */
+export function unresolvablePath(p: string): string {
+  const { root } = path.parse(path.resolve(p));
+  return path.join(root, "\u0000unresolvable-link", path.basename(p));
+}
 
 export type WorkspaceSwitchDecision =
   /** 지금 열린 폴더를 그대로 쓴다. */

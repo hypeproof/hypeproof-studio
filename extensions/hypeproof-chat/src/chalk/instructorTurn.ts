@@ -5,7 +5,7 @@
 import type { ResolvedProfile } from "../protocol";
 import { runLocalCoach } from "../localRuntime/index.ts";
 import type { LocalRuntimeConfig, BrowserToolsForLocal } from "../localRuntime/index.ts";
-import type { ChalkToolContext } from "./tools";
+import { chalkExtraTools, type ChalkToolContext } from "./tools.ts";
 import type { SdkActivity, CoachToolAction } from "../sdkCoachHelpers";
 
 // Instructor tool policy — NOT a student profile.
@@ -50,6 +50,7 @@ export async function runInstructorTurn(args: {
   browserTools?: BrowserToolsForLocal;
   signal: AbortSignal;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   onActivity?: (a: SdkActivity) => void;
   requestApproval: (
     a: CoachToolAction,
@@ -65,10 +66,11 @@ export async function runInstructorTurn(args: {
     history: args.history,
     userText: args.userText,
     systemPrompt: args.brief,
-    chalkCtx: args.chalkCtx,
+    extraTools: chalkExtraTools(args.chalkCtx),
     browserTools: args.browserTools,
     signal: args.signal,
     onDelta: args.onDelta,
+    onRefusal: args.onRefusal,
     onActivity: args.onActivity,
     requestApproval: args.requestApproval,
   });

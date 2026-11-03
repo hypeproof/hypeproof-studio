@@ -1,11 +1,13 @@
 # HypeProof 멤버 온보딩 가이드
 
+> 갱신일 2026-10-13 · 상태: 활성
+
 > 이 문서는 **HypeProof 멤버 누구나 따라할 수 있게** 한글로 적힌 가이드다.
 > Claude Code, Codex, OpenClaw 같은 코딩 에이전트와 함께 쓰는 걸 가정한다.
 > *"이 문서 따라 진행해줘"* 라고 에이전트에게 말하면 각 단계가 실제 명령으로
 > 실행된다.
 
-> **출처(provenance)**: `jayleekr/hypeproof-harness:docs/MEMBER-GUIDE.ko.md`
+> **출처(provenance)**: `hypeproof/hypeproof-harness:docs/MEMBER-GUIDE.ko.md`
 > 의 vendored 사본. 직접 수정하지 말 것 — 변경은 harness에서 PR로.
 
 ---
@@ -42,19 +44,27 @@ checkout의 인터프리터**에 설치해야 한다(`docs/HYPE-PR.ko.md` → "�
 
 ## 1. 너는 어느 repo의 멤버인가?
 
-HypeProof는 4개 repo로 구성된다. **너는 그 중 1~2개에 기여한다.** 어느
-repo인지는 회의/Discord에서 배정받았을 것이다.
+HypeProof는 5개 repo로 구성된다. 전부 GitHub 조직 `hypeproof` 아래에 있고 주소는
+`hypeproof/<repo>`다 (이전 `jayleekr/<repo>` 주소는 쓰지 않는다 —
+`docs/AGENT-GUIDE.ko.md` §2). **너는 그 중 1~2개에 기여한다.** 어느 repo인지는
+회의/Discord에서 배정받았을 것이다.
 
 | Repo | 무엇 | 주 기여자 |
 |---|---|---|
 | **`hypeproof-studio`** | VSCodium fork 기반 워크숍 도구 | Jay · 진용 · 봉호 · 재형 · TJ |
 | **`sediment`** | 지식 DB / SaaS 백엔드·프론트 | Jay · 재형 · 진용 |
 | **`hypeprooflab`** | 공개 사이트(hypeproof-ai.xyz) + 콘텐츠/운영 | Jay · 재형 |
-| **`hypeproof-harness`** | 공유 스킬/규약 + 온보딩 스킬 — **1회만 clone, 그 후엔 무시** |
+| **`hypeproof-service`** | Worker 런타임 · 측정 엔진/기준 · 측정 패키지 (Studio에서 분리) | 지웅 · Jay |
+| **`hypeproof-harness`** | 공유 스킬/규약 + 온보딩 스킬 — **한 번 clone해서 자기 repo 옆에 계속 둔다** |
 
-`hypeproof-harness`는 처음 한 번 셋업할 때만 쓴다. 그 안의 `/onboard-member`
-스킬이 자기 consumer repo를 clone하고 환경을 잡아준다. 그 다음부턴 자기
-consumer repo에서만 일한다.
+`hypeproof-harness` 안의 `/onboard-member` 스킬이 자기 repo를 clone하고 환경을
+잡아준다. 그 다음부턴 자기 repo에서 일한다. 단 harness checkout은 지우지 않고
+**자기 repo와 같은 폴더에 둔다** — `hype-pr`가 실행될 때마다 그 checkout의 정본
+도구로 넘어가기 때문이다 (§2c).
+
+`hypeproof-service`는 harness가 스킬·가이드를 복사해 넣는 대상(studio · sediment ·
+lab)이 아니다. Service 멤버는 이 가이드를 harness checkout에서 읽고, repo 규칙은
+그 repo의 `AGENTS.md`를 먼저 본다.
 
 ---
 
@@ -71,7 +81,7 @@ Jay에게 알려주면 된다.
 
 | 서비스 | 무엇에 쓰나 | 권한 | 수락 방법 |
 |---|---|---|---|
-| **GitHub** (`jayleekr/*` 4개 repo) | 코드 · PR · 머지 | Write | GitHub 알림/이메일에서 초대 4건 수락 |
+| **GitHub** (`hypeproof` 조직) | 코드 · PR · 머지 | Write (조직 기본 권한 — 조직 repo 전부) | GitHub 알림/이메일에서 조직 초대 1건 수락 |
 | **Vercel** (`hype-proof-lab` 팀) | web(hypeproof-ai.xyz) 등 프론트 배포 | Developer | 이메일 초대 수락 (같은 이메일로 Vercel 가입) |
 | **HypeProof 포털** (`hypeproof-ai.xyz/members`) | 멤버 문서·재무·기회 보드 | 접근 원장 등재 (admin 이 `/members/admin` 에서) | 등재된 이메일로 로그인 |
 | **Supabase** (`sediment` org) | Sediment 프로덕션 Postgres 직접 조회 | Developer | 이메일 초대 수락 — **DB 를 직접 봐야 하는 사람만** |
@@ -92,10 +102,10 @@ Cloudflare 와 Fly 는 **개인 계정 초대도 개인 토큰도 주지 않는�
 것이 없고, 회수는 collaborator 제거 하나로 끝나며, 누가 언제 배포했는지가 Actions 실행
 기록에 남는다. 사람마다 토큰을 쥐여주면 이 셋이 전부 깨진다.
 
-write 는 멤버마다 repo 별로 따로 준다. 2026-09-15 기준 `hypeproof-studio` 는 멤버 전원이
-write 지만 `sediment` 는 **TJ-kr 이 read 뿐**이라 Sediment 배포를 실행할 수 없다. 내 권한은
-repo 의 Settings 가 아니라 `gh api repos/jayleekr/<repo>/collaborators/<내 id>/permission` 으로
-확인하고, `read` 로 나오면 Jay 에게 **그 repo 의 write** 를 요청한다 (계정 토큰이 아니다).
+write 는 `hypeproof` 조직의 기본 권한이다. 조직 멤버면 조직 repo 전부에 write 가 있다
+(2026-10-13 확인). 내 권한은 repo 의 Settings 가 아니라
+`gh api repos/hypeproof/<repo>/collaborators/<내 id>/permission` 으로 확인하고, `read` 나
+404 로 나오면 Jay 에게 **조직 초대** 를 확인해 달라고 한다 (계정 토큰이 아니다).
 
 **Studio Worker 는 프로덕션이다. 수업 중에는 배포하지 않는다.** 워크플로가 진행 중인 수업을
 감지하면 멈춘다. `override_live_session` 은 그 판단을 일부러 뒤집는 입력이고 실행 요약에
@@ -111,7 +121,7 @@ repo 의 Settings 가 아니라 `gh api repos/jayleekr/<repo>/collaborators/<내
 
 메인테이너 체크리스트 (새 멤버 조인 시):
 
-1. GitHub: `gh api -X PUT repos/jayleekr/<repo>/collaborators/<github-id> -f permission=push` × 4개 repo (hypeprooflab · hypeproof-studio · sediment · hypeproof-harness)
+1. GitHub: `hypeproof` 조직에 멤버로 초대 — github.com/orgs/hypeproof/people → Invite member, 또는 `gh api -X PUT orgs/hypeproof/memberships/<github-id> -f role=member` (조직 owner 만, 토큰에 `admin:org` 필요). 조직 기본 권한이 Write 라 초대 1건이면 조직 repo 전부에 write 가 생긴다
 2. Vercel: `hype-proof-lab` 팀 → Members → Invite (Developer)
 3. **접근 원장: `hypeproof-ai.xyz/members/admin` → 이메일·displayName·역할 등재**
 4. `hypeprooflab/data/members.json`에 멤버 엔트리 추가 (PR)
@@ -144,7 +154,8 @@ CODEOWNERS는 전원 등록된 리뷰 요청 라우팅용으로만 남아 있다
 ### 2a. 1회성 온보딩 (권장 — 자동화)
 
 ```bash
-git clone git@github.com:jayleekr/hypeproof-harness.git
+cd ~/CodeWorkspace   # 자기 워크스페이스 폴더 (§0). 자기 repo 도 이 폴더에 둔다 (§2c)
+git clone git@github.com:hypeproof/hypeproof-harness.git
 cd hypeproof-harness
 claude            # Claude Code 세션 시작
 # 세션에서:
@@ -154,14 +165,16 @@ claude            # Claude Code 세션 시작
 스킬이:
 0. **플랫폼 점검** (`uname -s`로 macOS/Linux/Windows 판정 + Studio 멤버라면
    macOS-only 정책 알림)
-1. 어느 consumer repo 멤버인지 물음 (studio/sediment/lab)
-2. **워크스페이스 베이스 경로 묻기** (`$HYPEPROOF_WORKSPACE` 환경변수, 또는
-   기존 `~/CodeWorkspace` / `~/code` / `~/dev` 등 후보 제시, 본인 입력 가능)
+1. 어느 repo 멤버인지 물음 (studio/sediment/lab/service)
+2. **워크스페이스 베이스 경로 묻기** (`$HYPEPROOF_WORKSPACE` 환경변수, harness
+   checkout 이 놓인 폴더, 또는 `~/CodeWorkspace` / `~/code` / `~/dev` 등 후보 제시,
+   본인 입력 가능)
 3. `$WS/<repo>`에 clone (`--recursive` 자동 적용 — studio의 vscodium-base
    서브모듈 같이 가져옴)
 4. git hooks 설치 (`.githooks/` 있으면 — studio의 pre-push 등)
 5. Claude Code `.claude/settings.json` 검증 + MCP 서버 점검
 6. vendored `skill-creator` + `MEMBER-GUIDE.ko.md` + `AGENT-GUIDE.ko.md` 존재 확인
+   (service 는 vendoring 대상이 아니라 건너뜀)
 7. 이 문서로 안내 후 종료
 
 **키/토큰 자동 저장은 안 한다** — 안내만. 본인이 처리. **재실행 안전**
@@ -175,12 +188,14 @@ claude            # Claude Code 세션 시작
 # 자기 워크스페이스 베이스 정하기 (자기 컨벤션 그대로)
 WS=~/CodeWorkspace         # 또는 ~/code, ~/dev, ~/projects, 어디든
 
-git clone --recursive git@github.com:jayleekr/<your-repo>.git "$WS/<your-repo>"
+git clone --recursive git@github.com:hypeproof/<your-repo>.git "$WS/<your-repo>"
+# hype-pr 로 PR 을 만들려면 harness 도 같은 폴더에 둔다 (§2c)
+[ -d "$WS/hypeproof-harness" ] || git clone git@github.com:hypeproof/hypeproof-harness.git "$WS/hypeproof-harness"
 cd "$WS/<your-repo>"
 [ -d .githooks ] && git config core.hooksPath .githooks
 ```
 
-`<your-repo>`는 `hypeproof-studio`, `sediment`, `hypeprooflab` 중 자기 것.
+`<your-repo>`는 `hypeproof-studio`, `sediment`, `hypeprooflab`, `hypeproof-service` 중 자기 것.
 clone 직후 바로 동작 — 별도 `submodule update --init` 같은 거 없다
 (`skill-creator`는 실파일로 들어와 있음, `vscodium-base`만 studio용 서브모듈).
 
@@ -188,12 +203,19 @@ clone 직후 바로 동작 — 별도 `submodule update --init` 같은 거 없�
 > 미지원 (rsync·BSD stat 등 의존 도구 부재). Git Bash로도 부분 가능하지만
 > 일관성을 위해 WSL2 권장.
 
-### 2c. 일상 작업 — harness는 잊는다
+### 2c. 일상 작업 — harness는 옆에 둔다
 
-온보딩 후엔 자기 consumer repo에서만 일한다. harness는 다시 clone할 필요
-없다. shared 콘텐츠는 이미 `.claude/skills/skill-creator/`와
+온보딩 후엔 자기 repo에서 일한다. harness checkout은 지우지 않고 자기 repo와
+같은 폴더(`$WS/hypeproof-harness`)에 둔다. 자기 repo의 `scripts/hype-pr/pr.py`는
+실행될 때마다 그 checkout의 정본 도구로 넘어가고, 없으면
+`canonical Harness checkout missing`으로 멈춘다. checkout이 깨끗한 `main`이면
+실행 때 스스로 최신으로 당기니 따로 `git pull` 할 일은 없다. 다른 위치에 뒀으면
+`HYPEPROOF_HARNESS`에 그 경로를 넣는다.
+
+shared 콘텐츠는 이미 `.claude/skills/skill-creator/`와
 `docs/MEMBER-GUIDE.ko.md`(이 파일), `docs/AGENT-GUIDE.ko.md`, 루트
-에이전트 진입점(`CLAUDE.md`, `AGENTS.md`, `OPENCLAW.md`)에 vendoring돼 있다.
+에이전트 진입점(`CLAUDE.md`, `AGENTS.md`, `OPENCLAW.md`)에 vendoring돼 있다
+(studio · sediment · lab. service는 §1 참고).
 
 ```bash
 cd "$WS/<your-repo>"     # 본인 워크스페이스 경로
@@ -217,6 +239,92 @@ consumer repo 루트에는 에이전트별 얇은 진입점이 들어간다.
 기존 repo별 지침이 있으면 그 내용은 보존하고, 공통 가이드 링크만 추가한다.
 repo별 세부 규칙은 각 consumer의 `README.md`, `DEV-GUIDE.md`, `docs/` 또는
 해당 에이전트 진입점에 둔다.
+
+---
+
+## 2e. 에이전트 App 인증
+
+PR 준비에는 다른 비공개 정본 저장소를 읽는 과정도 있다. 읽기(GET·Git fetch)는
+본인의 기존 `gh`/Git 로그인, 쓰기(push·PR)는 대상 저장소 전용 App 토큰을 쓴다.
+읽기 권한 부족은 관리자가 접근 권한을 확인해야 하며, 사람 명의 쓰기로 우회하지 않는다.
+
+에이전트가 만든 커밋·push·PR은 팀의 `hypeproof-agent[bot]`으로 기록한다.
+**멤버마다 GitHub App을 만들거나 조직 private key(PEM)를 받을 필요는 없다.**
+사람이 직접 한 작업은 사람 신원을 유지한다.
+
+### 최초 설정과 현재 활성화 상태
+
+**운영 브로커는 활성화됐다.** 2026-10-26에 Jay 계정으로 저장소별 토큰 발급과
+봇 Draft PR [#474](https://github.com/hypeproof/hypeproof-harness/pull/474) 생성을
+확인했다(시험 PR은 닫고 브랜치 정리). 다른 팀원 PC에서의 성공을 대신 보증하지
+않으므로 Harness가 각자의 로그인·저장소 접근을 확인한다.
+
+팀원은 Claude Code나 Codex에 **“이 저장소 개발을 시작할 수 있게 연결하고,
+작업을 이어가 줘”**라고 말하면 된다. 인증 명령을 직접 입력할 필요는 없다.
+
+1. Harness가 연결 상태를 확인한다.
+2. 최초 한 번, 기존 GitHub 인증 정보를 HypeProof에 보내는 이유를 설명하고 동의를
+   받는다. 기존 동의가 있으면 다시 묻지 않는다.
+3. GitHub에 로그인되어 있지 않으면 에이전트가 브라우저 로그인을 시작한다.
+   팀원은 GitHub 화면에서 본인 인증만 완료한다.
+4. 실제 저장소 권한이 확인되면 원래 개발과 PR 작업을 이어간다.
+
+기존 `gh` 인증 토큰은 고정 주소 `https://mcp.hypeproof-ai.xyz/agent-auth/token`에
+본인 확인용으로 전송된다. 조직의 active 멤버이고 요청한 저장소 하나의 write
+권한이 있어야 짧은 수명 App 토큰을 받을 수 있다. 로컬에는 비밀이 아닌 동의만
+저장하고, 토큰이나 PEM을 새 파일로 저장하지 않는다. 진단용 토큰은 확인 직후
+폐기한다. 일반 쓰기 명령의 토큰은 명령별로 발급하며 최대 한 시간 후 만료된다.
+
+연결을 끊고 싶으면 **“이 컴퓨터의 HypeProof 개발 연결을 해제해 줘”**라고 요청한다.
+에이전트가 `agent-auth.py logout`을 실행한다. 기존 GitHub 로그인은 유지되고
+이미 발급된 쓰기 토큰은 만료 때까지 남을 수 있다.
+
+<details>
+<summary>직접 진단하는 사람을 위한 명령</summary>
+
+정본 Harness에서 실행한다. `login`은 설명된 전송에 직접 동의할 때만 사용한다.
+
+```bash
+python3 scripts/agent-identity/agent-auth.py ensure --repo hypeproof/hypeprooflab --json
+python3 scripts/agent-identity/agent-auth.py login
+python3 scripts/agent-identity/agent-auth.py status
+python3 scripts/agent-identity/agent-auth.py logout
+```
+
+`status`는 동의 기록만 검사한다. 실제 권한 확인은 `ensure`로 한다.
+
+</details>
+
+### 일상 작업
+
+```bash
+# HYPEPROOF_HARNESS는 본인의 정본 Harness checkout 경로
+"$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh" commit -m 'fix: 설명'
+"$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh" rebase origin/main
+"$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh" git push -u origin BRANCH
+```
+
+로컬 커밋·rebase는 로그인·키·토큰·네트워크 없이 실행한다. 네트워크 쓰기 wrapper는
+명령의 `--repo` 또는 현재 저장소의 `origin`에서 대상 하나를 정한다. 모호하면
+`HYPEPROOF_AGENT_REPOSITORY=hypeproof/<repo>`로 명시한다. 여러 저장소 전체 토큰은
+요청하지 않는다. 다른 저장소 작업은 별도 호출로 권한을 다시 확인한다.
+
+workflow 파일을 쓰는 작업만 `HYPEPROOF_AGENT_WORKFLOWS=1`로 명시적으로 선택하고,
+본인의 `gh` OAuth 인증에도 `workflow` scope가 있어야 한다. 기본 토큰에는 이 권한이
+없다. 브로커 토큰은 organization Projects·관리·멤버·Actions·배포 권한을 요청하지
+않는다. 보드 hook이 별도 권한 부족을 보고하면 본래 쓰기 작업과 구분해 보고한다.
+기존 키 보관자의 승인된 bootstrap 경로는 유지하지만 저장소 범위는 동일하게
+좁히며 키를 멤버에게 배포하지 않는다.
+
+| 오류 | 확인할 일 |
+|---|---|
+| `No agent login/key configured` | 에이전트에게 개발 연결을 요청한다. Harness가 최초 동의와 로그인 복구를 진행하며 PEM은 필요 없다. |
+| 봇 committer 신원 거부 | 문제 커밋의 실제 작성자를 확인하고 본인이 에이전트로 만든 커밋만 수정한다. 사람 커밋은 보존한다. |
+| HTTP 403 | active 조직 멤버십과 요청 저장소 write 권한 확인. 사람 신원 fallback은 하지 않는다. |
+| HTTP 404 / 503 | 관리자에게 브로커 배포·활성화 상태 확인. 로그인 완료로 해결됐다고 보고하지 않는다. |
+
+실패 시 `status`와 오류의 비밀 아닌 부분만 보고한다. 토큰을 출력·복사하거나,
+사람 신원으로 push/PR을 재시도하거나, 실제 사람 커밋을 봇으로 일괄 재작성하지 않는다.
 
 ---
 
@@ -266,8 +374,8 @@ repo별 세부 규칙은 각 consumer의 `README.md`, `DEV-GUIDE.md`, `docs/` �
 **파일 충돌**만 막는다 — **중복 작업**은 못 막는다.
 
 ```bash
-gh issue edit <N> --repo jayleekr/<repo> --add-label wip --add-assignee @me
-gh issue comment <N> --repo jayleekr/<repo> \
+gh issue edit <N> --repo hypeproof/<repo> --add-label wip --add-assignee @me
+gh issue comment <N> --repo hypeproof/<repo> \
   --body "claim: <세션 이름> / branch: <브랜치 이름>"
 ```
 
@@ -325,7 +433,7 @@ protection, CODEOWNERS, required checks가 요구하는 quorum을 따른다.
 /hype-review
 
 # 특정 PR을 내 기본 lens로 점검
-/hype-review https://github.com/jayleekr/<repo>/pull/<number>
+/hype-review https://github.com/hypeproof/<repo>/pull/<number>
 ```
 
 스킬이 `policy/members.yaml`의 사용자별 기본 lens를 읽어서 공통 질문, 역할별 질문,
@@ -385,7 +493,7 @@ claude -w issue-15 --tmux  # 또 다른 이슈를 별도 worktree(+tmux 패널)
    stack-specific 함정·빌드 키 등
 2. **`CLAUDE.md` / `AGENTS.md` / `OPENCLAW.md`** — 에이전트별 진입점
 3. **`docs/AGENT-GUIDE.ko.md`** — 공통 에이전트 규약
-4. **Discord** — 채널: `#daily-research`, `#content-pipeline`, `#잡담`
+4. **Discord** — 채널: `#team`(팀 내부 채널), `#잡담`
 5. **메인테이너 직접 핑**: Jay (`@jayleekr`) / Jehyeong (`@JeHyeong2`)
 
 모르는 개념(이슈/PR/브랜치)이 있으면 **즉시 물어봐**. 회의 룰: "모르는
@@ -397,8 +505,9 @@ claude -w issue-15 --tmux  # 또 다른 이슈를 별도 worktree(+tmux 패널)
 ## 8. 자주 묻는 것
 
 **Q. harness repo도 clone해야 하나?**
-A. **1회만** — 처음 온보딩 시(`/onboard-member` 스킬). 그 다음엔 안 쓴다.
-자동화 안 쓸 거면 자기 consumer repo만 직접 clone해도 동작은 한다 (§2b).
+A. 해야 한다. **한 번 clone해서 자기 repo 옆에 계속 둔다.** 처음에는 온보딩
+(`/onboard-member` 스킬)에 쓰고, 그 뒤로는 `hype-pr`가 PR을 만들 때마다 쓴다 (§2c).
+자기 repo만 clone해도 코드 작업은 되지만 `hype-pr`는 멈춘다 (§2b).
 
 **Q. `.claude/skills/skill-creator/HARNESS_VERSION` 파일은 뭐냐?**
 A. 그 vendored 스킬이 harness 어느 commit에서 복사됐는지의 증거. 손대지

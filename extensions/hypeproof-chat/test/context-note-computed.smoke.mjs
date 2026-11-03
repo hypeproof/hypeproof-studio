@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {THEMES} from './lib/vscode-default-themes.mjs';
+import {chatPanelProps,chatConfig} from './sx-screen-fixtures.mjs';
+import {findChromium,launch} from './lib/headless-chromium.mjs';
+const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
+const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
+const css=app.outputFiles.find(f=>f.path.endsWith('.css')).text;
+const js=await build({stdin:{contents:`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {ChatPanel} from './src/ChatPanel';import {compactionLineId,CONTEXT_COMPACT_NOTE} from '../src/contextTrim';function Fixture(){const [messages,setMessages]=useState(window.fixture.messages);const [boundary,setBoundary]=useState(null);window.compact=()=>setMessages(m=>[...m,{id:compactionLineId('turn-a'),role:'tool',content:'',createdAt:5,tool:{icon:'',label:CONTEXT_COMPACT_NOTE,state:'done'}},{id:'u3',role:'user',content:'요약 이후 질문',createdAt:6},{id:'a3',role:'assistant',content:'요약 이후 답변',createdAt:7}]);window.append=()=>setMessages(m=>[...m,{id:'u4',role:'user',content:'추가 질문',createdAt:8},{id:'a4',role:'assistant',content:'추가 답변',createdAt:9}]);window.boundary=setBoundary;return <ChatPanel {...window.fixture} messages={messages} trimBoundaryId={boundary}/>};createRoot(document.getElementById('root')).render(<Fixture/>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
+const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Chromium required');console.log('NOT RUN context note: no Chromium');process.exit(0);}
+const evidence=process.env.CONTEXT_NOTE_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
+const pause=()=>new Promise(r=>setTimeout(r,100));
+const b=await launch(bin);try{for(const seat of ['personal','classroom'])for(const dark of [true,false])for(const width of [320,800,1420])for(const forcedColors of [false,true]){
+ const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
+ const config=chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?{tasks:[],sources:[]}:undefined});
+ const messages=[{id:'u1',role:'user',content:'첫 질문',createdAt:1},{id:'a1',role:'assistant',content:'첫 답변',createdAt:2},{id:'u2',role:'user',content:'요약 직전 질문',createdAt:3},{id:'a2',role:'assistant',content:'요약 직전 답변',createdAt:4}];
+ await b.load(`<!doctype html><html style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:800px"><div id="root"></div></div><script>window.fixture=${JSON.stringify(chatPanelProps({config,messages}))};</script><script>${js.outputFiles[0].text}</script></body></html>`,{width,height:900,dark,forcedColors});await pause();
+ assert.equal(await b.evaluate(`document.querySelectorAll('.hps-context-note').length`),0,'no event means no note');
+ await b.evaluate('window.compact()');await pause();
+ const measure=()=>b.evaluate(`(()=>{const notes=[...document.querySelectorAll('.hps-context-note')];return notes.map(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect(),probe=document.createElement('span');probe.style.color='var(--hp-text-muted-default)';e.append(probe);const color=getComputedStyle(probe).color;probe.remove();return {role:e.getAttribute('role'),align:s.textAlign,font:parseFloat(s.fontSize),color:s.color,expected:color,animation:s.animationName,position:s.position,icons:e.querySelectorAll('svg,img').length,inTranscript:!!e.closest('.hps-messages'),w:e.scrollWidth,client:e.clientWidth,text:e.textContent,top:r.top,bottom:r.bottom,left:r.left,right:r.right}})})()`);
+ let notes=await measure();assert.equal(notes.length,1);for(const n of notes){assert.equal(n.role,'note');assert.equal(n.align,'center');assert.ok(n.font>=13&&n.font<=14);if(seat==='personal')assert.equal(n.font,14);assert.equal(n.color,n.expected,'secondary text role');assert.equal(n.animation,'none');assert.ok(!['fixed','absolute'].includes(n.position)&&n.inTranscript,'in-flow transcript note');assert.equal(n.icons,0);assert.ok(n.w<=n.client+1,'notice wraps without overflow');}
+ const order=()=>b.evaluate(`(()=>{const root=document.querySelector('.hps-messages'),text=root.textContent;return text.indexOf('요약 직전 답변')<text.indexOf('AI가 앞 대화를')&&text.indexOf('AI가 앞 대화를')<text.indexOf('요약 이후 질문')})()`);assert.equal(await order(),true,'real compaction stays at its transcript point');
+ await b.evaluate('window.append()');await pause();assert.equal((await measure()).length,1,'new turns do not duplicate note');assert.equal(await order(),true,'new turns do not move compaction point');
+ await b.evaluate(`window.boundary('u3')`);await pause();notes=await measure();assert.equal(notes.length,2,'host clamp and compaction are separate real conditions');assert.ok(notes.some(n=>n.text.includes('기억하지 못해요')));assert.ok(notes.some(n=>n.text.includes('짧게 줄여서')));
+ await b.evaluate(`window.boundary('not-in-view')`);await pause();assert.equal((await measure()).length,1,'invisible host boundary creates no false marker');
+ await b.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'},{name:'forced-colors',value:forcedColors?'active':'none'},{name:'prefers-color-scheme',value:dark?'dark':'light'}]});assert.equal((await measure())[0].animation,'none');
+ await b.evaluate(`document.querySelector('.hps-context-note').scrollIntoView({block:'nearest'})`);await pause();const visible=await b.evaluate(`(()=>{const e=document.querySelector('.hps-context-note'),r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})()`);assert.equal(visible,true,'note is visible, not clipped behind an overlay');
+ if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/context-${seat}-${width}-${dark?'dark':'light'}-${forcedColors?'forced':'normal'}.png`,Buffer.from(shot.data,'base64'));}
+ console.log('PASS',seat,width,dark?'dark':'light',forcedColors?'forced':'normal');
+}}finally{await b.close()}
+console.log('PASS context notice computed layout and transcript persistence');

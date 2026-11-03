@@ -7,9 +7,9 @@
 //   silently open instructor chat for any token.
 
 import assert from "node:assert/strict";
-import { InstructorModeManager } from "../src/chalk/instructorMode.ts";
-import { adminBaseFrom } from "../src/chalk/serverBase.ts";
-import { decideMode, profileFailureToStatus } from "../src/chalk/modeDecision.ts";
+import { InstructorModeManager } from "../src/instructorMode.ts";
+import { adminBaseFrom } from "../src/serverBase.ts";
+import { decideMode, profileFailureToStatus } from "../src/modeDecision.ts";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`  ok   ${name}`); };
@@ -337,19 +337,21 @@ t("handleAutoReadResult: ok → ok_noop", async () => {
 console.log("=== mergeChalkTools — chalk_* in instructor turn ===");
 
 t("mergeChalkTools: chalkCtx present → chalk_* tool names in definitions", async () => {
-  const { mergeChalkTools } = await import("../src/localRuntime/index.ts");
+  const { mergeExtraTools } = await import("../src/localRuntime/index.ts");
+  const { chalkExtraTools } = await import("../src/chalk/tools.ts");
   const emptyWorkTools = { definitions: [], call: async () => "" };
   const fakeCtx = { serverUrl: "https://x", secrets: {} };
-  const merged = mergeChalkTools(emptyWorkTools, fakeCtx);
+  const merged = mergeExtraTools(emptyWorkTools, chalkExtraTools(fakeCtx));
   const names = merged.definitions.map((d) => d.name);
   assert.ok(names.some((n) => n.startsWith("chalk_")),
     `chalk_* tool must appear when chalkCtx present; got: [${names.join(", ")}]`);
 });
 
 t("mergeChalkTools: no chalkCtx → no chalk_* in definitions", async () => {
-  const { mergeChalkTools } = await import("../src/localRuntime/index.ts");
+  const { mergeExtraTools } = await import("../src/localRuntime/index.ts");
+  const { chalkExtraTools } = await import("../src/chalk/tools.ts");
   const emptyWorkTools = { definitions: [], call: async () => "" };
-  const merged = mergeChalkTools(emptyWorkTools, undefined);
+  const merged = mergeExtraTools(emptyWorkTools, chalkExtraTools(undefined));
   const names = merged.definitions.map((d) => d.name);
   assert.ok(!names.some((n) => n.startsWith("chalk_")),
     "no chalk_* must appear without chalkCtx");

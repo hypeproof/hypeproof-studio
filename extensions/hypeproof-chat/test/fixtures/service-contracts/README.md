@@ -14,3 +14,10 @@ The curriculum plan and model labels are example Service response data used to
 exercise generic App rendering. They are not an App runtime curriculum registry.
 Keep snapshots versioned when the Service contract deliberately changes; record
 the producing Service revision and rerun both products' corresponding checks.
+
+`trial-funnel.json` is the open-trial funnel event contract (`/v1/trial/events`).
+Each sample's `accepted`/`message` is the verdict of the Service's own
+`parseAppEvent`, captured by running it over every body the App builder can
+produce plus refused controls. `test/funnel-events.smoke.mjs` replays it, and
+runs the real Service parser too when `HPS_SERVICE_WORKER_DIR` points at a
+`hypeproof-service/worker` checkout.

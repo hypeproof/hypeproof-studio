@@ -1,0 +1,57 @@
+{"case":"A clean forced save with trim participant"}
+{"ev":"open","f":"a.html","scheme":"file"}
+{"ev":"change","f":"a.html","scheme":"file","dirty":false,"n":1,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a.html","scheme":"file","dirty":true,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"willSave","f":"a.html","scheme":"file","dirty":true,"reason":1,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"change","f":"a.html","scheme":"file","dirty":false,"n":0,"text":"<p>AI page</p>\n"}
+{"ev":"didSave","f":"a.html","scheme":"file","dirty":false,"text":"<p>AI page</p>\n"}
+{"disk":"<p>AI page</p>\n"}
+{"case":"B dirty save, does willSave run before trim"}
+{"ev":"open","f":"b.html","scheme":"file"}
+{"ev":"change","f":"b.html","scheme":"file","dirty":false,"n":1,"text":"<p>v0</p>  mine   \n"}
+{"ev":"change","f":"b.html","scheme":"file","dirty":true,"n":0,"text":"<p>v0</p>  mine   \n"}
+{"ev":"change","f":"b.html","scheme":"file","dirty":true,"n":1,"text":"<p>v0</p>  mine\n"}
+{"ev":"willSave","f":"b.html","scheme":"file","dirty":true,"reason":1,"text":"<p>v0</p>  mine\n"}
+{"ev":"change","f":"b.html","scheme":"file","dirty":false,"n":0,"text":"<p>v0</p>  mine\n"}
+{"ev":"change","f":"b.html","scheme":"file","dirty":false,"n":0,"text":"<p>v0</p>  mine\n"}
+{"ev":"didSave","f":"b.html","scheme":"file","dirty":false,"text":"<p>v0</p>  mine\n"}
+{"case":"C type+undo forced save"}
+{"ev":"open","f":"c.html","scheme":"file"}
+{"ev":"change","f":"c.html","scheme":"file","dirty":false,"n":1,"text":"x<p>c</p>\n"}
+{"ev":"change","f":"c.html","scheme":"file","dirty":true,"n":0,"text":"x<p>c</p>\n"}
+{"ev":"change","f":"c.html","scheme":"file","dirty":true,"n":1,"reason":1,"text":"<p>c</p>\n"}
+{"ev":"change","f":"c.html","scheme":"file","dirty":false,"n":0,"text":"<p>c</p>\n"}
+{"ev":"willSave","f":"c.html","scheme":"file","dirty":false,"reason":1,"text":"<p>c</p>\n"}
+{"ev":"change","f":"c.html","scheme":"file","dirty":false,"n":0,"text":"<p>c</p>\n"}
+{"ev":"didSave","f":"c.html","scheme":"file","dirty":false,"text":"<p>c</p>\n"}
+{"case":"D dirty buffer then external disk write then save"}
+{"ev":"open","f":"d.html","scheme":"file"}
+{"ev":"change","f":"d.html","scheme":"file","dirty":false,"n":1,"text":"mine<p>d</p>\n"}
+{"ev":"change","f":"d.html","scheme":"file","dirty":true,"n":0,"text":"mine<p>d</p>\n"}
+{"dDirtyAfterDiskWrite":true,"text":"mine<p>d</p>\n"}
+{"ev":"willSave","f":"d.html","scheme":"file","dirty":true,"reason":1,"text":"mine<p>d</p>\n"}
+{"dSaveResult":false,"disk":"<p>AI rewrote</p>\n","dirty":true}
+{"case":"E two editors same doc"}
+{"ev":"open","f":"e.html","scheme":"file"}
+{"ev":"change","f":"e.html","scheme":"file","dirty":false,"n":1,"text":"two<p>e</p>\n"}
+{"ev":"change","f":"e.html","scheme":"file","dirty":true,"n":0,"text":"two<p>e</p>\n"}
+{"ev":"willSave","f":"e.html","scheme":"file","dirty":true,"reason":1,"text":"two<p>e</p>\n"}
+{"ev":"change","f":"e.html","scheme":"file","dirty":false,"n":0,"text":"two<p>e</p>\n"}
+{"ev":"change","f":"e.html","scheme":"file","dirty":false,"n":0,"text":"two<p>e</p>\n"}
+{"ev":"didSave","f":"e.html","scheme":"file","dirty":false,"text":"two<p>e</p>\n"}
+{"case":"F untitled -> save into folder"}
+{"ev":"open","f":"f.html","scheme":"untitled"}
+{"ev":"change","f":"f.html","scheme":"untitled","dirty":true,"n":0,"text":""}
+{"ev":"change","f":"f.html","scheme":"untitled","dirty":true,"n":1,"text":"<p>untitled typed</p>"}
+{"ev":"open","f":"f.html","scheme":"file"}
+{"ev":"change","f":"f.html","scheme":"file","dirty":false,"n":1,"text":"<p>untitled typed</p>"}
+{"ev":"change","f":"f.html","scheme":"file","dirty":true,"n":0,"text":"<p>untitled typed</p>"}
+{"ev":"willSave","f":"f.html","scheme":"file","dirty":true,"reason":1,"text":"<p>untitled typed</p>"}
+{"ev":"change","f":"f.html","scheme":"file","dirty":false,"n":0,"text":"<p>untitled typed</p>"}
+{"ev":"change","f":"f.html","scheme":"file","dirty":false,"n":0,"text":"<p>untitled typed</p>"}
+{"ev":"didSave","f":"f.html","scheme":"file","dirty":false,"text":"<p>untitled typed</p>"}
+{"ev":"change","f":"f.html","scheme":"untitled","dirty":true,"n":1,"text":""}
+{"ev":"close","f":"f.html","scheme":"untitled"}
+{"fSave":true,"disk":"<p>untitled typed</p>"}
+{"done":true}

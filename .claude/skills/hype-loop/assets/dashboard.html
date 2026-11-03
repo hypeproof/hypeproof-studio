@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop Dashboard</title>
+<!-- Rendered by hype-loop loopctl.py; data is embedded below. Do not edit a rendered copy. -->
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --line: #e3e3de; --accent: #2f5bd3; --ok: #1f7a4d; --fail: #b3261e; --warn: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --surface: #1f1f1d; --text: #ececea; --muted: #a2a29c;
+      --line: #33332f; --accent: #8aa8ff; --ok: #5cc48f; --fail: #ff8a80; --warn: #e0b45a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615; --surface: #1f1f1d; --text: #ececea; --muted: #a2a29c;
+    --line: #33332f; --accent: #8aa8ff; --ok: #5cc48f; --fail: #ff8a80; --warn: #e0b45a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", system-ui, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; word-break: break-all; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { color: var(--muted); font-size: 12px; }
+  .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 6px 0 20px; }
+  .bar > div { height: 100%; background: var(--accent); }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { border-top: 1px solid var(--line); padding: 8px 0; display: grid; grid-template-columns: 48px 72px 1fr; gap: 8px; }
+  li:first-child { border-top: 0; }
+  .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .st { font-size: 12px; font-weight: 600; }
+  .st.ok { color: var(--ok); } .st.fail { color: var(--fail); } .st.partial, .st.abandoned { color: var(--warn); }
+  .t { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">루프 대시보드</h1>
+  <div class="sub" id="sub"></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="bar"><div id="bar" style="width:0"></div></div>
+  <section><h2>틱 기록 (최신순)</h2><ol id="log"></ol></section>
+  <section><h2>합의한 헌장</h2><pre id="charter"></pre></section>
+  <section><h2>틱마다 실행하는 지시</h2><pre id="instruction"></pre></section>
+</main>
+<script id="loop-data" type="application/json">__LOOP_DATA__</script>
+<script>
+(function () {
+  var d = JSON.parse(document.getElementById("loop-data").textContent);
+  var STATE = { pending: "준비", running: "진행 중", stopped: "중지됨", done: "완료" };
+  var STATUS = { ok: "성공", fail: "실패", partial: "부분", abandoned: "중단" };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmt(t) { if (!t) return "-"; try { return new Date(t).toLocaleString("ko-KR", { hour12: false }); } catch (e) { return t; } }
+
+  document.getElementById("title").textContent = "루프 대시보드 · " + d.loop_id;
+  document.getElementById("sub").textContent =
+    "생성 " + fmt(d.created) + " · 마지막 갱신 " + fmt(d.updated) + " · 크론 " + (d.cron && d.cron.expr || "-") +
+    (d.cron && d.cron.id ? " (" + d.cron.id + ")" : "");
+
+  var ok = (d.log || []).filter(function (e) { return e.status === "ok"; }).length;
+  var fail = (d.log || []).filter(function (e) { return e.status === "fail"; }).length;
+  var tiles = [
+    ["상태", STATE[d.state] || d.state],
+    ["진행", d.done + " / " + d.target],
+    ["성공 · 실패", ok + " · " + fail],
+    ["주기", d.interval],
+    ["크론 만료", d.cron && d.cron.expires_at ? fmt(d.cron.expires_at) : "-"]
+  ];
+  if (d.final) tiles.push(["종료 사유", d.final.reason]);
+  var tb = document.getElementById("tiles");
+  tiles.forEach(function (t) { var x = el("div", "tile"); x.appendChild(el("div", "k", t[0])); x.appendChild(el("div", "v", t[1])); tb.appendChild(x); });
+  document.getElementById("bar").style.width = Math.min(100, Math.round(100 * d.done / Math.max(1, d.target))) + "%";
+
+  var log = document.getElementById("log");
+  var rows = (d.log || []).slice().reverse();
+  if (!rows.length) log.appendChild(el("li", "empty", "아직 실행된 틱이 없습니다."));
+  rows.forEach(function (e) {
+    var li = el("li");
+    li.appendChild(el("span", "n", "#" + e.tick));
+    li.appendChild(el("span", "st " + e.status, STATUS[e.status] || e.status));
+    var body = el("div");
+    body.appendChild(el("div", null, e.summary || ""));
+    body.appendChild(el("div", "t", fmt(e.started) + " → " + fmt(e.ended)));
+    (e.links || []).forEach(function (u) {
+      if (!/^https?:\/\//.test(u)) return;
+      var a = el("a", null, u); a.href = u; a.target = "_blank"; a.rel = "noopener"; body.appendChild(a);
+    });
+    li.appendChild(body);
+    log.appendChild(li);
+  });
+  document.getElementById("charter").textContent = d.charter_summary || "";
+  document.getElementById("instruction").textContent = d.instruction || "";
+})();
+</script>
+</body>
+</html>

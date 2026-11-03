@@ -6,97 +6,126 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   :root {
-    --bg: #0f1115; --fg: #e6e8eb; --muted: #8a8f99; --line: #2a2e36;
-    --accent: #5b8def; --ok: #4dbd84; --warn: #d97757; --card: #1a1d24;
+    --bg: var(--ds-c-chalk-console-surface-72); --fg: var(--ds-c-chalk-console-ink-44); --muted: var(--ds-c-chalk-console-ink-71); --line: var(--ds-c-chalk-console-boundary-64);
+    --accent: var(--ds-c-chalk-console-ink-25); --ok: var(--ds-c-chalk-console-ink-73); --warn: var(--ds-c-chalk-console-ink-23); --card: var(--ds-c-chalk-console-ink-72);
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 32px 16px;
+    margin: 0; padding: var(--ds-c-chalk-console-space-6) var(--ds-c-chalk-console-space-20);
     background: var(--bg); color: var(--fg);
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Pretendard", sans-serif;
-    line-height: 1.45;
+    font-family: var(--ds-c-chalk-console-font-9);
+    line-height: var(--ds-c-chalk-console-typography-20);
   }
-  .wrap { max-width: 640px; margin: 0 auto; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
-  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
-  legend { padding: 0 6px; color: var(--muted); font-size: 12px; }
-  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .wrap { max-width: var(--ds-c-chalk-console-size-24); margin: 0 auto; }
+  h1 { font-size: var(--ds-c-chalk-console-type-5); margin: 0 0 var(--ds-c-chalk-console-space-13); }
+  .sub { color: var(--muted); font-size: var(--ds-c-chalk-console-type-9); margin-bottom: var(--ds-c-chalk-console-space-4); }
+  fieldset { border: var(--ds-c-chalk-console-size-3) solid var(--line); border-radius: var(--ds-c-chalk-console-radius-10); padding: var(--ds-c-chalk-console-space-20); margin: 0 0 var(--ds-c-chalk-console-space-20); }
+  legend { padding: 0 var(--ds-c-chalk-console-space-15); color: var(--muted); font-size: var(--ds-c-chalk-console-type-1); }
+  label { display: block; font-size: var(--ds-c-chalk-console-type-1); color: var(--muted); margin: var(--ds-c-chalk-console-space-7) 0 var(--ds-c-chalk-console-space-13); }
   input, select, textarea {
-    width: 100%; padding: 10px 12px; font: inherit;
+    width: 100%; padding: var(--ds-c-chalk-console-space-7) var(--ds-c-chalk-console-space-1); font: inherit;
     background: var(--card); color: var(--fg);
-    border: 1px solid var(--line); border-radius: 6px;
+    border: var(--ds-c-chalk-console-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-chalk-console-radius-3);
   }
-  textarea { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; resize: vertical; }
+  textarea { font-family: var(--ds-c-chalk-console-font-7); font-size: var(--ds-c-chalk-console-type-1); resize: vertical; }
   button {
-    width: 100%; margin-top: 12px; padding: 12px;
-    border: 0; border-radius: 6px; cursor: pointer; font: inherit;
-    background: var(--accent); color: white; font-weight: 600;
+    width: 100%; margin-top: var(--ds-c-chalk-console-space-1); padding: var(--ds-c-chalk-console-space-1);
+    border: 0; border-radius: var(--ds-c-chalk-console-radius-3); cursor: pointer; font: inherit;
+    background: var(--accent); color: var(--ds-c-chalk-console-ink-52); font-weight: var(--ds-c-chalk-console-typography-7);
   }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-  button.danger { background: #6b2622; }
-  .banner { padding: 12px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
-  .banner.ok { background: #0a3622; border: 1px solid #145a3c; }
-  .banner.warn { background: #3a2a14; border: 1px solid #6b4d22; color: #e0b070; }
-  .banner.err { background: #3a1714; border: 1px solid #6b2622; color: var(--warn); }
+  button.ghost { background: transparent; color: var(--muted); border: var(--ds-c-chalk-console-size-3) solid var(--hp-control-line); }
+  button.danger { background: var(--ds-c-chalk-console-surface-95); }
+  .banner { padding: var(--ds-c-chalk-console-space-1) var(--ds-c-chalk-console-space-19); border-radius: var(--ds-c-chalk-console-radius-10); font-size: var(--ds-c-chalk-console-type-9); margin-bottom: var(--ds-c-chalk-console-space-20); }
+  .banner.ok { background: var(--ds-c-chalk-console-surface-101); border: var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-69); }
+  .banner.warn { background: var(--ds-c-chalk-console-surface-102); border: var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-70); color: var(--ds-c-chalk-console-ink-86); }
+  .banner.err { background: var(--ds-c-chalk-console-surface-91); border: var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-65); color: var(--warn); }
   .track {
-    border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-top: 10px;
+    border: var(--ds-c-chalk-console-size-3) solid var(--line); border-radius: var(--ds-c-chalk-console-radius-10); padding: var(--ds-c-chalk-console-space-19); margin-top: var(--ds-c-chalk-console-space-7);
     background: var(--card);
   }
-  .track.live { border-color: #145a3c; background: #0a3622; }
-  .track h3 { margin: 0 0 2px; font-size: 15px; }
-  .track .pid { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; word-break: break-all; }
-  .track .countdown { font-size: 13px; color: var(--ok); margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .track.live { border-color: var(--ds-c-chalk-console-boundary-69); background: var(--ds-c-chalk-console-surface-101); }
+  .track h3 { margin: 0 0 var(--ds-c-chalk-console-space-14); font-size: var(--ds-c-chalk-console-type-2); }
+  .track .pid { color: var(--muted); font-size: var(--ds-c-chalk-console-type-3); font-family: var(--ds-c-chalk-console-font-8); word-break: break-all; }
+  .track .countdown { font-size: var(--ds-c-chalk-console-type-9); color: var(--ok); margin-top: var(--ds-c-chalk-console-space-15); font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: var(--ds-c-chalk-console-space-2); align-items: flex-end; }
   .row > div { flex: 1; }
   .row button { margin-top: 0; }
-  .tok-line { margin-top: 8px; padding: 8px; background: #0f1115; border-radius: 4px; }
-  .tok-line .name { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .tok-line .token { font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; user-select: all; }
-  .tok-line .tok-copy { width: auto; margin-top: 8px; padding: 6px 12px; font-size: 11px; }
-  .help { font-size: 11px; color: var(--muted); margin-top: 4px; }
-  .err-detail { margin-top: 8px; opacity: 0.7; font-size: 11px; }
+  .session-start { display: grid; grid-template-columns: minmax(var(--ds-c-chalk-console-duration-min-width), max-content) minmax(0, 1fr); }
+  .session-duration label { margin: 0; font-size: var(--ds-c-chalk-console-type-17); white-space: nowrap; }
+  .session-duration select { display: block; margin-top: var(--ds-c-chalk-console-space-13); min-height: var(--ds-c-chalk-console-size-8); }
+  .tok-line { margin-top: var(--ds-c-chalk-console-space-2); padding: var(--ds-c-chalk-console-space-2); background: var(--ds-c-chalk-console-surface-72); border-radius: var(--ds-c-chalk-console-radius-13); }
+  .tok-line .name { font-size: var(--ds-c-chalk-console-type-1); color: var(--muted); margin-bottom: var(--ds-c-chalk-console-space-13); }
+  .tok-line .token { font-family: var(--ds-c-chalk-console-font-8); font-size: var(--ds-c-chalk-console-type-4); word-break: break-all; user-select: all; }
+  .tok-line .tok-copy { width: auto; margin-top: var(--ds-c-chalk-console-space-2); padding: var(--ds-c-chalk-console-space-15) var(--ds-c-chalk-console-space-1); font-size: var(--ds-c-chalk-console-type-3); }
+  .help { font-size: var(--ds-c-chalk-console-type-3); color: var(--muted); margin-top: var(--ds-c-chalk-console-space-13); }
+  .err-detail { margin-top: var(--ds-c-chalk-console-space-2); opacity: 0.7; font-size: var(--ds-c-chalk-console-type-3); }
 
   /* Brand tokens shared with /manage (docs/requirements/classroom-design.md §디자인 시스템). Status/label text stays at 14px or more (DES-02). */
-  :root { --bg: #151D19; --fg: #F2F4E8; --muted: #BAC5B4; --line: #3A4A3E; --accent: #D5F279; --ok: #9FD08A; --warn: #FF9D8C; --card: #1A241E; }
-  body { line-height: 1.6; } h1 { font-size: 22px; } .sub, label, legend, .help, .banner, .err { font-size: 14px; }
-  input, select, textarea { border-color: #8A9A86; } textarea { font-size: 14px; } a { color: var(--accent); }
-  button { color: #151D19; min-height: 44px; } button.ghost, button.reset, .reset { color: var(--fg); border-color: #8A9A86; } button.danger { color: #FFE9E4; }
-  .out, .track.live, .banner.ok { background: #1F3326; border-color: #4E6B52; } .tok-line, .out .token { background: #111915; }
+  :root { --bg: var(--ds-c-chalk-console-surface-68); --fg: var(--ds-c-chalk-console-ink-40); --muted: var(--ds-c-chalk-console-ink-56); --line: var(--ds-c-chalk-console-boundary-58); --accent: var(--ds-c-chalk-console-ink-12); --ok: var(--ds-c-chalk-console-ink-87); --warn: var(--ds-c-chalk-console-ink-88); --card: var(--ds-c-chalk-console-ink-89); }
+  body { line-height: var(--ds-c-chalk-console-typography-4); } h1 { font-size: var(--ds-c-chalk-console-type-15); } .sub, label, legend, .help, .banner, .err { font-size: var(--ds-c-chalk-console-type-17); }
+  input, select, textarea { border-color: var(--ds-c-chalk-console-boundary-71); } textarea { font-size: var(--ds-c-chalk-console-type-17); } a { color: var(--accent); }
+  button { color: var(--ds-c-chalk-console-ink-90); min-height: var(--ds-c-chalk-console-size-8); } button.ghost, button.reset, .reset { color: var(--fg); border-color: var(--ds-c-chalk-console-boundary-71); } button.danger { color: var(--ds-c-chalk-console-ink-91); }
+  .out, .track.live, .banner.ok { background: var(--ds-c-chalk-console-surface-103); border-color: var(--ds-c-chalk-console-boundary-72); } .tok-line, .out .token { background: var(--ds-c-chalk-console-surface-82); }
+</style>
+<style>
+/* CGP-SHELL-R-032 / D-031 roster CSV import. Status is icon + text, never colour alone (DES-SHELL-31). */
+.roster-import [hidden]{display:none!important}
+.roster-import code{font-family:var(--ds-c-chalk-console-font-10);color:var(--hp-text)}
+.roster-import input[type=file]{padding:var(--ds-c-chalk-console-space-2);min-height:var(--ds-c-chalk-console-size-8)}
+.roster-import h3{font-size:var(--ds-c-chalk-console-type-31);margin:var(--ds-c-chalk-console-space-20) 0 var(--ds-c-chalk-console-space-2);color:var(--hp-text)}
+.roster-import h3:focus-visible,.ri-table-wrap:focus-visible{outline:var(--ds-c-chalk-console-size-15) solid var(--hp-accent);outline-offset:var(--ds-c-chalk-console-size-7)}
+.ri-table-wrap{max-height:var(--ds-c-chalk-console-size-106);overflow:auto;border:var(--ds-c-chalk-console-size-3) solid var(--hp-line-hi);border-radius:var(--ds-c-chalk-console-radius-10)}
+.ri-table{width:100%;border-collapse:collapse;font-size:var(--ds-c-chalk-console-type-17)}
+.ri-table caption{text-align:left;padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-7);color:var(--hp-text-2);font-size:var(--ds-c-chalk-console-type-17)}
+.ri-table th,.ri-table td{padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-7);border-top:var(--ds-c-chalk-console-size-3) solid var(--hp-line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.ri-table thead th{position:sticky;top:0;background:var(--hp-panel-hi);color:var(--hp-text-2);font-weight:var(--ds-c-chalk-console-typography-7)}
+.ri-table td.ri-line{color:var(--hp-text-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ri-table td.ri-handle{font-family:var(--ds-c-chalk-console-font-10);white-space:nowrap;overflow-wrap:normal}
+.ri-table thead th{white-space:nowrap}
+.ri-table tr.ri-bad td{background:var(--ds-c-chalk-console-surface-104)}
+.ri-table tr.ri-bad td:first-child{box-shadow:inset var(--ds-c-chalk-console-shadow-21) 0 0 var(--hp-warn)}
+.ri-mark{display:inline-block;min-width:var(--ds-c-chalk-console-size-107);font-weight:var(--ds-c-chalk-console-typography-17)}
+.ri-ok{color:var(--hp-ok)}.ri-warn{color:var(--hp-warn)}.ri-fail{color:var(--hp-alert)}.ri-same{color:var(--hp-text-2)}
+.ri-confirm{display:flex!important;align-items:center;gap:var(--ds-c-chalk-console-space-7);min-height:var(--ds-c-chalk-console-size-8);margin:var(--ds-c-chalk-console-space-1) 0 0!important;font-size:var(--ds-c-chalk-console-type-2);color:var(--hp-text)!important;cursor:pointer}
+.ri-confirm input{width:var(--ds-c-chalk-console-size-2)!important;height:var(--ds-c-chalk-console-size-2);min-height:0;margin:0;flex:none;accent-color:var(--hp-accent)}
+.ri-results{list-style:none;margin:0;padding:0}
+.ri-results li{padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-7);border-top:var(--ds-c-chalk-console-size-3) solid var(--hp-line);font-size:var(--ds-c-chalk-console-type-2);overflow-wrap:anywhere}
+.ri-results li .ri-who{font-family:var(--ds-c-chalk-console-font-10)}
+.ri-count{font-size:var(--ds-c-chalk-console-type-2);color:var(--hp-text)}
 </style>
 </head>
 <body>
-<style>/* Instructor flow bar — the same three stages as /manage (docs/requirements/classroom-design.md · 강사 화면 공통 동선). Scoped so the page's own styles stay as they were. */.hp-flowbar{box-sizing:border-box;max-width:1100px;margin-left:auto!important;margin-right:auto!important;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 24px;padding:8px 16px;margin:0 0 20px;background:#111915;border:1px solid #3A4A3E;border-radius:10px;font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;color:#F2F4E8;color-scheme:dark}.hp-flowbar .hp-home{font-size:14px;color:#BAC5B4;text-decoration:none}.hp-flowbar nav{display:flex;flex-wrap:wrap;gap:4px 6px}.hp-flowbar .hp-step{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding-right:8px;border-right:1px solid #3A4A3E}.hp-flowbar .hp-step:last-child{border-right:0}.hp-flowbar .hp-label{font-size:14px;color:#BAC5B4;padding:0 6px 0 8px;white-space:nowrap}.hp-flowbar nav a{font-size:15px;font-weight:400;display:inline-flex;align-items:center;min-height:44px;padding:0 10px;border-radius:7px;color:#F2F4E8;text-decoration:none;white-space:nowrap}.hp-flowbar nav a:hover{background:#26352B;text-decoration:underline}.hp-flowbar nav a:focus-visible,.hp-flowbar .hp-home:focus-visible{outline:3px solid #D5F279;outline-offset:2px}.hp-flowbar nav a[aria-current="page"]{background:#26352B;box-shadow:inset 0 -3px 0 #D5F279;font-weight:600}@media(max-width:620px){.hp-flowbar nav{flex:1 1 100%;min-width:0;flex-wrap:nowrap;overflow-x:auto;max-width:100%}.hp-flowbar .hp-step{flex-wrap:nowrap}}</style><style>
+<style>/* Instructor flow bar — the same three stages as /manage (docs/requirements/classroom-design.md · 강사 화면 공통 동선). Scoped so the page's own styles stay as they were. */.hp-flowbar{box-sizing:border-box;max-width:var(--ds-c-chalk-console-size-97);margin-left:auto!important;margin-right:auto!important;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-15) var(--ds-c-chalk-console-space-4);padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-20);margin:0 0 var(--ds-c-chalk-console-space-5);background:var(--ds-c-chalk-console-surface-82);border:var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-58);border-radius:var(--ds-c-chalk-console-radius-9);font:var(--ds-c-chalk-console-typography-27);color:var(--ds-c-chalk-console-ink-40);color-scheme:dark}.hp-flowbar .hp-home{font-size:var(--ds-c-chalk-console-type-17);color:var(--ds-c-chalk-console-ink-56);text-decoration:none}.hp-flowbar nav{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-13) var(--ds-c-chalk-console-space-15)}.hp-flowbar .hp-step{display:flex;align-items:center;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-14);padding-right:var(--ds-c-chalk-console-space-2);border-right:var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-58)}.hp-flowbar .hp-step:last-child{border-right:0}.hp-flowbar .hp-label{font-size:var(--ds-c-chalk-console-type-17);color:var(--ds-c-chalk-console-ink-56);padding:0 var(--ds-c-chalk-console-space-15) 0 var(--ds-c-chalk-console-space-2);white-space:nowrap}.hp-flowbar nav a{font-size:var(--ds-c-chalk-console-type-2);font-weight:var(--ds-c-chalk-console-typography-12);display:inline-flex;align-items:center;min-height:var(--ds-c-chalk-console-size-8);padding:0 var(--ds-c-chalk-console-space-7);border-radius:var(--ds-c-chalk-console-radius-1);color:var(--ds-c-chalk-console-ink-40);text-decoration:none;white-space:nowrap}.hp-flowbar nav a:hover{background:var(--hp-state-hover);text-decoration:underline}.hp-flowbar nav a:focus-visible,.hp-flowbar .hp-home:focus-visible{outline:var(--ds-c-chalk-console-size-15) solid var(--ds-c-chalk-console-boundary-6);outline-offset:var(--ds-c-chalk-console-size-7)}.hp-flowbar nav a[aria-current="page"]{background:var(--ds-c-chalk-console-surface-83);box-shadow:inset 0 var(--ds-c-chalk-console-shadow-19) 0 var(--ds-c-chalk-console-shadow-20);font-weight:var(--ds-c-chalk-console-typography-7)}@media(max-width:620px){.hp-flowbar nav{flex:1 1 100%;min-width:0;flex-wrap:nowrap;overflow-x:auto;max-width:100%}.hp-flowbar .hp-step{flex-wrap:nowrap}}</style><style>
 /* #1363 shared instructor theme — charcoal + cyan, compact flowbar, first-view spacing. */
-:root{--hp-bg:#0F1418;--hp-panel:#151C22;--hp-panel-hi:#1D2630;--hp-line:#2A343E;--hp-line-hi:#3A4855;--hp-text:#E8ECEF;--hp-text-2:#B7C1CA;--hp-mute:#7D8994;--hp-accent:#2AC4D9;--hp-accent-hi:#5FE0F2;--hp-ok:#7DC896;--hp-warn:#F5C36B;--hp-alert:#FF8686}
+:root{--hp-control-line:var(--ds-c-chalk-console-boundary-81);--hp-state-hover:color-mix(in srgb,var(--hp-text) 8%,transparent);--hp-state-pressed:color-mix(in srgb,var(--hp-text) 14%,transparent);--hp-layer-hover:color-mix(in srgb,currentColor 8%,transparent);--hp-layer-pressed:color-mix(in srgb,currentColor 14%,transparent);--hp-bg:var(--ds-c-chalk-console-surface-84);--hp-panel:var(--ds-c-chalk-console-surface-85);--hp-panel-hi:var(--ds-c-chalk-console-surface-86);--hp-line:var(--ds-c-chalk-console-boundary-59);--hp-line-hi:var(--ds-c-chalk-console-boundary-60);--hp-text:var(--ds-c-chalk-console-ink-57);--hp-text-2:var(--ds-c-chalk-console-ink-58);--hp-mute:var(--ds-c-chalk-console-ink-59);--hp-accent:var(--ds-c-chalk-console-ink-60);--hp-accent-hi:var(--ds-c-chalk-console-ink-61);--hp-ok:var(--ds-c-chalk-console-ink-62);--hp-warn:var(--ds-c-chalk-console-ink-63);--hp-alert:var(--ds-c-chalk-console-ink-64)}
 html,body{background:var(--hp-bg);color:var(--hp-text)}
 a{color:var(--hp-accent)}
 button{color:var(--hp-text)}
-input,select,textarea{background:var(--hp-panel-hi);color:var(--hp-text);border-color:var(--hp-line-hi)}
-button:not(.ghost):not(.reset):not(.danger){background:var(--hp-accent);color:#08131A;border-color:var(--hp-accent);font-weight:600}
-button:not(.ghost):not(.reset):not(.danger):hover:not(:disabled){background:var(--hp-accent-hi);border-color:var(--hp-accent-hi);color:#08131A}
-button.ghost,button.reset,.reset,button[disabled]{background:transparent;color:var(--hp-text-2);border:1px solid var(--hp-line-hi);font-weight:400}
-form:has(input,textarea,select) button:nth-of-type(n+2):not(.primary):not([type=submit]){background:transparent;color:var(--hp-text-2);border:1px solid var(--hp-line-hi);font-weight:400}
-button.ghost,button.reset,.reset{background:transparent;color:var(--hp-text-2);border-color:var(--hp-line-hi)}
+input,select,textarea{background:var(--hp-panel-hi);color:var(--hp-text);border-color:var(--hp-control-line)}
+button:not(.ghost):not(.reset):not(.danger){background:var(--hp-accent);color:var(--ds-c-chalk-console-ink-65);border-color:var(--hp-accent);font-weight:var(--ds-c-chalk-console-typography-7)}
+button:not(.ghost):not(.reset):not(.danger):not(.secondary):hover:not(:disabled){background-image:linear-gradient(var(--hp-layer-hover),var(--hp-layer-hover));color:var(--ds-c-chalk-console-ink-65)}button:not(.ghost):not(.reset):not(.danger):not(.secondary):active:not(:disabled){background-image:linear-gradient(var(--hp-layer-pressed),var(--hp-layer-pressed))}
+button.ghost,button.reset,.reset,button[disabled]{background:transparent;color:var(--hp-text-2);border:var(--ds-c-chalk-console-size-3) solid var(--hp-control-line);font-weight:var(--ds-c-chalk-console-typography-12)}
+form:has(input,textarea,select) button:nth-of-type(n+2):not(.primary):not([type=submit]){background:transparent;color:var(--hp-text-2);border:var(--ds-c-chalk-console-size-3) solid var(--hp-control-line);font-weight:var(--ds-c-chalk-console-typography-12)}
+button.ghost,button.reset,.reset{background:transparent;color:var(--hp-text-2);border-color:var(--hp-control-line)}
 *:focus-visible{outline-color:var(--hp-accent)!important}
-.hp-flowbar{background:var(--hp-panel);border-color:var(--hp-line);color:var(--hp-text);padding:8px 14px;gap:4px 10px}
-.hp-flowbar .hp-home{color:var(--hp-mute);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
-.hp-flowbar .hp-step{padding-right:8px;border-right-color:var(--hp-line)}
+.hp-flowbar{background:var(--hp-panel);border-color:var(--hp-line);color:var(--hp-text);padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-19);gap:var(--ds-c-chalk-console-space-13) var(--ds-c-chalk-console-space-7)}
+.hp-flowbar .hp-home{color:var(--hp-mute);font-size:var(--ds-c-chalk-console-type-1);letter-spacing:var(--ds-c-chalk-console-size-98);text-transform:uppercase;font-weight:var(--ds-c-chalk-console-typography-7)}
+.hp-flowbar .hp-step{padding-right:var(--ds-c-chalk-console-space-2);border-right-color:var(--hp-line)}
 .hp-flowbar .hp-label{display:none}
-.hp-flowbar nav{gap:2px 4px}
-.hp-flowbar nav a{min-height:32px;padding:2px 10px;font-size:.8125rem;color:var(--hp-text-2);border-radius:6px}
-.hp-flowbar nav a:hover{background:var(--hp-panel-hi);color:var(--hp-text);text-decoration:none}
-.hp-flowbar nav a[aria-current="page"]{background:transparent;box-shadow:none;color:var(--hp-accent);font-weight:600;border-bottom:2px solid var(--hp-accent);border-radius:0;padding-bottom:0}
+.hp-flowbar nav{gap:var(--ds-c-chalk-console-space-14) var(--ds-c-chalk-console-space-13)}
+.hp-flowbar nav a{min-height:var(--ds-c-chalk-console-size-23);padding:var(--ds-c-chalk-console-space-14) var(--ds-c-chalk-console-space-7);font-size:var(--ds-c-chalk-console-type-26);color:var(--hp-text-2);border-radius:var(--ds-c-chalk-console-radius-3)}
+.hp-flowbar nav a:hover{background:var(--hp-state-hover);color:var(--hp-text);text-decoration:none}.hp-flowbar nav a:active{background:var(--hp-state-pressed)}
+.hp-flowbar nav a[aria-current="page"]{background:transparent;box-shadow:none;color:var(--hp-accent);font-weight:var(--ds-c-chalk-console-typography-7);border-bottom:var(--ds-c-chalk-console-size-7) solid var(--hp-accent);border-radius:0;padding-bottom:0}
 /* Page containers: reduce top padding and h1 size so essential inputs sit above the fold. */
-body>header,body>main,body>.wrap{padding-top:16px}
-h1{font-size:1.375rem;letter-spacing:.01em;margin:8px 0 4px}
-.sub,p.sub,header>p,header p{font-size:.875rem;color:var(--hp-mute);margin:0 0 12px;max-width:60ch}
+body>header,body>main,body>.wrap{padding-top:var(--ds-c-chalk-console-space-20)}
+h1{font-size:var(--ds-c-chalk-console-type-27);letter-spacing:var(--ds-c-chalk-console-size-99);margin:var(--ds-c-chalk-console-space-2) 0 var(--ds-c-chalk-console-space-13)}
+.sub,p.sub,header>p,header p{font-size:var(--ds-c-chalk-console-type-28);color:var(--hp-mute);margin:0 0 var(--ds-c-chalk-console-space-1);max-width:60ch}
 /* Fieldsets/sections: panels with clear separation, primary field first. */
-fieldset,section,form.editor{background:var(--hp-panel);border-color:var(--hp-line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
-legend{background:transparent;color:var(--hp-mute);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;padding:0 6px}
+fieldset,section,form.editor{background:var(--hp-panel);border-color:var(--hp-line);border-radius:var(--ds-c-chalk-console-radius-9);padding:var(--ds-c-chalk-console-space-19) var(--ds-c-chalk-console-space-20);margin:0 0 var(--ds-c-chalk-console-space-1)}
+legend{background:transparent;color:var(--hp-mute);font-size:var(--ds-c-chalk-console-type-29);letter-spacing:var(--ds-c-chalk-console-size-100);text-transform:uppercase;padding:0 var(--ds-c-chalk-console-space-15)}
 /* Fold anything beyond the first fieldset on a fresh page load until the user acts (progressive disclosure). Users still see progress via headings. */
-label{color:var(--hp-text-2);font-size:.8125rem}
+label{color:var(--hp-text-2);font-size:var(--ds-c-chalk-console-type-26)}
 label small{color:var(--hp-mute)}
 </style><div class="hp-flowbar"><a class="hp-home" href="/manage">HypeProof Chalk · 강사</a><nav aria-label="강사 도구"><a href="/manage">수업 운영</a><a href="/authoring">강의 작성</a><a href="/issuer">학생 초대</a><a href="/console" aria-current="page">수업 시작·종료</a><a href="/budgets">AI 예산</a><details><summary>더보기</summary><div class="more-links"><a href="/authoring#rehearsal">리허설·확정</a><a href="/manage#ops-help-title">도움 요청</a><a href="/manage#shares-title">공유 기록</a><a href="/manage#ops-finish-title">기록 회수·보고서</a></div></details></nav></div>
 <div class="wrap">
@@ -118,6 +147,9 @@ label small{color:var(--hp-mute)}
 </div>
 
 <script>
+/*@roster-csv*/
+// The inlined script binds rosterCsvKit to the kit object (the factory already ran).
+const rosterCsv = rosterCsvKit;
 const $ = (id) => document.getElementById(id);
 
 // --- shared with /issuer (issue #65): paste normalization -------------------
@@ -183,6 +215,7 @@ $("forget").onclick = () => {
 };
 
 let countdownTimer = null;
+let distributionTargets = [];
 
 async function api(path, opts) {
   const issuer = sanitizeToken($("issuer").value);
@@ -191,7 +224,9 @@ async function api(path, opts) {
     headers: { "Authorization": "Bearer " + issuer, "content-type": "application/json", ...(opts && opts.headers) },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || ("HTTP " + res.status));
+  // Chalk's own upstream errors are objects ({type, message}); show the message, not [object Object].
+  const e = body.error;
+  if (!res.ok) throw new Error((typeof e === "string" ? e : e && e.message) || ("HTTP " + res.status));
   return body;
 }
 
@@ -225,6 +260,16 @@ async function load() {
     esc(payload.u || "강사") + ' · 토큰 유효: ' + esc(new Date(expMs).toLocaleDateString()) + '까지' +
     (daysLeft <= 7 ? ' — <b>만료 ' + daysLeft + '일 전!</b> 미리 Jay에게 재발급 요청해두세요.' : '') + '</div>';
 
+  distributionTargets = [];
+  try {
+    const routing = await api('/workshop/boa-tokens', { method: 'GET' });
+    if (!Array.isArray(routing.targets) || routing.targets.some((target) =>
+      !target || typeof target.cohort !== 'string' || !Array.isArray(target.profiles) ||
+      target.profiles.some((id) => typeof id !== 'string'))) throw new Error('배부 설정 형식이 올바르지 않습니다.');
+    distributionTargets = routing.targets;
+  } catch {
+    banner.innerHTML += '<div class="banner warn">공개 배부 보드 설정을 확인하지 못했습니다. 이번 발급 결과는 보드에 자동 게시되지 않으므로 학생에게 직접 전달하세요.</div>';
+  }
   for (const scope of payload.scopes || []) renderCohort(scope);
 }
 
@@ -259,10 +304,10 @@ async function renderCohort(scope) {
         ? '<div class="countdown" data-ends="' + esc(state.session.ends_at) + '"></div>' +
           '<button class="danger" data-close="' + esc(scope.cohort) + '">세션 닫기</button>'
         : (canStart
-          ? '<div class="row"><div><label>시간</label><select data-hours>' +
+          ? '<div class="row session-start"><div class="session-duration"><label>시간<select data-hours>' +
             [1,2,3,4,5,6].filter(h => h <= maxH).map(h =>
               '<option value="' + h + '"' + (h === Math.min(4, maxH) ? " selected" : "") + '>' + h + '시간</option>').join("") +
-            '</select></div>' +
+            '</select></label></div>' +
             '<button data-open="' + esc(scope.cohort) + '" data-profile="' + esc(p.id) + '">이 트랙으로 세션 열기</button></div>'
           : "")) +
       '</div>';
@@ -304,7 +349,9 @@ async function renderCohort(scope) {
   });
 
   startCountdowns();
+  renderRosterImport(scope);
   renderMinter(scope, state);
+  renderLabTokens(scope);
 }
 
 function startCountdowns() {
@@ -349,28 +396,42 @@ function renderMinter(scope, state) {
     out.innerHTML = "";
     if (!users.length) return (out.innerHTML = '<div class="banner err">참가자 handle을 한 줄에 한 명씩 입력해주세요.</div>');
     btn.disabled = true;
-    // #367 — roster BEFORE minting: the chat gate blocks any handle not in
-    // the cohort roster (not_in_roster), so a minted-but-unrostered token is
-    // a lecture-day trap. Registering first makes "token issued" imply
-    // "student can actually chat". Server-side merge, so re-runs are safe.
-    try {
-      btn.textContent = "명단 등록 중…";
-      await api("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
-        method: "POST",
-        body: JSON.stringify({ users }),
-      });
-    } catch (err) {
-      btn.disabled = false; btn.textContent = "일괄 발급 →";
-      return (out.innerHTML = '<div class="banner err">참가자 명단 등록 실패 — 발급을 중단했어요. ' + esc(mapServerError(err.message)) + '</div>');
-    }
-    const results = [];
-    for (const u of users) {
-      btn.textContent = "발급 중… (" + (results.length + 1) + "/" + users.length + ")";
+    const publishesToBoa = distributionTargets.some((target) => target.cohort === scope.cohort && target.profiles.includes(p));
+    let results = [];
+    let boardNotice = "";
+    if (publishesToBoa) {
       try {
-        const body = await api("/admin/tokens/issue", { method: "POST", body: JSON.stringify({ u, c: scope.cohort, p, hours }) });
-        results.push({ u, token: body.token });
+        btn.textContent = "발급·배부 보드 등록 중…";
+        const body = await api("/workshop/boa-tokens", {
+          method: "POST", body: JSON.stringify({ cohort: scope.cohort, profile: p, users, hours }),
+        });
+        results = body.results.map((r) => ({ u: r.handle, token: r.token, error: r.error }));
+        boardNotice = body.board
+          ? '<div class="banner ok">학생 토큰을 <a href="https://hypeproof-ai.xyz/live/boa#token" target="_blank" rel="noopener noreferrer">내 토큰 받기</a>에 올렸습니다.</div>'
+          : body.boardError ? '<div class="banner err">' + esc(body.boardError) + '</div>' : "";
       } catch (err) {
-        results.push({ u, error: err.message });
+        btn.disabled = false; btn.textContent = "일괄 발급 →";
+        return (out.innerHTML = '<div class="banner err">' + esc(mapServerError(err.message)) + '</div>');
+      }
+    } else {
+      // Other cohorts retain their existing Service-only issuance path.
+      try {
+        btn.textContent = "명단 등록 중…";
+        await api("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
+          method: "POST", body: JSON.stringify({ users }),
+        });
+      } catch (err) {
+        btn.disabled = false; btn.textContent = "일괄 발급 →";
+        return (out.innerHTML = '<div class="banner err">참가자 명단 등록 실패 — 발급을 중단했어요. ' + esc(mapServerError(err.message)) + '</div>');
+      }
+      for (const u of users) {
+        btn.textContent = "발급 중… (" + (results.length + 1) + "/" + users.length + ")";
+        try {
+          const body = await api("/admin/tokens/issue", { method: "POST", body: JSON.stringify({ u, c: scope.cohort, p, hours }) });
+          results.push({ u, token: body.token });
+        } catch (err) {
+          results.push({ u, error: err.message });
+        }
       }
     }
     btn.disabled = false; btn.textContent = "일괄 발급 →";
@@ -380,7 +441,7 @@ function renderMinter(scope, state) {
     // copies "이름: 토큰" pairs (goes into KakaoTalk so each student can find
     // their own line). Pasting the bulk format into the app yields a 401 —
     // hence the explicit warning on the bulk label.
-    out.innerHTML =
+    out.innerHTML = boardNotice +
       results.map((r, i) => '<div class="tok-line"><div class="name">' + esc(r.u) + (r.error ? ' — <span style="color:var(--warn)">' + esc(mapServerError(r.error)) + '</span>' : "") + '</div>' +
         (r.token
           ? '<div class="token">' + esc(r.token) + '</div>' +
@@ -390,17 +451,177 @@ function renderMinter(scope, state) {
         ? '<button class="ghost" id="copyall-' + esc(scope.cohort) + '">명단용 전체 복사 (이름: 토큰 — 앱에 그대로 붙이면 안 됩니다)</button>'
         : "");
     out.querySelectorAll(".tok-copy").forEach((b) => {
-      b.onclick = () => {
-        navigator.clipboard.writeText(results[Number(b.dataset.idx)].token);
-        b.textContent = "복사됨 ✓";
-        setTimeout(() => { b.textContent = "이 토큰만 복사"; }, 1500);
-      };
+      b.onclick = () => window.chalkCopyFeedback(b, () => results[Number(b.dataset.idx)].token);
     });
     const copyBtn = document.getElementById("copyall-" + scope.cohort);
-    if (copyBtn) copyBtn.onclick = () => {
-      navigator.clipboard.writeText(results.filter((r) => r.token).map((r) => r.u + ": " + r.token).join("\n\n"));
-      copyBtn.textContent = "복사됨 ✓";
-    };
+    if (copyBtn) copyBtn.onclick = () => window.chalkCopyFeedback(copyBtn, () => results.filter((r) => r.token).map((r) => r.u + ": " + r.token).join("\n\n"));
+  };
+}
+
+// CGP-SHELL-R-032 / D-031 — roster CSV import (classroom-admin ADM-01 roster CSV). Paste or upload → preview table →
+// the instructor confirms → the valid handles go to the Service's existing roster append (handles only, like ③) →
+// one result line per row. "실패한 줄만 다시" resends only the failed rows. No token is issued here.
+function renderRosterImport(scope) {
+  const id = "ri-" + scope.cohort.replace(/[^A-Za-z0-9_-]/g, "_");
+  if (document.getElementById(id)) return;
+  const wrap = document.createElement("fieldset");
+  wrap.id = id; wrap.className = "roster-import";
+  wrap.innerHTML =
+    '<legend>명단 가져오기 (CSV) — ' + esc(scope.cohort) + '</legend>' +
+    '<div class="help" id="' + id + '-help">첫 줄은 머리글 <code>handle,name</code>이에요. 이 가져오기는 handle(영문 소문자·숫자·하이픈)만 서버로 보내요. handle은 서버에 남으니 실명·전화번호 대신 <code>s01</code>처럼 번호로 정해 주세요. name 열은 이 화면에서 줄을 맞춰 볼 때만 써요. 한 번에 ' + rosterCsv.MAX_ROWS + '줄까지 받아요. 학생 토큰은 아래 ③에서 따로 발급해요.</div>' +
+    '<label for="' + id + '-file">CSV 파일 고르기</label>' +
+    '<input id="' + id + '-file" type="file" accept=".csv,text/csv,text/plain" aria-describedby="' + id + '-help">' +
+    '<label for="' + id + '-text">또는 붙여넣기</label>' +
+    '<textarea id="' + id + '-text" rows="5" spellcheck="false" aria-describedby="' + id + '-help" placeholder="handle,name&#10;s01,김민지&#10;s02,이서준"></textarea>' +
+    '<button type="button" data-ri-preview>미리 보기</button>' +
+    '<div data-ri-error role="alert"></div>' +
+    '<div data-ri-preview-area hidden>' +
+      '<h3 id="' + id + '-sum" tabindex="-1" data-ri-summary></h3>' +
+      '<div class="ri-table-wrap" tabindex="0" role="region" aria-labelledby="' + id + '-sum" data-ri-table></div>' +
+      '<label class="ri-confirm"><input type="checkbox" data-ri-confirm> <span data-ri-confirm-text></span></label>' +
+      '<button type="button" data-ri-send disabled></button>' +
+    '</div>' +
+    '<div data-ri-results-area hidden>' +
+      '<h3 id="' + id + '-res" tabindex="-1">보낸 결과</h3>' +
+      '<p class="ri-count" role="status" data-ri-count></p>' +
+      '<ol class="ri-results" aria-labelledby="' + id + '-res" data-ri-results></ol>' +
+      '<button type="button" class="ghost" data-ri-retry hidden>실패한 줄만 다시</button>' +
+    '</div>';
+  $("minter").appendChild(wrap);
+
+  const q = (sel) => wrap.querySelector(sel);
+  const fileInput = $(id + "-file"), text = $(id + "-text");
+  const previewBtn = q("[data-ri-preview]"), errorBox = q("[data-ri-error]");
+  const area = q("[data-ri-preview-area]"), summary = q("[data-ri-summary]"), tableBox = q("[data-ri-table]");
+  const confirmBox = q("[data-ri-confirm]"), confirmText = q("[data-ri-confirm-text]"), sendBtn = q("[data-ri-send]");
+  const resultsArea = q("[data-ri-results-area]"), countLine = q("[data-ri-count]"), list = q("[data-ri-results]"), retryBtn = q("[data-ri-retry]");
+  let preview = null, order = [], names = new Map(), results = new Map(), busy = false, sentText = null;
+
+  const cell = (tag, value, cls) => { const el = document.createElement(tag); el.textContent = value; if (cls) el.className = cls; return el; };
+  const mark = (glyph, cls, label) => { const s = document.createElement("span"); s.className = "ri-mark " + cls; s.setAttribute("aria-hidden", "true"); s.textContent = glyph; const t = document.createElement("span"); t.className = cls; t.textContent = label; return [s, t]; };
+
+  // Any edit after a preview voids it: what is confirmed is what was shown.
+  // `sentText`: the CSV text last sent. 추가 stays off until the CSV changes (a resend would relabel 추가됨 as 이미 있음).
+  const alreadySent = () => sentText !== null && text.value === sentText;
+  function invalidate() { preview = null; area.hidden = true; confirmBox.checked = false; sendBtn.disabled = true; }
+  // While a request is in flight the inputs are locked too, so a new file cannot discard that request's results.
+  function syncSend() { sendBtn.disabled = busy || alreadySent() || !preview || !preview.valid || !confirmBox.checked; retryBtn.disabled = busy; previewBtn.disabled = busy; fileInput.disabled = busy; text.readOnly = busy; text.setAttribute("aria-busy", String(busy));
+    if (!busy && preview) sendBtn.textContent = alreadySent() ? "보냈어요 · CSV를 바꾸면 다시 보낼 수 있어요" : "정상 " + preview.valid + "명 명단에 추가"; }
+
+  function showPreview() {
+    errorBox.innerHTML = ""; invalidate();
+    const p = rosterCsv.preview(text.value);
+    if (!p.ok) { errorBox.innerHTML = '<div class="banner err">' + esc(p.error) + ' 아무것도 보내지 않았어요.</div>'; return; }
+    preview = p;
+    summary.textContent = "정상 " + p.valid + " · 확인 필요 " + p.invalid;
+    const table = document.createElement("table"); table.className = "ri-table";
+    table.append(cell("caption", "보내기 전에 확인하세요. 확인 필요 줄은 보내지 않아요."));
+    const head = document.createElement("tr");
+    for (const h of ["줄", "handle"].concat(p.hasName ? ["name (화면 확인용)"] : [], ["상태"])) { const th = cell("th", h); th.scope = "col"; head.append(th); }
+    const thead = document.createElement("thead"); thead.append(head); table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const r of p.rows) {
+      const tr = document.createElement("tr"); if (!r.ok) tr.className = "ri-bad";
+      tr.append(cell("td", String(r.line), "ri-line"), cell("td", r.handle, "ri-handle"));
+      if (p.hasName) tr.append(cell("td", r.name));
+      const st = document.createElement("td");
+      st.append(...(r.ok ? mark("✓", "ri-ok", "정상") : mark("!", "ri-warn", "확인 필요 — " + r.reason)));
+      tr.append(st); tbody.append(tr);
+    }
+    table.append(tbody); tableBox.replaceChildren(table);
+    confirmText.textContent = p.valid ? "표를 확인했어요. 정상인 " + p.valid + "명의 handle만 보내요 (name 열은 이 가져오기에서 보내지 않아요)." : "보낼 수 있는 정상 줄이 없어요. 파일을 고친 뒤 다시 미리 보기를 눌러 주세요.";
+    confirmBox.disabled = !p.valid;
+    area.hidden = false; syncSend(); summary.focus();
+  }
+
+  function renderResults() {
+    const c = rosterCsv.counts(order, results);
+    countLine.textContent = "추가됨 " + c.added + " · 이미 있음 " + c.exists + " · 실패 " + c.failed;
+    list.replaceChildren(...order.map((h) => {
+      const r = results.get(h), li = document.createElement("li"), who = cell("span", h, "ri-who"), name = names.get(h);
+      li.append(...(r.state === "added" ? mark("✓", "ri-ok", "추가됨") : r.state === "exists" ? mark("=", "ri-same", "이미 있음") : mark("✕", "ri-fail", "실패")));
+      li.append(document.createTextNode(" · "), who);
+      // <bdi> isolates the name's text direction so it cannot reorder the reason that follows it.
+      if (name) { const b = document.createElement("bdi"); b.textContent = name; li.append(document.createTextNode(" ("), b, document.createTextNode(")")); }
+      if (r.state === "failed") li.append(document.createTextNode(" — " + r.reason));
+      li.dataset.state = r.state; li.dataset.handle = h;
+      return li;
+    }));
+    retryBtn.hidden = !c.failed;
+    resultsArea.hidden = false;
+  }
+
+  async function send(handles) {
+    if (busy || !handles.length) return;
+    busy = true; syncSend();
+    const label = sendBtn.textContent; sendBtn.textContent = "보내는 중… (" + handles.length + "명)";
+    let answer;
+    try {
+      const res = await fetch("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + sanitizeToken($("issuer").value), "content-type": "application/json" },
+        body: JSON.stringify(rosterCsv.requestBody(handles)),
+      });
+      answer = { status: res.status, body: await res.json().catch(() => null) };
+    } catch { answer = { network: true }; }
+    results = rosterCsv.merge(results, rosterCsv.mapAppend(handles, answer, mapServerError));
+    busy = false; sendBtn.textContent = label;
+    renderResults(); syncSend(); $(id + "-res").focus();
+  }
+
+  // A new input voids the preview but keeps the last result lines on screen; they are replaced when a new send starts.
+  fileInput.onchange = async () => {
+    errorBox.innerHTML = ""; invalidate();
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    if (f.size > rosterCsv.MAX_BYTES) { errorBox.innerHTML = '<div class="banner err">파일이 너무 커요. 64KB까지 받아요. 아무것도 보내지 않았어요.</div>'; return; }
+    try { text.value = rosterCsv.decode(await f.arrayBuffer()); }
+    catch { errorBox.innerHTML = '<div class="banner err">파일을 읽지 못했어요. 아무것도 보내지 않았어요.</div>'; return; }
+    showPreview();
+  };
+  text.oninput = invalidate;
+  previewBtn.onclick = showPreview;
+  confirmBox.onchange = syncSend;
+  sendBtn.onclick = () => {
+    if (busy || alreadySent() || !preview || !confirmBox.checked) return;
+    const ok = preview.rows.filter((r) => r.ok);
+    order = ok.map((r) => r.handle); names = new Map(ok.filter((r) => r.name).map((r) => [r.handle, r.name])); results = new Map();
+    sentText = text.value; send(order);
+  };
+  retryBtn.onclick = () => send(rosterCsv.failed(order, results));
+}
+
+// Lab keeps the short-lived distribution credentials; Service authorizes the read.
+// This explicit lookup never reissues a token or persists student credentials in the browser.
+function renderLabTokens(scope) {
+  const wrap = document.createElement('fieldset');
+  wrap.dataset.labTokens = scope.cohort;
+  wrap.innerHTML = '<legend>④ Lab에서 발급한 학생 토큰 — ' + esc(scope.cohort) + '</legend>' +
+    '<div class="help">현재 Lab 배부 보드의 토큰을 조회합니다. 이미 가져간 학생의 토큰도 담당 강사 권한으로 확인할 수 있어요. 만료되어 사라진 보드의 과거 토큰은 표시하지 않습니다.</div>' +
+    '<button type="button" data-load-lab-tokens>Lab 학생 토큰 불러오기</button>' +
+    '<div data-lab-token-results aria-live="polite"></div>';
+  $('minter').appendChild(wrap);
+  const btn = wrap.querySelector('[data-load-lab-tokens]');
+  const out = wrap.querySelector('[data-lab-token-results]');
+  btn.onclick = async () => {
+    btn.disabled = true; out.textContent = '불러오는 중…';
+    try {
+      const body = await api('/admin/cohorts/' + encodeURIComponent(scope.cohort) + '/lab-tokens', { method: 'GET' });
+      if (!body.board) { out.textContent = '현재 Lab 배부 보드가 없습니다. 아직 발급하지 않았거나 보드가 만료됐습니다.'; return; }
+      const students = body.board.students;
+      if (!Array.isArray(students)) throw new Error('Lab 조회 응답을 확인하지 못했습니다.');
+      out.innerHTML = students.length ? students.map((student, i) =>
+        '<div class="tok-line"><div class="name">' + esc(student.handle) + '</div>' +
+        '<div class="help">' + (student.claimedBy ? '가져감 · ' + esc(student.claimedBy) : '아직 가져가지 않음') +
+        (student.expiresAt ? ' · 만료 ' + esc(new Date(student.expiresAt).toLocaleString()) : '') + '</div>' +
+        '<div class="token">' + esc(student.token) + '</div>' +
+        '<button type="button" data-copy-lab="' + i + '">이 토큰만 복사</button></div>').join('') : '발급된 학생 토큰이 없습니다.';
+      out.querySelectorAll('[data-copy-lab]').forEach(button => {
+        button.onclick = () => window.chalkCopyFeedback(button, () => students[Number(button.dataset.copyLab)].token);
+      });
+    } catch (error) {
+      out.innerHTML = '<div class="banner err">' + esc(error.message || '조회하지 못했습니다.') + '</div>';
+    } finally { btn.disabled = false; }
   };
 }
 
@@ -413,10 +634,12 @@ if (typeof window === "undefined") {
 }
 </script>
 <style>
-html:root,body{background:#0f1418!important;color:#e8ecef;min-height:100vh}body{margin:0!important}body>.wrap,body>header,body>main{width:min(100%,1100px);margin-inline:auto;padding:20px}
-.hp-flowbar{align-items:center;font-size:15px}.hp-flowbar nav{gap:4px;align-items:center;overflow:visible!important;flex-wrap:wrap!important}.hp-flowbar nav a{font-size:14px;min-height:40px}.hp-flowbar details{position:relative;padding:0 10px}.hp-flowbar summary{cursor:pointer;color:#b7c1ca}.hp-flowbar .more-links{position:absolute;right:0;top:32px;z-index:20;background:#151c22;border:1px solid #3a4855;border-radius:8px;padding:8px;min-width:200px}.hp-flowbar .more-links a{display:block;white-space:normal}
-label{font-size:15px}input,textarea,select{font-size:16px}small,.help,.muted{color:#a7b4bf}button.secondary,button.ghost,button.reset{background:transparent!important;color:#b7c1ca!important;border:1px solid #3a4855!important}
-.page-help{margin:14px 0;color:#b7c1ca}.page-help>summary{cursor:pointer}.page-help[open]{padding-bottom:12px}.page-help nav{display:flex;flex-wrap:wrap;gap:16px;padding:12px 0}.page-help p{line-height:1.6}
-@media(max-width:600px){body>.wrap,body>header,body>main{padding:14px}.hp-flowbar{padding:10px}.hp-flowbar nav{gap:0}.hp-flowbar nav a{padding:4px 7px;font-size:14px}}
+html:root,body{background:var(--ds-c-chalk-console-surface-87)!important;color:var(--ds-c-chalk-console-ink-66);min-height:100vh}body{margin:0!important}body>.wrap,body>header,body>main{width:min(100%,var(--ds-c-chalk-console-size-97));margin-inline:auto;padding:var(--ds-c-chalk-console-space-5)}
+.hp-flowbar{align-items:center;font-size:var(--ds-c-chalk-console-type-2)}.hp-flowbar nav{gap:var(--ds-c-chalk-console-space-13);align-items:center;overflow:visible!important;flex-wrap:wrap!important}.hp-flowbar nav a{font-size:var(--ds-c-chalk-console-type-17);min-height:var(--ds-c-chalk-console-size-42)}.hp-flowbar details{position:relative;padding:0 var(--ds-c-chalk-console-space-7)}.hp-flowbar summary{cursor:pointer;color:var(--ds-c-chalk-console-ink-67)}.hp-flowbar .more-links{position:absolute;right:0;top:var(--ds-c-chalk-console-size-23);z-index:20;background:var(--ds-c-chalk-console-surface-88);border:var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-61);border-radius:var(--ds-c-chalk-console-radius-10);padding:var(--ds-c-chalk-console-space-2);min-width:var(--ds-c-chalk-console-size-56)}.hp-flowbar .more-links a{display:block;white-space:normal}
+label{font-size:var(--ds-c-chalk-console-type-2)}input,textarea,select{font-size:var(--ds-c-chalk-console-type-13)}small,.help,.muted{color:var(--ds-c-chalk-console-ink-68)}button.secondary,button.ghost,button.reset{background-color:transparent!important;color:var(--ds-c-chalk-console-ink-67)!important;border:var(--ds-c-chalk-console-size-3) solid var(--hp-control-line)!important}/* CGP-DS-D-003: quiet controls take the state layers, text at 8% (hover) and 14% (pressed) over the surface. */button.secondary:hover:not(:disabled),button.ghost:hover:not(:disabled),button.reset:hover:not(:disabled){background-image:linear-gradient(var(--hp-state-hover),var(--hp-state-hover))}button.secondary:active:not(:disabled),button.ghost:active:not(:disabled),button.reset:active:not(:disabled){background-image:linear-gradient(var(--hp-state-pressed),var(--hp-state-pressed))}form:has(input,textarea,select) button:nth-of-type(n+2):not(.primary):not([type=submit]):hover:not(:disabled){background-color:transparent;background-image:linear-gradient(var(--hp-state-hover),var(--hp-state-hover))}form:has(input,textarea,select) button:nth-of-type(n+2):not(.primary):not([type=submit]):active:not(:disabled){background-color:transparent;background-image:linear-gradient(var(--hp-state-pressed),var(--hp-state-pressed))}
+.page-help{margin:var(--ds-c-chalk-console-space-19) 0;color:var(--ds-c-chalk-console-ink-67)}.page-help>summary{cursor:pointer}.page-help[open]{padding-bottom:var(--ds-c-chalk-console-space-1)}.page-help nav{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-20);padding:var(--ds-c-chalk-console-space-1) 0}.page-help p{line-height:var(--ds-c-chalk-console-typography-4)}
+@media(max-width:600px){body>.wrap,body>header,body>main{padding:var(--ds-c-chalk-console-space-19)}.hp-flowbar{padding:var(--ds-c-chalk-console-space-7)}.hp-flowbar nav{gap:0}.hp-flowbar nav a{padding:var(--ds-c-chalk-console-space-13) var(--ds-c-chalk-console-space-12);font-size:var(--ds-c-chalk-console-type-17)}}
+/* CGP-DS-D-028: placeholders take the page's secondary ink at full opacity (the browser default #757575 is 3.3-3.7:1 on these fields). */
+::placeholder{color:var(--ds-c-chalk-console-ink-68);opacity:1}
 </style></body>
 </html>

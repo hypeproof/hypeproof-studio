@@ -49,7 +49,8 @@ failResolved=false;response='invalid';
 await page.handle({type:'beginCourse'});assert.equal(stored,'valid-old');assert.equal(starts,0,'expired preview cannot start');
 response='valid';await page.handle({type:'beginCourse'});assert.equal(stored,'valid-new');assert.equal(starts,1);assert.equal(page.panel,undefined);assert.equal(page.candidate,undefined);assert.equal(page.started,true);
 attach();await page.handle({type:'disconnectCourse'});assert.equal(stored,undefined);assert.equal(states.at(-1).state.profile,undefined);
-await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer','workbench.action.openSettings']);
+await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer'],'CGP-SHELL-R-014: 설정 opens the learner sheet, never the settings editor directly');
+await page.handle({type:'reportProblem'});assert.deepEqual(commands,['workbench.view.explorer','hypeproof-chat.reportProblem'],'REQ-STUDIO-FEEDBACK-ENTRY: 의견·문제 보내기 runs the existing report command');
 console.log('PASS host candidate transaction: 401/403/network/malformed, active-stream exclusion, preview/cancel, workspace/storage/revalidation rollback, committed entry, disconnect and navigation');
 
 response='waiting';stored='valid-old';const pending=page.handle({type:'connectCourse',token:'valid-first'});
@@ -242,20 +243,6 @@ console.log('PASS activity folder choice: no candidate opens no dialog, cancel k
 }
 console.log('PASS saved activity selection: record drives token/workspace, credential never reaches the UI, unknown ref and foreign Service refuse before forwarding');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ② shouldHideSidebar — tabGroups × chatViewVisible 네 경우
-// ③ openChat() — panel 있으면 openInEditor+started, 없으면 noop
-// ─────────────────────────────────────────────────────────────────────────────
-const {shouldHideSidebar}=module.exports;
-// (탭 없고 뷰 숨김) → 숨겨야 한다
-assert.equal(shouldHideSidebar([{tabs:[]}],false),true,'빈 탭 그룹+뷰 숨김인데 false');
-// (탭 있고 뷰 숨김) → 숨기지 않는다
-assert.equal(shouldHideSidebar([{tabs:[{}]}],false),false,'탭 있는데 true');
-// (탭 없고 뷰 보임) → 숨기지 않는다
-assert.equal(shouldHideSidebar([{tabs:[]}],true),false,'뷰 보이는데 true');
-// (그룹 없고 뷰 숨김) → 숨겨야 한다
-assert.equal(shouldHideSidebar([],false),true,'빈 그룹 배열+뷰 숨김인데 false');
-console.log('PASS shouldHideSidebar: tabGroups × chatViewVisible four cases');
 
 {
   const startsBefore=starts;
@@ -286,4 +273,19 @@ console.log('PASS shouldHideSidebar: tabGroups × chatViewVisible four cases');
   assert.equal(disposals, 1, 'a transferred chat or user editor is never closed');
   assert.equal(commands.length, beforeCommands, 'no global close-editor or layout commands');
   console.log('PASS automation canvas reclaim: only owned welcome panel closes, column preserved');
+}
+// A focus action arriving during slow restore must not open a second chat surface.
+{
+ let release, restored=false, focused=0, shown=0;const focusPhases=[];chat.focusDiagnostic=phase=>focusPhases.push(phase);
+ const restore=new Promise(resolve=>{release=()=>{restored=true;resolve();};});
+ chat.focusEditor=()=>{assert(restored,'focus must wait for restored activity');focused++;return true;};
+ const originalShow=page.show;page.show=async()=>{shown++;};
+ const pending=page.focusAfterRestore(restore);
+ await new Promise(resolve=>setTimeout(resolve,10));assert.equal(focused,0);assert.equal(shown,0);
+ release();await pending;assert.equal(focused,1);assert.equal(shown,0);
+ chat.focusEditor=()=>false;await page.focusAfterRestore(Promise.resolve());assert.equal(shown,1,'closed chat returns to entry');
+ const before=shown;await assert.rejects(page.focusAfterRestore(Promise.reject(Error('restore failed'))),/restore failed/);assert.equal(shown,before,'failed restore cannot bypass into another chat');
+ assert.deepEqual(focusPhases,['command_enter','restore_ready','command_complete','command_enter','restore_ready','command_complete','command_enter','command_failed']);
+ page.show=originalShow;
+ console.log('PASS chat focus waits for restore and uses entry when closed; no sidebar fallback');
 }

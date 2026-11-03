@@ -1,3 +1,4 @@
+import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture } from "./referenceDesign.ts";
 // Experiment Browser core (cr-browser, #1391; CR-04, CR-05, CR-06, CR-08, CR-11, CR-68).
 //
 // Pure and vscode-free: every function takes a `CdpLike` (a `CdpSession`, or a mock in
@@ -18,6 +19,7 @@
 //
 // Provider-neutral by construction (CR-03): plain data in and out, no model SDK types.
 
+import { denialToolText } from "./denialSource.ts";
 import { buildAxSnapshot, safeNavigateUrl } from "./browserControlHelpers.ts";
 
 export interface CdpLike {
@@ -392,6 +394,7 @@ export interface Observation {
   snapshot: string;
   refs: string[];
   screenshot: { mimeType: "image/jpeg"; data: string };
+  referenceCapture?: ReferenceCapture;
   viewport: { width: number; height: number };
   documentGeneration: string;
   records: PageRecord[];
@@ -695,6 +698,7 @@ export function observationText(o: Observation): string {
       lines.push(`- [${r.kind}/${r.level}]${r.earlierRequest ? " 이전 요청" : r.step !== null ? ` 단계 ${r.step}` : ""} ${r.message}${where}`);
     }
   }
+  if (o.referenceCapture) lines.push(referenceCaptureText(o.referenceCapture));
   lines.push("", o.snapshot);
   return lines.join("\n");
 }
@@ -1079,7 +1083,7 @@ export class CrExecutor {
     let target: string | null = null;
     if (name === "browser_navigate") {
       target = safeNavigateUrl(String(input.url ?? ""));
-      if (!target) return crFail(`허용되지 않은 주소예요: ${String(input.url ?? "")}`);
+      if (!target) return crFail(denialToolText({ source: "safety", reason: `열 수 없는 주소예요: ${String(input.url ?? "")}` }));
       const v = checkAgentOrigin(target, allowed);
       if (!v.ok) return crFail(v.reason);
     } else {
@@ -1414,6 +1418,10 @@ export async function observePage(
       refs: [...refs.keys()],
       refMap: refs,
       screenshot: { mimeType: "image/jpeg", data: String(shot?.data ?? "") },
+      ...(shot?.data ? { referenceCapture: referenceCaptureMetadata({
+        data: String(shot.data), mime: "image/jpeg", url: first.url, title: first.title,
+        viewport: { ...viewport, deviceScaleFactor: null }, state: opts.step === null ? "current" : `step-${opts.step}`,
+      }) } : {}),
       viewport,
       documentGeneration: generation ?? "",
       records: log.records(generation),

@@ -9,11 +9,15 @@
 // test data (CR-69). Nothing is copied into the App's workspaceState: the record lives on the
 // Service (recon R6, SX-48).
 
+import { lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import { curriculumRequest, type CurriculumResult } from "./galleryPublish.ts";
 import { latestDrafts, noteBody, noteFormProblems, type EvidenceDraftView, type EvidenceExperimentView, type EvidenceView, type NoteForm } from "./evidenceView.ts";
 
 export interface EvidencePorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   token(): Promise<string | null>;
   base(): string;
   fetchImpl?: typeof fetch;
@@ -65,7 +69,7 @@ export class EvidenceSession {
   /** The panel's view: the Project's experiments and the selected one's evidence, read now. */
   async view(select?: string): Promise<EvidenceView> {
     const none = (notice: string): EvidenceView => ({ available: false, experiments: [], selected: null, notice, ...EMPTY });
-    if (!this.ports.switchOn()) return none("이 수업에서는 실험 증거를 쓸 수 없어요.");
+    if (!this.ports.switchOn()) return none(lessonFeatureOff("실험 증거", this.ports.audience?.()));
     const client = await this.client();
     if (!client) return none(SIGN_IN);
     const projectId = this.ports.projectId();
@@ -102,7 +106,7 @@ export class EvidenceSession {
   }
 
   private async act<T>(fn: (c: Client) => Promise<CurriculumResult<T>>): Promise<{ ok: true; body: T } | { ok: false; message: string; detail?: unknown }> {
-    if (!this.ports.switchOn()) return { ok: false, message: "이 수업에서는 실험 증거를 쓸 수 없어요." };
+    if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("실험 증거", this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
     const r = await fn(client);

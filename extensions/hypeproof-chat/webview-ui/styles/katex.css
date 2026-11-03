@@ -1,0 +1,4 @@
+/* CGP-CHAT-R-022 (REQ-STUDIO-ANSWER-MATH): KaTeX's layout rules and its bundled fonts. Linked from
+   index.html rather than imported by a module, so Vite copies the font files next to the CSS
+   (served through the webview's own cspSource) while esbuild-built tests skip them. */
+@import "katex/dist/katex.min.css";

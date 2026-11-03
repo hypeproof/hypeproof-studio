@@ -14,6 +14,44 @@ skills, templates). Every step is "run this", not "figure this out".
 
 ---
 
+## 먼저 읽기: Worker 이전 / Read first: the Worker moved
+
+- Worker 소스는 2026-10-10(#1587)에 `hypeproof/hypeproof-service`(비공개)로
+  옮겨졌습니다. 이 레포에는 `worker/` 디렉토리가 없습니다.
+- 아래 §1·§2·§4·§7과 부록에 남아 있는 `worker/.dev.vars` 와 `cd worker && npm test`
+  는 지금 동작하지 않습니다. 해당 절은 후속 PR에서 다시 씁니다.
+- 설치 순서: Node 22.22.1 → `gh auth login`(`hypeproof/hypeproof-service` 를 읽을
+  수 있는 계정) → `npm run bootstrap:service` → `npm ci`. 부트스트랩 없이 `npm ci`
+  를 돌리면 `.private-service-cache/*.tgz` 에서 `ENOENT` 로 끝나고 원인을 알려주지
+  않습니다. §1의 `scripts/setup.sh` 는 부트스트랩을 먼저 실행한 뒤 루트·확장·
+  webview·Chalk·e2e 폴더에서 `npm ci` 를 실행합니다.
+- 로컬 Service용 변수 파일 위치는 설치 후 `node scripts/service-tooling.mjs --dev-vars`
+  로 확인합니다(기본값 `~/.local/state/hypeproof-studio/service.dev.vars`).
+- Worker 자체를 고치거나 테스트하려면 `hypeproof/hypeproof-service` 의 AGENTS.md 를
+  따르세요.
+
+<details><summary>English</summary>
+
+- The Worker source moved to `hypeproof/hypeproof-service` (private) on
+  2026-10-10 (#1587). This repository has no `worker/` directory.
+- `worker/.dev.vars` and `cd worker && npm test` in §1, §2, §4, §7 and the
+  appendix below no longer work. Those sections will be rewritten in a
+  follow-up PR.
+- Install order: Node 22.22.1 → `gh auth login` (an account that can read
+  `hypeproof/hypeproof-service`) → `npm run bootstrap:service` → `npm ci`.
+  Without the bootstrap, `npm ci` ends in `ENOENT` on
+  `.private-service-cache/*.tgz` and does not say why. `scripts/setup.sh` in §1
+  runs the bootstrap first and then `npm ci` in the root, extension, webview,
+  Chalk and e2e folders.
+- After the install, `node scripts/service-tooling.mjs --dev-vars` prints where
+  the local Service variables file lives (default
+  `~/.local/state/hypeproof-studio/service.dev.vars`).
+- To change or test the Worker itself, follow the AGENTS.md of
+  `hypeproof/hypeproof-service`.
+</details>
+
+---
+
 ## 0. 전제 / Prerequisites
 
 - **Claude Code를 쓴다고 가정**합니다. 모든 단계가 Claude Code 실행 기준.
@@ -21,7 +59,7 @@ skills, templates). Every step is "run this", not "figure this out".
   and run the extension/webview in an isolated installed-shell copy; follow
   [Studio development](docs/dev/studio-dev.md). Windows shell/installer builds
   remain in GitHub Actions; this exception is for developer copies.
-- `jayleekr/hypeproof-studio` 접근 권한 + GitHub 계정.
+- `hypeproof/hypeproof-studio` 접근 권한 + GitHub 계정.
 
 <details><summary>English</summary>
 
@@ -29,7 +67,7 @@ skills, templates). Every step is "run this", not "figure this out".
 - Full local shell builds target **macOS arm64**. Windows extension/webview
   development uses [the isolated development launcher](docs/dev/studio-dev.md),
   without rebuilding the shell. Windows shell/installer builds remain in CI.
-- Access to `jayleekr/hypeproof-studio` + a GitHub account.
+- Access to `hypeproof/hypeproof-studio` + a GitHub account.
 </details>
 
 ---
@@ -37,7 +75,7 @@ skills, templates). Every step is "run this", not "figure this out".
 ## 1. 한 번에 셋업 / One-command setup
 
 ```bash
-git clone --recursive git@github.com:jayleekr/hypeproof-studio.git
+git clone --recursive git@github.com:hypeproof/hypeproof-studio.git
 cd hypeproof-studio
 bash scripts/setup.sh
 ```

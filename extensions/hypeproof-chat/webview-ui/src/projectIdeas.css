@@ -1,0 +1,73 @@
+/* CGP-SHELL-R-020 / DES-SHELL-19 — example idea list after a no-idea answer (personal seats only). */
+.hps-project-ideas {
+  width: 100%;
+  max-width: var(--chat-column, 100%);
+  box-sizing: border-box;
+  margin-block: var(--hp-space-2);
+  font-size: var(--hp-font-caption);
+  line-height: var(--hp-leading-label);
+  overflow-wrap: anywhere;
+}
+.hps-project-ideas-label { margin: 0; font-weight: var(--hp-weight-strong); }
+.hps-project-ideas-help { margin: 0 0 var(--hp-space-2); color: var(--hp-text-muted-default); }
+.hps-project-ideas-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--hp-space-2);
+}
+@container studio-chat (width >= 640px) {
+  .hps-project-ideas-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.hps-project-ideas button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  min-height: var(--hp-control-md);
+  min-width: var(--hp-control-md);
+  box-sizing: border-box;
+  border-radius: var(--hp-space-3);
+}
+.hps-project-ideas-own {
+  margin-block-start: var(--hp-space-1);
+  padding-inline: var(--hp-space-3);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+}
+.hps-project-idea {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--hp-space-2);
+  padding: var(--hp-space-2) var(--hp-space-3);
+  text-align: start;
+  background: transparent;
+  border: var(--ds-c-focus-width) solid var(--hp-border-control-default);
+}
+.hps-project-idea-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.hps-project-idea-use { flex: 0 0 auto; color: var(--hp-text-muted-default); text-decoration: underline; }
+.hps-project-ideas button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-project-ideas button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-project-idea[aria-pressed="true"] { border-color: currentColor; }
+.hps-project-ideas button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-project-ideas button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
+@media (forced-colors: active) {
+  .hps-project-idea { border-color: ButtonText; }
+  .hps-project-idea[aria-pressed="true"] { border-color: Highlight; }
+  .hps-project-ideas button { color: ButtonText; }
+  .hps-project-ideas button:disabled { color: GrayText; }
+  .hps-project-idea-use, .hps-project-ideas-help { color: CanvasText; }
+}

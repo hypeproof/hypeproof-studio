@@ -1,13 +1,16 @@
+import { contentBytes, OUTBOUND_EXCLUDED } from "../../src/outboundConsent";
 import { useEffect, useState } from 'react';
 import type { LocalReviewRequest, LocalReviewState, TaskCard } from '../../src/localReviewProtocol';
 import { capabilityModel } from '@hypeproof/measurement-core/capability-models';
 import './localReview.css';
 import { postLocalReview } from "./vscode";
 const bridge = { postMessage: postLocalReview };
+const submissionLabels: Record<string, string> = { format: "기록 형식", kind: "기록 종류", id: "제출 식별 정보", parent: "이전 제출", reason: "제출 이유", destination: "보관 위치", interpretations: "선택한 해석", revision: "제출 버전", purpose: "작업 목적", observations: "선택한 대화", reviews: "선택한 검토", excluded: "제외 항목", task: "작업 정보", created_at: "작성 시각", versions: "기록 형식 버전", source: "출처", source_digest: "출처 식별 정보", submitted_at: "제출 시각" };
 export function LocalReview() {
   const [state, setState] = useState<LocalReviewState>({ type: 'localReviewState', tasks: [], storage: '' });
   const [busy, setBusy] = useState(false);
   const [include, setInclude] = useState(false);
+  useEffect(() => { setInclude(false); }, [state.card?.task.id]);
   const send = (m: LocalReviewRequest) => { setBusy(true); bridge.postMessage(m); };
   useEffect(() => {
     const listener = (event: MessageEvent<LocalReviewState>) => { if (event.data?.type === 'localReviewState') { setState(event.data); setBusy(false); } };
@@ -26,13 +29,33 @@ export function LocalReview() {
     {!state.card && !state.error && <p>Import a task to start. A receipt records local acceptance, not task completion or capability growth.</p>}
     {state.card && <TaskReview key={state.card.task.id} card={state.card} busy={busy} send={send} />}
     {state.card && <ImprovementReview key={'improve-' + state.card.task.id} card={state.card} all={state.improvements || []} tasks={state.tasks} busy={busy} send={send} />}
-    {state.card && <section><h2>Local submission</h2><p>A submission can include unfinished work. Review decisions and purpose are included; source messages are optional.</p>
-      <label><input type="checkbox" checked={include} onChange={e => { setInclude(e.target.checked); setState(s => ({ ...s, preview: undefined })); }} /> Include imported message text</label>
-      <button disabled={busy} onClick={() => send({ type: 'localReview', action: 'preview', task: state.card!.task.id, includeEvidence: include })}>Preview submission</button>
-      {state.preview && <div className="submission-preview"><h3>Destination: local inbox</h3><p>{state.preview.payload.observations.length} messages · {state.preview.payload.reviews.length} review revisions · {state.preview.payload.excluded.length} excluded items</p><p>Revision {state.preview.payload.revision} · <code>{state.preview.digest}</code></p><details><summary>Inspect exact included and excluded data</summary><pre>{JSON.stringify(state.preview.payload, null, 2)}</pre></details><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'submit', task: state.card!.task.id, digest: state.preview!.digest })}>Confirm local submission</button></div>}
-      {state.card.receipts.map(r => <article className="receipt" key={r.revision}><h3>Accepted locally · revision {r.revision}</h3><p>{r.id} · {new Date(r.accepted_at).toLocaleString()}</p><code>{r.digest}</code><p>Destination: {r.destination} · Stored content verified</p></article>)}
-    </section>}
+    {state.card && <SubmissionArea card={state.card} preview={state.preview} include={include} busy={busy}
+      onInclude={(v) => { setInclude(v); setState(s => ({ ...s, preview: undefined })); }}
+      onPreview={() => send({ type: 'localReview', action: 'preview', task: state.card!.task.id, includeEvidence: include })}
+      onSubmit={(digest) => send({ type: 'localReview', action: 'submit', task: state.card!.task.id, digest })}
+      onCancel={() => setState(s => ({ ...s, preview: undefined }))} />}
   </main>;
+}
+/**
+ * REQ-KNOW-09 — the 나의 변화 기록 submit area: where it goes (this device's inbox), every bundle part with its size, what is
+ * never included, then 확인하고 제출 or 취소. Learner copy is Korean only; the exact JSON stays available as data.
+ */
+export function SubmissionArea({ card, preview, include, busy, onInclude, onPreview, onSubmit, onCancel }: {
+  card: TaskCard; preview?: LocalReviewState['preview']; include: boolean; busy: boolean;
+  onInclude: (v: boolean) => void; onPreview: () => void; onSubmit: (digest: string) => void; onCancel: () => void;
+}) {
+  return <section data-submission-area=""><h2>이 기기에 제출하기</h2><p>끝나지 않은 작업도 제출할 수 있어요. 검토한 판단과 작업 목적은 들어가고, 가져온 대화 글은 고를 때만 들어가요.</p>
+    <label><input type="checkbox" checked={include} onChange={e => onInclude(e.target.checked)} /> 가져온 대화 글도 함께 넣기</label>
+    <button disabled={busy} onClick={onPreview}>제출할 내용 미리 보기</button>
+    {preview && <div className="submission-preview" data-submission-preview=""><h3>받는 곳: 이 기기의 검토함</h3>
+      <ul>{Object.entries(preview.payload).map(([name, value]) => <li key={name} data-submission-item={name}>{submissionLabels[name] ?? '기타 기록 항목'} · {contentBytes(JSON.stringify(value)).toLocaleString('ko-KR')} 바이트</li>)}</ul>
+      <p data-submission-excluded="">{OUTBOUND_EXCLUDED}</p>
+      <p>대화 {preview.payload.observations.length}개 · 검토 기록 {preview.payload.reviews.length}개 · 뺀 항목 {preview.payload.excluded.length}개</p>
+      <p>제출 버전 {preview.payload.revision} · 확인 번호 <code>{preview.digest}</code></p>
+      <details><summary>들어가는 것과 빠지는 것을 그대로 보기</summary><pre>{JSON.stringify(preview.payload, null, 2)}</pre></details>
+      <button disabled={busy} data-submission-submit="" onClick={() => onSubmit(preview.digest)}>확인하고 제출</button><button disabled={busy} data-submission-cancel="" onClick={onCancel}>취소</button></div>}
+    {card.receipts.map(r => <article className="receipt" key={r.revision}><h3>이 기기에 접수됨 · 제출 버전 {r.revision}</h3><p>{r.id} · {new Date(r.accepted_at).toLocaleString('ko-KR', { hour12: false })}</p><code>{r.digest}</code><p>받는 곳: {r.destination === 'local-inbox' ? '이 기기의 검토함' : '이 기기'} · 저장된 내용 확인함</p></article>)}
+  </section>;
 }
 /**
  * MC-27 — what the list above leaves out, said with its count, and the way to delete it (MC-31).

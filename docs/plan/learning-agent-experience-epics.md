@@ -1,6 +1,6 @@
 # 수업별 Agent 경험 에픽 제안
 
-상태: 제안 · 2026-09-08 · 상위 에픽 [#746](https://github.com/jayleekr/hypeproof-studio/issues/746).
+상태: 제안 · 2026-09-08 · 상위 에픽 [#746](https://github.com/hypeproof/hypeproof-studio/issues/746).
 입력: [비교 증거](../research/agent-experience-2026-09-08/README.md),
 [Mission/Intent](../design/learning-agent-experience.md), [요구사항](../requirements/learning-agent-experience.md),
 [검증](../testing/learning-agent-experience.md).
@@ -58,13 +58,13 @@ what has actually been run, not what is planned.
 | **G3** multi-session report and delivery | Kinds collection (`/3`, sessions before a restart) → compatible report inputs; evidence-bound "recent repeated patterns"; PDF attachment and provider-adapter gaps; review/delivery UI | A report built from a `/3` collection cites every included session and says which are missing; collection alone never starts an evaluation or a send; policy- or account-dependent activation (sender account, recipients, retention) stays a separate decision | Not started |
 | **G4** integrated journey | One instructor's whole class on a real Mac with snapshots, regressions and an explicit NOT RUN list | The [integrated acceptance](../testing/classroom-admin.md#one-instructor-acceptance) record. Windows, several physical PCs, a school network, production D1/R2, paid models and real recipients are run only with the environment and authorization — never completed synthetically | Not started |
 
-GitHub 하위 에픽: [E1 #747](https://github.com/jayleekr/hypeproof-studio/issues/747),
-[E2 #748](https://github.com/jayleekr/hypeproof-studio/issues/748),
-[E3 #749](https://github.com/jayleekr/hypeproof-studio/issues/749),
-[E4 #750](https://github.com/jayleekr/hypeproof-studio/issues/750),
-[E5 #751](https://github.com/jayleekr/hypeproof-studio/issues/751),
-[E6 #752](https://github.com/jayleekr/hypeproof-studio/issues/752),
-[E7 #755](https://github.com/jayleekr/hypeproof-studio/issues/755).
+GitHub 하위 에픽: [E1 #747](https://github.com/hypeproof/hypeproof-studio/issues/747),
+[E2 #748](https://github.com/hypeproof/hypeproof-studio/issues/748),
+[E3 #749](https://github.com/hypeproof/hypeproof-studio/issues/749),
+[E4 #750](https://github.com/hypeproof/hypeproof-studio/issues/750),
+[E5 #751](https://github.com/hypeproof/hypeproof-studio/issues/751),
+[E6 #752](https://github.com/hypeproof/hypeproof-studio/issues/752),
+[E7 #755](https://github.com/hypeproof/hypeproof-studio/issues/755).
 
 | 에픽 | 사용자에게 생기는 변화 | 요구사항 | 우선순위·의존성 |
 |---|---|---|---|

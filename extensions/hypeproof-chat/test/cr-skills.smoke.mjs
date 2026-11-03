@@ -274,8 +274,8 @@ if (!status.available) {
   assert.ok(refused.includes("아무것도 저장하지 않았어요") && refused.includes("본 것(관찰)에 어느 기록에서 봤는지가 빠졌어요."));
   assert.ok(!refused.includes("observation_without_source_refs"), "no raw rule code in the text a student reads");
   assert.ok(!refused.includes("제안이에요."), "a refusal is not drawn as an accepted proposal");
-  const off = visibleText(await renderComponent("SkillsPanel", props({ available: false, notice: "이 수업에서는 커리큘럼 스킬을 쓸 수 없어요.", week: null, skills: [], pickers, result: null })));
-  assert.ok(off.includes("쓸 수 없어요") && !off.includes("주차 질문"));
+  const off = visibleText(await renderComponent("SkillsPanel", props({ available: false, notice: "이 수업에서는 커리큘럼 스킬을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요.", week: null, skills: [], pickers, result: null })));
+  assert.ok(off.includes("쓰지 않도록 정해져 있어요") && !off.includes("주차 질문"));
   // Instrument control: a week question the view does not carry is never drawn.
   assert.ok(!text.includes("Q1"));
   ok("panel: the week's question is the served data, results and refusals are drawn as such, nothing is shown with the switch off");

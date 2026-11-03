@@ -80,7 +80,7 @@ const WEEK3 = JSON.parse(fs.readFileSync(new URL(import.meta.resolve("@hypeproof
 const COMPLETION = WEEK3.learning.completion.map((c) => c.id).join(",");
 /** "남은 단계 N" when the view stands on `stepId` (a position, counted from it: missionHeaderLogic.ts). */
 const remainingAt = (stepId: string) => `남은 단계 ${WEEK3.steps.length - WEEK3.steps.findIndex((s) => s.id === stepId)}`;
-/** The Primary's colour: `--hp-accent` (webview-ui/src/tokens.css), as Chromium computes it. */
+/** The Primary's colour: `--hp-bg-accent-default` (webview-ui/src/tokens.css), as Chromium computes it. */
 const LIME = "rgb(213, 242, 121)";
 const WIDE = { width: 1280, height: 800 };
 type Audit = { ok: boolean; findings: Array<{ rule: string; match: string; index: number; label: string }> };

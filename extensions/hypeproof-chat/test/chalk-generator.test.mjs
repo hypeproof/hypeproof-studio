@@ -22,7 +22,8 @@ const {
   workingCopyPath,
 } = await import('../src/chalk/tools.ts');
 
-const { mergeChalkTools, mergeBrowserTools } = await import('../src/localRuntime/index.ts');
+const { mergeExtraTools, mergeBrowserTools } = await import('../src/localRuntime/index.ts');
+const { chalkExtraTools } = await import('../src/chalk/tools.ts');
 const { runBrowserOpen, runLivePreviewStart } = await import('../src/browserMcp.ts');
 
 let passed = 0;
@@ -55,7 +56,7 @@ await check('T-G1 CHALK_TOOL_DEFINITIONS includes all 7 tools', () => {
 // ─── T-G2: 학생 모드(chalkCtx 없음) → 새 도구 4개 붙지 않음 ──────────────
 await check('T-G2 student mode: new E2-6 tools NOT in definitions', () => {
   const mockWork = { definitions: [{ name: 'Read', description: '', inputSchema: {} }], call: async () => 'ok' };
-  const merged = mergeChalkTools(mockWork, undefined);
+  const merged = mergeExtraTools(mockWork, chalkExtraTools(undefined));
   const names = merged.definitions.map(d => d.name);
   for (const n of ['chalk_set_inputs', 'chalk_generator_brief', 'chalk_open_course', 'chalk_save_plan']) {
     assert.ok(!names.includes(n), `${n} must not appear in student mode`);
@@ -281,7 +282,7 @@ await check('T-G9 instructor mode: all E2-6 tools in merged definitions', () => 
   const issuerPayload = Buffer.from(JSON.stringify({ role: 'issuer', scopes: [] })).toString('base64url');
   const chalkCtx = { serverUrl: 'http://localhost', secrets: { get: async (k) => k === 'hypeproofChat.issuerToken' ? `${issuerPayload}.sig` : undefined } };
   const mockWork = { definitions: [{ name: 'Read', description: '', inputSchema: {} }], call: async () => 'ok' };
-  const merged = mergeChalkTools(mockWork, chalkCtx);
+  const merged = mergeExtraTools(mockWork, chalkExtraTools(chalkCtx));
   const names = merged.definitions.map(d => d.name);
   for (const n of ['chalk_set_inputs', 'chalk_generator_brief', 'chalk_open_course', 'chalk_save_plan']) {
     assert.ok(names.includes(n), `강사 모드에 ${n}이 없다`);

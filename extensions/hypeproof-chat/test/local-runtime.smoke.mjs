@@ -74,9 +74,10 @@ try {
   await symlink(outside, join(cwd, "link"), process.platform === "win32" ? "junction" : "dir");
   await assert.rejects(tools.call("Read", { file_path: "link/private.txt" }), /밖/);
   assert.equal(asks, before);
+  // REQ-STUDIO-DENIAL-SOURCE: an ungranted tool is a lesson setting, said as one.
   await assert.rejects(
     tools.call("Bash", { file_path: "a", command: "echo no" }),
-    /없는/,
+    /^Error: \[수업 설정\] 이 수업에서는 명령 실행을 쓰지 않도록 정해져 있어요\./,
   );
   const denied = workspaceTools({
     cwd,
@@ -85,7 +86,7 @@ try {
     approve: async () => true,
   });
   assert.equal(denied.definitions.length, 0);
-  await assert.rejects(denied.call("Read", { file_path: "a.txt" }), /없는/);
+  await assert.rejects(denied.call("Read", { file_path: "a.txt" }), /^Error: \[수업 설정\] 이 수업에서는 파일 읽기를 쓰지 않도록 정해져 있어요\./);
   const env = {
     HPS_DEV_RUNTIME: "1",
     HPS_DEV_PROVIDER: "claude",

@@ -1,0 +1,927 @@
+/* Personal task conversation: theme-native, quiet, and aligned to one reading column. */
+.hps-shell[data-chat-detail="personal"] { min-height: 0; --chat-column: var(--ds-c-studio-chatdetails-size-1); }
+.hps-shell[data-chat-detail="personal"] .hps-header { color: var(--tw-muted); padding-block: var(--ds-c-studio-chatdetails-space-1); }
+/* US-05 — the current activity (kind · name) in the personal header; it yields before the remaining line. */
+.hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state line in the header row. The state words never shrink. The folder gives
+   way before anything else (its shrink factor dwarfs the activity line's 1000), so the activity kind stays whole as on a
+   heading without it; the row gap separates the state from "· folder" (no negative margin). */
+.hps-memory-now { display: contents; }
+.hps-memory-now-state { flex: none; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); white-space: nowrap; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-now-folder { flex: 0 1000000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); color: var(--tw-muted); }
+/* Up to 1100px the row has no room for the state without cutting the activity line (the kind, or a name that is whole
+   without it): the state takes a band under the heading, at its end (the band the coach run state also uses at ≤480px,
+   coachRunState.css), so the activity line, the state and every control stay as whole as they are without it. The folder
+   is visually hidden there; its words stay in the tooltip and the accessible text. */
+@media (max-width: 1100px) {
+  .tw-heading:has(.hps-memory-now-state) { position: relative; padding-bottom: calc(var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state { position: absolute; inset-inline-end: var(--ds-c-studio-coachrunstate-space-1); bottom: var(--ds-c-studio-coachrunstate-space-2); margin: 0; }
+  .hps-memory-now-folder { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.hps-memory-now code, .hps-memory-state-setting code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); background: transparent; padding: 0; }
+.hps-memory-state-setting { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
+/* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
+.hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2); font-size: var(--ds-c-studio-chatdetails-type-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CONV-ENDCARD-R-003 — the ended free seat's way back to the pass list: a quiet text link, not a
+   Primary (no fill, no border), and it never shrinks into an ellipsis. */
+.hps-header button.hps-header-passes { flex: 0 0 auto; white-space: nowrap; margin-left: 0; padding: var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-13); border-color: transparent; background: transparent; color: var(--vscode-textLink-foreground, var(--ds-c-studio-chatdetails-ink-36)); text-decoration: underline; text-underline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-header button.hps-header-passes:hover { background: transparent; color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, var(--ds-c-studio-chatdetails-ink-36))); }
+.hps-free-ended-note { margin: 0 0 var(--ds-c-studio-chatdetails-space-15); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); }
+.hps-shell[data-chat-detail="personal"] .hps-messages {
+  min-height: 0; --hps-list-gap: var(--ds-c-studio-chatdetails-space-3); gap: var(--hps-list-gap); overscroll-behavior: contain;
+  padding: var(--ds-c-studio-chatdetails-space-4) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) var(--ds-c-studio-chatdetails-space-6);
+  scrollbar-width: thin;
+  /* CGP-DS-R-031 — the scrollbar's space is reserved before it appears, so the column does not
+     shift sideways when a reply first grows past the pane (DES-CGP-DS-36). */
+  scrollbar-gutter: stable;
+}
+.hps-shell[data-chat-detail="personal"] .hps-messages > * { flex-shrink: 0; min-width: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-msg { gap: var(--ds-c-studio-chatdetails-space-7); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; min-width: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-role { opacity: 1; color: var(--tw-muted); letter-spacing: var(--hp-tracking-hangul); font-size: var(--hp-font-caption); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-role > span { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); font-weight: var(--hp-weight-strong); }
+.hps-shell[data-chat-detail="personal"] .hps-assistant-mark {
+  display: inline-grid; place-items: center; width: var(--ds-c-studio-chatdetails-size-2); height: var(--ds-c-studio-chatdetails-size-2);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-1); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-2); margin: 0;
+}
+.hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body {
+  box-sizing: border-box; padding: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-8); max-width: min(85%, var(--ds-c-studio-chatdetails-size-4)); border-radius: var(--hp-radius-18) var(--hp-radius-18) var(--hp-radius-6) var(--hp-radius-18);
+  background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-1));
+}
+.hps-shell[data-chat-detail="personal"] .hps-prose p { margin-bottom: var(--ds-c-studio-chatdetails-space-9); }
+.hps-shell[data-chat-detail="personal"] .hps-prose p:last-child { margin-bottom: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-prose h1,
+.hps-shell[data-chat-detail="personal"] .hps-prose h2,
+.hps-shell[data-chat-detail="personal"] .hps-prose h3 { font-weight: var(--hp-weight-strong); letter-spacing: var(--hp-tracking-hangul); margin-top: var(--ds-c-studio-chatdetails-space-10); }
+/* CGP-DS-D-005 (DES-CGP-DS-09) — answer markdown on the learner scale: h1 22px, h2/h3 18px (h4-h6 stay
+   1em, 16px) and label leading. Their weight, and strong, b and th, are 600 (taskWorkspace.css). */
+.hps-shell[data-chat-detail="personal"] .hps-prose h1 { font-size: var(--hp-font-title); }
+.hps-shell[data-chat-detail="personal"] .hps-prose h2,
+.hps-shell[data-chat-detail="personal"] .hps-prose h3 { font-size: var(--hp-font-lead); }
+.hps-shell[data-chat-detail="personal"] .hps-prose h1,
+.hps-shell[data-chat-detail="personal"] .hps-prose h2,
+.hps-shell[data-chat-detail="personal"] .hps-prose h3,
+.hps-shell[data-chat-detail="personal"] .hps-prose h4,
+.hps-shell[data-chat-detail="personal"] .hps-prose h5,
+.hps-shell[data-chat-detail="personal"] .hps-prose h6 { line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-prose > :first-child { margin-top: 0; }
+/* CGP-DS-R-020 — prose measure: about 40 Hangul syllables per line (40em of the prose's own font,
+   640px at 16px; it scales with the text-size choice). A cap only: narrower panes still wrap to the
+   pane, and tables and code blocks keep their own overflow inside it (DES-CGP-DS-22). */
+.hps-shell[data-chat-detail="personal"] .hps-prose { max-inline-size: var(--ds-c-studio-chatdetails-size-6); }
+.hps-shell[data-chat-detail="personal"] .hps-codepill-body {
+  background: var(--vscode-textCodeBlock-background, var(--tw-panel));
+  color: var(--vscode-editor-foreground, var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)));
+  border-color: var(--tw-line);
+}
+.hps-shell[data-chat-detail="personal"] .hps-tool-log-line {
+  align-self: flex-start; max-width: 100%; box-sizing: border-box; padding: var(--ds-c-studio-chatdetails-space-11) 0;
+  border: 0; background: transparent; font-size: var(--hp-font-caption); color: var(--tw-muted); gap: var(--ds-c-studio-chatdetails-space-2);
+}
+.hps-shell[data-chat-detail="personal"] .hps-tool-label { overflow-wrap: anywhere; min-width: 0; }
+/* CGP-KNOW-D-021 — a download line follows the personal type scale (14px caption, under the answer body). */
+.hps-shell[data-chat-detail="personal"] .hps-download-line { font-size: var(--hp-font-caption); }
+/* REQ-STUDIO-LONG-STEP-HINT — the long-step hint follows the personal type scale (≥14px). */
+.hps-shell[data-chat-detail="personal"] .hps-long-step { font-size: var(--hp-font-caption); color: var(--tw-muted); border-left-color: var(--tw-line); }
+.hps-shell[data-chat-detail="personal"] .hps-tool-mark { color: inherit; }
+.hps-shell[data-chat-detail="personal"] .hps-cit-rack { margin-top: var(--ds-c-studio-chatdetails-space-11); max-width: 100%; gap: var(--ds-c-studio-chatdetails-space-12); }
+.hps-shell[data-chat-detail="personal"] .hps-cit-chip {
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); background: var(--tw-panel); color: inherit;
+  border-radius: var(--hp-radius-8); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-7); max-width: 100%; font-size: var(--hp-font-caption);
+}
+.hps-shell[data-chat-detail="personal"] .hps-cit-index { font-variant-numeric: tabular-nums; color: var(--tw-muted); }
+.hps-shell[data-chat-detail="personal"] .hps-cit-domain { color: var(--tw-muted); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-cit-chip:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-shell[data-chat-detail="personal"] .hps-cit-chip:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-shell[data-chat-detail="personal"] .hps-input-area {
+  border: 0; flex-shrink: 0; gap: var(--ds-c-studio-chatdetails-space-7);
+  padding: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) var(--ds-c-studio-chatdetails-space-5);
+}
+.hps-shell[data-chat-detail="personal"] .hps-input {
+  gap: var(--ds-c-studio-chatdetails-space-13); padding: var(--ds-c-studio-chatdetails-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-composer);
+  background: var(--vscode-input-background, var(--ds-c-studio-chatdetails-surface-3)); box-shadow: var(--hp-elevation-raised);
+}
+.hps-shell[data-chat-detail="personal"] .hps-input:focus-within { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-shell[data-chat-detail="personal"] .hps-input textarea {
+  border: 0; background: transparent; outline: none; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1);
+  min-height: var(--ds-c-studio-chatdetails-size-8); max-height: var(--ds-c-studio-chatdetails-size-9); overflow-y: auto; border-radius: var(--ds-c-studio-chatdetails-radius-6);
+  line-height: var(--hp-leading-label); font-size: var(--hp-font-body); scrollbar-width: thin;
+}
+.hps-shell[data-chat-detail="personal"] .hps-input textarea::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-input-buttons { align-items: center; padding: 0 var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-1); gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-composer-hint { margin-right: auto; font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--hp-leading-label); color: var(--tw-muted); }
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
+  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: var(--hp-radius-full); flex-shrink: 0; display: grid; place-items: center;
+  transition: transform var(--hp-dur-press) var(--hp-ease), opacity var(--hp-dur-press) var(--hp-ease);
+  background: var(--vscode-button-background, var(--ds-c-studio-chatdetails-surface-4)); color: var(--vscode-button-foreground, var(--ds-c-studio-chatdetails-ink-2));
+}
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop { background: var(--vscode-foreground, var(--ds-c-studio-chatdetails-surface-5)); color: var(--tw-canvas); }
+.hps-shell[data-chat-detail="personal"] .hps-input button:hover:not(:disabled) { transform: translateY(var(--ds-c-studio-chatdetails-size-11)); }
+.hps-shell[data-chat-detail="personal"] .hps-input button:active:not(:disabled) { transform: scale(.94); }
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send:disabled { opacity: .42; }
+.hps-answer-actions { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-7); min-height: var(--ds-c-studio-chatdetails-size-12); color: var(--tw-muted); }
+.hps-copy-answer { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); padding: var(--ds-c-studio-chatdetails-space-16) var(--ds-c-studio-chatdetails-space-12); margin-left: var(--ds-c-studio-chatdetails-space-17); color: inherit; background: transparent; }
+.tw-workspace .hps-copy-answer { font-size: var(--hp-font-caption); }
+.hps-copy-answer:hover { background-color: var(--hp-bg-control-hover); }
+.hps-copy-answer:active { background-color: var(--hp-bg-control-pressed); }
+.hps-copy-status { font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--hp-leading-label); }
+.hps-copy-status:not(:empty) { animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
+.hps-response-pending { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-7); color: var(--tw-muted); font-size: var(--hp-font-caption); margin: var(--ds-c-studio-chatdetails-space-2) 0; }
+.hps-response-dots { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-13); }
+.hps-response-dots i { width: var(--ds-c-studio-chatdetails-size-13); height: var(--ds-c-studio-chatdetails-size-13); border-radius: 50%; background: currentColor; animation: chat-pending var(--hp-dur-pending) ease-in-out 3; }
+.hps-response-dots i:nth-child(2) { animation-delay: var(--hp-dur-stagger); }
+.hps-response-dots i:nth-child(3) { animation-delay: calc(var(--hp-dur-stagger) * 2); }
+.hps-msg-live { animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
+/* #2788 — the pill takes its own row between the transcript and the composer instead of floating over
+   the last lines: while it shows, the list is that much shorter, so no transcript text sits under it. */
+.hps-catchup { flex-shrink: 0; display: flex; justify-content: center; padding-block: var(--ds-c-studio-chatdetails-space-13); }
+.hps-catchup button { min-height: var(--ds-c-studio-chatdetails-size-8); display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-2); background: var(--tw-panel); color: inherit; box-shadow: var(--hp-elevation-raised); animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
+.tw-workspace .hps-catchup button { font-size: var(--hp-font-caption); }
+@keyframes chat-feedback { from { opacity: 0; transform: translateY(var(--ds-c-studio-chatdetails-size-15)); } to { opacity: 1; transform: translateY(0); } }
+@keyframes chat-pending { 0%, 70%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(var(--ds-c-studio-chatdetails-size-16)); } }
+@container studio-chat (width < 448px) {
+  .hps-shell[data-chat-detail="personal"] .hps-messages { padding: var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-4); --hps-list-gap: var(--ds-c-studio-chatdetails-space-4); gap: var(--hps-list-gap); }
+  .hps-shell[data-chat-detail="personal"] .hps-input-area { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-19); }
+  .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); }
+  .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { max-width: 85%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-19); }
+  .hps-shell[data-chat-detail="personal"] .hps-cit-domain { display: none; }
+  .hps-shell[data-chat-detail="personal"] .hps-cit-title { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+  .hps-composer-hint { font-size: var(--ds-c-studio-chatdetails-type-4); }
+}
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *, :where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *::before, :where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] .hps-input button:hover,
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] .hps-input button:active { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *, :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *::before, :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] .hps-input button:hover,
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] .hps-input button:active { transform: none; }
+}
+
+/* CG-R1: a compact editing row expands without remounting the textarea. */
+.hps-shell[data-chat-detail="personal"] .hps-input {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  column-gap: var(--ds-c-studio-chatdetails-space-2); row-gap: var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-16) var(--ds-c-studio-chatdetails-space-2); border-radius: var(--hp-radius-composer);
+}
+.hps-shell[data-chat-detail="personal"] .hps-input textarea {
+  min-height: var(--ds-c-studio-chatdetails-size-17); padding: 0 var(--ds-c-studio-chatdetails-space-2); font-size: var(--hp-font-body); line-height: var(--hp-leading-label); resize: none;
+  box-sizing: border-box; min-width: 0; width: 100%; border-radius: 0;
+}
+.hps-shell[data-chat-detail="personal"] .hps-input-buttons { padding: 0; justify-self: end; gap: var(--ds-c-studio-chatdetails-space-13); }
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] { padding-top: var(--ds-c-studio-chatdetails-space-20); border-radius: var(--hp-radius-composer); }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] textarea { grid-column: 1 / -1; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-input-buttons { grid-column: 2; }
+.hps-composer-hint { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
+
+/* Tools share the editing surface; only a selected tool adds a context row. */
+.hps-shell[data-chat-detail="personal"] .hps-input { position: relative; grid-template-columns: var(--ds-c-studio-chatdetails-size-8) minmax(0, 1fr) var(--ds-c-studio-chatdetails-size-8); }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] textarea { grid-row: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-composer-tools { grid-column: 1; grid-row: 2; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-input-buttons { grid-column: 3; grid-row: 2; }
+.hps-composer-tools { position: relative; min-width: 0; }
+.tw-workspace .hps-tool-trigger { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); padding: 0; display: grid; place-items: center; background: transparent; color: inherit; border: 0; border-radius: var(--hp-radius-full); }
+.hps-tool-trigger:hover { background-color: var(--hp-bg-control-hover); }
+.hps-tool-trigger:active { background-color: var(--hp-bg-control-pressed); }
+.hps-tools-menu { position: absolute; bottom: calc(100% + var(--ds-c-studio-chatdetails-size-18)); left: 0; width: min(var(--ds-c-studio-chatdetails-size-19), calc(100vw - var(--ds-c-studio-chatdetails-size-20))); max-height: min(var(--ds-c-studio-chatdetails-size-21), 50vh); overflow-y: auto; padding: var(--ds-c-studio-chatdetails-space-15); z-index: 20; border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); color: var(--vscode-foreground); box-shadow: var(--hp-elevation-overlay); animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
+.tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); width: 100%; min-height: var(--ds-c-studio-chatdetails-size-22); padding: var(--ds-c-studio-chatdetails-space-1); border: 0; border-radius: var(--hp-radius-menu-item); background: transparent; color: inherit; text-align: left; font-size: var(--hp-font-caption); }
+.hps-tools-menu button > svg { flex-shrink: 0; margin-top: var(--ds-c-studio-chatdetails-space-21); }
+.hps-tools-menu button > span { flex: 1; min-width: 0; }
+.hps-tools-menu button small { display: block; margin-top: var(--ds-c-studio-chatdetails-space-13); font-size: var(--ds-c-studio-chatdetails-type-1); color: var(--tw-muted); line-height: var(--hp-leading-label); }
+.hps-tools-menu button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-tools-menu button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-tools-menu button:hover { transform: none; }
+.hps-tools-menu button[aria-disabled="true"] { cursor: default; }
+.tw-workspace .hps-selected-tool { grid-row: 2; grid-column: 2; justify-self: start; display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-12); min-height: var(--ds-c-studio-chatdetails-size-8); max-width: 100%; border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-5); padding: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1); background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-1)); color: inherit; font-size: var(--hp-font-caption); }
+.hps-selected-tool:disabled { opacity: .8; }
+.hps-user-tool { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--ds-c-studio-chatdetails-space-16); color: var(--tw-muted); font-size: var(--hp-font-caption); }
+.hps-shell[data-chat-detail="personal"] .hps-queued { flex-wrap: wrap; }
+.hps-queued-send { min-height: var(--ds-c-studio-chatdetails-size-8); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-10); background: transparent; color: inherit; }
+.hps-shell[data-chat-detail="personal"] .hps-copy-answer,
+.hps-shell[data-chat-detail="personal"] .hps-msg-retry,
+.hps-shell[data-chat-detail="personal"] .hps-queued-cancel { min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); }
+
+/* Keep the optional code disclosure as reachable as the adjacent answer actions. */
+.hps-shell[data-chat-detail="personal"] .hps-codepill-toggle { min-height: var(--ds-c-studio-chatdetails-size-8); }
+
+/* Attachments stay one reachable row instead of pushing the composer off screen. */
+.hps-shell[data-chat-detail="personal"] .hps-attachments { flex-wrap: nowrap; overflow-x: auto; flex-shrink: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-attachment { display: flex; align-items: center; flex: 0 0 auto; width: auto; height: var(--ds-c-studio-chatdetails-size-8); border-radius: var(--ds-c-studio-chatdetails-radius-10); background: var(--tw-panel); }
+/* CGP-KNOW-D-020: a refused photo's chip is not the 44px row chip; it grows to hold its failure block (styles.css). */
+.hps-shell[data-chat-detail="personal"] .hps-attachment:has(.hps-photo-failure) { flex-wrap: wrap; align-items: center; width: min(100%, var(--ds-c-studio-chatdetails-size-106)); height: auto; }
+.hps-shell[data-chat-detail="personal"] .hps-attachment img { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); flex: 0 0 var(--ds-c-studio-chatdetails-size-8); }
+.hps-shell[data-chat-detail="personal"] .hps-attachment-remove { position: static; display: grid; place-items: center; width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); border-radius: 0; background: transparent; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-5); }
+.hps-shell[data-chat-detail="personal"] .hps-attachment-remove:hover { background: var(--hp-bg-control-hover); }
+.hps-shell[data-chat-detail="personal"] .hps-attachment-remove:active { background: var(--hp-bg-control-pressed); }
+@media (max-height: 500px) {
+  .hps-shell[data-chat-detail="personal"] .hps-input-area { padding-top: var(--ds-c-studio-chatdetails-space-13); padding-bottom: var(--ds-c-studio-chatdetails-space-2); gap: var(--ds-c-studio-chatdetails-space-13); }
+  .hps-shell[data-chat-detail="personal"] .hps-messages { padding-top: var(--ds-c-studio-chatdetails-space-2); padding-bottom: var(--ds-c-studio-chatdetails-space-2); }
+}
+
+/* ── Personal chat polish (Jay 2026-10-19: "아이콘이 너무 크다", "다시 시작하는 것이 안 어울린다").
+   One reading column, one spacing scale (4 · 8 · 12 · 24), one ghost-button family for every
+   control that follows an answer, no boxed icon squares. Classroom screens are untouched. */
+.hps-sr-only { position: absolute !important; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); padding: 0; margin: var(--ds-c-studio-chatdetails-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-messages { --hps-list-gap: var(--ds-c-studio-chatdetails-space-4); gap: var(--hps-list-gap); }
+.hps-shell[data-chat-detail="personal"] .hps-msg { gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-user + .hps-msg-assistant,
+.hps-shell[data-chat-detail="personal"] .hps-msg-assistant + .hps-msg-user { margin-top: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-radius: var(--hp-radius-18) var(--hp-radius-18) var(--hp-radius-6) var(--hp-radius-18); }
+
+/* Actions under an answer: copy · preview · ask again — same size, same ghost style, the first
+   icon on the answer text's left edge. 44px hit area (REQ-STUDIO-CHAT-DETAIL, #1763) without a box. */
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions { gap: var(--ds-c-studio-chatdetails-space-14); min-height: var(--ds-c-studio-chatdetails-size-8); margin-top: var(--ds-c-studio-chatdetails-space-23); flex-wrap: wrap; }
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action {
+  display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); margin: 0;
+  padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: var(--tw-muted);
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); opacity: 1;
+}
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions > .hps-answer-action:first-child { margin-left: var(--ds-c-studio-chatdetails-space-23); }
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:active { background-color: var(--hp-bg-control-pressed); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); }
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-shell[data-chat-detail="personal"] .hps-copy-status { font-size: var(--hp-font-caption); margin-left: var(--ds-c-studio-chatdetails-space-13); }
+
+/* CGP-CHAT-R-005 — answer verdict. The two buttons share the ghost action style above; pressed state is
+   a check mark plus aria-pressed, never colour alone. Reasons are a small wrapped group under the row. */
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-verdict[aria-pressed="true"] { color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-2)); }
+.hps-verdict-reasons { display: flex; flex-direction: column; gap: var(--ds-c-studio-chatdetails-space-15); margin: 0 0 var(--ds-c-studio-chatdetails-space-2); color: var(--tw-muted, var(--hp-text-muted-default)); font-size: var(--hp-font-caption); }
+.hps-verdict-reason-row { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-15); }
+.hps-verdict-reason { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-1); border-radius: var(--ds-c-studio-chatdetails-radius-5); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default, var(--ds-c-studio-chatdetails-boundary-1)); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.hps-verdict-reason[aria-pressed="true"] { color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-2)); }
+.hps-verdict-reason:focus-visible, .hps-verdict-note textarea:focus-visible, .hps-verdict-note button:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-verdict-note { display: flex; flex-direction: column; gap: var(--ds-c-studio-chatdetails-space-13); }
+.hps-verdict-note textarea { min-height: var(--ds-c-studio-chatdetails-size-20); resize: vertical; padding: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-7); border-radius: var(--ds-c-studio-chatdetails-radius-10); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default, var(--ds-c-studio-chatdetails-boundary-1)); background: var(--vscode-input-background, var(--vscode-editor-background, var(--ds-c-studio-chatdetails-surface-7))); color: var(--vscode-input-foreground, var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1))); font: inherit; font-size: var(--hp-font-caption); }
+.hps-verdict-note textarea::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
+.hps-verdict-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-verdict-note-actions button { min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-19); border-radius: var(--ds-c-studio-chatdetails-radius-10); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default, var(--ds-c-studio-chatdetails-boundary-1)); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.hps-verdict-note-actions button:disabled { opacity: .5; cursor: default; }
+/* CGP-DS-D-003 — state layers: text colour at 8% (hover) and 14% / 12% light (pressed) over the surface. A chosen reason keeps its selection fill. */
+.hps-verdict-reason:hover:not(:disabled):not([aria-pressed="true"]), .hps-verdict-note-actions button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-verdict-reason:active:not(:disabled):not([aria-pressed="true"]), .hps-verdict-note-actions button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-verdict-privacy { margin: 0; }
+
+/* Code disclosure: the answer's quiet secondary, not a 16px emoji pill (UI audit P0-2). */
+.hps-shell[data-chat-detail="personal"] .hps-codepill-toggle {
+  display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--hp-control-min); margin-left: var(--ds-c-studio-chatdetails-space-23);
+  padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: var(--tw-muted);
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+}
+.hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); }
+.hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:active { background-color: var(--hp-bg-control-pressed); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); }
+
+/* Send: the one Primary. Disabled reads as disabled, not as a dimmed Primary (low contrast olive). */
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send:disabled {
+  opacity: 1; background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-1)); color: var(--tw-muted);
+}
+.hps-shell[data-chat-detail="personal"] .hps-codepill { margin: var(--ds-c-studio-chatdetails-space-13) 0 0; }
+
+/* Personal chat keeps secondary controls behind settings and the conversation in view. */
+.hps-shell[data-chat-detail="personal"] .hps-header { padding-block: var(--ds-c-studio-chatdetails-space-13); min-height: var(--ds-c-studio-chatdetails-size-10); }
+.hps-shell[data-chat-detail="personal"] .hps-ai-disclosure {
+  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+}
+.hps-shell[data-chat-detail="personal"] .hps-empty { padding: var(--ds-c-studio-chatdetails-space-20) 0 0; }
+.hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: var(--hp-font-lead); line-height: var(--hp-leading-prose); max-width: var(--ds-c-studio-chatdetails-size-24); }
+.hps-shell[data-chat-detail="personal"] .hps-chips-rack { margin: 0; padding: 0; gap: var(--ds-c-studio-chatdetails-space-7); }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: var(--hp-font-caption); color: var(--tw-muted); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--ds-c-studio-chatdetails-size-25), 100%), 1fr)); gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-shell[data-chat-detail="personal"] .hps-chip { padding: var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8); text-align: left; background: transparent; min-height: var(--ds-c-studio-chatdetails-size-8); }
+/* CGP-DS-R-005: the personal resting rule outranks the shared .hps-chip:hover, so the states are restated here. */
+.hps-shell[data-chat-detail="personal"] .hps-chip:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-shell[data-chat-detail="personal"] .hps-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
+.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel, var(--vscode-sideBar-background, var(--vscode-editor-background))); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--hp-radius-dialog); box-shadow: var(--hp-elevation-overlay); overflow: auto; }
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow; the 1px border takes the theme's contrastBorder.
+   The composer and the catch-up button are controls: their 1px border stays the fixed control boundary (CGP-DS-R-005).
+   The second tools-menu entry outranks the collapsed-composer panel colour in styles.css. */
+body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-preferences) { border-color: var(--vscode-contrastBorder, currentColor); }
+.hps-preferences::backdrop { background: var(--ds-c-studio-chatdetails-surface-8); }
+.hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
+.hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); margin: 0; }
+.hps-preferences > header button { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); padding: 0; border: 0; background: transparent; color: inherit; font-size: var(--ds-c-studio-chatdetails-type-6); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-preferences-body { padding: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-5) var(--ds-c-studio-chatdetails-space-20); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
+.hps-preferences-body > details { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; margin: 0; max-height: none; }
+.hps-preferences summary { min-height: var(--ds-c-studio-chatdetails-size-8); align-content: center; cursor: pointer; font-weight: var(--hp-weight-strong); }
+.hps-preferences .hps-model-selection, .hps-preferences .hps-effort { margin: var(--ds-c-studio-chatdetails-space-1) 0; padding: 0; }
+.hps-preferences select { max-width: 100%; min-height: var(--ds-c-studio-chatdetails-size-10); font-size: var(--hp-font-caption); }
+.hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
+.hps-preferences .hps-all-settings { margin-top: var(--ds-c-studio-chatdetails-space-1); padding: var(--ds-c-studio-chatdetails-space-2) 0; border: 0; min-height: var(--ds-c-studio-chatdetails-size-8); background: transparent; color: inherit; }
+/* CGP-CHAT-R-030: the shortcut sheet. Key caps and notes keep the caption size (>=14px); a row
+   wraps its description under the keys when the dialog is narrow. The classroom dialog sits outside
+   .tw-workspace (no --tw-* values), so its surface and lines fall back to the theme's own colours;
+   before this the classroom dialog had no background and the page showed through. */
+/* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
+.hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+@media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
+.hps-shortcut-list { inline-size: 100%; margin: 0; border-collapse: collapse; }
+/* CGP-CHAT-D-030: two columns (key, action). The key cell stays on one line; in a narrow window it
+   wraps between key caps, never inside one, so the table stays two columns down to 320px. */
+.hps-shortcut-list th, .hps-shortcut-list td { padding-block: var(--ds-c-studio-chatdetails-space-2); padding-inline: 0 var(--ds-c-studio-chatdetails-space-5); text-align: start; vertical-align: baseline; border-block-end: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
+.hps-shortcut-list th:last-child, .hps-shortcut-list td:last-child { padding-inline-end: 0; }
+.hps-shortcut-list thead th { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-shortcut-list .hps-shortcut-keys { font-weight: var(--hp-weight-regular); white-space: nowrap; }
+@media (max-width: 480px) { .hps-shortcut-list .hps-shortcut-keys { white-space: normal; } }
+.hps-shortcut-keys > span { white-space: nowrap; }
+.hps-shortcut-list td { color: var(--vscode-foreground, inherit); }
+.hps-shortcut-list td small { display: block; font-size: var(--hp-font-caption); }
+.hps-shortcut-row kbd { font: inherit; font-size: var(--hp-font-caption); padding: 0 var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+/* REQ-STUDIO-UI-POLISH-1: the access line is an inline notice (.hps-notice-caution, the offline
+   banner's surface in styles.css) inside the composer's column, not loose text above it. Its one
+   action keeps a 44px target; the notice's block padding shrinks so the row stays one line tall. */
+.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--ds-c-studio-chatdetails-space-2); }
+.hps-shell[data-chat-detail="personal"] .hps-access-attention { margin: 0; padding-block: 0; }
+.hps-access-attention button { color: inherit; background: transparent; border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); text-decoration: underline; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-2); font: inherit; cursor: pointer; }
+.hps-access-attention button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-access-attention button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-reply-question { width: 100%; max-width: var(--chat-column, var(--ds-c-studio-chatdetails-size-1)); box-sizing: border-box; overflow-wrap: anywhere; }
+.hps-reply-choices { display: flex; flex-direction: column; gap: var(--ds-c-studio-chatdetails-space-2); margin: var(--ds-c-studio-chatdetails-space-20) 0 var(--ds-c-studio-chatdetails-space-13); }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1); width: 100%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); min-height: var(--ds-c-studio-chatdetails-size-8); text-align: left; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-4); color: inherit; background: transparent; }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-reply-choices button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-reply-choices button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-choice-number { color: var(--tw-muted); flex-shrink: 0; font-size: var(--hp-font-caption); font-variant-numeric: tabular-nums; }
+.hps-choice-help { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-7); color: var(--tw-muted); font-size: var(--hp-font-caption); }
+.hps-choice-help button { border: 0; background: transparent; color: inherit; text-decoration: underline; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-2); font-size: var(--hp-font-caption); }
+@media (max-height: 500px) {
+  .hps-shell[data-chat-detail="personal"] .hps-empty { padding-top: 0; }
+  .hps-shell[data-chat-detail="personal"] .hps-messages { --hps-list-gap: var(--ds-c-studio-chatdetails-space-20); gap: var(--hps-list-gap); }
+}
+
+/* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }
+
+/* CGP-DS-R-009 / CGP-DS-R-008: chat text size in personal chat (the picker lives in 대화 설정). The
+   shell sets the step; every --hp-text-* size inside it follows (tokens.css), so 크게 / 아주 크게 add
+   2px / 4px to the body, the composer, reply choices and every caption alike. Control heights and
+   44px targets do not change (min-heights only). */
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-7); }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] { --hp-font-step: var(--ds-c-studio-chatdetails-size-13); }
+
+/* CGP-DS-R-008 (REQ-STUDIO-TYPE-SCALE, DEC-29): learner text in the personal chat reads at 14px or
+   more. The shell's own size is the caption step, so text that only inherits follows the step too.
+   The rules below are the shared chat classes whose base size in styles.css (or in a component file
+   the classroom also loads) is below 14px; the classroom keeps those sizes, and this personal scope
+   raises them to the caption step. Each selector is the base selector under the personal shell, so
+   it always outranks its base rule (test/type-scale.smoke.mjs computes the cascade). */
+.hps-shell[data-chat-detail="personal"] { font-size: var(--hp-font-caption); }
+.hps-shell[data-chat-detail="personal"] .hps-user-actions button,
+.hps-shell[data-chat-detail="personal"] .hps-version-pager,
+.hps-shell[data-chat-detail="personal"] .hps-version-note,
+.hps-shell[data-chat-detail="personal"] .hps-edit-note,
+.hps-shell[data-chat-detail="personal"] .hps-cit-domain,
+.hps-shell[data-chat-detail="personal"] .hps-msg-run,
+.hps-shell[data-chat-detail="personal"] .hps-msg-retry,
+.hps-shell[data-chat-detail="personal"] .hps-naming-btn-ghost,
+.hps-shell[data-chat-detail="personal"] .hps-thinking-details pre,
+.hps-shell[data-chat-detail="personal"] .hps-code-progress,
+.hps-shell[data-chat-detail="personal"] .hps-codepill-body,
+.hps-shell[data-chat-detail="personal"] .hps-empty-sub,
+.hps-shell[data-chat-detail="personal"] .hps-error,
+.hps-shell[data-chat-detail="personal"] .hps-hint,
+.hps-shell[data-chat-detail="personal"] .hps-hint code,
+.hps-shell[data-chat-detail="personal"] .hps-input button,
+.hps-shell[data-chat-detail="personal"] .hps-queued,
+.hps-shell[data-chat-detail="personal"] .hps-img-note,
+.hps-shell[data-chat-detail="personal"] .hps-image-preparing,
+.hps-shell[data-chat-detail="personal"] .hps-attachment-name,
+.hps-shell[data-chat-detail="personal"] .hps-roll-hint,
+.hps-shell[data-chat-detail="personal"] .hps-roll-original,
+.hps-shell[data-chat-detail="personal"] .hps-roll-cancel,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-title,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-msg,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-retry,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-dismiss,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-report,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-rid,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-title,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-sub,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-notes,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-toggle,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-install,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-dismiss,
+.hps-shell[data-chat-detail="personal"] .hps-page-notice,
+.hps-shell[data-chat-detail="personal"] .hps-element-context,
+.hps-shell[data-chat-detail="personal"] .hps-stop-notice,
+.hps-shell[data-chat-detail="personal"] .hps-turn-review,
+.hps-shell[data-chat-detail="personal"] .hps-effort,
+.hps-shell[data-chat-detail="personal"] .hps-access,
+.hps-shell[data-chat-detail="personal"] .hps-verify,
+.hps-shell[data-chat-detail="personal"] .hps-verify-ai,
+.hps-shell[data-chat-detail="personal"] .hps-publish,
+.hps-shell[data-chat-detail="personal"] .hps-publish-note,
+.hps-shell[data-chat-detail="personal"] .hps-publish-timing,
+.hps-shell[data-chat-detail="personal"] .hps-publish-declare legend,
+.hps-shell[data-chat-detail="personal"] .hps-evidence,
+.hps-shell[data-chat-detail="personal"] .hps-evidence-meta,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-fact,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-primary,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-escape,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-personal,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-input,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-submit,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-consent,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-withdraw,
+.hps-shell[data-chat-detail="personal"] .hps-recovery-notice,
+.hps-shell[data-chat-detail="personal"] .hps-recovered,
+.hps-shell[data-chat-detail="personal"] .hps-page-attachment,
+.hps-shell[data-chat-detail="personal"] .hps-page-attachment-note,
+.hps-shell[data-chat-detail="personal"] .hps-file-attach-notice,
+.hps-shell[data-chat-detail="personal"] .hps-file-attach-error,
+.hps-shell[data-chat-detail="personal"] .hps-input:not([data-expanded]) .hps-tools-menu button,
+.hps-shell[data-chat-detail="personal"] .hps-tools-menu button small,
+.hps-shell[data-chat-detail="personal"] .hps-codeblock-tool,
+.hps-shell[data-chat-detail="personal"] .cp-citation-number,
+.hps-shell[data-chat-detail="personal"] .cp-citation-title,
+.hps-shell[data-chat-detail="personal"] .cp-citation-domain,
+.hps-shell[data-chat-detail="personal"] .hps-context-note,
+.hps-shell[data-chat-detail="personal"] .hps-quote-action,
+.hps-shell[data-chat-detail="personal"] .hps-quote-note,
+.hps-shell[data-chat-detail="personal"] .hps-offline-banner,
+.hps-shell[data-chat-detail="personal"] .hps-delegation,
+.hps-shell[data-chat-detail="personal"] .hps-delegation-stop,
+.hps-shell[data-chat-detail="personal"] .hps-page-card,
+.hps-shell[data-chat-detail="personal"] .hps-notice-caution,
+.hps-shell[data-chat-detail="personal"] .hp-mission-week,
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson-meta,
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson-note,
+.hps-shell[data-chat-detail="personal"] .hp-goal-heading,
+.hps-shell[data-chat-detail="personal"] .hp-goal-error,
+.hps-shell[data-chat-detail="personal"] .hp-complete-why,
+.hps-shell[data-chat-detail="personal"] .hp-complete-note,
+.hps-shell[data-chat-detail="personal"] .hp-complete-notice,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-verify,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-form label,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-filter,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-empty,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-group h4,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-meta,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-adopted,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-previous,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff summary,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff-criterion,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff-note,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare h5,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare pre,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare small,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-aside h5,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-hint,
+.hps-shell[data-chat-detail="personal"] .hp-inbox-meta,
+.hps-shell[data-chat-detail="personal"] .hp-inbox-link-url,
+.hps-shell[data-chat-detail="personal"] .hp-help-label,
+.hps-shell[data-chat-detail="personal"] .hp-help-consent,
+.hps-shell[data-chat-detail="personal"] .hp-help-modes legend { font-size: var(--hp-font-caption); }
+/* The naming screen shows the activity line above the card, inside the workspace but outside the shell. */
+.tw-workspace .hps-activity-header { font-size: var(--hp-font-caption); }
+/* The personal header is drawn into the task heading (outside the shell, so it keeps the base step). */
+.tw-heading .hps-coach-name, .tw-heading .hps-header button, .tw-heading .hps-trial-left,
+.hps-shell[data-chat-detail="personal"] .hps-coach-name, .hps-shell[data-chat-detail="personal"] .hps-header button, .hps-shell[data-chat-detail="personal"] .hps-trial-left { font-size: var(--hp-font-caption); }
+.hps-text-size { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); margin: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-1); }
+.hps-text-size legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
+.hps-text-size label { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
+/* CGP-KNOW-R-032 / DES-KNOW-50 — the nickname field in 대화 설정: 44px controls, the counter and refusal as text. */
+.hps-nickname { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); margin: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; min-width: 0; }
+.hps-nickname legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
+.hps-nickname p { margin: 0; word-break: keep-all; }
+.hps-nickname-row { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-1); margin-top: var(--ds-c-studio-chatdetails-space-1); }
+.hps-nickname input { box-sizing: border-box; flex: 1 1 var(--ds-c-studio-chatdetails-size-27); min-width: 0; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-2); font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-nickname button { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-5); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); cursor: pointer; }
+.hps-nickname button:hover { background: var(--hp-bg-control-hover); }
+.hps-nickname button:active { background: var(--hp-bg-control-pressed); }
+.hps-nickname .hps-nickname-error { color: var(--vscode-errorForeground, inherit); }
+
+/* REQ-STUDIO-MISSING-TASK-FOLDER — the missing-folder recovery notice: two 44px actions, wrapping on narrow panels. */
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1); margin: 0 0 var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, var(--ds-c-studio-chatdetails-boundary-2))); border-radius: var(--ds-c-studio-chatdetails-radius-9); }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-text { margin: 0; flex: 1 1 var(--ds-c-studio-chatdetails-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-note { margin: 0; flex: 1 1 100%; color: var(--tw-muted, inherit); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-10); border: var(--ds-c-studio-chatdetails-size-3) solid transparent; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); cursor: pointer; }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-action:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+
+/* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Normal mode is unchanged. */
+@media (forced-colors: active) {
+  /* The composer wrapper is the field: it keeps the boundary and the ring, and the textarea inside it
+     draws neither, as in normal mode. */
+  .hps-shell[data-chat-detail="personal"] .hps-input { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; }
+  .hps-shell[data-chat-detail="personal"] .hps-input:focus-within { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+  .hps-shell[data-chat-detail="personal"] .hps-input textarea { border-style: none !important; }
+  /* Response dots are painted with currentColor as a background, which forced colors repaints as Canvas. */
+  .hps-response-dots i { background: CanvasText; }
+}
+
+/* REQ-STUDIO-UI-POLISH-1 — the "여기서 AI가 할 수 있는 일" card sits in the reading column: the same
+   740px centred measure as the messages and the composer (the margin is the input area's padding,
+   so the left edges line up), on a quiet panel with a hairline border. 6px of inner padding gives
+   the summary's 2px focus ring room inside the card, and nothing in the card clips (no scroller). */
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do {
+  box-sizing: border-box; max-height: none; overflow: visible;
+  margin: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) 0;
+  padding: var(--ds-c-studio-chatdetails-space-15); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-6);
+  background: var(--tw-panel); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+}
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > summary { padding-inline: var(--ds-c-studio-chatdetails-space-7); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do-count,
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > summary::before,
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do li[data-on="false"] { color: var(--tw-muted); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do li { padding-inline: var(--ds-c-studio-chatdetails-space-7); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > .hp-rail-lesson-note { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-2); border-top-color: var(--tw-line); color: var(--tw-muted); line-height: var(--hp-leading-label); }
+@container studio-chat (width < 448px) {
+  .hps-shell[data-chat-detail="personal"] .hp-ai-can-do { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
+}
+/* REQ-STUDIO-PREVIEW-RECOVERY — the preview failure line sits in the same 740px reading column as the messages and
+   the composer (the UI-POLISH-1 measure), not across the whole pane. */
+.hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) 0; }
+@container studio-chat (width < 448px) {
+  .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
+}
+
+/* CGP-SHELL-R-013 (REQ-STUDIO-PANEL-BOUNDARY) — a panel that failed to render: one calm line and one
+   44px 다시 불러오기, in place of only that panel. Unscoped: classroom chat, the personal chat and the
+   task rail and sources (outside the chat shell) all draw it. Text sits on the type scale (>= 14px). */
+.hps-panel-fallback {
+  box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1);
+  margin: var(--ds-c-studio-chatdetails-space-2) 0; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); max-width: 100%;
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, var(--ds-c-studio-chatdetails-boundary-2))); border-radius: var(--ds-c-studio-chatdetails-radius-9);
+  background: var(--tw-panel, transparent); color: inherit;
+}
+.hps-panel-fallback-icon { flex: none; color: var(--tw-muted, var(--hp-text-muted-default)); }
+.hps-panel-fallback-text { flex: 1 1 var(--ds-c-studio-chatdetails-size-28); min-width: 0; margin: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); word-break: keep-all; }
+.hps-panel-fallback-retry {
+  flex: none; min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-10);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
+  font: inherit; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); cursor: pointer;
+}
+.hps-panel-fallback-retry:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-panel-fallback-retry:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-panel-fallback-retry:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+@media (forced-colors: active) {
+  .hps-panel-fallback { border-color: CanvasText; }
+  .hps-panel-fallback-icon { color: CanvasText; }
+}
+
+/* CGP-CHAT-D53: selection and recommendation also have text/shape cues. */
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button[aria-checked="true"] { border-color: currentColor; box-shadow: inset 0 0 0 var(--ds-c-studio-chatdetails-shadow-31) currentColor; }
+.hps-choice-recommended { color: var(--hp-text-paper-default); background: var(--hp-bg-paper-default); border: var(--ds-c-studio-chatdetails-size-3) solid currentColor; border-radius: var(--ds-c-studio-chatdetails-radius-13); padding: 0 var(--ds-c-studio-chatdetails-space-15); font-size: var(--hp-font-caption); white-space: nowrap; }
+.hps-question-arrived { color: inherit; font-size: var(--hp-font-caption); }
+.hps-choice-help button:disabled { opacity: .6; cursor: default; }
+@media (forced-colors: active) {
+  .hps-choice-recommended { color: CanvasText; background: Canvas; border-color: CanvasText; }
+  .hps-shell[data-chat-detail="personal"] .hps-reply-choices button[aria-checked="true"] { border-color: Highlight; }
+}
+
+/* The question occupies the reading column; prose retains its own measure. */
+.hps-shell[data-chat-detail="personal"] .hps-msg-body.hps-msg-question { width: 100%; max-width: var(--chat-column, var(--ds-c-studio-chatdetails-size-1)); box-sizing: border-box; padding: 0; background: transparent; border: 0; }
+
+/* CGP-DS-D-005 (DES-CGP-DS-09) — shared chat classes the personal workspace draws, put on the learner
+   scale there: label leading 1.5 (not 1.2-1.45), Hangul tracking 0 (not 0.2px or 1px), weights 400/600
+   (not 550 or 700) and the 16/18px steps (not 15 or 17px). The classroom keeps its values (DEC-29). */
+.hps-shell[data-chat-detail="personal"] .hps-cit-chip,
+.hps-shell[data-chat-detail="personal"] .hps-codepill-body,
+.hps-shell[data-chat-detail="personal"] .hps-attachment-name,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-notes { line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label,
+.hps-shell[data-chat-detail="personal"] .hp-mission-week { letter-spacing: var(--hp-tracking-hangul); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do-title,
+.hps-shell[data-chat-detail="personal"] .hp-goal-label,
+.hps-shell[data-chat-detail="personal"] .hp-cta-primary { font-weight: var(--hp-weight-strong); }
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson,
+.hps-shell[data-chat-detail="personal"] .hp-rail-goal,
+.hps-shell[data-chat-detail="personal"] .hp-evidence { font-size: var(--hp-font-body); }
+/* The naming screen is drawn in the conversation column before the chat shell mounts. */
+.tw-workspace .hps-naming-title { font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
+.tw-workspace .hps-naming-input { font-size: var(--hp-font-body); }
+.tw-workspace .hps-naming-btn { font-weight: var(--hp-weight-strong); }
+
+/* CGP-DS-D-016: one editing card in both seats. 48px is a floor, not a fixed
+   height: the 44px controls plus 12px inset need more room. Keep the growing
+   textarea's 24px measurement unchanged. The placeholder colour stays the
+   audited --hp-text-placeholder-default role set in styles.css/chatDetails.css
+   (components never declare a role of their own). */
+.hps-input,
+.hps-shell[data-chat-detail="personal"] .hps-input,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] {
+  box-sizing: border-box;
+  border-radius: var(--hp-radius-composer);
+  min-height: var(--hp-control-lg);
+  padding: var(--hp-composer-inset);
+  padding-top: var(--hp-composer-inset);
+}
+.hps-input:not([data-expanded]) {
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  background: var(--vscode-input-background, var(--ds-c-studio-chatdetails-surface-3));
+}
+.hps-input:not([data-expanded]) textarea { background: transparent; border: 0; }
+.hps-input .hps-btn-send,
+.hps-input .hps-btn-stop,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
+  box-sizing: border-box;
+  width: var(--hp-control-min);
+  height: var(--hp-control-min);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* REQ-CGP-DS-24: placement belongs to each opener; menu surfaces and targets share tokens.
+   The header may be portalled into the task heading, outside the chat shell. */
+.hps-shell .hps-input .hps-tools-menu,
+.tw-chat-menu .tw-chat-menu-panel {
+  box-sizing: border-box;
+  border-radius: var(--hp-radius-menu);
+  padding: var(--ds-c-menu-gutter);
+  background: var(--hp-bg-panel-default);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+}
+.hps-shell .hps-input .hps-tools-menu > button,
+.tw-workspace .hps-header .tw-chat-menu-panel > button,
+.tw-chat-menu .tw-chat-menu-panel > button {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--ds-c-menu-item-height);
+  width: 100%;
+  margin: 0;
+  padding: var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline);
+  border-radius: var(--hp-radius-menu-item); /* nested: menu radius - gutter */
+  font-size: var(--hp-font-caption);
+  line-height: var(--hp-leading-label);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.hps-shell .hps-tools-menu button small { font-size: var(--hp-font-caption); }
+/* Title/description hierarchy comes from weight and colour, never from a size below the learner minimum. */
+.hps-shell .hps-input .hps-tools-menu > button > span { font-weight: var(--hp-weight-strong); color: var(--hp-text-primary-default); }
+.hps-shell .hps-input .hps-tools-menu > button > span > small { font-weight: var(--hp-weight-regular); color: var(--hp-text-muted-default); }
+/* CGP-CHAT-D-005: keep the note editable while the selected reason folds to a text summary. */
+.hps-verdict-reason-disclosure { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--hp-dur-content), opacity var(--hp-dur-content); }
+.hps-verdict-reason-disclosure[data-expanded="false"] { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+.hps-verdict-reason-clip { min-height: 0; overflow: hidden; }
+.hps-verdict-reason-toggle { display: inline-flex; align-items: center; align-self: flex-start; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); max-width: 100%; padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: inherit; font: inherit; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
+.hps-verdict-reason-toggle:hover { background: var(--hp-bg-control-hover); }
+.hps-verdict-reason-toggle:active { background: var(--hp-bg-control-pressed); }
+.hps-verdict-reason-toggle:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+@media (forced-colors: active) {
+  /* Match the existing materials control: Canvas avoids Chromium's black text backplate on Highlight. */
+  .hps-shell .hps-verdict[aria-pressed="true"], .hps-shell .hps-verdict-reason[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+  .hps-shell .hps-verdict[aria-pressed="true"] *, .hps-shell .hps-verdict-reason[aria-pressed="true"] * { color: CanvasText !important; }
+}
+/* CGP-CHAT-D-011: pending workspace context belongs to the editing surface. */
+.hps-file-context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space); min-width: 0; max-width: 100%; color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); }
+.hps-file-context-stack { display: flex; flex-direction: column; gap: var(--hp-space); min-width: 0; max-width: 100%; }
+.hps-file-context-stack > .hps-file-attach-notice { margin: 0; }
+.hps-file-context-name { display: inline-flex; align-items: center; gap: var(--hp-space); flex: 1 1 0; min-width: 0; min-height: var(--hp-control-min); font: inherit; color: inherit; }
+.hps-file-context-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hps-file-context-name > svg { flex-shrink: 0; }
+.hps-file-context-size { flex-shrink: 0; white-space: nowrap; }
+.hps-file-context .hps-file-context-remove { display: grid; place-items: center; flex: 0 0 var(--hp-control-min); width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; margin: 0; }
+.hps-shell .hps-input[data-file-context],
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] { display: grid; grid-template-columns: var(--hp-control-min) minmax(0, 1fr) var(--hp-control-min); row-gap: var(--hp-space); }
+.hps-shell .hps-input[data-file-context] > .hps-file-context-stack,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-file-context-stack { grid-column: 1 / -1; grid-row: 1; }
+.hps-shell .hps-input[data-file-context] > textarea,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > textarea { grid-column: 1 / -1; grid-row: 2; min-height: var(--ds-c-studio-chatdetails-size-17); overflow-y: auto; }
+.hps-shell .hps-input[data-file-context] > .hps-composer-tools,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-composer-tools { grid-column: 1; grid-row: 3; }
+.hps-shell .hps-input[data-file-context] > .hps-input-buttons,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-input-buttons { grid-column: 3; grid-row: 3; }
+.hps-file-context-preview { color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); font-size: var(--hp-font-caption); }
+.hps-file-context-preview > strong { overflow-wrap: anywhere; }
+.hps-file-context-preview > button { display: block; margin-inline-start: auto; min-height: var(--hp-control-min); min-width: var(--hp-control-min); }
+.hps-file-context-preview > pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.hps-shell .hps-input .hps-file-context button { font: inherit; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); }
+.hps-shell .hps-input .hps-file-context button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); transform: none; }
+.hps-shell .hps-input .hps-file-context button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); transform: none; }
+/* CGP-KNOW-D-004: local answer review; actual proposed writes keep the host confirmation. */
+.hps-answer-actions .hps-answer-wiki { min-width: var(--hp-control-min); min-height: var(--hp-control-min); border: 0; }
+.hps-wiki-review { margin-block: var(--hp-space-2); padding: var(--hp-space-3); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: var(--vscode-editorWidget-background); font-size: var(--hp-font-caption); min-width: 0; overflow-wrap: anywhere; }
+.hps-wiki-review p { margin-block: var(--hp-space-2); }
+.hps-wiki-excerpt { margin: var(--hp-space-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.hps-wiki-excerpt[data-expanded] { display: block; }
+.hps-wiki-turn { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
+.hps-wiki-review-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hps-wiki-review button { min-width: var(--hp-control-min); min-height: var(--hp-control-min); }
+.hps-wiki-review button { padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: transparent; color: var(--hp-text-primary-default); font: inherit; cursor: pointer; }
+.hps-wiki-review button:hover { background: var(--hp-bg-control-hover); }
+.hps-wiki-review button:active { background: var(--hp-bg-control-pressed); }
+/* CGP-KNOW-D-010: a persisted restriction stays visible beside the activity header. */
+.hps-folder-restricted { flex: 0 0 auto; font-size: var(--hp-font-caption); padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid currentColor; border-radius: var(--hp-space-2); }
+/* DES-CGP-AGENT-67: top-layer disclosure; no permission or runtime change. */
+.hps-shell .hp-capability-sheet {
+  box-sizing: border-box;
+  width: min(var(--ds-c-modal-max), calc(100% - var(--ds-c-modal-gutter)));
+  max-width: calc(100% - var(--ds-c-modal-gutter));
+  max-height: calc(100dvh - var(--ds-c-modal-gutter));
+  margin: auto;
+  padding: var(--ds-c-modal-padding);
+  overflow: auto;
+  color: var(--hp-text-primary-default);
+  background: var(--vscode-editor-background);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--hp-radius-dialog);
+  font: inherit;
+}
+.hps-shell .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-dark); }
+.hps-shell .hp-capability-sheet .hp-ai-can-do { width: auto; max-width: 100%; max-height: none; margin: 0; overflow: visible; }
+.hps-shell .hp-capability-sheet .hp-ai-can-do ul { grid-template-columns: minmax(0, 1fr); }
+.hps-shell .hp-capability-sheet .hp-capability-next { width: 100%; margin-block: var(--ds-c-studio-chatdetails-space-1); }
+.hps-shell .hp-capability-sheet .hp-rail-lesson-note { font-size: var(--hp-font-caption); }
+body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-light); }
+@media (forced-colors: active) {
+  .hps-shell .hp-capability-sheet { color: CanvasText; background: Canvas; border-color: CanvasText; }
+  .hps-shell .hp-capability-sheet :focus-visible { --hp-ring-focus-default: Highlight; outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); }
+}
+/* DES-CGP-AGENT-57: recovery replaces editing controls while preserving the same draft field. */
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"],
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"][data-file-context] { display: flex; flex-direction: column; align-items: stretch; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"] > .hps-file-context-stack { display: none; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"] textarea { width: 100%; min-height: var(--hp-control-min); }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); width: 100%; }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-draft-label { font-size: var(--hp-font-caption); color: var(--tw-muted); }
+@container studio-chat (width < 448px) {
+  .hps-shell[data-chat-detail="personal"] .hps-missing-folder-actions { flex-direction: column; }
+  .hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { width: 100%; }
+}
+
+/* DES-CGP-DS-36: both transcript branches reserve space and follow the host's thumb palette.
+   position: relative makes the transcript the containing block of its sr-only rows (#2735), so they
+   cannot grow the page and draw a second, page-level scrollbar on hosts with classic scrollbars. */
+.hps-shell .hps-messages {
+  position: relative;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)) transparent;
+}
+/* Chromium ignores thumb pseudo styles when standard scrollbar-color/width are non-auto.
+   Use its thin custom scrollbar to retain the host's separate hover and drag colors. */
+@supports selector(::-webkit-scrollbar) {
+  .hps-shell .hps-messages, .hps-shell[data-chat-detail="personal"] .hps-messages { scrollbar-width: auto; scrollbar-color: auto; }
+  .hps-shell .hps-messages::-webkit-scrollbar { width: var(--ds-c-studio-chatdetails-space-7); height: var(--ds-c-studio-chatdetails-space-7); }
+  .hps-shell .hps-messages::-webkit-scrollbar-track { background: transparent; }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)); }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default))); }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default))); }
+}
+@media (forced-colors: active) {
+  .hps-shell .hps-messages { scrollbar-color: auto; }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb,
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:hover,
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: CanvasText; }
+}
+/* CGP-CHAT-R-015: terminal evidence is separate from the coach's answer prose. */
+.hps-turn-elapsed { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+/* CGP-CHAT-D-015: secondary text at the end of the turn's status line (the answer action row);
+   it wraps under the controls in a narrow pane instead of overflowing. Not a control, no target. */
+.hps-answer-actions > .hps-turn-elapsed-inline { min-width: 0; overflow-wrap: anywhere; }
+/* CGP-CHAT-R-018: locally scoped file names, with the composer retaining keyboard focus.
+   CGP-CHAT-D-018: a popover above the composer card, its inline start at the `@` that opened it and
+   clamped into the card. The list shows at most 6 rows of exactly 44px and scrolls past that; the
+   surface and row geometry are the shared menu tokens (REQ-CGP-DS-24). */
+.hps-shell .hps-input > .hps-file-mentions {
+  position: absolute; z-index: 20; inset-block-end: calc(100% + var(--ds-c-studio-chatdetails-size-14));
+  width: min(var(--ds-c-studio-chatdetails-size-21), 100%);
+  inset-inline-start: min(var(--hps-file-mentions-anchor), calc(100% - min(var(--ds-c-studio-chatdetails-size-21), 100%)));
+  box-sizing: border-box; min-width: 0; margin: 0;
+  padding: var(--ds-c-menu-gutter); border-radius: var(--hp-radius-menu);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  background: var(--hp-bg-panel-default); color: var(--vscode-foreground);
+  box-shadow: var(--hp-elevation-overlay);
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); text-align: start;
+}
+.hps-shell .hps-input > .hps-file-mentions p { margin: 0; padding: var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline); color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
+.hps-file-mentions-list {
+  position: relative; display: flex; flex-direction: column; min-width: 0;
+  max-height: calc(var(--ds-c-menu-item-height) * 6); overflow-y: auto; overscroll-behavior: contain;
+}
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention {
+  display: flex; flex: 0 0 auto; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2);
+  box-sizing: border-box; width: 100%; min-width: 0; height: var(--ds-c-menu-item-height); min-height: var(--ds-c-menu-item-height);
+  margin: 0; padding: 0 var(--ds-c-menu-item-pad-inline); border: 0; border-radius: var(--hp-radius-menu-item);
+  background: transparent; color: var(--hp-text-primary-default); text-align: start; white-space: nowrap;
+  font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-regular); line-height: var(--hp-leading-label); cursor: pointer;
+}
+/* CGP-DS-R-012: in high contrast the popover has no elevation shadow, so its 1px border takes the theme's contrastBorder. */
+body.vscode-high-contrast .hps-shell .hps-input > .hps-file-mentions { border-color: var(--vscode-contrastBorder, currentColor); }
+/* The chosen row keeps its pressed fill under the pointer; other rows take the hover layer. */
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention:hover:not(:disabled):not([aria-selected="true"]) { background-color: var(--hp-bg-control-hover); }
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention:hover:not(:disabled) { transform: none; }
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention:active:not(:disabled):not([aria-selected="true"]) { background-color: var(--hp-bg-control-pressed); }
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention:active:not(:disabled) { transform: none; }
+.hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention[aria-selected="true"] { background-color: var(--hp-bg-control-pressed); }
+.hps-file-mention > svg, .hps-file-mention-mark { flex: 0 0 auto; width: var(--ds-c-studio-chatdetails-space-20); }
+.hps-file-mention-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; unicode-bidi: isolate; font-weight: var(--hp-weight-strong); }
+.hps-file-mention-folder { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; unicode-bidi: isolate; color: var(--hp-text-muted-default); }
+.hps-file-mention-size { flex: 0 0 auto; margin-inline-start: auto; color: var(--hp-text-muted-default); font-variant-numeric: tabular-nums; }
+/* Forced colours: Chromium paints a Canvas backplate behind text, so a Highlight fill would hide the
+   chosen row's words. Like the home tabs, the chosen row keeps Canvas/CanvasText and is marked by a
+   2px Highlight border plus the check icon. */
+@media (forced-colors: active) {
+  .hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention[aria-selected="true"] { background-color: Canvas !important; color: CanvasText !important; border: var(--ds-c-studio-chatdetails-size-7) solid Highlight !important; }
+  .hps-shell .hps-input .hps-file-mentions-list > .hps-file-mention[aria-selected="true"] * { color: CanvasText !important; }
+}
+/* CGP-CHAT-R-017: view-only paste chips keep the complete draft available.
+   CGP-CHAT-D-017: same chip family as the D06 file chip (icon, label, 44px × remove, same borders);
+   the expanded editor grows to 240px and then scrolls on its own. The list sits above the composer
+   card so an expanded 240px editor never fights the card's 192px growth cap. */
+.hps-pasted-list { display: flex; flex-direction: column; gap: var(--hp-space); max-height: 40vh; overflow: auto; min-width: 0; margin-block-end: var(--hp-space); }
+.hps-pasted-chip .hps-pasted-toggle { flex: 1 1 auto; padding-inline: var(--hp-space-2); text-align: start; cursor: pointer; }
+/* The line count is the point of the label: wrap the row instead of ellipsizing it in a narrow column. */
+.hps-pasted-chip .hps-pasted-toggle > span { overflow: visible; text-overflow: clip; }
+.hps-pasted-chip .hps-pasted-inline { flex: 0 0 auto; min-height: var(--hp-control-min); padding-inline: var(--hp-space-2); cursor: pointer; }
+.hps-pasted-chip .hps-file-context-remove { cursor: pointer; }
+.hps-shell .hps-pasted-chip button { font: inherit; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); }
+.hps-shell .hps-pasted-chip button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-shell .hps-pasted-chip button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-shell .hps-pasted-chip button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-pasted-editor { box-sizing: border-box; flex-basis: 100%; width: 100%; min-width: 0; min-height: var(--hp-control-min); field-sizing: content; max-height: var(--ds-c-studio-paste-editor-max); overflow-y: auto; resize: none; padding: var(--hp-space-2); font: inherit; font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); color: inherit; background: var(--vscode-input-background, transparent); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); }
+@media (forced-colors: active) { .hps-shell .hps-pasted-chip button, .hps-pasted-editor { border-color: CanvasText; } }
+/* CGP-CHAT-R-016: failed response only; raw text is selectable and never parsed as Markdown/HTML. */
+.hps-turn-raw { flex-basis: 100%; min-width: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); margin: 0; }
+/* CGP-CHAT-D-012: only a host-accepted steered request exits; waiting has no animation. */
+.hps-steer-delivered { animation: hps-steer-exit var(--hp-dur-press) ease-out both; }
+@keyframes hps-steer-exit { from { opacity: 1; } to { opacity: 0; } }
+:where(:root[data-reduced-motion="true"]) .hps-steer-delivered { animation: none; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-steer-delivered { animation: none; } }
+
+/* CGP-CHAT-R-020: drawing colors are image data; surrounding controls follow the host theme. */
+.hps-sketch { color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); font-size: var(--hp-font-body); }
+.hps-sketch-tools { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-sketch-tools [aria-pressed="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); font-weight: var(--hp-weight-strong); }
+.hps-sketch-canvas { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 1; touch-action: none; margin: var(--ds-c-studio-chatdetails-space-2) 0; }
+/* DES-CGP-DS-27: in-flow at the pane bottom, never covering the composer or stealing focus. */
+.hps-copy-feedback { display: contents; }
+.hps-copy-toasts { display: flex; flex-direction: column; align-items: center; min-width: 0; max-height: 25vh; overflow-y: auto; gap: var(--ds-c-studio-chatdetails-space-7); }
+.hps-copy-toast-entry { display: contents; }
+.hps-shell .hps-copy-toasts .hps-copy-toast { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); box-sizing: border-box; width: fit-content; max-width: min(100%, var(--ds-c-studio-copy-toast-max)); margin: 0; padding: var(--ds-c-studio-chatdetails-space-7); border: var(--ds-c-studio-styles-size-7) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hps-shell .hps-copy-toasts .hps-copy-toast:empty { display: none; }
+.hps-copy-toast > .hps-icon { flex-shrink: 0; }
+@media (forced-colors: active) { .hps-shell .hps-copy-toasts .hps-copy-toast { color: CanvasText; background: Canvas; border-color: CanvasText; } }
+
+/* CGP-CHAT-R-027 / CGP-CHAT-D-027: find bar at the transcript's top edge, right-aligned in the chat
+   column (ChatFindBar keeps the reading position when it opens or closes); 44px controls, 14px
+   floor, paints no transcript node. */
+.hps-find {
+  flex: none; align-self: flex-end; box-sizing: border-box; display: flex; align-items: center; gap: var(--hp-space-1);
+  width: calc(var(--hp-control-md) * 9); max-width: calc(100% - var(--hp-space-4)); margin: var(--hp-space-2); padding: var(--hp-space-1);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2);
+  background: var(--vscode-editorWidget-background, var(--hp-bg-panel-default)); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, inherit));
+  font-size: var(--hp-font-body);
+}
+.hps-find-input {
+  flex: 1 1 auto; min-width: 0; min-height: var(--hp-control-md); box-sizing: border-box; padding: 0 var(--hp-space-2);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-1);
+  background: var(--vscode-input-background, transparent); color: var(--vscode-input-foreground, inherit); font: inherit; font-size: var(--hp-font-body);
+}
+.hps-find-input:focus-visible, .hps-find-btn:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-find-count { flex: none; min-width: calc(var(--hp-space) * 10); text-align: center; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-variant-numeric: tabular-nums; }
+.hps-find-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: var(--hp-control-md); min-height: var(--hp-control-md); padding: 0; border: 0; border-radius: var(--hp-space-1);
+  background: transparent; color: inherit; font: inherit; font-size: var(--hp-font-caption); cursor: pointer;
+}
+.hps-find-btn:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-find-btn:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-find-btn:disabled { cursor: default; color: var(--hp-text-muted-default); }
+::highlight(hp-find) { background-color: var(--vscode-editor-findMatchHighlightBackground, color-mix(in srgb, var(--hp-bg-accent-default) 20%, transparent)); }
+/* The current match also underlines, so it differs from the others without colour. */
+::highlight(hp-find-current) { background-color: var(--vscode-editor-findMatchBackground, color-mix(in srgb, var(--hp-bg-accent-default) 45%, transparent)); text-decoration: underline; }
+@media (forced-colors: active) {
+  .hps-find, .hps-find-input { border-color: CanvasText; }
+  .hps-find-btn:disabled { color: GrayText; }
+  ::highlight(hp-find) { background-color: Mark; color: MarkText; }
+  ::highlight(hp-find-current) { background-color: Highlight; color: HighlightText; }
+}
+
+/* CGP-KNOW-D-023 (DES-KNOW-41): "AI가 기억하는 것" in 대화 설정. Rows and controls are 44px; every word is 14px; the source
+   line sits under the item text (so at 320px it wraps below it). The confirm is a small modal with no scroller of its own. */
+.hps-memory-settings { display: grid; gap: var(--ds-c-studio-chatdetails-space-12); min-width: 0; }
+.hps-memory-settings h3 { margin: 0; font-size: var(--hp-font-body); }
+.hps-memory-settings-search { display: grid; gap: var(--ds-c-studio-chatdetails-space-13); font-size: var(--hp-font-caption); }
+.hps-memory-settings-search input { box-sizing: border-box; width: 100%; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-search input:focus-visible,
+.hps-memory-settings-delete:focus-visible,
+.hps-memory-settings-actions button:focus-visible,
+.hps-memory-settings .tw-memory-source button:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-memory-settings-list { display: grid; gap: var(--ds-c-studio-chatdetails-space-12); margin: 0; padding: 0; list-style: none; }
+.hps-memory-settings-list > li { display: grid; gap: var(--ds-c-studio-chatdetails-space-13); align-content: center; min-height: var(--ds-c-studio-chatdetails-size-8); min-width: 0; padding-block: var(--ds-c-studio-chatdetails-space-13); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
+.hps-memory-settings-text { margin: 0; font-size: var(--hp-font-caption); overflow-wrap: anywhere; white-space: pre-wrap; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-settings-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-12); min-width: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); }
+.hps-memory-settings .tw-memory-source button { min-height: var(--ds-c-studio-chatdetails-size-8); max-width: 100%; padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); text-align: start; overflow-wrap: anywhere; color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-delete,
+.hps-memory-settings-actions button { justify-self: start; min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-delete:hover, .hps-memory-settings-actions button:hover, .hps-memory-settings .tw-memory-source button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-memory-settings-delete:active, .hps-memory-settings-actions button:active, .hps-memory-settings .tw-memory-source button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-memory-settings-empty, .hps-memory-settings-note { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-settings-note:empty { display: none; }
+.hps-memory-settings-confirm { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); padding: var(--ds-c-studio-chatdetails-space-5); color: var(--vscode-foreground, var(--hp-text-primary-default)); background: var(--tw-panel, var(--vscode-editor-background)); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, currentColor); border-radius: var(--hp-radius-dialog); font-size: var(--hp-font-caption); }
+.hps-memory-settings-confirm h4 { margin: 0 0 var(--ds-c-studio-chatdetails-space-12); font-size: var(--hp-font-body); }
+.hps-memory-settings-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-c-studio-chatdetails-space-12); margin-top: var(--ds-c-studio-chatdetails-space-12); }
+.hps-memory-settings-danger { font-weight: var(--hp-weight-strong); }
+@media (forced-colors: active) {
+  .hps-memory-settings-delete, .hps-memory-settings-actions button, .hps-memory-settings-search input, .hps-memory-settings .tw-memory-source button { border-color: ButtonText; }
+}

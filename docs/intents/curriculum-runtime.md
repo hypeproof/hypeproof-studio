@@ -2,8 +2,8 @@
 
 Status: proposed contract, not implemented and not used in a class. 2026-09-29.
 Owner: jayleekr. Source: *HypeProof Studio Curriculum Runtime — Product & Engineering Requirements, AI for Good v5*, v1.0, 2026-09-28 (the PRD; §-numbers below refer to it), preserved verbatim at [docs/design/curriculum-runtime-prd-v1.0-2026-09-28.md](../design/curriculum-runtime-prd-v1.0-2026-09-28.md) and not edited by the documents derived from it.
-Epic: [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388).
-Parent: [Product Intent](../PRODUCT-INTENT.md) (Useful work first, Human judgment stays visible, Evidence over claims, Capability models are hypotheses). Sibling intents are referenced, not copied: [INT-SX-00–10](studio-learning-experience.md) owns what the student screen shows during work; [INT-MC-01–03](measurement-core.md) owns observation, evidence and interpretation. Lab [PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/main/PHILOSOPHY.md) and [MISSION.md](https://github.com/jayleekr/hypeprooflab/blob/main/MISSION.md) keep ownership of the learning philosophy and child-safety decisions.
+Epic: [#1388](https://github.com/hypeproof/hypeproof-studio/issues/1388).
+Parent: [Product Intent](../PRODUCT-INTENT.md) (Useful work first, Human judgment stays visible, Evidence over claims, Capability models are hypotheses). Sibling intents are referenced, not copied: [INT-SX-00–10](studio-learning-experience.md) owns what the student screen shows during work; [INT-MC-01–03](measurement-core.md) owns observation, evidence and interpretation. Lab [PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/main/PHILOSOPHY.md) and [MISSION.md](https://github.com/hypeproof/hypeprooflab/blob/main/MISSION.md) keep ownership of the learning philosophy and child-safety decisions.
 
 ## Product Intent
 

@@ -1,111 +1,50 @@
 ---
 name: hype-deploy
-description: Deploy the HypeProof Studio Worker to Cloudflare production (api.hypeproof-ai.xyz) after PRs have merged to main. Wraps `npx wrangler deploy` with preflight (clean tree · on main · in sync with origin) and post-deploy health verification. Use when worker code, profiles, or system prompts have landed on main and need to reach prod — the deploy-side counterpart of /hype-open-pr.
-user_invocable: true
-triggers:
-  - "hype-deploy"
-  - "deploy worker"
-  - "deploy prod"
-  - "deploy to prod"
-  - "push to prod"
-  - "prod 배포"
-  - "워커 배포"
-  - "배포해"
-argument_hint: "[issue # to close after deploy, optional]"
+description: Route a HypeProof Service Worker deploy (api.hypeproof-ai.xyz, hypeproof-studio-api) out of Studio to hypeproof-service, where `cd worker && npm run release:deploy` runs the release dependency check and the deploy. Use whenever someone in this repo asks to deploy the worker, push profiles or prompts to prod, or "prod 배포", even if they expect it to happen from Studio — Studio no longer deploys the Worker and its old deploy script refuses.
 ---
 
 # hype-deploy
 
-Promote the Worker on `main` to Cloudflare production. The mechanical part —
-preflight, deploy, version capture, health smoke — runs through
-`scripts/deploy-worker.sh`. This skill adds the judgment a bare script can't:
-*should* we deploy right now, and which deploy-tracking issue gets closed.
+The production Worker (`hypeproof-studio-api`, `https://api.hypeproof-ai.xyz`) is owned
+and deployed by `hypeproof/hypeproof-service`. Studio's `scripts/deploy-worker.sh` is a stub
+that exits 1 (#1832), so do not run it or `wrangler deploy` from this repo. The canonical
+runbook is `worker/DEPLOY.md` in hypeproof-service; read it there before deploying, since it
+changes faster than this skill.
 
-Repo: `jayleekr/hypeproof-studio`. Prod URL: `https://api.hypeproof-ai.xyz`.
-
-## Preconditions
-
-- On `main`, working tree clean, in sync with `origin/main`. The script
-  enforces this — fix locally before retrying. Submodule modified content is
-  OK (`vscodium-base` rename residue from `prepare_vscode.sh` is benign).
-- The change you want live is **already on `main`** (PR merged). This skill
-  does not deploy from feature branches.
-- Cloudflare `wrangler login` is active. If not: `cd worker && npx wrangler login`.
-- **Workshop awareness**: if a live cohort is currently running (check the
-  admin UI at `https://api.hypeproof-ai.xyz/` → active classes), don't deploy
-  mid-session unless the change is itself a hotfix for that session.
+Chalk (`chalk/`) and the App are separate trains: `deploy-chalk.yml` and the `v*` release
+process (`docs/dev/06-release-process.md`). This skill is only about the Service Worker.
 
 ## Flow
 
-### 1. Confirm there is something to deploy
-`git log origin/main...` is meaningless on a clean main — instead, look at
-the last few commits and compare to the currently-active version:
+1. **Get the change onto Service `main`.** Worker code, profiles and prompts live in
+   hypeproof-service now. A Studio PR cannot put them live.
+2. **Apply migrations first.** Schema migrations go through hypeproof-ops `opsdb.py`. The
+   deploy script never applies one and stops if the live DB head is behind the commit's
+   highest migration.
+3. **Dry run** from a clean Service checkout at `origin/main`:
 
-```bash
-git log --oneline -5
-cd worker && npx wrangler deployments status | head -10
-```
+   ```bash
+   cd worker && npm run release:deploy                    # add --db-head NNNN until _ops_migrations exists
+   ```
 
-If the latest active version corresponds to commits older than your intended
-deploy target, deploy is needed. Otherwise tell the user: "already at HEAD,
-nothing to deploy."
+   It runs the Harness release dependency check (`release_deps.py check --candidate
+   service=…`) and the provider contract suites. Anything but PASS stops it: report the
+   engine's unmet or unresolved requirements instead of working around them.
+4. **Deploy** only when the user asks for it, because it is a production write and tags
+   `service-vYYYY.MM.DD-N`:
 
-### 2. Run the harness
-```
-bash scripts/deploy-worker.sh
-```
-The script will:
-1. Enforce preflight (branch + sync + clean tree).
-2. Print the last 5 commits and ask for `y/N` confirmation. To skip the
-   prompt (e.g. autonomous deploy after a recent merge), pass `FORCE=1`.
-3. Run `npx wrangler deploy --env=""` (top-level env — silences wrangler's
-   multi-env warning).
-4. Tolerate a known side-effect: if `Uploaded hypeproof-studio-api` appears
-   but a tail step (cron schedules / workers.dev subdomain) fails, the
-   worker code IS live — only schedule registration is skipped. Surface
-   this as a warning, not a failure.
-5. Hit `/v1/health` on `https://api.hypeproof-ai.xyz` and require
-   `"ok":true`.
-6. Print a summary block (timestamp · commit · version id · URL · health).
+   ```bash
+   cd worker && npm run release:deploy -- --apply
+   ```
 
-If preflight fails (exit 1), help the user fix the cause (`git pull` /
-`git stash` / branch switch) — never bypass with `--force`.
-
-### 3. Close the deploy-tracking issue, if there is one
-The repo uses `ops:` issues to track required redeploys (e.g. `#76 ops: prod
-worker redeploy needed for PR #74`). After a successful deploy that covers
-such an issue:
-
-```bash
-gh issue comment <N> --body-file <tmp-comment>
-gh issue close <N>
-```
-
-Comment body should include: deploy timestamp · version id · which PRs/issues
-this deploy now puts live. Use the argument-passed issue number, or ask the
-user which open `ops:`/`fix:` issue this resolves.
-
-### 4. Smoke beyond /v1/health (optional, recommended near a workshop)
-Public `/v1/health` only confirms the worker boots. To verify the deployed
-*content* (e.g. new system prompt is live), have the user open Studio with a
-cohort token and start a chat — the first turn reflects the new profile.
-Document this as a manual step; don't try to issue a prod token from CLI
-unless `HPS_SIGNING_SECRET` is at hand.
+   The script checks the live-class freeze, deploys, tags, and verifies `/v1/health`
+   reports the new version. A failure after the tag means the release is live; say so.
+5. **Close the tracking issue** if the user passed an issue number: comment with the version, tag and what
+   went live, then close it.
 
 ## Guardrails
 
-- Never deploy from a feature branch. Always main + in sync with origin.
-- Never bypass the preflight (no `--force-deploy`). If the tree is dirty,
-  commit or stash; if behind origin, `git pull --ff-only`.
-- Never deploy mid-workshop without explicit user confirmation — even a
-  "trivial" deploy can disconnect active SSE streams.
-- Don't touch secrets from this skill. Secret rotation is its own thing
-  (`npx wrangler secret put <KEY>` interactively, never piped from a file).
-- The workers.dev-subdomain / cron-schedules error is *non-blocking* for the
-  current deploy. Treat it as warning + flag, not a retry trigger. The
-  proper fix is dashboard-side (create workers.dev subdomain) and is its own
-  ticket.
-- One deploy per invocation. If the user asks for "deploy + rollback if X",
-  split — deploy first, then check, then decide.
-- Communicate in any language; the deploy summary printed by the script is
-  English (terse, log-friendly).
+- Do not deploy mid-class without explicit confirmation; it can drop active streams.
+  `--override-live-session` is a recorded human decision, not a retry flag.
+- Do not touch secrets from this skill.
+- One deploy per invocation.

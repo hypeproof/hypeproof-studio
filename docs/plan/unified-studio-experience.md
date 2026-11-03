@@ -1,6 +1,6 @@
 # 체험·수업 통합 구현 순서
 
-2026-09-10 · [Intent/Epic #915](https://github.com/jayleekr/hypeproof-studio/issues/915)
+2026-09-10 · [Intent/Epic #915](https://github.com/hypeproof/hypeproof-studio/issues/915)
 제품 책임 Jay (`jayleekr`). 상태: 공통 코드 진입 구현·로컬 검증, 활동 전환 경계 구현 중. 공개 전달은 미완료.
 [Intent/설계](../design/unified-studio-experience.md), [US 요구사항](../requirements/unified-studio-experience.md),
 [US 테스트](../testing/unified-studio-experience.md)가 원본이다. 이슈/PR은 ID와 실행 근거를 연결한다.
@@ -9,10 +9,10 @@
 
 | 단계 / 이슈 | 구현 범위 | 선행 조건 | 완료 증거 |
 |---|---|---|---|
-| US-1 [#916](https://github.com/jayleekr/hypeproof-studio/issues/916) 공통 진입 | US-01~06/12/17. 같은 App에서 체험·수업·이어가기, 기존 코드 확인. 공개 무코드 발급은 P1로 분리 | 기존 NAT/profile/access, 발급 정책 결정 | US-T01~06/13/15. 실제 자격으로 진입하며 잘못된 코드/발급 실패도 관측 |
-| US-2 [#917](https://github.com/jayleekr/hypeproof-studio/issues/917) 활동 전환·보존 | US-05~12/18. 기존 저장소 조사와 귀속 ADR, 준비→확정 전환, 실행·자료·비용 경계 | US-1의 진입 계약, #748/#749와 기존 #800 결과 재사용 | US-T06~14/18. 실패/중지/크래시/늦은 이벤트/폴더 충돌 대조와 실제 복귀 |
-| US-3 [#918](https://github.com/jayleekr/hypeproof-studio/issues/918) 기존 환경 이행 | US-01/02/10/12/13/18. 앱 사본/localhost 설정·자격·대화/파일 백업과 공개 연결 | US-1/US-2, #911/#912의 현황 | US-T11/13/16/18. 실제 다음 실행의 버전·자격·원본 보존·복귀 확인 |
-| US-4 [#919](https://github.com/jayleekr/hypeproof-studio/issues/919) 릴리스 강제 검사 | US-14~16, 공통 App/Service 경로. 기존 fixture/manifest/workflow 확장 | US-1~3의 계약, 지원 OS와 비운영 자격 | US-T01/02/17/19/20. 실패/누락/stale 대조로 자동 차단 후 최종 산출물 인수 |
+| US-1 [#916](https://github.com/hypeproof/hypeproof-studio/issues/916) 공통 진입 | US-01~06/12/17. 같은 App에서 체험·수업·이어가기, 기존 코드 확인. 공개 무코드 발급은 P1로 분리 | 기존 NAT/profile/access, 발급 정책 결정 | US-T01~06/13/15. 실제 자격으로 진입하며 잘못된 코드/발급 실패도 관측 |
+| US-2 [#917](https://github.com/hypeproof/hypeproof-studio/issues/917) 활동 전환·보존 | US-05~12/18. 기존 저장소 조사와 귀속 ADR, 준비→확정 전환, 실행·자료·비용 경계 | US-1의 진입 계약, #748/#749와 기존 #800 결과 재사용 | US-T06~14/18. 실패/중지/크래시/늦은 이벤트/폴더 충돌 대조와 실제 복귀 |
+| US-3 [#918](https://github.com/hypeproof/hypeproof-studio/issues/918) 기존 환경 이행 | US-01/02/10/12/13/18. 앱 사본/localhost 설정·자격·대화/파일 백업과 공개 연결 | US-1/US-2, #911/#912의 현황 | US-T11/13/16/18. 실제 다음 실행의 버전·자격·원본 보존·복귀 확인 |
+| US-4 [#919](https://github.com/hypeproof/hypeproof-studio/issues/919) 릴리스 강제 검사 | US-14~16, 공통 App/Service 경로. 기존 fixture/manifest/workflow 확장 | US-1~3의 계약, 지원 OS와 비운영 자격 | US-T01/02/17/19/20. 실패/누락/stale 대조로 자동 차단 후 최종 산출물 인수 |
 
 US-1과 US-2의 계약 조사가 먼저다. US-4의 gate 설계/대조군은 독립 진행할 수 있으나,
 아직 없는 제품 흐름을 mock한 성공으로 최종 배포 gate를 충족시키지 않는다. US-3의 이행은
