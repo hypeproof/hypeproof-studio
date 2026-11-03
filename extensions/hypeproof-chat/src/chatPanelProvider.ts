@@ -101,9 +101,9 @@ import { fetchSdkSeed } from "./sdkSeedFetch";
 import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
-import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
+import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, problemReportUiState, type FailureFacts, type ProblemReportEntry, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
 import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
-import { WEBVIEW_ERRORS_KEY, rememberWebviewError, validWebviewErrors, webviewErrorRecord } from "./reportLogs";
+import { LogLineBuffer, WEBVIEW_ERRORS_KEY, rememberWebviewError, validWebviewErrors, webviewErrorRecord } from "./reportLogs";
 import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
@@ -1290,6 +1290,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * way, after the fact, to check "did this classroom run on the proxy?".
    */
   private logChannel: vscode.OutputChannel | null = null;
+  /** #3426 — this session's coach channel lines, kept so a problem report can attach them (redacted at send time). */
+  private readonly coachLog = new LogLineBuffer();
+  /** One coach diagnostic line: always kept for a problem report; shown in the channel when it already exists. */
+  private coachLine(line: string): void {
+    if (this.logChannel) this.logChannel.appendLine(line);
+    else this.coachLog?.push(line);
+  }
+  /** The "HypeProof Coach" channel, created once; every appendLine through it is also kept in coachLog (#3426). */
+  private ensureLogChannel(): vscode.OutputChannel {
+    if (this.logChannel) return this.logChannel;
+    const raw = vscode.window.createOutputChannel("HypeProof Coach");
+    // The API object is frozen, so it is wrapped rather than patched.
+    const record = (v: string) => this.coachLog?.push(v);
+    this.logChannel = {
+      get name() { return raw.name; },
+      append: (v: string) => raw.append(v),
+      appendLine: (v: string) => { record(v); raw.appendLine(v); },
+      replace: (v: string) => raw.replace(v),
+      clear: () => raw.clear(),
+      show: ((a?: unknown, b?: boolean) => (raw.show as (a?: unknown, b?: boolean) => void)(a, b)) as vscode.OutputChannel["show"],
+      hide: () => raw.hide(),
+      dispose: () => raw.dispose(),
+    };
+    return this.logChannel;
+  }
   private focusDiagnosticCount = 0;
   /** Existing output channel, opt-in synthetic host only; never changes focus. */
   focusDiagnostic(phase: FocusDiagnosticPhase, flags: {scope_present?:boolean;delivered?:boolean} = {}): void {
@@ -1327,8 +1352,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** The output channel — where a diagnosis leaves its verdict. Same channel as the fallback notice (#476). */
   voiceLogChannel(): vscode.OutputChannel {
-    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
-    return this.logChannel;
+    return this.ensureLogChannel();
   }
   private cachedProfile: ResolvedProfile | null = null;
 
@@ -2538,7 +2562,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       run = intent.kind === "show" ? this.brainShow() : intent.kind === "deck" ? await this.runDeckDraft({ ask: false }) : await this.runWikiIngest({ ask: false, session: intent.session });
       run ??= { lines: [intent.kind === "deck" ? "덱 초안은 쓰지 않았어요." : `정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
     } catch (err) {
-      this.logChannel?.appendLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
+      this.coachLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
       run = { lines: [`${name} 작업이 중간에 멈췄어요. 잠시 뒤 다시 해 주세요.`] };
     }
     // Markdown hard breaks: one short sentence per line in one bubble.
@@ -2614,7 +2638,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const run = await this.runAnswerToWiki(msg);
       if (run) await this.showBrainRun(run);
     } catch (err) {
-      this.logChannel?.appendLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
+      this.coachLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
       this.postPageNotice(`${brainName(this.learningWikiPlan())} 작업이 중간에 멈췄어요. 잠시 뒤 다시 해 주세요.`);
     } finally {
       this.answerToWikiBusy = false;
@@ -3142,7 +3166,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
       return res.status;
     },
-    log: (line) => this.logChannel?.appendLine(line),
+    log: (line) => this.coachLine(line),
   });
   /** The seat token found at the first profile read of this process (entry outcome `reused` vs `granted`). */
   private funnelStartupToken: string | null | undefined = undefined;
@@ -3360,6 +3384,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const version = this.context?.extension?.packageJSON?.version;
     const diagnostic = problemDiagnostic(facts, { appVersion: typeof version === "string" ? version : "unknown", platform: process.platform, arch: process.arch });
     this.lastProblem = { diagnostic, at: Date.now() };
+    this.coachLine(`[problem] ${diagnostic.step} ${diagnostic.code}${diagnostic.http_status ? ` http ${diagnostic.http_status}` : ""}${diagnostic.request_id ? ` request ${diagnostic.request_id}` : ""}`);
     const note = this.problemTracker.note(diagnostic);
     if (note.send && autoProblemReportEnabled(this.context?.globalState)) {
       void postAutoReport(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"), diagnostic);
@@ -3371,7 +3396,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Level 2 — the in-panel report form. Returns false when no chat panel can show it (the caller falls back to the
    * command's input boxes). Submitting goes through the same REQ-KNOW-09 confirmation as before; closing sends nothing.
    */
-  async openProblemReport(reason: ProblemFormReason): Promise<boolean> {
+  async openProblemReport(reason: ProblemFormReason, entry: ProblemReportEntry = reason === "error" ? "error_card" : reason === "crash" ? "crash_screen" : reason === "manual" ? "command" : "offer"): Promise<boolean> {
     if (this.problemForm) return true;
     if (!(this.editorChat?.visible || this.view?.visible)) {
       await vscode.commands.executeCommand("hypeproof-chat.panel.focus").then(undefined, () => undefined);
@@ -3386,6 +3411,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const turns = sanitizeRecentTurns(this.getHistorySnapshot());
     const webviewErrors = validWebviewErrors(this.context.globalState.get(WEBVIEW_ERRORS_KEY));
     const logDir = this.context.logUri?.fsPath;
+    // #3426 — what was on screen when the form opened (kinds and codes only), read before the form takes focus.
+    const uiState = problemReportUiState({
+      entry,
+      chatSurface: this.editorChat?.visible ? "editor" : this.view?.visible ? "sidebar" : "hidden",
+      activeTab: activeTabKind(),
+      lastProblem: this.lastProblem,
+    });
     const crashed = reason === "crash" || this.webviewCrashedThisSession;
     const answer = await new Promise<ProblemReportAnswer | null>(resolve => {
       const timer = setTimeout(() => this.problemForm?.finish(null), 15 * 60_000);
@@ -3394,15 +3426,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         id, reason, details: problemDetailRows(diagnostic, appVersion, problemOs(process.platform, process.arch)),
         contactPrompt: reportContactPrompt(audience), contactPlaceholder: reportContactPlaceholder(audience), recentTurns: turns.length,
         autoReport: autoProblemReportEnabled(this.context.globalState),
-        logs: { available: logsAvailable(logDir), checked: crashed, errorCount: webviewErrors.length },
+        logs: { available: logsAvailable(logDir, this.coachLog.text()), checked: crashed, errorCount: webviewErrors.length },
       } }).then(shown => { if (shown === false) this.problemForm?.finish(null); });
     });
     if (!answer) return true;
     const token = await this.context.secrets.get(TOKEN_KEY);
     const jti = token ? extractJtiUnverified(token) : undefined;
     const body = problemReportBody(answer, {
-      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(),
-      logs: { webview_errors: webviewErrors, ...(answer.includeLogs ? await readSessionLogs(logDir) : {}) },
+      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(), uiState,
+      logs: { webview_errors: webviewErrors, ...(answer.includeLogs ? await readSessionLogs(logDir, this.coachLog.text()) : {}) },
       metadata: collectReportMetadata(this.context, { requestId: this.lastRequestId, profileId: this.getProfileId(), jtiHash: jti ? await hashJti(jti) : undefined }),
     });
     const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
@@ -5267,7 +5299,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       idleMs: () => Date.now() - this.lastActivityAt,
       setInterval: (fn, ms) => setInterval(fn, ms),
       clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
-      log: (line) => this.logChannel?.appendLine(line),
+      log: (line) => this.coachLine(line),
       onStopped: () => {
         this.heartbeat = null;
       },
@@ -5333,7 +5365,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         os: funnelOs(process.platform),
       });
     } catch (err) {
-      this.logChannel?.appendLine(`[funnel] target not set: ${err instanceof Error ? err.message : "unknown"}`);
+      this.coachLine(`[funnel] target not set: ${err instanceof Error ? err.message : "unknown"}`);
     }
   }
 
@@ -5377,8 +5409,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M45 keeps it when no fallback runs). */
   private logSdkUnavailable(reason: string): void {
-    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
-    this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
+    this.ensureLogChannel().appendLine(sdkFallbackLogLine(reason, new Date()));
   }
 
   /**
@@ -8054,7 +8085,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "openReportModal":
         // REQ-STUDIO-PROBLEM-REPORT — the error card's 문제 보내기 opens the in-panel form with that failure's diagnostic.
-        if (!(await this.openProblemReport(msg.source === "error" ? "error" : msg.source === "crash" ? "crash" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        if (!(await this.openProblemReport(msg.source === "error" ? "error" : msg.source === "crash" ? "crash" : "manual", msg.source === "error" ? "error_card" : msg.source === "crash" ? "crash_screen" : "chat_panel"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
         return;
       case "problemReportAnswer":
         if (this.problemForm && msg.id === this.problemForm.id) this.problemForm.finish(parseProblemAnswer(msg.answer));
@@ -8400,7 +8431,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           ? { serverSubstituted: true, serverRequested: u.serverRequested ?? null }
           : {}),
       });
-      this.logChannel?.appendLine(`[model] ${describeModelEcho(verdict)}`);
+      this.coachLine(`[model] ${describeModelEcho(verdict)}`);
       const notice = modelEchoNotice(verdict);
       if (!notice || this.modelNoticeTurn === turnId) return;
       this.modelNoticeTurn = turnId;
@@ -11241,4 +11272,18 @@ try { ${js} } catch (err) { document.body.innerHTML = '<pre style="color:#c00">'
   }
 
   return null;
+}
+
+/** #3426 — the active editor tab as a kind for a problem report: a file by its extension only, a webview by its view type. */
+function activeTabKind(): { kind: "text"; fileName: string } | { kind: "webview"; viewType: string } | { kind: "other" } | undefined {
+  try {
+    const input = vscode.window.tabGroups?.activeTabGroup?.activeTab?.input;
+    if (!input) return undefined;
+    if (input instanceof vscode.TabInputText) return { kind: "text", fileName: input.uri.path };
+    if (input instanceof vscode.TabInputWebview) return { kind: "webview", viewType: input.viewType };
+    if (input instanceof vscode.TabInputCustom) return { kind: "webview", viewType: input.viewType };
+    return { kind: "other" };
+  } catch {
+    return undefined;
+  }
 }

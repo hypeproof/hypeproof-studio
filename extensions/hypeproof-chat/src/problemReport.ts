@@ -218,16 +218,58 @@ export function parseProblemAnswer(v: unknown): ProblemReportAnswer | null {
   return { description, contact, includeRecentTurns: a.includeRecentTurns, includeLogs: a.includeLogs === true };
 }
 
+/** #3426 — where the report form was opened from. */
+export type ProblemReportEntry = "start_page" | "chat_panel" | "command" | "error_card" | "crash_screen" | "offer" | "unknown";
+const ENTRY_LABEL: Record<ProblemReportEntry, string> = {
+  start_page: "시작 화면", chat_panel: "대화 창", command: "명령", error_card: "오류 안내", crash_screen: "멈춤 화면", offer: "도움 제안", unknown: "",
+};
+export interface ProblemReportUiState {
+  entry: ProblemReportEntry;
+  chat_surface: "editor" | "sidebar" | "hidden";
+  active_tab?: string;
+  last_error?: { code: string; step: string; age_s: number };
+}
+
+/**
+ * #3426 — the last visible UI state a report carries, so a report sent with no description still says which screen
+ * and action it came from. Only kinds and codes: an open file is named by its extension, never its name or path; a
+ * webview by its view type (Studio's own identifiers). No conversation content.
+ */
+export function problemReportUiState(input: {
+  entry: unknown;
+  chatSurface: "editor" | "sidebar" | "hidden";
+  activeTab?: { kind: "text"; fileName: string } | { kind: "webview"; viewType: string } | { kind: "other" };
+  lastProblem?: { diagnostic: { code: string; step: string }; at: number };
+  now?: number;
+}): ProblemReportUiState {
+  const entry = typeof input.entry === "string" && input.entry in ENTRY_LABEL ? input.entry as ProblemReportEntry : "unknown";
+  const tab = input.activeTab;
+  let active_tab: string | undefined;
+  if (tab?.kind === "text") {
+    const ext = /\.([A-Za-z0-9]{1,8})$/.exec(tab.fileName)?.[1];
+    active_tab = `text:${ext ? `.${ext.toLowerCase()}` : "none"}`;
+  } else if (tab?.kind === "webview") active_tab = `webview:${tab.viewType.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 80)}`;
+  else if (tab?.kind === "other") active_tab = "other";
+  const lp = input.lastProblem;
+  return {
+    entry,
+    chat_surface: input.chatSurface,
+    ...(active_tab ? { active_tab } : {}),
+    ...(lp ? { last_error: { code: lp.diagnostic.code, step: lp.diagnostic.step, age_s: Math.max(0, Math.round(((input.now ?? Date.now()) - lp.at) / 1000)) } } : {}),
+  };
+}
+
 /**
  * The POST /v1/report body for a submitted form. Recent turns are attached only when the person ticked the box;
  * an empty description is replaced by a line naming the diagnostic, because the report route requires one.
  */
 export function problemReportBody(
   answer: ProblemReportAnswer,
-  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason; logs?: { webview_errors: unknown[]; renderer_log?: string; exthost_log?: string } },
+  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason; logs?: { webview_errors: unknown[]; renderer_log?: string; exthost_log?: string }; uiState?: ProblemReportUiState },
 ): Record<string, unknown> {
   const d = ctx.diagnostic;
-  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : ctx.reason === "crash" ? "(설명 없음) 화면이 멈췄어요" : "(설명 없음)";
+  const from = ctx.uiState && ENTRY_LABEL[ctx.uiState.entry] ? ` ${ENTRY_LABEL[ctx.uiState.entry]}에서 보냄` : "";
+  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : ctx.reason === "crash" ? "(설명 없음) 화면이 멈췄어요" : `(설명 없음)${from}`;
   // REQ-STUDIO-REPORT-LOGS: crash records always (already redacted, no conversation); log tails only when ticked.
   const errors = ctx.logs?.webview_errors ?? [];
   const tails = answer.includeLogs ? { ...(ctx.logs?.renderer_log ? { renderer_log: ctx.logs.renderer_log } : {}), ...(ctx.logs?.exthost_log ? { exthost_log: ctx.logs.exthost_log } : {}) } : {};
@@ -239,7 +281,7 @@ export function problemReportBody(
     contact: answer.contact || undefined,
     include_recent_turns: answer.includeRecentTurns,
     recent_turns: answer.includeRecentTurns ? ctx.recentTurns : undefined,
-    attachments: { ...ctx.metadata, report_source: ctx.reason, ...(d ? { diagnostic: autoReportBody(d) } : {}) },
+    attachments: { ...ctx.metadata, report_source: ctx.reason, ...(d ? { diagnostic: autoReportBody(d) } : {}), ...(ctx.uiState ? { ui_state: ctx.uiState } : {}) },
     ...(logs ? { logs } : {}),
   };
 }
