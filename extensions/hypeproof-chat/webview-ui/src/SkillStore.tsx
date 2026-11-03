@@ -7,7 +7,9 @@ import { STORE_COPY, won } from "../../src/skillStore";
 import "./localReview.css";
 import { postSkillStore } from "./vscode";
 
-const TOOL_LABELS: Record<string, string> = { read: "파일 읽기", write: "파일 쓰기", browser: "브라우저" };
+// A store run never gets a browser (design v1 F2), so the sell form does not offer it.
+const TOOL_LABELS: Record<string, string> = { read: "파일 읽기", write: "파일 쓰기", browser: "브라우저(스토어 실행에서는 꺼져 있어요)" };
+const SELL_TOOLS = ["read", "write"] as const;
 const CONNECTION_LABELS: Record<string, string> = { "google.gmail.send": "Gmail 보내기", "google.sheets.read": "구글 시트 읽기", "roster.read": "명단" };
 const TIER_LABELS: Record<string, string> = { none: "본인인증 전", new: "신규", standard: "일반", verified: "인증", minor: "청소년" };
 const SALE_STATUS: Record<string, string> = { refunded: "환불됨", refund_window: "환불 가능 기간", payout_hold: "지급 보류", payable: "정산 대상" };
@@ -131,7 +133,7 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
       <label>한 줄 설명<input value={draft.summary} maxLength={200} onChange={e => set({ summary: e.target.value })} /></label>
       <label>스킬 내용<textarea value={draft.body} maxLength={20000} onChange={e => set({ body: e.target.value })} /></label>
       <button disabled={busy} onClick={() => send({ type: "storeImportFile" })}>파일에서 불러오기</button>
-      <fieldset><legend>쓰는 도구</legend>{Object.entries(TOOL_LABELS).map(([k, label]) => <label key={k}><input type="checkbox" checked={draft.tools.includes(k)} onChange={e => set({ tools: e.target.checked ? [...draft.tools, k] : draft.tools.filter(t => t !== k) })} />{label}</label>)}</fieldset>
+      <fieldset><legend>쓰는 도구</legend>{SELL_TOOLS.map(k => [k, TOOL_LABELS[k]] as const).map(([k, label]) => <label key={k}><input type="checkbox" checked={draft.tools.includes(k)} onChange={e => set({ tools: e.target.checked ? [...draft.tools, k] : draft.tools.filter(t => t !== k) })} />{label}</label>)}</fieldset>
       <label>가격 (원, 부가세 포함, 0이면 무료)<input inputMode="numeric" value={String(draft.price_krw)} onChange={e => set({ price_krw: Number(e.target.value.replace(/\D/g, "").slice(0, 7) || 0) })} /></label>
       <p>키, 토큰, 비밀번호, 이메일 주소, 전화번호, 외부 MCP 설정은 넣을 수 없어요. 올리면 자동으로 검사해요.</p>
       <button disabled={busy || !ready} onClick={() => send({ type: "storePublish", draft })}>스토어에 올리기</button>

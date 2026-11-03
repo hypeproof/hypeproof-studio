@@ -8,6 +8,8 @@
 //
 //   HPS_STORE_DEV_STATE=<studio-dev state dir> HPS_STORE_EVIDENCE=<out dir> HPS_STORE_DEV_VARS=<worker/.dev.vars> \
 //   STORE_ROLE=buyer|seller STORE_ACCOUNT=acc_… [STORE_FIXTURE_PAY=1] node e2e/store/mac-store.mjs
+//
+// A run is composed by the Service on a chat turn (design v1 D2); its App entry ships with the quest slice (#1605).
 import { _electron as electron } from '@playwright/test';
 import { macWindow } from '../classroom/mac-window.mjs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -103,13 +105,10 @@ try {
     const first = already ? 'existing' : await buyOnce(1);
     if (first) {
       await shot('installed');
-      if (process.env.STORE_HAS_SEAT !== '1') {
-        // No pass or class on this App: 실행 must not spend the refund right.
-        await pressText(store, '실행', 'run without a seat');
-        await driver.wait(() => has(store, '실행하려면 내 이용권이 필요해요.'), 'seat needed notice', 30000);
-        note('refund still offered after a seatless run: ' + await store.evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='환불')"));
-        await shot('run-needs-seat');
-      }
+      // Custody (design v1 D1): the installed skill shows its public steps; the App has no call that fetches its text.
+      await pressText(store, '내 스킬', 'my skills').catch(() => {});
+      note('public steps shown on the install: ' + await store.evaluate("document.querySelectorAll('[aria-label=\"포함된 단계\"] li').length"));
+      note('run button present: ' + await store.evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='실행')"));
       await pressText(store, '환불', 'refund before first run');
       await dialogButton('환불하기').first().waitFor({ timeout: 15000 });
       await shot('refund-confirm');
@@ -118,15 +117,6 @@ try {
       await shot('refunded');
       await pressText(store, '둘러보기', 'back to the list');
       await driver.wait(() => has(store, '10,000원 카드 결제'), 'buyable again', 30000);
-      if (process.env.STORE_HAS_SEAT === '1') {
-      await buyOnce(2);
-      await shot('installed-again');
-      await pressText(store, '실행', 'run the installed skill');
-      await driver.wait(() => has(store, '다음 메시지에 붙였어요'), 'run attached', 30000);
-      await driver.wait(() => has(store, '실행한 뒤라 환불할 수 없어요.'), 'refund gone after run', 30000);
-      note('refund button after run: ' + await store.evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='환불')"));
-      await shot('after-run');
-      }
     }
   } else {
     await pressText(store, '판매', 'seller tab');

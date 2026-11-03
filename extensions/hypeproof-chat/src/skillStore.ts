@@ -115,7 +115,8 @@ export class StoreClient {
         summary: draft.summary,
         price_krw: draft.price_krw,
         tools: draft.tools,
-        outputs: ["chat_answer"],
+        // Writing files is a declared output, or a store run gets no write tool (design v1 F2).
+        outputs: draft.tools.includes("write") ? ["chat_answer", "workspace_file"] : ["chat_answer"],
         steps: [{ step_id: "main", title: draft.title, description: draft.summary, private: { prompt: draft.body } }],
       },
     });
@@ -140,7 +141,7 @@ export const STORE_COPY = {
   refunded: "환불했어요. 스킬도 지웠어요.",
   classroomSeat: "수업에 연결된 동안에는 스킬 스토어를 쓸 수 없어요.",
   published: "스토어에 올렸어요.",
-  inReview: "가격이 50만 원을 넘어서 사람이 검토한 뒤에 올라가요.",
+  inReview: "운영팀이 검토한 뒤에 올라가요. 50만 원을 넘는 스킬과 만 19세 미만 판매자의 스킬은 검토를 거쳐요.",
   reported: "신고했어요. 운영팀이 확인할게요.",
   payoutNotStarted: "정산은 기록만 되고 있어요. 실제 지급은 결제사 계약이 끝난 뒤 시작돼요.",
   payoutLinkedAdult: "만 19세 미만 판매자의 정산금은 연결된 보호자 계정으로만 지급돼요. 보호자 연결이 필요해요.",

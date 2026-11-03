@@ -83,6 +83,8 @@ const client = (routes, token = 'acct-token') => {
   await c.publish({ title: '정리', summary: '요약', body: '비공개 지침', tools: ['read'], price_krw: 0 });
   assert.deepEqual(calls[0].body.steps, [{ step_id: 'main', title: '정리', description: '요약', private: { prompt: '비공개 지침' } }]);
   assert.deepEqual(calls[0].body.outputs, ['chat_answer']);
+  await c.publish({ title: '정리', summary: '요약', body: '비공개 지침', tools: ['read', 'write'], price_krw: 0 });
+  assert.deepEqual(calls[1].body.outputs, ['chat_answer', 'workspace_file'], 'file writes are a declared output');
   assert.equal('body' in calls[0].body, false);
   assert.equal(typeof c.run, 'undefined');
   assert.equal(typeof s.storeSkillBlock, 'undefined');
