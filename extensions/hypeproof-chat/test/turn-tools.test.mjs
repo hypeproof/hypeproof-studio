@@ -218,6 +218,9 @@ test('browser-only proxy loop cannot reveal HTML, invent a destination, or retar
     // Exercise the real loop and its policy, with the native CDP action boundary scripted.
     f.BrowserControl.prototype.execute = async call => { executed.push(copy(call)); return { isError: false, content: [{ type: 'text', text: 'Fixture browser result' }] }; };
     f.h.liveServer.currentUrl = () => 'http://127.0.0.1:50123/';
+    // #3425 — the loopback probe is a scripted boundary too: nothing listens on the invented port.
+    const probed = [];
+    f.h.loopbackAnswers = async url => { probed.push(url); return false; };
     const retarget = f.h.retargetLoopbackNavigation.bind(f.h);
     f.h.retargetLoopbackNavigation = call => { retargeted.push(copy(call)); return retarget(call); };
     f.runtime.proxy = async args => {
@@ -238,6 +241,7 @@ test('browser-only proxy loop cannot reveal HTML, invent a destination, or retar
     if (browserOnly) assert.equal(executed[0].input.url, 'about:blank');
     else assert.equal(executed.find(call => call.id === 'invented').input.url, 'http://127.0.0.1:50123/');
     assert.equal(retargeted.length, browserOnly ? 0 : 3);
+    assert.deepEqual(probed, browserOnly ? [] : ['http://localhost:3000/'], 'only the invented loopback port is probed');
     assert.equal(page.reveals.length, browserOnly ? 0 : 1);
     assert.equal(page.shown.length, browserOnly ? 0 : 1);
     assert.equal(fs.readFileSync(page.index, 'utf8'), browserOnly ? 'PRESERVE EXISTING WORK' : generatedHtml);

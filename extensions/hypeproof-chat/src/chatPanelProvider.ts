@@ -6254,6 +6254,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Nothing is corrected when the server is not up — it is never fixed by guessing
    * (if we do not know, leave it as it is).
    */
+  /** #3425 — does a server answer at this loopback address (any HTTP status)? The proxy loop's one probe boundary. */
+  private async loopbackAnswers(url: string): Promise<boolean> {
+    if (!isLoopbackUrl(url)) return false;
+    try {
+      const head = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(2000) });
+      return head.status > 0;
+    } catch {
+      return false; // nothing listens: the #507 correction stands
+    }
+  }
+
   private async retargetLoopbackNavigation(call: BrowserToolCall): Promise<{
     call: BrowserToolCall;
     note?: string;
@@ -6263,10 +6274,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const target = resolveLivePreviewUrl(requested, this.liveServer.currentUrl());
     if (!target?.redirected) return { call };
     // #3425 — a port that answers is a server the learner started (e.g. on 9000), not a guess: keep it.
-    try {
-      const head = await fetch(target.requested ?? requested, { method: "HEAD", signal: AbortSignal.timeout(2000) });
-      if (head.status > 0) return { call };
-    } catch { /* nothing listens: the #507 correction stands */ }
+    if (await this.loopbackAnswers(target.requested ?? requested)) return { call };
     return {
       call: { ...call, input: { ...call.input, url: target.url } },
       note:
