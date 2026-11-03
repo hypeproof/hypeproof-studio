@@ -1154,11 +1154,9 @@ offline banner (`.hps-offline-banner`, #2076) and the quote button and note (`qu
 shrink and wrap between words instead of staying rigid, the trial count keeps `flex-shrink: 0` at
 640px and below so it stays whole (TUX-SP-13B), and text that still truncates with an ellipsis carries
 its full text in a title (the task title button's title now names the task). Allowed below 14px: visually hidden text (the keyboard hint), decorative
-glyphs, glyph-only buttons with an accessible name (×), and instructor-only text. **Scope: DEC-29 narrows this
-slice to the personal chat, so REQ-CGP-DS-09 ("no visible text <14px on learner surfaces") and
-CGP-DS-R-008 stay open for the classroom chat and must not be marked done by this requirement.** Not
-covered: the classroom chat, whose base body is still 13px and whose labels run 10-13px (DES-02
-already applies there; a separate slice); DES-CGP-DS-09's "weights 400/600 only" (550/650/700/750
+glyphs, glyph-only buttons with an accessible name (×), and instructor-only text. **Scope: DEC-29 narrowed the first
+slice to the personal chat; the classroom chat follows in the paragraph below (DEC-29b).** Not
+covered by the first slice: DES-CGP-DS-09's "weights 400/600 only" (550/650/700/750
 remain) and "tracking 0 for Hangul" (`.tw-brand` keeps -.4px on its Latin word); the error-boundary screen that replaces the panel; `start.css` and the
 local review page; the 22/28px title steps of DES-CGP-DS-09 (no personal chat text uses them);
 learner testing of 35 vs 40 syllables per line (DEC-29 keeps 40em from
@@ -1172,7 +1170,7 @@ header portalled into `tw-heading`, rail, sources). It checks the token values, 
 that every rule in `styles.css` and `start.css` with a size below 14px (px under 14 or em/% under 1),
 whatever its prefix, is classified (learner / out of scope with a reason, stale entries fail; only
 pure `.studio-*` start-page rules skip the list), that every learner probe computes to ≥14px
-everywhere and to base+2 / base+4 under 크게 / 아주 크게, that classroom sizes are unchanged, and that
+everywhere and to base+2 / base+4 under 크게 / 아주 크게, that classroom sizes were unchanged (until DEC-29b, below), and that
 in the 390px heading no learner text is nowrap and rigid (except the short 자료 N and ☰ labels), no
 ellipsis lacks a full-text title in its component, and the trial count cannot shrink. Red on
 origin/main with 338 findings; the widened inventory was red on the first version of this change
@@ -1183,6 +1181,47 @@ task title's full-text title removed, a 13px caption token, tokens declared on `
 base rule, a shared class left without its override, the composer tool buttons left at the compact
 menu's 13px, an unclassified new rule, a removed step rule, a rail line back at 10px and a stale
 classification; plus a positive control.
+
+Classroom seat (CGP-DS-R-008 classroom, 2026-11-03; DEC-29b, confirmed by Jay). The classroom lesson
+chat (ChatPanel without the personal workspace, so a shell without `data-chat-detail="personal"`;
+the instructor seat mounts the same panel) gets the same floor: the shell's own size is the 14px
+caption step, message bodies (the coach's answer and the learner's bubble) and the composer take the
+16px body step (from 13px), and every shared or classroom-only class whose base size in a file the classroom loads
+is below 14px is raised to the caption step under `.hps-shell:not([data-chat-detail="personal"])`
+in `styles.css`: the header (coach name, 활동 변경 / 대화 지우기), role line, run and retry, code pill,
+chips, hints, error and update banners, page / stop / AI notices, tool log, verify and publish cards,
+trial end card, notify opt-in, the mission header (week, activity, acceptance, completion, resume,
+foot, growth, goal, the compact-height completion line), lesson cards (`.hp-rail-lesson-*`), goal,
+evidence and completion panels, help request, the instructor notice inbox, the kids world strip,
+runner bar and gallery notice, and the automation question card (`UserQuestionCard.css`). At a
+280px pane the header's two text actions may wrap inside their group instead of widening the shell.
+The naming screen's activity line (`start.css`, ChatPanel only, outside any shell) moves from .9em to
+the caption step in both seats. Side effect in the personal seat: the error-boundary screen and the
+coach-naming card draw a bare `.hps-shell`, so their inherited text grows from 13px to 14px. The
+personal rules and the personal text-size step are unchanged; the classroom keeps the base step
+(0px). DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
+hidden text, decorative glyphs, glyph-only buttons with an accessible name, instructor-only text and
+the unmounted VoicePanel. Not covered: the error-boundary screen's own 11-13px lines (both seats), the
+naming screen's draft-error line and update banner (drawn beside the naming card, outside any shell), the entry page (`start.css`), the automation and local-review surfaces (their own webview
+entry points), DES-CGP-DS-09 weights/tracking/upper steps in the classroom (CGP-DS-D-005 is
+personal-scoped) and the text-size choice in the classroom (CGP-DS-R-009).
+Tests: `test/type-scale.smoke.mjs` step 7 classifies every sub-14px rule in every file the classroom
+loads (not only `styles.css`; personal-scoped and `.tw-*` selectors skip) and computes each classroom learner selector, plus inherited probes
+(CTA, bare paragraph, answer paragraph, trial line, code copy status, tools caption, citation chip,
+help exclusion line, and the compact-height mission completion line through its `:has` rule), inside the classroom shell at all 12 viewports, and the classroom body at 16px;
+the old "classroom sizes are unchanged" self-check now asserts the 14px role line. Red on origin/main
+(the classroom role line computes to 11px). Negative controls: a classroom-only class left without its override, the shell
+left at 13px, the body back at 13px, a new 12px rule in a component file (`lessonTip.css`), the
+compact-height completion line back at 12px, a citation number left without its override, a stale
+exemption. `test/classroom-type-scale-browser.smoke.mjs` mounts the real ChatPanel in the classroom
+lesson seat (week-3 lesson, mission header, lesson cards, an answer with code, a learner turn, error,
+page, AI and stop notices) with the built stylesheet in headless Chromium, light and dark, at
+360x1400, 1280x1400 and 360x640 (the compact-height mission layout), and reads `getComputedStyle` on
+every visible text element (aria-hidden text is measured when it has letters or digits): none below
+14px, both bodies and the composer 16px; `chat-container-layout.smoke.mjs` keeps the classroom free of
+horizontal overflow at 280px and `download-line-browser.smoke.mjs` now expects the 14px caption in
+both seats. Red on origin/main (42 elements at
+10-13px at 360x1400 light); negative control: an injected 12px rule is reported.
 
 `REQ-STUDIO-CONTROL-LADDER` (CGP-DS-R-010, 2026-10-22; REQ-CGP-DS-11; extends DES-06 and the CC-R1
 44px targets to every learner surface). `tokens.css` defines the spacing unit `--hp-space` = 4px and

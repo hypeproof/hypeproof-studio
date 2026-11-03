@@ -454,7 +454,8 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* width 0 + min-width 100%: the one-line workspace must not set the card's minimum width (the card is a grid item
    with min-width auto), or a long folder name widens the page at 320 px instead of ending in an ellipsis. */
 .studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
-.hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--ds-c-studio-start-type-19); overflow-wrap: anywhere; }
+/* CGP-DS-R-008 (DEC-29b): the naming screen's activity line (ChatPanel only, outside any shell) reads at the 14px caption step in both seats. */
+.hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */
 .hp-inbox-quiet { margin-top: var(--ds-c-studio-start-space-20); text-align: left; font-size: var(--ds-c-studio-start-type-17); }

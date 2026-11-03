@@ -7560,6 +7560,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-type-scale-browser.smoke.mjs"
         }
       ]
     },
