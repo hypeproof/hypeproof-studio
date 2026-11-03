@@ -31,6 +31,8 @@ export interface SkillStoreDeps {
   questOffer?: () => { draft: StoreQuestDraft; pkg: (meta: { title: string; summary: string; price_krw: number }) => unknown } | undefined;
   /** Opens the buyer's run of an installed skill: a new chat task the Service composes (D2), shown as a quest. */
   runSkill?: (skill: { itemId: string; version: number; title: string; steps: StoreStepView[]; connections?: StoreLocalConnections }) => Promise<void>;
+  /** Shows the buyer's quest for an installed skill (scene 3), from the public layer only. */
+  showQuest?: (skill: { title: string; steps: StoreStepView[]; connections?: StoreLocalConnections }) => Promise<void>;
   /**
    * D10/F7: runs a mail skill from the buyer's own roster. `render` sends only the rows to the Service and returns
    * the rendered messages; the host shows the exact preview and sends through the buyer's own Gmail connection.
@@ -199,6 +201,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           // A mail skill runs from the buyer's roster through the Service's render, never as a chat turn (the
           // store run holds no mail tool, F2) and never with its template on this device (D10).
           if (install.public?.outputs?.includes("mail_draft") && deps.runMailSkill) {
+            await deps.showQuest?.({ title: install.title, steps: install.public.steps ?? [], connections: state.connections }).catch(() => undefined);
             const params = (install.public.steps ?? []).flatMap((st) => st.params ?? []);
             const result = await deps.runMailSkill({ title: install.title, params }, (rows) => c.render(install.item_id, install.version, rows));
             return void (await load("mine", { notice: "cancelled" in result ? STORE_COPY.mailCancelled : STORE_COPY.mailSent(result.sent, result.failed) }));

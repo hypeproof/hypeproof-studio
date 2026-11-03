@@ -287,6 +287,12 @@ export async function activate(context: vscode.ExtensionContext) {
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
+  const showStoreQuest = async (skill: { title: string; steps: import("./skillStoreProtocol").StoreStepView[]; connections?: import("./skillStoreProtocol").StoreLocalConnections }) => {
+    const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
+    if (!snapshot) return;
+    preview.setLabels({ title: "스토어 스킬", placeholder: "대화에서 요청을 입력하세요", emoji: "◇" });
+    await preview.showAutomation(renderQuestHtml(snapshot));
+  };
   registerSkillStore(context, {
     render: (webview, dist) => provider.renderHtml(webview, dist),
     accountToken: async () => accounts?.accessToken(),
@@ -302,12 +308,10 @@ export async function activate(context: vscode.ExtensionContext) {
     // Scene 3: the installed skill opens as the buyer's quest (public layer only) beside a new chat task the Service composes.
     runSkill: async (skill) => {
       await provider.beginStoreRun(skill);
-      const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
-      if (snapshot) {
-        preview.setLabels({ title: "스토어 스킬", placeholder: "대화에서 요청을 입력하세요", emoji: "◇" });
-        await preview.showAutomation(renderQuestHtml(snapshot));
-      }
+      await showStoreQuest(skill);
     },
+    // A mail skill runs from the buyer's roster (no chat task), and still shows the buyer's quest first.
+    showQuest: (skill) => showStoreQuest(skill),
   });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
