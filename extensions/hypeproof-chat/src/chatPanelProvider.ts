@@ -39,7 +39,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, syncInstructorSession, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
@@ -185,12 +185,9 @@ import { FileRecordStorage, LOCAL_RECORD_DIR } from "./localRecordFile";
 import { LocalRecord } from "@hypeproof/measurement-core/local-record";
 import {
   toMcpToolResult,
-  BROWSER_OPEN_TOOL_DEF,
-  LIVE_PREVIEW_START_TOOL_DEF,
-  runBrowserOpen,
-  runLivePreviewStart,
   SiteCheckViewports,
 } from "./browserMcp";
+import { instructorLocalBrowserTools } from "./chalk/instructorBrowserTools";
 
 // #525 — a plain editor command registered in the core. The browser-only API cannot
 // bring a tab to the front (BrowserTab has no show()/reveal()), so this path is used
@@ -206,7 +203,6 @@ const OPEN_EDITOR_AT_INDEX = "workbench.action.openEditorAtIndex";
 
 // Instructor-mode browser tool definitions — use the canonical defs from browserMcp.ts
 // so the description and inputSchema stay in sync with the student SDK path.
-const INSTRUCTOR_LOCAL_BROWSER_DEFS = [LIVE_PREVIEW_START_TOOL_DEF, BROWSER_OPEN_TOOL_DEF] as const;
 import { PreviewProvider, sanitizeQuestResult } from "./previewProvider";
 import {
   matchWorldRef,
@@ -7630,6 +7626,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: local,
       profile: INSTRUCTOR_TOOL_PROFILE,
       cwd,
+      browserTools: instructorLocalBrowserTools(() => this.buildBrowserMcpHost(last.content)),
       history: input.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
       userText: last.content,
       systemPrompt: input.systemBrief,
@@ -7639,11 +7636,50 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       onRefusal: () => emit({ kind: 'refusal' }),
       onActivity: (activity) => emit({ kind: 'activity', activity }),
       requestApproval: async (action) => {
+        const req = sdkToolToActionRequest(action);
+        const required = vscode.workspace.getConfiguration('hypeproofChat').get<string[]>('requireApprovalFor', ['executeShell', 'openBrowser', 'delegateAgent', 'browserType']);
+        if (needsChalkPrompt(req.kind, required)) {
+          const approved = await input.askApproval({
+            kind: req.kind,
+            toolName: action.toolName,
+            input: action.input,
+            title: req.description,
+            verb: '쓰기',
+            files: writeTargetsFromPayload(req.payload).map(t => t.path),
+          });
+          return { approved, actor: 'user' as const };
+        }
         let prompted = false;
         const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; });
         return { approved, actor: prompted ? 'user' : 'policy' };
       },
     });
+  }
+
+  chalkOps(): ContractOps {
+    return {
+      openExternal: async (url) => {
+        const persisted = vscode.workspace.getConfiguration("hypeproof.browser").get<boolean>("safeSession");
+        if (routeExternalLink(url, linkSafety(this.cachedProfile, persisted)).kind === "refuse") return { ok: false, reason: "refused" };
+        await this.openLearnerLink(url);
+        return { ok: true };
+      },
+      openReport: async () => {
+        await vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        return { ok: true };
+      },
+      inboxView: async () => (await this.inboxSource?.inboxView().catch(() => null)) ?? null,
+      inboxOpened: async (objectId, generation) => { await this.inboxSource?.inboxOpened(objectId, generation); },
+      inboxLink: async (objectId, url, generation, action) => {
+        await this.handleInboxLink({ objectId, url, generation, action });
+        return { ok: true };
+      },
+      reviewPrepare: async (week) => {
+        if (!this.isCurriculumRuntimeEnabled()) return { ok: false, message: "off" };
+        const r = await this.reviewSession.prepare(week);
+        return r.ok ? { ok: true } : { ok: false, message: r.message };
+      },
+    };
   }
 
   private async contractPreviewOpen(webPath: string): Promise<{ ok: boolean; error?: string }> {
@@ -9691,37 +9727,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 },
               }
             : undefined;
-          // Browser tools for the local runtime: live_preview_start + browser_open.
-          // Reuses INSTRUCTOR_TOOL_PROFILE.sdk_tools.browser to stay in sync with the policy.
-          // Delegates to runBrowserOpen / runLivePreviewStart via the same BrowserMcpHost the
-          // student SDK path uses (buildBrowserMcpHost). That gives the instructor the full
-          // #507 port correction (livePreviewUrl), #415 duplicate suppression (openPages /
-          // currentPage), and #526 slot-displaced notice. The host's crEnabled / crScope
-          // are fine for the instructor: with CR off they are no-ops; with CR on the
-          // instructor is subject to the same scope rules as a student.
-          const browserTools: BrowserToolsForLocal | undefined =
-            INSTRUCTOR_TOOL_PROFILE.sdk_tools?.browser
-              ? (() => {
-                  const host = this.buildBrowserMcpHost(text);
-                  return {
-                    definitions: [...INSTRUCTOR_LOCAL_BROWSER_DEFS],
-                    call: async (name: string, input: unknown) => {
-                      const r =
-                        name === "live_preview_start"
-                          ? await runLivePreviewStart(host)
-                          : name === "browser_open"
-                            ? await runBrowserOpen(host, input && typeof input === "object" ? (input as Record<string, unknown>).url : null)
-                            : null;
-                      if (!r) throw new Error(`알 수 없는 브라우저 도구: ${name}`);
-                      // isError mirrors the workspace/chalk tool convention: throw so the
-                      // local runtime marks the tool result as a failure.
-                      const text = r.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
-                      if (r.isError) throw new Error(text);
-                      return text;
-                    },
-                  };
-                })()
-              : undefined;
+          // Browser tools for the local runtime: the same builder the Chalk contract turn uses.
+          const browserTools = instructorLocalBrowserTools(() => this.buildBrowserMcpHost(text));
           const result=await runInstructorTurn({
             local,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
