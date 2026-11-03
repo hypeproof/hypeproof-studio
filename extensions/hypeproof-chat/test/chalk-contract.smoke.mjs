@@ -307,12 +307,12 @@ await t("pushInbox sends onInboxState only in an active session, with the nonce 
   assert.deepEqual(sent[0].args[0], { contractVersion: 1, sessionNonce: "nonce-1", view: { run: "r1" } });
 });
 
-await t("needsChalkPrompt routes only openBrowser and writeFile, and only when the policy asks for them", async () => {
+await t("needsChalkPrompt routes only writeFile, and only when the policy asks for it (openBrowser is not a Chalk prompt)", async () => {
   const defaults = ["executeShell", "openBrowser", "delegateAgent", "browserType"];
-  assert.equal(needsChalkPrompt("openBrowser", defaults), true);
+  assert.equal(needsChalkPrompt("openBrowser", defaults), false, "browser_open never reaches the approval gate on the local runner");
   assert.equal(needsChalkPrompt("writeFile", defaults), false);
   assert.equal(needsChalkPrompt("writeFile", [...defaults, "writeFile"]), true);
-  for (const kind of ["executeShell", "delegateAgent", "browserType", "consultHelper", "readFile"]) {
+  for (const kind of ["executeShell", "delegateAgent", "browserType", "consultHelper", "readFile", "openBrowser"]) {
     assert.equal(needsChalkPrompt(kind, [...defaults, "writeFile", "consultHelper"]), false, `${kind} must stay in Studio`);
   }
 });
@@ -322,7 +322,7 @@ await t("askApproval sends an approvalRequest with the prompt and resolves false
   let asked = null;
   const runner = makeRunner({
     behaviour: async (input) => {
-      asked = await input.askApproval({ kind: "openBrowser", toolName: "browser_open", input: { url: "https://a.example" }, title: "브라우저 열기", verb: "열기", files: ["https://a.example"] });
+      asked = await input.askApproval({ kind: "writeFile", toolName: "Write", input: { file_path: "lesson/a.html" }, title: "파일 쓰기", verb: "쓰기", files: ["lesson/a.html"] });
     },
   });
   const host = new ChalkContractHost(bus, runner, makeOps(), () => "nonce-1");
@@ -332,9 +332,9 @@ await t("askApproval sends an approvalRequest with the prompt and resolves false
   await bus.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t11", policy: "chalk-instructor", messages: [], tools: [] });
   await tick(); await tick();
   const req = bus.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "approvalRequest");
-  assert.equal(req.event.action.prompt.title, "브라우저 열기");
-  assert.equal(req.event.action.prompt.verb, "열기");
-  assert.deepEqual(req.event.action.prompt.files, ["https://a.example"]);
+  assert.equal(req.event.action.prompt.title, "파일 쓰기");
+  assert.equal(req.event.action.prompt.verb, "쓰기");
+  assert.deepEqual(req.event.action.prompt.files, ["lesson/a.html"]);
   assert.equal(asked, false, "no reply from Chalk means not approved");
 });
 

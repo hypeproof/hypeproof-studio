@@ -90,11 +90,12 @@ Approval policy is owned by Studio: Studio decides whether an action needs appro
 Deny by default: a missing answer, a closed dialog, an error, or a turn that is already closed is `approved: false`.
 
 Which approvals Chalk shows (decided from the Studio policy, S-2b):
-- `openBrowser` (the `browser_open` tool) and `writeFile` (only when `requireApprovalFor` includes it). Studio sends `approvalRequest` with `action.prompt` (`{ id, title, verb, files }`) and Chalk shows its own dialog.
+- `writeFile` only, when `requireApprovalFor` includes it. Studio sends `approvalRequest` with `action.prompt` (`{ id, title, verb, files }`) and Chalk shows its own dialog. This comes from the workspace write tools (Write/Edit) on the local runner.
+- `browser_open` and `live_preview_start` are Studio browser tools, built by the same function on the legacy instructor path and the contract path (`src/chalk/instructorBrowserTools.ts`). They run in Studio with no approval step and are not `toolCall`s to Chalk. Gating outside URLs is out of scope for this contract version and is tracked separately (studio#3464). Do not describe `browser_open` as a Chalk prompt.
 - Not sent to Chalk, and kept in Studio: `executeShell`, `delegateAgent`, `browserType`, `consultHelper`, and the read-outside-workspace refusal. The instructor tool profile has no shell, subagent, type or consult tool, so these do not reach an instructor turn.
 - Any other runtime approval still uses the existing Studio modal.
 
-`docs/contract/studio-chalk.md` §6 before S-2b said Studio did not send `approvalRequest`. That is now corrected: S-2b sends it for the two kinds above.
+`docs/contract/studio-chalk.md` §6 before S-2b said Studio did not send `approvalRequest`. That is now corrected: S-2b sends it for `writeFile` when the policy asks for it.
 
 ## 6a. Instructor parity commands (S-2b, M-4)
 
