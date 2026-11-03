@@ -2892,8 +2892,8 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
    This also overrides legacy effort/mission rules that scroll the entire shell. */
 .hps-shell.hps-shell-automation { min-height: 0; overflow: hidden; }
 .hps-shell-automation > .hps-header { flex-shrink: 0; }
-.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 var(--ds-c-studio-styles-space-1); border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-line); max-height: 25%; overflow-y: auto; }
-.hps-conversation-support > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-7) 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-ink-14)); }
+.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 var(--ds-c-studio-styles-space-1); border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); max-height: 25%; overflow-y: auto; }
+.hps-conversation-support > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-7) 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
 .hps-shell-automation > .hps-messages { flex: 1 1 0; min-height: 0; overscroll-behavior: contain; }
 .hps-shell-automation > .hps-messages > * { flex-shrink: 0; }
 .hps-shell-automation > .hps-input-area { flex: 0 0 auto; max-height: 45%; box-sizing: border-box; overflow-y: auto; }
@@ -2901,26 +2901,14 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation .hps-access[open] { box-sizing: border-box; max-height: 14vh; }
 .hps-shell-automation .hps-access:not([open]) .hps-access-summary { display: none; }
 .hps-shell-automation.hps-shell-question .hps-input { display: none; }
-.hps-question-return { text-align: left; padding: var(--ds-c-studio-styles-space-15) 0; border: 0; background: transparent; color: var(--vscode-textLink-foreground, var(--ds-c-studio-styles-ink-41)); cursor: pointer; }
-.hps-conversation-support > summary:focus-visible,
-.hps-question-return:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--vscode-focusBorder, var(--ds-c-studio-styles-boundary-90)); outline-offset: var(--ds-c-studio-styles-size-143); }
+.hps-question-return { text-align: start; padding: var(--ds-c-studio-styles-space-15) 0; border: 0; background: transparent; color: var(--hp-text-accent-default); cursor: pointer; }
 .hps-conversation-settings { flex-shrink: 0; max-height: 16vh; overflow-y: auto; }
-.hps-conversation-settings > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-13) 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-ink-14)); }
-.hps-conversation-settings > summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--vscode-focusBorder, var(--ds-c-studio-styles-boundary-90)); outline-offset: var(--ds-c-studio-styles-size-143); }
+.hps-conversation-settings > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-13) 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
 
 /* EA-01/03: a focused conversation, one current question, and quiet utility controls. */
 .hps-shell-automation {
-  background: var(--hp-bg);
-  color: var(--hp-ink);
-  --vscode-descriptionForeground: var(--hp-muted);
-  --vscode-focusBorder: var(--hp-accent);
-  --vscode-button-background: var(--hp-accent);
-  --vscode-button-foreground: var(--hp-ink-on-accent);
-  --vscode-input-background: var(--hp-bg);
-  --vscode-input-foreground: var(--hp-ink);
-  --vscode-input-border: var(--hp-line);
-  --vscode-panel-border: var(--hp-line);
-  --vscode-editor-background: var(--hp-panel);
+  background: var(--hp-bg-app-default);
+  color: var(--hp-text-primary-default);
 }
 .hps-shell-automation > .hps-header { gap: var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); align-items: flex-start; }
 /* The automation header holds only the name, the run state and one menu, so the state stays in the row on a
@@ -2930,25 +2918,24 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   .hps-shell-automation > .hps-header > .hps-run-state { position: static; }
   .hps-shell-automation > .hps-header > .hps-coach-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
-.hps-shell-automation .hps-coach-name { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; font-size: var(--ds-c-studio-styles-type-17); text-align: left; }
-.hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: var(--ds-c-studio-styles-type-1); }
-.hps-conversation-actions > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-12) var(--ds-c-studio-styles-space-7); color: var(--hp-muted); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-3); }
+.hps-shell-automation .hps-coach-name { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; font-size: var(--ds-c-studio-styles-type-17); text-align: start; }
+.hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: var(--hp-font-caption); }
+.hps-conversation-actions > summary { cursor: pointer; padding: var(--ds-c-studio-styles-space-12) var(--ds-c-studio-styles-space-7); color: var(--hp-text-muted-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-3); }
 .hps-conversation-actions > div { display: grid; gap: var(--ds-c-studio-styles-space-13); margin-top: var(--ds-c-studio-styles-space-15); }
-.hps-header .hps-conversation-actions button { margin: 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); text-align: left; font-size: var(--ds-c-studio-styles-type-1); white-space: normal; }
-.hps-shell-automation :is(button, summary, select, input, textarea):focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-accent); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-header .hps-conversation-actions button { margin: 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); text-align: start; font-size: var(--hp-font-caption); white-space: normal; }
 .hps-shell-automation > .hps-conversation-support { padding-inline: var(--ds-c-studio-styles-space-19); }
 .hps-shell-automation > .hps-conversation-support > summary { padding-block: var(--ds-c-studio-styles-space-12); }
 .hps-shell-automation > .hps-messages { padding: var(--ds-c-studio-styles-space-5) var(--ds-c-studio-styles-space-19); gap: var(--ds-c-studio-styles-space-5); scroll-padding-block: var(--ds-c-studio-styles-space-20); }
-.hps-shell-automation .hps-msg-body { font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-21); min-width: 0; box-sizing: border-box; }
+.hps-shell-automation .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--ds-c-studio-styles-typography-21); min-width: 0; box-sizing: border-box; }
 .hps-shell-automation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
-.hps-shell-automation .hps-msg-user .hps-msg-body { background: var(--hp-panel); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); color: var(--hp-ink); max-width: 94%; }
-.hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-muted); }
+.hps-shell-automation .hps-msg-user .hps-msg-body { background: var(--hp-bg-panel-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); color: var(--hp-text-primary-default); max-width: 94%; }
+.hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-text-muted-default); }
 .hps-shell-automation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
-.hps-shell-automation > .hps-input-area { padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); gap: var(--ds-c-studio-styles-space-2); background: var(--hp-bg); }
+.hps-shell-automation > .hps-input-area { padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); gap: var(--ds-c-studio-styles-space-2); background: var(--hp-bg-app-default); }
 /* The settings disclosure gives way first so the composer and its buttons always stay in the capped footer. */
 .hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; flex-shrink: 1; min-height: 0; }
 .hps-shell-automation .hps-conversation-settings > summary { padding: var(--ds-c-studio-styles-space-15) 0; }
-.hps-shell-automation .hps-conversation-settings[open] { border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-line); padding-bottom: var(--ds-c-studio-styles-space-2); }
+.hps-shell-automation .hps-conversation-settings[open] { border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); padding-bottom: var(--ds-c-studio-styles-space-2); }
 /* Keep the conversation usable on short Windows screens with expanded settings,
    including systems whose Korean fallback font has taller line metrics. Main's growing
    composer fills the footer up to this cap, so the cap alone sets the conversation height. */
@@ -2956,22 +2943,21 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   .hps-shell-automation > .hps-input-area { max-height: 37%; }
 }
 .hps-shell-automation .hps-access-embedded { border: 0; padding: var(--ds-c-studio-styles-space-2) 0; max-height: none; overflow: visible; }
-.hps-shell-automation .hps-access-heading { font-size: var(--ds-c-studio-styles-type-1); margin: var(--ds-c-studio-styles-space-15) 0; }
-.hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: var(--ds-c-studio-styles-typography-4); }
+.hps-shell-automation .hps-access-heading { font-size: var(--hp-font-caption); margin: var(--ds-c-studio-styles-space-15) 0; }
+.hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-text-muted-default); line-height: var(--ds-c-studio-styles-typography-4); }
 .hps-shell-automation .hps-access select { box-sizing: border-box; }
-.hps-shell-automation .hps-input { padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-9); background: var(--hp-panel); flex-shrink: 0; }
-.hps-shell-automation .hps-input:focus-within { border-color: var(--hp-accent); }
+.hps-shell-automation .hps-input { padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-9); background: var(--hp-bg-panel-default); flex-shrink: 0; }
+.hps-shell-automation .hps-input:focus-within { border-color: var(--hp-border-accent-default); }
 .hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: var(--ds-c-studio-styles-space-14); line-height: var(--ds-c-studio-styles-typography-4); min-height: var(--ds-c-studio-styles-size-8); }
-.hps-shell-automation .hps-input textarea:focus { outline: none; }
 .hps-shell-automation .hps-input button { min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-12) var(--ds-c-studio-styles-space-20); border-radius: var(--ds-c-studio-styles-radius-3); }
-.hps-shell-automation .hps-user-question { background: var(--hp-panel); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-top: var(--ds-c-studio-styles-size-15) solid var(--hp-accent); border-radius: var(--ds-c-studio-styles-radius-9); margin-bottom: var(--ds-c-studio-styles-space-13); }
-.hps-shell-automation .hps-user-question h3 { font-size: var(--ds-c-studio-styles-type-5); line-height: var(--ds-c-studio-styles-typography-5); letter-spacing: var(--ds-c-studio-styles-typography-22); }
-.hps-shell-automation .hps-question-label { color: var(--hp-muted); }
+.hps-shell-automation .hps-user-question { background: var(--hp-bg-panel-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-top: var(--ds-c-studio-styles-size-15) solid var(--hp-border-accent-default); border-radius: var(--ds-c-studio-styles-radius-9); margin-bottom: var(--ds-c-studio-styles-space-13); }
+.hps-shell-automation .hps-user-question h3 { font-size: var(--ds-c-studio-styles-type-5); line-height: var(--ds-c-studio-styles-typography-5); }
+.hps-shell-automation .hps-question-label { color: var(--hp-text-muted-default); }
 .hps-shell-automation .hps-question-option { border-radius: var(--ds-c-studio-styles-radius-17); }
-.hps-shell-automation .hps-question-option[data-selected=true] { background: var(--hp-bg); border-color: var(--hp-accent); }
+.hps-shell-automation .hps-question-option[data-selected=true] { background: var(--hp-bg-app-default); border-color: var(--hp-border-accent-default); }
 .hps-shell-automation .hps-question-actions button { min-height: var(--ds-c-studio-styles-size-144); border-radius: var(--ds-c-studio-styles-radius-3); }
-.hps-shell-automation .hps-question-cancel { color: var(--hp-muted); }
-.hps-shell-automation .hps-question-return { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; color: var(--hp-ink); font-size: var(--ds-c-studio-styles-type-1); }
+.hps-shell-automation .hps-question-cancel { color: var(--hp-text-muted-default); }
+.hps-shell-automation .hps-question-return { margin: 0; padding: var(--ds-c-studio-styles-space-12) 0; color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); }
 @media (max-width: 340px) {
   .hps-shell-automation > .hps-header,
   .hps-shell-automation > .hps-messages,
@@ -2985,4 +2971,4 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-activity,
 .hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-foot { margin: 0; }
 
-.hps-conversation-actions .hps-layout-hint { max-width: var(--ds-c-studio-styles-size-145); margin: var(--ds-c-studio-styles-space-13) 0 0; padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-14); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-line); color: var(--hp-muted); font-size: var(--ds-c-studio-styles-type-3); line-height: var(--ds-c-studio-styles-typography-4); }
+.hps-conversation-actions .hps-layout-hint { max-width: var(--ds-c-studio-styles-size-145); margin: var(--ds-c-studio-styles-space-13) 0 0; padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-14); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-styles-typography-4); }

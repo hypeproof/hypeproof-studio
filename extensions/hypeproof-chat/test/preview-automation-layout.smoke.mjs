@@ -17,7 +17,7 @@ const vscode = {
     const panel = { title, viewColumn: options.viewColumn, options, reveals: [], messages: [],
       webview: { cspSource: 'vscode-webview://test', get html() { return html; }, set html(value) { html = value; updates++; },
         postMessage(message) { panel.messages.push(message); }, onDidReceiveMessage(fn) { receive = fn; } },
-      onDidDispose(fn) { disposals.push(fn); }, dispose() { this.disposed = true; for (const fn of disposals) fn(); }, reveal(column, preserveFocus) { this.viewColumn = column; this.reveals.push({ column, preserveFocus }); },
+      onDidDispose(fn) { disposals.push(fn); }, onDidChangeViewState() { return { dispose() {} }; }, dispose() { this.disposed = true; for (const fn of disposals) fn(); }, reveal(column, preserveFocus) { this.viewColumn = column; this.reveals.push({ column, preserveFocus }); },
       ready() { receive({ type: 'previewReady' }); }, get updates() { return updates; } };
     panels.push(panel); return panel;
   } },
@@ -58,6 +58,11 @@ console.log('PASS automation preview: main canvas reuse, focus preserved, live p
 const chat = Object.create(ChatPanelProvider.prototype);
 chat.context = { extensionUri: '/synthetic-extension' };
 chat.activeStreams = new Map();
+// StartPage subscribes to the chat's update banner (main's onUpdateChanged).
+chat.updateListeners = new Set();
+const noop = () => {};
+chat.writeApprovalRequest = { cancel: noop, invalidate: noop };
+chat.queuedSources = new Set();
 chat.renderHtml = () => '<html>Conversation</html>';
 chat.refreshConfig = () => {};
 const startPage = new StartPage({}, chat, async () => true);

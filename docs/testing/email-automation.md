@@ -49,7 +49,8 @@ Run extension/webview type checks and builds after integration. Run affected exi
 start/profile, SDK permission, Service budget and native-trial checks as regression.
 
 For local Dev OAuth acceptance, use Command Palette →
-**운영자: Google Desktop OAuth 설정** after configuring the public Desktop client ID.
+**운영자: Google Desktop OAuth 설정** after configuring the public Desktop client ID
+and turning on `hypeproofChat.googleOperatorSetup`.
 Enter the secret only in the native masked input; it must be held in SecretStorage,
 scoped to that client ID, and absent from browser URLs, webview/model messages,
 settings/profile JSON and shared recipes. Check cancellation, changing client IDs,

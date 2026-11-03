@@ -113,8 +113,9 @@ Attachments, model switching during a turn, and production funding parity remain
 outside this adapter. No claim of full release-runtime equivalence is made.
 
 For Google Desktop OAuth in the isolated Dev app, first set the public client ID
-through the authorized profile or `hypeproofChat.automationGoogleClientId`. Open
-Command Palette → **운영자: Google Desktop OAuth 설정** and enter that client's
+through the authorized profile or `hypeproofChat.automationGoogleClientId`, and turn
+on `hypeproofChat.googleOperatorSetup` (default off; the command exists only in the
+Dev app). Open Command Palette → **운영자: Google Desktop OAuth 설정** and enter that client's
 secret in the native masked input. The host stores it in SecretStorage under a
 client-ID-specific key and injects it only into Google token exchange. Never put
 it in settings, profile JSON, chat, command arguments or shared skills. Cancelling

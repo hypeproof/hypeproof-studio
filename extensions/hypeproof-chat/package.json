@@ -63,7 +63,7 @@
       {
         "command": "hypeproof-chat.configureGoogleDesktopClient",
         "title": "운영자: Google Desktop OAuth 설정",
-        "enablement": "hypeproofChat.devGoogleOperator"
+        "enablement": "config.hypeproofChat.googleOperatorSetup"
       },
       {
         "command": "hypeproof-chat.focus",
@@ -449,8 +449,12 @@
           "when": "false"
         },
         {
+          "command": "hypeproof-chat.emailAutomation",
+          "when": "false"
+        },
+        {
           "command": "hypeproof-chat.configureGoogleDesktopClient",
-          "when": "hypeproofChat.devGoogleOperator"
+          "when": "config.hypeproofChat.googleOperatorSetup"
         },
         {
           "command": "hypeproof-chat.diagnoseVoiceCapability",
@@ -650,11 +654,17 @@
           "description": "사이트 주소입니다. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
           "scope": "machine"
         },
+        "hypeproofChat.googleOperatorSetup": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "개발용 Dev 앱 운영자에게 Google Desktop OAuth 설정 명령을 보여 줍니다. 수강생 앱에는 이 명령이 없습니다."
+        },
         "hypeproofChat.automationGoogleClientId": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Google Desktop OAuth client ID for opted-in email workshops. The Service profile must enable email automation."
+          "description": "메일 자동화 수업에서 쓰는 Google Desktop OAuth 클라이언트 ID입니다. Service 프로필이 메일 자동화를 켠 경우에만 사용합니다."
         },
         "hypeproofChat.accountsEnabled": {
           "type": "boolean",

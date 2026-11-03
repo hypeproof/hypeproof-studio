@@ -44,7 +44,7 @@ const host=module.exports.registerAutomationHost(ctx,{beginAutomationConversatio
 const waitQuestion=async()=>{for(let i=0;i<100;i++){if(question)return question;await new Promise(r=>setTimeout(r,2));}throw Error('No question shown');};
 try {
   await commands.get('hypeproof-chat.emailAutomation')();assert.equal(started,1);assert.equal(panelCount,0);assert.equal(globals.size,0,'intent discovery must not save an assumed default skill');
-  const operator=commands.get('hypeproof-chat.configureGoogleDesktopClient');assert.equal(typeof operator,'function');assert.equal(devContext,true);
+  const operator=commands.get('hypeproof-chat.configureGoogleDesktopClient');assert.equal(typeof operator,'function');
   assert.equal((await operator()).configured,true);assert.equal(operatorOptions.password,true);assert.equal(operatorOptions.ignoreFocusOut,true);
   assert.equal(secrets.size,1);assert.match([...secrets.keys()][0],/^hps\.google\.desktop-client\.[a-f0-9]{64}$/);
   await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,'synthetic-desktop-secret');
@@ -220,6 +220,6 @@ try {
   globals.set(savedRecipeKey,{...recipe,bodyTemplate:'private@example.invalid'});
   restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'invalid/private recipe cannot hydrate progress');
   globals.delete(savedRecipeKey);restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'another or missing activity recipe remains uncompleted');
-  vscode.env.appName='HypeProof Studio';commands.delete('hypeproof-chat.configureGoogleDesktopClient');module.exports.registerAutomationHost(ctx,{});assert.equal(commands.has('hypeproof-chat.configureGoogleDesktopClient'),false);assert.equal(devContext,false);
+  vscode.env.appName='HypeProof Studio';commands.delete('hypeproof-chat.configureGoogleDesktopClient');module.exports.registerAutomationHost(ctx,{});assert.equal(commands.has('hypeproof-chat.configureGoogleDesktopClient'),false);
   console.log('PASS conversation host: intent-first entry, private answers, one-use approvals, auto-save, independent publish, locked refresh, Stop races, stale install privacy');
 } finally { await rm(storage,{recursive:true,force:true}); }

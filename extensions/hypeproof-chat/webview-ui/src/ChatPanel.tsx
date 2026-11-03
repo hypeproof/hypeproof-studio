@@ -295,7 +295,7 @@ function ConversationActions({ compact, children }: { compact: boolean; children
     return cleanup;
   }, [compact]);
   return compact ? <details ref={menu} className="hps-conversation-actions" onKeyDown={event => {
-    if (event.key === "Escape" && menu.current?.open) {
+    if (event.key === "Escape" && !imeComposing(event) && menu.current?.open) {
       event.preventDefault(); event.stopPropagation(); menu.current.open = false;
       menu.current.querySelector<HTMLElement>("summary")?.focus();
     }

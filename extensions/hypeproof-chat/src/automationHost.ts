@@ -299,8 +299,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     try { await prepare(); await ensureQuest(); await provider.beginAutomationConversation(); }
     catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
   }
-  // Only the isolated Dev app exposes this operator setup command.
-  void vscode.commands.executeCommand('setContext', 'hypeproofChat.devGoogleOperator', vscode.env.appName === 'HypeProof Studio Dev');
+  // Only the isolated Dev app registers this operator setup command; hypeproofChat.googleOperatorSetup shows it.
   if (vscode.env.appName === 'HypeProof Studio Dev') context.subscriptions.push(
     vscode.commands.registerCommand('hypeproof-chat.configureGoogleDesktopClient', async () => {
       try {

@@ -8188,8 +8188,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
-        this.automationConversation?.cancel();
         this.activeStreams.get(msg.streamId)?.abort();
+        this.automationConversation?.cancel();
         // #497 — abort() alone tells the webview NOTHING. handleSend and
         // handleSendError both skip their posts on an aborted signal, each
         // citing "the webview already ended the stream" — a premise no code
@@ -9708,7 +9708,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
           const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
-            onDiagnostic: phase => this.voiceLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
+            onDiagnostic: phase => this.ensureLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
             processes: { registry: this.runningProcesses, prefix: `sdk:${streamId}:` },
             toolMode: mode,
