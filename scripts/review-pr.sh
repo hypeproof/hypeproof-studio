@@ -123,13 +123,13 @@ cleanup() {
       sleep 1
       _QUIT_WAITED=$(( _QUIT_WAITED + 1 ))
       # App is gone when no process with that bundle ID remains.
-      if ! pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+      if [[ -z "$(dev_app_pids "$STATE_DIR_REAL")" ]]; then
         break
       fi
     done
-    if pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+    if [[ -n "$(dev_app_pids "$STATE_DIR_REAL")" ]]; then
       echo "WARNING: Dev app did not exit after 15 s. Remaining PIDs:"
-      pgrep -f "hypeproof-studio-dev-$STATE_HASH" || true
+      dev_app_pids "$STATE_DIR_REAL" || true
     fi
   elif [[ -n "${DEV_APP_PID:-}" ]] && kill -0 "$DEV_APP_PID" 2>/dev/null; then
     echo "Closing Dev app (PID $DEV_APP_PID, no STATE_HASH)..."

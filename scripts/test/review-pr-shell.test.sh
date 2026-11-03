@@ -295,12 +295,12 @@ else
 fi
 
 # 33. cleanup: osascript quit by bundle ID, 15 s wait loop, no SIGKILL (#1487).
-# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s pgrep wait → warn if surviving.
+# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s wait on dev_app_pids (state path) → warn if surviving.
 # SIGKILL (kill -9) is forbidden and must be absent.
 CLEANUP_BODY="$(awk '/^cleanup\(\)/{found=1} found{print} found && /^\}/{exit}' "$SCRIPT")"
 if echo "$CLEANUP_BODY" | grep -qE 'osascript.*quit app id' && \
    echo "$CLEANUP_BODY" | grep -q 'sleep 1' && \
-   echo "$CLEANUP_BODY" | grep -qE 'pgrep.*STATE_HASH'; then
+   echo "$CLEANUP_BODY" | grep -qE 'dev_app_pids.*STATE_DIR_REAL'; then
   if echo "$CLEANUP_BODY" | grep -q 'kill -9'; then
     fail "cleanup: SIGKILL (kill -9) present — forbidden (SIGKILL 금지)"
   else
@@ -771,6 +771,51 @@ else
 fi
 chmod -R u+w "$CL_TMP" 2>/dev/null || true
 rm -rf "$CL_TMP"
+
+# 67–71. Running-app check uses the state path, not the applicationName (#3465 follow-up).
+PS_TMP="$(mktemp -d)"
+PS_DEV="$PS_TMP/Library/Application Support/HypeProof Studio Development"
+PS_WT="$PS_TMP/studio-review-branch"; mkdir -p "$PS_WT"; PS_REAL_WT="$(cd "$PS_WT" && pwd -P)"
+mk_state() { mkdir -p "$1/user-data" && printf '{"format":"x","repo":"%s"}' "$PS_REAL_WT" > "$1/owner.json"; }
+ps_cleanup() { ( STATE_HASH="$1"; STATE_DIR_REAL="$2"; WORKTREE_DIR="$PS_WT"; source "$CLEAN_LIB"; remove_review_state ); }
+PS_PIDS=()
+
+# 67. A live process whose command line names this state folder keeps it.
+PS_LIVE="$PS_DEV/fedcba987654"; mk_state "$PS_LIVE"
+bash -c 'sleep 30; true' "$PS_LIVE/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "fedcba987654" "$PS_LIVE"
+if [[ -f "$PS_LIVE/owner.json" ]]; then ok "67: state folder of a running Dev app (path in its command line) is kept"; else fail "67: running app's state folder removed"; fi
+
+# 68. A process naming another hash's folder does not keep this state.
+PS_OTHER="$PS_DEV/a1a1a1a1a1a1"; mk_state "$PS_OTHER"
+PS_TARGET="$PS_DEV/b2b2b2b2b2b2"; mk_state "$PS_TARGET"
+bash -c 'sleep 30; true' "$PS_OTHER/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "b2b2b2b2b2b2" "$PS_TARGET"
+if [[ ! -e "$PS_TARGET" && -f "$PS_OTHER/owner.json" ]]; then ok "68: a process of another checkout does not block removal; its folder is untouched"; else fail "68: other-hash process affected removal"; fi
+
+# 69. A sibling folder whose name starts with this state's name does not match.
+PS_BASE="$PS_DEV/c3c3c3c3c3c3"; mk_state "$PS_BASE"
+PS_SIB="${PS_BASE}2"; mk_state "$PS_SIB"
+bash -c 'sleep 30; true' "$PS_SIB/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "c3c3c3c3c3c3" "$PS_BASE"
+if [[ ! -e "$PS_BASE" && -f "$PS_SIB/owner.json" ]]; then ok "69: sibling folder with a longer name does not match the state path"; else fail "69: prefix match blocked or wrongly kept"; fi
+
+# 70. An empty path matches nothing (it would otherwise match every process).
+PS_EMPTY_OUT="$( ( source "$CLEAN_LIB"; dev_app_pids "" ) )"
+if [[ -z "$PS_EMPTY_OUT" ]]; then ok "70: empty state path matches no process"; else fail "70: empty path matched processes"; fi
+
+# 71. review-pr.sh no longer looks for the applicationName; both places use dev_app_pids.
+if ! grep -q 'pgrep -f "hypeproof-studio-dev-' "$SCRIPT" && [[ "$(grep -c 'dev_app_pids' "$SCRIPT")" -ge 3 ]]; then
+  ok "71: review-pr.sh wait loop and warning use the state-path check"
+else
+  fail "71: applicationName pgrep still used or state-path check missing"
+fi
+
+for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
+rm -rf "$PS_TMP"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"
