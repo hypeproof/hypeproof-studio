@@ -486,8 +486,12 @@ class DevChalkTests(DevLauncherTests):
                 return subprocess.CompletedProcess(args, 0)
             if args[0].endswith('hypeproof-studio.cmd'):
                 extensions = Path(next(a.split('=', 1)[1] for a in args if a.startswith('--extensions-dir=')))
-                folder = extensions/'hypeproof.hypeproof-chalk-0.1.0'; folder.mkdir(parents=True)
-                (folder/'package.json').write_text('{}', encoding='utf-8')
+                folder = extensions/'hypeproof.hypeproof-chalk-0.1.0'
+                if '--uninstall-extension' in args:
+                    shutil.rmtree(folder, ignore_errors=True)
+                else:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    (folder/'package.json').write_text('{}', encoding='utf-8')
                 return subprocess.CompletedProcess(args, 0)
             raise AssertionError('unexpected command: ' + repr(args))
         return fake
@@ -577,5 +581,47 @@ class DevChalkTests(DevLauncherTests):
         root = Path(__file__).resolve().parents[1]
         for relative in ['scripts/inject-builtin-extensions.sh', 'scripts/apply-product-overrides.sh']:
             self.assertNotIn('chalk', (root/relative).read_text(encoding='utf-8').lower(), relative)
+
+    def test_cli_gets_isolated_extensions_and_user_data_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            chalk = self.chalk_fixture(Path(tmp))
+            calls = []
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local', False, 'auto')
+            install = next(c for c in calls if '--install-extension' in c)
+            self.assertIn('--extensions-dir=' + str(state/'extensions'), install)
+            self.assertIn('--user-data-dir=' + str(state/'user-data'), install)
+            self.assertTrue((state/'user-data').is_dir())
+
+    def test_checks_run_before_studio_build_and_failure_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            order = []
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(Path(tmp)/'missing')}), patch.object(dev, 'build', side_effect=lambda *a: order.append('build') or self.stub_build(*a)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print', side_effect=lambda *a, **k: order.append('print:' + ' '.join(map(str, a)))):
+                dev.prepare(repo, base, state, 'local', False, 'auto')
+            note = next(i for i, v in enumerate(order) if v.startswith('print:NOTE: Chalk checkout not found'))
+            self.assertLess(note, order.index('build'))
+            chalk = self.chalk_fixture(Path(tmp))
+            build = patch.object(dev, 'build', side_effect=self.stub_build)
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), build as built, patch.object(dev, 'run', side_effect=self.fake_run(npm_fails=True)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                with self.assertRaises(RuntimeError):
+                    dev.prepare(repo, base, state, 'local', False, 'auto')
+            built.assert_not_called()
+
+    def test_off_uninstalls_through_the_installed_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, old = self.prepared_fixture(Path(tmp))
+            cli = old/'resources/app/bin/hypeproof-studio.cmd'; cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
+            installed = state/'extensions/hypeproof.hypeproof-chalk-0.1.0'; installed.mkdir(parents=True)
+            calls = []
+            with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local', False, 'off')
+            uninstall = next(c for c in calls if '--uninstall-extension' in c)
+            self.assertIn('hypeproof.hypeproof-chalk', uninstall)
+            self.assertIn('--user-data-dir=' + str(state/'user-data'), uninstall)
+            self.assertFalse(installed.exists())
 
 if __name__=='__main__': unittest.main()

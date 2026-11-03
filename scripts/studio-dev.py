@@ -351,7 +351,26 @@ def chalk_checkout(repo):
     return path.resolve(), None
 
 
-def remove_chalk(state):
+def chalk_cli(app):
+    return app_resources(app) / ('bin/hypeproof-studio' if is_mac_app(app) else 'bin/hypeproof-studio.cmd')
+
+
+def chalk_cli_args(state):
+    user_data = state / 'user-data'
+    user_data.mkdir(parents=True, exist_ok=True)
+    return ['--extensions-dir=' + str(state / 'extensions'), '--user-data-dir=' + str(user_data)]
+
+
+def remove_chalk(state, app):
+    """Uninstall Chalk through the app CLI; fall back to deleting its folders only if that fails."""
+    cli = chalk_cli(app)
+    if cli.is_file():
+        try:
+            with (state / 'chalk-build.log').open('a', encoding='utf-8') as out:
+                run([cli, *chalk_cli_args(state), '--uninstall-extension', CHALK_ID], stdout=out, stderr=subprocess.STDOUT)
+            return
+        except subprocess.CalledProcessError:
+            pass
     for old in (state / 'extensions').glob(CHALK_ID + '-*'):
         if old.is_dir() and not old.is_symlink():
             shutil.rmtree(old)
@@ -381,14 +400,14 @@ def package_chalk(checkout, state):
 
 
 def install_chalk(app, state, vsix):
-    cli = app_resources(app) / ('bin/hypeproof-studio' if is_mac_app(app) else 'bin/hypeproof-studio.cmd')
+    cli = chalk_cli(app)
     if not cli.is_file():
         raise RuntimeError(f'Dev app CLI not found: {cli}. {NO_CHALK_HINT}')
-    remove_chalk(state)
+    remove_chalk(state, app)
     log = state / 'chalk-build.log'
     with log.open('a', encoding='utf-8') as out:
         try:
-            run([cli, '--extensions-dir=' + str(state / 'extensions'), '--install-extension', vsix, '--force'], stdout=out, stderr=subprocess.STDOUT)
+            run([cli, *chalk_cli_args(state), '--install-extension', vsix, '--force'], stdout=out, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError:
             raise chalk_failure('install', log) from None
 
@@ -400,28 +419,27 @@ def chalk_record(checkout, vsix):
             'ref': git('branch', '--show-current') or 'detached', 'vsix_sha256': sha(vsix)}
 
 
-def provision_chalk(app, state, repo, mode):
-    """Install or remove Chalk for this Dev app. Return its receipt record, or None."""
+def plan_chalk(repo, state, app, mode):
+    """Check and pack Chalk before the Studio build, so its errors come first. Return a plan or None."""
     if mode == 'off':
-        remove_chalk(state)
+        remove_chalk(state, app)
         print('NOTE: Chalk extension removed from the Dev app (--no-chalk).', flush=True)
         return None
     checkout, reason = chalk_checkout(repo)
     if checkout is None:
         if mode == 'on':
             raise RuntimeError(f'{reason}. Set HPS_CHALK_CHECKOUT to a Chalk checkout. {NO_CHALK_HINT}')
-        remove_chalk(state)
+        remove_chalk(state, app)
         print('NOTE: Chalk checkout not found; Dev app runs without the Chalk extension.', flush=True)
         return None
-    vsix = package_chalk(checkout, state)
-    install_chalk(app, state, vsix)
-    return chalk_record(checkout, vsix)
+    return {'checkout': checkout, 'vsix': package_chalk(checkout, state)}
 
 
 def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
     app = state / ('HypeProof Studio Dev.app' if is_mac_app(base) else 'HypeProof Studio Dev')
     if app_running(app):
         raise RuntimeError('Save your work and quit only the development app before applying changes. It will not be killed.')
+    chalk_plan = plan_chalk(repo, state, app, chalk)
     source_before = source_snapshot(repo)
     stage = state / 'build'
     metadata = build(repo, stage)
@@ -455,8 +473,11 @@ def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
     if is_mac_app(base):
         run(['codesign', '--force', '--deep', '--sign', '-', candidate])
         run(['codesign', '--verify', '--deep', candidate])
+    chalk_entry = None
     try:
-        chalk_entry = provision_chalk(candidate, state, repo, chalk)
+        if chalk_plan is not None:
+            install_chalk(candidate, state, chalk_plan['vsix'])
+            chalk_entry = chalk_record(chalk_plan['checkout'], chalk_plan['vsix'])
     except Exception:
         shutil.rmtree(candidate, ignore_errors=True)
         raise

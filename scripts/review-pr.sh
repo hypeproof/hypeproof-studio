@@ -561,6 +561,12 @@ else
     (cd "$CHALK_WT" && npm ci --prefer-offline --silent 2>&1)
     export HPS_CHALK_CHECKOUT="$CHALK_WT"
     echo "Chalk: $CHALK_SPEC at $CHALK_SHA (worktree $CHALK_WT)"
+  elif [[ "$CHALK_FLAG" == "--no-chalk" ]]; then
+    echo "Chalk: off (--no-chalk)"
+  elif [[ "$CHALK_FLAG" == "--with-chalk" ]]; then
+    echo "ERROR: Chalk checkout not found; --with-chalk makes the Dev build fail."
+  else
+    echo "NOTE: Chalk checkout not found; Dev app runs without the Chalk extension."
   fi
 
   # Note: instructor (issuer) token is seeded only via HPS_DEV_ISSUER_TOKEN_FILE above.
