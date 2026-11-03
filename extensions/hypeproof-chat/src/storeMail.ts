@@ -24,6 +24,31 @@ export interface StoreMailDeps {
   stillAllowed(): Promise<boolean>;
 }
 
+export const STORE_MAIL_APPROVE = '확인한 메일 보내기';
+/**
+ * The host's side of a run, built from the host's own primitives so its gates are tested here: the modal answer is
+ * the approval, the activity is checked again after it, and the cap is the activity's recipient cap.
+ */
+export function storeMailHostDeps(host: {
+  runtime: StoreMailDeps['runtime'];
+  maxRecipients: number;
+  title: string;
+  sheet: StoreMailDeps['sheet'];
+  showModal(message: string, detail: string, approve: string): PromiseLike<string | undefined>;
+  reauthorize(): Promise<boolean>;
+}): StoreMailDeps {
+  return {
+    runtime: host.runtime,
+    maxRecipients: host.maxRecipients,
+    sheet: host.sheet,
+    confirm: async (preview) => {
+      const detail = preview.messages.map((m, i) => `${i + 1}. 받는 사람: ${m.to}\n제목: ${m.subject}\n\n${m.body}`).join('\n\n────────────────────\n\n');
+      return (await host.showModal(`「${host.title}」로 ${preview.messages.length}명에게 보낼 메일을 모두 확인해 주세요.`, detail, STORE_MAIL_APPROVE)) === STORE_MAIL_APPROVE;
+    },
+    stillAllowed: () => host.reauthorize(),
+  };
+}
+
 export async function runStoreMail(
   deps: StoreMailDeps,
   skill: { title: string; params: { name: string; label: string }[] },

@@ -17,11 +17,13 @@ import { createAutomationPanelController, spreadsheetIdFromInput } from './autom
 import { createAutomationStoreClient } from './automationStoreClient';
 import { readAutomationDraft, automationDraftValue } from './automationDraft';
 import { deviceDraftKey, isSealedDraft, openDraft, sealDraft } from './automationDraftSeal';
+// The lock directory of the device draft key (sha256 of 'hps-draft-key'); not an activity namespace.
+const DRAFT_KEY_LOCK = createHash('sha256').update('hps-draft-key').digest('hex');
 import { publishAutomationRecipe } from './automationPublication';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
 import { emailQuestPackage, questDraft } from './questSkill';
-import { runStoreMail, type StoreMailMessage, type StoreMailRow } from './storeMail';
+import { runStoreMail, storeMailHostDeps, type StoreMailMessage, type StoreMailRow } from './storeMail';
 import { SKILL_STORE_PUBLISH_QUEST_COMMAND } from './skillStorePanel';
 import type { StoreLocalConnections } from './skillStoreProtocol';
 
@@ -122,7 +124,9 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   const storedDraft = (owner: Binding) => { const value = context.globalState.get<unknown>(recipeKey(owner)); return value === undefined ? undefined : openDraft(requireDraftKey(), owner.namespace, value); };
   const savedDraft = (owner: Binding) => readAutomationDraft(storedDraft(owner));
   // The key is created only when a draft is first written, so an activity without a draft adds no secret.
-  const writeDraft = async (owner: Binding, value: unknown) => { draftKey ??= await deviceDraftKey(context.secrets); await context.globalState.update(recipeKey(owner), sealDraft(draftKey, owner.namespace, value)); };
+  // Created under a cross-window file lock, so two windows never seal with different first keys.
+  const loadDraftKey = () => createAutomationLedger(context.globalStorageUri.fsPath, DRAFT_KEY_LOCK).withLock(() => deviceDraftKey(context.secrets));
+  const writeDraft = async (owner: Binding, value: unknown) => { draftKey ??= await loadDraftKey(); await context.globalState.update(recipeKey(owner), sealDraft(draftKey, owner.namespace, value)); };
   const reusable = (value: unknown) => {
     const recipe = validateEmailRecipe(value);
     if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}|docs\.google\.com\/spreadsheets/i.test(JSON.stringify(recipe))) throw new Error('재사용 스킬에는 실제 주소·시트·비밀값을 넣지 마세요.');
@@ -237,7 +241,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     });
     // A draft written before D7 is plaintext: seal it in place on first open.
     const legacy = context.globalState.get<unknown>(recipeKey(pinned));
-    if (legacy !== undefined) draftKey ??= await deviceDraftKey(context.secrets);
+    if (legacy !== undefined) draftKey ??= await loadDraftKey();
     if (legacy !== undefined && !isSealedDraft(legacy)) await writeDraft(pinned, legacy);
     let saved: unknown;
     try { saved = storedDraft(pinned); } catch { saved = undefined; }
@@ -377,15 +381,12 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       await prepare();
       const pinned = binding, active = runtime;
       if (!pinned || !active || !allowed()) throw new Error('메일 스킬은 Google 자동화를 쓰는 활동에서 실행할 수 있어요.');
-      return runStoreMail({
-        runtime: active, maxRecipients: pinned.maxRecipients,
+      return runStoreMail(storeMailHostDeps({
+        runtime: active, maxRecipients: pinned.maxRecipients, title: skill.title,
         sheet: async () => { try { return JSON.parse((await context.secrets.get(`hps.email-automation.${pinned.namespace}.sheet`)) ?? 'null'); } catch { return null; } },
-        confirm: async preview => {
-          const detail = preview.messages.map((m, i) => `${i + 1}. 받는 사람: ${m.to}\n제목: ${m.subject}\n\n${m.body}`).join('\n\n────────────────────\n\n');
-          return await vscode.window.showWarningMessage(`「${skill.title}」로 ${preview.messages.length}명에게 보낼 메일을 모두 확인해 주세요.`, { modal: true, detail }, '확인한 메일 보내기') === '확인한 메일 보내기';
-        },
-        stillAllowed: async () => { await authorize(); return binding === pinned && allowed(); },
-      }, skill, render);
+        showModal: (message, detail, approve) => vscode.window.showWarningMessage(message, { modal: true, detail }, approve),
+        reauthorize: async () => { await authorize(); return binding === pinned && allowed(); },
+      }), skill, render);
     },
     /** Which connections this device already has for the store card (D6): presence only, never an account or a sheet. */
     async storeConnections(): Promise<StoreLocalConnections> {

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createGoogleAutomationRuntime } from '../src/googleAutomation.ts';
 import { DRAFT_KEY_SECRET, deviceDraftKey, isSealedDraft, openDraft, sealDraft } from '../src/automationDraftSeal.ts';
-import { runStoreMail } from '../src/storeMail.ts';
+import { runStoreMail, storeMailHostDeps, STORE_MAIL_APPROVE } from '../src/storeMail.ts';
 import { storeErrorMessage } from '../src/skillStore.ts';
 
 // The third column of 민지's row holds another address (a manager to copy): it is in the sheet but not a recipient.
@@ -113,6 +113,44 @@ test('D10/F7 host run: only roster rows go out; a wrong row, a cancel, another G
   assert.equal(storeErrorMessage(new Error('TypeError: x is undefined')), '지금은 스토어를 열 수 없어요. 잠시 뒤 다시 시도해 주세요.');
 });
 
+test('D10/F7 host wiring: the modal answer is the approval, the activity is checked again, the cap is the activity\'s', async () => {
+  const sends = [];
+  const runtime = {
+    getConnectionIdentity: async () => 'google-A',
+    readSheet: async () => [['이메일', '이름', '서류', '기한'], ['minji@example.invalid', '민지', '업무 현황', '11월 6일'], ['jun@example.invalid', '준', '보고서', '11월 7일']],
+    previewRendered: async ({ messages }) => ({ id: 'p1', createdAt: 1, messages }),
+    send: async () => { sends.push(1); return { records: [{ status: 'sent' }, { status: 'sent' }] }; },
+  };
+  const render = async (rows) => rows.map((r) => ({ to: r.to, subject: `${r.values.name}님`, body: 'b' }));
+  const sheet = async () => ({ spreadsheetId: 'synthetic_sheet_id', range: 'A1:D21', connection: 'google-A' });
+  const modals = [];
+  const deps = (answer, allowed = true, maxRecipients = 20) => storeMailHostDeps({ runtime, maxRecipients, title: '서류 제출 요청', sheet, reauthorize: async () => allowed,
+    showModal: async (message, detail, approve) => { modals.push({ message, detail, approve }); return answer; } });
+  // Dismissed, or any other button: nothing is sent.
+  assert.deepEqual(await runStoreMail(deps(undefined), SKILL, render), { cancelled: true });
+  assert.deepEqual(await runStoreMail(deps('취소'), SKILL, render), { cancelled: true });
+  assert.equal(sends.length, 0);
+  // The modal lists every recipient, subject and body before the approval.
+  assert.equal(modals[0].approve, STORE_MAIL_APPROVE);
+  assert.ok(modals[0].message.includes('2명'));
+  assert.ok(modals[0].detail.includes('받는 사람: minji@example.invalid') && modals[0].detail.includes('제목: 준님'));
+  // Approved but the activity changed: nothing is sent. Over the activity's cap: nothing is rendered or sent.
+  await assert.rejects(runStoreMail(deps(STORE_MAIL_APPROVE, false), SKILL, render), /활동이 변경/);
+  await assert.rejects(runStoreMail(deps(STORE_MAIL_APPROVE, true, 1), SKILL, render), /1명까지/);
+  assert.equal(sends.length, 0);
+  assert.deepEqual(await runStoreMail(deps(STORE_MAIL_APPROVE), SKILL, render), { sent: 2, failed: 0 });
+  assert.equal(sends.length, 1);
+  // Structural: the shipped host wiring passes the activity's own cap and re-authorization, and the store panel
+  // routes a mail skill's 실행 to this run before any chat run (these files cannot run without vscode).
+  const host = readFileSync(new URL('../src/automationHost.ts', import.meta.url), 'utf8');
+  const wiring = host.slice(host.indexOf('return runStoreMail(storeMailHostDeps({'), host.indexOf('}), skill, render);'));
+  assert.ok(wiring.includes('maxRecipients: pinned.maxRecipients') && wiring.includes('reauthorize: async () => { await authorize(); return binding === pinned && allowed(); }') && wiring.includes('showModal: (message, detail, approve) => vscode.window.showWarningMessage(message, { modal: true, detail }, approve)'));
+  const panel = readFileSync(new URL('../src/skillStorePanel.ts', import.meta.url), 'utf8');
+  const runCase = panel.slice(panel.indexOf('case "storeRun":'), panel.indexOf('case "storeOverlayOpen":'));
+  assert.ok(runCase.indexOf('includes("mail_draft")') > 0 && runCase.indexOf('deps.runMailSkill(') < runCase.indexOf('deps.runSkill({'));
+  assert.ok(readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8').includes('runMailSkill: (skill, render) => automationHost.runStoreMail(skill, render)'));
+});
+
 test('D10: the store mail run has no path into the Apps Script generator or the shared runner', () => {
   // The run is storeMail.ts plus the host's wiring. Neither names Apps Script, the shared-runner deployment or the
   // local recipe, so no store template can reach either runner.
@@ -120,7 +158,7 @@ test('D10: the store mail run has no path into the Apps Script generator or the 
   const src = readFileSync(new URL('../src/automationHost.ts', import.meta.url), 'utf8');
   const start = src.indexOf('async runStoreMail(');
   const wiring = src.slice(start, src.indexOf('\n    },\n', start));
-  assert.ok(start > 0 && wiring.includes('runStoreMail({') && wiring.includes('runtime: active'));
+  assert.ok(start > 0 && wiring.includes('runStoreMail(storeMailHostDeps({') && wiring.includes('runtime: active'));
   for (const body of [mod, wiring]) for (const forbidden of ['appsRuntime', 'appsTools', 'sharedDeployment', 'generateAppsScriptEmailProject', 'previewLatestSheet', 'savedDraft']) assert.ok(!body.includes(forbidden), forbidden);
 });
 
