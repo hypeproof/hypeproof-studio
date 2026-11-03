@@ -163,7 +163,7 @@ export const LOGS_HINT = "renderer.log·exthost.log 의 마지막 부분이에�
 
 /** The toggle's label and its statement of what it sends (REQ-H10). */
 export const AUTO_REPORT_LABEL = "오류가 나면 오류 정보만 자동으로 보내기";
-export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버전·운영체제·요청 번호만 보내요. 대화 내용, 파일 이름과 경로, 프롬프트, 토큰은 보내지 않고 계정과 연결하지 않아요. 기본은 꺼짐이에요.";
+export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버전·운영체제·요청 번호만 보내요. 대화 내용, 파일 이름과 경로, 프롬프트, 토큰은 보내지 않고 계정과 연결하지 않아요. 기본으로 켜져 있고, 여기서 끌 수 있어요.";
 
 export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean; includeLogs: boolean }
 
