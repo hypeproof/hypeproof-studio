@@ -38,7 +38,7 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   // REQ-M45 — the app lacks the Agent SDK binary: an install step, not a lock or a fault.
   const isInstall = /설치 도구/.test(message);
   return {
-    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isInstall ? "🧰" : isRateLimited ? "⚠️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",
+    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isInstall ? "🧰" : !isRateLimited && isAuth ? "🔒" : !isRateLimited && isConn ? "🔌" : "⚠️",
     title: isPass
       ? "이용권을 더 쓸 수 없어요"
       : isTrialEnd

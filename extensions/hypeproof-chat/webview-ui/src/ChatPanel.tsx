@@ -1854,7 +1854,6 @@ export function ChatPanel(props: Props) {
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
 
-      <ConversationSupport compact={config.profile?.automations?.enabled === true}>
       <ConversationSupport compact={automationCompact}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.

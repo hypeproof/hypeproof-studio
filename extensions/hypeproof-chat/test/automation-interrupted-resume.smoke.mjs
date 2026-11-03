@@ -18,7 +18,9 @@ host.turnTimelines.set('turn',{items:[
 ],openId:null,baseId:'reply',seg:1,pending:[]});
 host.recordAutomationAnswer({id:'public',kind:'choice',private:false,title:'어떤 업무인가요?',choices:[{id:'request',label:'자료 요청'}]},{questionId:'public',choiceId:'request'});
 host.recordAutomationAnswer({id:'private',kind:'sheet',private:true,title:'비공개 설정'},{questionId:'private',text:'private-sheet-value'});
-await host.preserveInterruptedAutomationTurn('turn','reply','자료 요청 메일을 만들고 싶어요.','메일 스킬을 준비했어요.',[],'코치');
+// The Stop path saves the user line plus the frozen turn, marked by automationInterruptedItems.
+const frozen=host.automationInterruptedItems(host.finishTurnItems('turn','reply','메일 스킬을 준비했어요.',[],'코치'),'코치');
+await host.appendHistory([{id:'stopped-user',role:'user',content:'자료 요청 메일을 만들고 싶어요.',createdAt:0},...frozen]);
 // A fresh provider reads the same activity history without any runtime/tool call.
 const reopened=makeHost(),history=reopened.getHistory();
 assert.equal(history[0].content,'자료 요청 메일을 만들고 싶어요.');

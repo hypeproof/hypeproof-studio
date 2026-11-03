@@ -1028,6 +1028,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A4 — a running consult or site check is host work, not a stall.
     isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
     ...(busy ? { busy } : {}),
+    ...(args.emailAutomationHost ? { failFast: true } : {}),
   }).then(
     // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
     // The value and the error pass through as they are.

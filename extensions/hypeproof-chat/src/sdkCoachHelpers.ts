@@ -1559,6 +1559,8 @@ function sdkApiFailure(msg: Record<string, unknown>): Error | null {
   const assistantFailure = msg.type === 'assistant' && (msg.isApiErrorMessage === true
     || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
   if (!rateLimit && !assistantFailure) return null;
+  // REQ-M44 — a CLI line carrying the Service's own sentence (trial or pass end) ends the turn with that sentence.
+  if (msg.type === 'assistant') { const line = sdkCliErrorLine(msg); if (line && sdkServiceSentence(line)) return null; }
   return Object.assign(new Error(rateLimit
     ? '요청이 제한됐어요. 이용권·사용량과 실행 중인 작업을 확인한 뒤 다시 보내 주세요. 잔액이 있어도 AI 서비스의 요청 제한이 적용될 수 있어요. (429)'
     : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
@@ -2166,6 +2168,11 @@ export interface SdkStreamHandlers {
    * before. Attach it with sdkBusyPolicyFor (orchestrator seats only).
    */
   busy?: SdkBusyPolicy;
+  /**
+   * Email-automation turns: an unmanaged 429 or CLI API failure ends the turn at once instead of
+   * waiting out CLI retries, because a budget refusal needs the learner's action (#1604).
+   */
+  failFast?: boolean;
 }
 
 /**
@@ -2234,6 +2241,8 @@ const SDK_CLI_ERROR_TEXT = /Claude Code returned an error result|Claude Code pro
 /** The text of a CLI-generated API-error assistant message, or null for anything the model said. */
 export function sdkCliErrorLine(msg: Record<string, unknown>): string | null {
   if (msg["type"] !== "assistant") return null;
+  // A reply cut at the output limit is the model's own text, not a CLI refusal line.
+  if (msg["error"] === "max_output_tokens") return null;
   const synthetic = (msg["message"] as { model?: unknown } | undefined)?.model === "<synthetic>";
   if (msg["error"] === undefined && !synthetic) return null;
   const text = extractSdkText(msg);
@@ -2427,7 +2436,7 @@ export async function consumeSdkStream(
       // A response that came back after the retries answers them: their status no longer describes this turn.
       // The CLI's own "API Error: …" line is an assistant message too — it is the failure, not an answer (`error` set, or
       // the CLI's `<synthetic>` model).
-      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
+      else if (msg["type"] === "assistant" && (msg["error"] === undefined || msg["error"] === "max_output_tokens") && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
         lastRetryStatus = undefined;
         // …and ends a busy episode: the next rush counts from zero again.
         busyRetries = 0;
@@ -2441,15 +2450,14 @@ export async function consumeSdkStream(
         h.abortQuery();
         throw h.makeFatalAuthError(fatal);
       }
-      // A served orchestrator owns its bounded busy-retry episode. Keep its
-      // synthetic provider errors out of conversation while waiting; seats
-      // without that policy fail immediately on budget/concurrency refusal.
+      // A served busy policy owns its bounded busy-retry episode (REQ-M44 keeps the CLI's error
+      // lines out of the bubble). Without that policy an automation turn fails immediately on a
+      // budget/concurrency refusal.
       const managedBusyFailure = busy && (
         (isSdkRetryEvent(msg) && SDK_BUSY_STATUSES.has(Number(msg.error_status)))
         || (msg.type === 'assistant' && ['rate_limit', 'overloaded'].includes(String(msg.error)))
       );
-      if (managedBusyFailure && msg.type === 'assistant') continue;
-      const apiFailure = managedBusyFailure ? null : sdkApiFailure(msg);
+      const apiFailure = managedBusyFailure || !h.failFast ? null : sdkApiFailure(msg);
       if (apiFailure) {
         h.abortQuery();
         throw apiFailure;

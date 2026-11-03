@@ -87,7 +87,8 @@ for (const needle of ['stale_signal: 확인 불가', 'too_long_title: title leng
   assert.ok(found.includes(needle), 'linter reports ' + needle + '\n' + found);
 
 // 3. The approval-wait row stage (no reason code, runtime says waiting) uses the same title as the item.
-assert.match(html, /else if\(wait\)stage=reasonLabels\.waiting_approval\[0\];/, 'approval-wait stage reads the item title');
+// An automation waiting for approval names its step instead (#1604); every other approval wait reads the item title.
+assert.match(html, /else if\(wait\)stage=(?:s\.automation\?\.phase==='waiting_approval'\?automationText\(s\):)?reasonLabels\.waiting_approval\[0\];/, 'approval-wait stage reads the item title');
 
 // 4. The old wording is gone from the page (no second copy left behind).
 for (const old of ['토큰 기한이 지났습니다', '토큰이 올바르지 않습니다', '기기가 연결되지 않았습니다', '신호가 끊겼습니다 · 확인 불가',

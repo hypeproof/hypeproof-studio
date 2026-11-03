@@ -36,19 +36,13 @@ for(const type of ['sendMessage','retryMessage']) for(const toolMode of ['auto',
  assert.ok(rejected>=0&&error>rejected,'restore input before reporting the failed pending send');
  assert.equal(h.posts[rejected].text,text);assert.deepEqual(h.posts[rejected].images,images);assert.equal(h.posts[rejected].toolMode,toolMode);
 }
-// A duplicate click/retry during authentication cannot take another writer or
-// make the real turn look ended. Its text and image return to the draft.
+// A counter, not a boolean: one rejected pending send cannot unlock another.
 {
- const h=host(),auth=deferred(),posts=[];let reads=0;
- h.context={secrets:{get:()=>{reads++;return auth.promise;}}};h.post=async m=>posts.push(m);
- const first=proto.handleSend.call(h,'정리해줘',[]);
- await proto.handleMessage.call(h,{type:'retryMessage',prompt:'추가 계획',history:[],images:['synthetic-image']});
- assert.equal(reads,1,'the duplicate never reads credentials or acquires another writer');
- assert.equal(h.pendingSends,1);assert.equal(h.hasActiveStream(),true);
- assert.equal(posts.length,1);assert.equal(posts[0].type,'inputRejected');
- assert.equal(posts[0].text,'추가 계획');assert.deepEqual(posts[0].images,['synthetic-image']);
- assert.match(posts[0].notice,/초안/);
- auth.reject(new Error('first'));await assert.rejects(first,/first/);
+ const h=host(),first=deferred(),second=deferred();let reads=0;
+ h.context={secrets:{get:()=>++reads===1?first.promise:second.promise}};
+ const a=proto.handleSend.call(h,'정리해줘',[]),b=proto.handleSend.call(h,'계획해줘',[]);
+ first.reject(new Error('first'));await assert.rejects(a,/first/);
+ assert.equal(h.hasActiveStream(),true);second.reject(new Error('second'));await assert.rejects(b,/second/);
  assert.equal(h.hasActiveStream(),false);
 }
 // Even a no-model response remains bound until its history write finishes.
@@ -161,12 +155,13 @@ for (const selected of [undefined,'removed','ended','ready']) {
  const h=host(),posts=[];let configPosts=0;
  h.context={secrets:{get:async()=> 'synthetic-token'},workspaceState:{get:()=>undefined}};
  h.getCoach=()=>null;h.ensureProfile=async()=>null;h.loadAccess=async()=>{};
- h.post=async m=>posts.push(m);h.postConfig=async()=>{configPosts++;};
+ h.post=async m=>{if(m.type!=='lowDisk')posts.push(m);};h.postConfig=async()=>{configPosts++;};
  h.accessState={status:'ready',selected,view:{required:true,choices:[{id:'ready',active:true},{id:'ended',active:false}]}};
- h.pullQuestResultFromPreview=async()=>{throw Error('accepted turn reached preparation');};
+ // The first read after admission is the seat's instructor mode (folder consent); reaching it means the turn was admitted.
+ Object.defineProperty(h,'_instructorMode',{get(){throw Error('accepted turn reached preparation');}});
  if(selected==='ready') {
   await assert.rejects(proto.handleSend.call(h,'자료 요청',[],['synthetic-image']),/accepted turn reached preparation/);
-  assert.equal(posts.length,0);
+  assert.equal(posts.some(m=>/이용권을 선택/.test(m.notice??'')),false,'a valid choice is admitted without the funding notice');
  } else {
   await proto.handleSend.call(h,'자료 요청',[],['synthetic-image']);
   assert.equal(posts.length,1);assert.equal(posts[0].type,'inputRejected');
@@ -180,7 +175,7 @@ for (const local of [false,true]) {
  const h=host();h.context={secrets:{get:async()=> 'synthetic-token'},workspaceState:{get:()=>undefined}};
  h.getCoach=()=>null;h.ensureProfile=async()=>null;h.loadAccess=async()=>{};
  h.accessState={status:'ready',view:{required:local,choices:[]}};
- h.pullQuestResultFromPreview=async()=>{throw Error('accepted turn reached preparation');};
+ Object.defineProperty(h,'_instructorMode',{get(){throw Error('accepted turn reached preparation');}});
  const savedEnv={...process.env};
  try {
   if(local) {

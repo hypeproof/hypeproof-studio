@@ -1,10 +1,10 @@
 // A4 (ADR 0011; spec §2.3, §5.4, §13.2 A4, §15): the front-line orchestrator's switch.
 //
 // 1. Byte-identity: without a served roster this seat may use, runSdkCoach does exactly
-//    what it does on the pre-A4 email branch. A matrix of profiles × served values × host
+//    what it does on Studio main without A4. A matrix of profiles × served values × host
 //    arguments runs through the real runSdkCoach with a scripted CLI; what the CLI would
 //    receive (prompt, options, the MCP server, canUseTool's answers, the stream's
-//    callbacks) is hashed and compared with digests taken on the pre-A4 branch with
+//    callbacks) is hashed and compared with digests taken on main trees without A4 with
 //    this same matrix (BASE, section 1). Cases with the orchestrator on must differ
 //    (positive control), and a one-field change must be noticed (negative control).
 // 2. The switch-off inventory (ORCHESTRATOR_SURFACES): with the switch off there is no
@@ -13,7 +13,7 @@
 // 3. A full consult turn through runSdkCoach against a fake gateway.
 //
 // Run: node --experimental-strip-types test/orchestrator-switch.smoke.mjs
-// Record on pre-A4 624b214f with the approved #1527 policy delta and this test copied in:
+// Record the base digests (only on a main tree without A4, with this file copied in):
 //   HPS_A4_RECORD_BASE=1 node --experimental-strip-types test/orchestrator-switch.smoke.mjs
 
 import assert from "node:assert/strict";
@@ -223,11 +223,6 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, 
           },
         }
       : {}),
-  }).catch(error => {
-    // The email branch fails closed on an unmanaged 429. A served orchestrator
-    // owns its bounded retry policy; recording the error keeps both contracts visible.
-    if (error.name !== "SdkApiError" || error.status !== 429) throw error;
-    return { failed: true, error: error.name, status: error.status };
   });
   const call = sdk.calls[0];
   const { env, ...rest } = call.options;
@@ -382,7 +377,7 @@ const BASE = {
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
   const offDrift = CASES.filter((c) => !c.on && digest(observed[c.name].snapshot) !== BASE[c.name.split("/")[0]]);
-  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from pre-A4 624b214f");
+  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from main");
   // Positive control: the cases that are on really differ, so the comparison can see A4.
   const onCases = CASES.filter((c) => c.on);
   assert.equal(onCases.length, 6, "six adult profiles with a roster and a host");
@@ -396,7 +391,7 @@ const BASE = {
   const tampered2 = structuredClone(observed["adultRW/roster/none"].snapshot);
   tampered2.env.set.CLAUDE_CODE_GATEWAY_HINT_HEADERS = "1";
   assert.notEqual(digest(tampered2), BASE.adultRW, "an added env pin changes the digest");
-  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal pre-A4 624b214f (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster, publish seats); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
+  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal main (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster, publish seats); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
 }
 
 // ── 2. The switch-off inventory ─────────────────────────────────────────────
