@@ -4966,6 +4966,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.handleTaskMessage({ type: 'taskCreate', taskId: before } as WebviewMessage);
     const taskId = this.currentTaskStore?.()?.getView().activeTaskId;
     if (!taskId || taskId === before) throw new Error('새 작업을 열지 못했어요. 다시 실행해 주세요.');
+    // The task is named after the skill, so the buyer can tell it runs one (a naming failure never stops the run).
+    await this.currentTaskStore?.()?.rename(taskId, skill.title.slice(0, 60)).then(view => this.post({ type: 'taskWorkspaceState', view }), () => undefined);
     const runs = this.storeRuns();
     runs.set(taskId, run);
     // Bounded: the oldest binding goes first, and its task then runs as an ordinary chat without the skill.

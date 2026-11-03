@@ -90,3 +90,15 @@ const client = (routes, token = 'acct-token') => {
   assert.equal(typeof s.storeSkillBlock, 'undefined');
 }
 console.log('skill-store-client smoke: list, order headers, checkout origin, signed-out, refusal copy, sealed publish PASS');
+
+// #3477: a free install promises no refund, and neither notice depends on the title's last letter for its particle.
+{
+  assert.equal(s.STORE_COPY.installedFree('회의록 요약 정리'), '「회의록 요약 정리」 스킬을 설치했어요.');
+  assert.ok(!s.STORE_COPY.installedFree('x').includes('환불'));
+  assert.equal(s.STORE_COPY.paid('서류 제출 요청'), '「서류 제출 요청」 스킬을 설치했어요. 처음 실행하기 전까지는 환불할 수 있어요.');
+  const panel = (await import('node:fs')).readFileSync(new URL('../src/skillStorePanel.ts', import.meta.url), 'utf8');
+  const free = panel.slice(panel.indexOf('case "storeInstallFree":'), panel.indexOf('case "storeRefund":'));
+  assert.ok(free.includes('STORE_COPY.installedFree(') && !free.includes('STORE_COPY.paid('), 'the free-install path uses the free notice');
+  console.log('PASS free-install notice');
+}
+
