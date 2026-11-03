@@ -256,7 +256,7 @@ import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, write
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
+import { externalLinkDialog, linkSafety, resolveBrowserSafety, routeExternalLink, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -4801,13 +4801,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /**
    * CGP-ART-R-008 — the one exit for links a learner clicks in chat. Minor cohorts stay in the
-   * integrated browser (its hardened session enforces the allowlist); others confirm the host
-   * before the system browser opens.
+   * integrated browser; others confirm the host before the system browser opens. CGP-ART-D-008:
+   * the learner's own loopback preview opens in the integrated browser with no dialog, and with
+   * `hypeproofChat.safeLinkAllowlistEnabled` on, a minor's link outside the cohort allowlist does
+   * not navigate and the chat panel shows the blocked notice. The persist:hp-safe core patch is not
+   * in the pinned vscodium-base, so this host check is the only allowlist enforcement.
    */
   async openLearnerLink(raw: unknown): Promise<void> {
-    const persisted = vscode.workspace.getConfiguration("hypeproof.browser").get<boolean>("safeSession");
-    const route = routeExternalLink(raw, linkSafety(this.cachedProfile, persisted));
+    const route = this.learnerLinkRoute(raw);
     if (route.kind === "refuse") return;
+    if (route.kind === "blocked") {
+      // CGP-ART-D-008 (flag on): nothing navigates; the chat panel draws the blocked notice with the host.
+      void this.post({ type: "externalLinkBlocked", host: route.host, at: Date.now() });
+      return;
+    }
     if (route.kind === "integrated") {
       try {
         await vscode.window.openBrowserTab(route.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
@@ -4817,14 +4824,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       return;
     }
-    const choice = await vscode.window.showWarningMessage(
-      "바깥 사이트를 열까요?",
-      { modal: true, detail: `${route.host}\n${route.url}` },
-      "열기",
-      "링크 복사",
-    );
+    // CGP-ART-D-008: the host is the (bold) message line, middle-ellipsized past 48 characters; the full address is the detail.
+    const dialog = externalLinkDialog(route);
+    const choice = await vscode.window.showWarningMessage(dialog.message, { modal: true, detail: dialog.detail }, "열기", "링크 복사");
     if (choice === "열기") await vscode.env.openExternal(vscode.Uri.parse(route.url));
     else if (choice === "링크 복사") await vscode.env.clipboard.writeText(route.url);
+  }
+  /** CGP-ART-R-008 / D-008: one route for every learner link; the allowlist block is behind a machine-scoped, default-off flag. */
+  private learnerLinkRoute(raw: unknown): ExternalLinkRoute {
+    const browser = vscode.workspace.getConfiguration("hypeproof.browser");
+    const enforceAllowlist = vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled", false) === true;
+    return routeExternalLink(raw, linkSafety(this.cachedProfile, browser.get<boolean>("safeSession"), browser.get<string[]>("safeAllowlist")), { enforceAllowlist });
   }
   private opsLastArtifact: string | undefined;
   // #751 R3 — why new AI runs are held. Local editing, saving, Stop and export never consult this.
@@ -7665,9 +7675,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   chalkOps(): ContractOps {
     return {
       openExternal: async (url) => {
-        const persisted = vscode.workspace.getConfiguration("hypeproof.browser").get<boolean>("safeSession");
-        if (routeExternalLink(url, linkSafety(this.cachedProfile, persisted)).kind === "refuse") return { ok: false, reason: "refused" };
+        const kind = this.learnerLinkRoute(url).kind;
+        if (kind === "refuse") return { ok: false, reason: "refused" };
         await this.openLearnerLink(url);
+        if (kind === "blocked") return { ok: false, reason: "blocked" };
         return { ok: true };
       },
       openReport: async () => {

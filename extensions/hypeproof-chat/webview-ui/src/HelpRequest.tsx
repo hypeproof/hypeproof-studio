@@ -42,10 +42,17 @@ function Card(props: { card: HelpCard; k: string; post: Post; history?: boolean 
   );
 }
 
-export function HelpRequest(props: { view: HelpView | null; post: Post }) {
+/** CGP-ART-D-008 — append one line to the learner's question unless it is already there. Pure; nothing is sent. */
+export function withPrefill(question: string, line: string): string {
+  if (!line || question.includes(line)) return question;
+  return question.trim() ? `${question.replace(/\s+$/, "")}\n${line}` : line;
+}
+
+export function HelpRequest(props: { view: HelpView | null; post: Post; prefill?: { text: string; nonce: number } | null; onPrefillUsed?: () => void }) {
   const v = props.view, key = v?.draft_key ?? null;
   const [draft, setDraft] = useState<HelpDraft | null>(null), [consent, setConsent] = useState(false), [open, setOpen] = useState(false);
   const drawnFor = useRef<string | null>(null), saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panel = useRef<HTMLDetailsElement | null>(null), prefilled = useRef<number | null>(null);
   // The local draft is (re)loaded only when the view is for another learner-in-class; typing is never overwritten by a refresh.
   useEffect(() => { if (!v) return; if (drawnFor.current !== key) { drawnFor.current = key; setDraft(v.draft); setConsent(false); } }, [v, key]);
   // A preview being made, sent or dropped is the host's decision about the draft (a sent question is cleared there): take it.
@@ -55,12 +62,21 @@ export function HelpRequest(props: { view: HelpView | null; post: Post }) {
   // While open, read again now and then (the instructor's answer arrives without the learner doing anything).
   useEffect(() => { if (!open) return; props.post({ type: "helpRequest" }); const t = setInterval(() => { if (document.visibilityState !== "hidden") props.post({ type: "helpRequest" }); }, 15000); const stop = () => clearInterval(t); return stop; }, [open]);
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
-  if (!v) return null;
   const edit = (next: HelpDraft) => { setDraft(next); if (!key) return; if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => props.post({ type: "helpDraft", key, draft: { question: next.question, turnId: next.turnId, duration: next.duration } }), 400); };
+  // CGP-ART-D-008 — "선생님께 알리기" on a blocked link: the host goes into the learner's own draft and the panel opens on it.
+  // Only into an editable draft (no preview open); the learner still edits, previews and consents before anything leaves.
+  useEffect(() => {
+    const p = props.prefill; if (!p || prefilled.current === p.nonce || !v || !key || v.envelope) return;
+    prefilled.current = p.nonce;
+    const d = draft ?? v.draft; edit({ ...d, question: withPrefill(d.question, p.text) });
+    if (panel.current) { panel.current.open = true; panel.current.scrollIntoView?.({ block: "nearest" }); }
+    props.onPrefillUsed?.(); // consumed once: a remount must not bring a deleted line back
+  }, [props.prefill?.nonce, key, !!v?.envelope]);
+  if (!v) return null;
   const a = v.availability, answered = v.current.filter((c) => c.status === "answered").length, e = v.envelope, d = draft ?? v.draft;
   const summary = `강사에게 도움 요청${answered ? ` · 강사 답변 ${answered}개 도착` : ""}${e && e.state !== "prepared" ? " · 보냈는지 확인 필요" : ""}`;
   return (
-    <details className="hp-inbox hp-rail-lesson hp-help" data-help-key={key ?? ""} data-help-availability={a.state} onToggle={(ev) => setOpen((ev.currentTarget as HTMLDetailsElement).open)}>
+    <details ref={panel} className="hp-inbox hp-rail-lesson hp-help" data-help-key={key ?? ""} data-help-availability={a.state} onToggle={(ev) => setOpen((ev.currentTarget as HTMLDetailsElement).open)}>
       <summary>{summary}</summary>
       <p className="hp-rail-lesson-note">내 과제·대화·파일은 그대로입니다. 보내기 전에 받는 강사와 보낼 내용을 먼저 보여 드립니다.</p>
       {a.state === "unavailable" && <p className="hp-rail-lesson-note" data-help-unavailable={a.reason}>{REASON_TEXT[a.reason] ?? "지금은 앱에서 도움 요청을 보낼 수 없습니다. 강사에게 직접 알려 주세요."}</p>}

@@ -93,6 +93,7 @@ import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
 import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
+import { ExternalLinkBlocked, blockedLinkHelpText } from './ExternalLinkBlocked';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
@@ -834,6 +835,10 @@ export function ChatPanel(props: Props) {
   }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
+  // CGP-ART-D-008 — the last safe-session link that did not open, and the host line "선생님께 알리기" puts in the help draft.
+  const [linkBlocked, setLinkBlocked] = useState<{ host: string; at: number } | null>(null);
+  const [helpPrefill, setHelpPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  useEffect(() => onHostMessage((msg) => { if (msg.type === "externalLinkBlocked" && typeof msg.host === "string") setLinkBlocked({ host: msg.host, at: msg.at }); }), []);
   useEffect(() => {
     // The host numbers its draws; one that arrives after a newer draw (an older learner's, or an older read) is not shown.
     const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => guardHostPayload("help", () => acceptHelp(prev, msg.help), null)); });
@@ -1019,6 +1024,11 @@ export function ChatPanel(props: Props) {
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
+  // CGP-ART-D-008 — "선생님께 알리기" only while this learner's class help channel can take a new request.
+  const canAskTeacher = !props.instructor && classroomPanels.help && help?.availability.state === "ready" && !!help.draft_key && !help.envelope;
+  const linkBlockedBanner = linkBlocked && <ExternalLinkBlocked key={linkBlocked.at} host={linkBlocked.host} canAskTeacher={canAskTeacher}
+    onAskTeacher={() => { setHelpPrefill({ text: blockedLinkHelpText(linkBlocked.host), nonce: linkBlocked.at }); setLinkBlocked(null); }}
+    onDismiss={() => setLinkBlocked(null)} />;
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
   const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
@@ -1398,6 +1408,7 @@ export function ChatPanel(props: Props) {
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
+      {linkBlockedBanner}
       {updateBanner}
       <NamingCard
         namingPromptMd={config.profile.ux.coach.naming_prompt_md}
@@ -1853,6 +1864,7 @@ export function ChatPanel(props: Props) {
         } : null}
       />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
+      {linkBlockedBanner}
       {updateBanner}
 
       <ConversationSupport compact={automationCompact}>
@@ -1908,7 +1920,7 @@ export function ChatPanel(props: Props) {
       {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
-      {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} /></PanelBoundary>}
+      {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} prefill={helpPrefill} onPrefillUsed={() => setHelpPrefill(null)} /></PanelBoundary>}
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}

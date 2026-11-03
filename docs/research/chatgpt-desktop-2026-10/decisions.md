@@ -1662,3 +1662,13 @@ Builds DES-KNOW-44 on REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026): no second list, no
 - Focus and return: the chip uses the citation path (`previewSource`'s reading position, `sourceTrigger`, `pendingFocus` on `#task-source-title`), so the side panel focuses the heading, the narrow sheet keeps its modal rule (focus on its first control, Tab trapped), and closing returns to the chip.
 - Glyph: a new stroke `bookmark` icon at 16px (DES-KNOW-45 names the same glyph for memory writes).
 - Reduced motion: nothing here animates; the global reduced-motion rule covers any inherited transition (test asserts no running animation and at most 1ms).
+
+## CGP-ART-D-008: external-link dialog host line and the minor blocked notice (2026-11-04, agent-selected)
+
+Builds DES-ART-08 on REQ-N11 (CGP-ART-R-008, merged in #1862); CGP-SHELL-D-025 is merged into this row. DEC-14 unchanged.
+- Bold host: VS Code's native modal has no inline markup, so the host is the second line of the modal's message (drawn bold) and the full address is the detail. Middle ellipsis past 48 characters reuses `middleEllipsis`; 48 keeps at least 24 characters on screen.
+- Loopback: "no dialog for loopback preview URLs" is met by opening the learner's own loopback address in the integrated browser for every cohort, so no new system-browser exit is added.
+- Blocked notice: the persist:hp-safe core patch is not in the pinned vscodium-base, so nothing enforced the cohort allowlist. The host now checks it before opening a minor's link, behind `hypeproofChat.safeLinkAllowlistEnabled` (machine scope, default off; minor-safety rule). Empty list = nothing admitted (fail closed); loopback always admitted.
+- Where: an inline alert beside the composer, not in the browser tab (no trusted in-tab surface, as for CGP-ART-D-002 and D-006).
+- 선생님께 알리기: shown only when the class help channel is ready; it fills the learner's own help draft and opens the panel. The learner previews and consents as usual; there is no automatic instructor notification (DEC-14).
+- Confirmed by Jay: no

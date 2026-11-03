@@ -10,6 +10,8 @@
 // extension-pure-orchestration-split); the actual settings write lives in the
 // orchestration layer (chatPanelProvider) which owns the vscode API surface.
 
+import { middleEllipsis } from "./taskActivity.ts";
+
 /** Minimal shape of the fields we read off a resolved profile. Kept structural
  *  so tests don't need the full ResolvedProfile type. */
 export interface BrowserSafetyProfileLike {
@@ -63,7 +65,45 @@ export function resolveBrowserSafety(
 export type ExternalLinkRoute =
   | { kind: "refuse" }
   | { kind: "integrated"; url: string }
+  | { kind: "blocked"; url: string; host: string }
   | { kind: "confirm"; url: string; host: string };
+
+/** CGP-ART-D-008 — the learner's own machine (live preview, local server). WHATWG-normalized hostnames only. */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+}
+
+/**
+ * CGP-ART-D-008 — does the cohort allowlist admit this URL? A bare entry (`example.org`, `*.example.org`, `.example.org`)
+ * admits that host and its subdomains on any scheme and port. An entry with a scheme (`https://ok.org/docs`) admits the
+ * same origin and that path prefix on a segment boundary. Unparseable entries admit nothing, so a malformed list can
+ * only narrow access.
+ */
+export function hostAllowed(url: URL, allowlist: readonly string[]): boolean {
+  const host = url.hostname.toLowerCase().replace(/\.$/, ""); // `example.org.` is the same host
+  for (const raw of allowlist) {
+    if (typeof raw !== "string") continue;
+    const entry = raw.trim().toLowerCase();
+    if (!entry) continue;
+    if (entry.includes("://")) {
+      let e: URL;
+      try { e = new URL(entry); } catch { continue; }
+      if (e.origin !== url.origin) continue;
+      const base = e.pathname.endsWith("/") ? e.pathname : e.pathname + "/";
+      if (e.pathname === "/" || url.pathname === e.pathname || url.pathname.startsWith(base)) return true;
+      continue;
+    }
+    const bare = entry.replace(/^\*?\./, "");
+    if (!bare || /[\/?#@\s]/.test(bare)) continue;
+    if (host === bare || host.endsWith("." + bare)) return true;
+  }
+  return false;
+}
+
+export interface LinkRouteOptions {
+  /** `hypeproofChat.safeLinkAllowlistEnabled` (machine, default off): a safe-session link outside the allowlist is blocked. */
+  enforceAllowlist?: boolean;
+}
 
 /**
  * The safety used for a link click. A loaded profile decides. Without one (before the first
@@ -74,17 +114,38 @@ export type ExternalLinkRoute =
 export function linkSafety(
   profile: BrowserSafetyProfileLike | null | undefined,
   persistedSafeSession: unknown,
+  persistedAllowlist?: unknown,
 ): BrowserSafetyConfig {
   if (profile) return resolveBrowserSafety(profile);
-  return { safeSession: persistedSafeSession !== false, safeAllowlist: [] };
+  const safeAllowlist = Array.isArray(persistedAllowlist)
+    ? persistedAllowlist.filter((e): e is string => typeof e === "string" && e.length > 0)
+    : [];
+  return { safeSession: persistedSafeSession !== false, safeAllowlist };
 }
 
-export function routeExternalLink(raw: unknown, safety: BrowserSafetyConfig): ExternalLinkRoute {
+/**
+ * CGP-ART-R-008 / CGP-ART-D-008. Order: refuse non-web input; the learner's own loopback preview opens in the integrated
+ * browser for everyone, with no dialog; a safe session opens the integrated browser, or, with `enforceAllowlist`, is
+ * blocked when the allowlist does not admit the URL (an empty list admits nothing: fail closed); everyone else confirms.
+ */
+export function routeExternalLink(raw: unknown, safety: BrowserSafetyConfig, opts: LinkRouteOptions = {}): ExternalLinkRoute {
   if (typeof raw !== "string" || !/^https?:\/\//i.test(raw)) return { kind: "refuse" };
   let parsed: URL;
   try { parsed = new URL(raw); } catch { return { kind: "refuse" }; }
   if (!parsed.hostname) return { kind: "refuse" };
   const url = parsed.toString();
-  if (safety.safeSession) return { kind: "integrated", url };
+  if (isLoopbackHost(parsed.hostname)) return { kind: "integrated", url };
+  if (safety.safeSession) {
+    if (opts.enforceAllowlist && !hostAllowed(parsed, safety.safeAllowlist)) return { kind: "blocked", url, host: parsed.hostname };
+    return { kind: "integrated", url };
+  }
   return { kind: "confirm", url, host: parsed.hostname };
+}
+
+/** CGP-ART-D-008 — the host as the dialog and banner show it: whole up to 48 characters, middle ellipsis beyond. */
+export const LINK_HOST_MAX = 48;
+
+/** The adult confirmation. The host is the dialog's (bold) message line; the full address is the plain detail. */
+export function externalLinkDialog(route: { url: string; host: string }): { message: string; detail: string; open: string; copy: string } {
+  return { message: `바깥 사이트를 열까요?\n${middleEllipsis(route.host, LINK_HOST_MAX)}`, detail: route.url, open: "열기", copy: "링크 복사" };
 }
