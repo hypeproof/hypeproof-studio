@@ -95,6 +95,12 @@ This approves research and acceptance planning, not a chosen storage vendor,
 public audience, new paid subscription, executable-package trust grant or new
 mail send. Three Google logins alone do not establish three Studio principals.
 
+### 확정 기록 — 2026-11-03 Chalk 분리
+
+| ID | 제안·선택지 | 인간의 최종 결정 | 확정 근거 |
+|---|---|---|---|
+| DEC-027 | Chalk 분리 중 Studio 옛 강사 코드의 변경 범위. A: 버그·보안 수정만 허용. B: 완전 동결 | A. `extensions/hypeproof-chat/src/chalk/` 와 웹 `chalk/` 는 버그·보안 수정만 받는다. 새 기능과 리팩터링은 `hypeproof/hypeproof-chalk` 에서만 한다. 이 경로를 바꾸는 PR 은 What & why 에 `Chalk follow-up: needed (hypeproof/hypeproof-chalk#N)` 또는 `Chalk follow-up: not needed — <이유>` 한 줄을 적는다. 동결은 Studio 에서 옛 강사 코드를 지울 때(S-4, studio#2558) 끝난다. | 제품 리드(JY)가 2026-11-03 Chalk 분리 계획 4판의 결정 D2 를 권장안 A 로 확정했다. 기록자는 Chalk PO 의 전언으로 받았다. 기록자가 직접 받은 발언이 아니다. |
+
 ## 이번 레포 정리의 목표와 필수 원칙 — 2026-10-10
 
 ### 궁극적인 목표
