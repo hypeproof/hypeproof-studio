@@ -148,7 +148,10 @@ test('D10/F7 host wiring: the modal answer is the approval, the activity is chec
   const panel = readFileSync(new URL('../src/skillStorePanel.ts', import.meta.url), 'utf8');
   const runCase = panel.slice(panel.indexOf('case "storeRun":'), panel.indexOf('case "storeOverlayOpen":'));
   assert.ok(runCase.indexOf('includes("mail_draft")') > 0 && runCase.indexOf('deps.runMailSkill(') < runCase.indexOf('deps.runSkill({'));
-  assert.ok(readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8').includes('runMailSkill: (skill, render) => automationHost.runStoreMail(skill, render)'));
+  // Scene 3 (#3476): a mail skill also shows the buyer's quest, before its run starts.
+  assert.ok(runCase.indexOf('deps.showQuest?.(') > 0 && runCase.indexOf('deps.showQuest?.(') < runCase.indexOf('deps.runMailSkill('));
+  const ext = readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8');
+  assert.ok(ext.includes('runMailSkill: (skill, render) => automationHost.runStoreMail(skill, render)') && ext.includes('showQuest: (skill) => showStoreQuest(skill)'));
 });
 
 test('D10: the store mail run has no path into the Apps Script generator or the shared runner', () => {
