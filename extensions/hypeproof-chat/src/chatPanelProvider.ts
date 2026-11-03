@@ -7245,16 +7245,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /**
    * #3427 — an approved write of a turn with a tracked point: record each target's pre-write state
-   * before the tool runs. A file past the per-file or per-turn byte bound is named right away; a
-   * failure never blocks the write (the path then reads as not covered at the turn's end).
+   * before the tool runs. A file past the per-file or per-turn byte bound is named right away.
+   * It runs inside every tool's approval callback, so it never throws: a non-write tool returns
+   * before touching any restore state, and a failed capture never blocks the write (the path then
+   * reads as not covered at the turn's end).
    */
   private async captureTurnWrite(streamId: string, action: { toolName: string; input: unknown }, approved: boolean): Promise<void> {
-    const tracker = this.turnWriteTrackers.get(streamId);
-    if (!tracker || !approved || !isWriteToolName(action.toolName)) return;
-    let captured: TrackedCapture[] = [];
-    try { captured = await tracker.capture(writeScopeKeys(action.toolName, action.input, tracker.root)); } catch { return; }
-    const tooBig = captured.filter((c) => c.reason === "too_large" || c.reason === "total_cap");
-    if (tooBig.length) this.postToolLog(streamId, { id: `turn-restore-big-${streamId}-${tooBig[0].path}`, icon: "⚠️", label: trackedTooLargeLine(tooBig.map((c) => c.path)), state: "error" });
+    if (!approved || !isWriteToolName(action.toolName)) return;
+    try {
+      const tracker = this.turnWriteTrackers?.get(streamId);
+      if (!tracker) return;
+      const captured: TrackedCapture[] = await tracker.capture(writeScopeKeys(action.toolName, action.input, tracker.root));
+      const tooBig = captured.filter((c) => c.reason === "too_large" || c.reason === "total_cap");
+      if (tooBig.length) this.postToolLog(streamId, { id: `turn-restore-big-${streamId}-${tooBig[0].path}`, icon: "⚠️", label: trackedTooLargeLine(tooBig.map((c) => c.path)), state: "error" });
+    } catch { /* not covered at the turn's end */ }
   }
 
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
@@ -9221,7 +9225,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
         webActivity.observe(a);
         // #3427 — a shell step on a tracked turn: its changes are not in the restore point.
-        if (a.kind === 'approval' && a.allowed && (a.name === 'Bash' || a.name === 'PowerShell')) this.turnWriteTrackers.get(streamId)?.noteShell();
+        if (a.kind === 'approval' && a.allowed && (a.name === 'Bash' || a.name === 'PowerShell')) this.turnWriteTrackers?.get(streamId)?.noteShell();
         if (a.kind === 'tool_use') this.noteTaskActivity(streamId, { kind: 'use', id: a.id, name: a.name, input: a.input });
         else if (a.kind === 'approval' && !a.allowed) this.noteTaskActivity(streamId, { kind: 'deny', id: a.id });
         else if (a.kind === 'tool_result') this.noteTaskActivity(streamId, { kind: 'result', id: a.id, isError: a.isError });
