@@ -421,6 +421,10 @@
       ],
       "commandPalette": [
         {
+          "command": "hypeproof-chat.skillStore",
+          "when": "false"
+        },
+        {
           "command": "hypeproof-chat.runDoctor"
         },
         {
