@@ -95,12 +95,14 @@ export class PreviewProvider {
     if (bar?.state === "restored") {
       if (this.toastedTurn === bar.turnId) bar = null;
       else {
+        // The toast says whether the page shown is the reverted one: only a watched file that was
+        // read again and shown is; a generated page, a removed file or a failed read is not.
         this.toastedTurn = bar.turnId;
-        const stale = !this.watchedFile;
-        if (!stale) void this.reloadWatched();
-        this.reviewBar = { ...bar, stale };
-        this.postReviewState();
         this.reviewBar = null;
+        const restored = bar;
+        void (this.watchedFile ? this.reloadWatched() : Promise.resolve(false)).then((reloaded) => {
+          if (this.ready) void this.panel?.webview.postMessage({ type: "previewReviewState", bar: { ...restored, stale: !reloaded } });
+        });
         return;
       }
     }
@@ -113,17 +115,18 @@ export class PreviewProvider {
   }
 
   /** Re-read the watched file and show it again (after a revert put its earlier bytes back). */
-  private async reloadWatched(): Promise<void> {
-    if (!this.panel || !this.watchedFile) return;
+  private async reloadWatched(): Promise<boolean> {
+    if (!this.panel || !this.watchedFile) return false;
     const revision = this.previewRevision;
     const file = this.watchedFile;
     const base = this.watchedBase;
     const ask = this.askAboutFile;
     try {
       const html = this.watchedRead ? await this.watchedRead() : Buffer.from(await vscode.workspace.fs.readFile(file)).toString("utf8");
-      if (html === null || revision !== this.previewRevision) return;
+      if (html === null || revision !== this.previewRevision) return false;
       await this.show(html, base, ask, true);
-    } catch { /* file may have been deleted; ignore */ }
+      return true;
+    } catch { return false; /* file may have been deleted */ }
   }
 
   constructor(
@@ -400,7 +403,10 @@ export class PreviewProvider {
     #review-bar.entering { animation: hp-review-in 120ms ease-out; }
     @keyframes hp-review-in { from { opacity: 0; } to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { #review-bar.entering { animation: none; } }
-    #review-title { margin: 0; font-size: 14px; line-height: 20px; }
+    #review-text { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
+    #review-title, #review-notice { margin: 0; font-size: 14px; line-height: 20px; }
+    #review-notice[hidden] { display: none; }
+    #review-notice { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32em; opacity: .85; }
     #review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     #review-actions button[hidden] { display: none; }
     #review-actions button { min-height: 44px; min-width: 44px; padding: 0 10px; font: inherit; font-size: 14px;
@@ -428,7 +434,7 @@ export class PreviewProvider {
   <iframe id="frame" style="display:none" sandbox="${PREVIEW_IFRAME_SANDBOX}" allow="${PREVIEW_IFRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>
   <div id="review-strip" hidden>
     <section id="review-bar" hidden aria-label="AI가 바꾼 곳" aria-describedby="review-move-hint">
-      <p id="review-title"></p>
+      <div id="review-text"><p id="review-title"></p><p id="review-notice" hidden></p></div>
       <div id="review-actions">
         <button id="review-show" type="button" class="secondary">바뀐 곳 보기</button>
         <button id="review-revert" type="button" class="secondary">되돌리기</button>
@@ -436,8 +442,9 @@ export class PreviewProvider {
       </div>
       <span id="review-move-hint" class="sr-only">왼쪽·오른쪽 화살표 키로 이 막대를 옮기고, Home 키로 제자리에 놓아요.</span>
     </section>
-    <p id="review-toast" role="status" aria-live="polite"></p>
+    <p id="review-toast" aria-hidden="true"></p>
   </div>
+  <p id="review-live" class="sr-only" role="status" aria-live="polite"></p>
   <script>
   (() => {
     const vscode = acquireVsCodeApi();
@@ -480,6 +487,9 @@ export class PreviewProvider {
     const reviewRevert = document.getElementById("review-revert");
     const reviewKeep = document.getElementById("review-keep");
     const toast = document.getElementById("review-toast");
+    const reviewNotice = document.getElementById("review-notice");
+    // The live region stays in the document (never inside a hidden strip), so the toast is announced.
+    const live = document.getElementById("review-live");
     let review = null;
     let toastTimer = null;
     let offset = 0;
@@ -492,8 +502,9 @@ export class PreviewProvider {
     const showToast = (text) => {
       if (toastTimer) clearTimeout(toastTimer);
       toast.textContent = text;
+      live.textContent = text;
       syncStrip();
-      toastTimer = setTimeout(() => { toastTimer = null; toast.textContent = ""; syncStrip(); }, 4000);
+      toastTimer = setTimeout(() => { toastTimer = null; toast.textContent = ""; live.textContent = ""; syncStrip(); }, 4000);
     };
     const renderReview = (bar) => {
       const valid = bar && typeof bar === "object" && typeof bar.turnId === "string" && Number.isInteger(bar.count) && bar.count >= 0
@@ -509,9 +520,14 @@ export class PreviewProvider {
       review = { turnId: bar.turnId, state: bar.state };
       if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
       toast.textContent = "";
-      const notice = typeof bar.notice === "string" ? bar.notice : "";
+      live.textContent = "";
+      // The count always stays; the chat bar's notice is a second line, one line long (full text in title).
+      const notice = bar.state === "open" && typeof bar.notice === "string" ? bar.notice : "";
       reviewTitle.textContent = bar.state === "failed" ? "되돌리지 못했어요. 채팅에서 확인해 주세요."
-        : bar.state === "restoring" ? "되돌리는 중…" : notice || "AI가 " + bar.count + "곳을 바꿨어요";
+        : bar.state === "restoring" ? "되돌리는 중…" : "AI가 " + bar.count + "곳을 바꿨어요";
+      reviewNotice.textContent = notice;
+      reviewNotice.title = notice;
+      reviewNotice.hidden = !notice;
       reviewShow.textContent = bar.state === "failed" ? "채팅에서 보기" : "바뀐 곳 보기";
       reviewRevert.hidden = reviewKeep.hidden = bar.state === "failed";
       reviewRevert.disabled = reviewKeep.disabled = bar.state !== "open";

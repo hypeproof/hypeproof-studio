@@ -7203,7 +7203,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CGP-ART-D-002 — a press on the preview's review bar runs the chat review's own keep, revert or show. */
   async handlePreviewReviewAction(a: PreviewReviewAction): Promise<void> {
     const review = this.turnReview;
-    if (!review || review.view.turnId !== a.turnId || review.taskKey !== this.turnRestoreTaskKey() || this._instructorMode?.isInstructor) return;
+    // A dropped press re-sends the current review, so the preview never keeps a bar it disabled.
+    if (!review || review.view.turnId !== a.turnId || review.taskKey !== this.turnRestoreTaskKey() || this._instructorMode?.isInstructor) { this.postTurnReview(); return; }
     if (a.action === "show") {
       await vscode.commands.executeCommand("hypeproof-chat.focus");
       const v = review.view;

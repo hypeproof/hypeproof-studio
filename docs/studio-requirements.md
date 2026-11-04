@@ -3185,14 +3185,17 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
   `handleTurnReviewMessage` as the chat buttons, so the same modal, refusals, Evidence events and
   "복구 직전" point apply. A press is accepted only for the bar's current turn, and keep or revert only
   while it is open; the shell disables both after one press until the host answers. While a revert
-  runs it reads "되돌리는 중…"; a refusal ("진행 중인 작업이 끝난 뒤에 …") replaces the count; a failed
+  runs it reads "되돌리는 중…"; the chat bar's notice (a refusal such as "진행 중인 작업이 끝난 뒤에 …", or
+  the large-folder line) is a second line under the count, one line long and ellipsized with the full
+  text as its tooltip, so the count is always shown; a failed
   revert reads "되돌리지 못했어요. 채팅에서 확인해 주세요." with only **채팅에서 보기**. **바뀐 곳 보기**
   moves to the chat and opens its review at the turn's first file (`turnReviewShow`). After a
-  successful revert the bar leaves and "되돌렸어요" is shown in the same strip for 4 s with
-  `role=status`, once per turn; a preview opened from a file is re-read and shown again, and a
-  generated preview that cannot be re-read says "되돌렸어요. 미리보기를 다시 열면 되돌린 내용이 보여요."
-  instead. It never auto-dismisses while open. Height is 48 px with targets of 44 px and 14 px text
-  at widths of 800 px and more; narrower, the bar wraps rather than cutting its count or buttons, and
+  successful revert the bar leaves and "되돌렸어요" is shown in the same strip for 4 s, once per
+  turn, and announced through a `role=status` region that is always in the document. A preview
+  opened from a file is re-read and shown again; when that is not possible (a generated preview, a
+  file the revert removed, a failed read) the toast says "되돌렸어요. 미리보기를 다시 열면 되돌린 내용이
+  보여요." instead. A press the chat host drops (another turn or task) re-sends the current review. It never auto-dismisses while open. Height is 48 px, with or without a notice, with targets of 44 px and 14 px
+  text at widths of 800 px and more; narrower, the bar wraps rather than cutting its count or buttons, and
   never scrolls sideways. Left and right arrow keys inside the bar move it along the strip (24 px a
   step, kept inside the preview) and Home puts it back, described to assistive technology through
   `aria-describedby`. Appearance is a 120 ms fade, none with reduced motion; keyboard focus rings and

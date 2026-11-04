@@ -71,16 +71,22 @@ let reads = 0;
 preview.watchForReload({ fsPath: '/w/index.html' }, async () => { reads++; return '<p>reverted page</p>'; });
 const renders = messages.filter(m => m.type === 'renderPreview').length;
 preview.setReviewBar({ turnId: 't1', state: 'restored', count: 3 });
-assert.deepEqual(last().bar, { turnId: 't1', state: 'restored', count: 3, stale: false });
 await new Promise(r => setTimeout(r, 0));
+assert.deepEqual(last().bar, { turnId: 't1', state: 'restored', count: 3, stale: false }, 'reloaded page: plain toast');
 assert.equal(reads, 1, 'the watched file is read again after a revert');
-assert.ok(messages.filter(m => m.type === 'renderPreview').length > renders && messages.at(-1).html.includes('reverted page'), 'the reverted page is shown');
+assert.ok(messages.filter(m => m.type === 'renderPreview').length > renders && messages.filter(m => m.type === 'renderPreview').at(-1).html.includes('reverted page'), 'the reverted page is shown');
 preview.setReviewBar({ turnId: 't1', state: 'restored', count: 3 });
 assert.equal(last().bar, null, 'a re-sent result does not toast again');
 receive({ type: 'preview_review_action', action: 'revert', turnId: 't1' });
 assert.equal(fired.length, 2, 'no press after the result');
+// A revert that removed the watched file (the AI created it): the read fails, so the toast says so.
+preview.watchForReload({ fsPath: '/w/new.html' }, async () => { throw new Error('ENOENT'); });
+preview.setReviewBar({ turnId: 't3', state: 'restored', count: 1 });
+await new Promise(r => setTimeout(r, 0));
+assert.equal(last().bar.stale, true, 'a failed reload is not claimed as the reverted page');
 await preview.show('<p>generated</p>');
 preview.setReviewBar({ turnId: 't2', state: 'restored', count: 1 });
+await new Promise(r => setTimeout(r, 0));
 assert.equal(last().bar.stale, true, 'a generated preview says it was not reloaded');
 preview.setReviewBar(null);
 assert.equal(last().bar, null);
@@ -106,7 +112,7 @@ const inShell = expr => browser.evaluate(`(()=>{const S=document.getElementById(
 const send = async data => { await browser.evaluate(`document.getElementById('shell').contentWindow.postMessage(${JSON.stringify(data)},'*')`); await settle(); };
 const geometry = () => inShell(`(()=>{const s=D.querySelector('#review-strip'),b=D.querySelector('#review-bar'),f=D.querySelector('#frame').getBoundingClientRect(),r=s.getBoundingClientRect(),br=b.getBoundingClientRect();
   return {stripHidden:s.hidden,barHidden:b.hidden,top:r.top,height:r.height,frameBottom:f.bottom,barLeft:br.left,barRight:br.right,docWidth:D.documentElement.scrollWidth,viewWidth:S.innerWidth,
-    title:D.querySelector('#review-title').textContent,toast:D.querySelector('#review-toast').textContent,
+    title:D.querySelector('#review-title').textContent,notice:D.querySelector('#review-notice').hidden?'':D.querySelector('#review-notice').textContent,toast:D.querySelector('#review-toast').textContent,live:D.querySelector('#review-live').textContent,
     buttons:[...D.querySelectorAll('#review-actions button')].filter(x=>!x.hidden).map(x=>{const q=x.getBoundingClientRect(),c=S.getComputedStyle(x);return {label:x.textContent,w:q.width,h:q.height,font:parseFloat(c.fontSize),cls:x.className,disabled:x.disabled}})}})()`);
 const hostileInner = `<p>미리보기</p><script>parent.postMessage({type:'previewReviewState',bar:null},'*');parent.postMessage({type:'previewReviewState',bar:{turnId:'evil',state:'open',count:99}},'*');<\/script>`;
 try {
@@ -119,9 +125,11 @@ try {
     for (let i = 0; i < 50 && !(await inShell(`Array.isArray(S.posted)&&D.readyState==='complete'`)); i++) await settle();
     const tag = JSON.stringify({ width, theme, forcedColors });
     assert.equal((await geometry()).stripHidden, true, 'no bar before the host sends one');
-    await send({ type: 'renderPreview', revision: 1, html: hostileInner });
+    // The host bar arrives first; the framed page then tries to hide and replace it (and to press).
     await send({ type: 'previewReviewState', bar: { turnId: 't1', state: 'open', count: 3 } });
+    await send({ type: 'renderPreview', revision: 1, html: hostileInner });
     await settle(300);
+    assert.equal(await inShell(`S.posted.filter(m=>m.type==='preview_review_action').length`), 0, 'the framed page cannot press');
     let g = await geometry();
     assert.equal(g.title, 'AI가 3곳을 바꿨어요', tag);
     assert.deepEqual(g.buttons.map(b => [b.label, b.cls]), [['바뀐 곳 보기', 'secondary'], ['되돌리기', 'secondary'], ['이대로 둘게요', 'primary']], tag);
@@ -158,13 +166,25 @@ try {
     assert.equal(g.title, '되돌리는 중…');
     assert.deepEqual(g.buttons.map(b => b.disabled), [false, true, true]);
     await send({ type: 'previewReviewState', bar: { turnId: 't1', state: 'open', count: 3, notice: '진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요.' } });
-    assert.equal((await geometry()).title, '진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요.', 'a refusal is shown, not swallowed');
+    g = await geometry();
+    assert.equal(g.title, 'AI가 3곳을 바꿨어요', 'the count stays with a notice');
+    assert.equal(g.notice, '진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요.', 'a refusal is shown, not swallowed');
+    // The longest standing notice (a large folder's tracked turn) keeps the bar at 48 px.
+    const tracked = '작업 폴더가 커서 이번 요청은 AI가 쓰거나 고친 파일만 보관했어요. 명령 실행으로 바뀐 파일은 되돌릴 수 없어요.';
+    await send({ type: 'previewReviewState', bar: { turnId: 't1', state: 'open', count: 3, notice: tracked } });
+    g = await geometry();
+    assert.equal(g.title, 'AI가 3곳을 바꿨어요');
+    assert.equal(g.notice, tracked);
+    if (width >= 800) assert.ok(g.height <= 48, `${tag} bar height with a notice ${g.height}`);
+    assert.ok(g.docWidth <= g.viewWidth, `${tag} no horizontal scroll with a notice`);
     // Revert result: toast "되돌렸어요" with role=status for 4 s, then the strip goes away.
     await send({ type: 'previewReviewState', bar: { turnId: 't1', state: 'restored', count: 3, stale: false } });
     g = await geometry();
     assert.equal(g.barHidden, true);
     assert.equal(g.toast, '되돌렸어요');
-    assert.equal(await inShell(`D.querySelector('#review-toast').getAttribute('role')`), 'status');
+    assert.equal(g.live, '되돌렸어요', 'announced through the always-present status region');
+    assert.equal(await inShell(`D.querySelector('#review-live').getAttribute('role')`), 'status');
+    assert.equal(await inShell(`D.querySelector('#review-live').closest('[hidden]')`), null, 'the status region is never inside a hidden container');
     assert.ok(g.frameBottom <= g.top + 0.5, `${tag} the toast never covers the page`);
     if (width === 800 && theme === 'Dark+' && !forcedColors) {
       await settle(3400);
@@ -172,6 +192,7 @@ try {
       await settle(800);
       g = await geometry();
       assert.equal(g.toast, '');
+      assert.equal(g.live, '');
       assert.equal(g.stripHidden, true, 'the strip leaves after the toast');
     }
     await send({ type: 'previewReviewState', bar: { turnId: 't2', state: 'failed', count: 2 } });
