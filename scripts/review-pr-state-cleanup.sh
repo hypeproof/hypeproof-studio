@@ -14,8 +14,12 @@ dev_app_pids() {
 
 # Resolves STATE_DIR_REAL again from STATE_DIR. review-pr.sh step 1.5 resolves it before
 # studio-dev.py creates the folder, when realpath still returns nothing.
+# Only an existing folder counts: GNU realpath also resolves a missing last component
+# when its parent exists, so the result must be checked the same way on both platforms.
 refresh_state_dir_real() {
-  STATE_DIR_REAL="$(realpath "${STATE_DIR:-}" 2>/dev/null || true)"
+  local resolved=""
+  [[ -d "${STATE_DIR:-}" ]] && resolved="$(realpath "$STATE_DIR" 2>/dev/null || true)"
+  STATE_DIR_REAL="$resolved"
 }
 
 # Skips the removal with a NOTE on stderr. The exit status stays 0.

@@ -828,17 +828,18 @@ mkdir -p "$(rs_root)"
 
 # 72. Normal: the state folder appears after step 1.5 (resolved empty there), cleanup resolves it, removal succeeds.
 RS_WT="$(rs_wt normal)"
+# Step 1.5 result on macOS: realpath returns nothing for a missing folder (the bug).
+# Set it directly, so this test does not depend on GNU vs BSD realpath behavior.
 RS_OUT="$(
   export HOME="$RS_TMP/home"
   STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
   STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
-  STATE_DIR_REAL="$(realpath "$STATE_DIR" 2>/dev/null || true)"
-  [[ -z "$STATE_DIR_REAL" ]] || { echo "PRECONDITION: folder must not exist at step 1.5"; exit 1; }
+  STATE_DIR_REAL=""
   mkdir -p "$STATE_DIR/user-data" && printf '{"format":"x","repo":"%s"}' "$RS_WT" > "$STATE_DIR/owner.json"
   source "$RS_LIB"
   refresh_state_dir_real
   remove_review_state 2>&1
-)"
+)" || RS_OUT="subshell failed (rc=$?)"
 if [[ ! -e "$RS_TMP/home/Library/Application Support/HypeProof Studio Development/$RS_HASH" ]] && grep -q "Removed the Dev state folder" <<<"$RS_OUT"; then
   ok "72: state folder created after step 1.5 is resolved at cleanup and removed"
 else
@@ -873,7 +874,7 @@ RS_OUT="$(
   source "$RS_LIB"
   refresh_state_dir_real
   remove_review_state 2>&1
-)"
+)" || RS_OUT="subshell failed (rc=$?)"
 if [[ -f "$RS_OWN/owner.json" ]] && grep -q "owner.json does not name this review worktree" <<<"$RS_OUT"; then
   ok "74: folder owned by another repo is kept with a NOTE"
 else
@@ -888,7 +889,7 @@ RS_OUT="$(
   STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"; STATE_DIR_REAL="$RS_ODD"
   source "$RS_LIB"
   remove_review_state 2>&1
-)"
+)" || RS_OUT="subshell failed (rc=$?)"
 if [[ -f "$RS_ODD/owner.json" ]] && grep -q "outside the Dev state root" <<<"$RS_OUT"; then
   ok "75: folder outside the Dev state root is kept with a NOTE"
 else
