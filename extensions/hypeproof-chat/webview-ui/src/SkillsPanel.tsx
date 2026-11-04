@@ -25,11 +25,16 @@ export function SkillsPanel(props: {
   const { view } = props;
   const [skill, setSkill] = useState("");
   const [form, setForm] = useState<SkillForm>({});
+  const [evidenceQuery, setEvidenceQuery] = useState("");
+  const evidenceSearch = useRef<HTMLInputElement>(null);
+  const query = evidenceQuery.trim().toLocaleLowerCase();
+  const visibleEvidence = view.pickers.evidence.filter(e => e.label.toLocaleLowerCase().includes(query));
   const chosen = view.skills.find((s) => s.skill === skill) ?? null;
   const problems = chosen ? skillFormProblems(chosen.skill, form) : ["스킬을 골라 주세요."];
   const pick = (id: string) => {
     setSkill(id);
     setForm({});
+    setEvidenceQuery("");
   };
   const toggle = (ref: string, on: boolean) => setForm((f) => ({ ...f, evidence_refs: on ? [...(f.evidence_refs ?? []), ref] : (f.evidence_refs ?? []).filter((x) => x !== ref) }));
   const r = view.result;
@@ -71,8 +76,16 @@ export function SkillsPanel(props: {
                 </select>
               )}
               {chosen.skill === "product-builder" && (
+                <div>
+                  <label>
+                    근거 검색
+                    <input ref={evidenceSearch} type="search" aria-label="근거 검색" value={evidenceQuery} onChange={e => setEvidenceQuery(e.target.value)} />
+                  </label>
+                  {evidenceQuery && <button type="button" aria-label="근거 검색 지우기" onClick={() => { setEvidenceQuery(""); evidenceSearch.current?.focus(); }}>검색 지우기</button>}
+                  <p role="status">선택한 근거 {form.evidence_refs?.length ?? 0}개 · 검색 결과 {visibleEvidence.length}개</p>
+                  {visibleEvidence.length === 0 && <p>{query ? "검색 결과가 없어요. 다른 말로 찾아보세요." : "선택할 근거가 아직 없어요."}</p>}
                 <ul aria-label="고칠 근거">
-                  {view.pickers.evidence.map((e) => (
+                  {visibleEvidence.map((e) => (
                     <li key={e.id}>
                       <label>
                         <input type="checkbox" checked={(form.evidence_refs ?? []).includes(e.id)} onChange={(ev) => toggle(e.id, ev.target.checked)} />
@@ -81,6 +94,7 @@ export function SkillsPanel(props: {
                     </li>
                   ))}
                 </ul>
+                </div>
               )}
               {["experiment", "evidence", "product-builder", "interview", "critic"].includes(chosen.skill) && (
                 <textarea
