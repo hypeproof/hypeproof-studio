@@ -97,7 +97,9 @@ assert.equal(preset.approvalPresetBlockServed({ approval_preset: null }), false)
       "rm -f a.txt > /tmp/../Users/x/.zshrc", "rm -f a.txt >> /tmp/x", "mv a.txt --target-directory=../victim",
       // verify round 2: `..` folded before links, zsh >! / <-> / ^ / #, quotes, mv then more, -t.., hard links, noglob
       "rm -rf link-out/../victim", "echo evil >! ~/.zshrc", "rm x >! f", "rm -rf l<->x/", "rm -f ^x", "rm a#", "echo x >| f", "rm x &> f", "rm x >&f",
-      "rm \"a b\"", "mv d e; rm -rf e/l/", "mv -t.. a.txt", "truncate -s 0 hard", "chmod 000 hard", "rm x > hard", "noglob rm -rf ../v", "nocorrect rm -rf x"];
+      "rm \"a b\"", "mv d e; rm -rf e/l/", "mv -t.. a.txt", "truncate -s 0 hard", "chmod 000 hard", "rm x > hard", "noglob rm -rf ../v", "nocorrect rm -rf x",
+      // verify round 3: options that follow links, and a link-making command before a delete
+      "chmod -RL o+w sub", "chmod -R -L o+w sub", "chmod -RH o+w sub", "chmod --dereference 644 a", "cp -R src e; rm -rf e/lv"];
     for (const c of INSIDE) {
       assert.equal(destructiveStaysInFolder(c, root, canon), true, `inside: ${c}`);
       assert.equal(ev("Bash", { command: c }).decision, "ask", `control: without auto, ${c} asks`);

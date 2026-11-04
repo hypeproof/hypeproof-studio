@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDestructiveCommand } from "./shellPolicy.ts";
 import { parseShell, shellQuote, type ShellWord } from "./shellWords.ts";
+import { mentionsLinkTool } from "./shellLinkPolicy.ts";
 
 /** Verbs whose only effect is on the files they name. Their operands are checked one by one. */
 const FOLDER_FILE_VERBS = new Set(["rm", "rmdir", "unlink", "mv", "cp", "truncate", "chmod", "mkdir", "touch"]);
@@ -55,6 +56,8 @@ export function destructiveStaysInFolder(
   if (parsed.uncertain || parsed.nested.length > 0 || parsed.commands.length === 0) return false;
   // Only plain characters (PLAIN_COMMAND); `>` only as `>`, `>>` or `2>&1`, never `>!`, `>|`, `&>` or `>&file`.
   if (!PLAIN_COMMAND.test(command) || /&>|>&(?!1(?!\d))|>{3}/.test(command)) return false;
+  // A command that can make a link (cp -R, tar x, ln, …) can plant one a later part follows (verify round 3): never silent.
+  if (mentionsLinkTool(command)) return false;
   // A rename changes what later paths name (verify round 2 N5: `mv d e; rm -rf e/l/`): mv only as the last command.
   let root: string;
   try { root = canonicalize(workspaceRoot); } catch { return false; }
@@ -102,6 +105,8 @@ export function destructiveStaysInFolder(
           if (eq > 0) { if (!inside({ ...w, text: w.text.slice(eq + 1) }, false)) return false; }
           // An attached value that could name a place (`-t..`, `-t/x`) is not silent (verify round 2 N6).
           else if (/[./~]/.test(w.text)) return false;
+          // Options that follow links into what they walk (`chmod -RL`, `-H`, `--dereference`) are not silent (verify round 3).
+          if (/^-[^-]*[LH]/.test(w.text) || /deref/i.test(w.text)) return false;
           continue;
         }
         if (!inside(w, REMOVING_VERBS.has(head))) return false;
