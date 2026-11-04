@@ -141,6 +141,7 @@ export function ChatFindBar({ scrollRef, scope, onReading }: {
     firstScope.current = scope;
     close(!!bar.current?.contains(document.activeElement));
     setCurrent(0);
+    setQuery(''); // #2974: the next conversation must perform a fresh search, even for the same text.
   }, [scope, close]);
 
   useEffect(() => {
