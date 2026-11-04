@@ -16,7 +16,7 @@ USAGE (Python):
         event_type="deploy.success",
         routes_path="config/notify_routes.yaml",
         payload={"sha": "abc1234", "branch": "main", "url": "..."},
-        tenant_slug="hypeproof-lab",  # optional; uses '*' if absent
+        tenant_slug="example-tenant",  # optional; uses '*' if absent
     )
 
 DEPENDENCIES: httpx, jinja2, pyyaml. No db, no llm, no surprises.
