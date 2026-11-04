@@ -7,6 +7,9 @@
 //       the final version, then: v tag on the rc commit, v draft with the rc's packages and
 //       acceptance receipts (same bytes), squash-merge of the release PR, verify-unified-release
 //       dispatched for the v tag. Every step is idempotent, so a rerun continues a failed run.
+//       The release PR runs studio-pr-ci like any PR, and main's protection requires its checks,
+//       `extension / smoke` included (#3512). A release PR that main would refuse is refused here,
+//       before the v tag, instead of failing at the merge after tagging.
 //   node scripts/release/promote.mjs reuse-acceptance --tag T --sha S --version V --dir D
 //       (verify-unified-release.yml) prints accepted=true when D, the downloaded v draft, holds the
 //       acceptance receipts of a published rc at the same commit and they still hold for these bytes
@@ -40,12 +43,17 @@ export function recordedRcTag(message, version) {
   return tag && tag.startsWith(`${version}-rc.`) ? tag : null;
 }
 
+// GitHub's mergeStateStatus values under which main's protection accepts the squash-merge.
+// BLOCKED: a required check (e.g. `extension / smoke`, about 14 min) is pending, failed or absent.
+const MERGEABLE_STATES = new Set(['CLEAN', 'UNSTABLE', 'HAS_HOOKS']);
+
 // Pure decision. Every input is already fetched.
 //   pr:      {number, state, merged, labels, base, headRef, head, reviews: [{user, state, commit}]}
+//   mergeState: the release PR's mergeStateStatus ('' when unread); ignored once it is merged
 //   commit:  the PR head commit {sha, parents: [sha], message, files: [path]}
 //   rcTags:  [{name, sha}] for <version>-rc.*; vTagSha: the v tag's commit, or '' when absent
 //   rcRelease: {isDraft, assets: [{name, digest}]} of the recorded rc, or null
-export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), vTagSha = '', rcRelease = null}) {
+export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), vTagSha = '', rcRelease = null, mergeState = ''}) {
   const refuse = reason => ({allow: false, reasons: [reason]});
   const version = branchVersion(pr.headRef);
   if (!version) return refuse(`#${pr.number}: head ${pr.headRef} is not release/vX.Y.Z`);
@@ -53,6 +61,11 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   if (!pr.labels.includes('release')) return refuse(`#${pr.number}: no release label`);
   if (pr.state !== 'open' && !pr.merged) return refuse(`#${pr.number}: closed without merge`);
   if (commit.sha !== pr.head) return refuse(`#${pr.number}: head commit lookup returned another commit`);
+  if (!pr.merged && !MERGEABLE_STATES.has(mergeState)) {
+    return refuse(mergeState === 'BLOCKED'
+      ? `#${pr.number}: a required check on the release PR head is not green yet (extension / smoke takes about 14 min). Wait for it, or rerun the failed check, then rerun release-promote`
+      : `#${pr.number}: main would not accept the merge (mergeStateStatus ${mergeState || 'unread'}). Rerun release-promote once the PR is mergeable`);
+  }
   // The release branch is the candidate plus one commit that adds the release record. Anything
   // else on it would ship code the rc never built.
   if (commit.parents.length !== 1) return refuse(`#${pr.number}: head is not a single commit on the candidate`);
@@ -139,7 +152,14 @@ export function gatherPromotion(number, repo) {
   }
   const version = branchVersion(pr.headRef);
   const rcTag = version ? recordedRcTag(commit.message, version) : null;
-  return {pr, commit, writers, rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
+  // GitHub computes mergeStateStatus lazily: UNKNOWN right after a push or review settles in seconds.
+  let mergeState = '';
+  for (let i = 0; !pr.merged && i < 5; i++) {
+    mergeState = gh('pr', 'view', String(number), '--repo', repo, '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus');
+    if (mergeState !== 'UNKNOWN') break;
+    execFileSync('sleep', ['3']);
+  }
+  return {pr, commit, writers, mergeState, rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
     rcRelease: rcTag ? releaseOf(rcTag) : null};
 }
 
