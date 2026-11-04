@@ -950,6 +950,8 @@ export type HostMessage = (
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
+  /** CGP-ART-D-002 — the preview bar's 바뀐 곳 보기: open the chat review at this file (null: just the bar). */
+  | { type: "turnReviewShow"; turnId: string; path: string | null }
   /** REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder is gone: one notice with 다시 고르기; null hides it. */
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */

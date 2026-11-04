@@ -3175,6 +3175,32 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
   manual edit inside the turn window counts), the not-covered names, the external-state line, and
   **되돌리기** / **이대로 둘게요**. It never auto-dismisses; it survives a webview remount (re-sent
   on `ready`), the next turn replaces it, and it is shown only in the task it was taken in.
+- **Review bar in the preview (CGP-ART-D-002 / DES-ART-02, extends CGP-ART-R-002 and AE-15).**
+  While the chat review above is open for the active task, the preview panel (`previewProvider.ts`)
+  shows a bar in a strip below the page, never over it (the page area shrinks, so its last pixels
+  stay visible): "AI가 {n}곳을 바꿨어요" (n = files added, changed or deleted, the chat bar's count)
+  with **바뀐 곳 보기** and **되돌리기** (secondary) and **이대로 둘게요** (primary). It is a mirror,
+  not a second undo: the host posts it from `postTurnReview` (`previewReviewBar`, turn id, state,
+  count and the chat bar's notice; no paths or contents) and every press goes to the same
+  `handleTurnReviewMessage` as the chat buttons, so the same modal, refusals, Evidence events and
+  "복구 직전" point apply. A press is accepted only for the bar's current turn, and keep or revert only
+  while it is open; the shell disables both after one press until the host answers. While a revert
+  runs it reads "되돌리는 중…"; a refusal ("진행 중인 작업이 끝난 뒤에 …") replaces the count; a failed
+  revert reads "되돌리지 못했어요. 채팅에서 확인해 주세요." with only **채팅에서 보기**. **바뀐 곳 보기**
+  moves to the chat and opens its review at the turn's first file (`turnReviewShow`). After a
+  successful revert the bar leaves and "되돌렸어요" is shown in the same strip for 4 s with
+  `role=status`, once per turn; a preview opened from a file is re-read and shown again, and a
+  generated preview that cannot be re-read says "되돌렸어요. 미리보기를 다시 열면 되돌린 내용이 보여요."
+  instead. It never auto-dismisses while open. Height is 48 px with targets of 44 px and 14 px text
+  at widths of 800 px and more; narrower, the bar wraps rather than cutting its count or buttons, and
+  never scrolls sideways. Left and right arrow keys inside the bar move it along the strip (24 px a
+  step, kept inside the preview) and Home puts it back, described to assistive technology through
+  `aria-describedby`. Appearance is a 120 ms fade, none with reduced motion; keyboard focus rings and
+  forced-colours boundaries are kept. Only host messages drive it (the shell's `fromHost` check), so
+  the previewed page cannot hide, replace or press it. The instructor surface has none. Verification:
+  U (`extensions/hypeproof-chat/test/preview-review-bar.smoke.mjs` — real preview host and shell in
+  headless Chromium at 320/800/1420 px, both themes, forced colours and reduced motion; host gates,
+  one toast, watched-file reload, wiring to the chat review).
 - **되돌리기.** Refused with a notice while a turn, a verify run or a task switch is in progress.
   First the current folder is recorded as its own point (`before_restore`, the "복구 직전" state
   AE-15 requires); if that fails, nothing is changed and the bar says so. Then files the point does
@@ -3201,8 +3227,8 @@ Not built: a per-task history of restore points or a picker for older ones (only
 offered; older points are kept for 10 turns but have no UI), per-file restore, the CGP-AGENT-R-026
 "바뀐 것" panel and the CGP-ART-R-020 summary, artifact version ids (CGP-ART-R-002 (2)), separating
 tool success from check success (AE-05), attributing a change to shell or subagent tools (they are
-counted, as any folder change is, but not labelled), refreshing the preview after a revert (the
-page shown stays until the learner reopens it), and any Chalk view. Mid-turn changes outside the
+counted, as any folder change is, but not labelled), refreshing a generated preview after a revert (a preview opened from a file is re-read; a
+generated page stays until the learner reopens it), and any Chalk view. Mid-turn changes outside the
 work folder are out of scope by design. Verification: U (`extensions/hypeproof-chat/test/turn-restore-large.smoke.mjs`
 — a synthetic folder of 20,000 files where a turn edits 2 files and creates 1 in a new nested folder: undo
 restores exactly those bytes, removes the created file and folders, leaves all other files, copies only

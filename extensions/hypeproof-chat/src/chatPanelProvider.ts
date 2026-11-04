@@ -237,7 +237,8 @@ import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchiv
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, scanForPoint, takeRestorePoint, turnRestoreStoreDir, folderFitsRestoreLimits, TurnWriteTracker, TRACKED_SHELL_NOTICE, trackedTooLargeLine, type RestoreManifest, type TrackedCapture } from "./turnRestore";
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
-import type { TurnReviewView } from "./turnReviewView";
+import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
+import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
@@ -7195,6 +7196,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       view = rest;
     }
     void this.post({ type: "turnReviewState", view });
+    // CGP-ART-D-002 — the preview's bar mirrors the same review; the instructor surface has none (as in chat).
+    this.preview.setReviewBar(this._instructorMode?.isInstructor ? null : previewReviewBar(view));
+  }
+
+  /** CGP-ART-D-002 — a press on the preview's review bar runs the chat review's own keep, revert or show. */
+  async handlePreviewReviewAction(a: PreviewReviewAction): Promise<void> {
+    const review = this.turnReview;
+    if (!review || review.view.turnId !== a.turnId || review.taskKey !== this.turnRestoreTaskKey() || this._instructorMode?.isInstructor) return;
+    if (a.action === "show") {
+      await vscode.commands.executeCommand("hypeproof-chat.focus");
+      const v = review.view;
+      const path = v.state === "open" ? [...v.added, ...v.changed, ...v.deleted][0] ?? null : null;
+      void this.post({ type: "turnReviewShow", turnId: v.turnId, path });
+      return;
+    }
+    await this.handleTurnReviewMessage({ type: a.action === "revert" ? "turnRevert" : "turnKeep", turnId: a.turnId });
   }
 
   private async enrichPageCard(taskKey:string, root:string, turnId:string):Promise<void> {
