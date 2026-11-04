@@ -7197,7 +7197,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     void this.post({ type: "turnReviewState", view });
     // CGP-ART-D-002 — the preview's bar mirrors the same review; the instructor surface has none (as in chat).
-    this.preview.setReviewBar(this._instructorMode?.isInstructor ? null : previewReviewBar(view));
+    this.preview?.setReviewBar(this._instructorMode?.isInstructor ? null : previewReviewBar(view));
   }
 
   /** CGP-ART-D-002 — a press on the preview's review bar runs the chat review's own keep, revert or show. */
