@@ -90,6 +90,14 @@ await new Promise(r => setTimeout(r, 0));
 assert.equal(last().bar.stale, true, 'a generated preview says it was not reloaded');
 preview.setReviewBar(null);
 assert.equal(last().bar, null);
+// A newer bar sent while the reverted page is re-read is not hidden by the late toast.
+let finish;
+preview.watchForReload({ fsPath: '/w/slow.html' }, () => new Promise(r => { finish = r; }));
+preview.setReviewBar({ turnId: 't4', state: 'restored', count: 1 });
+preview.setReviewBar({ turnId: 't5', state: 'open', count: 2 });
+finish('<p>slow</p>');
+await new Promise(r => setTimeout(r, 0));
+assert.equal(last().bar.turnId, 't5', 'the late toast does not replace a newer bar');
 void save;
 const shell = panel.webview.html;
 console.log('preview review bar host PASS: mirror, ready re-post, turn/state gates, one toast, reload');

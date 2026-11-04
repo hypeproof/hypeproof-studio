@@ -87,11 +87,13 @@ export class PreviewProvider {
   // preview and the chat offer one undo, never two.
   private reviewBar: PreviewReviewBar | null = null;
   private toastedTurn: string | null = null;
+  private reviewSeq = 0;
   private readonly reviewActionEmitter = new vscode.EventEmitter<PreviewReviewAction>();
   readonly onReviewAction = this.reviewActionEmitter.event;
 
   /** Mirror the chat's turn review (null hides the bar). A revert result is shown once, as a toast. */
   setReviewBar(bar: PreviewReviewBar | null): void {
+    const seq = ++this.reviewSeq;
     if (bar?.state === "restored") {
       if (this.toastedTurn === bar.turnId) bar = null;
       else {
@@ -101,7 +103,8 @@ export class PreviewProvider {
         this.reviewBar = null;
         const restored = bar;
         void (this.watchedFile ? this.reloadWatched() : Promise.resolve(false)).then((reloaded) => {
-          if (this.ready) void this.panel?.webview.postMessage({ type: "previewReviewState", bar: { ...restored, stale: !reloaded } });
+          // A newer bar sent while the page was re-read wins; the late toast is dropped.
+          if (seq === this.reviewSeq && this.ready) void this.panel?.webview.postMessage({ type: "previewReviewState", bar: { ...restored, stale: !reloaded } });
         });
         return;
       }
@@ -434,7 +437,7 @@ export class PreviewProvider {
   <iframe id="frame" style="display:none" sandbox="${PREVIEW_IFRAME_SANDBOX}" allow="${PREVIEW_IFRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>
   <div id="review-strip" hidden>
     <section id="review-bar" hidden aria-label="AI가 바꾼 곳" aria-describedby="review-move-hint">
-      <div id="review-text"><p id="review-title"></p><p id="review-notice" hidden></p></div>
+      <div id="review-text"><p id="review-title"></p><p id="review-notice" aria-live="polite" hidden></p></div>
       <div id="review-actions">
         <button id="review-show" type="button" class="secondary">바뀐 곳 보기</button>
         <button id="review-revert" type="button" class="secondary">되돌리기</button>
