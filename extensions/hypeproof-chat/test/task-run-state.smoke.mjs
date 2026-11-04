@@ -28,6 +28,7 @@ t("each state from its own input (positive controls)", () => {
   assert.equal(deriveTaskRunState({ ...idle, approvalPending: true }), "approval");
   assert.equal(deriveTaskRunState({ ...idle, lastOutcome: "stopped" }), "stopped");
   assert.equal(deriveTaskRunState({ ...idle, lastOutcome: "error" }), "error");
+  assert.equal(deriveTaskRunState({ ...idle, lastOutcome: "access" }), "access");
   assert.equal(deriveTaskRunState({ ...idle, lastOutcome: "done" }), "done");
 });
 t("precedence: approval > running > preparing", () => {
@@ -36,7 +37,7 @@ t("precedence: approval > running > preparing", () => {
   assert.equal(deriveTaskRunState({ ...idle, running: true, preparing: true }), "running");
 });
 t("a live turn outranks the previous turn's outcome (negative controls: an old 오류/멈춤/끝남 never shows during a run)", () => {
-  for (const lastOutcome of ["done", "stopped", "error"]) {
+  for (const lastOutcome of ["done", "stopped", "access", "error"]) {
     assert.equal(deriveTaskRunState({ ...idle, lastOutcome, preparing: true }), "preparing");
     assert.equal(deriveTaskRunState({ ...idle, lastOutcome, running: true }), "running");
     assert.equal(deriveTaskRunState({ ...idle, lastOutcome, approvalPending: true }), "approval");
@@ -44,7 +45,7 @@ t("a live turn outranks the previous turn's outcome (negative controls: an old �
 });
 t("labels: one short Korean label and a symbol per state", () => {
   assert.deepEqual(Object.fromEntries(Object.entries(TASK_RUN_STATE_LABELS).map(([k, v]) => [k, v.label])), {
-    preparing: "응답 준비 중", running: "작업 중", approval: "승인 기다리는 중", stopped: "멈춤", error: "오류", done: "끝남",
+    preparing: "응답 준비 중", running: "작업 중", approval: "승인 기다리는 중", stopped: "멈춤", access: "이용권 확인 필요", error: "오류", done: "끝남",
   });
   // REQ-STUDIO-STROKE-ICONS: each state names a stroke icon (a ChatIcon kind), not a Unicode symbol.
   for (const { label, icon } of Object.values(TASK_RUN_STATE_LABELS)) {

@@ -7,9 +7,9 @@
  */
 
 /** How this view's last turn ended. `null` = no turn ended in this view yet (no evidence). */
-export type TaskTurnOutcome = 'done' | 'stopped' | 'error' | null;
+export type TaskTurnOutcome = 'done' | 'stopped' | 'access' | 'error' | null;
 
-export type TaskRunState = 'preparing' | 'running' | 'approval' | 'stopped' | 'error' | 'done';
+export type TaskRunState = 'preparing' | 'running' | 'approval' | 'stopped' | 'access' | 'error' | 'done';
 
 export interface TaskRunInputs {
   /** A send left the composer and the host has not opened its stream yet. */
@@ -30,7 +30,7 @@ export function deriveTaskRunState(input: TaskRunInputs): TaskRunState | null {
 }
 
 /** The stroke icons (webview ChatIcon kinds) a run state may draw. */
-export type TaskRunIcon = 'dots' | 'dot' | 'hand' | 'stop' | 'alert' | 'check';
+export type TaskRunIcon = 'dots' | 'dot' | 'hand' | 'stop' | 'alert' | 'ticket' | 'check';
 
 /**
  * One short Korean label and an icon per state. The words are always drawn; the icon is decoration,
@@ -42,6 +42,7 @@ export const TASK_RUN_STATE_LABELS: Record<TaskRunState, { label: string; icon: 
   running: { label: '작업 중', icon: 'dot' },
   approval: { label: '승인 기다리는 중', icon: 'hand' },
   stopped: { label: '멈춤', icon: 'stop' },
+  access: { label: '이용권 확인 필요', icon: 'ticket' },
   error: { label: '오류', icon: 'alert' },
   done: { label: '끝남', icon: 'check' },
 };
