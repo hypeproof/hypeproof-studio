@@ -11,7 +11,8 @@
 //   - removing the work folder itself (`rm -rf .`);
 //   - system and outward verbs (sudo, kill, launchctl, defaults, npm publish, git push --force,
 //     curl | sh, npx/npm scripts, git reset/clean, every Windows destructive verb);
-//   - anything the tokeniser cannot read, any substitution, any `cd` (later paths become unknown).
+//   - anything the tokeniser cannot read, any substitution, any `cd` (later paths become unknown);
+//   - any glob, brace expansion, zsh `=cmd` or glob qualifier (they expand to names this module never checked).
 //
 // Pure apart from the injected canonicaliser, so the smoke test can vary it.
 import path from "node:path";
@@ -43,23 +44,26 @@ export function destructiveStaysInFolder(
   if (!workspaceRoot || !command.trim()) return false;
   const parsed = parseShell(command);
   if (parsed.uncertain || parsed.nested.length > 0 || parsed.commands.length === 0) return false;
+  // Expansions the tokeniser reads as plain text (verify 2026-11-04 H2): brace expansion `{../x,y}`, zsh glob
+  // qualifiers and extended globs `*(e:…:)`, subshells, and zsh `=cmd` (a path from $PATH). Never silent.
+  if (/[{}()]/.test(command) || /(^|[\s;&|])=/.test(command)) return false;
   let root: string;
   try { root = canonicalize(workspaceRoot); } catch { return false; }
   // A target is inside when its static part resolves (links followed) strictly below or at the root.
   const inside = (w: ShellWord, removing: boolean): boolean => {
     if (w.dynamic || w.assignment) return false;
     const text = w.text;
-    if (!text || text.startsWith("~")) return false;
-    // `.*` matches `..` in some shells; a hidden-file glob is never silent.
-    if (w.glob && /(^|\/)\.[^/]*[*?[]/.test(text)) return false;
-    const staticPart = w.glob ? text.slice(0, text.search(/[*?[]/)) : text;
-    const dir = w.glob ? (staticPart.endsWith("/") ? staticPart : path.dirname(staticPart || ".")) : staticPart;
+    if (!text || text.startsWith("~") || text.startsWith("=")) return false;
+    // A glob is never silent (verify 2026-11-04 H1): it expands to names the app has not checked, including symlinks
+    // that point outside (`rm -rf */`) and `..` after the wildcard (`*/../../x`).
+    if (w.glob) return false;
     let resolved: string;
-    try { resolved = canonicalize(path.isAbsolute(dir) ? dir : path.join(root, dir || ".")); } catch { return false; }
+    // Links are followed: a link inside that points outside counts as outside (chmod, truncate, mv and cp follow it).
+    try { resolved = canonicalize(path.isAbsolute(text) ? text : path.join(root, text)); } catch { return false; }
     const rel = path.relative(root, resolved);
     if (escapes(rel)) return false;
-    // The work folder itself is not a silent target of rm/rmdir/unlink (`rm -rf .`); a glob inside it is.
-    return !(removing && rel === "" && !w.glob);
+    // The work folder itself is not a silent target of rm/rmdir/unlink (`rm -rf .`).
+    return !(removing && rel === "");
   };
   for (const cmd of parsed.commands) {
     if (cmd.words.length === 0) return false;
@@ -70,7 +74,8 @@ export function destructiveStaysInFolder(
     for (const r of cmd.redirects) {
       if (!r.op.includes(">")) continue;
       if (r.op === ">&" && /^\d+$|^-$/.test(r.target.text)) continue;
-      if (r.target.text === "/dev/null" || r.target.text.startsWith("/tmp/")) continue;
+      // Only /dev/null exactly (verify 2026-11-04 H3: a raw `/tmp/` prefix let `/tmp/../Users/x/.zshrc` through).
+      if (r.target.text === "/dev/null") continue;
       if (!inside(r.target, false)) return false;
     }
     if (FOLDER_FILE_VERBS.has(head)) {

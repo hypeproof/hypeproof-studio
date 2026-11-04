@@ -136,7 +136,7 @@ export interface PublishSiteDeps {
    * preview and no content checklist. Read before `confirmPublish`, so a destination allowed during this very run
    * still gets its preview and checklist the first time. Absent → every run asks (REQ-KNOW-63 as before).
    */
-  rememberedDestination?: (login: string, repo: string) => boolean;
+  rememberedDestination?: (login: string, repo: string, stage: "save" | "publish") => boolean;
   /**
    * Which repository the open folder publishes to, asked after sign-in because a folder's
    * binding belongs to a GitHub login. `{ repo }`: the folder published from this computer
@@ -150,7 +150,7 @@ export interface PublishSiteDeps {
   /** The commit our last push to `<login>/<repo>` created (divergence stop, D18 ⑤). */
   lastPushedSha?: (login: string, repo: string) => string | undefined;
   /** A push succeeded: remember its commit for the next divergence check. */
-  onPushed?: (login: string, repo: string, sha: string) => Promise<void>;
+  onPushed?: (login: string, repo: string, sha: string, stage?: "save" | "publish") => Promise<void>;
   onStep?: (step: PublishStep, at: number) => void;
   onDeviceCode?: (code: string, verificationUri: string) => void;
   /** Developer-side detail (HTTP statuses, GitHub messages). Never shown to the participant. */
@@ -367,7 +367,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     if (checkOnly) return await checkStatus(api, login, repoName, plannedUrl, domain);
 
     // ── consent (registration), before the first write ────────────────────────
-    const remembered = deps.rememberedDestination?.(login, repoName) === true;
+    const remembered = deps.rememberedDestination?.(login, repoName, stage) === true;
     const consent = deps.confirmPublish ? await deps.confirmPublish(login, repoName, stage) : true;
     if (consent === "not_allowed") {
       steps.set("repo", "skipped", "이 GitHub 계정·저장소로는 등록되어 있지 않아 올리지 않았어요.");
@@ -415,7 +415,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
         steps.set("commit", "failed", c.code === "remote_changed" ? "GitHub에서 직접 고친 내용이 있어 올리지 않았어요." : "파일을 저장소에 올리지 못했어요.");
         return fail(c.code, c.detail);
       }
-      await deps.onPushed?.(login, repoName, c.sha);
+      await deps.onPushed?.(login, repoName, c.sha, "save");
       steps.set("commit", "ok", `파일 ${site.length}개를 저장소에 올렸어요. 아직 인터넷 주소는 열리지 않아요(404가 정상이에요).${markerSuffix()}`);
       return result(true, false);
     }
@@ -441,7 +441,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       return fail(commit.code, commit.detail);
     }
     // Recorded at once: the push happened even if the build or verification later fails.
-    await deps.onPushed?.(login, repoName, commit.sha);
+    await deps.onPushed?.(login, repoName, commit.sha, "publish");
     steps.set("commit", "ok", `파일 ${site.length}개를 한 번에 올렸어요.`);
 
     // ── build + verify ──────────────────────────────────────────────────────

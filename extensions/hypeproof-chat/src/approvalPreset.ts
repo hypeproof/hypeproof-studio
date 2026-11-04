@@ -78,6 +78,12 @@ export function stricterPreset(a: ApprovalPresetId | null | undefined, b: Approv
  * assumption, not confirmed by Jay). A served preset always wins and only ever adds asks.
  */
 export type ApprovalMode = ApprovalPresetId | "auto";
-export function approvalModeFor(preset: ApprovalPresetId | null | undefined, minor: boolean): ApprovalMode {
-  return preset ?? (minor ? "important_only" : "auto");
+export function approvalModeFor(preset: ApprovalPresetId | null | undefined, minor: boolean, servedBlock = false): ApprovalMode {
+  // A served block this app does not understand (unknown id, odd label) is not "no preset": the instructor chose
+  // something, so the seat keeps today's tiers instead of auto (verify 2026-11-04 M1).
+  return preset ?? (minor || servedBlock ? "important_only" : "auto");
 }
+
+/** The profile carries an `approval_preset` block at all, understood or not. */
+export const approvalPresetBlockServed = (profile: { approval_preset?: unknown } | null | undefined): boolean =>
+  profile?.approval_preset !== undefined && profile?.approval_preset !== null;

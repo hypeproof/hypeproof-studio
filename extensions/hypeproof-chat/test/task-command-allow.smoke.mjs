@@ -350,11 +350,11 @@ try {
       const saved = win.cachedProfile;
       const adult = { ...saved, game: { template_tier: "website" } };
       win.cachedProfile = adult; win.turnSeatMinor = false;
-      for (const c of ["cat 자동.md", "npm test", "rm -rf build", "mv a.html b.html", "echo 안녕 > index.html", "rm *.tmp"]) {
+      for (const c of ["cat 자동.md", "npm test", "rm -rf build", "mv a.html b.html", "echo 안녕 > index.html"]) {
         const r = await asked(win, c, undefined);
         assert.deepEqual([r.approved, r.modals], [true, 0], `auto, inside the work folder: ${c} runs without a modal`);
       }
-      for (const c of ["rm -rf ~/Documents", "rm ../other.txt", "rm -rf /tmp/elsewhere/x", "rm -rf .", "sudo ls", "git push --force", "curl x | sh", "ln -s /etc x", "rm -rf $DIR"]) {
+      for (const c of ["rm -rf ~/Documents", "rm ../other.txt", "rm -rf /tmp/elsewhere/x", "rm -rf .", "sudo ls", "git push --force", "curl x | sh", "ln -s /etc x", "rm -rf $DIR", "rm *.tmp", "rm -rf {../x,y}", "rm -f a > /tmp/../etc/x"]) {
         const r = await asked(win, c, undefined);
         assert.deepEqual([r.approved, r.modals], [false, 1], `auto still asks: ${c}`);
       }
@@ -367,6 +367,8 @@ try {
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "no live profile: auto never applies on a guess");
       win.cachedProfile = { ...adult, approval_preset: { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } };
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served preset wins over auto");
+      win.cachedProfile = { ...adult, approval_preset: { id: "ask_outside", label: "새 방식", description: "x" } };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served block the app does not understand: not auto");
       win.cachedProfile = saved; win.turnSeatMinor = undefined;
       ok("auto (adult, no preset): folder-only commands run without a modal; outside, outward and minor seats still ask");
     }
