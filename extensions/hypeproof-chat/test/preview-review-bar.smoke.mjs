@@ -105,7 +105,7 @@ console.log('preview review bar host PASS: mirror, ready re-post, turn/state gat
 // ── wiring: one undo, the chat review's own ──
 const src = readFileSync(`${root}/src/chatPanelProvider.ts`, 'utf8');
 const post = src.slice(src.indexOf('private postTurnReview(): void {'), src.indexOf('private async enrichPageCard'));
-assert.match(post, /this\.preview\?\.setReviewBar\(this\._instructorMode\?\.isInstructor \? null : previewReviewBar\(view\)\)/, 'postTurnReview mirrors the task-scoped review to the preview');
+assert.match(post, /this\.preview\?\.setReviewBar\?\.\(this\._instructorMode\?\.isInstructor \? null : previewReviewBar\(view\)\)/, 'postTurnReview mirrors the task-scoped review to the preview');
 assert.match(post, /await this\.handleTurnReviewMessage\(\{ type: a\.action === "revert" \? "turnRevert" : "turnKeep", turnId: a\.turnId \}\)/, 'presses reuse the chat revert and keep');
 assert.match(post, /type: "turnReviewShow"/, '바뀐 곳 보기 opens the chat review');
 assert.match(readFileSync(`${root}/src/extension.ts`, 'utf8'), /preview\.onReviewAction\(\(a\) => void provider\.handlePreviewReviewAction\(a\)\)/);
