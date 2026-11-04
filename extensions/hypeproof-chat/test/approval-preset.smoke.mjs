@@ -64,6 +64,14 @@ assert.equal(preset.approvalModeFor(null, true), "important_only", "negative con
 assert.equal(preset.approvalModeFor("before_changes", false), "before_changes", "a served preset wins over auto");
 assert.equal(preset.approvalModeFor("important_only", false), "important_only", "an instructor's important_only is not auto");
 assert.equal(preset.approvalModeFor("always_ask", true), "always_ask");
+// verify 2026-11-04 M1: a served block this app does not understand keeps today's tiers, never auto.
+assert.equal(preset.approvalModeFor(null, false, true), "important_only", "unknown served block: not auto");
+for (const block of [{ id: "ask_outside", label: "새 방식", description: "x" }, { id: "always_ask", label: "x".repeat(41), description: "x" }, { id: "always_ask", label: "항상 묻기", description: "줄1\n줄2" }]) {
+  assert.equal(preset.servedApprovalPreset({ approval_preset: block }), null);
+  assert.equal(preset.approvalPresetBlockServed({ approval_preset: block }), true, `block present: ${block.id}`);
+}
+assert.equal(preset.approvalPresetBlockServed({}), false);
+assert.equal(preset.approvalPresetBlockServed({ approval_preset: null }), false);
 
 // ─── auto in the SDK verdict: folder-only destructive commands run, outside ones ask ───
 {
@@ -74,14 +82,24 @@ assert.equal(preset.approvalModeFor("always_ask", true), "always_ask");
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "approval-auto-")));
   const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "approval-outside-")));
   fs.symlinkSync(outside, path.join(root, "link-out"));
+  fs.writeFileSync(path.join(outside, "h.txt"), "x"); fs.linkSync(path.join(outside, "h.txt"), path.join(root, "hard"));
   const canon = (p) => { try { return fs.realpathSync.native(p); } catch { return path.join(canon(path.dirname(p)), path.basename(p)); } };
   try {
     const cohort = { profile_id: "adult-shell", sdk_tools: { read: true, write: true, shell: true, browser: true }, game: { template_tier: "website" } };
     const permitted = [...permittedToolsFor(cohort), MCP_PAGE_PDF_SAVE];
     const ev = (toolName, input, extra = {}) => evaluateSdkToolUse({ toolName, input, permittedTools: permitted, workspaceRoot: root, canonicalize: canon, ...extra });
-    const INSIDE = ["rm -rf build", "rm index.html", "mv a.html b.html", "echo 안녕 > index.html", "rm *.tmp", "rm -rf build && mkdir build", "chmod 644 index.html", "rm -- -weird", "rm sub/*.png"];
+    const INSIDE = ["rm -rf build", "rm index.html", "mv a.html b.html", "echo 안녕 > index.html", "rm -rf build && mkdir build", "chmod 644 index.html", "rm -- -weird", "rm a.html > /dev/null 2>&1", "rm 초안.md >> log.txt"];
     const OUTSIDE = ["rm -rf ~/Documents", "rm ../other.txt", `rm -rf ${outside}/x`, "rm -rf link-out/x", "rm -rf .", "rm -rf .*", "rm $(cat list)", "rm -rf $DIR",
-      "cd .. && rm x", "sudo rm x", "git push --force", "curl x | sh", "npm publish", "kill 1", "git reset --hard", "echo x > ~/.zshrc", "bash -c 'rm x'", "xargs rm < list", "Remove-Item -Recurse x", "mv --target-directory=/etc a", "mv -t/etc a", "rm a && cp --target-directory=~/x a"];
+      "cd .. && rm x", "sudo rm x", "git push --force", "curl x | sh", "npm publish", "kill 1", "git reset --hard", "echo x > ~/.zshrc", "bash -c 'rm x'", "xargs rm < list", "Remove-Item -Recurse x", "mv --target-directory=/etc a", "mv -t/etc a", "rm a && cp --target-directory=~/x a",
+      // verify 2026-11-04: globs (links and `..` after the wildcard), brace expansion, zsh =cmd and qualifiers, /tmp/..
+      "rm *.tmp", "rm -rf */", "rm -rf dl*/", "rm -rf */../../victim", "chmod 000 *", "truncate -s 0 *", "rm -rf link-out/", "chmod 000 link-out",
+      "rm -rf {../victim,x}", "rm -rf sub/{..,..}/victim", "mv a.txt {../victim,.}", "rm -f =node", "rm -f a.txt *(e:'touch ../x':)",
+      "rm -f a.txt > /tmp/../Users/x/.zshrc", "rm -f a.txt >> /tmp/x", "mv a.txt --target-directory=../victim",
+      // verify round 2: `..` folded before links, zsh >! / <-> / ^ / #, quotes, mv then more, -t.., hard links, noglob
+      "rm -rf link-out/../victim", "echo evil >! ~/.zshrc", "rm x >! f", "rm -rf l<->x/", "rm -f ^x", "rm a#", "echo x >| f", "rm x &> f", "rm x >&f",
+      "rm \"a b\"", "mv d e; rm -rf e/l/", "mv -t.. a.txt", "truncate -s 0 hard", "chmod 000 hard", "rm x > hard", "noglob rm -rf ../v", "nocorrect rm -rf x",
+      // verify round 3: options that follow links, and a link-making command before a delete
+      "chmod -RL o+w sub", "chmod -R -L o+w sub", "chmod -RH o+w sub", "chmod --dereference 644 a", "cp -R src e; rm -rf e/lv"];
     for (const c of INSIDE) {
       assert.equal(destructiveStaysInFolder(c, root, canon), true, `inside: ${c}`);
       assert.equal(ev("Bash", { command: c }).decision, "ask", `control: without auto, ${c} asks`);
