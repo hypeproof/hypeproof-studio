@@ -13,6 +13,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const shown = [];
@@ -65,6 +66,8 @@ const plain = (x) => (x === null || x === undefined ? x : JSON.parse(JSON.string
 const SERVICE_SENTENCE = '앗, 이 이야기는 우리 워크숍에서 함께 다룰 수 없는 내용이에요. 대신 만들고 싶은 게임이나 궁금한 것을 물어봐 줄래요? 걱정되는 일이나 도움이 필요한 일이 있으면 옆에 계신 선생님께 꼭 이야기해 주세요.';
 const chatBody = (category, message = SERVICE_SENTENCE) => JSON.stringify({ error: { message, type: 'moderation_block', ...(category === undefined ? {} : { category }), request_id: 'req-1' } });
 const messagesBody = JSON.stringify({ type: 'error', error: { type: 'moderation_block', message: SERVICE_SENTENCE }, request_id: 'req-2' });
+// The Service's current /v1/messages block (moderation-block-category, CGP-LEARN-R-013): error.category is named.
+const messagesBodyNamed = (category) => JSON.stringify({ type: 'error', error: { type: 'moderation_block', message: SERVICE_SENTENCE, category }, request_id: 'req-3' });
 
 test('parseModerationBlock reads both Service shapes and nothing else', () => {
   assert.deepEqual(plain(M.parseModerationBlock(400, chatBody('self_harm'))), { message: SERVICE_SENTENCE, category: 'self_harm' });
@@ -192,5 +195,60 @@ test('host negative control: any other failure has no safetyNotice', async () =>
     const r = await present(err, classroomOn);
     assert.ok(r.posts.length >= 1);
     for (const p of r.posts) assert.equal(p.safetyNotice, undefined, err.message);
+  }
+});
+
+// CGP-LEARN-R-013 — the agent-sdk runtime (Service /v1/messages). The pinned CLI unwraps the body to
+// "API Error: 400 <error.message>" (fixtures/sdk-gateway-errors.json), so the Service tags the message with
+// [hps:moderation_help] (self_harm) or [hps:moderation_block] (any other). The line below is that real shape.
+const FIX = JSON.parse(readFileSync(new URL('./fixtures/sdk-gateway-errors.json', import.meta.url), 'utf8'));
+const cliLine = (category) => `API Error: 400 ${SERVICE_SENTENCE} [hps:moderation_${category === 'self_harm' ? 'help' : 'block'}]`;
+const cli = (category) => {
+  const err = new Error(`Claude Code returned an error result: ${cliLine(category)}`);
+  Object.defineProperty(err, 'status', { value: 400 });
+  return err;
+};
+
+test('agent-sdk: the fixture confirms the CLI line carries error.message only', () => {
+  for (const [name, s] of Object.entries(FIX.scenarios)) {
+    assert.ok(!/\{/.test(s.sdkThrew), `${name}: recorded CLI line has no JSON body`);
+    assert.ok(s.sdkThrew.includes(s.serviceBody.error.message), `${name}: recorded line carries error.message`);
+  }
+});
+
+test('agent-sdk: a tagged self_harm line is a block with its category and the clean sentence', () => {
+  assert.deepEqual(plain(M.moderationBlockOf(cli('self_harm'))), { message: SERVICE_SENTENCE, category: 'self_harm' });
+  const line = new Error('generic');
+  Object.defineProperty(line, 'sdkErrorLine', { value: cliLine('graphic_violence') });
+  assert.deepEqual(plain(M.moderationBlockOf(line)), { message: SERVICE_SENTENCE }, 'the neutral block tag names no category');
+  // A JSON body whose message carries the tag: the tag never reaches the learner.
+  assert.deepEqual(plain(M.moderationBlockOf(new Error(`API Error: 400 ${messagesBodyNamed('self_harm').replace(SERVICE_SENTENCE, SERVICE_SENTENCE + ' [hps:moderation_help]')}`))), { message: SERVICE_SENTENCE, category: 'self_harm' });
+  // Negative controls: untagged 400 sentence, unknown category tag, another status, no CLI marker.
+  assert.equal(M.moderationBlockOf(new Error(`Claude Code returned an error result: API Error: 400 ${SERVICE_SENTENCE}`)), null);
+  assert.equal(M.moderationBlockOf(new Error(`API Error: 400 ${SERVICE_SENTENCE} [hps:moderation_self_harm]`)), null, 'only the neutral tags count');
+  assert.equal(M.moderationBlockOf(new Error(`API Error: 403 ${SERVICE_SENTENCE} [hps:moderation_help]`)), null);
+  assert.equal(M.moderationBlockOf(new Error(`the model said ${SERVICE_SENTENCE} [hps:moderation_help]`)), null);
+  assert.equal(M.moderationBlockOf(new Error(`API Error: 400 bad request "[hps:moderation_help]" quoted`)), null, 'a tag mid-line is not the Service tag');
+});
+
+test('agent-sdk: a tagged self_harm block gets the help lines only when the profile allows them', async () => {
+  let r = await present(cli('self_harm'), classroomOn);
+  assert.equal(r.posts.length, 1);
+  assert.equal(r.posts[0].type, 'streamError');
+  assert.equal(r.posts[0].error, SERVICE_SENTENCE, 'the tag is never shown');
+  assert.equal(r.posts[0].retry, false);
+  assert.deepEqual(plain(r.posts[0].safetyNotice.help.lines), [{ label: '자살예방상담전화', number: '109' }, { label: '청소년상담', number: '1388' }]);
+  assert.equal(r.posts[0].safetyNotice.help.adultLine, '선생님께 바로 이야기해도 괜찮아요.');
+  assert.deepEqual(r.shown, [], 'no VS Code notification (and so no sound)');
+
+  r = await present(cli('self_harm'), { activity_kind: 'personal', safety_help_lines: true });
+  assert.equal(r.posts[0].safetyNotice.help.adultLine, '가까운 어른께 바로 이야기해도 괜찮아요.', 'a solo seat names a nearby adult');
+
+  // Negative controls: flag off, another category.
+  for (const [category, profile] of [['self_harm', classroomOff], ['graphic_violence', classroomOn]]) {
+    r = await present(cli(category), profile);
+    assert.equal(r.posts.length, 1, category);
+    assert.ok(r.posts[0].safetyNotice, `${category}: still the calm notice`);
+    assert.equal(r.posts[0].safetyNotice.help, undefined, `${category}: no help lines`);
   }
 });

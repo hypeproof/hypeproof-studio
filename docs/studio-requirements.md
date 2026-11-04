@@ -2794,7 +2794,7 @@ Anthropic 미성년자 가이드(#282 의 2026-07-13 라이선싱 코멘트) 구
 | ID | 요구사항 | 수용 기준 | Layer |
 |---|---|---|---|
 | REQ-O1 | Minor cohort 판별 fail-safe | `minor_cohort: true` 플래그 **또는** `audience.age_range` 상한 < 18 → minor (`isMinorCohort`). 플래그 누락이 모더레이션을 silent-disable 할 수 없음. `/v1/profile` 응답에 `minor_cohort` 노출 (클라이언트 AI 디스클로저 등 minor UX 근거) | R (`worker/test/moderation.test.mjs`) |
-| REQ-O2 | 인바운드 게이트웨이 모더레이션 | minor cohort 의 최신 user 텍스트를 **upstream 호출 전** 스크린 (`/v1/chat` + `/v1/messages` 동일, stream/non-stream 공통). 카테고리: 노골적 성적 콘텐츠 · 자해 지시 · 잔혹 폭력 · PII 요구 (전화번호/집주소/주민번호). 한국어 토큰은 multi-char only (bare 색 → 검색 매칭 함정). 차단 시 400 + `type: "moderation_block"` + kid-friendly 한국어 문구 + `request_id`, upstream 호출 0회 | R (`worker/test/moderation.test.mjs`) |
+| REQ-O2 | 인바운드 게이트웨이 모더레이션 | minor cohort 의 최신 user 텍스트를 **upstream 호출 전** 스크린 (`/v1/chat` + `/v1/messages` 동일, stream/non-stream 공통). 카테고리: 노골적 성적 콘텐츠 · 자해 지시 · 잔혹 폭력 · PII 요구 (전화번호/집주소/주민번호). 한국어 토큰은 multi-char only (bare 색 → 검색 매칭 함정). 차단 시 400 + `type: "moderation_block"` + `category` (두 경로 모두, CGP-LEARN-R-013) + kid-friendly 한국어 문구 + `request_id`, upstream 호출 0회 | R (`worker/test/moderation.test.mjs`) |
 | REQ-O3 | 아웃바운드 non-stream 모더레이션 | non-stream 응답의 assistant 텍스트 스크린 — 차단 시에도 usage 계량은 유지 (토큰은 실소비). **스트리밍 아웃바운드는 문서화된 후속** (스트림 버퍼링 금지 — 인바운드 스크린 + 코호트 child-safety 프롬프트가 스트림 경로 방어) | R (`worker/test/moderation.test.mjs`) |
 | REQ-O4 | 성인 코호트 무영향 | adult profile 은 스크린을 아예 호출하지 않음 — 동일 텍스트가 성인 경로에선 그대로 통과 | R (`worker/test/moderation.test.mjs`) |
 | REQ-O5 | 로그 위생 | 차단 로그(console.error + Analytics `moderation_block` datapoint)는 category + rule id + FNV hash 만 — 매칭된 텍스트 verbatim 절대 금지 | R (`worker/test/moderation.test.mjs`) |
@@ -2823,6 +2823,16 @@ Learner (Studio, `extensions/hypeproof-chat/src/safetyNotice.ts`, `webview-ui/sr
   (solo seats: "가까운 어른께 …") are added only when the Service named `category: "self_harm"`
   and the served profile has `safety_help_lines: true` (DEC-LEARN-13a, default off). Numbers are plain,
   selectable text, never links: a desktop cannot dial, and a link would leave the safe session.
+- Both runtimes get the calm notice and the help lines (CGP-LEARN-R-013). The proxy runtime reads
+  `error.category` from the `/v1/chat/completions` body. The agent-sdk runtime sees only the CLI line:
+  the pinned Agent SDK CLI unwraps a 4xx body to `API Error: 400 <error.message>`
+  (`test/fixtures/sdk-gateway-errors.json`), so the Service's `/v1/messages` block message ends with
+  a neutral tag (Service `docs/requirements/moderation-block-category.md`): `[hps:moderation_help]`
+  for `self_harm`, `[hps:moderation_block]` for any other. Studio reads `self_harm` from the help tag,
+  under the same gate, only when the tag is the line's last token. The tag is never shown (Studio
+  v2026.1020.0 and later strip `[hps:…]`; an older build prints the raw line, which is why the tag
+  never names the category). An untagged 400 sentence (an older Service) stays the generic banner,
+  because it cannot be told from another 400.
 - No VS Code notification is raised for a block, so there is no OS sound.
 
 Instructor (Chalk `/manage`, `chalk/src/lib/safety-signal.ts`):
@@ -2840,11 +2850,12 @@ Instructor (Chalk `/manage`, `chalk/src/lib/safety-signal.ts`):
 - The Service field is DEC-LEARN-13b's contract. The Service does not send it yet (it records the
   category only in Analytics); until it does, the region stays hidden.
 
-Not covered here: the 10 s delivery, the operator-protocol link and guardian notification (REQ row
-CGP-LEARN-R-013), and help lines on the agent-sdk runtime (its `/v1/messages` block has no category).
+Not covered here: the 10 s instructor delivery (the Service does not yet send the per-seat `safety`
+field of DEC-LEARN-13b), the operator-protocol link and guardian notification (REQ row CGP-LEARN-R-013),
+and a Service profile that serves `safety_help_lines` (no profile does, so the help lines stay off).
 
 Evidence: `extensions/hypeproof-chat/test/safety-notice.smoke.mjs` (parsing, hostile text, help-line
-gate, proxy runtime, host turn ending), `test/safety-notice.test.tsx` (render, classroom and personal),
+gate, proxy runtime, host turn ending, agent-sdk runtime with a named category), `test/safety-notice.test.tsx` (render, classroom and personal),
 `test/safety-notice-css.smoke.mjs` (no red, no motion, 14px, 44px, focus ring, forced colours, with
 negative controls), `chalk/test/safety-signal.test.mjs` (shipped `/manage` script) and
 `chalk/test/safety-signal-css.test.mjs`.
