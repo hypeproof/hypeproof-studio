@@ -125,6 +125,7 @@ import {
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
+import { presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
 import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
@@ -8952,6 +8953,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // REQ-STUDIO-FOLDER-CONSENT — a personal activity in a folder that is not its own asks once; the choice only narrows.
     const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
+    // CGP-AGENT-R-002 — the approval preset this turn runs under (the label and the SDK verdict use the same value).
+    this.turnApprovalPreset = servedApprovalPreset(profile)?.id ?? null;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
@@ -10673,7 +10676,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Public so e2e tests can synthesize requests without spinning through the
    * streamed-assistant path.
    */
+  /** CGP-AGENT-R-001 — the lesson approval preset the current turn started under (handleSend). */
+  private turnApprovalPreset: ApprovalPresetId | null = null;
+
   async resolveActionApproval(req: ActionRequest, onPrompted?: () => void, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
+    // CGP-AGENT-R-001 — the lesson's approval preset only ever adds asks (approvalPreset.ts):
+    // before_changes/always_ask put writes and every command behind the modal (Tier 3, and the SDK
+    // verdict asks for every command); always_ask also ignores and never offers a remembered allow.
+    // The stricter of the preset this turn started under and the live profile's: a refresh mid-turn
+    // (cachedProfile is null while it refetches) or a looser lesson never loosens before the next turn.
+    const preset = stricterPreset(this.turnApprovalPreset, servedApprovalPreset(this.cachedProfile)?.id ?? null);
+    const forgetAllows = presetForgetsAllows(preset);
     // Tier 1 — shell (epic #431). No longer a hard deny: a cohort that set
     // `sdk_tools.shell` gets arbitrary commands, and THIS modal is the gate.
     // Four shapes, in order of how much they interrupt:
@@ -10695,7 +10708,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (onDenied) onDenied("folder"); else await this.postDenialNotice("folder");
         return false;
       }
-      const exact = destructive ? null : taskCommandExact(command);
+      const exact = destructive || forgetAllows ? null : taskCommandExact(command);
 
       if (exact && this.taskCommandAllows.has(scope.key, exact.key)) {
         return true;
@@ -10730,8 +10743,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const blank = url === BLANK_BROWSER_URL;
       if (!blank && !target.host) return false;
       const origin = target.web ? originOfUrl(url) : null;
-      if (origin && this.approvedBrowserOrigins.has(origin)) return true;
-      const rememberLabel = origin ? browserRememberLabel(url) : null;
+      if (origin && !forgetAllows && this.approvedBrowserOrigins.has(origin)) return true;
+      const rememberLabel = origin && !forgetAllows ? browserRememberLabel(url) : null;
       onPrompted?.();
       const pick = await this.browserApprovalRequest.confirm({
         id:crypto.randomUUID(), title:cleanName(browserApprovalTitle(this.coachDisplayName())),
@@ -10828,12 +10841,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // was still alive while browserType, absent from the list, was unconditionally
     // auto-allowed. To change the policy, edit `default` and `items.enum` in
     // package.json (a smoke test locks it).
-    const required = cfg.get<string[]>("requireApprovalFor", [
+    const required = presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", [
       "executeShell",
       "openBrowser",
       "delegateAgent",
       "browserType",
-    ]);
+    ]), preset);
     const needsApproval = required.includes(req.kind);
     if (!needsApproval) return true;
 
@@ -11027,7 +11040,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
     });
     // REQ-M47 and CGP-SHELL-R-024 evaluate a served profile the same way: this access choice, this runtime setting, this fallback.
-    const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: cfg.get<string[]>("requireApprovalFor", []) };
+    const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", []), servedApprovalPreset(this.cachedProfile)?.id) };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
     const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks

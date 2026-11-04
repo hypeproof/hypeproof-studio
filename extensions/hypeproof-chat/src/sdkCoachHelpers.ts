@@ -56,6 +56,7 @@ import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
+import { presetAsksBeforeChanges, type ApprovalPresetId } from "./approvalPreset.ts";
 import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
@@ -3058,6 +3059,12 @@ export function evaluateSdkToolUse(args: {
    * the source of a Gate 1 deny (폴더 권한); never changes the verdict.
    */
   folderRemoved?: ReadonlySet<string>;
+  /**
+   * CGP-AGENT-R-001 — the lesson's approval preset (approvalPreset.ts). Can only turn an
+   * "allow" into an "ask" (before_changes / always_ask: every shell command asks); never
+   * changes a deny and never turns an ask into an allow. Absent → today's verdicts.
+   */
+  approvalPreset?: ApprovalPresetId | null;
 }): SdkToolVerdict {
   const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
@@ -3149,7 +3156,8 @@ export function evaluateSdkToolUse(args: {
     if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
       return { decision: "ask", destructive: true };
     }
-    return { decision: "allow" };
+    // CGP-AGENT-R-001 — a stricter lesson preset asks before every command, not only destructive ones.
+    return presetAsksBeforeChanges(args.approvalPreset) ? { decision: "ask" } : { decision: "allow" };
   }
 
   // ── Agent/Task tool — subagent delegation (#282 P2 slice 3, REQ-M22) ──────

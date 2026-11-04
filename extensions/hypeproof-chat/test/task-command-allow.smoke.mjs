@@ -319,6 +319,31 @@ try {
     capture.push({ case: "destructive command (strong confirm, unchanged)", ...r.modal });
     ok("destructive: strong confirm every time, the allow is never consulted");
 
+    // CGP-AGENT-R-001 — under the lesson preset 항상 묻기 an earlier allow is not reused and none is offered.
+    {
+      const grant = await asked(win, "cat preset.md", LABEL);
+      assert.equal(grant.approved, true);
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "control: remembered with no preset");
+      const saved = win.cachedProfile;
+      win.cachedProfile = { ...saved, approval_preset: { id: "always_ask", label: "항상 묻기", description: "파일을 고치거나 명령을 실행하기 전에 매번 묻고, 한 번 허락한 일도 다시 물어봐요." } };
+      const again = await asked(win, "cat preset.md", undefined);
+      assert.deepEqual([again.approved, again.modals, [...again.modal.buttons]], [false, 1, ["허락", "거절"]], "always_ask: asked again, no remember button");
+      win.cachedProfile = { ...saved, approval_preset: { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } };
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "before_changes keeps the task-scoped allow");
+      // A refresh mid-turn (cachedProfile null while it refetches) keeps the turn's preset.
+      win.turnApprovalPreset = "always_ask"; win.cachedProfile = null;
+      const refreshing = await asked(win, "cat preset.md", undefined);
+      assert.deepEqual([refreshing.modals, [...refreshing.modal.buttons]], [1, ["허락", "거절"]], "mid-turn refresh does not loosen 항상 묻기");
+      win.cachedProfile = saved;
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 1, "a looser live profile waits for the next turn");
+      win.turnApprovalPreset = null;
+      // The null-profile request was another scope, which forgets task allows (store rule above); the
+      // next turn without a preset offers the remember button again.
+      const next = await asked(win, "cat preset.md", undefined);
+      assert.ok(next.modal.buttons.includes(LABEL), "next turn without a preset: the task allow is offered again");
+      ok("lesson preset 항상 묻기: no remembered allow is reused or offered");
+    }
+
     const regrant = async () => { const g = await asked(win, "cat a.md", LABEL); assert.equal(g.modals, 1, "a fresh grant needs a modal"); };
     const stillAllowed = async () => (await asked(win, "cat a.md", undefined)).modals === 0;
     await regrant();

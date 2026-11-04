@@ -1828,6 +1828,11 @@ html, body, #root {
 .hps-managed-reason { display:inline-flex; align-items:flex-start; gap:var(--ds-c-studio-styles-space-15); }
 .hps-model-selection small.hps-managed-reason, .hps-effort small.hps-managed-reason { flex:1 1 100%; min-width:0; color:var(--vscode-foreground); font-size:var(--hp-font-caption); line-height:var(--hp-leading-label); }
 .hps-managed-reason > .hps-icon { margin-top:var(--ds-c-studio-styles-space-13); }
+/* CGP-AGENT-R-002 / DES-CGP-AGENT-01 — read-only approval preset left of the send button: 14px text + lock,
+   no hover/press affordance, truncates with an ellipsis (full text in the tooltip) instead of wrapping the composer. */
+.hps-approval-preset { display:inline-flex; align-items:center; gap:var(--ds-c-studio-styles-space-15); min-width:0; max-width:40%; flex:0 1 auto; color:var(--vscode-foreground); font-size:var(--hp-font-caption); line-height:var(--hp-leading-label); cursor:default; user-select:none; }
+.hps-approval-preset > .hps-icon { flex:none; }
+.hps-approval-preset-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .hps-model-selection select:disabled[aria-disabled="true"], .hps-effort select:disabled[aria-disabled="true"] { border-style:dashed; cursor:not-allowed; opacity:1; color:var(--vscode-input-foreground); }
 .hps-effort summary { cursor:pointer; }
 .hps-effort ul { padding-left:var(--ds-c-studio-styles-space-5); }
