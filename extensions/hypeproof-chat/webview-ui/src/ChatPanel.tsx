@@ -899,6 +899,8 @@ export function ChatPanel(props: Props) {
   const statusAudience = config?.activity?.kind === "classroom" || config?.profile?.activity_kind === "classroom" ? "classroom" : config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const selectedAccess = config?.access?.view?.choices.find(c => c.id === config.access?.selected);
   const activityStatus = props.activityUnavailable ?? config?.activityUnavailable ?? accessFailure(selectedAccess?.state, statusAudience);
+  // CGP-KNOW-D-036: a safety notice keeps the message-area slot; otherwise the status screen replaces the composer.
+  const statusScreen = activityStatus && !(error && props.safetyNotice) ? activityStatus : null;
   const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
@@ -2226,14 +2228,7 @@ export function ChatPanel(props: Props) {
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
-        ) : activityStatus ? <ActivityStatus status={activityStatus}
-          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
-          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
-          onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
-          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
-          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
-        </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
+        ) : statusScreen ? null : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
           <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
@@ -2445,6 +2440,16 @@ export function ChatPanel(props: Props) {
             onRemove={() => removePaste(part.id!)}
             onInline={() => { setDraftParts(previous => changePaste(previous, part.id!, part.text, true));requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
         </div>}
+        {/* CGP-KNOW-D-036: the status screen takes the composer's place; the input card below is hidden, not
+            unmounted, so the draft and its caret survive until the activity can run again. */}
+        {statusScreen && <ActivityStatus status={statusScreen}
+          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
+          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
+          onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
+          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+        </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
@@ -2453,6 +2458,8 @@ export function ChatPanel(props: Props) {
           data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
+          data-activity-status={statusScreen ? "true" : undefined}
+          hidden={!!statusScreen}
         >
           {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
           {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}

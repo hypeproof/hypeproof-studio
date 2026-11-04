@@ -4611,6 +4611,25 @@ support and has no purchase action. A remounted panel restores the current activ
 refusal; a new turn or explicit recovery clears it. Cancelled or stale file pickers do
 nothing, and exporting never silently overwrites a destination.
 
+Status screen (CGP-KNOW-D-036 / DES-KNOW-68, ADAPT, extends US-12). The status is one
+screen in the composer's place, not a second banner: while it shows, the composer card
+is hidden (not unmounted, so the draft survives) and nothing is drawn for it in the
+message list. A safety notice keeps its message-area slot and the composer stays as
+before. The screen reads, in order: a one-line cause headline (at most 20 characters
+per cause, one line in a 740px panel), the evidenced cause sentence, "아직 할 수 있는 것"
+as a list with one enabled button per local action (내 파일 열기, 내 파일 내보내기, and
+when they apply 내 작업 가져가기 and 참여 코드 확인), and a "다시 쓰려면" contact line
+naming the instructor on class seats and HypeProof support on solo seats, followed by
+상태 다시 확인 and HypeProof 지원 문의. Class seats never get a purchase or pass action;
+the solo trial card stays inside the screen. A polite live region, empty at mount and
+filled after, announces the headline when the screen appears; focus that was in the
+hidden composer (or nowhere) moves to the headline. Own-file buttons are at
+least 44px; the screen has no horizontal scroll at 320px in dark and light themes.
+Evidence: `test/activity-status-chatpanel.test.tsx` (placement, hidden card, draft,
+list, contact, no payment on class seats with a card sent, announcement; red on base) and `test/activity-status-screen-layout.smoke.mjs`
+(computed one-line headline at 740px, 44px enabled buttons, 320px overflow, both themes,
+composer card `display: none` in the file-context and folder-missing layouts, negative controls). A screen-reader announcement on a real device is not measured in CI.
+
 ## REQ-STUDIO-TURN-FILE-DIFF — inspect and selectively restore changed files
 
 Extends AE-05, AE-15 and REQ-CGP-AGENT-52 / DES-CGP-AGENT-52.

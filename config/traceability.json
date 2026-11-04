@@ -9492,6 +9492,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
         }
       ]
     },
@@ -9512,6 +9518,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-status-chatpanel.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-status-screen-layout.smoke.mjs"
         }
       ]
     },
