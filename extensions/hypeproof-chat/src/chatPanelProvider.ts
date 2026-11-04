@@ -125,7 +125,9 @@ import {
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
-import { presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
+import { approvalModeFor, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
+import { destructiveStaysInFolder } from "./shellFolderScope";
+import { mentionsLinkTool, shellUnreadable } from "./shellLinkPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
 import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
@@ -8955,6 +8957,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
     // CGP-AGENT-R-002 — the approval preset this turn runs under (the label and the SDK verdict use the same value).
     this.turnApprovalPreset = servedApprovalPreset(profile)?.id ?? null;
+    // DEC-11 amended — `auto` needs both the turn's seat and the live one to be adult; no profile counts as minor.
+    this.turnSeatMinor = profile ? isMinorProfile(profile) : true;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
@@ -10678,6 +10682,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   /** CGP-AGENT-R-001 — the lesson approval preset the current turn started under (handleSend). */
   private turnApprovalPreset: ApprovalPresetId | null = null;
+  /** DEC-11 amended — the seat the current turn started under is a minor's (or unknown). */
+  private turnSeatMinor = true;
 
   async resolveActionApproval(req: ActionRequest, onPrompted?: () => void, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
     // CGP-AGENT-R-001 — the lesson's approval preset only ever adds asks (approvalPreset.ts):
@@ -10687,6 +10693,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // (cachedProfile is null while it refetches) or a looser lesson never loosens before the next turn.
     const preset = stricterPreset(this.turnApprovalPreset, servedApprovalPreset(this.cachedProfile)?.id ?? null);
     const forgetAllows = presetForgetsAllows(preset);
+    // DEC-11 amended (Jay 2026-11-04) — with no preset, a personal or adult seat runs in `auto`. A minor seat, or a
+    // moment with no live profile (a refresh), keeps today's tiers: auto never applies on a guess.
+    const mode = approvalModeFor(preset, this.turnSeatMinor !== false || !this.cachedProfile || isMinorProfile(this.cachedProfile));
     // Tier 1 — shell (epic #431). No longer a hard deny: a cohort that set
     // `sdk_tools.shell` gets arbitrary commands, and THIS modal is the gate.
     // Four shapes, in order of how much they interrupt:
@@ -10707,6 +10716,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.window.showInformationMessage(scope.refusal);
         if (onDenied) onDenied("folder"); else await this.postDenialNotice("folder");
         return false;
+      }
+      // DEC-11 amended — auto: a command that only touches the work folder runs without a modal (the same reading as
+      // the SDK verdict). A link-making or unreadable command, or one that reaches outside, still asks.
+      if (mode === "auto" && !shellUnreadable(command) && !mentionsLinkTool(command) &&
+          (!destructive || destructiveStaysInFolder(command, this.resolveCoachCwd() ?? null, canonicalizeExistingPath))) {
+        return true;
       }
       const exact = destructive || forgetAllows ? null : taskCommandExact(command);
 

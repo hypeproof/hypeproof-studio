@@ -7,7 +7,8 @@
 // composer is text, never a control).
 //
 // A preset only ever ADDS approvals on top of the app's own tiers (REQ-E1); it never removes
-// one, and an absent or unknown preset means today's tiers exactly:
+// one. An absent or unknown preset means the seat's default (`approvalModeFor` below): `auto`
+// for personal and adult seats, today's tiers (`important_only`) for minor seats:
 //   important_only  today's tiers (destructive shell confirm, browser per site, subagent, typing)
 //   before_changes  + every file write and every shell command asks first
 //   always_ask      before_changes, and nothing allowed earlier is remembered or offered to
@@ -66,4 +67,17 @@ const RANK: Record<ApprovalPresetId, number> = { important_only: 1, before_chang
 export function stricterPreset(a: ApprovalPresetId | null | undefined, b: ApprovalPresetId | null | undefined): ApprovalPresetId | null {
   const ra = a ? RANK[a] : 0, rb = b ? RANK[b] : 0;
   return (ra >= rb ? a : b) ?? null;
+}
+
+/**
+ * DEC-11 amended (Jay 2026-11-04: "그냥 안묻게 했으면 좋겠어"). With no lesson preset, a personal or
+ * adult seat runs in `auto`: file writes and shell commands inside the work folder run without a modal
+ * (shellFolderScope.ts decides what "inside" means for a destructive command). Irreversible or outward
+ * acts still ask: publishing (once per repository, publishHost.ts), deleting or changing anything outside
+ * the work folder, and opening a site that already asks. A minor seat keeps `important_only` (agent
+ * assumption, not confirmed by Jay). A served preset always wins and only ever adds asks.
+ */
+export type ApprovalMode = ApprovalPresetId | "auto";
+export function approvalModeFor(preset: ApprovalPresetId | null | undefined, minor: boolean): ApprovalMode {
+  return preset ?? (minor ? "important_only" : "auto");
 }

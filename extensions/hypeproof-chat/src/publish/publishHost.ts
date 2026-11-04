@@ -282,6 +282,8 @@ export class SitePublisher {
           }
           return this.confirmRegistration(login, repo);
         },
+        // Jay 2026-11-04 — a destination allowed before from this folder publishes without asking again.
+        rememberedDestination: (login, repo) => this.registry.remembersFor(login, repo, workspace, (a, b) => this.host.sameFolder(a, b)),
         lastPushedSha: (login, repo) => this.registry.get(login, repo)?.lastPushedSha,
         onPushed: async (login, repo, sha) => {
           await this.registry.recordPush(login, repo, sha, workspace);

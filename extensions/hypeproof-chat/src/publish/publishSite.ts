@@ -131,6 +131,13 @@ export interface PublishSiteDeps {
    */
   confirmPublish?: (login: string, repo: string, stage: "save" | "publish") => Promise<boolean | "not_allowed">;
   /**
+   * Jay 2026-11-04 ("한번 허락하면 기억해서 알아서 올리게"): this destination was allowed BEFORE this run, from this
+   * same work folder (publishRegistry `remembersFor`). Then the run publishes without asking again: no visitor
+   * preview and no content checklist. Read before `confirmPublish`, so a destination allowed during this very run
+   * still gets its preview and checklist the first time. Absent → every run asks (REQ-KNOW-63 as before).
+   */
+  rememberedDestination?: (login: string, repo: string) => boolean;
+  /**
    * Which repository the open folder publishes to, asked after sign-in because a folder's
    * binding belongs to a GitHub login. `{ repo }`: the folder published from this computer
    * before, or "GitHub에서 이어하기" brought that repository down into it. `"new"`: the folder
@@ -360,6 +367,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     if (checkOnly) return await checkStatus(api, login, repoName, plannedUrl, domain);
 
     // ── consent (registration), before the first write ────────────────────────
+    const remembered = deps.rememberedDestination?.(login, repoName) === true;
     const consent = deps.confirmPublish ? await deps.confirmPublish(login, repoName, stage) : true;
     if (consent === "not_allowed") {
       steps.set("repo", "skipped", "이 GitHub 계정·저장소로는 등록되어 있지 않아 올리지 않았어요.");
@@ -378,8 +386,8 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     // same file list that is pushed, so neither can drift from what visitors actually get.
     const published = [...site, ...generated];
     const recipient = `GitHub · github.com/${login}/${repoName}${stage === "save" ? "" : ` · 사이트 ${approvedCname ?? new URL(plannedUrl).host}`}`;
-    if (stage !== "save" && !await deps.previewVisitor?.({ entry: "index.html", audience: `${recipient} · 인터넷의 누구나`, files: published.map(f => ({ path: f.path, data: f.bytes })) })) return fail("declined");
-    if (!await deps.confirmContent?.({ recipient, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: published.map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
+    if (stage !== "save" && !remembered && !await deps.previewVisitor?.({ entry: "index.html", audience: `${recipient} · 인터넷의 누구나`, files: published.map(f => ({ path: f.path, data: f.bytes })) })) return fail("declined");
+    if (!remembered && !await deps.confirmContent?.({ recipient, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: published.map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
     const expectedHead = deps.lastPushedSha?.(login, repoName);
 
     // ── repository ──────────────────────────────────────────────────────────

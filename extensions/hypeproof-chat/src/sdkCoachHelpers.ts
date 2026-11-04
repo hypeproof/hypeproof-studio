@@ -57,6 +57,7 @@ import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
 import { presetAsksBeforeChanges, type ApprovalPresetId } from "./approvalPreset.ts";
+import { destructiveStaysInFolder } from "./shellFolderScope.ts";
 import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
@@ -2736,6 +2737,13 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   // 그게 없어서 문구가 통째로 비었다("코치가 명령을 실행하려고 해요:" 뒤가 공백).
   // CR-06 — choosing an option acts inside the already-opened page like a click, so it
   // takes the click's kind (auto-allowed by the default approval list).
+  // CGP-AGENT-R-001 — page_pdf_save reaches the approval path only under a preset that asks before changes:
+  // it writes `<name>.pdf` beside the work-folder page, so it is shown and checked as that file write.
+  if (action.toolName === MCP_PAGE_PDF_SAVE) {
+    const page = firstString(action.input, ["path"]) ?? "";
+    const pdf = page ? page.replace(/\.html?$/i, "") + ".pdf" : "";
+    return { kind: "writeFile", description: `PDF로 저장: ${pdf || "알 수 없는 파일"}`, payload: { path: pdf } };
+  }
   if (action.toolName === MCP_PUBLISH_SITE) {
     const repo = firstString(action.input, ["repo_name"]) ?? "";
     const stage = firstString(action.input, ["stage"]) === "save" ? "save" : "publish";
@@ -3065,6 +3073,12 @@ export function evaluateSdkToolUse(args: {
    * changes a deny and never turns an ask into an allow. Absent → today's verdicts.
    */
   approvalPreset?: ApprovalPresetId | null;
+  /**
+   * DEC-11 amended (Jay 2026-11-04) — the seat runs in `auto` (approvalModeFor: no served preset and not a
+   * minor). A destructive command whose every target stays inside the work folder then runs without a modal;
+   * one that reaches outside, or that this layer cannot read, keeps the strong confirm. Never changes a deny.
+   */
+  autoInFolder?: boolean;
 }): SdkToolVerdict {
   const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
@@ -3153,8 +3167,12 @@ export function evaluateSdkToolUse(args: {
       return denyVerdict("app_bundle_program", "command runs a program inside an app bundle (.app/Contents/)", toolName, audience, APP_BUNDLE_PROGRAM_REASON);
     }
     // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
-    if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
+    if (link?.decision === "ask" || shellUnreadable(command)) {
       return { decision: "ask", destructive: true };
+    }
+    if (isDestructiveCommand(command)) {
+      // DEC-11 amended — auto: deleting or moving files inside the work folder does not ask; outside still does.
+      return args.autoInFolder === true && !args.approvalPreset && destructiveStaysInFolder(command, workspaceRoot, canon) ? { decision: "allow" } : { decision: "ask", destructive: true };
     }
     // CGP-AGENT-R-001 — a stricter lesson preset asks before every command, not only destructive ones.
     return presetAsksBeforeChanges(args.approvalPreset) ? { decision: "ask" } : { decision: "allow" };
@@ -3249,6 +3267,9 @@ export function evaluateSdkToolUse(args: {
   }
   // #3221 — page_pdf_save prints the student's own work-folder page with Studio's browser and writes the PDF beside it;
   // the host re-checks the folder and its write consent. Like a preview, not an outward action.
+  // CGP-AGENT-R-001 (Jay 2026-11-04) — under 바꾸기 전에 묻기 / 항상 묻기 the PDF is a file change like any write, so it
+  // asks first (the host shows the file-save approval, sdkToolToActionRequest maps it to writeFile).
+  if (toolName === MCP_PAGE_PDF_SAVE && presetAsksBeforeChanges(args.approvalPreset)) return { decision: "ask" };
   if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START || toolName === MCP_PAGE_PDF_SAVE) {
     // Auto-allow once the browser capability is granted: a screenshot of the
     // student's own tab / serving their own workspace locally is the coach

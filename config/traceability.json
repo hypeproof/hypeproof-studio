@@ -8820,6 +8820,9 @@
           "path": "extensions/hypeproof-chat/src/approvalPreset.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/shellFolderScope.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ApprovalPresetLabel.tsx"
         }
       ]
