@@ -1523,7 +1523,16 @@ accessible name includes the full relative path and 빼기. Narrow panes may cli
 further; the full path remains in its accessible name and tooltip. Activating the name opens a
 native in-page preview dialog showing the full relative path and exact text to be sent, scrollable
 and escaped as text. Closing returns focus to the opener; replacing the attachment closes the
-stale preview. The preview sends nothing. The chip, controls and inset share the composer's192px
+stale preview. The preview sends nothing. Local lookup in the preview (#3360) treats the
+query as literal, case-insensitive text, reports current/total matches and supports wrapping
+previous/next navigation. The current match is highlighted without changing the full text.
+A no-match query says so; replacing the attachment clears the query. Only the text pane
+scrolls when finding a distant match, keeping lookup controls available (text pane capped at
+40dvh). Component regression `test/file-preview-search.test.tsx` covers literal/Korean lookup,
+wrap, unchanged text and replacement; `test/file-preview-search-computed.smoke.mjs` verifies
+long-file scrolling, visible controls, keyboard close and no overflow in real Chromium.
+These checks supplement the existing full ChatPanel attachment regression; installed-App
+acceptance remains separate. The chip, controls and inset share the composer's192px
 growth cap while the draft scrolls internally; a short pane still reserves96px for the transcript.
 The persistent refusal notice is a status line directly under the chip row, inside the composer card. The host-owned removal/send
 lifetime below is unchanged; clicking the close icon requests removal and waits for host state. The model receives the

@@ -7925,6 +7925,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/dataTag.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/filePreviewSearch.css"
         }
       ]
     },
@@ -7948,6 +7951,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/file-attachment-kids-render.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/file-preview-search.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/file-preview-search-computed.smoke.mjs"
         }
       ]
     },
