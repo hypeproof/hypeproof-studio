@@ -1,4 +1,4 @@
-☀️ **Daily digest — {{ date }}** · `{{ tenant_slug or "hypeproof-lab" }}`
+☀️ **Daily digest — {{ date }}**{% if tenant_slug %} · `{{ tenant_slug }}`{% endif %}
 
 **Yesterday:**
 - 💬 {{ chat_count or 0 }} chat queries{% if unique_askers %} ({{ unique_askers }} people){% endif %}

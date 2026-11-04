@@ -125,7 +125,7 @@ import {
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
-import { approvalModeFor, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
+import { approvalModeFor, approvalPresetBlockServed, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
 import { destructiveStaysInFolder } from "./shellFolderScope";
 import { mentionsLinkTool, shellUnreadable } from "./shellLinkPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
@@ -8959,6 +8959,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.turnApprovalPreset = servedApprovalPreset(profile)?.id ?? null;
     // DEC-11 amended — `auto` needs both the turn's seat and the live one to be adult; no profile counts as minor.
     this.turnSeatMinor = profile ? isMinorProfile(profile) : true;
+    this.turnPresetBlock = approvalPresetBlockServed(profile);
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
@@ -10684,6 +10685,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private turnApprovalPreset: ApprovalPresetId | null = null;
   /** DEC-11 amended — the seat the current turn started under is a minor's (or unknown). */
   private turnSeatMinor = true;
+  /** DEC-11 amended — the turn's profile carried an approval_preset block, understood or not (auto stays off). */
+  private turnPresetBlock = false;
 
   async resolveActionApproval(req: ActionRequest, onPrompted?: () => void, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
     // CGP-AGENT-R-001 — the lesson's approval preset only ever adds asks (approvalPreset.ts):
@@ -10695,7 +10698,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const forgetAllows = presetForgetsAllows(preset);
     // DEC-11 amended (Jay 2026-11-04) — with no preset, a personal or adult seat runs in `auto`. A minor seat, or a
     // moment with no live profile (a refresh), keeps today's tiers: auto never applies on a guess.
-    const mode = approvalModeFor(preset, this.turnSeatMinor !== false || !this.cachedProfile || isMinorProfile(this.cachedProfile));
+    const mode = approvalModeFor(preset, this.turnSeatMinor !== false || !this.cachedProfile || isMinorProfile(this.cachedProfile),
+      this.turnPresetBlock === true || approvalPresetBlockServed(this.cachedProfile));
     // Tier 1 — shell (epic #431). No longer a hard deny: a cohort that set
     // `sdk_tools.shell` gets arbitrary commands, and THIS modal is the gate.
     // Four shapes, in order of how much they interrupt:

@@ -769,18 +769,34 @@ console.log("\n✓ publish-site smoke 통과");
  assert.deepEqual(control.asked,['preview','content'],'negative control: not remembered asks as before');
  const other=await run((login,repo)=>repo==='another-site');
  assert.deepEqual(other.asked,['preview','content'],'another repository is asked about');
- // The registry remembers per destination AND work folder; another folder, or none, asks again.
+ // The registry remembers per destination AND work folder, and only after the destination really went out from it.
  const { PublishRegistry } = await import("../src/publish/publishRegistry.ts");
  const store=new Map();const reg=new PublishRegistry({get:k=>store.get(k),update:async(k,v)=>{store.set(k,v);}});
  const same=(a,b)=>a===b;
  assert.equal(reg.remembersFor('octo','site','/w/a',same),false,'nothing allowed yet');
  await reg.register('octo','site','/w/a');
- assert.equal(reg.remembersFor('Octo','SITE','/w/a',same),true,'allowed from this folder: remembered');
+ assert.equal(reg.remembersFor('octo','site','/w/a',same),false,'registered but never pushed (preview declined): asks again');
+ await reg.recordPush('octo','site','sha1','/w/a','save');
+ assert.equal(reg.remembersFor('octo','site','/w/a',same,'save'),true,'a save went out: the next save is remembered');
+ assert.equal(reg.remembersFor('octo','site','/w/a',same,'publish'),false,'a save never showed the public preview: a site publish asks');
+ await reg.recordPush('octo','site','sha2','/w/a','publish');
+ assert.equal(reg.remembersFor('Octo','SITE','/w/a',same,'publish'),true,'published from this folder: remembered');
  assert.equal(reg.remembersFor('octo','site','/w/b',same),false,'another folder asks again');
  assert.equal(reg.remembersFor('octo','site',undefined,same),false,'no open folder asks again');
- await reg.register('octo','old');
+ await reg.register('octo','old');await reg.recordPush('octo','old','sha3');
  assert.equal(reg.remembersFor('octo','old','/w/a',same),false,'a registration with no folder asks again');
  await reg.unregister('octo','site');
  assert.equal(reg.remembersFor('octo','site','/w/a',same),false,'배포 등록 해제 forgets it');
+ // End to end with the real registry (verify 2026-11-04 M2): declining the first preview leaves nothing remembered.
+ {
+  const st=new Map();const r2=new PublishRegistry({get:k=>st.get(k),update:async(k,v)=>{st.set(k,v);}});
+  const wired=(asked,preview)=>({confirmPublish:async(login,repo)=>{await r2.register(login,repo,'/w/a');return true;},rememberedDestination:(login,repo,stage)=>r2.remembersFor(login,repo,'/w/a',same,stage),onPushed:async(login,repo,sha,stage)=>r2.recordPush(login,repo,sha,'/w/a',stage),previewVisitor:async()=>(asked.push('preview'),preview),confirmContent:async()=>(asked.push('content'),true)});
+  const a1=[];const d1=await runPublishSite({},deps(createMockGitHub(),site({...GOOD_SITE}),wired(a1,false)));
+  assert.equal(d1.error?.code,'declined');
+  const gh=createMockGitHub();const a2=[];const ok2=await runPublishSite({},deps(gh,site({...GOOD_SITE}),wired(a2,true)));
+  assert.equal(ok2.ok,true,JSON.stringify(ok2.error));assert.deepEqual(a2,['preview','content'],'after a declined preview the next run asks again');
+  const a3=[];const ok3=await runPublishSite({},deps(gh,site({...GOOD_SITE}),wired(a3,true)));
+  assert.equal(ok3.ok,true,JSON.stringify(ok3.error));assert.deepEqual(a3,[],'after a real publish from this folder: no preview, no checklist');
+ }
  console.log('PASS remembered destination: publishes without asking again, per repository and work folder');
 }

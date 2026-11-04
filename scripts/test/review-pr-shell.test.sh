@@ -817,6 +817,96 @@ fi
 for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
 rm -rf "$PS_TMP"
 
+# 72–76. Review state removal (#3467 follow-up): the state folder is resolved at cleanup time,
+# and every silent skip prints a NOTE. Temporary HOME only; the real state folder is never touched.
+RS_LIB="$(cd "$(dirname "$0")/../.." && pwd)/scripts/review-pr-state-cleanup.sh"
+RS_TMP="$(mktemp -d)"
+RS_HASH="ab12cd34ef56"
+rs_wt() { local w="$RS_TMP/studio-review-$1"; mkdir -p "$w/scripts"; (cd "$w" && pwd -P); }
+rs_root() { echo "$RS_TMP/home/Library/Application Support/HypeProof Studio Development"; }
+mkdir -p "$(rs_root)"
+
+# 72. Normal: the state folder appears after step 1.5 (resolved empty there), cleanup resolves it, removal succeeds.
+RS_WT="$(rs_wt normal)"
+# Step 1.5 result on macOS: realpath returns nothing for a missing folder (the bug).
+# Set it directly, so this test does not depend on GNU vs BSD realpath behavior.
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  STATE_DIR_REAL=""
+  mkdir -p "$STATE_DIR/user-data" && printf '{"format":"x","repo":"%s"}' "$RS_WT" > "$STATE_DIR/owner.json"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ ! -e "$RS_TMP/home/Library/Application Support/HypeProof Studio Development/$RS_HASH" ]] && grep -q "Removed the Dev state folder" <<<"$RS_OUT"; then
+  ok "72: state folder created after step 1.5 is resolved at cleanup and removed"
+else
+  fail "72: state folder not removed after the late resolve (out='$RS_OUT')"
+fi
+
+# 73. No folder at cleanup: a NOTE says so, exit 0, and a sibling folder is untouched.
+RS_WT="$(rs_wt absent)"
+mkdir -p "$(rs_root)/0f0f0f0f0f0f/user-data"
+RS_RC=0
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_RC=$?
+if [[ $RS_RC -eq 0 ]] && grep -q "NOTE: state removal skipped: no Dev state folder" <<<"$RS_OUT" && [[ -d "$(rs_root)/0f0f0f0f0f0f" ]]; then
+  ok "73: missing folder prints a NOTE, exits 0, and leaves a sibling folder alone"
+else
+  fail "73: missing folder not reported (rc=$RS_RC, out='$RS_OUT')"
+fi
+
+# 74. owner.json names another repo: the folder is kept and the NOTE says why.
+RS_WT="$(rs_wt owner)"
+RS_OWN="$(rs_root)/$RS_HASH"; mkdir -p "$RS_OWN/user-data" && printf '{"format":"x","repo":"/Users/someone/other"}' > "$RS_OWN/owner.json"
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ -f "$RS_OWN/owner.json" ]] && grep -q "owner.json does not name this review worktree" <<<"$RS_OUT"; then
+  ok "74: folder owned by another repo is kept with a NOTE"
+else
+  fail "74: foreign-owned folder handled wrongly (out='$RS_OUT')"
+fi
+rm -rf "$RS_OWN"
+
+# 75. A folder outside the Dev state root is kept with a NOTE (guard unchanged).
+RS_WT="$(rs_wt outside)"
+RS_ODD="$RS_TMP/elsewhere/$RS_HASH"; mkdir -p "$RS_ODD" && printf '{"format":"x","repo":"%s"}' "$RS_WT" > "$RS_ODD/owner.json"
+RS_OUT="$(
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"; STATE_DIR_REAL="$RS_ODD"
+  source "$RS_LIB"
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ -f "$RS_ODD/owner.json" ]] && grep -q "outside the Dev state root" <<<"$RS_OUT"; then
+  ok "75: folder outside the Dev state root is kept with a NOTE"
+else
+  fail "75: outside-root folder handled wrongly (out='$RS_OUT')"
+fi
+
+# 76. review-pr.sh resolves the folder inside cleanup, before the wait loop and the removal.
+RS_REFRESH="$(grep -n '^  refresh_state_dir_real$' "$SCRIPT" | cut -d: -f1 | head -1 || true)"
+RS_WAIT="$(grep -n 'dev_app_pids "\$STATE_DIR_REAL"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+RS_REMOVE="$(grep -n '^  remove_review_state$' "$SCRIPT" | cut -d: -f1 | head -1 || true)"
+if [[ -n "$RS_REFRESH" && -n "$RS_WAIT" && -n "$RS_REMOVE" && "$RS_REFRESH" -lt "$RS_WAIT" && "$RS_WAIT" -lt "$RS_REMOVE" ]]; then
+  ok "76: cleanup resolves the state folder before the wait loop and the removal"
+else
+  fail "76: resolve placement wrong (refresh=$RS_REFRESH wait=$RS_WAIT remove=$RS_REMOVE)"
+fi
+rm -rf "$RS_TMP"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"
 [[ $FAIL -eq 0 ]]

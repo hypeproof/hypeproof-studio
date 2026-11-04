@@ -228,7 +228,7 @@ consumer가 로컬에 없거나 아직 새 vendored 파일을 받지 않은 경�
 mock consumer 워크스페이스로 검증한다.
 
 ```bash
-mkdir -p /tmp/ws/hypeproof-studio /tmp/ws/sediment /tmp/ws/hypeprooflab
+mkdir -p /tmp/ws/hypeproof-studio /tmp/ws/sediment /tmp/ws/hypeprooflab /tmp/ws/hypeproof-chalk
 for d in /tmp/ws/*; do
   git -C "$d" init -q -b main
   git -C "$d" -c user.email=ci@example.com -c user.name=CI commit --allow-empty -q -m init

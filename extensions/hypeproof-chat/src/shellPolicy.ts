@@ -101,6 +101,8 @@ const DESTRUCTIVE_ARG_PATTERNS: readonly RegExp[] = [
 const COMMAND_INTRODUCERS = new Set([
   "xargs", "env", "time", "nice", "nohup", "command", "exec", "builtin",
   "sh", "bash", "zsh", "dash", "-exec", "-execdir", "-c", "then", "else", "do",
+  // zsh precommand modifiers (verify 2026-11-04 N4: `noglob rm -rf ../x` ran with no confirm on every seat).
+  "noglob", "nocorrect",
 ]);
 
 function commandWords(command: string): string[] {
@@ -246,7 +248,7 @@ const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
 /** Wrappers that run the words after their options as a command. */
 const COMMAND_WRAPPERS = new Set([
   "env", "command", "builtin", "exec", "time", "nice", "nohup", "timeout", "caffeinate", "xargs", "busybox",
-  "stdbuf", "ionice", "unbuffer", "chronic",
+  "stdbuf", "ionice", "unbuffer", "chronic", "noglob", "nocorrect",
 ]);
 
 /** Redirection targets that hold nothing worth keeping (same as the `>` rule above). */
