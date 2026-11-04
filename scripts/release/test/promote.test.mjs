@@ -26,7 +26,7 @@ const good = () => ({
   commit: {sha: HEAD, parents: [CAND], message: `release: record ${RC}`, files: [`releases/${V}.md`]},
   rcTags: [{name: `${V}-rc.1`, sha: OTHER}, {name: RC, sha: CAND}],
   writers: new Set(['minhan']), vTagSha: '',
-  rcRelease: {isDraft: false, assets: rcAssets},
+  rcRelease: {isDraft: false, assets: rcAssets}, mergeState: 'CLEAN',
 });
 const with_ = (patch) => { const f = good(); for (const [k, v] of Object.entries(patch)) f[k] = typeof v === 'function' ? v(f[k]) : v; return f; };
 
@@ -69,12 +69,28 @@ test('negative controls: every way the approval, the branch or the rc can be wro
     'rc still draft (not accepted)': {rcRelease: r => ({...r, isDraft: true})},
     'rc without receipts': {rcRelease: r => ({...r, assets: r.assets.filter(a => a.name !== 'unified-acceptance.json')})},
     'rc without packages': {rcRelease: r => ({...r, assets: r.assets.filter(a => a.name === 'unified-acceptance.json')})},
+    'required check (extension / smoke) pending or failed': {mergeState: 'BLOCKED'},
+    'merge state unread': {mergeState: ''},
+    'merge state still unknown': {mergeState: 'UNKNOWN'},
+    'conflicting release branch': {mergeState: 'DIRTY'},
   };
   for (const [name, patch] of Object.entries(cases)) {
     const v = promotionDecision(with_(patch));
     assert.equal(v.allow, false, name);
     assert.ok(v.reasons.length, `${name}: a refusal names its reason`);
   }
+});
+
+test('#3512: a release PR whose required checks are not green is refused before the v tag', () => {
+  const mergeReason = facts => promotionDecision(facts).reasons.find(r => /required check|would not accept the merge/.test(r));
+  const blocked = promotionDecision(with_({mergeState: 'BLOCKED'}));
+  assert.equal(blocked.allow, false);
+  assert.match(blocked.reasons[0], /required check on the release PR head is not green yet \(extension \/ smoke/);
+  for (const state of ['', 'UNKNOWN', 'DIRTY', 'DRAFT']) assert.match(mergeReason(with_({mergeState: state})), /would not accept the merge/, state);
+  // A failing check main does not require leaves the merge to GitHub, as do CLEAN and HAS_HOOKS.
+  for (const state of ['CLEAN', 'UNSTABLE', 'HAS_HOOKS']) assert.equal(mergeReason(with_({mergeState: state})), undefined, state);
+  // After the merge the state no longer matters, so a rerun still finishes the release.
+  assert.equal(mergeReason(with_({pr: pr => ({...pr, state: 'closed', merged: true}), vTagSha: CAND, mergeState: ''})), undefined);
 });
 
 test('upload plan: missing files upload, same bytes skip, other bytes or foreign packages refuse', () => {
