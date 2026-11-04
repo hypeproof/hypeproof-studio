@@ -20,9 +20,15 @@ const rcAssets = [
   {name: `HypeProof-${RC}-Test-Kit.zip`, digest: digest('5')},
   {name: 'claude-agent-sdk-darwin-arm64-0.3.299.tgz', digest: digest('6')},
 ];
+// The release casebook (#3429): the candidate's P0 cases and the release PR's comments since the head.
+const P0 = ['BB-001', 'BB-005'];
+const HEAD_DATE = '2026-10-29T10:00:00Z';
+const comment = (user, body, at = '2026-10-29T11:00:00Z', association = 'MEMBER') => ({user, association, created_at: at, body, url: 'u'});
+const OVERRIDE = comment('jayleekr', 'Release manager override: P0 run by hand on the pre-tester Mac; results in the thread');
 const good = () => ({
   pr: {number: 3159, state: 'open', merged: false, labels: ['release'], base: 'main', headRef: `release/${V}`, head: HEAD,
-    reviews: [{user: 'minhan', state: 'APPROVED', commit: HEAD}]},
+    headDate: HEAD_DATE, comments: [OVERRIDE], reviews: [{user: 'minhan', state: 'APPROVED', commit: HEAD}]},
+  p0: P0,
   commit: {sha: HEAD, parents: [CAND], message: `release: record ${RC}`, files: [`releases/${V}.md`]},
   rcTags: [{name: `${V}-rc.1`, sha: OTHER}, {name: RC, sha: CAND}],
   writers: new Set(['minhan']), vTagSha: '',
@@ -73,12 +79,30 @@ test('negative controls: every way the approval, the branch or the rc can be wro
     'merge state unread': {mergeState: ''},
     'merge state still unknown': {mergeState: 'UNKNOWN'},
     'conflicting release branch': {mergeState: 'DIRTY'},
+    // #3513: the casebook gate of #3429 applies at promotion too, not only at publication.
+    'casebook P0 list not read': {p0: undefined},
+    'casebook neither run nor overridden': {pr: pr => ({...pr, comments: []})},
+    'override without a reason': {pr: pr => ({...pr, comments: [comment('jayleekr', 'Release manager override')]})},
+    'override by a non-approving writer': {pr: pr => ({...pr, comments: [comment('otherwriter', OVERRIDE.body)]})},
+    'override older than the head commit': {pr: pr => ({...pr, comments: [{...OVERRIDE, created_at: '2026-10-29T09:00:00Z'}]})},
   };
   for (const [name, patch] of Object.entries(cases)) {
     const v = promotionDecision(with_(patch));
     assert.equal(v.allow, false, name);
     assert.ok(v.reasons.length, `${name}: a refusal names its reason`);
   }
+});
+
+test('#3513: the casebook evidence the publish gate needs reaches it from promotion', () => {
+  const v = promotionDecision(good());
+  assert.match(v.reasons.join('\n'), /casebook: release manager override by jayleekr/);
+  // The approving writer may override too, and an empty P0 list needs neither run nor override.
+  assert.equal(promotionDecision(with_({pr: pr => ({...pr, comments: [comment('minhan', OVERRIDE.body)]})})).allow, true);
+  assert.equal(promotionDecision(with_({p0: [], pr: pr => ({...pr, comments: []})})).allow, true);
+  const refused = promotionDecision(with_({pr: pr => ({...pr, comments: []})}));
+  assert.match(refused.reasons.join('\n'), /casebook not run at the head: no hps-blackbox-run\/1 PASS for P0 BB-001, BB-005/);
+  assert.doesNotMatch(refused.reasons.join('\n'), /^hotfix:/m, 'promotion names only the approval route');
+  assert.match(promotionDecision(with_({p0: undefined})).reasons.join('\n'), /casebook P0 list was not read/);
 });
 
 test('#3512: a release PR whose required checks are not green is refused before the v tag', () => {
@@ -166,4 +190,13 @@ test('verify-unified-release: a promoted release skips acceptance only on reusab
   const names = doc.jobs.publish.steps.map(s => s.name);
   for (const name of ['Confirm the public Service still matches acceptance', 'Live-session freeze immediately before publication',
     'Publish gate — approved release PR or hotfix']) assert.ok(names.includes(name), name);
+});
+
+test('#3513: studio-pr-ci runs every release control, so a change that breaks one fails its PR', () => {
+  const text = fs.readFileSync(`${root}.github/workflows/pr-ci.yml`, 'utf8');
+  const files = fs.readdirSync(`${root}scripts/release/test`).filter(f => f.endsWith('.test.mjs'));
+  const missing = files.filter(f => !text.includes(`scripts/release/test/${f}`));
+  assert.deepEqual(missing, [], 'add these to a `node --test` line in .github/workflows/pr-ci.yml');
+  // release-promote's own Controls step runs these two before it touches a tag.
+  assert.match(fs.readFileSync(`${root}.github/workflows/release-promote.yml`, 'utf8'), /node --test scripts\/release\/test\/promote\.test\.mjs scripts\/release\/test\/publish-gate\.test\.mjs/);
 });
