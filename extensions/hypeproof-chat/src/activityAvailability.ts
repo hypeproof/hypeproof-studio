@@ -44,3 +44,20 @@ export const ACTIVITY_CAUSE_COPY: Record<ActivityCause, string> = {
   outage: '서비스에 연결하지 못해 AI를 실행할 수 없습니다. 잠시 후 연결을 다시 확인해 주세요.',
   limited: 'AI 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도해 주세요. 자원 소진 여부는 확인되지 않았습니다.',
 };
+/**
+ * CGP-KNOW-D-036: the one-line cause headline of the status screen. Each stays at most 20 characters so it
+ * holds one line in a 740px panel; the full evidenced sentence follows in ACTIVITY_CAUSE_COPY.
+ */
+export const ACTIVITY_CAUSE_HEADLINE: Record<ActivityCause, string> = {
+  revoked: '참여 코드가 취소되었습니다',
+  unknown: '원인을 확인하지 못했습니다',
+  auth: '참여 인증을 확인하지 못했습니다',
+  expired: '이용 기간이 끝났습니다',
+  ended: '활동 시간이 끝났습니다',
+  paused: '활동이 일시정지되었습니다',
+  exhausted: 'AI 사용량을 모두 썼습니다',
+  forbidden: '이용 정책이 AI 실행을 막았습니다',
+  not_started: '아직 수업이 열리지 않았습니다',
+  outage: '서비스에 연결하지 못했습니다',
+  limited: 'AI 요청이 잠시 제한되었습니다',
+};

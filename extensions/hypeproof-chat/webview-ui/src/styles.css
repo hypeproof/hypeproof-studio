@@ -2615,6 +2615,18 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-activity-status button { min-height: var(--ds-c-studio-styles-size-8); font-size: var(--hp-font-caption); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); }
 .hps-activity-status button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @media (forced-colors: active) { .hps-activity-status { border-color: CanvasText; } }
+/* CGP-KNOW-D-036: the status screen replaces the composer card; the hidden card keeps the draft. */
+/* Outranks every .hps-input display rule (file context, folder missing: up to five classes/attributes in chatDetails.css). */
+.hps-input-area > .hps-input[hidden],
+.hps-shell[data-chat-detail] .hps-input-area > .hps-input[hidden][data-activity-status],
+.hps-shell .hps-input-area > .hps-input[hidden][data-activity-status] { display: none; }
+.hps-activity-status { max-width: 100%; box-sizing: border-box; min-width: 0; }
+.hps-activity-status .hps-activity-status-headline { overflow-wrap: anywhere; line-height: var(--ds-c-studio-styles-typography-4); }
+.hps-activity-status .hps-activity-status-subhead { margin: var(--ds-c-studio-styles-space-1) 0 var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-caption); font-weight: var(--ds-c-studio-styles-typography-7); }
+.hps-activity-status-can { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); }
+.hps-activity-status-can > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-activity-status-can > li > span { flex: 1 1 var(--ds-c-studio-styles-size-54); min-width: 0; }
+.hps-activity-status .hps-activity-status-contact { margin: var(--ds-c-studio-styles-space-1) 0 var(--ds-c-studio-styles-space-2); }
 
 /* DES-CGP-AGENT-52: bounded local diff, glyphs alongside theme colors. */
 .hps-turn-review { min-width: 0; font-size: var(--hp-font-caption); }
