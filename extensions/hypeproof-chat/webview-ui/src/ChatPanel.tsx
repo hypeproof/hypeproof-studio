@@ -782,6 +782,10 @@ export function ChatPanel(props: Props) {
   }), []);
   useEffect(() => { setLiveActivity([]); }, [activityId, taskId]);
   const [reviewFocus, setReviewFocus] = useState<{ path: string; seq: number; turnId: string } | null>(null);
+  // CGP-ART-D-002 — 바뀐 곳 보기 on the preview's review bar opens this review at the turn's first file.
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "turnReviewShow" && msg.path) { const path = msg.path; setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: msg.turnId })); }
+  }), []);
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {

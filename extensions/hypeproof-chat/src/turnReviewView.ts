@@ -66,6 +66,28 @@ export function turnReviewCount(v: Pick<TurnReviewView, "added" | "changed" | "d
   return v.added.length + v.changed.length + v.deleted.length;
 }
 
+/**
+ * CGP-ART-D-002 / DES-ART-02 — what the preview's own review bar shows. It mirrors the chat review
+ * bar's turn (the same host review, so the same restore and keep); it carries no paths or contents.
+ */
+export interface PreviewReviewBar {
+  turnId: string;
+  state: TurnReviewState;
+  /** Files added, changed or deleted in the turn (the "{n}곳" of "AI가 {n}곳을 바꿨어요"). */
+  count: number;
+  /** The chat bar's one-line refusal for the last button press, shown in place of the count. */
+  notice?: string;
+  /** restored only: the preview could not reload the reverted page (it was not opened from a file). */
+  stale?: boolean;
+}
+
+export function previewReviewBar(view: TurnReviewView | null): PreviewReviewBar | null {
+  if (!view) return null;
+  const count = turnReviewCount(view);
+  if ((view.state === "open" || view.state === "restoring") && !count) return null;
+  return { turnId: view.turnId, state: view.state, count, ...(view.notice ? { notice: view.notice } : {}) };
+}
+
 export interface TurnFileReview {
   path: string;
   added?: number;

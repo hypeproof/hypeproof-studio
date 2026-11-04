@@ -401,6 +401,8 @@ export async function activate(context: vscode.ExtensionContext) {
   provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks, tasks: () => provider.activityMemoryTasks }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
+  // CGP-ART-D-002 — the preview's review bar presses go to the chat's turn review (one undo).
+  context.subscriptions.push(preview.onReviewAction((a) => void provider.handlePreviewReviewAction(a)));
 
   const classroomOps = new ClassroomOpsHost(context, () => provider.opsRuntime(), {
     hasActiveRun: () => provider.hasActiveStream(),
