@@ -751,3 +751,36 @@ console.log("\n✓ publish-site smoke 통과");
  }
  console.log('PASS visitor preview: site gate, audience equals recipient, files equal pushed tree');
 }
+
+// Jay 2026-11-04 ("한번 허락하면 기억해서 알아서 올리게") — a destination allowed earlier from this folder publishes
+// without asking again; the control (not remembered, or another repository) still shows preview and checklist.
+{
+ const run=async remembered=>{
+  const gh=createMockGitHub();const asked=[];const seen=[];
+  const r=await runPublishSite({},deps(gh,site({...GOOD_SITE}),{rememberedDestination:(login,repo)=>(seen.push(`${login}/${repo}`),remembered(login,repo)),previewVisitor:async()=>(asked.push('preview'),true),confirmContent:async()=>(asked.push('content'),true)}));
+  return {r,asked,seen};
+ };
+ const kept=await run(()=>true);
+ assert.equal(kept.r.ok,true,JSON.stringify(kept.r.error));
+ assert.deepEqual(kept.asked,[],'remembered destination: no preview, no checklist');
+ assert.deepEqual(kept.seen,['octo-clinic/neo-dental'],'asked about the destination the run settled on');
+ const control=await run(()=>false);
+ assert.equal(control.r.ok,true);
+ assert.deepEqual(control.asked,['preview','content'],'negative control: not remembered asks as before');
+ const other=await run((login,repo)=>repo==='another-site');
+ assert.deepEqual(other.asked,['preview','content'],'another repository is asked about');
+ // The registry remembers per destination AND work folder; another folder, or none, asks again.
+ const { PublishRegistry } = await import("../src/publish/publishRegistry.ts");
+ const store=new Map();const reg=new PublishRegistry({get:k=>store.get(k),update:async(k,v)=>{store.set(k,v);}});
+ const same=(a,b)=>a===b;
+ assert.equal(reg.remembersFor('octo','site','/w/a',same),false,'nothing allowed yet');
+ await reg.register('octo','site','/w/a');
+ assert.equal(reg.remembersFor('Octo','SITE','/w/a',same),true,'allowed from this folder: remembered');
+ assert.equal(reg.remembersFor('octo','site','/w/b',same),false,'another folder asks again');
+ assert.equal(reg.remembersFor('octo','site',undefined,same),false,'no open folder asks again');
+ await reg.register('octo','old');
+ assert.equal(reg.remembersFor('octo','old','/w/a',same),false,'a registration with no folder asks again');
+ await reg.unregister('octo','site');
+ assert.equal(reg.remembersFor('octo','site','/w/a',same),false,'배포 등록 해제 forgets it');
+ console.log('PASS remembered destination: publishes without asking again, per repository and work folder');
+}

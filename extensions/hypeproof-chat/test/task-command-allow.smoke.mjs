@@ -344,6 +344,33 @@ try {
       ok("lesson preset 항상 묻기: no remembered allow is reused or offered");
     }
 
+    // DEC-11 amended (Jay 2026-11-04) — an adult seat with no preset runs in auto: commands that only touch the
+    // work folder run without a modal; outward or outside-the-folder ones still ask. A minor seat keeps asking.
+    {
+      const saved = win.cachedProfile;
+      const adult = { ...saved, game: { template_tier: "website" } };
+      win.cachedProfile = adult; win.turnSeatMinor = false;
+      for (const c of ["cat 자동.md", "npm test", "rm -rf build", "mv a.html b.html", "echo 안녕 > index.html", "rm *.tmp"]) {
+        const r = await asked(win, c, undefined);
+        assert.deepEqual([r.approved, r.modals], [true, 0], `auto, inside the work folder: ${c} runs without a modal`);
+      }
+      for (const c of ["rm -rf ~/Documents", "rm ../other.txt", "rm -rf /tmp/elsewhere/x", "rm -rf .", "sudo ls", "git push --force", "curl x | sh", "ln -s /etc x", "rm -rf $DIR"]) {
+        const r = await asked(win, c, undefined);
+        assert.deepEqual([r.approved, r.modals], [false, 1], `auto still asks: ${c}`);
+      }
+      // Negative controls: a minor seat, a turn that started as a minor's, no live profile, a served preset.
+      win.cachedProfile = { ...adult, minor_cohort: true };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "minor seat: still asks (중요한 것만 묻기)");
+      win.cachedProfile = adult; win.turnSeatMinor = true;
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a turn that started on a minor seat: still asks");
+      win.turnSeatMinor = false; win.cachedProfile = null;
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "no live profile: auto never applies on a guess");
+      win.cachedProfile = { ...adult, approval_preset: { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served preset wins over auto");
+      win.cachedProfile = saved; win.turnSeatMinor = undefined;
+      ok("auto (adult, no preset): folder-only commands run without a modal; outside, outward and minor seats still ask");
+    }
+
     const regrant = async () => { const g = await asked(win, "cat a.md", LABEL); assert.equal(g.modals, 1, "a fresh grant needs a modal"); };
     const stillAllowed = async () => (await asked(win, "cat a.md", undefined)).modals === 0;
     await regrant();

@@ -364,13 +364,16 @@ const ok = (name) => {
 // own browser instead of running Chrome). The six profiles that grant the browser moved. Control: removing
 // page_pdf_save from MCP_BROWSER_TOOLS and the server reproduced every previous digest (a7b8013ce7d9d7d0,
 // cdc79d6719de7555, 3545599d2498467d, e7f98f066d7810de, 610234268befcbb9, f854dfa48639b858).
+// DEC-11 amended (Jay 2026-11-04): an adult seat with no lesson preset runs in auto, so the scripted `rm -rf site`
+// inside the work folder is allowed instead of asked. Only adultWide grants the shell and moved. Control: forcing
+// autoInFolder off in sdkCoach.ts reproduced every previous digest (adultWide 12183dad8d42f3be).
 const BASE = {
   kidsChat: "582e3e0804786f9f",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools.
   kidsPolluted: "5f38949c153d4c13",
   adultRW: "6295e410f05b5f13",
-  adultWide: "12183dad8d42f3be",
+  adultWide: "ebc3069233384a3e",
   adultSubagents: "b995c4fa789f806f",
   adultCR: "06c7bf022016cb15",
   minorFlagAdultTier: "f5e0eea0b4359fcf",

@@ -1,5 +1,5 @@
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
-import { servedApprovalPreset } from "./approvalPreset";
+import { approvalModeFor, servedApprovalPreset } from "./approvalPreset";
 import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
@@ -850,6 +850,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         folderRemoved: folderRemovedFeatures(args.profile),
         // CGP-AGENT-R-001 — the lesson's approval preset may only add asks (approvalPreset.ts).
         approvalPreset: servedApprovalPreset(args.profile)?.id ?? null,
+        // DEC-11 amended (Jay 2026-11-04) — personal and adult seats with no preset run in auto.
+        autoInFolder: approvalModeFor(servedApprovalPreset(args.profile)?.id ?? null, isMinorProfile(args.profile)) === "auto",
       });
       if (verdict.decision === "deny") {
         if (verdict.drift) {

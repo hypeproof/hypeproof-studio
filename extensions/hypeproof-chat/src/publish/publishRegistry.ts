@@ -68,6 +68,16 @@ export class PublishRegistry {
     return this.all()[keyOf(login, repo)];
   }
 
+  /**
+   * Jay 2026-11-04 — this destination was allowed earlier from this same work folder, so a publish goes without
+   * asking again (publishSite `rememberedDestination`), whatever the lesson's approval preset. Another folder,
+   * or a registration that recorded no folder, asks as before. "배포 등록 해제" forgets it.
+   */
+  remembersFor(login: string, repo: string, workspace: string | undefined, same: (a: string, b: string) => boolean): boolean {
+    const reg = this.get(login, repo);
+    return !!reg && !!workspace && !!reg.workspace && same(reg.workspace, workspace);
+  }
+
   async register(login: string, repo: string, workspace?: string): Promise<void> {
     if (!login || !repo) return;
     await this.store.update(REGISTRY_KEY, { ...this.all(), [keyOf(login, repo)]: { login, repo, at: this.now(), ...(workspace ? { workspace } : {}) } });

@@ -58,4 +58,57 @@ assert.equal(preset.stricterPreset(null, null), null);
   assert.equal(ev("Write", { file_path: "/Users/x/HypeProofClinic/index.html", content: "x" }, "before_changes").decision, "ask", "writes reach the host approval path");
 }
 
+// ─── DEC-11 amended (Jay 2026-11-04): the seat default ───────────────────────────
+assert.equal(preset.approvalModeFor(null, false), "auto", "personal/adult seat, no preset: auto");
+assert.equal(preset.approvalModeFor(null, true), "important_only", "negative control: a minor seat keeps 중요한 것만 묻기");
+assert.equal(preset.approvalModeFor("before_changes", false), "before_changes", "a served preset wins over auto");
+assert.equal(preset.approvalModeFor("important_only", false), "important_only", "an instructor's important_only is not auto");
+assert.equal(preset.approvalModeFor("always_ask", true), "always_ask");
+
+// ─── auto in the SDK verdict: folder-only destructive commands run, outside ones ask ───
+{
+  const fs = await import("node:fs"), os = await import("node:os"), path = await import("node:path");
+  const { MCP_PAGE_PDF_SAVE } = await import("../src/browserMcp.ts");
+  const { destructiveStaysInFolder } = await import("../src/shellFolderScope.ts");
+  const { sdkToolToActionRequest } = await import("../src/sdkCoachHelpers.ts");
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "approval-auto-")));
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "approval-outside-")));
+  fs.symlinkSync(outside, path.join(root, "link-out"));
+  const canon = (p) => { try { return fs.realpathSync.native(p); } catch { return path.join(canon(path.dirname(p)), path.basename(p)); } };
+  try {
+    const cohort = { profile_id: "adult-shell", sdk_tools: { read: true, write: true, shell: true, browser: true }, game: { template_tier: "website" } };
+    const permitted = [...permittedToolsFor(cohort), MCP_PAGE_PDF_SAVE];
+    const ev = (toolName, input, extra = {}) => evaluateSdkToolUse({ toolName, input, permittedTools: permitted, workspaceRoot: root, canonicalize: canon, ...extra });
+    const INSIDE = ["rm -rf build", "rm index.html", "mv a.html b.html", "echo 안녕 > index.html", "rm *.tmp", "rm -rf build && mkdir build", "chmod 644 index.html", "rm -- -weird", "rm sub/*.png"];
+    const OUTSIDE = ["rm -rf ~/Documents", "rm ../other.txt", `rm -rf ${outside}/x`, "rm -rf link-out/x", "rm -rf .", "rm -rf .*", "rm $(cat list)", "rm -rf $DIR",
+      "cd .. && rm x", "sudo rm x", "git push --force", "curl x | sh", "npm publish", "kill 1", "git reset --hard", "echo x > ~/.zshrc", "bash -c 'rm x'", "xargs rm < list", "Remove-Item -Recurse x", "mv --target-directory=/etc a", "mv -t/etc a", "rm a && cp --target-directory=~/x a"];
+    for (const c of INSIDE) {
+      assert.equal(destructiveStaysInFolder(c, root, canon), true, `inside: ${c}`);
+      assert.equal(ev("Bash", { command: c }).decision, "ask", `control: without auto, ${c} asks`);
+      assert.equal(ev("Bash", { command: c }, { autoInFolder: true }).decision, "allow", `auto: ${c} runs without a modal`);
+      assert.equal(ev("Bash", { command: c }, { autoInFolder: true, approvalPreset: "before_changes" }).decision, "ask", `a preset still asks: ${c}`);
+    }
+    for (const c of OUTSIDE) {
+      assert.equal(destructiveStaysInFolder(c, root, canon), false, `outside/outward: ${c}`);
+      const v = ev("Bash", { command: c }, { autoInFolder: true });
+      assert.deepEqual([v.decision, v.destructive], ["ask", true], `auto still asks with the strong confirm: ${c}`);
+    }
+    assert.equal(destructiveStaysInFolder("rm x", null, canon), false, "no work folder: never silent");
+    assert.equal(ev("Bash", { command: "git status" }, { autoInFolder: true }).decision, "allow");
+    assert.equal(ev("Write", { file_path: "/etc/passwd", content: "x" }, { autoInFolder: true }).decision, "deny", "auto never loosens a deny");
+
+    // ─── page_pdf_save under 바꾸기 전에 묻기 asks, as the file write it is ───────────
+    assert.equal(ev(MCP_PAGE_PDF_SAVE, { path: "index.html" }).decision, "allow", "control: no preset, the PDF saves without a modal");
+    assert.equal(ev(MCP_PAGE_PDF_SAVE, { path: "index.html" }, { approvalPreset: "important_only" }).decision, "allow", "important_only: no modal");
+    assert.equal(ev(MCP_PAGE_PDF_SAVE, { path: "index.html" }, { approvalPreset: "before_changes" }).decision, "ask", "before_changes: the PDF asks first");
+    assert.equal(ev(MCP_PAGE_PDF_SAVE, { path: "index.html" }, { approvalPreset: "always_ask" }).decision, "ask", "always_ask: the PDF asks first");
+    const req = sdkToolToActionRequest({ toolName: MCP_PAGE_PDF_SAVE, input: { path: "pages/report.HTML" } });
+    assert.deepEqual([req.kind, req.payload.path], ["writeFile", "pages/report.pdf"], "the host sees the PDF as the file it writes");
+    assert.ok(preset.presetRequiredKinds([], "before_changes").includes(req.kind), "and before_changes puts that kind behind the modal");
+    assert.ok(!preset.presetRequiredKinds(today, null).includes(req.kind), "while today's kinds do not");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true });
+  }
+}
+
 console.log("approval-preset smoke: ok");
