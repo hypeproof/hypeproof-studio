@@ -4206,6 +4206,9 @@
         },
         {
           "path": "e2e/curriculum-runtime/fixtures/dental-element-trial/index.html"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/review-team-search.test.tsx"
         }
       ]
     },
