@@ -14932,6 +14932,52 @@
       ]
     },
     {
+      "id": "ST-REQ-CHALK-APPROVAL-PRESET",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### CH-08 수업 버전별 AI가 묻는 방식 (CGP-AGENT-R-001) · 2026-11-04"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-APPROVAL-PRESET",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-APPROVAL-PRESET",
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/authoring.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-APPROVAL-PRESET",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-APPROVAL-PRESET",
+        "ST-IMP-CHALK-APPROVAL-PRESET"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/approval-preset.browser.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md",
+          "section": "### T-51 수업 버전별 AI가 묻는 방식 (CH-08, CGP-AGENT-R-001) · 2026-11-04"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-CHALK-HELP-TRIAGE",
       "stage": "requirement",
       "label": "REQ-CGP-LEARN-17: Chalk help-request queue keyboard triage (next, previous, open, answer-and-advance)",
