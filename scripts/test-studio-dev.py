@@ -508,7 +508,8 @@ class DevChalkTests(DevLauncherTests):
             receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
             self.assertEqual(receipt['chalk']['commit'], commit)
             self.assertFalse(receipt['chalk']['dirty'])
-            self.assertEqual(receipt['chalk']['ref'], 'main')
+            branch = subprocess.check_output(['git', 'branch', '--show-current'], cwd=chalk, text=True).strip()
+            self.assertEqual(receipt['chalk']['ref'], branch)
             self.assertEqual(len(receipt['chalk']['vsix_sha256']), 64)
 
     def test_no_chalk_removes_installed_copy_and_never_builds(self):
