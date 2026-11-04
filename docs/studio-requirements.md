@@ -6883,6 +6883,9 @@ chip are outside this row.
 
 ## Task archive (CGP-CHAT-R-025)
 
+Recent-task row menus also expose **보관하기** for personal tasks (#3234). The open task uses the existing scoped archive command; other rows show a focusable disabled action explaining that the task must be opened first. The description states that the conversation remains in 보관함 and can be reopened. Classroom/trial rows do not gain this action; busy-state guards remain in force.
+
+
 REQ-STUDIO-TASK-ARCHIVE / CGP-CHAT-R77 (CGP-CHAT-077) / CGP-CHAT-D77 / PI#2 (human judgment stays
 visible: the learner decides what stays in view, and nothing of their work is lost): on a personal
 task workspace (REQ-STUDIO-TASK-WORKSPACE), the task menu (대화 메뉴) offers **보관하기** for the open

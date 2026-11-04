@@ -6,7 +6,7 @@
 // The real webview entry (main.tsx: the real stylesheet order and the real rail markup) is bundled and gets a
 // personal task workspace config with two tasks and a host move rule. Two seats: a personal activity whose menu
 // lists two destinations (one with a long unbroken name), and a class task whose menu has only the
-// aria-disabled move item with its reason. Dark and light, 1420 and 800 px. With the first task's menu open:
+// aria-disabled move item with its reason. Dark and light, 320, 390, 800 and 1420 px; personal rows also expose reversible archive. With the first task's menu open:
 //   - every toggle and menu item is a 44px target (width and height of its real box)
 //   - every element of the menu that draws text has a computed font-size of at least 14px
 //   - the menu stays inside the rail and the viewport; the page does not scroll sideways
@@ -94,7 +94,7 @@ const RING = ['outline-width', 'outline-style', 'outline-color', 'outline-offset
 
 async function runMatrix(b, extraCss, shots) {
   const results = [];
-  for (const seat of ['personal', 'class']) for (const theme of ['dark', 'light']) for (const width of [1420, 800]) {
+  for (const seat of ['personal', 'class']) for (const theme of ['dark', 'light']) for (const width of [1420, 800, 390, 320]) {
     const where = `${seat}/${theme}/${width}`;
     await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }, { name: 'prefers-color-scheme', value: theme }] });
@@ -108,6 +108,10 @@ async function runMatrix(b, extraCss, shots) {
       for (let i = 0; i < 100 && !(await b.evaluate(`!!window.sent && window.sent.some((m) => m.type === 'ready')`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
       await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'config', config: ${JSON.stringify(config(seat))} } }))`);
       for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('.tw-task-menu-toggle')`)); i++) await new Promise((r) => setTimeout(r, 100));
+      if (width <= 700) {
+        await b.evaluate(`document.querySelector('.tw-rail-toggle')?.click()`);
+        await new Promise(r => setTimeout(r, 100));
+      }
       await b.evaluate(`(() => { document.querySelector('.tw-task-menu-toggle')?.click();
         ${extraCss ? `const s = document.createElement('style'); s.textContent = ${JSON.stringify(extraCss)}; document.head.append(s);` : ''} })()`);
       for (let i = 0; i < 20 && !(await b.evaluate(`!!document.querySelector('.tw-task-menu-panel')`)); i++) await new Promise((r) => setTimeout(r, 50));
@@ -139,7 +143,7 @@ function check(results) {
     expect(r.toggles === 2, `${r.where}: ${r.toggles} task menu toggles, want one per task`);
     expect(r.docScroll <= r.vw + 0.5, `${r.where}: the page scrolls horizontally (${r.docScroll} > clientWidth ${r.vw})`);
     for (const o of r.overflow ?? []) expect(false, `${r.where}: ${o}`);
-    const want = r.seat === 'personal' ? 4 : 3; // two toggles + destinations, or + the one disabled item
+    const want = r.seat === 'personal' ? 5 : 3; // two toggles + destinations + archive, or class disabled item
     expect((r.controls ?? []).length === want, `${r.where}: ${(r.controls ?? []).length} buttons measured, want ${want}`);
     for (const c of r.controls ?? []) expect(c.w >= 43.5 && c.h >= 43.5, `${r.where}: ${c.name} target is ${Math.round(c.w)}x${Math.round(c.h)}px, under 44`);
     expect((r.texts ?? []).length >= 2, `${r.where}: only ${(r.texts ?? []).length} text elements measured`);
@@ -157,7 +161,7 @@ function check(results) {
       expect(ring['outline-offset'] === row['outline-offset'], `${r.where}: ${name} ring offset ${ring['outline-offset']} differs from the task rows' ${row['outline-offset']}`);
     }
   }
-  expect(results.length === 8, `ran ${results.length} of 8 combinations`);
+  expect(results.length === 16, `ran ${results.length} of 16 combinations`);
   return failures;
 }
 
@@ -184,4 +188,4 @@ try {
   }
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`task-menu-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS task menu computed: 44px targets, 14px text, inside the rail, the rows\' 2px focus ring, the class reason on the focusable item; personal and class x dark and light x 1420 and 800; four injected overrides caught');
+console.log('PASS task menu computed: 44px targets, 14px text, inside the rail, the rows\' 2px focus ring, the class reason on the focusable item; personal and class x dark and light x 320, 390, 800 and 1420; four injected overrides caught');

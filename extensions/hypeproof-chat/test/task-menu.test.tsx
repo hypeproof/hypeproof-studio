@@ -41,7 +41,11 @@ async function run() {
   const menu = host.querySelector('[role="menu"]');
   assert.ok(menu);
   const items = menu.querySelectorAll('button[role="menuitem"]');
-  assert.deepEqual([...items].map((item: any) => item.textContent), ['그림 연습', '<b>홈페이지</b>']);
+  assert.deepEqual([...items].map((item: any) => item.textContent), ['그림 연습', '<b>홈페이지</b>', '보관하기']);
+  assert.equal(items[2].getAttribute('aria-disabled'), 'true', 'inactive task cannot archive the currently open task');
+  const beforeInactiveArchive = posted().length;
+  await act(() => click(items[2]));
+  assert.equal(posted().length, beforeInactiveArchive, 'inactive archive posts nothing');
   assert.equal(host.querySelector('b'), null, 'activity names render as text');
   assert.equal(items[0].getAttribute('aria-label'), '옮기기: 그림 연습');
   assert.equal(doc.activeElement === items[0], true, 'the first item takes focus');
@@ -89,7 +93,7 @@ async function run() {
     await render(move);
     await act(() => click(host.querySelectorAll('.tw-task-menu-toggle')[0]));
     const only = host.querySelectorAll('[role="menu"] button[role="menuitem"]');
-    assert.equal(only.length, 1);
+    assert.equal(only.length, move.allowed ? 2 : 1, 'archive is personal only, including no move destinations');
     const item: any = only[0];
     assert.equal(item.textContent, '다른 활동으로 옮기기');
     assert.equal(item.parentElement.getAttribute('role'), 'group', 'the reason sits in a group, not loose in the menu');
@@ -104,6 +108,15 @@ async function run() {
     assert.equal(posted().slice(count).some(message => message.type === 'taskMove'), false, 'a disabled move sends nothing');
     await key(item, 'Escape');
   }
+  await render(personal);
+  await act(() => click(host.querySelectorAll('.tw-task-menu-toggle')[0]));
+  const archive = [...host.querySelectorAll('[role="menu"] button')].find((item: any) => item.textContent === '보관하기');
+  assert.ok(archive);
+  assert.equal(archive.getAttribute('aria-disabled'), 'false');
+  const beforeArchive = posted().length;
+  await act(() => click(archive));
+  assert.deepEqual(posted().slice(beforeArchive).map(message => message.type), ['taskArchive']);
+  assert.equal(host.querySelector('[role="menu"]'), null, 'archive closes the menu');
   await act(() => root.unmount());
   console.log('task-menu: ok');
 }
