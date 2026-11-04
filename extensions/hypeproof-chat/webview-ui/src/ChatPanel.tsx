@@ -132,6 +132,8 @@ import { currentDividerId, stepDividerLabel, stepDividers, type LessonStepMarks 
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
+import { servedApprovalPreset } from "../../src/approvalPreset";
+import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
@@ -1028,6 +1030,8 @@ export function ChatPanel(props: Props) {
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
+  // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
+  const approvalPreset = useTurnBoundaryPreset(servedApprovalPreset(config?.profile), streaming);
   // CGP-ART-D-008 — "선생님께 알리기" only while this learner's class help channel can take a new request.
   const canAskTeacher = !props.instructor && classroomPanels.help && help?.availability.state === "ready" && !!help.draft_key && !help.envelope;
   const linkBlockedBanner = linkBlocked && <ExternalLinkBlocked key={linkBlocked.at} host={linkBlocked.host} canAskTeacher={canAskTeacher}
@@ -2555,6 +2559,7 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
+            <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
               <button
                 onClick={() => {

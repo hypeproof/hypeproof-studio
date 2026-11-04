@@ -428,6 +428,11 @@ export interface ResolvedProfile {
   };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
+  /**
+   * CGP-AGENT-R-001/R-002 — the frozen lesson's approval preset (approvalPreset.ts). Absent → the
+   * app's own approval tiers. Read with servedApprovalPreset(), which ignores an unknown id.
+   */
+  approval_preset?: import("./approvalPreset").ServedApprovalPreset;
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
   tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
