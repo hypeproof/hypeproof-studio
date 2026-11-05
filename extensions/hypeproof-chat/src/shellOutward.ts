@@ -82,6 +82,7 @@ const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh
 /** Prefixes that run the rest of the words as the command, unchanged. */
 const TRANSPARENT = new Set(["command", "builtin", "exec", "nohup", "time", "nice", "noglob", "nocorrect", "-", "sudo", "doas", "caffeinate", "timeout", "gtimeout", "stdbuf", "unbuffer", "chronic", "ionice", "arch"]);
 /** Shell words that open a group or a clause; the command starts after them. */
+const LOOP_WORDS = new Set(["while", "until", "for", "select"]);
 const KEYWORDS = new Set(["{", "}", "(", ")", "!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "coproc", "function"]);
 /** Commands that only print or search the words they are given: a word naming a network tool there is text. */
 const TEXT_ONLY = new Set([
@@ -148,6 +149,10 @@ interface State {
   headMoved: boolean;
   /** A push ran earlier in this command: `-u`/`autoSetupRemote` may have set a branch's remote in shared config. */
   pushSeen: boolean;
+  /** Reading a `$(…)`/backtick/`<(…)` body: bash runs it later than this reading's order (verify r9). */
+  inSubst: number;
+  /** A `while`/`until`/`for`/`select` loop: a push in it may run again after later steps (verify r9). */
+  loopSeen: boolean;
 }
 
 const mark = (s: State, why: string) => { s.outward = true; s.unknown ??= why; };
@@ -155,8 +160,9 @@ const add = (s: State, t: OutwardTarget) => { s.outward = true; s.targets.push(t
 
 /** Read `command` for parts that may send data off this computer. */
 export function readOutward(command: string): OutwardReading {
-  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false, pushSeen: false };
+  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false, pushSeen: false, inSubst: 0, loopSeen: false };
   readScript(command, s, 0);
+  if (s.loopSeen && s.targets.some((t) => t.kind === "git")) s.unknown ??= "a push inside a loop may run again after later steps";
   // A push read after a change of remotes, config, variables or folder goes somewhere this reading cannot see.
   if (s.outward && (s.rewired || s.moved) && s.targets.length) s.unknown ??= s.rewired ? "remotes or network variables change in the same command" : "the folder changes before it";
   return { outward: s.outward, unknown: s.outward ? s.unknown : null, targets: s.targets };
@@ -170,8 +176,12 @@ function readScript(script: string, s: State, depth: number): void {
     if (MENTIONS_OUTWARD.test(script) || [...NETWORK_TOOLS].some((t) => new RegExp(`(^|[^\\w.-])${t}(?![\\w.-])`, "i").test(script))) mark(s, `unreadable: ${parsed.uncertain}`);
     return;
   }
-  for (const body of parsed.nested) readScript(body, s, depth + 1);
+  // Substitution bodies are read first here but run when bash expands the command holding them, after earlier steps.
+  s.inSubst++;
+  try { for (const body of parsed.nested) readScript(body, s, depth + 1); } finally { s.inSubst--; }
   for (const cmd of parsed.commands) {
+    const lead = cmd.words.find((w) => !KEYWORDS.has(w.text) || LOOP_WORDS.has(w.text));
+    if (lead && LOOP_WORDS.has(lead.text)) s.loopSeen = true;
     readCommand(cmd, cmd.words, s, depth);
     // DEC-11f — what ran before a push (at any depth: `sh -c '… && git push'`) decides whether it can be placed.
     if (!chainSafe(cmd)) s.unsafeSeen = true;
@@ -512,6 +522,9 @@ function readGit(rest: ShellWord[], s: State, env: { gitDir?: string; workTree?:
   // Verify r8: `git -C ../wt2 push -u up main && git push` — the first push wrote `branch.main.remote` into config another
   // repository shares (a linked worktree, an include), so a later bare push may use a remote this reading never saw.
   if (repo === null && s.pushSeen) { mark(s, "an earlier push may set the branch's default remote"); return; }
+  // Verify r9: a push in a substitution runs after the steps this reading saw as later, and one in a loop runs again
+  // after the loop's other steps; either way what ran before it is not what this reading saw.
+  if (s.inSubst > 0) { mark(s, "a push inside a command substitution"); return; }
   s.pushSeen = true;
   // DEC-11f — any other command earlier in the same command (`npm test`, `printf … >> .git/config`, `ln -s …`) may change
   // which repository, folder or remote applies when the push runs: only `cd` steps and chain-safe git may come first.
