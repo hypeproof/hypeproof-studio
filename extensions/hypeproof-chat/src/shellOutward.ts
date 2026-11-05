@@ -204,7 +204,10 @@ function andChainOnly(src: string): boolean {
 // Not `log`/`show`/`diff` (`--output=` writes any file, e.g. `.git/config`), `stash` (`stash branch` switches),
 // `rm`/`mv`/`restore` (they move or rewrite folders a later step relies on).
 // Not `pull`: it rewrites checked-out files (a tracked link, an included config file) after the decision (verify r5 C4).
-const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "fetch", "tag", "rev-parse", "ls-files", "push"]);
+// Not `commit`/`tag`: they write `COMMIT_EDITMSG`/`TAG_EDITMSG` in place, through a link into `.git/config` or an included
+// file (verify r6 C2, r7 A). Not `fetch`: `--set-upstream` writes `branch.<b>.remote` (verify r7 C). A push after them
+// asks; the same push as its own command is read after they ran.
+const CHAIN_SAFE_GIT = new Set(["add", "status", "rev-parse", "ls-files", "push"]);
 /** Git subcommands that may change the current branch, so a later bare `git push` may use another default remote. */
 const GIT_HEAD_MOVERS = new Set(["checkout", "switch", "rebase", "worktree", "branch", "symbolic-ref", "bisect"]);
 /** A redirect that writes no file: a descriptor copy (`2>&1`) or `/dev/null`. */
@@ -986,6 +989,7 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     const common0 = g(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
     const commonReal = common0 ? realpath(common0) : null;
     if (!commonReal) { unknown ??= "the repository's shared git folder cannot be read"; continue; }
+    const top = g(["rev-parse", "--show-toplevel"]);
     const inside = (p: string) => [repo, commonReal].some((b) => p === b || p.startsWith(`${b}/`));
     const includeInGitDir = includes.some((e) => {
       if (e.value === null || e.value === "" || /[\u0000-\u001f]/.test(e.value)) return true;
@@ -993,10 +997,17 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
       if (target.startsWith("~/")) target = path.join(os.homedir(), target.slice(2));
       else if (!path.isAbsolute(target)) {
         if (!e.origin?.startsWith("file:")) return true;
-        target = path.join(path.dirname(path.resolve(dir, e.origin.slice(5))), target);
+        // git prints a relative origin from the top of the worktree (the git folder when bare), not the push folder
+        // (verify r7 B: a fake `sub/.git` made `.git/config` resolve elsewhere).
+        const originFile = e.origin.slice(5);
+        target = path.join(path.dirname(path.isAbsolute(originFile) ? originFile : path.resolve(top ?? repo, originFile)), target);
       }
+      // The final link is followed too, and a file with another hard link may be written through that link (verify r7 A).
       const parent = realpath(path.dirname(target));
-      return parent === null || inside(path.join(parent, path.basename(target))) || inside(path.resolve(target));
+      let st: fs.Stats | null = null;
+      try { st = fs.statSync(target); } catch { /* not there yet */ }
+      const real = st ? realpath(target) : null;
+      return parent === null || (st !== null && (real === null || st.nlink > 1)) || inside(path.join(parent, path.basename(target))) || inside(path.resolve(target)) || (real !== null && inside(real));
     });
     if (includeInGitDir) { unknown ??= "a config include reads a file inside the git folder"; continue; }
     const remoteKeys = cfg("^remote\\..*\\.(url|pushurl)$", true);

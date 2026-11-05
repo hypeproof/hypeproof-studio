@@ -126,7 +126,7 @@ try {
     assert.deepEqual([r.approved, r.modals], [true, 0], "second push from the nested repository runs silently");
     for (const [c, cwd] of [
       ["git push origin main", nested], ["git push", deep],
-      [`cd ${nested} && git push`, work], ["cd nested && git push", work], ["cd nested && git add -A && git commit -m 'x' && git push origin main", work],
+      [`cd ${nested} && git push`, work], ["cd nested && git push", work], ["cd nested && git add -A && git push origin main", work],
       ["git -C nested push", work], [`git -C ${nested} push origin`, tmp], ["cd .. && git push", deep],
       ["GIT_DIR=nested/.git git push origin", work], ["git --git-dir=nested/.git push origin", work],
     ]) {
@@ -181,7 +181,13 @@ try {
       assert.equal(r.modals, 1, `F2/F3: ${c} asks`);
       assert.equal((await asked(c, cwd, undefined)).modals, 1, `F2/F3: ${c} asks again, never remembered`);
     }
-    assert.equal((await asked("git add -A && git commit -m 'x' && git push origin", nested, undefined)).modals, 0, "control: add and commit before the push stay silent");
+    assert.equal((await asked("git add -A && git status && git push origin", nested, undefined)).modals, 0, "control: add and status before the push stay silent");
+    // Verify r6/r7: commit/tag write their message file in place (through a link into config); fetch --set-upstream writes
+    // the branch's remote. A push chained after them asks; as its own command it is read after they ran.
+    for (const c of ["git add -A && git commit -m 'x' && git push origin", "git tag -a v1 -m x && git push origin", "git fetch origin && git push origin", "git fetch --set-upstream origin main && git push"]) {
+      assert.equal((await asked(c, nested, undefined)).modals, 1, `r7: ${c} asks`);
+    }
+    assert.equal((await asked("git push origin", nested, undefined)).modals, 0, "r7 control: the push on its own after a commit stays silent");
     ok("verify r1: -C through a link resolves on disk; a command before the push (log/show/diff --output, appends, programs) asks");
 
     // Unresolvable: asks every time and is never remembered.
@@ -301,7 +307,7 @@ try {
     assert.equal((await asked("git push lf2", work, undefined)).modals, 1, "B2: a legacy remotes file of that name asks");
     fs.rmSync(path.join(work, ".git", "remotes"), { recursive: true, force: true });
     // C4 (verify r5) — `git pull` rewrites checked-out files (a tracked link, an included config) after the decision.
-    assert.equal((await asked("git fetch origin && git push origin", work, undefined)).modals, 0, "C4 control: fetch before a remembered push stays silent");
+    assert.equal((await asked("git status && git push origin", work, undefined)).modals, 0, "C4 control: status before a remembered push stays silent");
     for (const c of ["git pull && git push origin", "git pull --ff-only origin main && git push origin"]) assert.equal((await asked(c, work, undefined)).modals, 1, `C4: ${c} asks`);
     // Verify r6 (head da6b50698), each ran silently and delivered there:
     // C1 — a default remote `origin ` (trimmed to the allowed `origin` here, another remote to git).
@@ -325,6 +331,21 @@ try {
     fs.writeFileSync(path.join(tmp, "shared.gitconfig"), "[user]\n\tname = t\n");
     assert.equal((await asked("git push origin", work, undefined)).modals, 0, "C2 control: an include outside the git folder is read as it is");
     env.GIT_CONFIG_GLOBAL = "/dev/null";
+    // Verify r7 B/A — an include check that resolved a relative origin from the push folder, or stopped at a final link.
+    fs.mkdirSync(path.join(work, "fake", ".git"), { recursive: true });
+    git(work, "config", "include.path", "COMMIT_EDITMSG");
+    assert.equal((await asked("git push origin", path.join(work, "fake"), undefined)).modals, 1, "r7 B: a relative origin is read from the worktree top: the include inside .git asks from a subfolder");
+    git(work, "config", "--unset", "include.path");
+    fs.rmSync(path.join(work, "fake"), { recursive: true, force: true });
+    fs.symlinkSync(".git/COMMIT_EDITMSG", path.join(work, "cfg-link"));
+    git(work, "config", "include.path", "../cfg-link");
+    assert.equal((await asked("git push origin", work, undefined)).modals, 1, "r7 A: an include through a final link into .git asks");
+    git(work, "config", "--unset", "include.path"); fs.unlinkSync(path.join(work, "cfg-link"));
+    fs.linkSync(path.join(work, ".git", "COMMIT_EDITMSG"), path.join(work, "cfg-hard"));
+    git(work, "config", "include.path", "../cfg-hard");
+    assert.equal((await asked("git push origin", work, undefined)).modals, 1, "r7 A: an include of a file with another hard link asks");
+    git(work, "config", "--unset", "include.path"); fs.unlinkSync(path.join(work, "cfg-hard"));
+    assert.equal((await asked("git push origin", work, undefined)).modals, 0, "r7 control: includes removed, silent again");
     ok("verify r4–r6: ambiguous branch names, legacy remote files, a pull before the push, padded default remotes and includes inside the git folder ask");
   }
 
