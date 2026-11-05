@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
 import {casebookEvidence, decide, p0CaseIds} from '../publish-gate.mjs';
 import {parseYaml} from '../casebook.mjs';
 
@@ -29,6 +32,34 @@ const hotfixPr = (sha, extra = {}) => ({number: 7, labels: ['hotfix'], base: 'ho
 
 test('a prerelease tag is not gated', () => {
   assert.equal(decide({tag: `${TAG}-rc.1`, tagSha: SHA}).allow, true);
+});
+
+// The publish job refuses to publish without a notes line, so an rc must get one (rc.3 of
+// v2026.1105.0 stayed a draft because it did not), while a stable tag still needs the casebook.
+test('rc prerelease passes with a notes line; a stable tag without a run or override does not', () => {
+  const rcVerdict = decide({tag: 'v2026.1105.0-rc.3'});
+  assert.deepEqual([rcVerdict.allow, rcVerdict.route], [true, 'prerelease']);
+  assert.match(rcVerdict.notesLine, /^Release casebook: rc prerelease; the casebook gate .* applies when the stable tag is published\.$/);
+  const bare = decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}], ['release'], [])});
+  assert.equal(bare.allow, false);
+  assert.equal(bare.notesLine, undefined);
+  const overridden = decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: P0, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}], ['release'],
+    [override('jayleekr', 'Release manager override: P0 run on rc.2; rc.3 only fixes the publish gate')])});
+  assert.deepEqual([overridden.allow, overridden.casebook], [true, 'override']);
+  assert.match(overridden.notesLine, /^Release casebook: not run; release manager override by jayleekr on #9/);
+});
+
+test('CLI: an rc tag writes notes_line to GITHUB_OUTPUT without any GitHub lookup', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-gate-'));
+  const out = path.join(dir, 'output');
+  fs.writeFileSync(out, '');
+  const script = fileURLToPath(new URL('../publish-gate.mjs', import.meta.url));
+  // An unusable gh on PATH proves the rc path makes no lookup.
+  const env = {...process.env, GITHUB_OUTPUT: out, GITHUB_STEP_SUMMARY: '', PATH: dir, GH_TOKEN: ''};
+  const r = spawnSync(process.execPath, [script, '--tag', 'v2026.1105.0-rc.3'], {env, encoding: 'utf8'});
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(fs.readFileSync(out, 'utf8'), /^notes_line=Release casebook: rc prerelease; .+\n$/);
+  fs.rmSync(dir, {recursive: true, force: true});
 });
 
 test('negative control: a hand-pushed stable tag with no release PR and no hotfix range is refused', () => {
