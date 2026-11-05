@@ -67,9 +67,10 @@ export function runGitQuietly(args: string[], cwd: string): string | null {
 }
 
 /**
- * Another git repository (or worktree) somewhere below `root` (depth 4, `node_modules` skipped, at most 4000
- * folders read). The agent's shell keeps its folder between commands, so a later bare `git push` might run there.
- * True when the walk cannot finish (unreadable or too large): the caller then cannot place a remote name.
+ * Another git repository (or worktree) somewhere below `root` (depth 8, at most 4000 folders read; `node_modules`
+ * is not walked, only its packages' top folders are checked). A link to a folder counts as one (it may lead to
+ * another repository). The agent's shell keeps its folder between commands, so a later bare `git push` might run
+ * there. True when the walk cannot finish (unreadable or too large): the caller then cannot place a remote name.
  */
 export function hasNestedGitRepo(root: string): boolean {
   let budget = 4000;
@@ -77,12 +78,26 @@ export function hasNestedGitRepo(root: string): boolean {
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return dir !== root; }
     for (const e of entries) {
-      if (e.name === "node_modules" || e.name === ".git") continue;
+      if (e.name === ".git") continue;
+      if (e.isSymbolicLink()) { try { if (fs.statSync(path.join(dir, e.name)).isDirectory()) return true; } catch { /* broken link */ } continue; }
       if (!e.isDirectory()) continue;
+      if (e.name === "node_modules") { if (packagesHoldRepo(path.join(dir, e.name))) return true; continue; }
       if (--budget < 0) return true;
       const child = path.join(dir, e.name);
       try { if (fs.existsSync(path.join(child, ".git"))) return true; } catch { return true; }
-      if (depth < 4 && walk(child, depth + 1)) return true;
+      if (depth < 8 && walk(child, depth + 1)) return true;
+    }
+    return false;
+  };
+  /** `node_modules/<pkg>/.git` or `node_modules/@scope/<pkg>/.git` (a git dependency checked out in place). */
+  const packagesHoldRepo = (modules: string): boolean => {
+    let names: string[];
+    try { names = fs.readdirSync(modules); } catch { return false; }
+    for (const n of names) {
+      if (--budget < 0) return true;
+      const pkg = path.join(modules, n);
+      if (fs.existsSync(path.join(pkg, ".git"))) return true;
+      if (n.startsWith("@")) { try { for (const m of fs.readdirSync(pkg)) if (fs.existsSync(path.join(pkg, m, ".git"))) return true; } catch { /* unreadable scope */ } }
     }
     return false;
   };

@@ -53,7 +53,11 @@ const NETWORK_TOOLS = new Set([
   "sendmail", "mail", "mailx", "http", "https", "xh", "xhs", "openssl", "dig", "nslookup", "host", "drill", "whois", "ping", "ping6", "traceroute",
 ]);
 /** Code runners that read a program from standard input or from a file named at run time (`… | python3`, `node <(…)`). */
-const INTERPRETERS = new Set(["python", "python2", "python3", "node", "nodejs", "deno", "bun", "perl", "ruby", "php", "lua", "osascript", "tclsh", "expect", "rscript", "jshell", "pwsh", "powershell"]);
+const INTERPRETERS = new Set(["python", "python2", "python3", "node", "nodejs", "deno", "bun", "perl", "ruby", "php", "lua", "osascript", "tclsh", "expect", "rscript", "jshell", "pwsh", "powershell", "awk", "gawk", "mawk", "nawk"]);
+/** Standard input named as a file: a program read from it arrives through the pipe. */
+const STDIN_PATH = /^(-|\/dev\/stdin|\/dev\/fd\/\d+|\/proc\/self\/fd\/\d+|\/dev\/tty)$/;
+/** Wrappers that build the command line at run time (arguments appended or substituted). */
+const ARG_WRAPPERS = new Set(["xargs", "parallel", "find", "watch", "flock", "sem", "entr", "fswatch"]);
 /** Lookup tools: silent with a written-out name, unknown with one known only at run time (DNS can carry data). */
 const LOOKUPS = new Set(["dig", "nslookup", "host", "drill", "whois", "ping", "ping6", "traceroute"]);
 /** Network tools whose destination this module does not read: always `unknown`. */
@@ -88,6 +92,13 @@ const GIT_LOCAL = new Set([
 /** Git subcommands that reach a remote (with a run-time argument they may carry data out in the address). */
 const GIT_NETWORK = new Set(["push", "send-pack", "fetch", "pull", "clone", "ls-remote", "remote", "submodule", "archive", "lfs"]);
 /** Git global options that take no value and do not change where a push goes. */
+/** git push long options that take no value and name no place or program (exact spelling only). */
+const PUSH_PLAIN_LONG = new Set([
+  "--all", "--branches", "--mirror", "--tags", "--follow-tags", "--no-follow-tags", "--dry-run", "--porcelain", "--delete",
+  "--prune", "--no-prune", "--force", "--force-if-includes", "--no-force-if-includes", "--no-verify", "--verify", "--quiet",
+  "--verbose", "--progress", "--no-progress", "--set-upstream", "--atomic", "--no-atomic", "--thin", "--no-thin", "--ipv4",
+  "--ipv6", "--no-signed", "--recurse-submodules=check", "--recurse-submodules=no", "--no-recurse-submodules", "--no-force-with-lease",
+]);
 const GIT_PLAIN_GLOBALS = new Set([
   "--no-pager", "-p", "--paginate", "-P", "--bare", "--no-replace-objects", "--literal-pathspecs", "--glob-pathspecs",
   "--noglob-pathspecs", "--icase-pathspecs", "--no-optional-locks", "--no-advice", "--version", "--help",
@@ -191,7 +202,7 @@ function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: nu
   if (head === "wget") return readWget(rest, s);
   if (UNREAD_NETWORK.has(head)) { mark(s, `${head} is not read`); return; }
   if (TEXT_ONLY.has(head)) return;
-  readWrapped(cmd, rest, s, depth, false);
+  readWrapped(cmd, rest, s, depth, false, head);
 }
 
 /** `env [-i] [-u NAME] [-C dir] [-S string] [NAME=value…] command…` */
@@ -215,7 +226,7 @@ function readEnv(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: number)
  * network tool among its words exactly; any other command that carries a network tool's name as a word
  * (`xargs git push`, `find . -exec git push \;`) or inline code that names one changes how it runs: unknown.
  */
-function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: number, transparent: boolean): void {
+function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: number, transparent: boolean, head = ""): void {
   for (let j = 0; j < rest.length; j++) {
     const w = rest[j];
     if (w.dynamic && transparent) { mark(s, "a wrapper argument is known only at run time"); return; }
@@ -223,7 +234,7 @@ function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: num
     if (NETWORK_TOOLS.has(name) || SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval" || name === "env" || name.startsWith("git-")) {
       if (transparent) { readCommand(cmd, rest.slice(j), s, depth); return; }
       // xargs/parallel/find -exec hand a shell or interpreter code built at run time (`xargs -I{} sh -c '{}'`).
-      if (SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval") { mark(s, "a wrapper runs a shell or interpreter with arguments built at run time"); return; }
+      if (ARG_WRAPPERS.has(head) && (SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval")) { mark(s, "a wrapper runs a shell or interpreter with arguments built at run time"); return; }
       const inner: State = { targets: [], unknown: null, outward: false, moved: s.moved, rewired: s.rewired };
       readCommand(cmd, rest.slice(j), inner, depth);
       if (inner.outward) mark(s, "a network command inside a wrapper this app does not read");
@@ -254,8 +265,9 @@ function readShellRun(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: nu
     readScript(body.text, s, depth + 1);
     return;
   }
-  // A script file named at run time (`bash <(echo …)`, `sh $F`) is not read.
+  // A script file named at run time (`bash <(echo …)`, `sh $F`) or standard input by path (`sh /dev/stdin`) is not read.
   if (rest.slice(i).some((w) => w.dynamic || w.glob)) { mark(s, "a shell runs a script known only at run time"); return; }
+  if (rest[i] && STDIN_PATH.test(rest[i].text) && (cmd.piped || cmd.redirects.some((r) => r.op === "<"))) { mark(s, "a shell reads its script from a pipe"); return; }
   for (const h of cmd.heredocs) readScript(h.body, s, depth + 1);
   for (const h of cmd.herestrings) readScript(h.text, s, depth + 1);
   // Reading its script from a pipe: what arrives is not known here.
@@ -274,7 +286,7 @@ function readInterpreter(cmd: SimpleCommand, rest: ShellWord[], s: State): void 
   if (texts.some((t) => MENTIONS_OUTWARD.test(t))) { mark(s, "inline code names an outward command"); return; }
   const operands = rest.filter((w) => !w.text.startsWith("-"));
   const inline = rest.some((w) => /^-[A-Za-z]*[ceEr]$|^--(eval|print|command)/.test(w.text));
-  const fromStdin = operands.length === 0 || operands[0].text === "-";
+  const fromStdin = operands.length === 0 || operands.some((w) => STDIN_PATH.test(w.text));
   if (!inline && fromStdin && (cmd.piped || cmd.redirects.some((r) => r.op === "<" || r.op === "<>"))) mark(s, "an interpreter reads its program from a pipe or file");
 }
 
@@ -328,30 +340,34 @@ function readGit(rest: ShellWord[], s: State): void {
     return;
   }
   if (sub !== "push") return;
-  // git push [options] [<repository> [<refspec>…]]
-  let repo: string | null = null;
+  // git push [options] [<repository> [<refspec>…]]. Only options known not to name a place or program are read;
+  // git accepts any unambiguous prefix of a long option, so anything else asks. A positional repository beats --repo.
+  let repoOpt: string | null = null, positional: string | null = null;
   for (let j = 0; j < args.length; j++) {
     const t = args[j].text;
-    if (t === "--") { repo ??= args[j + 1]?.text ?? null; break; }
+    if (t === "--") { positional = args[j + 1]?.text ?? null; break; }
     if (t.startsWith("--")) {
-      // git accepts any unambiguous prefix of a long option (`--rep=` is --repo, `--receive=` is --receive-pack).
-      const name = t.slice(2).replace(/=.*$/, "");
-      if (t === "--repo") { repo = args[++j]?.text ?? null; continue; }
-      if (t.startsWith("--repo=")) { repo = t.slice(7); continue; }
-      if (t === "--recurse-submodules=check" || t === "--recurse-submodules=no" || t === "--no-recurse-submodules") continue;
-      if (name.length > 0 && ["repo", "receive-pack", "exec", "recurse-submodules"].some((o) => o.startsWith(name))) { mark(s, `git push --${name} can name another place or program`); return; }
-      if (t === "--push-option" || t === "--signed" && args[j + 1] && /^(true|false|if-asked|yes|no|on|off)$/.test(args[j + 1].text)) { j++; continue; }
-      continue;
+      if (t === "--repo") { repoOpt = args[++j]?.text ?? null; continue; }
+      if (t.startsWith("--repo=")) { repoOpt = t.slice(7); continue; }
+      if (t === "--push-option") { j++; continue; }
+      if (t.startsWith("--push-option=")) continue;
+      if (PUSH_PLAIN_LONG.has(t) || /^--force-with-lease(=|$)/.test(t)) continue;
+      mark(s, `git push ${t.replace(/=.*$/, "")} is not read`);
+      return;
     }
     if (t.startsWith("-") && t.length > 1) {
-      // A short bundle; `-o` takes the next word (or the rest of the bundle).
-      const o = t.indexOf("o", 1);
-      if (o > 0 && o === t.length - 1) j++;
+      // A short bundle of plain flags; `-o` takes the rest of the bundle or the next word.
+      for (let k = 1; k < t.length; k++) {
+        const c = t[k];
+        if (c === "o") { if (k === t.length - 1) j++; break; }
+        if (!"nvqufd46".includes(c)) { mark(s, `git push -${c} is not read`); return; }
+      }
       continue;
     }
-    if (repo === null) repo = t;
+    positional = t;
     break;
   }
+  const repo = positional ?? repoOpt;
   // A remote helper (`ext::sh -c …`) runs a program instead of naming a place.
   if (repo !== null && /^[A-Za-z][A-Za-z0-9+.-]*::/.test(repo)) { mark(s, "git push to a remote helper"); return; }
   add(s, { kind: "git", remote: repo, dir });
@@ -539,7 +555,11 @@ const CURL_LONG_VALUE = new Set([
   "tls-max", "proto", "proto-redir", "cert-type", "key-type", "pass", "hostpubmd5", "hostpubsha256", "time-cond",
   "speed-limit", "speed-time", "quote", "telnet-option", "ftp-port", "proxy-user", "data", "data-ascii", "data-binary",
   "data-raw", "data-urlencode", "json", "form", "form-string", "upload-file", "request", "mail-from", "mail-rcpt", "mail-auth",
+  "etag-compare", "etag-save", "netrc-file", "proxy-header", "cookie", "unix-socket", "abstract-unix-socket", "connect-to",
+  "resolve", "proxy", "preproxy", "doh-url", "dns-servers", "socks4", "socks4a", "socks5", "socks5-hostname", "config",
 ]);
+/** Options that put a file's contents or saved credentials into the request. */
+const CURL_FILE_SENDERS = ["etag-compare", "netrc", "netrc-file", "netrc-optional", "proxy-header"];
 /** Options that change where the request really goes, or read more options from somewhere: unknown. */
 const CURL_REROUTE = ["config", "next", "proxy", "preproxy", "socks4", "socks4a", "socks5", "socks5-hostname", "connect-to", "resolve", "unix-socket", "abstract-unix-socket", "doh-url", "dns-servers"];
 /** curl reads an unambiguous prefix of a long option on older versions: a prefix of any of these counts as it. */
@@ -553,9 +573,13 @@ function readCurl(args: ShellWord[], s: State): void {
     const w = args[j], t = w.text;
     if (w.dynamic || w.glob) dynamic = true;
     if (t === "--") { urls.push(...args.slice(j + 1)); break; }
+    // Any word starting with `@` is a file curl reads into the request (`--proxy-header @f`, `-H @f`): an upload.
+    if (t.startsWith("@") || /^--?[^=]*=@/.test(t)) upload = true;
     if (t.startsWith("--") && t.length > 2) {
       const eq = t.indexOf("=");
       const name = (eq > 0 ? t.slice(2, eq) : t.slice(2)).replace(/^no-/, "");
+      // Options that send a file's contents or saved credentials (`--etag-compare f`, `--netrc`).
+      if (name.length >= 3 && CURL_FILE_SENDERS.some((o) => o.startsWith(name))) upload = true;
       const takesValue = eq < 0 && (CURL_LONG_VALUE.has(name) || prefixOf(name, CURL_UPLOAD_LONG) || prefixOf(name, ["request", "url"]) || CURL_REROUTE.includes(name));
       const value = eq > 0 ? t.slice(eq + 1) : takesValue ? args[j + 1]?.text : undefined;
       if (takesValue) j++;
@@ -572,7 +596,7 @@ function readCurl(args: ShellWord[], s: State): void {
       for (let k = 1; k < t.length; k++) {
         const c = t[k];
         if (c === ":") { reroute = true; configRead = true; } // -: is --next
-        if (c === "G") upload = true;
+        if (c === "G" || c === "n") upload = true;
         if (!CURL_SHORT_VALUE.includes(c)) continue;
         const value = k < t.length - 1 ? t.slice(k + 1) : args[++j]?.text;
         if (k === t.length - 1 && args[j]?.dynamic) dynamic = true;
@@ -691,7 +715,7 @@ export type GitRunner = (args: string[], cwd: string) => string | null;
  * (an earlier silent `git config core.sshCommand …` then `git push` to a remembered remote, verify 2026-11-05).
  * Canonical key names are lowercase apart from the subsection, so the pattern is lowercase.
  */
-export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\..*proxy|https?\\.proxy|remote\\..*\\.(receivepack|proxy|vcs|uploadpack)|protocol\\..*\\.allow)$";
+export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\..*(proxy|curloptresolve)|https?\\.(proxy|curloptresolve)|gpg\\..*program|remote\\..*\\.(receivepack|proxy|vcs|uploadpack)|protocol\\..*\\.allow)$";
 
 export function resolveOutwardDestinations(reading: OutwardReading, cwd: string | null, git: GitRunner, opts: { nestedRepo?: boolean } = {}): { destinations: string[]; unknown: string | null } {
   const out = new Set<string>();
