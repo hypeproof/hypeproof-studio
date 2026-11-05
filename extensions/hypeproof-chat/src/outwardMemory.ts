@@ -9,6 +9,8 @@
 //
 // Pure apart from the injected store (structurally `vscode.Memento`) and `runGitQuietly` below.
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface OutwardStore {
   get<T>(key: string): T | undefined;
@@ -62,4 +64,27 @@ export function runGitQuietly(args: string[], cwd: string): string | null {
     const text = out.trim();
     return text ? text : null;
   } catch { return null; }
+}
+
+/**
+ * Another git repository (or worktree) somewhere below `root` (depth 4, `node_modules` skipped, at most 4000
+ * folders read). The agent's shell keeps its folder between commands, so a later bare `git push` might run there.
+ * True when the walk cannot finish (unreadable or too large): the caller then cannot place a remote name.
+ */
+export function hasNestedGitRepo(root: string): boolean {
+  let budget = 4000;
+  const walk = (dir: string, depth: number): boolean => {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return dir !== root; }
+    for (const e of entries) {
+      if (e.name === "node_modules" || e.name === ".git") continue;
+      if (!e.isDirectory()) continue;
+      if (--budget < 0) return true;
+      const child = path.join(dir, e.name);
+      try { if (fs.existsSync(path.join(child, ".git"))) return true; } catch { return true; }
+      if (depth < 4 && walk(child, depth + 1)) return true;
+    }
+    return false;
+  };
+  return walk(root, 1);
 }

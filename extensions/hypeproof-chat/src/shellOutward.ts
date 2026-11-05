@@ -50,8 +50,12 @@ export interface OutwardReading {
 const NETWORK_TOOLS = new Set([
   "git", "ssh", "scp", "sftp", "rsync", "curl", "wget",
   "nc", "ncat", "netcat", "telnet", "socat", "ftp", "lftp", "tftp", "ssh-copy-id", "sshfs", "mosh", "autossh",
-  "sendmail", "mail", "mailx", "http", "https", "xh", "xhs",
+  "sendmail", "mail", "mailx", "http", "https", "xh", "xhs", "openssl", "dig", "nslookup", "host", "drill", "whois", "ping", "ping6", "traceroute",
 ]);
+/** Code runners that read a program from standard input or from a file named at run time (`… | python3`, `node <(…)`). */
+const INTERPRETERS = new Set(["python", "python2", "python3", "node", "nodejs", "deno", "bun", "perl", "ruby", "php", "lua", "osascript", "tclsh", "expect", "rscript", "jshell", "pwsh", "powershell"]);
+/** Lookup tools: silent with a written-out name, unknown with one known only at run time (DNS can carry data). */
+const LOOKUPS = new Set(["dig", "nslookup", "host", "drill", "whois", "ping", "ping6", "traceroute"]);
 /** Network tools whose destination this module does not read: always `unknown`. */
 const UNREAD_NETWORK = new Set(["nc", "ncat", "netcat", "telnet", "socat", "ftp", "lftp", "tftp", "ssh-copy-id", "sshfs", "mosh", "autossh", "sendmail", "mail", "mailx", "http", "https", "xh", "xhs"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh", "tcsh"]);
@@ -89,6 +93,12 @@ const GIT_PLAIN_GLOBALS = new Set([
   "--noglob-pathspecs", "--icase-pathspecs", "--no-optional-locks", "--no-advice", "--version", "--help",
 ]);
 
+/** `--name[=…]` is the long option `name` or an abbreviation of one of `options` (git and getopt accept prefixes). */
+const longPrefix = (text: string, options: readonly string[]): boolean => {
+  if (!text.startsWith("--") || text.length < 3) return false;
+  const name = text.slice(2).replace(/=.*$/, "").replace(/^no-/, "");
+  return options.some((o) => o.startsWith(name));
+};
 const basename = (text: string) => text.replace(/^=/, "").replace(/^.*[\\/]/, "").toLowerCase();
 
 interface State {
@@ -152,7 +162,15 @@ function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: nu
   if (head === "cd" || head === "pushd" || head === "popd") { s.moved = true; return; }
   if (head === "alias") {
     // `alias gp='git push'` defines what a later word runs.
-    for (const w of rest) { const eq = w.text.indexOf("="); if (eq > 0) readScript(w.text.slice(eq + 1), s, depth + 1); }
+    for (const w of rest) {
+      const eq = w.text.indexOf("=");
+      if (eq <= 0) continue;
+      const value = w.text.slice(eq + 1);
+      readScript(value, s, depth + 1);
+      // `alias g=git` then `g push`: the alias name hides the command, so any alias of a network tool or runner asks.
+      const first = basename(value.trim().split(/\s+/)[0] ?? "");
+      if (NETWORK_TOOLS.has(first) || SHELLS.has(first) || INTERPRETERS.has(first) || TRANSPARENT.has(first) || first === "eval" || first === "env" || first === "xargs") mark(s, "an alias names a network command or a runner");
+    }
     return;
   }
   if (head === "eval") { readScript(rest.map((w) => w.text).join(" "), s, depth + 1); return; }
@@ -160,6 +178,11 @@ function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: nu
   if (TRANSPARENT.has(head)) return readWrapped(cmd, rest, s, depth, true);
   if (SHELLS.has(head)) return readShellRun(cmd, rest, s, depth);
   if (head === "git") return readGit(rest, s);
+  // `git-push`, `git-send-pack`, … run straight from git's libexec folder.
+  if (head.startsWith("git-")) return readGit([{ ...headWord, text: head.slice(4) }, ...rest], s);
+  if (head === "openssl") { if (rest.some((w) => /^(s_client|s_time)$/i.test(w.text) || w.dynamic)) mark(s, "openssl opens a connection"); return; }
+  if (LOOKUPS.has(head)) { if (rest.some((w) => w.dynamic || w.glob)) mark(s, `${head} with a name known only at run time`); return; }
+  if (INTERPRETERS.has(head)) return readInterpreter(cmd, rest, s);
   if (head === "ssh") return readSsh(rest, s);
   if (head === "scp") return readScp(rest, s);
   if (head === "sftp") return readSftp(rest, s);
@@ -197,8 +220,10 @@ function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: num
     const w = rest[j];
     if (w.dynamic && transparent) { mark(s, "a wrapper argument is known only at run time"); return; }
     const name = basename(w.text);
-    if (NETWORK_TOOLS.has(name) || SHELLS.has(name) || name === "eval" || name === "env") {
+    if (NETWORK_TOOLS.has(name) || SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval" || name === "env" || name.startsWith("git-")) {
       if (transparent) { readCommand(cmd, rest.slice(j), s, depth); return; }
+      // xargs/parallel/find -exec hand a shell or interpreter code built at run time (`xargs -I{} sh -c '{}'`).
+      if (SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval") { mark(s, "a wrapper runs a shell or interpreter with arguments built at run time"); return; }
       const inner: State = { targets: [], unknown: null, outward: false, moved: s.moved, rewired: s.rewired };
       readCommand(cmd, rest.slice(j), inner, depth);
       if (inner.outward) mark(s, "a network command inside a wrapper this app does not read");
@@ -223,16 +248,34 @@ function readShellRun(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: nu
   if (i < rest.length && rest[i].text === "--") i++;
   if (inline) {
     const body = rest[i];
-    if (!body) return;
+    // `xargs -0 sh -c` (the script arrives as an argument at run time).
+    if (!body) { mark(s, "a shell runs a script supplied at run time"); return; }
     if (body.dynamic) { if (MENTIONS_OUTWARD.test(body.text) || body.text.includes("$")) mark(s, "a shell runs text known only at run time"); return; }
     readScript(body.text, s, depth + 1);
     return;
   }
+  // A script file named at run time (`bash <(echo …)`, `sh $F`) is not read.
+  if (rest.slice(i).some((w) => w.dynamic || w.glob)) { mark(s, "a shell runs a script known only at run time"); return; }
   for (const h of cmd.heredocs) readScript(h.body, s, depth + 1);
   for (const h of cmd.herestrings) readScript(h.text, s, depth + 1);
   // Reading its script from a pipe: what arrives is not known here.
   if (i >= rest.length && cmd.piped) mark(s, "a shell reads its script from a pipe");
   if (i >= rest.length && cmd.redirects.some((r) => r.op === "<")) mark(s, "a shell reads its script from a file");
+}
+
+/**
+ * `python3 -c "…"`, `node -e "…"`, `… | python3`, `node <(…)`. Inline code that names an outward command asks;
+ * code from a pipe, a `<` file or a file named at run time is not read and asks. A script file named in full is a
+ * known gap (REQ-E1a), like `npm run deploy`.
+ */
+function readInterpreter(cmd: SimpleCommand, rest: ShellWord[], s: State): void {
+  if (rest.some((w) => w.dynamic || w.glob)) { mark(s, "an interpreter runs code known only at run time"); return; }
+  const texts = [...rest.map((w) => w.text), ...cmd.heredocs.map((h) => h.body), ...cmd.herestrings.map((w) => w.text)];
+  if (texts.some((t) => MENTIONS_OUTWARD.test(t))) { mark(s, "inline code names an outward command"); return; }
+  const operands = rest.filter((w) => !w.text.startsWith("-"));
+  const inline = rest.some((w) => /^-[A-Za-z]*[ceEr]$|^--(eval|print|command)/.test(w.text));
+  const fromStdin = operands.length === 0 || operands[0].text === "-";
+  if (!inline && fromStdin && (cmd.piped || cmd.redirects.some((r) => r.op === "<" || r.op === "<>"))) mark(s, "an interpreter reads its program from a pipe or file");
 }
 
 // ── git ─────────────────────────────────────────────────────────────────────
@@ -273,9 +316,15 @@ function readGit(rest: ShellWord[], s: State): void {
   if (sub === "submodule") { if (args.some((w) => w.text === "foreach")) mark(s, "git submodule foreach runs commands"); return; }
   if (sub === "rebase") { if (args.some((w) => /^(-x|--exec)(=|$)|^-[A-Za-z]*x/.test(w.text))) mark(s, "git rebase --exec runs commands"); return; }
   if (sub === "bisect") { if (args.some((w) => w.text === "run")) mark(s, "git bisect run runs commands"); return; }
+  // Options that run a program named on the command line (`difftool -x`, `grep -O`), long forms by any prefix.
+  if (sub === "difftool" || sub === "mergetool") {
+    if (args.some((w) => /^-[A-Za-z]*[xtg]/.test(w.text) || longPrefix(w.text, ["extcmd", "tool", "gui", "tool-help"]))) { mark(s, `git ${sub} runs a named tool`); return; }
+    return;
+  }
+  if (sub === "grep") { if (args.some((w) => /^-[A-Za-z]*O/.test(w.text) || longPrefix(w.text, ["open-files-in-pager"]))) mark(s, "git grep -O runs a pager"); return; }
   if (sub === "archive") { if (args.some((w) => /^--(remote|exec)/.test(w.text))) mark(s, "git archive --remote/--exec"); return; }
   if (sub === "fetch" || sub === "pull" || sub === "clone" || sub === "ls-remote") {
-    if (args.some((w) => /^--(upload-pack|config|template)/.test(w.text) || /^-[A-Za-z]*[uc]/.test(w.text) && sub === "clone" || /^[A-Za-z][A-Za-z0-9+.-]*::/.test(w.text))) mark(s, `git ${sub} with an option that runs a program`);
+    if (args.some((w) => longPrefix(w.text, ["upload-pack", "config", "template", "server-option"]) || /^-[A-Za-z]*[uc]/.test(w.text) && sub === "clone" || /^[A-Za-z][A-Za-z0-9+.-]*::/.test(w.text))) mark(s, `git ${sub} with an option that runs a program`);
     return;
   }
   if (sub !== "push") return;
@@ -285,14 +334,12 @@ function readGit(rest: ShellWord[], s: State): void {
     const t = args[j].text;
     if (t === "--") { repo ??= args[j + 1]?.text ?? null; break; }
     if (t.startsWith("--")) {
-      if (/^--(receive-pack|exec)/.test(t)) { mark(s, "git push --receive-pack/--exec runs a program"); return; }
-      if (/^--recurse-submodules(=|$)/.test(t)) {
-        const v = t.includes("=") ? t.slice(t.indexOf("=") + 1) : args[++j]?.text ?? "";
-        if (!/^(check|no)$/.test(v)) { mark(s, "git push --recurse-submodules pushes other repositories"); return; }
-        continue;
-      }
+      // git accepts any unambiguous prefix of a long option (`--rep=` is --repo, `--receive=` is --receive-pack).
+      const name = t.slice(2).replace(/=.*$/, "");
       if (t === "--repo") { repo = args[++j]?.text ?? null; continue; }
       if (t.startsWith("--repo=")) { repo = t.slice(7); continue; }
+      if (t === "--recurse-submodules=check" || t === "--recurse-submodules=no" || t === "--no-recurse-submodules") continue;
+      if (name.length > 0 && ["repo", "receive-pack", "exec", "recurse-submodules"].some((o) => o.startsWith(name))) { mark(s, `git push --${name} can name another place or program`); return; }
       if (t === "--push-option" || t === "--signed" && args[j + 1] && /^(true|false|if-asked|yes|no|on|off)$/.test(args[j + 1].text)) { j++; continue; }
       continue;
     }
@@ -341,6 +388,9 @@ function sshOptions(args: ShellWord[], shape: SshShape, portFlag: string, s: Sta
       if (c === "o") {
         const key = value.split(/[=\s]/)[0];
         if (!SSH_PLAIN_OPTIONS.test(key)) { mark(s, `-o ${key} can run a program or change the host`); return null; }
+      } else if (shape === SSH && "LRDWw".includes(c)) {
+        // A forward or tunnel carries later local traffic (`curl localhost:8080`) to the far side: asked every time.
+        mark(s, `ssh -${c} opens a tunnel`); return null;
       } else if (c === portFlag) {
         if (!/^\d{1,5}$/.test(value)) { mark(s, "port is not a number"); return null; }
         port = value;
@@ -496,7 +546,7 @@ const CURL_REROUTE = ["config", "next", "proxy", "preproxy", "socks4", "socks4a"
 const prefixOf = (name: string, list: readonly string[]) => name.length >= 1 && list.some((o) => o.startsWith(name));
 
 function readCurl(args: ShellWord[], s: State): void {
-  let upload = false, reroute = false, dynamic = false;
+  let upload = false, reroute = false, dynamic = false, configRead = false;
   const urls: ShellWord[] = [];
   const method = (v: string | undefined) => { if (!v || !/^(GET|HEAD|OPTIONS)$/i.test(v)) upload = true; };
   for (let j = 0; j < args.length; j++) {
@@ -509,7 +559,10 @@ function readCurl(args: ShellWord[], s: State): void {
       const takesValue = eq < 0 && (CURL_LONG_VALUE.has(name) || prefixOf(name, CURL_UPLOAD_LONG) || prefixOf(name, ["request", "url"]) || CURL_REROUTE.includes(name));
       const value = eq > 0 ? t.slice(eq + 1) : takesValue ? args[j + 1]?.text : undefined;
       if (takesValue) j++;
+      // A value read from a file (`-H @file`, `--url-query k@file`, `--variable n@file`, a cookie file) sends that file.
+      if (value !== undefined && (value.startsWith("@") || /^(url-query|variable|expand-)/.test(name) && value.includes("@") || name === "cookie" && !value.includes("="))) upload = true;
       if (prefixOf(name, CURL_REROUTE) && name.length >= 2 || name === "x") reroute = true;
+      if (name.length >= 2 && ("config".startsWith(name) || "next".startsWith(name))) configRead = true;
       if (prefixOf(name, CURL_UPLOAD_LONG) || name === "get") upload = true;
       if (name.length >= 2 && "request".startsWith(name)) method(value);
       if (name === "url" && value !== undefined) urls.push({ ...w, text: value });
@@ -518,20 +571,24 @@ function readCurl(args: ShellWord[], s: State): void {
     if (t.startsWith("-") && t.length > 1) {
       for (let k = 1; k < t.length; k++) {
         const c = t[k];
-        if (c === ":" ) reroute = true; // -: is --next
+        if (c === ":") { reroute = true; configRead = true; } // -: is --next
         if (c === "G") upload = true;
         if (!CURL_SHORT_VALUE.includes(c)) continue;
         const value = k < t.length - 1 ? t.slice(k + 1) : args[++j]?.text;
         if (k === t.length - 1 && args[j]?.dynamic) dynamic = true;
+        if (value !== undefined && (value.startsWith("@") || c === "b" && !value.includes("="))) upload = true;
         if (c === "d" || c === "F" || c === "T") upload = true;
         if (c === "X") method(value);
         if (c === "K" || c === "x") reroute = true;
+        if (c === "K") configRead = true;
         break;
       }
       continue;
     }
     urls.push(w);
   }
+  // Options read from a config file or standard input (`-K -`) can upload anything to anywhere.
+  if (reroute && configRead) { mark(s, "curl reads options from a file"); return; }
   // A GET whose address is known only at run time can carry data in the address.
   if (!upload) { if (dynamic && urls.some((u) => u.dynamic || u.glob)) mark(s, "curl address known only at run time"); return; }
   if (reroute) { mark(s, "curl reads options from elsewhere or goes through another host"); return; }
@@ -601,7 +658,7 @@ function readWget(args: ShellWord[], s: State): void {
 export function gitDestination(url: string, cwd: string): string | null {
   const u = url.trim();
   if (!u || /[\u0000-\u001f\u007f]/.test(u) || /^[a-z][a-z0-9+.-]*::/i.test(u)) return null;
-  const tidy = (p: string) => p.replace(/\/+$/, "").replace(/\.git$/i, "").replace(/\/+$/, "");
+  const tidy = (p: string) => p.replace(/[?#].*$/, "").replace(/\/+$/, "").replace(/\.git$/i, "").replace(/\/+$/, "");
   const full = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)?$/i.exec(u);
   if (full) {
     const scheme = full[1].toLowerCase();
@@ -629,13 +686,24 @@ export type GitRunner = (args: string[], cwd: string) => string | null;
  * The destinations a reading sends to, resolving git remote names in `cwd` with `git`. `unknown` is set when
  * any of them cannot be named (then the host asks every time and remembers nothing).
  */
-export function resolveOutwardDestinations(reading: OutwardReading, cwd: string | null, git: GitRunner): { destinations: string[]; unknown: string | null } {
+/**
+ * Repository settings that send a push somewhere else than its address says, or run a program on the way
+ * (an earlier silent `git config core.sshCommand …` then `git push` to a remembered remote, verify 2026-11-05).
+ * Canonical key names are lowercase apart from the subsection, so the pattern is lowercase.
+ */
+export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\..*proxy|https?\\.proxy|remote\\..*\\.(receivepack|proxy|vcs|uploadpack)|protocol\\..*\\.allow)$";
+
+export function resolveOutwardDestinations(reading: OutwardReading, cwd: string | null, git: GitRunner, opts: { nestedRepo?: boolean } = {}): { destinations: string[]; unknown: string | null } {
   const out = new Set<string>();
   let unknown = reading.unknown;
   for (const t of reading.targets) {
     if (t.kind === "dest") { out.add(t.destination); continue; }
     if (!cwd) { unknown ??= "no work folder to read git remotes in"; continue; }
     const dir = t.dir ? path.resolve(cwd, t.dir) : cwd;
+    // The agent's shell keeps its folder between commands: with another repository inside the work folder, a bare
+    // `git push` may run there, so a remote name or a relative path cannot be placed.
+    if (opts.nestedRepo && (t.remote === null || !/[:/]/.test(t.remote) || /^\.\.?\//.test(t.remote))) { unknown ??= "another repository inside the work folder"; continue; }
+    if (git(["config", "--get-regexp", GIT_TRANSPORT_KEYS], dir)) { unknown ??= "repository settings change how a push travels"; continue; }
     let remote = t.remote;
     if (remote === null) {
       const branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], dir);

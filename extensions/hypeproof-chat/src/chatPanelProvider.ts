@@ -128,7 +128,7 @@ import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
 import { approvalModeFor, approvalPresetBlockServed, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
 import { destructiveStaysInFolder } from "./shellFolderScope";
 import { readOutward, resolveOutwardDestinations, type OutwardReading } from "./shellOutward";
-import { OutwardMemory, outwardScopeKey, runGitQuietly } from "./outwardMemory";
+import { OutwardMemory, hasNestedGitRepo, outwardScopeKey, runGitQuietly } from "./outwardMemory";
 import { mentionsLinkTool, shellUnreadable } from "./shellLinkPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
@@ -10700,7 +10700,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const cwd = this.resolveCoachCwd() ?? null;
     let folder: string | null = null;
     try { folder = cwd ? canonicalFolder(cwd) : null; } catch { folder = null; }
-    const { destinations, unknown } = resolveOutwardDestinations(reading, folder, runGitQuietly);
+    const nestedRepo = folder !== null && reading.targets.some((t) => t.kind === "git") && hasNestedGitRepo(folder);
+    const { destinations, unknown } = resolveOutwardDestinations(reading, folder, runGitQuietly, { nestedRepo });
     const scope = outwardScopeKey({ cohort: this.activeCohortId ?? null, activity: activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? null, folder });
     const memory = new OutwardMemory(this.context.globalState);
     const known = !unknown && destinations.length > 0;
