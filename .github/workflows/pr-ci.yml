@@ -24,6 +24,9 @@ on:
       - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
+      - 'scripts/check-residual-branding.sh'
+      - 'scripts/verify-branding.sh'
+      - 'scripts/test/residual-branding.test.mjs'
       - '.github/workflows/pr-ci.yml'
 
 permissions:
@@ -252,6 +255,59 @@ jobs:
       - name: Typecheck extension
         working-directory: extensions/hypeproof-chat
         run: npm run typecheck
+
+  # #3553: the residual "codium"/"VSCodium" rule (REQ-J4) ran only in build-mac on a release tag, so
+  # #3484's `vscodium-base` method comment (esbuild keeps member JSDoc) merged green and broke
+  # v2026.1105.0-rc.2. This bundles the extension and webview the way inject-builtin-extensions.sh
+  # does and runs the SAME script build-mac's verify-branding.sh runs, on the files that ship
+  # (package.json, dist/, media/, webview-ui/dist/). No vendored SDK here; build-mac excludes it anyway.
+  extension-branding:
+    name: extension / shipped branding
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            extensions/hypeproof-chat/package-lock.json
+            extensions/hypeproof-chat/webview-ui/package-lock.json
+      - name: Residual-branding rule controls (planted #3484 comment)
+        run: node --test scripts/test/residual-branding.test.mjs
+      - name: Bootstrap pinned private Service packages
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install extension deps
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --no-audit --no-fund
+      - name: Install webview deps
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat/webview-ui
+        run: npm ci --no-audit --no-fund
+      - name: Bundle extension (dist/extension.js)
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat
+        run: npm run build:extension
+      - name: Build webview (webview-ui/dist)
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat/webview-ui
+        run: npm run build
+      - name: No residual 'codium' in the shipped extension files
+        if: ${{ !cancelled() }}
+        run: |
+          test -f extensions/hypeproof-chat/dist/extension.js
+          test -f extensions/hypeproof-chat/webview-ui/dist/index.html
+          bash scripts/check-residual-branding.sh \
+            extensions/hypeproof-chat/package.json \
+            extensions/hypeproof-chat/dist \
+            extensions/hypeproof-chat/media \
+            extensions/hypeproof-chat/webview-ui/dist \
+            || { echo "::error title=Residual branding in the shipped extension::'codium'/'VSCodium' would ship (build-mac's verify-branding.sh check 5 would fail the release). Reword the comment or string listed above."; exit 1; }
 
   # The extension's `npm test` chain, split across six parallel runners (#3417).
   # One runner took 65-77 min; scripts/run-smoke-shard.mjs reads the same chain
