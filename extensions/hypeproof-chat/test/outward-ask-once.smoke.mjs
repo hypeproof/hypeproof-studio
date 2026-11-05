@@ -315,13 +315,13 @@ try {
     // DEC-11f: each push first names its repository (`rev-parse --absolute-git-dir`); the runner answers that for /w.
     const runner = (map) => (args) => map[args.join(" ")] ?? (args.join(" ") === "rev-parse --absolute-git-dir" ? "/w/.git" : null);
     const res = (c, map) => { const { destinations, unknown } = O.resolveOutwardDestinations(read(c), "/w", runner(map), { realpath: (p) => p }); return { destinations, unknown }; };
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.remote": "lab", "remote get-url --push --all lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.pushRemote": "pr", "remote get-url --push --all pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.remote": "lab", "remote get-url --push --all -- lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.pushRemote": "pr", "remote get-url --push --all -- pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
     assert.notEqual(res("git push", {}).unknown, null, "no remote at all: unknown");
     assert.notEqual(res("git push https://github.com/a/b", { "config --get-regexp ^url\\..*insteadof$": "url.https://evil/.pushinsteadof https://github.com/" }).unknown, null, "a written-out address under url rewrites: unknown");
-    assert.notEqual(res("git push origin", { "remote get-url --push --all origin": "ext::sh -c evil" }).unknown, null, "a remote helper address: unknown");
+    assert.notEqual(res("git push origin", { "remote get-url --push --all -- origin": "ext::sh -c evil" }).unknown, null, "a remote helper address: unknown");
     // Verify 2026-11-05: an earlier silent `git config core.sshCommand …` sends the push through another program.
-    const origin = { "remote get-url --push --all origin": "https://github.com/a/b" };
+    const origin = { "remote get-url --push --all -- origin": "https://github.com/a/b" };
     assert.deepEqual(res("git push origin", origin), { destinations: ["https://github.com/a/b"], unknown: null }, "control: plain remote is readable");
     assert.notEqual(res("git push origin", { ...origin, [`config --get-regexp ${O.GIT_TRANSPORT_KEYS}`]: "core.sshcommand sh ./x.sh" }).unknown, null, "transport settings: unknown");
     for (const key of ["core.sshcommand", "http.proxy", "http.curloptresolve", "http.https://github.com/.curloptresolve", "remote.origin.receivepack", "gpg.ssh.program", "core.gitproxy"]) assert.match(key, new RegExp(O.GIT_TRANSPORT_KEYS), `transport key covered: ${key}`);

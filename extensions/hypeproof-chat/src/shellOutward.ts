@@ -849,6 +849,24 @@ export type GitRunner = (args: string[], cwd: string) => string | null;
  */
 export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\..*(proxy|curloptresolve)|https?\\.(proxy|curloptresolve)|gpg\\..*program|remote\\..*\\.(receivepack|proxy|vcs|uploadpack)|protocol\\..*\\.allow)$";
 
+/**
+ * Settings that make a push also push submodules to their own remotes (`submodule.recurse true`, `push.recurseSubmodules
+ * on-demand|only`): an earlier silent `git config submodule.recurse true` then `git push origin` sent a submodule's
+ * commits to the submodule's remote (verify 2026-11-05). Read from every scope git reads (global, system, includes).
+ */
+export const GIT_RECURSE_KEYS = "^(push\\.recursesubmodules|submodule\\.recurse)$";
+/** A value of GIT_RECURSE_KEYS that pushes nothing beyond the repository itself (a key without a value is true). */
+const GIT_RECURSE_OFF = /^(false|no|off|0|check)$/i;
+
+/** True when a `config --get-regexp GIT_RECURSE_KEYS` listing may push submodules too. */
+export function gitRecursesSubmodules(listing: string | null): boolean {
+  if (!listing) return false;
+  return listing.split(/\r?\n/).filter(Boolean).some((line) => {
+    const sp = line.indexOf(" ");
+    return sp < 0 || !GIT_RECURSE_OFF.test(line.slice(sp + 1).trim());
+  });
+}
+
 /** DEC-11f — one (repository, destination) pair: `repo` is the real git folder a push runs from, null for ssh/uploads. */
 export interface OutwardPair { repo: string | null; destination: string }
 
@@ -908,6 +926,7 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     const repo = gitFolder ? realpath(gitFolder) : null;
     if (!repo) { unknown ??= "the push does not run inside a repository this app can read"; continue; }
     if (g(["config", "--get-regexp", GIT_TRANSPORT_KEYS])) { unknown ??= "repository settings change how a push travels"; continue; }
+    if (gitRecursesSubmodules(g(["config", "--get-regexp", GIT_RECURSE_KEYS]))) { unknown ??= "a push also pushes submodules to their own remotes"; continue; }
     let remote = t.remote;
     if (remote === null) {
       const branch = g(["symbolic-ref", "--quiet", "--short", "HEAD"]);
@@ -916,8 +935,10 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
         || (branch && (g(["config", "--get", `branch.${branch}.remote`]) || null))
         || "origin";
     }
-    // `remote get-url --push` applies pushurl and the insteadOf / pushInsteadOf rewrites of a named remote.
-    const named = /^[A-Za-z0-9._-]+$/.test(remote) ? g(["remote", "get-url", "--push", "--all", remote]) : null;
+    // `remote get-url --push` applies pushurl and the insteadOf / pushInsteadOf rewrites of a named remote. git looks a
+    // configured remote up by any name (`foo/bar`, `A.b`) before it reads the word as an address, so every word is asked
+    // about first (verify 2026-11-05: `git remote add foo/bar https://evil/x.git` after `foo/bar` was allowed as a folder).
+    const named = g(["remote", "get-url", "--push", "--all", "--", remote]);
     if (named) {
       for (const line of named.split(/\r?\n/).filter(Boolean)) {
         const d = gitDestination(line, dir);
@@ -928,6 +949,11 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     if (t.remote === null) { unknown ??= "the default push remote has no address"; continue; }
     // A written-out address: an insteadOf / pushInsteadOf rewrite would send it elsewhere.
     if (g(["config", "--get-regexp", "^url\\..*insteadof$"])) { unknown ??= "url rewrites are configured"; continue; }
+    // Not a remote: an address (`scheme://`, `host:path`) or a folder. A folder is placed only when it is anchored
+    // (`/`, `./`, `../`) or exists now; any other word asks.
+    const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || (remote.indexOf(":") > 0 && !remote.slice(0, remote.indexOf(":")).includes("/"));
+    const folderAnchored = /^(\/|\.\.?(\/|$))/.test(remote);
+    if (!isUrl && !folderAnchored && realpath(path.resolve(dir, remote)) === null) { unknown ??= "the push names neither a remote nor an existing folder"; continue; }
     const d = gitDestination(remote, dir);
     if (d) put({ repo, destination: d }); else unknown ??= "the push address is not plain";
   }

