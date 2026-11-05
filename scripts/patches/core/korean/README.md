@@ -5,7 +5,7 @@ https://open-vsx.org/api/MS-CEINTL/vscode-language-pack-ko/1.118.1/file/MS-CEINT
 
 VSIX SHA-256: `5e8697f2af6107d8909e06c7752d83b30f9edc0696c9cad3554bf67ad1faf804`.
 `main.i18n.json` is verbatim; `overrides.json` supplies missing Studio/upstream keys.
-The four upstream fixtures are verbatim VS Code commit
+The five upstream fixtures are verbatim VS Code commit
 `560a9dba96f961efea7b1612916f89e5d5d4d679` (MIT, LICENSE.txt).
 Regenerate the startup patch with `python3 scripts/patches/core/korean/build_patch.py`.
 `shell-fixture.json` contains only native menu/dialog/update metadata from the

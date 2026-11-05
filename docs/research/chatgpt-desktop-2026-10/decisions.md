@@ -1699,3 +1699,11 @@ Jay, 2026-11-04: turn the blocked notice on for minor cohorts after verifying th
 - `hypeproofChat.safeLinkAllowlistEnabled` stays machine-scoped and its default becomes true; only an explicit `false` turns the block off, as a support override.
 - Adults: unchanged (confirm dialog).
 - Confirmed by Jay: yes (2026-11-04)
+
+## CGP-SHELL-R-004 core batch: preview builds in the quit guard, and the built-in extension i18n warning (2026-11-05)
+
+Jay, 2026-11-03: approved R-004 with its core patch and the CI mac base rebuild, batched with Studio #3437 so the base rebuilds once.
+- Preview build: DEC-SHELL-03 said preview reveals are part of the turn. A reveal also runs outside a turn (▶ Run, "보여줘", a pre-built world), and REQ-STUDIO-WORK-POWER already holds a `preview-build` lease for exactly that span (`revealBuilt`: check, archive, save, open). The quit guard now reads that lease (`workPower.isHeld("preview-build")`) and names it: "만들고 있는 미리보기가 멈춰요." alone, "대답과 미리보기 만들기가 멈춰요." with a turn. No new state, no new core code: the core already accepts any validated two-line answer. A live server that keeps serving a finished page is not a build and does not ask.
+- #3437: of the two fixes the issue names (ship the built-in extensions' Korean l10n bundles, or stop logging the fallback at warning level), this batch takes the second (agent-selected, reversible): the Korean shell patch moves the one `Using default string…` log line in `extHostLocalizationService.getMessage` to trace. Shipping the bundles needs the language pack's per-extension translations and the built-in bundle lookup that `availableLanguages: {}` turns off, a larger packaging change; the strings stay English as today.
+- Not in this batch: the `persist:hp-safe` session patch (fork branch `feat/306-hp-safe-session`) and the extension-owned copy of the served allowlist. Both are listed for the next core batch.
+- Confirmed by Jay: yes (2026-11-03) for the batch; the #3437 option choice is agent-selected.

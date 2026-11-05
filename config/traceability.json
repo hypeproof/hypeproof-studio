@@ -9892,6 +9892,9 @@
           "path": "extensions/hypeproof-chat/src/quitGuardHelpers.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/workPower.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
         },
         {
@@ -12504,6 +12507,9 @@
         },
         {
           "path": "scripts/patches/core/korean/install.mjs"
+        },
+        {
+          "path": "scripts/patches/core/korean/build_patch.py"
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/EffortControl.tsx"

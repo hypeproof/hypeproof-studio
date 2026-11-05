@@ -5016,7 +5016,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   hasActiveStream(): boolean { return !!this.attemptWrite || this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
   /** REQ-STUDIO-QUIT-GUARD — chat surfaces that last reported a queued, unsent message. */
   private queuedSources = new Set<vscode.Webview>();
-  quitGuardActivity(): QuitGuardActivity { return { turnRunning: this.hasActiveStream(), queuedUnsent: this.queuedSources.size > 0 }; }
+  quitGuardActivity(): QuitGuardActivity { return { turnRunning: this.hasActiveStream(), queuedUnsent: this.queuedSources.size > 0, previewBuilding: workPower.isHeld("preview-build") }; }
   /** #3411 — chat surfaces whose last saved composer state still holds unsent input. */
   private draftSources = new Set<vscode.Webview>();
   /** #3411 — everything an automatic idle restart could interrupt (see autoUpdate.idleApplyBlocker). */

@@ -16,10 +16,32 @@ const ast = text => ts.createSourceFile('input.ts', text, ts.ScriptTarget.Latest
 const nodes = (tree, predicate) => { const found=[]; const visit=n=>{if(predicate(n)) found.push(n); ts.forEachChild(n,visit);}; visit(tree); return found; };
 const compile = text => ts.transpileModule(text, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 try {
-  for (const [fixture, rel] of [['settingsTreeModels.ts','src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts'],['main.ts','src/main.ts'],['nls.ts','src/vs/base/node/nls.ts'],['menubar.ts','src/vs/platform/menubar/electron-main/menubar.ts']]) {
+  for (const [fixture, rel] of [['settingsTreeModels.ts','src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts'],['main.ts','src/main.ts'],['nls.ts','src/vs/base/node/nls.ts'],['menubar.ts','src/vs/platform/menubar/electron-main/menubar.ts'],['extHostLocalizationService.ts','src/vs/workbench/api/common/extHostLocalizationService.ts']]) {
     const dst=path.join(tmp,rel); fs.mkdirSync(path.dirname(dst),{recursive:true}); fs.copyFileSync(path.join(core,'korean/upstream',fixture),dst);
   }
   execFileSync('git',['apply',path.join(core,'hps-korean-shell.patch')],{cwd:tmp});
+  // #3437: a built-in extension string with no Korean bundle entry returns its English default
+  // and logs at trace, not warning (542 warning lines in one member's exthost.log). Run the
+  // patched getMessage itself, with a recording log service.
+  {
+    const l10nAst=ast(read(path.join(tmp,'src/vs/workbench/api/common/extHostLocalizationService.ts')));
+    const getMessage=nodes(l10nAst,n=>ts.isMethodDeclaration(n)&&n.name.getText(l10nAst)==='getMessage')[0];
+    assert.ok(getMessage,'upstream getMessage present');
+    const logged=[];
+    const logService=Object.fromEntries(['trace','debug','info','warn','error'].map(level=>[level,msg=>logged.push([level,msg])]));
+    const run=(contents,details)=>vm.runInNewContext(compile(`function getMessage(extensionId, details) ${getMessage.body.getText(l10nAst)}; getMessage.call(target, 'vscode.git', details);`),
+      {details,format2:(m,a)=>m.replace(/\{(\w+)\}/g,(_,k)=>a[k]??`{${k}}`),target:{isDefaultLanguage:false,logService,bundleCache:new Map([['vscode.git',{contents}]])}});
+    assert.equal(run({},{message:'Commit {0}',args:['x']}),'Commit x','missing key keeps the English default');
+    assert.deepEqual(logged.map(([level])=>level),['trace'],'missing-bundle fallback is not logged at warning level');
+    assert.match(logged[0][1],/Using default string since no string found in i18n bundle that has the key: Commit \{0\}/);
+    logged.length=0;
+    assert.equal(run({'Commit {0}':'커밋 {0}'},{message:'Commit {0}',args:['x']}),'커밋 x','a shipped translation still wins');
+    assert.deepEqual(logged,[],'a found translation logs nothing');
+    // Only the log level moved; error paths (missing bundle location, unreadable bundle) keep their level.
+    const upstreamL10n=read(path.join(core,'korean/upstream/extHostLocalizationService.ts'));
+    assert.equal(read(path.join(tmp,'src/vs/workbench/api/common/extHostLocalizationService.ts')),
+      upstreamL10n.replace('this.logService.warn(`Using default string','this.logService.trace(`Using default string'),'no other change to the localization service');
+  }
   const startup=ast(read(path.join(tmp,'src/main.ts')));
   // Evaluate the exact startup statements, not a second locale policy in the test.
   const statements=startup.statements.filter(n=>ts.isVariableStatement(n) && n.declarationList.declarations.some(d=>['osLocale','userLocale','nlsConfigurationPromise'].includes(d.name.getText(startup))) || ts.isIfStatement(n) && (n.expression.getText(startup)==='userLocale' || n.getText(startup).includes("appendSwitch('lang'")));

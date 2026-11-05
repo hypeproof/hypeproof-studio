@@ -4821,6 +4821,9 @@ command `_hypeproof.quitGuard.prompt`, which answers from the host's own state:
 | a coach turn (streaming, settling or waiting on an approval; every runtime) | "지금 하고 있는 대답이 멈춰요." / "만든 파일은 그대로 남아요." |
 | a queued message not yet sent, reported by the sidebar or editor chat | "보내지 않은 메시지가 있어요." / "끝내면 이 메시지는 보내지 않아요." |
 | both | "지금 하고 있는 대답이 멈춰요." / "보내려던 메시지도 보내지 않아요." |
+| a preview build in progress (2026-11-05; the `preview-build` work lease of REQ-STUDIO-WORK-POWER, held while a page is checked, saved and opened) | "만들고 있는 미리보기가 멈춰요." / "만든 파일은 그대로 남아요." |
+| a coach turn and a preview build | "대답과 미리보기 만들기가 멈춰요." / "만든 파일은 그대로 남아요." |
+| a preview build (with or without a turn) and a queued message | line 1 as above / "보내려던 메시지도 보내지 않아요." |
 | nothing | no dialog; the quit goes ahead |
 
 - **Native dialog, safe default.** An OS message box (warning), title "Studio를 끝낼까요?", the body
@@ -4844,7 +4847,8 @@ command `_hypeproof.quitGuard.prompt`, which answers from the host's own state:
   two windows can ask once per window that has work.
 
 Verification: `test/quit-guard.smoke.mjs` (copy, box shape, Enter/Esc through the safe-default path,
-guard decisions, hostile answers), `test/quit-guard-host.smoke.mjs` (host state per surface),
+guard decisions, hostile answers), `test/quit-guard-host.smoke.mjs` (host state per surface, and a
+preview build reported while `revealBuilt` holds its lease and cleared when it ends),
 `test/quit-guard-queue.test.tsx` (ChatPanel reports its queue), `test/quit-guard-patch.smoke.mjs`
 (the patch is current, applies to the pinned upstream files and ships the tested sources). The
 native dialog itself (macOS and Windows) needs a built app; see the row's report.
@@ -6037,7 +6041,16 @@ an update never loses a learner's saved tokens or settings (`app.setName` is not
 called). Personal and classroom effort controls both read `생각 깊이`, with
 `가볍게`, `보통`, `깊게` choices. This changes presentation, not service policy.
 
-Evidence: `test/korean-shell.smoke.mjs` executes the patched upstream startup, fails on any
+Built-in extension strings (#3437, 2026-11-05). The shell ships only the main Korean bundle
+(`availableLanguages` is empty), so a built-in extension's `vscode.l10n.t` string has no Korean
+entry and shows its English default. Upstream logged every such fallback at warning level (542
+lines in one member's 64 KB `exthost.log`). The same generated patch moves that one log line to
+trace level in `extHostLocalizationService.getMessage`; the returned string, a shipped
+translation's precedence, and the error logs for a missing or unreadable bundle are unchanged.
+Shipping Korean bundles for the built-in extensions themselves is not part of this row.
+
+Evidence: `test/korean-shell.smoke.mjs` executes the patched upstream startup, runs the patched
+`getMessage` (English default returned, logged at trace, a found translation logs nothing), fails on any
 identity or non-label manifest change versus main, and
 menu-label expressions, and checks the packaged translation output;
 `test/korean-settings.test.tsx` renders both settings variants. Native screenshot
