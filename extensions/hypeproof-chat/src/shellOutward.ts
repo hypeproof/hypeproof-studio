@@ -35,6 +35,7 @@
 // folder or repository cannot be resolved (`cd "$X" && git push`, `cd a; git push`, a `cd` after another command,
 // a branch switch before a bare push) asks every time and is never remembered.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { parseShell, type ShellWord, type SimpleCommand } from "./shellWords.ts";
 
@@ -870,6 +871,28 @@ export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\
 export const GIT_RECURSE_KEYS = "^(push\\.recursesubmodules|submodule\\.recurse)$";
 /** A key every repository's config has (`git init` writes it): a config query that matches nothing still prints it. */
 export const GIT_CONFIG_PRESENT = "^core\\.repositoryformatversion$";
+/** The settings that pick a bare push's remote. */
+export const GIT_DEFAULT_REMOTE_KEYS = "^(branch\\..*\\.(pushremote|remote)|remote\\.pushdefault)$";
+/** Include settings: a file they name is read as config when git runs. */
+export const GIT_INCLUDE_KEYS = "^include(if\\..*)?\\.path$";
+
+/** One entry of a `git config -z [--show-origin] --get-regexp` listing; `value` is null for a key without `=`. */
+export interface GitConfigEntry { origin?: string; key: string; value: string | null }
+
+/** Parses a `-z` listing (NUL-terminated `key\nvalue` records, each after its origin with --show-origin). */
+export function parseGitConfigZ(out: string, showOrigin: boolean): GitConfigEntry[] {
+  const parts = out.split("\0");
+  if (parts.length && parts[parts.length - 1] === "") parts.pop();
+  const entries: GitConfigEntry[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const origin = showOrigin ? parts[i++] : undefined;
+    const kv = parts[i] ?? "";
+    const nl = kv.indexOf("\n");
+    entries.push({ ...(origin !== undefined ? { origin } : {}), key: nl < 0 ? kv : kv.slice(0, nl), value: nl < 0 ? null : kv.slice(nl + 1) });
+  }
+  return entries;
+}
+
 /** A value of GIT_RECURSE_KEYS that pushes nothing beyond the repository itself (a key without a value is true). */
 const GIT_RECURSE_OFF = /^(false|no|off|0|check)$/i;
 
@@ -948,7 +971,34 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
       if (outp === null) return null;
       return outp.split(/\r?\n/).filter((l) => l && !/^core\.repositoryformatversion( |$)/.test(l)).join("\n");
     };
+    // `-z` keeps values exactly (the runner trims only the ends of the output, which are a key and a NUL here).
+    const cfgZ = (pattern: string, showOrigin = false): GitConfigEntry[] | null => {
+      const outp = g(["config", "-z", ...(showOrigin ? ["--show-origin"] : []), "--get-regexp", `${GIT_CONFIG_PRESENT}|${pattern}`]);
+      if (outp === null) return null;
+      return parseGitConfigZ(outp, showOrigin).filter((e) => e.key !== "core.repositoryformatversion");
+    };
     const transport = cfg(GIT_TRANSPORT_KEYS), recurse = cfg(GIT_RECURSE_KEYS), rewrites = cfg("^url\\..*insteadof$");
+    const defaults = cfgZ(GIT_DEFAULT_REMOTE_KEYS), includes = cfgZ(GIT_INCLUDE_KEYS, true);
+    if (defaults === null || includes === null) { unknown ??= "repository settings could not be read"; continue; }
+    // Verify r6 C2: a file inside the repository's git folder read as config (`include.path=COMMIT_EDITMSG`) is rewritten
+    // by a chain-safe `git commit -m '[remote "origin"] pushurl = …'` before the push runs. Includes elsewhere (a shared
+    // `../.gitconfig`, a global includeIf) are read as they are now.
+    const common0 = g(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    const commonReal = common0 ? realpath(common0) : null;
+    if (!commonReal) { unknown ??= "the repository's shared git folder cannot be read"; continue; }
+    const inside = (p: string) => [repo, commonReal].some((b) => p === b || p.startsWith(`${b}/`));
+    const includeInGitDir = includes.some((e) => {
+      if (e.value === null || e.value === "" || /[\u0000-\u001f]/.test(e.value)) return true;
+      let target = e.value;
+      if (target.startsWith("~/")) target = path.join(os.homedir(), target.slice(2));
+      else if (!path.isAbsolute(target)) {
+        if (!e.origin?.startsWith("file:")) return true;
+        target = path.join(path.dirname(path.resolve(dir, e.origin.slice(5))), target);
+      }
+      const parent = realpath(path.dirname(target));
+      return parent === null || inside(path.join(parent, path.basename(target))) || inside(path.resolve(target));
+    });
+    if (includeInGitDir) { unknown ??= "a config include reads a file inside the git folder"; continue; }
     const remoteKeys = cfg("^remote\\..*\\.(url|pushurl)$", true);
     if (transport === null || recurse === null || rewrites === null || remoteKeys === null) { unknown ??= "repository settings could not be read"; continue; }
     if (transport) { unknown ??= "repository settings change how a push travels"; continue; }
@@ -960,18 +1010,19 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
       const head = g(["symbolic-ref", "--quiet", "HEAD"]);
       const branch = head && head.startsWith("refs/heads/") ? head.slice("refs/heads/".length) : null;
       if (head === null || branch === null) { unknown ??= "the branch a bare push uses cannot be read"; continue; }
-      remote = (branch && (g(["config", "--get", `branch.${branch}.pushRemote`]) || null))
-        || g(["config", "--get", "remote.pushDefault"])
-        || (branch && (g(["config", "--get", `branch.${branch}.remote`]) || null))
-        || "origin";
+      // Read from the `-z` listing (last value wins, as `--get`): a trimmed `origin ` would be the allowed `origin` here
+      // and another remote to git (verify r6 C1). A value with spaces, control characters or nothing asks.
+      const last = (key: string) => { const hits = defaults.filter((e) => e.key === key); return hits.length ? hits[hits.length - 1].value : undefined; };
+      const picked = [last(`branch.${branch}.pushremote`), last("remote.pushdefault"), last(`branch.${branch}.remote`)];
+      if (picked.some((v) => v === null || v === "" || (v !== undefined && /[\s\u0000-\u001f\u007f]/.test(v)))) { unknown ??= "the default push remote is not a plain name"; continue; }
+      remote = picked.find((v): v is string => typeof v === "string") ?? "origin";
     }
     // `remote get-url --push` applies pushurl and the insteadOf / pushInsteadOf rewrites of a named remote. git looks a
     // configured remote up by any name (`foo/bar`, `A.b`) before it reads the word as an address, so every word is asked
     // about first (verify 2026-11-05: `git remote add foo/bar https://evil/x.git` after `foo/bar` was allowed as a folder).
     // Legacy `remotes/<name>` and `branches/<name>` files: git reads them at push time, and one that reads empty for
     // `get-url` (a fifo, a timeout) makes it answer the bare name, read here as a folder (verify r4 B2). Any such file asks.
-    const common = g(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-    if ([repo, ...(common ? [common] : [])].some((base) => ["remotes", "branches"].some((d) => { try { fs.lstatSync(path.join(base, d, remote)); return true; } catch { return false; } }))) { unknown ??= "a legacy remote file names the remote"; continue; }
+    if ([repo, commonReal].some((base) => ["remotes", "branches"].some((d) => { try { fs.lstatSync(path.join(base, d, remote)); return true; } catch { return false; } }))) { unknown ??= "a legacy remote file names the remote"; continue; }
     const named = g(["remote", "get-url", "--push", "--all", "--", remote]);
     // A push to a folder on this computer asks every time and is never remembered (verify r4/r5): the repository git
     // enters for a written path depends on `<p>/.git` and `gitdir:` files, `.git` suffixes it tries, links, `~`, the

@@ -317,15 +317,24 @@ try {
     // scripted value up by the pattern alone (`config --get-regexp <pattern>`).
     const runner = (map) => (args) => {
       const i = args.indexOf("--get-regexp"), pre = `${O.GIT_CONFIG_PRESENT}|`;
-      if (args[0] === "config" && i > 0 && args[i + 1]?.startsWith(pre)) { const v = map[`config --get-regexp ${args[i + 1].slice(pre.length)}`]; return v ? `core.repositoryformatversion 0\n${v}` : "core.repositoryformatversion 0"; }
-      return map[args.join(" ")] ?? (args.join(" ") === "rev-parse --absolute-git-dir" ? "/w/.git" : null);
+      if (args[0] === "config" && i > 0 && args[i + 1]?.startsWith(pre)) {
+        const v = map[`config --get-regexp ${args[i + 1].slice(pre.length)}`];
+        // `-z` listings are NUL-terminated `key\nvalue` records (after the origin with --show-origin).
+        if (args.includes("-z")) return `${args.includes("--show-origin") ? "file:.git/config\0" : ""}core.repositoryformatversion\n0\0${v ?? ""}`;
+        return v ? `core.repositoryformatversion 0\n${v}` : "core.repositoryformatversion 0";
+      }
+      const joined = args.join(" ");
+      return map[joined] ?? (joined === "rev-parse --absolute-git-dir" || joined === "rev-parse --path-format=absolute --git-common-dir" ? "/w/.git" : null);
     };
     const res = (c, map) => { const { destinations, unknown } = O.resolveOutwardDestinations(read(c), "/w", runner(map), { realpath: (p) => p }); return { destinations, unknown }; };
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", "config --get branch.main.remote": "lab", "remote get-url --push --all -- lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", "config --get branch.main.pushRemote": "pr", "remote get-url --push --all -- pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", [`config --get-regexp ${O.GIT_DEFAULT_REMOTE_KEYS}`]: "branch.main.remote\nlab\0", "remote get-url --push --all -- lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", [`config --get-regexp ${O.GIT_DEFAULT_REMOTE_KEYS}`]: "branch.main.remote\nlab\0branch.main.pushremote\npr\0", "remote get-url --push --all -- pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
     assert.notEqual(res("git push", {}).unknown, null, "no remote at all: unknown");
     assert.notEqual(res("git push https://github.com/a/b", { "config --get-regexp ^url\\..*insteadof$": "url.https://evil/.pushinsteadof https://github.com/" }).unknown, null, "a written-out address under url rewrites: unknown");
     assert.notEqual(res("git push origin", { "remote get-url --push --all -- origin": "ext::sh -c evil" }).unknown, null, "a remote helper address: unknown");
+    // Verify r6 C1: a default remote with spaces or nothing is not the allowed name git would trim it to here.
+    for (const v of ["origin ", " origin", "origin\t", ""]) assert.notEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", [`config --get-regexp ${O.GIT_DEFAULT_REMOTE_KEYS}`]: `branch.main.pushremote\n${v}\0`, "remote get-url --push --all -- origin": "https://github.com/a/b" }).unknown, null, `C1: pushRemote ${JSON.stringify(v)} is unknown`);
+    assert.deepEqual(O.parseGitConfigZ("file:a\0x.y\n1 2\0file:b\0x.z\0", true), [{ origin: "file:a", key: "x.y", value: "1 2" }, { origin: "file:b", key: "x.z", value: null }], "-z listing parsed exactly");
     // Verify r3: a config query that fails (a timeout on a huge include) asks instead of reading as "nothing set".
     assert.notEqual(O.resolveOutwardDestinations(read("git push origin"), "/w", (args) => args[0] === "config" ? null : runner({ "remote get-url --push --all -- origin": "https://github.com/a/b" })(args), { realpath: (p) => p }).unknown, null, "unreadable settings: unknown");
     // Verify 2026-11-05: an earlier silent `git config core.sshCommand …` sends the push through another program.
