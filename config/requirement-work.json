@@ -899,6 +899,22 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
       "test": "docs/testing/desktop-mobile-companion.md"
+    },
+    {
+      "path": "docs/requirements/rc-build-failure-alarm.md",
+      "ids": [
+        "RCAL-01",
+        "RCAL-02",
+        "RCAL-03",
+        "RCAL-04",
+        "RCAL-05"
+      ],
+      "inline_prefixes": [],
+      "sha256": "412c23824077ce562d3553df66679f51421fc34e329816a4221c742b2697862c",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/rc-build-failure-alarm.md",
+      "test": "docs/testing/rc-build-failure-alarm.md"
     }
   ],
   "work_items": [
@@ -4419,6 +4435,38 @@
         "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
         "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
         "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+      ]
+    },
+    {
+      "id": "rc-build-failure-alarm-intent",
+      "title": "Classify existing RC build failures into the existing release alarm intent",
+      "issue": 3547,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/rc-build-failure-alarm.md",
+          "ids": [
+            "RCAL-01",
+            "RCAL-02",
+            "RCAL-03",
+            "RCAL-04",
+            "RCAL-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Implement only the two new local CLI/test files against the frozen independent acceptance inputs; keep #3173 open for workflow delivery and unified acceptance routing.",
+      "design_delta": "Reuse PLATFORM and explicit-platform buildDispatches from the current contract; emit deterministic offline alarm intent with run-attempt identity and no remote effects.",
+      "positive_control": "The actual failed RC projection and derived Windows case produce the exact existing alarm intent; repeating an input preserves its key.",
+      "negative_control": "Success and non-RC/unified scope remain quiet; foreign or malformed identity rejects; unclassified terminal outcomes remain UNDETERMINED; no remote or persistent effects.",
+      "evidence_required": "Exact candidate/source, immutable acceptance manifest hash, Node executable and sandbox policy pins, independent CLI case exit/JSON results, existing contract regressions and separation from unexecuted production alarm delivery.",
+      "implementation_paths": [
+        "scripts/release/rc-failure-alarm.mjs"
+      ],
+      "verification_inputs": [
+        "scripts/release/rc-failure-alarm.mjs",
+        "scripts/release/test/rc-failure-alarm.test.mjs"
       ]
     }
   ]
