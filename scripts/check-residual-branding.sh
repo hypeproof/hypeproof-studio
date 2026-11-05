@@ -41,7 +41,13 @@ for r in "${ROOTS[@]}"; do
 done
 
 # -I skips binaries (tunnel executable, .node addons — embedded linker strings).
-CANDIDATES=$(grep -rIli "codium" "${ROOTS[@]}" 2>/dev/null \
+# Text bundles are always scanned (-a), because -I alone is not a text test: esbuild
+# emits a raw NUL inside a regex character class (dist/extension.js has one at ~2.5 MB),
+# so GNU grep (Linux) skipped the whole bundle and BSD grep (macOS) only scanned it
+# because its NUL sniff stops early. Found while proving #3553 red-before-green.
+TEXT_EXT=(--include='*.js' --include='*.mjs' --include='*.cjs' --include='*.json' --include='*.html' --include='*.css')
+CANDIDATES=$( { grep -rIli "codium" "${ROOTS[@]}" 2>/dev/null; \
+    grep -rlia "${TEXT_EXT[@]}" "codium" "${ROOTS[@]}" 2>/dev/null; } | sort -u \
   | grep -viE "license|notice|attribution|third.?party|credits" \
   | grep -vE "/node_modules/|/dist/vendor/|/policies/" || true)
 for x in "${EXCLUDES[@]+"${EXCLUDES[@]}"}"; do
@@ -63,7 +69,7 @@ HITS=""
 KNOWN_HITS=""
 while IFS= read -r f; do
   [[ -z "$f" ]] && continue
-  CTX=$(grep -oi ".\{0,50\}codium.\{0,50\}" "$f" 2>/dev/null \
+  CTX=$(grep -oai ".\{0,50\}codium.\{0,50\}" "$f" 2>/dev/null | tr -d '\000' \
     | grep -vi "sourcemaps" \
     | grep -vi "@vscodium/" \
     | grep -viF '"author":{"name":"VSCodium"}' \

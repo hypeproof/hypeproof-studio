@@ -57,6 +57,25 @@ test('negative control: the #3484 `vscodium-base` method comment in dist/extensi
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
+// esbuild writes a raw NUL inside a regex character class (the real dist/extension.js has one), which made
+// GNU grep -I treat the whole bundle as binary and skip it: the Linux PR job passed the #3484 bundle.
+test('negative control: a bundle containing a raw NUL byte is still scanned', () => {
+  for (const [label, body] of [
+    ['NUL before the comment', `var CONTROL_CHARS_RE = /[\u0000-\u001f]+/g;\nclass A {\n${COMMENT_3484}  m() {}\n}\n`],
+    ['NUL after the comment', `class A {\n${COMMENT_3484}  m() {}\n}\n${'x=1;\n'.repeat(200000)}var R = /[\u0000-\u001f]+/g;\n`],
+  ]) {
+    const dir = shippedExtension({'dist/extension.js': body});
+    try {
+      const r = check(...shippedRoots(dir));
+      assert.equal(r.status, 1, `${label}: ${r.stdout}`);
+      assert.match(r.stdout, /dist\/extension\.js/, label);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  }
+  // A real binary (not a text extension) stays skipped, as before (.node addons, tunnel executable).
+  const dir = shippedExtension({'dist/addon.node': Buffer.from('\u0000\u0001ELF codium linker string\u0000')});
+  try { assert.equal(check(...shippedRoots(dir)).status, 0); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
 test('negative controls: "VSCodium" in the webview bundle or the extension manifest fails', () => {
   for (const [rel, body] of [
     ['webview-ui/dist/assets/index-abc.js', 'const t="Welcome to VSCodium";'],
