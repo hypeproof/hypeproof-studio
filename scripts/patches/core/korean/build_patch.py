@@ -10,6 +10,13 @@ changes = {
  'src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts': ('settingsTreeModels.ts', settings_hook, settings_hook + '\n\tconst koreanLabels: Record<string, string> = ' + settings_map + ";\n\tif (Object.hasOwn(koreanLabels, key)) { return { category: '대화 설정', label: koreanLabels[key] }; }"),
  'src/vs/platform/menubar/electron-main/menubar.ts': ('menubar.ts', 'label: this.productService.nameShort, submenu: applicationMenu', "label: '하이프루프 스튜디오', submenu: applicationMenu"),
  'src/main.ts': ('main.ts', "const userLocale = getUserDefinedLocale(argvConfig);", "const userLocale = 'ko'; // Studio learner shell is Korean on every OS."),
+ # #3437: built-in extensions ship no Korean l10n bundle (availableLanguages is {}), so every
+ # vscode.l10n.t call falls back to its English source string. Upstream logs each fallback at
+ # warning level (hundreds of lines per session in exthost.log); demote it to trace. Only the log
+ # level changes: the returned string is the same English default as before.
+ 'src/vs/workbench/api/common/extHostLocalizationService.ts': ('extHostLocalizationService.ts',
+  "this.logService.warn(`Using default string since no string found in i18n bundle that has the key: ${key}`);",
+  "this.logService.trace(`Using default string since no string found in i18n bundle that has the key: ${key}`);"),
  'src/vs/base/node/nls.ts': ('nls.ts', "\tmark('code/willGenerateNls');", """\tmark('code/willGenerateNls');
 
 	// Studio ships a build-validated Korean bundle, independent of user language packs.

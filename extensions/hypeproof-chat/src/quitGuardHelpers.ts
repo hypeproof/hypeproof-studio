@@ -14,6 +14,8 @@ export interface QuitGuardActivity {
   turnRunning: boolean;
   /** A chat surface holds a queued message that has not been sent. */
   queuedUnsent: boolean;
+  /** A preview build is in progress (the "preview-build" power lease, REQ-STUDIO-WORK-POWER). Optional for older callers. */
+  previewBuilding?: boolean;
 }
 
 export interface QuitGuardPrompt {
@@ -28,9 +30,15 @@ export interface QuitGuardPrompt {
 export const UPDATE_DURING_TURN_COPY = "AI가 대답하고 있어서 지금은 업데이트하지 않았어요. 대답이 끝난 뒤 다시 눌러 주세요.";
 
 export function quitGuardPrompt(activity: QuitGuardActivity): QuitGuardPrompt | null {
+  // Line 1 names what stops; line 2 says what happens to the files or the queued message.
+  const preview = activity.previewBuilding === true;
+  let stops: string | null = null;
+  if (activity.turnRunning && preview) stops = "대답과 미리보기 만들기가 멈춰요.";
+  else if (activity.turnRunning) stops = "지금 하고 있는 대답이 멈춰요.";
+  else if (preview) stops = "만들고 있는 미리보기가 멈춰요.";
   let detail: string;
-  if (activity.turnRunning && activity.queuedUnsent) detail = "지금 하고 있는 대답이 멈춰요.\n보내려던 메시지도 보내지 않아요.";
-  else if (activity.turnRunning) detail = "지금 하고 있는 대답이 멈춰요.\n만든 파일은 그대로 남아요.";
+  if (stops && activity.queuedUnsent) detail = `${stops}\n보내려던 메시지도 보내지 않아요.`;
+  else if (stops) detail = `${stops}\n만든 파일은 그대로 남아요.`;
   else if (activity.queuedUnsent) detail = "보내지 않은 메시지가 있어요.\n끝내면 이 메시지는 보내지 않아요.";
   else return null;
   return { message: "Studio를 끝낼까요?", detail, continueLabel: "계속하기", quitLabel: "끝내기" };
