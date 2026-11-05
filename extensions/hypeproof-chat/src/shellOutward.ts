@@ -55,7 +55,9 @@ const NETWORK_TOOLS = new Set([
 /** Code runners that read a program from standard input or from a file named at run time (`… | python3`, `node <(…)`). */
 const INTERPRETERS = new Set(["python", "python2", "python3", "node", "nodejs", "deno", "bun", "perl", "ruby", "php", "lua", "osascript", "tclsh", "expect", "rscript", "jshell", "pwsh", "powershell", "awk", "gawk", "mawk", "nawk"]);
 /** Standard input named as a file: a program read from it arrives through the pipe. */
-const STDIN_PATH = /^(-|\/dev\/stdin|\/dev\/fd\/\d+|\/proc\/self\/fd\/\d+|\/dev\/tty)$/;
+const STDIN_RE = /^(-|\/dev\/stdin|\/dev\/fd\/\d+|\/proc\/self\/fd\/\d+|\/dev\/tty)$/;
+/** Any spelling of standard input as a path (`/dev//stdin`, `//dev/./stdin`), after folding `//`, `.` and `..`. */
+const isStdinPath = (text: string): boolean => text === "-" || STDIN_RE.test(path.posix.normalize(text.replace(/^\/+/, "/")));
 /** Wrappers that build the command line at run time (arguments appended or substituted). */
 const ARG_WRAPPERS = new Set(["xargs", "parallel", "find", "watch", "flock", "sem", "entr", "fswatch"]);
 /** Lookup tools: silent with a written-out name, unknown with one known only at run time (DNS can carry data). */
@@ -231,6 +233,9 @@ function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: num
     const w = rest[j];
     if (w.dynamic && transparent) { mark(s, "a wrapper argument is known only at run time"); return; }
     const name = basename(w.text);
+    // A transparent prefix (`nice`, `timeout 9`, `time`) runs its command unchanged: read from the first word that is a
+    // command this module treats specially, including an argument-building wrapper (`nice xargs git push`).
+    if (transparent && (ARG_WRAPPERS.has(name) || TRANSPARENT.has(name) || name === "alias")) { readCommand(cmd, rest.slice(j), s, depth); return; }
     if (NETWORK_TOOLS.has(name) || SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval" || name === "env" || name.startsWith("git-")) {
       if (transparent) { readCommand(cmd, rest.slice(j), s, depth); return; }
       // xargs/parallel/find -exec hand a shell or interpreter code built at run time (`xargs -I{} sh -c '{}'`).
@@ -248,12 +253,14 @@ function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: num
 
 /** `sh -c 'script'`, `bash <<EOF … EOF`, `zsh <<< '…'`, `echo … | sh`. A script file is not read. */
 function readShellRun(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: number): void {
+  // Options start with `-` or `+` (`bash +x`); `-o`/`+o`/`-O`/`+O` and `--rcfile`/`--init-file` take a value. `-c` may
+  // sit anywhere among them (`bash +x -c …`, `bash --rcfile x -c …`).
   let i = 0, inline = false;
-  while (i < rest.length && rest[i].text.startsWith("-") && rest[i].text !== "-" && rest[i].text !== "--") {
+  const isOption = (t: string) => (t.startsWith("-") || t.startsWith("+")) && t !== "-" && t !== "--" && t !== "+";
+  while (i < rest.length && isOption(rest[i].text)) {
     const t = rest[i].text;
     if (/^-[A-Za-z]*c[A-Za-z]*$/.test(t) || t === "--command") inline = true;
-    // `-o option` / `-O option` take a value.
-    if (/^[-+][A-Za-z]*[oO]$/.test(t)) i++;
+    if (/^[-+][A-Za-z]*[oO]$/.test(t) || t === "--rcfile" || t === "--init-file") i++;
     i++;
   }
   if (i < rest.length && rest[i].text === "--") i++;
@@ -265,9 +272,17 @@ function readShellRun(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: nu
     readScript(body.text, s, depth + 1);
     return;
   }
+  // An option this loop does not know might take the next word: if a later word is a `-c`, read every word as a script.
+  if (rest.slice(i).some((w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w.text) || w.text === "--command")) {
+    for (const w of rest.slice(i)) { if (w.dynamic) { mark(s, "a shell runs text known only at run time"); return; } readScript(w.text, s, depth + 1); }
+    return;
+  }
   // A script file named at run time (`bash <(echo …)`, `sh $F`) or standard input by path (`sh /dev/stdin`) is not read.
   if (rest.slice(i).some((w) => w.dynamic || w.glob)) { mark(s, "a shell runs a script known only at run time"); return; }
-  if (rest[i] && STDIN_PATH.test(rest[i].text) && (cmd.piped || cmd.redirects.some((r) => r.op === "<"))) { mark(s, "a shell reads its script from a pipe"); return; }
+  // A shell whose standard input is a pipe or a file and that runs any script other than a written-out `-c` body may
+  // read its program from that input (`sh /dev/stdin`, `bash +x /dev/fd/0`, `bash --rcfile x /dev/stdin`): asked.
+  if (cmd.piped || cmd.redirects.some((r) => r.op === "<" || r.op === "<>")) { mark(s, "a shell reads from a pipe or file"); return; }
+  if (rest.some((w) => isStdinPath(w.text))) { mark(s, "a shell reads its script from standard input"); return; }
   for (const h of cmd.heredocs) readScript(h.body, s, depth + 1);
   for (const h of cmd.herestrings) readScript(h.text, s, depth + 1);
   // Reading its script from a pipe: what arrives is not known here.
@@ -286,7 +301,7 @@ function readInterpreter(cmd: SimpleCommand, rest: ShellWord[], s: State): void 
   if (texts.some((t) => MENTIONS_OUTWARD.test(t))) { mark(s, "inline code names an outward command"); return; }
   const operands = rest.filter((w) => !w.text.startsWith("-"));
   const inline = rest.some((w) => /^-[A-Za-z]*[ceEr]$|^--(eval|print|command)/.test(w.text));
-  const fromStdin = operands.length === 0 || operands.some((w) => STDIN_PATH.test(w.text));
+  const fromStdin = operands.length === 0 || operands.some((w) => isStdinPath(w.text));
   if (!inline && fromStdin && (cmd.piped || cmd.redirects.some((r) => r.op === "<" || r.op === "<>"))) mark(s, "an interpreter reads its program from a pipe or file");
 }
 
@@ -345,7 +360,7 @@ function readGit(rest: ShellWord[], s: State): void {
   let repoOpt: string | null = null, positional: string | null = null;
   for (let j = 0; j < args.length; j++) {
     const t = args[j].text;
-    if (t === "--") { positional = args[j + 1]?.text ?? null; break; }
+    if (t === "--") { positional ??= args[j + 1]?.text ?? null; break; }
     if (t.startsWith("--")) {
       if (t === "--repo") { repoOpt = args[++j]?.text ?? null; continue; }
       if (t.startsWith("--repo=")) { repoOpt = t.slice(7); continue; }
@@ -364,8 +379,8 @@ function readGit(rest: ShellWord[], s: State): void {
       }
       continue;
     }
-    positional = t;
-    break;
+    // git permutes options after the repository and refspecs (`git push origin main --receive-pack=./x`): keep reading.
+    positional ??= t;
   }
   const repo = positional ?? repoOpt;
   // A remote helper (`ext::sh -c …`) runs a program instead of naming a place.
