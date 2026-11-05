@@ -11,7 +11,7 @@
 //   - a command named or argued at run time (`$CMD`, `$(…)`, globs, an unreadable parse);
 //   - `git -c`, `--config-env`, `--exec-path`, `--receive-pack`/`--exec`, `--recurse-submodules=on-demand`,
 //     remote helpers (`ext::`), an unknown git subcommand (it may be an alias for push);
-//   - `git config`/`git remote` changes, `cd`/`pushd`, or `GIT_*`/`SSH*`/proxy/`PATH`/`HOME` variables in
+//   - `git config`/`git remote` changes, a `cd`/`pushd` it cannot follow (DEC-11f), or `GIT_*`/`SSH*`/proxy/`PATH`/`HOME` variables in
 //     the same command (they change where a push goes after this reading);
 //   - ssh family options that run a local program or change the host (`-o ProxyCommand`, `-F`, `-J`, `-S`,
 //     `rsync -e 'ssh -o …'`);
@@ -28,13 +28,25 @@
 //
 // Pure and vscode-free; the host resolves git remote names (resolveOutwardDestinations, with an injected
 // git runner) so the smoke test can vary them.
+//
+// DEC-11f (Jay 2026-11-05) — remembered per repository: for each push the host resolves the repository it really
+// runs in (the shell's folder from the SDK hook, then static `cd` steps of an `&&` chain, `-C`, `--git-dir`,
+// `--work-tree`, `GIT_DIR=`/`GIT_WORK_TREE=` prefixes) and remembers (repository, destination) pairs. A push whose
+// folder or repository cannot be resolved (`cd "$X" && git push`, `cd a; git push`, a `cd` after another command,
+// a branch switch before a bare push) asks every time and is never remembered.
+import fs from "node:fs";
 import path from "node:path";
 import { parseShell, type ShellWord, type SimpleCommand } from "./shellWords.ts";
 
 /** A part of the command that may send data off this computer. */
 export type OutwardTarget =
-  /** `git push`: `remote` null = the branch's default push remote; `dir` = a static `-C` path. */
-  | { kind: "git"; remote: string | null; dir: string | null }
+  /**
+   * `git push`: `remote` null = the branch's default push remote; `dir` = where it runs, relative to the shell's
+   * folder or absolute (static `cd` steps of an `&&` chain, then `-C`; DEC-11f); `gitDir`/`workTree` = a static
+   * `--git-dir`/`--work-tree` or `GIT_DIR=`/`GIT_WORK_TREE=` prefix, as written; `bareCd` = a `cd` step names a bare
+   * folder name (`cd site`), which a `CDPATH` could send elsewhere.
+   */
+  | { kind: "git"; remote: string | null; dir: string | null; gitDir?: string; workTree?: string; bareCd?: true }
   /** Already a destination key (`ssh://host:port`, `https://host`), never with credentials. */
   | { kind: "dest"; destination: string };
 
@@ -122,6 +134,16 @@ interface State {
   moved: boolean;
   /** git config / remotes or a network variable changed earlier in this command. */
   rewired: boolean;
+  /** DEC-11f — the whole command is one `&&` chain of plain commands (no `;`, `||`, pipes, groups, substitutions). */
+  chain: boolean;
+  /** DEC-11f — the folder the static `cd` steps of that chain lead to (relative to the shell's folder), or null. */
+  cdPath: string | null;
+  /** DEC-11f — a `cd` step named a bare folder name (a `CDPATH` lookup could apply). */
+  bareCd: boolean;
+  /** DEC-11f — a command other than `cd` or a chain-safe git command ran earlier in the chain. */
+  unsafeSeen: boolean;
+  /** DEC-11f — an earlier git command may change the current branch (and so the default push remote). */
+  headMoved: boolean;
 }
 
 const mark = (s: State, why: string) => { s.outward = true; s.unknown ??= why; };
@@ -129,7 +151,7 @@ const add = (s: State, t: OutwardTarget) => { s.outward = true; s.targets.push(t
 
 /** Read `command` for parts that may send data off this computer. */
 export function readOutward(command: string): OutwardReading {
-  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false };
+  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false };
   readScript(command, s, 0);
   // A push read after a change of remotes, config, variables or folder goes somewhere this reading cannot see.
   if (s.outward && (s.rewired || s.moved) && s.targets.length) s.unknown ??= s.rewired ? "remotes or network variables change in the same command" : "the folder changes before it";
@@ -145,8 +167,65 @@ function readScript(script: string, s: State, depth: number): void {
     return;
   }
   for (const body of parsed.nested) readScript(body, s, depth + 1);
-  for (const cmd of parsed.commands) readCommand(cmd, cmd.words, s, depth);
+  for (const cmd of parsed.commands) {
+    readCommand(cmd, cmd.words, s, depth);
+    // DEC-11f — what ran before a push decides whether a `cd` step still says where the push runs.
+    if (depth === 0 && !chainSafe(cmd)) s.unsafeSeen = true;
+  }
 }
+
+/**
+ * DEC-11f — the command is one `&&` chain: outside quotes it has no `;`, `||`, `|`, `&` (other than `&&`), newline,
+ * parentheses, braces or substitutions. Only then does a `cd` step say where every later step runs: `cd a && git push`
+ * pushes from `a` or not at all, while `cd a; git push`, `(cd a) && git push` or `cd a || true` may push from elsewhere.
+ */
+function andChainOnly(src: string): boolean {
+  const text = src.replace(/\s+$/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\\") { if (text[i + 1] === "\n") return false; i++; continue; }
+    if (c === "'") { const end = text.indexOf("'", i + 1); if (end < 0) return false; i = end; continue; }
+    if (c === '"') {
+      let k = i + 1;
+      for (; k < text.length && text[k] !== '"'; k++) { if (text[k] === "\\") k++; else if (text[k] === "$" || text[k] === "`") return false; }
+      if (k >= text.length) return false;
+      i = k; continue;
+    }
+    if (c === "&") { if (text[i + 1] === "&") { i++; continue; } return false; }
+    if (";|\n()`{}$#".includes(c)) return false;
+    if ((c === "<" || c === ">") && text[i + 1] === "(") return false;
+  }
+  return true;
+}
+
+/** Git subcommands that may run between a `cd` step and the push: they neither move folders nor change the branch or remotes. */
+const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "diff", "log", "show", "fetch", "pull", "stash", "tag", "restore", "rm", "mv", "rev-parse", "ls-files", "push"]);
+/** Git subcommands that may change the current branch, so a later bare `git push` may use another default remote. */
+const GIT_HEAD_MOVERS = new Set(["checkout", "switch", "rebase", "worktree", "branch", "symbolic-ref", "bisect"]);
+/** A redirect that writes no file: a descriptor copy (`2>&1`) or `/dev/null`. */
+const harmlessRedirect = (r: { op: string; target: ShellWord }) => !r.target.dynamic && ((/^(>&|<&)$/.test(r.op) && /^\d+$|^-$/.test(r.target.text)) || (/^(>|>>|&>|2>)$/.test(r.op) && r.target.text === "/dev/null"));
+
+/** DEC-11f — a `cd` with one static path, or a git command whose subcommand is chain-safe, with harmless redirects only. */
+function chainSafe(cmd: SimpleCommand): boolean {
+  if (cmd.heredocs.length || cmd.herestrings.length || cmd.piped || !cmd.redirects.every(harmlessRedirect)) return false;
+  const w = cmd.words;
+  if (!w.length || w[0].assignment || w[0].dynamic || w[0].glob) return false;
+  if (w[0].text === "cd") return w.length === 2 && staticPath(w[1]);
+  if (w[0].text !== "git") return false;
+  let i = 1;
+  while (i < w.length && w[i].text.startsWith("-")) {
+    const t = w[i].text;
+    if (t === "-C" || t === "--git-dir" || t === "--work-tree") { i += 2; continue; }
+    if (/^--(git-dir|work-tree)=/.test(t) || GIT_PLAIN_GLOBALS.has(t)) { i++; continue; }
+    return false;
+  }
+  const sub = w[i];
+  return !!sub && !sub.dynamic && !sub.glob && CHAIN_SAFE_GIT.has(sub.text);
+}
+
+/** A folder written out in full: no run-time part, no glob, no option, no `~` (the shell expands it from HOME). */
+const staticPath = (w: ShellWord | undefined): w is ShellWord =>
+  !!w && !w.dynamic && !w.glob && w.text !== "" && !w.text.startsWith("-") && !w.text.startsWith("~") && !/[\u0000-\u001f]/.test(w.text);
 
 function noteAssignments(words: ShellWord[], s: State, all = false): void {
   for (const w of words) {
@@ -157,11 +236,21 @@ function noteAssignments(words: ShellWord[], s: State, all = false): void {
 
 function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: number): void {
   let i = 0;
+  // DEC-11f — `GIT_DIR=x git push` / `GIT_WORK_TREE=y git push` with a written-out value name the repository the push
+  // runs in; held back here and passed to git (any other command, or a run-time value, rewires as before).
+  const gitEnv: { gitDir?: string; workTree?: string } = {};
+  const held: ShellWord[] = [];
   // Leading assignments and grouping words.
   while (i < words.length && (words[i].assignment || KEYWORDS.has(words[i].text) || /^[A-Za-z_][\w-]*\(\)$/.test(words[i].text))) {
-    if (words[i].assignment) noteAssignments([words[i]], s);
+    const w = words[i];
+    const m = w.assignment ? /^(GIT_DIR|GIT_WORK_TREE)=([\s\S]*)$/.exec(w.text) : null;
+    if (m && staticPath({ ...w, text: m[2] })) { held.push(w); if (m[1] === "GIT_DIR") gitEnv.gitDir = m[2]; else gitEnv.workTree = m[2]; }
+    else if (w.assignment) noteAssignments([w], s);
     i++;
   }
+  // Only `git` itself takes them here (`git-push` from libexec, or any other command, rewires as before).
+  const headIsGit = i < words.length && !words[i].dynamic && !words[i].glob && basename(words[i].text) === "git";
+  if (!headIsGit) noteAssignments(held, s);
   if (i >= words.length) return;
   const headWord = words[i];
   const rest = words.slice(i + 1);
@@ -172,7 +261,19 @@ function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: nu
   }
   const head = basename(headWord.text);
   if (EXPORTERS.has(head)) { noteAssignments(rest, s, true); return; }
-  if (head === "cd" || head === "pushd" || head === "popd") { s.moved = true; return; }
+  if (head === "cd") {
+    // DEC-11f — a static `cd` step of an `&&` chain, before anything that could change folders, says where later steps
+    // run. Any other `cd` (a run-time folder, `cd -`, `cd ~`, after another command, outside a plain chain) is a move
+    // this reading cannot follow.
+    const target = rest[0];
+    if (depth === 0 && words === cmd.words && s.chain && !s.unsafeSeen && rest.length === 1 && staticPath(target)) {
+      s.cdPath = s.cdPath === null || path.posix.isAbsolute(target.text) ? path.posix.normalize(target.text) : path.posix.join(s.cdPath, target.text);
+      if (!/^(\/|\.\.?(\/|$))/.test(target.text)) s.bareCd = true;
+      return;
+    }
+    s.moved = true; return;
+  }
+  if (head === "pushd" || head === "popd") { s.moved = true; return; }
   if (head === "alias") {
     // `alias gp='git push'` defines what a later word runs.
     for (const w of rest) {
@@ -190,7 +291,7 @@ function readCommand(cmd: SimpleCommand, words: ShellWord[], s: State, depth: nu
   if (head === "env") return readEnv(cmd, rest, s, depth);
   if (TRANSPARENT.has(head)) return readWrapped(cmd, rest, s, depth, true);
   if (SHELLS.has(head)) return readShellRun(cmd, rest, s, depth);
-  if (head === "git") return readGit(rest, s);
+  if (head === "git") return readGit(rest, s, gitEnv);
   // `git-push`, `git-send-pack`, … run straight from git's libexec folder.
   if (head.startsWith("git-")) return readGit([{ ...headWord, text: head.slice(4) }, ...rest], s);
   if (head === "openssl") { if (rest.some((w) => /^(s_client|s_time)$/i.test(w.text) || w.dynamic)) mark(s, "openssl opens a connection"); return; }
@@ -240,7 +341,7 @@ function readWrapped(cmd: SimpleCommand, rest: ShellWord[], s: State, depth: num
       if (transparent) { readCommand(cmd, rest.slice(j), s, depth); return; }
       // xargs/parallel/find -exec hand a shell or interpreter code built at run time (`xargs -I{} sh -c '{}'`).
       if (ARG_WRAPPERS.has(head) && (SHELLS.has(name) || INTERPRETERS.has(name) || name === "eval")) { mark(s, "a wrapper runs a shell or interpreter with arguments built at run time"); return; }
-      const inner: State = { targets: [], unknown: null, outward: false, moved: s.moved, rewired: s.rewired };
+      const inner: State = { ...s, targets: [], unknown: null, outward: false };
       readCommand(cmd, rest.slice(j), inner, depth);
       if (inner.outward) mark(s, "a network command inside a wrapper this app does not read");
       return;
@@ -307,18 +408,27 @@ function readInterpreter(cmd: SimpleCommand, rest: ShellWord[], s: State): void 
 
 // ── git ─────────────────────────────────────────────────────────────────────
 
-function readGit(rest: ShellWord[], s: State): void {
+function readGit(rest: ShellWord[], s: State, env: { gitDir?: string; workTree?: string } = {}): void {
   let i = 0, dir: string | null = null;
+  let gitDir = env.gitDir, workTree = env.workTree;
   while (i < rest.length && rest[i].text.startsWith("-")) {
     const w = rest[i], t = w.text;
     if (t === "-C") {
       const v = rest[i + 1];
-      if (!v || v.dynamic || v.glob) { s.moved = true; mark(s, "git -C names a folder known only at run time"); return; }
-      dir = dir ? path.join(dir, v.text) : v.text;
+      if (!staticPath(v)) { s.moved = true; mark(s, "git -C names a folder known only at run time"); return; }
+      dir = dir && !path.posix.isAbsolute(v.text) ? path.posix.join(dir, v.text) : v.text;
       i += 2; continue;
     }
     if (GIT_PLAIN_GLOBALS.has(t)) { i++; continue; }
-    if (/^--(git-dir|work-tree|namespace)(=|$)/.test(t)) { s.moved = true; i += t.includes("=") ? 1 : 2; continue; }
+    // DEC-11f — a written-out --git-dir / --work-tree names the repository; a run-time one (or --namespace) is a move.
+    const repoOpt = /^--(git-dir|work-tree)(=([\s\S]*))?$/.exec(t);
+    if (repoOpt) {
+      const v = repoOpt[2] !== undefined ? { ...w, text: repoOpt[3] } : rest[i + 1];
+      if (!staticPath(v)) { s.moved = true; i += repoOpt[2] !== undefined ? 1 : 2; continue; }
+      if (repoOpt[1] === "git-dir") gitDir = v.text; else workTree = v.text;
+      i += repoOpt[2] !== undefined ? 1 : 2; continue;
+    }
+    if (/^--namespace(=|$)/.test(t)) { s.moved = true; i += t.includes("=") ? 1 : 2; continue; }
     // `-c`, `--config-env`, `--exec-path` and anything unknown can run another program or rewrite the remote.
     mark(s, `git ${t} can change what runs or where it goes`);
     return;
@@ -328,6 +438,8 @@ function readGit(rest: ShellWord[], s: State): void {
   if (subWord.dynamic || subWord.glob) { mark(s, "git subcommand known only at run time"); return; }
   const sub = subWord.text.toLowerCase();
   const args = rest.slice(i + 1);
+  // A later bare `git push` uses the default remote of the branch it is on when it runs, not now.
+  if (GIT_HEAD_MOVERS.has(sub)) s.headMoved = true;
   if (!GIT_LOCAL.has(sub) && sub !== "push") {
     // An alias (`git p` → push), send-email, svn dcommit, p4 submit, …: not read.
     mark(s, `git ${sub} is not read`);
@@ -385,7 +497,11 @@ function readGit(rest: ShellWord[], s: State): void {
   const repo = positional ?? repoOpt;
   // A remote helper (`ext::sh -c …`) runs a program instead of naming a place.
   if (repo !== null && /^[A-Za-z][A-Za-z0-9+.-]*::/.test(repo)) { mark(s, "git push to a remote helper"); return; }
-  add(s, { kind: "git", remote: repo, dir });
+  if (repo === null && s.headMoved) { mark(s, "the branch may change before a push to its default remote"); return; }
+  // DEC-11f — after a `cd` step, the folder is known only if nothing but `cd` and chain-safe git ran before the push.
+  if (s.cdPath !== null && s.unsafeSeen) { s.moved = true; }
+  const where = s.cdPath !== null && !s.moved ? (dir === null ? s.cdPath : path.posix.isAbsolute(dir) ? dir : path.posix.join(s.cdPath, dir)) : dir;
+  add(s, { kind: "git", remote: repo, dir: where, ...(gitDir !== undefined ? { gitDir } : {}), ...(workTree !== undefined ? { workTree } : {}), ...(s.cdPath !== null && s.bareCd ? { bareCd: true as const } : {}) });
 }
 
 // ── ssh family ──────────────────────────────────────────────────────────────
@@ -722,48 +838,86 @@ export function gitDestination(url: string, cwd: string): string | null {
 export type GitRunner = (args: string[], cwd: string) => string | null;
 
 /**
- * The destinations a reading sends to, resolving git remote names in `cwd` with `git`. `unknown` is set when
- * any of them cannot be named (then the host asks every time and remembers nothing).
- */
-/**
  * Repository settings that send a push somewhere else than its address says, or run a program on the way
  * (an earlier silent `git config core.sshCommand …` then `git push` to a remembered remote, verify 2026-11-05).
  * Canonical key names are lowercase apart from the subsection, so the pattern is lowercase.
  */
 export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\..*(proxy|curloptresolve)|https?\\.(proxy|curloptresolve)|gpg\\..*program|remote\\..*\\.(receivepack|proxy|vcs|uploadpack)|protocol\\..*\\.allow)$";
 
-export function resolveOutwardDestinations(reading: OutwardReading, cwd: string | null, git: GitRunner, opts: { nestedRepo?: boolean } = {}): { destinations: string[]; unknown: string | null } {
-  const out = new Set<string>();
+/** DEC-11f — one (repository, destination) pair: `repo` is the real git folder a push runs from, null for ssh/uploads. */
+export interface OutwardPair { repo: string | null; destination: string }
+
+export interface ResolveOptions {
+  /**
+   * The folder the agent's shell is in when the command starts (the SDK PreToolUse hook's `cwd`; the Bash tool keeps
+   * its folder between commands). Unknown (null) means only the work folder is known.
+   */
+  shellCwd?: string | null;
+  /** Another repository may sit inside the work folder (outwardMemory `hasNestedGitRepo`): matters only without `shellCwd`. */
+  nestedRepo?: boolean;
+  /** `CDPATH` is set: a `cd` to a bare folder name may go elsewhere. */
+  cdpath?: boolean;
+  /** Real path of a folder, or null (default: fs.realpathSync.native). */
+  realpath?: (p: string) => string | null;
+}
+
+const defaultRealpath = (p: string): string | null => { try { return fs.realpathSync.native(p); } catch { return null; } };
+
+/**
+ * The destinations a reading sends to, and the (repository, destination) pairs the host remembers (DEC-11f). For each
+ * push it resolves the folder the push really runs in (the shell's folder, then the static `cd` steps and `-C`), the
+ * repository there (`--git-dir`/`--work-tree` as written) and that repository's push URLs. `unknown` is set when any of
+ * them cannot be named; the host then asks every time and remembers nothing.
+ */
+export function resolveOutwardDestinations(reading: OutwardReading, cwd: string | null, git: GitRunner, opts: ResolveOptions = {}): { destinations: string[]; pairs: OutwardPair[]; unknown: string | null } {
+  const out = new Map<string, OutwardPair>();
+  const put = (p: OutwardPair) => out.set(JSON.stringify([p.repo, p.destination]), p);
+  const realpath = opts.realpath ?? defaultRealpath;
   let unknown = reading.unknown;
+  const shellCwd = opts.shellCwd && path.isAbsolute(opts.shellCwd) ? opts.shellCwd : null;
+  const start = shellCwd ?? cwd;
   for (const t of reading.targets) {
-    if (t.kind === "dest") { out.add(t.destination); continue; }
-    if (!cwd) { unknown ??= "no work folder to read git remotes in"; continue; }
-    const dir = t.dir ? path.resolve(cwd, t.dir) : cwd;
-    // The agent's shell keeps its folder between commands: with another repository inside the work folder, a bare
-    // `git push` may run there, so a remote name or a relative path cannot be placed.
-    if (opts.nestedRepo && (t.remote === null || !/[:/]/.test(t.remote) || /^\.\.?\//.test(t.remote))) { unknown ??= "another repository inside the work folder"; continue; }
-    if (git(["config", "--get-regexp", GIT_TRANSPORT_KEYS], dir)) { unknown ??= "repository settings change how a push travels"; continue; }
+    if (t.kind === "dest") { put({ repo: null, destination: t.destination }); continue; }
+    if (!start) { unknown ??= "no work folder to read git remotes in"; continue; }
+    const absolute = t.dir !== null && path.isAbsolute(t.dir);
+    if (!shellCwd && !absolute) {
+      // Without the shell's folder only the work folder is known. The shell may be in any folder below it: that is the
+      // same repository only when no other repository sits inside, and a relative path that climbs (`cd ../x`) may
+      // land anywhere.
+      if (opts.nestedRepo) { unknown ??= "another repository inside the work folder"; continue; }
+      if (t.dir !== null && /^\.\.(\/|$)/.test(path.posix.normalize(t.dir))) { unknown ??= "a relative folder outside the shell's folder"; continue; }
+    }
+    if (t.bareCd && opts.cdpath) { unknown ??= "CDPATH may send a cd elsewhere"; continue; }
+    const dir = t.dir ? path.resolve(start, t.dir) : start;
+    const globals = [...(t.gitDir !== undefined ? [`--git-dir=${t.gitDir}`] : []), ...(t.workTree !== undefined ? [`--work-tree=${t.workTree}`] : [])];
+    const g = (args: string[]) => git([...globals, ...args], dir);
+    const gitFolder = g(["rev-parse", "--absolute-git-dir"]);
+    const repo = gitFolder ? realpath(gitFolder) : null;
+    if (!repo) { unknown ??= "the push does not run inside a repository this app can read"; continue; }
+    if (g(["config", "--get-regexp", GIT_TRANSPORT_KEYS])) { unknown ??= "repository settings change how a push travels"; continue; }
     let remote = t.remote;
     if (remote === null) {
-      const branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], dir);
-      remote = (branch && (git(["config", "--get", `branch.${branch}.pushRemote`], dir) || null))
-        || git(["config", "--get", "remote.pushDefault"], dir)
-        || (branch && (git(["config", "--get", `branch.${branch}.remote`], dir) || null))
+      const branch = g(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+      remote = (branch && (g(["config", "--get", `branch.${branch}.pushRemote`]) || null))
+        || g(["config", "--get", "remote.pushDefault"])
+        || (branch && (g(["config", "--get", `branch.${branch}.remote`]) || null))
         || "origin";
     }
-    const named = /^[A-Za-z0-9._-]+$/.test(remote) ? git(["remote", "get-url", "--push", "--all", remote], dir) : null;
+    // `remote get-url --push` applies pushurl and the insteadOf / pushInsteadOf rewrites of a named remote.
+    const named = /^[A-Za-z0-9._-]+$/.test(remote) ? g(["remote", "get-url", "--push", "--all", remote]) : null;
     if (named) {
       for (const line of named.split(/\r?\n/).filter(Boolean)) {
         const d = gitDestination(line, dir);
-        if (d) out.add(d); else unknown ??= "a remote address is not plain";
+        if (d) put({ repo, destination: d }); else unknown ??= "a remote address is not plain";
       }
       continue;
     }
     if (t.remote === null) { unknown ??= "the default push remote has no address"; continue; }
     // A written-out address: an insteadOf / pushInsteadOf rewrite would send it elsewhere.
-    if (git(["config", "--get-regexp", "^url\\..*insteadof$"], dir)) { unknown ??= "url rewrites are configured"; continue; }
+    if (g(["config", "--get-regexp", "^url\\..*insteadof$"])) { unknown ??= "url rewrites are configured"; continue; }
     const d = gitDestination(remote, dir);
-    if (d) out.add(d); else unknown ??= "the push address is not plain";
+    if (d) put({ repo, destination: d }); else unknown ??= "the push address is not plain";
   }
-  return { destinations: [...out].sort(), unknown };
+  const pairs = [...out.values()].sort((a, b) => (a.destination + "\0" + (a.repo ?? "")).localeCompare(b.destination + "\0" + (b.repo ?? "")));
+  return { destinations: [...new Set(pairs.map((p) => p.destination))].sort(), pairs, unknown };
 }

@@ -228,6 +228,20 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, 
       : {}),
   });
   const call = sdk.calls[0];
+  // DEC-11f (2026-11-05) — auto seats also carry one PreToolUse hook (matcher "Bash") that only records the shell's
+  // folder for the outward approval (sdkCoach.ts). It is not an orchestrator surface: counted here, then left out of the
+  // turn snapshot so the digests below keep measuring the orchestrator (checked in "DEC-11f shell-folder hook").
+  {
+    const hooks = call.options.hooks;
+    const pre = hooks?.PreToolUse ?? [];
+    call.shellCwdHooks = pre.filter((m) => m.matcher === "Bash").length;
+    if (call.shellCwdHooks) {
+      const kept = pre.filter((m) => m.matcher !== "Bash");
+      // Same key order as before (PreToolUse first when the orchestrator registered it).
+      const next = Object.fromEntries(Object.entries(hooks).flatMap(([k, v]) => (k !== "PreToolUse" ? [[k, v]] : kept.length ? [[k, kept]] : [])));
+      if (Object.keys(next).length) call.options.hooks = next; else delete call.options.hooks;
+    }
+  }
   const { env, ...rest } = call.options;
   assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "REQ-M6: the CLI's paid title request stays disabled");
   return {
@@ -334,6 +348,15 @@ const ok = (name) => {
   passed++;
   console.log(`✓ ${name}`);
 };
+
+// ── 0. DEC-11f shell-folder hook: on auto seats (adult, no preset) only ──────
+{
+  const auto = Object.entries(observed).filter(([, o]) => o.call.shellCwdHooks).map(([n]) => n.split("/")[0]);
+  for (const [name, o] of Object.entries(observed)) assert.ok(o.call.shellCwdHooks <= 1, `${name}: at most one shell-folder hook`);
+  assert.ok(auto.includes("adultWide"), "control: an adult seat with the shell carries it");
+  for (const p of ["kidsChat", "kidsPolluted", "minorFlagAdultTier"]) assert.ok(!auto.includes(p), `minor seat ${p}: no shell-folder hook`);
+  ok("DEC-11f shell-folder hook: one Bash PreToolUse recorder on auto seats, none on minor seats");
+}
 
 // ── 1. Byte-identity with Studio main ───────────────────────────────────────
 // Taken with HPS_A4_RECORD_BASE=1 on main trees without A4: all ten cases of a profile have

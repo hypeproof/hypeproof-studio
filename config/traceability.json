@@ -8850,6 +8850,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/outward-ask-once.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outward-per-repo.smoke.mjs"
         }
       ]
     },

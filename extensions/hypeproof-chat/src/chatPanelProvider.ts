@@ -128,7 +128,7 @@ import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
 import { approvalModeFor, approvalPresetBlockServed, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
 import { destructiveStaysInFolder } from "./shellFolderScope";
 import { readOutward, resolveOutwardDestinations, type OutwardReading } from "./shellOutward";
-import { OutwardMemory, hasNestedGitRepo, outwardScopeKey, runGitQuietly } from "./outwardMemory";
+import { OutwardMemory, hasNestedGitRepo, outwardPairKey, outwardScopeKey, runGitQuietly } from "./outwardMemory";
 import { mentionsLinkTool, shellUnreadable } from "./shellLinkPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
@@ -10695,24 +10695,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Destinations allowed before from this activity and work folder run without a modal (outwardMemory.ts); a new
    * one asks and is remembered when allowed. A destination this app cannot name asks every time and is never
    * remembered. Declining remembers nothing.
+   * DEC-11f (Jay 2026-11-05) — remembered per repository: `shellCwd` is the folder the agent's shell is in when the
+   * command starts (the SDK PreToolUse hook's `cwd`, sdkCoach.ts), so a push from a nested repository is resolved to
+   * that repository and its remote and remembered as that (repository, destination) pair. Without it, only a work
+   * folder with no other repository inside places a bare push.
    */
-  private async approveOutwardCommand(command: string, reading: OutwardReading, destructive: boolean, onPrompted?: () => void): Promise<boolean> {
+  private async approveOutwardCommand(command: string, reading: OutwardReading, destructive: boolean, onPrompted?: () => void, shellCwd?: string | null): Promise<boolean> {
     const cwd = this.resolveCoachCwd() ?? null;
     let folder: string | null = null;
     try { folder = cwd ? canonicalFolder(cwd) : null; } catch { folder = null; }
-    const nestedRepo = folder !== null && reading.targets.some((t) => t.kind === "git") && hasNestedGitRepo(folder);
-    const { destinations, unknown } = resolveOutwardDestinations(reading, folder, runGitQuietly, { nestedRepo });
+    let shell: string | null = null;
+    try { shell = typeof shellCwd === "string" && path.isAbsolute(shellCwd) && fs.statSync(shellCwd).isDirectory() ? shellCwd : null; } catch { shell = null; }
+    // The folder walk is needed only when the shell's folder is unknown and a push depends on where the shell is.
+    const nestedRepo = shell === null && folder !== null && reading.targets.some((t) => t.kind === "git" && (t.dir === null || !path.isAbsolute(t.dir))) && hasNestedGitRepo(folder);
+    const { destinations, pairs, unknown } = resolveOutwardDestinations(reading, folder, runGitQuietly, { nestedRepo, shellCwd: shell, cdpath: !!process.env.CDPATH });
     const scope = outwardScopeKey({ cohort: this.activeCohortId ?? null, activity: activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? null, folder });
     const memory = new OutwardMemory(this.context.globalState);
-    const known = !unknown && destinations.length > 0;
-    if (known && memory.remembersAll(scope, destinations)) return true;
+    const known = !unknown && pairs.length > 0;
+    const keys = pairs.map(outwardPairKey);
+    if (known && memory.remembersAll(scope, keys)) return true;
     onPrompted?.();
     const pick = await this.commandApprovalRequest.confirm({
       id: crypto.randomUUID(), purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
       outward: { destinations: known ? destinations : [], remembers: known && scope !== null },
     });
     if (pick !== "allow") return false;
-    if (known) await memory.remember(scope, destinations);
+    if (known) await memory.remember(scope, keys);
     return true;
   }
 
@@ -10755,7 +10763,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           (!destructive || destructiveStaysInFolder(command, this.resolveCoachCwd() ?? null, canonicalizeExistingPath))) {
         // DEC-11e — a command that may send data off this computer asks once per destination, then remembers it.
         const outward = readOutward(command);
-        return outward.outward ? this.approveOutwardCommand(command, outward, destructive, onPrompted) : true;
+        const shellCwd = (req.payload as { shellCwd?: unknown } | null | undefined)?.shellCwd;
+        return outward.outward ? this.approveOutwardCommand(command, outward, destructive, onPrompted, typeof shellCwd === "string" ? shellCwd : null) : true;
       }
       const exact = destructive || forgetAllows ? null : taskCommandExact(command);
 

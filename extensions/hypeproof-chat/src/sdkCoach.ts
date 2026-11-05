@@ -760,6 +760,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // locked by unit tests via buildSdkQueryOptions (REQ-M5/M6/M13); the two
   // host-bound fields are attached here. `Options` is the REAL SDK type.
   let delegationStop: DelegationStop | undefined;
+  // DEC-11f (Jay 2026-11-05) — the folder the agent's shell is in when each Bash call starts, by tool use id. The
+  // Bash tool keeps its folder between commands, so the host needs it to tell which repository a `git push` runs
+  // in (chatPanelProvider approveOutwardCommand). Filled by the PreToolUse hook below (hooks run before canUseTool);
+  // a call without an entry is resolved as before (work folder only).
+  const autoSeat = approvalModeFor(servedApprovalPreset(args.profile)?.id ?? null, isMinorProfile(args.profile), approvalPresetBlockServed(args.profile)) === "auto";
+  const shellCwds = new Map<string, string>();
   const options: Options = {
     ...buildSdkQueryOptions(opts, {
       proxyUrl: args.gatewayUrl,
@@ -903,7 +909,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
       const writeScope = isWriteToolName(name) ? writeScopeKeys(name, input, args.cwd) : null;
       try {
+        const shellCwd = shellCwds.get(options.toolUseID);
+        shellCwds.delete(options.toolUseID);
         const approval = await args.requestApproval({
+          ...(shellCwd ? { shellCwd } : {}),
           toolName: name,
           // A JSON copy: tool inputs are JSON, and some hosts (vm-bundled tests) have no structuredClone.
           input: writeScope ? (JSON.parse(JSON.stringify(input)) as typeof input) : input,
@@ -939,6 +948,20 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       ...options.hooks,
       UserPromptSubmit: [...(options.hooks?.UserPromptSubmit ?? []), { hooks: [async () => ({ hookSpecificOutput: { hookEventName: "UserPromptSubmit" as const, additionalContext } })] }],
     };
+  }
+
+  if (autoSeat) {
+    // DEC-11f — reports nothing and decides nothing: it only records the shell's folder for the approval host.
+    const recordShellCwd = async (input: import("@anthropic-ai/claude-agent-sdk").HookInput, toolUseID: string | undefined) => {
+      const id = (input as { tool_use_id?: unknown }).tool_use_id;
+      const key = typeof id === "string" && id ? id : toolUseID;
+      if (input.hook_event_name === "PreToolUse" && key && typeof input.cwd === "string" && input.cwd) {
+        shellCwds.set(key, input.cwd);
+        if (shellCwds.size > 200) shellCwds.delete(shellCwds.keys().next().value as string);
+      }
+      return {};
+    };
+    options.hooks = { ...options.hooks, PreToolUse: [...(options.hooks?.PreToolUse ?? []), { matcher: "Bash", hooks: [recordShellCwd] }] };
   }
 
   diagnostic('query_options_ready');
