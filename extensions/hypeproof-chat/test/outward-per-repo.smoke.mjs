@@ -188,6 +188,10 @@ try {
       assert.equal((await asked(c, nested, undefined)).modals, 1, `r7: ${c} asks`);
     }
     assert.equal((await asked("git push origin", nested, undefined)).modals, 0, "r7 control: the push on its own after a commit stays silent");
+    // Verify r8: a first push (`-u`, autoSetupRemote) may set a branch's remote in config another repository shares
+    // (a linked worktree, an include), so a later bare push in the same command asks; named remotes do not depend on it.
+    for (const c of ["git -C nested push -u origin main && git push", "git push -u origin main && git push"]) assert.equal((await asked(c, c.includes("-C") ? work : nested, undefined)).modals, 1, `r8: ${c} asks`);
+    assert.equal((await asked("git push origin main && git push origin HEAD:refs/heads/x", nested, undefined)).modals, 0, "r8 control: two pushes to a named remembered remote stay silent");
     ok("verify r1: -C through a link resolves on disk; a command before the push (log/show/diff --output, appends, programs) asks");
 
     // Unresolvable: asks every time and is never remembered.

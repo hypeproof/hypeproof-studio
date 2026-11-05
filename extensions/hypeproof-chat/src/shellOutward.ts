@@ -146,6 +146,8 @@ interface State {
   unsafeSeen: boolean;
   /** DEC-11f — an earlier git command may change the current branch (and so the default push remote). */
   headMoved: boolean;
+  /** A push ran earlier in this command: `-u`/`autoSetupRemote` may have set a branch's remote in shared config. */
+  pushSeen: boolean;
 }
 
 const mark = (s: State, why: string) => { s.outward = true; s.unknown ??= why; };
@@ -153,7 +155,7 @@ const add = (s: State, t: OutwardTarget) => { s.outward = true; s.targets.push(t
 
 /** Read `command` for parts that may send data off this computer. */
 export function readOutward(command: string): OutwardReading {
-  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false };
+  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false, pushSeen: false };
   readScript(command, s, 0);
   // A push read after a change of remotes, config, variables or folder goes somewhere this reading cannot see.
   if (s.outward && (s.rewired || s.moved) && s.targets.length) s.unknown ??= s.rewired ? "remotes or network variables change in the same command" : "the folder changes before it";
@@ -507,6 +509,10 @@ function readGit(rest: ShellWord[], s: State, env: { gitDir?: string; workTree?:
   // A remote helper (`ext::sh -c …`) runs a program instead of naming a place.
   if (repo !== null && /^[A-Za-z][A-Za-z0-9+.-]*::/.test(repo)) { mark(s, "git push to a remote helper"); return; }
   if (repo === null && s.headMoved) { mark(s, "the branch may change before a push to its default remote"); return; }
+  // Verify r8: `git -C ../wt2 push -u up main && git push` — the first push wrote `branch.main.remote` into config another
+  // repository shares (a linked worktree, an include), so a later bare push may use a remote this reading never saw.
+  if (repo === null && s.pushSeen) { mark(s, "an earlier push may set the branch's default remote"); return; }
+  s.pushSeen = true;
   // DEC-11f — any other command earlier in the same command (`npm test`, `printf … >> .git/config`, `ln -s …`) may change
   // which repository, folder or remote applies when the push runs: only `cd` steps and chain-safe git may come first.
   if (s.unsafeSeen) s.unknown ??= "another command runs before the push";
