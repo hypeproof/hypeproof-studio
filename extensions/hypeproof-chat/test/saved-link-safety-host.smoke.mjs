@@ -200,7 +200,7 @@ console.log("PASS saved link safety host: real ensureProfile saves the copy; ref
 
 // Wiring: sign-out and token changes reconcile; the copy is written only from a served profile.
 const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-assert.match(src, /invalidateProfile\(\): void \{[\s\S]{0,1200}void this\.reconcileSavedLinkSafety\(\);/, "invalidateProfile reconciles");
+assert.match(src, /invalidateProfile\(\): void \{[\s\S]{0,2400}this\._instructorMode\.reset\(\);\n    \/\/ REQ-N11[^\n]*\n    void this\.reconcileSavedLinkSafety\(\);\n  \}/, "invalidateProfile reconciles");
 assert.match(src, /if \(e\.key === TOKEN_KEY\) \{[^\n]*void this\.reconcileSavedLinkSafety\(\); \}/, "a token change reconciles");
 assert.equal((src.match(/rememberLinkSafety\(p, token\)/g) ?? []).length, 2, "saved from the served profile (fetch and lesson adoption) only");
 console.log("PASS saved link safety wiring");

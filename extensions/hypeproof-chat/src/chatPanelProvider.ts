@@ -5194,7 +5194,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
     void this.downloadWatcher?.reapply(); // CGP-KNOW-R-021 — no profile: downloads are denied until one loads
-    void this.reconcileSavedLinkSafety(); // REQ-N11 — sign-out or another seat drops the saved link safety
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
     // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
@@ -5205,6 +5204,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.refreshSitePublishContext();
     // #1298 — re-check instructor status + brief after token change.
     this._instructorMode.reset();
+    // REQ-N11 — sign-out or another seat drops the saved link safety.
+    void this.reconcileSavedLinkSafety();
   }
 
   /** #381 — cause of the most recent failed profile fetch, if any. */
