@@ -110,7 +110,7 @@ export interface LinkRouteOptions {
  * on only when it marks the seat minor (`minor_cohort: true`), in the safe session, with a non-empty allowlist.
  * An empty served list (or one with no usable entry) leaves today's integrated route instead of blocking every link.
  * Without a loaded profile, the persisted `hypeproof.browser.safeSession` / `safeAllowlist` decide; those settings
- * are registered only by the fork core patch, which the pinned vscodium-base lacks, so on shipped builds nothing is
+ * are registered only by the fork core patch, which the pinned fork base lacks, so on shipped builds nothing is
  * persisted and the block is off until the profile loads (the link still opens only in the integrated browser).
  * `hypeproofChat.safeLinkAllowlistEnabled` (machine, default true) is the support override: only an explicit `false`
  * turns it off.

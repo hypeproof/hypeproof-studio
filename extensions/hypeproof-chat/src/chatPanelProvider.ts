@@ -4811,7 +4811,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the learner's own loopback preview opens in the integrated browser with no dialog, and when the
    * served profile marks the seat minor with a non-empty allowlist (`safeLinkEnforced`), a link outside
    * that allowlist does not navigate and the chat panel shows the blocked notice. The persist:hp-safe core patch is not
-   * in the pinned vscodium-base, so this host check is the only allowlist enforcement.
+   * in the pinned fork base, so this host check is the only allowlist enforcement.
    */
   async openLearnerLink(raw: unknown): Promise<void> {
     const route = this.learnerLinkRoute(raw);
