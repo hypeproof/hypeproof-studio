@@ -153,6 +153,8 @@ interface State {
   inSubst: number;
   /** A `while`/`until`/`for`/`select` loop: a push in it may run again after later steps (verify r9). */
   loopSeen: boolean;
+  /** A redirect that writes or reads a file (not a descriptor copy or /dev/null) somewhere in the command (verify r10). */
+  fileRedirect: boolean;
 }
 
 const mark = (s: State, why: string) => { s.outward = true; s.unknown ??= why; };
@@ -160,9 +162,15 @@ const add = (s: State, t: OutwardTarget) => { s.outward = true; s.targets.push(t
 
 /** Read `command` for parts that may send data off this computer. */
 export function readOutward(command: string): OutwardReading {
-  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false, pushSeen: false, inSubst: 0, loopSeen: false };
+  const s: State = { targets: [], unknown: null, outward: false, moved: false, rewired: false, chain: andChainOnly(command), cdPath: null, bareCd: false, unsafeSeen: false, headMoved: false, pushSeen: false, inSubst: 0, loopSeen: false, fileRedirect: false };
   readScript(command, s, 0);
-  if (s.loopSeen && s.targets.some((t) => t.kind === "git")) s.unknown ??= "a push inside a loop may run again after later steps";
+  const pushes = s.targets.some((t) => t.kind === "git");
+  if (pushes && s.loopSeen) s.unknown ??= "a push inside a loop may run again after later steps";
+  // Verify r10: bash expands `${…:-$(…)}`, `$"…"`, heredoc bodies and redirect targets (a `>` truncating an included
+  // config file) before git starts, and the parser keeps some of them as plain text. A push in a command with any of
+  // them, or with a redirect that touches a file, asks.
+  if (pushes && /\$[({"]|`|<</.test(command)) s.unknown ??= "the command expands text or reads a here-document around a push";
+  if (pushes && s.fileRedirect) s.unknown ??= "a redirect touches a file in a command that pushes";
   // A push read after a change of remotes, config, variables or folder goes somewhere this reading cannot see.
   if (s.outward && (s.rewired || s.moved) && s.targets.length) s.unknown ??= s.rewired ? "remotes or network variables change in the same command" : "the folder changes before it";
   return { outward: s.outward, unknown: s.outward ? s.unknown : null, targets: s.targets };
@@ -182,6 +190,7 @@ function readScript(script: string, s: State, depth: number): void {
   for (const cmd of parsed.commands) {
     const lead = cmd.words.find((w) => !KEYWORDS.has(w.text) || LOOP_WORDS.has(w.text));
     if (lead && LOOP_WORDS.has(lead.text)) s.loopSeen = true;
+    if (!cmd.redirects.every(harmlessRedirect)) s.fileRedirect = true;
     readCommand(cmd, cmd.words, s, depth);
     // DEC-11f — what ran before a push (at any depth: `sh -c '… && git push'`) decides whether it can be placed.
     if (!chainSafe(cmd)) s.unsafeSeen = true;
