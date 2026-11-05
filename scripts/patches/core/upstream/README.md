@@ -7,3 +7,5 @@ and applies it. When the `vscodium-base` pin moves to a new upstream commit, ref
 copies from `vscodium-base/vscode` and regenerate the patch.
 
 `browserView/electron-browser/browserEditor.ts` is also a pristine copy at the same commit, used by `hps-preview-recovery.patch` and the isolated patched-method test. Regenerate with `build_preview_recovery_patch.py`. The snapshot is not a full native build or installed-app acceptance.
+
+The six `browserView` files under `src/vs/platform/browserView/` and `src/vs/workbench/contrib/browserView/` (except `browserEditor.ts`) are pristine copies at the same commit for `hps-safe-session.patch` (the `persist:hp-safe` session, REQ-N11). That patch is hand-maintained, not generated: edit it by applying it to these copies, changing the files, and writing `git diff` back under its three-line header. `extensions/hypeproof-chat/test/safe-session-patch.smoke.mjs` applies it here and runs its URL matcher.

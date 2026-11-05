@@ -262,7 +262,7 @@ import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, write
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { externalLinkDialog, linkSafety, resolveBrowserSafety, routeExternalLink, safeLinkEnforced, type ExternalLinkRoute } from "./browserSafetyHelpers";
+import { externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -3268,7 +3268,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
-      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); this._annotationLeaveRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
+      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); this._annotationLeaveRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); void this.reconcileSavedLinkSafety(); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
@@ -3559,18 +3559,41 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * build without patches/62-hp-safe-session.patch these keys are unregistered
    * and `update` rejects — we swallow it, since there is no hardened session to
    * drive there and the panel must not crash on older builds.
+   * REQ-N11 (2026-11-05): written only from a served profile. A failed fetch (no profile) keeps
+   * the last served values: writing `false` then would turn a minor seat's persisted fallback
+   * into the adult path now that `scripts/patches/core/hps-safe-session.patch` registers the keys.
    */
   private async applyBrowserSafety(profile: ResolvedProfile | null): Promise<void> {
-    const { safeSession, safeAllowlist } = resolveBrowserSafety(profile);
-    try {
-      const cfg = vscode.workspace.getConfiguration("hypeproof.browser");
-      await cfg.update("safeSession", safeSession, vscode.ConfigurationTarget.Global);
-      await cfg.update("safeAllowlist", safeAllowlist, vscode.ConfigurationTarget.Global);
-    } catch {
-      /* setting not registered → build without the fork patch; nothing to enforce */
+    if (profile) {
+      const { safeSession, safeAllowlist } = resolveBrowserSafety(profile);
+      try {
+        const cfg = vscode.workspace.getConfiguration("hypeproof.browser");
+        await cfg.update("safeSession", safeSession, vscode.ConfigurationTarget.Global);
+        await cfg.update("safeAllowlist", safeAllowlist, vscode.ConfigurationTarget.Global);
+      } catch {
+        /* setting not registered → build without the core patch; nothing to enforce */
+      }
     }
     // CGP-KNOW-R-021 — the cohort (safe session) and workspace root decide where downloads go.
     await this.downloadWatcher?.reapply();
+  }
+
+  /**
+   * REQ-N11 (2026-11-05) — keep this seat's served link safety (minor, safe session, allowlist) in
+   * extension-owned state, so a minor's link block holds while the profile loads, refetches or the
+   * token has expired. Only a served profile writes it.
+   */
+  private async rememberLinkSafety(profile: ResolvedProfile, token: string): Promise<void> {
+    const seat = linkSeatKey(token);
+    if (!seat) return;
+    try { await this.context.globalState.update(SAVED_LINK_SAFETY_KEY, savedLinkSafetyFrom(profile, seat, Date.now())); } catch { /* best-effort */ }
+  }
+  /** REQ-N11 — sign-out (no credential) or another seat: the saved copy is removed. */
+  private async reconcileSavedLinkSafety(): Promise<void> {
+    try {
+      const seat = linkSeatKey(await this.context.secrets.get(TOKEN_KEY));
+      if (savedLinkSafetyStale(this.context.globalState.get(SAVED_LINK_SAFETY_KEY), seat)) await this.context.globalState.update(SAVED_LINK_SAFETY_KEY, undefined);
+    } catch { /* best-effort: a copy for another seat is never applied anyway (savedLinkSafetyFor) */ }
   }
 
   /** #278 Phase 2 — may we attach a page screenshot (image)? Worker enforces the same gate. */
@@ -4810,11 +4833,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * integrated browser; others confirm the host before the system browser opens. CGP-ART-D-008:
    * the learner's own loopback preview opens in the integrated browser with no dialog, and when the
    * served profile marks the seat minor with a non-empty allowlist (`safeLinkEnforced`), a link outside
-   * that allowlist does not navigate and the chat panel shows the blocked notice. The persist:hp-safe core patch is not
-   * in the pinned fork base, so this host check is the only allowlist enforcement.
+   * that allowlist does not navigate and the chat panel shows the blocked notice. The persist:hp-safe session
+   * (`scripts/patches/core/hps-safe-session.patch`) is off by default until a real-device check, so this host check is
+   * the allowlist enforcement that is on; without a loaded profile it uses this seat's saved copy (REQ-N11).
    */
   async openLearnerLink(raw: unknown): Promise<void> {
-    const route = this.learnerLinkRoute(raw);
+    const route = await this.learnerLinkRoute(raw);
     if (route.kind === "refuse") return;
     if (route.kind === "blocked") {
       // CGP-ART-D-008 (block on): nothing navigates; the chat panel draws the blocked notice with the host.
@@ -4836,11 +4860,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (choice === "열기") await vscode.env.openExternal(vscode.Uri.parse(route.url));
     else if (choice === "링크 복사") await vscode.env.clipboard.writeText(route.url);
   }
-  /** CGP-ART-R-008 / D-008: one route for every learner link; the served profile turns the minor allowlist block on, the machine setting can only force it off. */
-  private learnerLinkRoute(raw: unknown): ExternalLinkRoute {
+  /**
+   * CGP-ART-R-008 / D-008: one route for every learner link; the served profile turns the minor allowlist block on, the machine
+   * setting can only force it off. REQ-N11 (2026-11-05): without a loaded profile this seat's saved copy decides.
+   */
+  private async learnerLinkRoute(raw: unknown): Promise<ExternalLinkRoute> {
     const browser = vscode.workspace.getConfiguration("hypeproof.browser");
-    const safety = linkSafety(this.cachedProfile, browser.get<boolean>("safeSession"), browser.get<string[]>("safeAllowlist"));
-    const enforceAllowlist = safeLinkEnforced(this.cachedProfile, safety, vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled"));
+    const profile = this.cachedProfile;
+    const saved = profile ? null : savedLinkSafetyFor(this.context.globalState.get(SAVED_LINK_SAFETY_KEY), linkSeatKey(await this.context.secrets.get(TOKEN_KEY)));
+    const { safety, enforceAllowlist } = learnerLinkPolicy({ profile: profile ?? this.cachedProfile, saved, persistedSafeSession: browser.get<boolean>("safeSession"), persistedAllowlist: browser.get<string[]>("safeAllowlist"), setting: vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled") });
     return routeExternalLink(raw, safety, { enforceAllowlist });
   }
   private opsLastArtifact: string | undefined;
@@ -5138,6 +5166,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
     if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
     this.cachedProfile = p; this.profileFetchPromise = null;
+    await this.rememberLinkSafety(p, token);
     await this.postConfig();
   }
   /** A turn refused under the lesson-binding contract. The Service's record decides how it ends; nothing is re-sent automatically. */
@@ -5165,6 +5194,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
     void this.downloadWatcher?.reapply(); // CGP-KNOW-R-021 — no profile: downloads are denied until one loads
+    void this.reconcileSavedLinkSafety(); // REQ-N11 — sign-out or another seat drops the saved link safety
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
     // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
@@ -5304,6 +5334,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #306 — mirror the cohort's browser_session onto the hardened-session
         // settings the fork core patch reads (minor cohorts → persist:hp-safe).
         await this.applyBrowserSafety(p);
+        if (p) await this.rememberLinkSafety(p, token);
         this.activeCohortId = extractCohortIdUnverified(token) ?? null;
         this.nativeHistoryScope=(p?.access_identity?.kind==='account')?p.access_identity.scope:(p?.observation||this.activeCohortId==='studio-native-trial')?'native-'+(p?.observation?.scope??createHash('sha256').update(token).digest('hex')):null;
         // Task E — a resolved profile means we have a usable token; start the
@@ -7699,7 +7730,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   chalkOps(): ContractOps {
     return {
       openExternal: async (url) => {
-        const kind = this.learnerLinkRoute(url).kind;
+        const kind = (await this.learnerLinkRoute(url)).kind;
         if (kind === "refuse") return { ok: false, reason: "refused" };
         await this.openLearnerLink(url);
         if (kind === "blocked") return { ok: false, reason: "blocked" };
