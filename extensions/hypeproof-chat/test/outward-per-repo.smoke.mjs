@@ -159,6 +159,31 @@ try {
     assert.equal((await asked("git push", nested, undefined)).modals, 0, "control: rewrite removed, remembered again");
     ok("pushurl and pushInsteadOf rewrites are resolved: the real destination asks");
 
+    // Verify r1 (head 3f18943f0), each ran silently there:
+    // F1 — git's -C is a chdir: `-C lnk/..` is the parent of the link's TARGET (another repository), not work/.
+    const outside = path.join(tmp, "other");
+    fs.mkdirSync(path.join(outside, "sub"), { recursive: true });
+    git(outside, "init", "-q", "-b", "main"); git(outside, "remote", "add", "origin", "https://github.com/learner/other.git");
+    fs.symlinkSync(path.join(outside, "sub"), path.join(work, "lnk"));
+    for (const c of ["git -C lnk/.. push origin", "cd lnk && git -C .. push origin"]) {
+      r = await asked(c, work, undefined);
+      assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, ["https://github.com/learner/other"]], `F1: ${c} is the linked repository's push: asks for its remote`);
+    }
+    assert.equal((await asked("cd lnk/.. && git push origin", work, undefined)).modals, 0, "control: the shell's cd is logical, `cd lnk/..` is work/ (remembered)");
+    // F2/F3 — a command before the push (git log --output, an append to .git/config, any program) may rewrite where it goes.
+    for (const [c, cwd] of [
+      ["git log -1 --format=x --output=.git/config && git push origin", nested], ["git show -s --format=x --output=.git/config && git push origin", nested],
+      ["git diff --output=.git/config && git push origin", nested], ["git stash branch x && git push origin", nested],
+      ["printf 'x' >> .git/config && git push origin", nested], ["npm test && git push", nested], ["touch x && GIT_DIR=nested/.git git push origin", work],
+      ["sh -c 'printf x >> .git/config && git push origin'", nested],
+    ]) {
+      r = await asked(c, cwd, "허락");
+      assert.equal(r.modals, 1, `F2/F3: ${c} asks`);
+      assert.equal((await asked(c, cwd, undefined)).modals, 1, `F2/F3: ${c} asks again, never remembered`);
+    }
+    assert.equal((await asked("git add -A && git commit -m 'x' && git push origin", nested, undefined)).modals, 0, "control: add and commit before the push stay silent");
+    ok("verify r1: -C through a link resolves on disk; a command before the push (log/show/diff --output, appends, programs) asks");
+
     // Unresolvable: asks every time and is never remembered.
     for (const [c, cwd] of [
       ['cd "$X" && git push', work], ["cd $X && git push", nested], ["cd nested; git push", work], ["cd nested || true && git push", work],
