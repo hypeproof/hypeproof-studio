@@ -276,6 +276,48 @@ try {
       env.GIT_CONFIG_GLOBAL = "/dev/null";
       assert.equal((await asked(c, work, undefined)).modals, 0, `F7 control: ${label} removed, silent again`);
     }
+    // Verify r4 (head fc8f45c10), each ran silently and delivered there:
+    // B1 — a tag named like the branch made `symbolic-ref --short` print `heads/main`, so the branch's pushRemote was
+    // missed and the bare push was keyed by the remembered origin.
+    const ident = ["-c", "user.name=t", "-c", "user.email=t@t"];
+    git(work, ...ident, "commit", "-q", "--allow-empty", "-m", "b1");
+    assert.equal((await asked("git push", work, undefined)).modals, 0, "B1 control: the bare push to origin is remembered");
+    git(work, "tag", "main"); git(work, "remote", "add", "b1", "https://evil.example.com/b1.git"); git(work, "config", "branch.main.pushRemote", "b1");
+    r = await asked("git push", work, undefined);
+    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, ["https://evil.example.com/b1"]], "B1: an ambiguous branch name still reads the branch's pushRemote: asks for it");
+    git(work, "config", "--unset", "branch.main.pushRemote"); git(work, "tag", "-d", "main");
+    // B2 — a legacy remotes file that reads empty (a fifo) made `get-url` answer the bare name, read as the allowed folder.
+    git(work, "init", "-q", "--bare", "lf");
+    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, "허락")).modals, 1, "B2 control: the folder asks once");
+    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, undefined)).modals, 0, "B2 control: then silent");
+    fs.mkdirSync(path.join(work, ".git", "remotes"), { recursive: true });
+    execFileSync("mkfifo", [path.join(work, ".git", "remotes", "lf")]);
+    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, undefined)).modals, 1, "B2: a legacy remotes file of that name asks");
+    fs.rmSync(path.join(work, ".git", "remotes"), { recursive: true, force: true });
+    // B3–B5 — a local address was keyed by its written path with `.git`/`?`/`#` stripped and links unresolved; git enters
+    // `<p>/.git` first (following a `gitdir:` file) and the real folder.
+    const lorig = path.join(tmp, "lorig.git");
+    git(tmp, "init", "-q", "--bare", lorig);
+    git(work, "remote", "add", "lo", lorig);
+    r = await asked("git push lo HEAD:refs/heads/x", work, "허락");
+    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${lorig}`]], "B3 control: a local remote asks once, keyed by its real folder");
+    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 0, "B3 control: then silent");
+    git(tmp, "init", "-q", "--bare", path.join(tmp, "evil-local.git"));
+    fs.writeFileSync(path.join(lorig, ".git"), `gitdir: ${path.join(tmp, "evil-local.git")}\n`);
+    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 1, "B3: a `.git` file inside the allowed folder redirects git: asks");
+    fs.rmSync(path.join(lorig, ".git"));
+    git(tmp, "init", "-q", "--bare", path.join(tmp, "lorig"));
+    git(work, "remote", "set-url", "lo", path.join(tmp, "lorig"));
+    r = await asked("git push lo HEAD:refs/heads/x", work, undefined);
+    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${path.join(tmp, "lorig")}`]], "B4: `lorig` is another folder than `lorig.git`: asks");
+    fs.symlinkSync(lorig, path.join(tmp, "llink"));
+    git(work, "remote", "set-url", "lo", path.join(tmp, "llink"));
+    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 0, "B5 control: a link to the allowed folder is that folder");
+    fs.unlinkSync(path.join(tmp, "llink")); fs.symlinkSync(path.join(tmp, "evil-local.git"), path.join(tmp, "llink"));
+    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 1, "B5: the link retargeted elsewhere asks");
+    git(work, "remote", "remove", "lo");
+    ok("verify r4: ambiguous branch names, legacy remote files, gitdir files, .git suffixes and links no longer reuse an allowed destination");
+
     ok("verify r2 F6: a push word is looked up as a remote first (slashes, dots, case); otherwise only an anchored or existing folder");
   }
 

@@ -839,6 +839,37 @@ export function gitDestination(url: string, cwd: string): string | null {
   return `file://${tidy(path.resolve(cwd, u))}`;
 }
 
+/**
+ * The absolute folder a local push address names (a path or `file://`), or undefined for a network address. Same split
+ * as gitDestination: a colon before the first slash is ssh.
+ */
+function localGitPath(url: string, cwd: string): string | undefined {
+  const u = url.trim();
+  const full = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)?$/i.exec(u);
+  if (full) return full[1].toLowerCase() === "file" ? path.resolve(decodeURIComponent((full[2] ? `/${full[2]}` : "") + (full[3] ?? ""))) : undefined;
+  const colon = u.indexOf(":");
+  if (colon > 0 && !u.slice(0, colon).includes("/")) return undefined;
+  return path.resolve(cwd, u);
+}
+
+/**
+ * Verify r4 (B3–B5): the key of a local push is the repository git really enters, not the written path. git tries
+ * `<p>/.git`, `<p>`, `<p>.git/.git`, `<p>.git` and takes the first that exists, following a `.git` FILE (`gitdir: …`)
+ * anywhere; `.git`, `?` and `#` are part of a folder name; a link may be retargeted. So the key is `file://` + the real
+ * path of the first existing candidate (nothing stripped), and a candidate that is a file (a gitdir pointer) or no
+ * candidate at all is null (unknown).
+ */
+export function localRepoKey(p: string, realpath: (p: string) => string | null): string | null {
+  for (const cand of [`${p}/.git`, p, `${p}.git/.git`, `${p}.git`]) {
+    let st: fs.Stats;
+    try { st = fs.statSync(cand); } catch { continue; }
+    if (!st.isDirectory()) return null;
+    const real = realpath(cand);
+    return real === null ? null : `file://${real}`;
+  }
+  return null;
+}
+
 /** Runs `git <args>` in `cwd`; the trimmed stdout, or null on any failure. */
 export type GitRunner = (args: string[], cwd: string) => string | null;
 
@@ -942,7 +973,11 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     if (gitRecursesSubmodules(recurse)) { unknown ??= "a push also pushes submodules to their own remotes"; continue; }
     let remote = t.remote;
     if (remote === null) {
-      const branch = g(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+      // The full ref, not `--short`: a tag or remote named like the branch makes `--short` print `heads/main`, and the
+      // branch's own pushRemote would then be missed for `origin` (verify r4 B1).
+      const head = g(["symbolic-ref", "--quiet", "HEAD"]);
+      const branch = head && head.startsWith("refs/heads/") ? head.slice("refs/heads/".length) : null;
+      if (head === null || branch === null) { unknown ??= "the branch a bare push uses cannot be read"; continue; }
       remote = (branch && (g(["config", "--get", `branch.${branch}.pushRemote`]) || null))
         || g(["config", "--get", "remote.pushDefault"])
         || (branch && (g(["config", "--get", `branch.${branch}.remote`]) || null))
@@ -951,10 +986,19 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     // `remote get-url --push` applies pushurl and the insteadOf / pushInsteadOf rewrites of a named remote. git looks a
     // configured remote up by any name (`foo/bar`, `A.b`) before it reads the word as an address, so every word is asked
     // about first (verify 2026-11-05: `git remote add foo/bar https://evil/x.git` after `foo/bar` was allowed as a folder).
+    // Legacy `remotes/<name>` and `branches/<name>` files: git reads them at push time, and one that reads empty for
+    // `get-url` (a fifo, a timeout) makes it answer the bare name, read here as a folder (verify r4 B2). Any such file asks.
+    const common = g(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    if ([repo, ...(common ? [common] : [])].some((base) => ["remotes", "branches"].some((d) => { try { fs.lstatSync(path.join(base, d, remote)); return true; } catch { return false; } }))) { unknown ??= "a legacy remote file names the remote"; continue; }
     const named = g(["remote", "get-url", "--push", "--all", "--", remote]);
+    // Keys a push address: a local one by the repository git really enters (localRepoKey), any other by gitDestination.
+    const destOf = (addr: string): string | null => {
+      const local = localGitPath(addr, dir);
+      return local === undefined ? gitDestination(addr, dir) : (gitDestination(addr, dir) === null ? null : localRepoKey(local, realpath));
+    };
     if (named) {
       for (const line of named.split(/\r?\n/).filter(Boolean)) {
-        const d = gitDestination(line, dir);
+        const d = destOf(line);
         if (d) put({ repo, destination: d }); else unknown ??= "a remote address is not plain";
       }
       continue;
@@ -970,7 +1014,7 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || (remote.indexOf(":") > 0 && !remote.slice(0, remote.indexOf(":")).includes("/"));
     const folderAnchored = /^(\/|\.\.?(\/|$))/.test(remote);
     if (!isUrl && !folderAnchored && realpath(path.resolve(dir, remote)) === null) { unknown ??= "the push names neither a remote nor an existing folder"; continue; }
-    const d = gitDestination(remote, dir);
+    const d = destOf(remote);
     if (d) put({ repo, destination: d }); else unknown ??= "the push address is not plain";
   }
   const pairs = [...out.values()].sort((a, b) => (a.destination + "\0" + (a.repo ?? "")).localeCompare(b.destination + "\0" + (b.repo ?? "")));

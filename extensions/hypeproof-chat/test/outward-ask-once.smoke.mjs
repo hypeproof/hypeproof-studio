@@ -321,8 +321,8 @@ try {
       return map[args.join(" ")] ?? (args.join(" ") === "rev-parse --absolute-git-dir" ? "/w/.git" : null);
     };
     const res = (c, map) => { const { destinations, unknown } = O.resolveOutwardDestinations(read(c), "/w", runner(map), { realpath: (p) => p }); return { destinations, unknown }; };
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.remote": "lab", "remote get-url --push --all -- lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
-    assert.deepEqual(res("git push", { "symbolic-ref --quiet --short HEAD": "main", "config --get branch.main.pushRemote": "pr", "remote get-url --push --all -- pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", "config --get branch.main.remote": "lab", "remote get-url --push --all -- lab": "git@gitlab.com:x/y.git" }), { destinations: ["ssh://gitlab.com/x/y"], unknown: null }, "default push remote is read from the branch");
+    assert.deepEqual(res("git push", { "symbolic-ref --quiet HEAD": "refs/heads/main", "config --get branch.main.pushRemote": "pr", "remote get-url --push --all -- pr": "https://a.com/1\nhttps://b.com/2" }), { destinations: ["https://a.com/1", "https://b.com/2"], unknown: null }, "every push URL counts");
     assert.notEqual(res("git push", {}).unknown, null, "no remote at all: unknown");
     assert.notEqual(res("git push https://github.com/a/b", { "config --get-regexp ^url\\..*insteadof$": "url.https://evil/.pushinsteadof https://github.com/" }).unknown, null, "a written-out address under url rewrites: unknown");
     assert.notEqual(res("git push origin", { "remote get-url --push --all -- origin": "ext::sh -c evil" }).unknown, null, "a remote helper address: unknown");
