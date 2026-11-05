@@ -4,11 +4,12 @@
  * description is `${toolName}: ${command}` (English tool name, the command repeated, no purpose),
  * and a model-written description in an approval heading would be a persuasion vector.
  */
-export type CommandApprovalPurpose = 'shell' | 'destructive' | 'unrecognized';
+export type CommandApprovalPurpose = 'shell' | 'destructive' | 'unrecognized' | 'outward';
 export const COMMAND_APPROVAL_PURPOSE: Readonly<Record<CommandApprovalPurpose, string>> = {
   shell: '코치가 명령을 실행하려고 해요',
   destructive: '코치가 위험한 명령을 실행하려고 해요',
   unrecognized: '코치가 알 수 없는 도구를 쓰려고 해요',
+  outward: '코치가 이 컴퓨터 밖으로 보내는 명령을 실행하려고 해요',
 };
 /** Any value the table does not know reads as the unrecognized phrase: fail toward caution. */
 export const commandApprovalPurposeText = (purpose: unknown): string =>
@@ -17,7 +18,12 @@ export const commandApprovalPurposeText = (purpose: unknown): string =>
 /** The kind comes from the request shape: a shell request without a string command is an unrecognized tool. */
 export const commandApprovalPurposeFor = (payload: unknown, destructive: boolean): CommandApprovalPurpose =>
   typeof (payload as { command?: unknown } | null | undefined)?.command !== 'string' ? 'unrecognized' : destructive ? 'destructive' : 'shell';
-export interface CommandApprovalPrompt { id: string; purpose: CommandApprovalPurpose; command: string; destructive: boolean; rememberAllowed: boolean }
+/**
+ * DEC-11e — set on an outward command under auto: where it sends (destination keys, never credentials) and
+ * whether allowing it remembers them. An empty list means the destination could not be read (asked every time).
+ */
+export interface CommandApprovalOutward { destinations: string[]; remembers: boolean }
+export interface CommandApprovalPrompt { id: string; purpose: CommandApprovalPurpose; command: string; destructive: boolean; rememberAllowed: boolean; outward?: CommandApprovalOutward }
 export type CommandApprovalChoice = 'allow' | 'deny' | 'remember';
 export class CommandApprovalRequest {
   private pending?: { prompt: CommandApprovalPrompt; scope: string; finish(choice: CommandApprovalChoice): void };
