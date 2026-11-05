@@ -399,10 +399,40 @@ def package_chalk(checkout, state):
     return packages[0]
 
 
-def install_chalk(app, state, vsix):
+def engine_satisfied(engine, version):
+    """Check a VS Code engines range against the app's product.json version.
+
+    Only the forms Chalk uses are supported: '>=X.Y.Z', '^X.Y.Z' (major > 0) and 'X.Y.Z'.
+    Anything else raises, so a rule this code does not know cannot pass silently.
+    """
+    match = re.fullmatch(r'\s*(\^|>=)?\s*(\d+)\.(\d+)\.(\d+)\s*', engine)
+    if not match or (match.group(1) == '^' and match.group(2) == '0'):
+        raise ValueError(f'unsupported engines.vscode range: {engine!r}')
+    want = tuple(int(part) for part in match.group(2, 3, 4))
+    current = re.fullmatch(r'\s*(\d+)\.(\d+)\.(\d+)\s*', version)
+    if not current:
+        raise ValueError(f'unsupported app version: {version!r}')
+    have = tuple(int(part) for part in current.groups())
+    if match.group(1) == '>=':
+        return have >= want
+    if match.group(1) == '^':
+        return have[0] == want[0] and have >= want
+    return have == want
+
+
+def check_chalk_engine(app, checkout):
+    product = json.loads((app_resources(app) / 'product.json').read_text(encoding='utf-8'))
+    engine = json.loads((checkout / 'package.json').read_text(encoding='utf-8')).get('engines', {}).get('vscode', '')
+    version = product.get('version', '')
+    if not engine or not engine_satisfied(engine, version):
+        raise RuntimeError(f"Chalk requires VS Code '{engine}', but the Dev app product.json version is '{version}'. {NO_CHALK_HINT}")
+
+
+def install_chalk(app, state, vsix, checkout):
     cli = chalk_cli(app)
     if not cli.is_file():
         raise RuntimeError(f'Dev app CLI not found: {cli}. {NO_CHALK_HINT}')
+    check_chalk_engine(app, checkout)
     remove_chalk(state, app)
     log = state / 'chalk-build.log'
     with log.open('a', encoding='utf-8') as out:
@@ -476,7 +506,7 @@ def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
     chalk_entry = None
     try:
         if chalk_plan is not None:
-            install_chalk(candidate, state, chalk_plan['vsix'])
+            install_chalk(candidate, state, chalk_plan['vsix'], chalk_plan['checkout'])
             chalk_entry = chalk_record(chalk_plan['checkout'], chalk_plan['vsix'])
     except Exception:
         shutil.rmtree(candidate, ignore_errors=True)

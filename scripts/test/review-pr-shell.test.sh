@@ -845,6 +845,40 @@ else
   fail "80: --chalk-pr accepted non-numeric input: $CP_OUT"
 fi
 
+# 81. A failed Dev run shows its last 40 lines, not only a line number.
+DF_LIB="$(cd "$(dirname "$SCRIPT")" && pwd)/review-pr-dev-failure.sh"
+DF_IN="$(seq 1 60 | sed 's/^/line /')"
+DF_OUT="$( (source "$DF_LIB"; print_dev_app_failure 3 "$DF_IN" "") 2>&1 )"
+if [[ "$DF_OUT" == *"line 60"* && "$DF_OUT" == *"line 21"* && "$DF_OUT" != *"line 20"* && "$DF_OUT" == *"exit 3"* ]]; then
+  ok "81: failed Dev run prints its last 40 lines with the exit status"
+else
+  fail "81: tail or exit status missing (out='$(echo "$DF_OUT" | head -3)')"
+fi
+
+# 82. Secret literal, JWT, dev-local value and token JSON are redacted before printing.
+DF_SECRET="dev-local-0123456789abcdef0123"
+DF_IN2="$(printf '%s\n' "HPS_SIGNING_SECRET=$DF_SECRET" "secret=$DF_SECRET" "jwt eyJhbGciOi.payload.sig" '{"token": "tok-live-XYZ123"}' "plain line")"
+DF_OUT2="$( (source "$DF_LIB"; print_dev_app_failure 1 "$DF_IN2" "$DF_SECRET") 2>&1 )"
+if [[ "$DF_OUT2" != *"0123456789abcdef"* && "$DF_OUT2" != *"eyJhbGciOi"* && "$DF_OUT2" != *"tok-live-XYZ123"* && "$DF_OUT2" == *"plain line"* && "$DF_OUT2" == *"<redacted"* ]]; then
+  ok "82: secret, JWT, dev-local and token values are redacted; plain lines stay"
+else
+  fail "82: a secret-like value was printed (out='$DF_OUT2')"
+fi
+
+# 83. review-pr.sh keeps the exit status of studio-dev.py and prints the failure before exiting.
+if grep -q '|| DEV_APP_RC=\$?' "$SCRIPT" && grep -q 'print_dev_app_failure "\$DEV_APP_RC" "\$DEV_APP_RAW" "\$LOCAL_SECRET"' "$SCRIPT" && grep -q 'exit "\$DEV_APP_RC"' "$SCRIPT"; then
+  ok "83: review-pr.sh captures the studio-dev.py exit status and prints the failure"
+else
+  fail "83: studio-dev.py failure path not wired in review-pr.sh"
+fi
+
+# 84. review-pr.sh sources the failure helper from the main checkout, like the state helper.
+if grep -q 'source "\$REPO/scripts/review-pr-dev-failure.sh"' "$SCRIPT"; then
+  ok "84: review-pr.sh sources review-pr-dev-failure.sh from the main checkout"
+else
+  fail "84: failure helper is not sourced"
+fi
+
 for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
 rm -rf "$PS_TMP"
 

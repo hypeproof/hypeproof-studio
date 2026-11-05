@@ -114,6 +114,8 @@ ms() { python3 -c 'import time;print(int(time.time()*1000))'; }
 
 # shellcheck source=review-pr-state-cleanup.sh
 source "$REPO/scripts/review-pr-state-cleanup.sh"
+# shellcheck source=review-pr-dev-failure.sh
+source "$REPO/scripts/review-pr-dev-failure.sh"
 _CLEANUP_DONE=0
 cleanup() {
   [[ $_CLEANUP_DONE -eq 1 ]] && return; _CLEANUP_DONE=1
@@ -576,11 +578,16 @@ else
   # Never write it to local-participant-token.txt (TOKEN_KEY student slot).
 
   T5=$(ms)
+  DEV_APP_RC=0
   DEV_APP_RAW="$(python3 "$WORKTREE_DIR/scripts/studio-dev.py" run \
     --provider "$PROVIDER" \
     --service local \
     ${CHALK_FLAG:+$CHALK_FLAG} \
-    ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)"
+    ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)" || DEV_APP_RC=$?
+  if [[ "$DEV_APP_RC" -ne 0 ]]; then
+    print_dev_app_failure "$DEV_APP_RC" "$DEV_APP_RAW" "$LOCAL_SECRET"
+    exit "$DEV_APP_RC"
+  fi
   echo "$DEV_APP_RAW"
   DEV_APP_PID="$(echo "$DEV_APP_RAW" | grep -oE 'Development process started: [0-9]+' | grep -oE '[0-9]+$' || true)"
   T5_END=$(ms)

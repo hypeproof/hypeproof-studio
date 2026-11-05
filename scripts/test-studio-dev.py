@@ -460,9 +460,9 @@ class DevLauncherTests(unittest.TestCase):
             self.assertTrue(Path(receipt['previous_app']).is_dir())
 
 class DevChalkTests(DevLauncherTests):
-    def chalk_fixture(self, root, origin='https://github.com/hypeproof/hypeproof-chalk.git', name='hypeproof-chalk'):
+    def chalk_fixture(self, root, origin='https://github.com/hypeproof/hypeproof-chalk.git', name='hypeproof-chalk', engines='>=1.116.0'):
         chalk = root/'hypeproof-chalk'; chalk.mkdir()
-        (chalk/'package.json').write_text(json.dumps({'publisher': 'hypeproof', 'name': name, 'version': '0.1.0'}), encoding='utf-8')
+        (chalk/'package.json').write_text(json.dumps({'publisher': 'hypeproof', 'name': name, 'version': '0.1.0', 'engines': {'vscode': engines}}), encoding='utf-8')
         (chalk/'node_modules').mkdir()
         for args in [('init', '-q'), ('config', 'user.name', 'Chalk Test'), ('config', 'user.email', 'chalk@example.invalid'), ('remote', 'add', 'origin', origin), ('add', '.'), ('commit', '-qm', 'fixture')]:
             subprocess.run(['git', *args], cwd=chalk, check=True, capture_output=True)
@@ -471,6 +471,7 @@ class DevChalkTests(DevLauncherTests):
     def chalk_base(self, base):
         cli = base/'resources/app/bin/hypeproof-studio.cmd'
         cli.parent.mkdir(parents=True); cli.write_text('@echo off', encoding='utf-8')
+        (base/'resources/app/product.json').write_text(json.dumps({'nameShort': 'HypeProof Studio', 'version': '2026.1103.0'}), encoding='utf-8')
 
     @staticmethod
     def fake_run(npm_fails=False, calls=None):
@@ -624,5 +625,45 @@ class DevChalkTests(DevLauncherTests):
             self.assertIn('hypeproof.hypeproof-chalk', uninstall)
             self.assertIn('--user-data-dir=' + str(state/'user-data'), uninstall)
             self.assertFalse(installed.exists())
+
+    def test_engine_rule_matches_the_cases_that_chalk_needs(self):
+        self.assertFalse(dev.engine_satisfied('^1.116.0', '2026.1103.0'))
+        self.assertTrue(dev.engine_satisfied('>=1.116.0', '2026.1103.0'))
+        self.assertFalse(dev.engine_satisfied('>=1.116.0', '1.115.0'))
+        self.assertTrue(dev.engine_satisfied('^1.116.0', '1.120.0'))
+        self.assertTrue(dev.engine_satisfied('1.116.0', '1.116.0'))
+        with self.assertRaisesRegex(ValueError, 'unsupported engines.vscode range'):
+            dev.engine_satisfied('~1.116.0', '1.116.0')
+        with self.assertRaisesRegex(ValueError, 'unsupported engines.vscode range'):
+            dev.engine_satisfied('^0.4.0', '0.4.1')
+
+    def test_prepare_refuses_chalk_before_install_when_app_version_is_outside_the_engine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            (base/'resources/app/product.json').write_text(json.dumps({'nameShort': 'HypeProof Studio', 'version': '2026.1103.0'}), encoding='utf-8')
+            chalk = self.chalk_fixture(Path(tmp), engines='^1.116.0')
+            calls = []
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                with self.assertRaises(RuntimeError) as caught:
+                    dev.prepare(repo, base, state, 'local', False, 'auto')
+            message = str(caught.exception)
+            self.assertIn("requires VS Code '^1.116.0'", message)
+            self.assertIn("'2026.1103.0'", message)
+            self.assertIn('--no-chalk', message)
+            self.assertFalse(any('--install-extension' in call for call in calls))
+            self.assertFalse((state/'extensions/hypeproof.hypeproof-chalk-0.1.0').exists())
+
+    def test_prepare_installs_chalk_when_the_app_version_satisfies_the_engine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base, state, _old = self.prepared_fixture(Path(tmp))
+            self.chalk_base(base)
+            (base/'resources/app/product.json').write_text(json.dumps({'nameShort': 'HypeProof Studio', 'version': '2026.1103.0'}), encoding='utf-8')
+            chalk = self.chalk_fixture(Path(tmp), engines='>=1.116.0')
+            calls = []
+            with patch.dict(os.environ, {'HPS_CHALK_CHECKOUT': str(chalk)}), patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'run', side_effect=self.fake_run(calls=calls)), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local', False, 'auto')
+            self.assertTrue(any('--install-extension' in call for call in calls))
+            self.assertTrue((state/'extensions/hypeproof.hypeproof-chalk-0.1.0/package.json').is_file())
 
 if __name__=='__main__': unittest.main()
