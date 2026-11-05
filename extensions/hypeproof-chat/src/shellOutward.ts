@@ -202,7 +202,8 @@ function andChainOnly(src: string): boolean {
 /** Git subcommands that may run before a push in the same command: they write no chosen file, move no folder and change neither the branch nor remotes. */
 // Not `log`/`show`/`diff` (`--output=` writes any file, e.g. `.git/config`), `stash` (`stash branch` switches),
 // `rm`/`mv`/`restore` (they move or rewrite folders a later step relies on).
-const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "fetch", "pull", "tag", "rev-parse", "ls-files", "push"]);
+// Not `pull`: it rewrites checked-out files (a tracked link, an included config file) after the decision (verify r5 C4).
+const CHAIN_SAFE_GIT = new Set(["add", "commit", "status", "fetch", "tag", "rev-parse", "ls-files", "push"]);
 /** Git subcommands that may change the current branch, so a later bare `git push` may use another default remote. */
 const GIT_HEAD_MOVERS = new Set(["checkout", "switch", "rebase", "worktree", "branch", "symbolic-ref", "bisect"]);
 /** A redirect that writes no file: a descriptor copy (`2>&1`) or `/dev/null`. */
@@ -840,34 +841,15 @@ export function gitDestination(url: string, cwd: string): string | null {
 }
 
 /**
- * The absolute folder a local push address names (a path or `file://`), or undefined for a network address. Same split
- * as gitDestination: a colon before the first slash is ssh.
+ * A push address that names a folder on this computer (a path or `file://`). Same split as gitDestination: a scheme or
+ * a colon before the first slash is a network address.
  */
-function localGitPath(url: string, cwd: string): string | undefined {
+function isLocalGitAddress(url: string): boolean {
   const u = url.trim();
-  const full = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)?$/i.exec(u);
-  if (full) return full[1].toLowerCase() === "file" ? path.resolve(decodeURIComponent((full[2] ? `/${full[2]}` : "") + (full[3] ?? ""))) : undefined;
+  const full = /^([a-z][a-z0-9+.-]*):\/\//i.exec(u);
+  if (full) return full[1].toLowerCase() === "file";
   const colon = u.indexOf(":");
-  if (colon > 0 && !u.slice(0, colon).includes("/")) return undefined;
-  return path.resolve(cwd, u);
-}
-
-/**
- * Verify r4 (B3–B5): the key of a local push is the repository git really enters, not the written path. git tries
- * `<p>/.git`, `<p>`, `<p>.git/.git`, `<p>.git` and takes the first that exists, following a `.git` FILE (`gitdir: …`)
- * anywhere; `.git`, `?` and `#` are part of a folder name; a link may be retargeted. So the key is `file://` + the real
- * path of the first existing candidate (nothing stripped), and a candidate that is a file (a gitdir pointer) or no
- * candidate at all is null (unknown).
- */
-export function localRepoKey(p: string, realpath: (p: string) => string | null): string | null {
-  for (const cand of [`${p}/.git`, p, `${p}.git/.git`, `${p}.git`]) {
-    let st: fs.Stats;
-    try { st = fs.statSync(cand); } catch { continue; }
-    if (!st.isDirectory()) return null;
-    const real = realpath(cand);
-    return real === null ? null : `file://${real}`;
-  }
-  return null;
+  return !(colon > 0 && !u.slice(0, colon).includes("/"));
 }
 
 /** Runs `git <args>` in `cwd`; the trimmed stdout, or null on any failure. */
@@ -991,15 +973,16 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     const common = g(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
     if ([repo, ...(common ? [common] : [])].some((base) => ["remotes", "branches"].some((d) => { try { fs.lstatSync(path.join(base, d, remote)); return true; } catch { return false; } }))) { unknown ??= "a legacy remote file names the remote"; continue; }
     const named = g(["remote", "get-url", "--push", "--all", "--", remote]);
-    // Keys a push address: a local one by the repository git really enters (localRepoKey), any other by gitDestination.
-    const destOf = (addr: string): string | null => {
-      const local = localGitPath(addr, dir);
-      return local === undefined ? gitDestination(addr, dir) : (gitDestination(addr, dir) === null ? null : localRepoKey(local, realpath));
-    };
+    // A push to a folder on this computer asks every time and is never remembered (verify r4/r5): the repository git
+    // enters for a written path depends on `<p>/.git` and `gitdir:` files, `.git` suffixes it tries, links, `~`, the
+    // top of the worktree for a relative path and which candidates are valid repositories, all of which a command
+    // can change. A remembered key for it could be reused for another repository.
+    const LOCAL = "a push to a folder on this computer";
+    const destOf = (addr: string): string | null => { try { return isLocalGitAddress(addr) ? null : gitDestination(addr, dir); } catch { return null; } };
     if (named) {
       for (const line of named.split(/\r?\n/).filter(Boolean)) {
         const d = destOf(line);
-        if (d) put({ repo, destination: d }); else unknown ??= "a remote address is not plain";
+        if (d) put({ repo, destination: d }); else unknown ??= isLocalGitAddress(line) ? LOCAL : "a remote address is not plain";
       }
       continue;
     }
@@ -1009,13 +992,8 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     if (/[\r\n]/.test(remote) || remoteKeys.split("\n").some((k) => k === `remote.${remote}.url` || k === `remote.${remote}.pushurl`)) { unknown ??= "a remote defined outside the repository"; continue; }
     // A written-out address: an insteadOf / pushInsteadOf rewrite would send it elsewhere.
     if (rewrites) { unknown ??= "url rewrites are configured"; continue; }
-    // Not a remote: an address (`scheme://`, `host:path`) or a folder. A folder is placed only when it is anchored
-    // (`/`, `./`, `../`) or exists now; any other word asks.
-    const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || (remote.indexOf(":") > 0 && !remote.slice(0, remote.indexOf(":")).includes("/"));
-    const folderAnchored = /^(\/|\.\.?(\/|$))/.test(remote);
-    if (!isUrl && !folderAnchored && realpath(path.resolve(dir, remote)) === null) { unknown ??= "the push names neither a remote nor an existing folder"; continue; }
     const d = destOf(remote);
-    if (d) put({ repo, destination: d }); else unknown ??= "the push address is not plain";
+    if (d) put({ repo, destination: d }); else unknown ??= isLocalGitAddress(remote) ? LOCAL : "the push address is not plain";
   }
   const pairs = [...out.values()].sort((a, b) => (a.destination + "\0" + (a.repo ?? "")).localeCompare(b.destination + "\0" + (b.repo ?? "")));
   return { destinations: [...new Set(pairs.map((p) => p.destination))].sort(), pairs, unknown };

