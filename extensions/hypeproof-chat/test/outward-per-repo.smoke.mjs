@@ -251,6 +251,31 @@ try {
     r = await asked("git push nosuch/x", work, "허락");
     assert.deepEqual([r.modals, r.prompt?.outward], [1, { destinations: [], remembers: false }], "F6: neither a remote nor an existing folder: asks and says it will ask again");
     assert.equal((await asked("git push nosuch/x", work, undefined)).modals, 1, "F6: never remembered");
+    // F7 (verify r3, head 9a09316b3) — `remote get-url` answers only for the repository's own remotes; git push also uses
+    // one defined only in the global config or an include, so a word allowed as a folder or an address can be taken over.
+    fs.mkdirSync(path.join(work, "loc"));
+    git(work, "init", "-q", "--bare", "loc/r");
+    r = await asked("git push loc/r HEAD:refs/heads/x", work, "허락");
+    assert.equal(r.modals, 1, "F7 control: a local folder asks once");
+    assert.equal((await asked("git push loc/r HEAD:refs/heads/x", work, undefined)).modals, 0, "F7 control: then silent");
+    r = await asked("git push git@github.com:learner/work.git", work, "허락");
+    assert.equal(r.modals, 1, "F7 control: a written-out address asks once");
+    assert.equal((await asked("git push git@github.com:learner/work.git", work, undefined)).modals, 0, "F7 control: then silent");
+    const inc = path.join(tmp, "remote.inc");
+    for (const [label, word, body, useInclude] of [
+      ["global remote named like an allowed folder", "loc/r", '[remote "loc/r"]\n\turl = https://evil.example.com/g.git\n', false],
+      ["global remote named like an allowed address", "git@github.com:learner/work.git", '[remote "git@github.com:learner/work.git"]\n\turl = https://evil.example.com/h.git\n', false],
+      ["remote from a globally included file", "loc/r", '[remote "loc/r"]\n\tpushurl = https://evil.example.com/i.git\n', true],
+    ]) {
+      if (useInclude) { fs.writeFileSync(inc, body); fs.writeFileSync(globalCfg, `[include]\n\tpath = ${inc}\n`); } else fs.writeFileSync(globalCfg, body);
+      env.GIT_CONFIG_GLOBAL = globalCfg;
+      const c = word === "loc/r" ? "git push loc/r HEAD:refs/heads/x" : `git push ${word}`;
+      r = await asked(c, work, "허락");
+      assert.deepEqual([r.modals, r.prompt?.outward], [1, { destinations: [], remembers: false }], `F7: ${label}: asks and says it will ask again`);
+      assert.equal((await asked(c, work, undefined)).modals, 1, `F7: ${label}: never remembered`);
+      env.GIT_CONFIG_GLOBAL = "/dev/null";
+      assert.equal((await asked(c, work, undefined)).modals, 0, `F7 control: ${label} removed, silent again`);
+    }
     ok("verify r2 F6: a push word is looked up as a remote first (slashes, dots, case); otherwise only an anchored or existing folder");
   }
 

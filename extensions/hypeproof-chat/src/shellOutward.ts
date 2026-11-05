@@ -855,6 +855,8 @@ export const GIT_TRANSPORT_KEYS = "^(core\\.(sshcommand|gitproxy|askpass)|http\\
  * commits to the submodule's remote (verify 2026-11-05). Read from every scope git reads (global, system, includes).
  */
 export const GIT_RECURSE_KEYS = "^(push\\.recursesubmodules|submodule\\.recurse)$";
+/** A key every repository's config has (`git init` writes it): a config query that matches nothing still prints it. */
+export const GIT_CONFIG_PRESENT = "^core\\.repositoryformatversion$";
 /** A value of GIT_RECURSE_KEYS that pushes nothing beyond the repository itself (a key without a value is true). */
 const GIT_RECURSE_OFF = /^(false|no|off|0|check)$/i;
 
@@ -925,8 +927,19 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
     const gitFolder = g(["rev-parse", "--absolute-git-dir"]);
     const repo = gitFolder ? realpath(gitFolder) : null;
     if (!repo) { unknown ??= "the push does not run inside a repository this app can read"; continue; }
-    if (g(["config", "--get-regexp", GIT_TRANSPORT_KEYS])) { unknown ??= "repository settings change how a push travels"; continue; }
-    if (gitRecursesSubmodules(g(["config", "--get-regexp", GIT_RECURSE_KEYS]))) { unknown ??= "a push also pushes submodules to their own remotes"; continue; }
+    // Settings are read from every scope git reads (repository, global, system, includes). `--get-regexp` prints nothing
+    // both when no key matches and when git fails (a timeout on a huge include), so every query also matches a key
+    // each repository has: no answer at all means "could not read" and asks (verify r3: a failed query failed open).
+    const cfg = (pattern: string, nameOnly = false): string | null => {
+      const outp = g(["config", ...(nameOnly ? ["--name-only"] : []), "--get-regexp", `${GIT_CONFIG_PRESENT}|${pattern}`]);
+      if (outp === null) return null;
+      return outp.split(/\r?\n/).filter((l) => l && !/^core\.repositoryformatversion( |$)/.test(l)).join("\n");
+    };
+    const transport = cfg(GIT_TRANSPORT_KEYS), recurse = cfg(GIT_RECURSE_KEYS), rewrites = cfg("^url\\..*insteadof$");
+    const remoteKeys = cfg("^remote\\..*\\.(url|pushurl)$", true);
+    if (transport === null || recurse === null || rewrites === null || remoteKeys === null) { unknown ??= "repository settings could not be read"; continue; }
+    if (transport) { unknown ??= "repository settings change how a push travels"; continue; }
+    if (gitRecursesSubmodules(recurse)) { unknown ??= "a push also pushes submodules to their own remotes"; continue; }
     let remote = t.remote;
     if (remote === null) {
       const branch = g(["symbolic-ref", "--quiet", "--short", "HEAD"]);
@@ -947,8 +960,11 @@ export function resolveOutwardDestinations(reading: OutwardReading, cwd: string 
       continue;
     }
     if (t.remote === null) { unknown ??= "the default push remote has no address"; continue; }
+    // `get-url` answers only for remotes in the repository's own config; git push also uses one defined only in the
+    // global config or an include (verify r3: global `remote.foo.url=<evil>` after `foo` was allowed as a folder).
+    if (/[\r\n]/.test(remote) || remoteKeys.split("\n").some((k) => k === `remote.${remote}.url` || k === `remote.${remote}.pushurl`)) { unknown ??= "a remote defined outside the repository"; continue; }
     // A written-out address: an insteadOf / pushInsteadOf rewrite would send it elsewhere.
-    if (g(["config", "--get-regexp", "^url\\..*insteadof$"])) { unknown ??= "url rewrites are configured"; continue; }
+    if (rewrites) { unknown ??= "url rewrites are configured"; continue; }
     // Not a remote: an address (`scheme://`, `host:path`) or a folder. A folder is placed only when it is anchored
     // (`/`, `./`, `../`) or exists now; any other word asks.
     const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || (remote.indexOf(":") > 0 && !remote.slice(0, remote.indexOf(":")).includes("/"));
