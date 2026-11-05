@@ -127,6 +127,8 @@ import {
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
 import { approvalModeFor, approvalPresetBlockServed, presetForgetsAllows, presetRequiredKinds, servedApprovalPreset, stricterPreset, type ApprovalPresetId } from "./approvalPreset";
 import { destructiveStaysInFolder } from "./shellFolderScope";
+import { readOutward, resolveOutwardDestinations, type OutwardReading } from "./shellOutward";
+import { OutwardMemory, outwardScopeKey, runGitQuietly } from "./outwardMemory";
 import { mentionsLinkTool, shellUnreadable } from "./shellLinkPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
@@ -10688,6 +10690,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** DEC-11 amended — the turn's profile carried an approval_preset block, understood or not (auto stays off). */
   private turnPresetBlock = false;
 
+  /**
+   * DEC-11e (Jay 2026-11-04) — under auto, an outward shell command (shellOutward.ts) asks ONCE per destination.
+   * Destinations allowed before from this activity and work folder run without a modal (outwardMemory.ts); a new
+   * one asks and is remembered when allowed. A destination this app cannot name asks every time and is never
+   * remembered. Declining remembers nothing.
+   */
+  private async approveOutwardCommand(command: string, reading: OutwardReading, destructive: boolean, onPrompted?: () => void): Promise<boolean> {
+    const cwd = this.resolveCoachCwd() ?? null;
+    let folder: string | null = null;
+    try { folder = cwd ? canonicalFolder(cwd) : null; } catch { folder = null; }
+    const { destinations, unknown } = resolveOutwardDestinations(reading, folder, runGitQuietly);
+    const scope = outwardScopeKey({ cohort: this.activeCohortId ?? null, activity: activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? null, folder });
+    const memory = new OutwardMemory(this.context.globalState);
+    const known = !unknown && destinations.length > 0;
+    if (known && memory.remembersAll(scope, destinations)) return true;
+    onPrompted?.();
+    const pick = await this.commandApprovalRequest.confirm({
+      id: crypto.randomUUID(), purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
+      outward: { destinations: known ? destinations : [], remembers: known && scope !== null },
+    });
+    if (pick !== "allow") return false;
+    if (known) await memory.remember(scope, destinations);
+    return true;
+  }
+
   async resolveActionApproval(req: ActionRequest, onPrompted?: () => void, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
     // CGP-AGENT-R-001 — the lesson's approval preset only ever adds asks (approvalPreset.ts):
     // before_changes/always_ask put writes and every command behind the modal (Tier 3, and the SDK
@@ -10725,7 +10752,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // the SDK verdict). A link-making or unreadable command, or one that reaches outside, still asks.
       if (mode === "auto" && !shellUnreadable(command) && !mentionsLinkTool(command) &&
           (!destructive || destructiveStaysInFolder(command, this.resolveCoachCwd() ?? null, canonicalizeExistingPath))) {
-        return true;
+        // DEC-11e — a command that may send data off this computer asks once per destination, then remembers it.
+        const outward = readOutward(command);
+        return outward.outward ? this.approveOutwardCommand(command, outward, destructive, onPrompted) : true;
       }
       const exact = destructive || forgetAllows ? null : taskCommandExact(command);
 

@@ -8823,6 +8823,12 @@
           "path": "extensions/hypeproof-chat/src/shellFolderScope.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/shellOutward.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/outwardMemory.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ApprovalPresetLabel.tsx"
         }
       ]
@@ -8841,6 +8847,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/approval-preset-label.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outward-ask-once.smoke.mjs"
         }
       ]
     },

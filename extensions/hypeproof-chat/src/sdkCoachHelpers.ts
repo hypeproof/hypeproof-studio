@@ -58,6 +58,7 @@ import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts
 import { isDestructiveCommand } from "./shellPolicy.ts";
 import { presetAsksBeforeChanges, type ApprovalPresetId } from "./approvalPreset.ts";
 import { destructiveStaysInFolder } from "./shellFolderScope.ts";
+import { readOutward } from "./shellOutward.ts";
 import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
@@ -3077,6 +3078,7 @@ export function evaluateSdkToolUse(args: {
    * DEC-11 amended (Jay 2026-11-04) — the seat runs in `auto` (approvalModeFor: no served preset and not a
    * minor). A destructive command whose every target stays inside the work folder then runs without a modal;
    * one that reaches outside, or that this layer cannot read, keeps the strong confirm. Never changes a deny.
+   * DEC-11e: a command that may send data off this computer asks (the host remembers allowed destinations).
    */
   autoInFolder?: boolean;
 }): SdkToolVerdict {
@@ -3170,10 +3172,15 @@ export function evaluateSdkToolUse(args: {
     if (link?.decision === "ask" || shellUnreadable(command)) {
       return { decision: "ask", destructive: true };
     }
+    const auto = args.autoInFolder === true && !args.approvalPreset;
+    // DEC-11e — auto: a command that may send data off this computer (git push, ssh/scp/sftp/rsync to a host,
+    // curl/wget uploads to a host that is not this one) reaches the host, which asks once per destination.
+    const outward = auto && readOutward(command).outward;
     if (isDestructiveCommand(command)) {
       // DEC-11 amended — auto: deleting or moving files inside the work folder does not ask; outside still does.
-      return args.autoInFolder === true && !args.approvalPreset && destructiveStaysInFolder(command, workspaceRoot, canon) ? { decision: "allow" } : { decision: "ask", destructive: true };
+      return auto && destructiveStaysInFolder(command, workspaceRoot, canon) ? (outward ? { decision: "ask" } : { decision: "allow" }) : { decision: "ask", destructive: true };
     }
+    if (outward) return { decision: "ask" };
     // CGP-AGENT-R-001 — a stricter lesson preset asks before every command, not only destructive ones.
     return presetAsksBeforeChanges(args.approvalPreset) ? { decision: "ask" } : { decision: "allow" };
   }
