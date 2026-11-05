@@ -13,7 +13,9 @@
 //              "Release manager override" with a reason after the head commit; or
 //   (hotfix)   every first-parent commit since the last published stable release is the merge
 //              commit of a `hotfix`-labelled PR whose base is a `hotfix/*` branch.
-// A prerelease tag (-rc.N) is not gated: the in-app updater ignores prereleases.
+// A prerelease tag (-rc.N) is not gated: the in-app updater ignores prereleases. It still gets a
+// notes line, because the publish job requires one for every release it publishes; the casebook
+// (P0 run or override) is checked when the stable tag is published.
 // Pushing a tag cannot be prevented on this plan (GitHub Free, private), so the check sits here.
 // Any lookup error refuses: a draft is the safe state.
 import fs from 'node:fs';
@@ -95,7 +97,9 @@ export function casebookEvidence({number, head, headDate, p0 = [], comments = []
 //   writers:    Set of logins with write access (only reviewers need to be in it)
 //   rangePrs:   [{sha, prs: [{number, labels, base, mergeCommit}]}]; rangeTooLong: commit count when not read
 export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), p0, previous, rangePrs = [], rangeTooLong}) {
-  if (tag.includes('-')) return {allow: true, route: 'prerelease', reasons: ['prerelease tag; the in-app updater ignores it']};
+  if (tag.includes('-')) return {allow: true, route: 'prerelease', casebook: 'prerelease',
+    notesLine: 'Release casebook: rc prerelease; the casebook gate (P0 run or release manager override) applies when the stable tag is published.',
+    reasons: ['prerelease tag; the in-app updater ignores it']};
   const reasons = [];
 
   const rcAtTag = rcTags.filter(t => t.sha === tagSha).map(t => t.name);
