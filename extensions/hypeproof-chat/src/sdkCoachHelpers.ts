@@ -2683,6 +2683,11 @@ export interface CoachToolAction {
    * own reading of the command: they may add the flag, never drop it.
    */
   destructive?: boolean;
+  /**
+   * DEC-11f — shell tools: the folder the agent's shell is in when this command starts (the SDK PreToolUse hook's
+   * `cwd`; the Bash tool keeps its folder between commands). Set by the host from the hook, never from tool input.
+   */
+  shellCwd?: string;
 }
 
 function firstString(input: unknown, keys: string[]): string | undefined {
@@ -2814,7 +2819,7 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     return {
       kind: "executeShell",
       description: `${action.toolName}: ${command}`,
-      payload: { command },
+      payload: { command, ...(typeof action.shellCwd === "string" ? { shellCwd: action.shellCwd } : {}) },
       ...(destructive ? { destructive: true } : {}),
     };
   }

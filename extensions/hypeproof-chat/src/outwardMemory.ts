@@ -5,6 +5,9 @@
 // to the same destination from the same activity and work folder runs without asking. Another destination,
 // another folder or another activity asks again. Stored in the extension's globalState, so it survives a restart.
 // Only destinations the reader could name are stored (shellOutward.ts); an unknown one is never remembered.
+// DEC-11f (Jay 2026-11-05): an entry is a (repository, destination) pair (`outwardPairKey`), so a push from another
+// repository in the same work folder (a nested repository or submodule) asks for its own destination once and is
+// then remembered for that repository only. Entries of the v1 key (destination only) are no longer read.
 // Destination keys never carry credentials (shellOutward `gitDestination` / `urlDestination` drop them).
 //
 // Pure apart from the injected store (structurally `vscode.Memento`) and `runGitQuietly` below.
@@ -17,7 +20,12 @@ export interface OutwardStore {
   update(key: string, value: unknown): Thenable<void> | Promise<void>;
 }
 
-export const OUTWARD_MEMORY_KEY = "hps.outward.destinations.v1";
+export const OUTWARD_MEMORY_KEY = "hps.outward.destinations.v2";
+
+/** DEC-11f — the remembered entry of one (repository, destination) pair; `repo` is null for ssh hosts and uploads. */
+export function outwardPairKey(pair: { repo: string | null; destination: string }): string {
+  return JSON.stringify([pair.repo, pair.destination]);
+}
 /** Bounds, so a runaway agent cannot grow globalState without limit (the oldest entries go first). */
 const MAX_SCOPES = 100;
 const MAX_PER_SCOPE = 50;
@@ -37,7 +45,7 @@ export class OutwardMemory {
     return v && typeof v === "object" && !Array.isArray(v) ? v : {};
   }
 
-  /** Every destination was allowed before in this scope (an empty list is never "remembered"). */
+  /** Every entry (pair key) was allowed before in this scope (an empty list is never "remembered"). */
   remembersAll(scope: string | null, destinations: readonly string[]): boolean {
     if (!scope || destinations.length === 0) return false;
     const known = this.all()[scope];
