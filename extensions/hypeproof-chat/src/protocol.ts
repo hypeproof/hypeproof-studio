@@ -449,8 +449,10 @@ export interface ResolvedProfile {
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
    * session (via the hypeproof.browser.safeSession setting). Absent / "browse"
    * → normal browser. Inert on a Studio build without the fork core patch.
+   * REQ-N11 (2026-11-07): `hardened: true` turns `hypeproof.browser.hardenedSessionEnabled` on for the cohort
+   * (absent → the registered default, off); for a minor or safe seat the extension locks all three settings.
    */
-  browser_session?: { mode: "safe" | "browse"; allowlist?: string[] };
+  browser_session?: { mode: "safe" | "browse"; allowlist?: string[]; hardened?: boolean };
   // #320 — true when the cohort is a minor cohort (explicit flag or age_range
   // upper bound < 18). Drives minor-specific UX and force-pins the coach to the
   // proxy runtime (#371).
