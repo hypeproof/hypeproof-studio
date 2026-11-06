@@ -45,8 +45,9 @@ assert.match(src, /if \(choice === "열기"\) await vscode\.env\.openExternal/, 
 assert.match(src, /case "openExternal":[\s\S]{0,400}this\.openLearnerLink\(msg\.url\)/, "citation chips use openLearnerLink");
 assert.match(src, /else await this\.openLearnerLink\(url\)/, "inbox links use openLearnerLink");
 
-assert.match(src, /const safety = linkSafety\(this\.cachedProfile, browser\.get<boolean>\("safeSession"\), browser\.get<string\[\]>\("safeAllowlist"\)\);/, "the click uses the fail-closed safety");
-assert.match(src, /const enforceAllowlist = safeLinkEnforced\(this\.cachedProfile, safety, vscode\.workspace\.getConfiguration\("hypeproofChat"\)\.get<boolean>\("safeLinkAllowlistEnabled"\)\);/, "the profile decides; the machine setting can only force it off");
+// REQ-N11 (2026-11-05): learnerLinkPolicy = linkSafety + safeLinkEnforced over the loaded profile, else this seat's
+// saved copy, else the persisted settings (test/saved-link-safety-host.smoke.mjs drives the real route).
+assert.match(src, /const \{ safety, enforceAllowlist \} = learnerLinkPolicy\(\{ profile: profile \?\? this\.cachedProfile, saved, persistedSafeSession: browser\.get<boolean>\("safeSession"\), persistedAllowlist: browser\.get<string\[\]>\("safeAllowlist"\), setting: vscode\.workspace\.getConfiguration\("hypeproofChat"\)\.get<boolean>\("safeLinkAllowlistEnabled"\) \}\);/, "the profile decides; the machine setting can only force it off");
 assert.match(src, /return routeExternalLink\(raw, safety, \{ enforceAllowlist \}\);/, "one route for every learner link");
 
 // The webview never opens an external page itself: every anchor with target=_blank is gone

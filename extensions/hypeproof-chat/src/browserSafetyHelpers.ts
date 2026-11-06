@@ -10,6 +10,7 @@
 // extension-pure-orchestration-split); the actual settings write lives in the
 // orchestration layer (chatPanelProvider) which owns the vscode API surface.
 
+import { createHash } from "node:crypto";
 import { middleEllipsis } from "./taskActivity.ts";
 
 /** Minimal shape of the fields we read off a resolved profile. Kept structural
@@ -109,9 +110,10 @@ export interface LinkRouteOptions {
  * CGP-ART-D-008 (Jay, 2026-11-04) — is the minor allowlist block on for this seat? The served profile decides:
  * on only when it marks the seat minor (`minor_cohort: true`), in the safe session, with a non-empty allowlist.
  * An empty served list (or one with no usable entry) leaves today's integrated route instead of blocking every link.
- * Without a loaded profile, the persisted `hypeproof.browser.safeSession` / `safeAllowlist` decide; those settings
- * are registered only by the fork core patch, which the pinned fork base lacks, so on shipped builds nothing is
- * persisted and the block is off until the profile loads (the link still opens only in the integrated browser).
+ * Without a loaded profile, the seat's saved copy (`learnerLinkPolicy`, REQ-N11) decides as its profile did; with no
+ * copy, the persisted `hypeproof.browser.safeSession` / `safeAllowlist` decide (registered only by the core patch
+ * `hps-safe-session.patch`; on builds without it nothing is persisted and the block is off until the profile loads,
+ * while the link still opens only in the integrated browser).
  * `hypeproofChat.safeLinkAllowlistEnabled` (machine, default true) is the support override: only an explicit `false`
  * turns it off.
  */
@@ -153,6 +155,93 @@ export function linkSafety(
     ? persistedAllowlist.filter((e): e is string => typeof e === "string" && e.length > 0)
     : [];
   return { safeSession: persistedSafeSession !== false, safeAllowlist };
+}
+
+/**
+ * REQ-N11 (2026-11-05) — the extension-owned copy of the last served link safety. Kept in the
+ * extension's globalState (never in settings.json, which the learner and any workspace settings
+ * file can edit) and used only while no profile is loaded: first load, refetch, token expiry.
+ */
+export const SAVED_LINK_SAFETY_KEY = "hypeproofChat.savedLinkSafety";
+
+export interface SavedLinkSafety {
+  v: 1;
+  /** `linkSeatKey` of the credential the profile was served for. */
+  seat: string;
+  /** The served `minor_cohort`. */
+  minor: boolean;
+  /** The served `browser_session.mode === "safe"`. */
+  safeSession: boolean;
+  /** The served `browser_session.allowlist` (strings only; safe sessions only). */
+  allowlist: string[];
+  savedAt: number;
+}
+
+/**
+ * A one-way key for the seat behind a credential: its cohort (`c`) when the token names one, so a
+ * renewed token for the same class keeps the copy; otherwise the credential itself. Unverified
+ * decode: it only selects which saved copy may apply, and a mismatch means "no copy".
+ */
+export function linkSeatKey(token: string | null | undefined): string | null {
+  if (typeof token !== "string" || !token) return null;
+  let cohort: string | undefined;
+  const head = token.split(".");
+  if (head.length === 2) {
+    try {
+      const payload = JSON.parse(Buffer.from(head[0].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as { c?: unknown };
+      if (typeof payload?.c === "string" && payload.c.trim()) cohort = payload.c;
+    } catch { /* not a cohort token: key on the credential */ }
+  }
+  const basis = cohort !== undefined ? `c\u0000${cohort}` : `t\u0000${token}`;
+  return createHash("sha256").update(`hps-link-seat/1\u0000${basis}`).digest("hex").slice(0, 32);
+}
+
+/** What to save from a served profile. */
+export function savedLinkSafetyFrom(
+  profile: BrowserSafetyProfileLike & { minor_cohort?: boolean },
+  seat: string,
+  now: number,
+): SavedLinkSafety {
+  const { safeSession, safeAllowlist } = resolveBrowserSafety(profile);
+  return { v: 1, seat, minor: profile.minor_cohort === true, safeSession, allowlist: safeAllowlist, savedAt: now };
+}
+
+/** The saved copy, only when it is well formed and was saved for this seat; anything else is "no copy". */
+export function savedLinkSafetyFor(saved: unknown, seat: string | null): SavedLinkSafety | null {
+  if (!seat || !saved || typeof saved !== "object") return null;
+  const r = saved as Partial<SavedLinkSafety>;
+  if (r.v !== 1 || r.seat !== seat || typeof r.minor !== "boolean" || typeof r.safeSession !== "boolean" || !Array.isArray(r.allowlist)) return null;
+  return {
+    v: 1, seat, minor: r.minor, safeSession: r.safeSession,
+    allowlist: r.allowlist.filter((e): e is string => typeof e === "string" && e.length > 0),
+    savedAt: typeof r.savedAt === "number" ? r.savedAt : 0,
+  };
+}
+
+/** Sign-out (no credential) or a seat change: the saved copy no longer belongs here and is removed. */
+export function savedLinkSafetyStale(saved: unknown, seat: string | null): boolean {
+  return saved !== undefined && saved !== null && savedLinkSafetyFor(saved, seat) === null;
+}
+
+/**
+ * REQ-N11 / CGP-ART-D-008 — the safety and the minor allowlist block for one link click. A loaded
+ * profile decides. Without one, this seat's saved copy decides exactly as its profile did (a minor
+ * seat with a usable list stays blocked outside it). Without either, the persisted settings decide
+ * as before (`linkSafety`: unknown fails closed to the integrated browser).
+ * `hypeproofChat.safeLinkAllowlistEnabled === false` stays the support override in every case.
+ */
+export function learnerLinkPolicy(input: {
+  profile: (BrowserSafetyProfileLike & { minor_cohort?: boolean }) | null | undefined;
+  saved: SavedLinkSafety | null;
+  persistedSafeSession: unknown;
+  persistedAllowlist: unknown;
+  setting: unknown;
+}): { safety: BrowserSafetyConfig; enforceAllowlist: boolean } {
+  const served = input.profile ?? (input.saved
+    ? { minor_cohort: input.saved.minor, browser_session: { mode: input.saved.safeSession ? "safe" : "browse", allowlist: input.saved.allowlist } }
+    : null);
+  const safety = linkSafety(served, input.persistedSafeSession, input.persistedAllowlist);
+  return { safety, enforceAllowlist: safeLinkEnforced(served, safety, input.setting) };
 }
 
 /**
