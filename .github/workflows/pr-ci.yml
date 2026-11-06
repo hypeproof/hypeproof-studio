@@ -439,7 +439,8 @@ jobs:
     # CR-T19 incl. the service-worker and sibling-link cases, CR-T21 one visit, CR-T22, CR-T60,
     # CR-T61). Synthetic: the real Service router over local SQLite and an in-memory R2.
     name: cr-publish / real Chromium
-    runs-on: ubuntu-latest
+    # Playwright 1.60 refuses Chromium on ubuntu-latest (= 26.04 since 2026-11); pin until it supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
