@@ -27,6 +27,7 @@ const FILES = [
   "src/vs/platform/browserView/electron-main/browserViewMainService.ts",
   "src/vs/workbench/contrib/browserView/common/browserView.ts",
   "src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts",
+  "src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts",
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hps-safe-session-patch-"));
@@ -41,7 +42,7 @@ try {
   run("git", ["add", "-A"], tree);
   run("git", ["-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-qm", "upstream"], tree);
   const text = fs.readFileSync(patch, "utf8");
-  assert.deepEqual([...text.matchAll(/^diff --git a\/(\S+) /gm)].map((m) => m[1]), FILES, "the patch edits exactly the six browserView files");
+  assert.deepEqual([...text.matchAll(/^diff --git a\/(\S+) /gm)].map((m) => m[1]), FILES, "the patch edits exactly the seven browserView files");
   run("git", ["apply", "--check", "--ignore-whitespace", patch], tree); // prepare_vscode.sh's apply_patch flags
   run("git", ["apply", patch], tree);
   const read = (rel) => fs.readFileSync(path.join(tree, rel), "utf8");
