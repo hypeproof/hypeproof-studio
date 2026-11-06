@@ -1,9 +1,9 @@
 Studio persist:hp-safe hardened integrated-browser session for minor cohorts (REQ-N11, ported from vscodium fork branch feat/306-hp-safe-session, #306).
 Off unless hypeproof.browser.hardenedSessionEnabled is true (default false until a real-device check); then a minor seat the chat extension marks
-with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools) confined to hypeproof.browser.safeAllowlist.
+with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools, external-browser exits) confined to hypeproof.browser.safeAllowlist, for every tab (CDP and pre-flip tabs too).
 
 diff --git a/src/vs/platform/browserView/common/browserView.ts b/src/vs/platform/browserView/common/browserView.ts
-index ca9ad6d..ca044ac 100644
+index ca9ad6d..cb56fe1 100644
 --- a/src/vs/platform/browserView/common/browserView.ts
 +++ b/src/vs/platform/browserView/common/browserView.ts
 @@ -176,6 +176,20 @@ export enum BrowserViewStorageScope {
@@ -27,15 +27,23 @@ index ca9ad6d..ca044ac 100644
  export const ipcBrowserViewChannelName = 'browserView';
  
  /**
-@@ -217,8 +231,10 @@ export interface IBrowserViewService {
+@@ -217,8 +231,18 @@ export interface IBrowserViewService {
  	 * @param id The browser view identifier
  	 * @param scope The storage scope for the browser view. Ignored if the view already exists.
  	 * @param workspaceId Workspace identifier for session isolation. Only used if scope is 'workspace'.
 +	 * @param safe HypeProof #306 — when provided, back the view with the hardened
 +	 *             `persist:hp-safe` session (minor cohorts). Overrides `scope`.
++	 */
++	getOrCreateBrowserView(id: string, scope: BrowserViewStorageScope, workspaceId?: string, safe?: IBrowserSafeSessionOptions): Promise<IBrowserViewState>;
++
++	/**
++	 * Studio (REQ-N11) — tell the main process whether the hardened session is on.
++	 * While it is on, every view the main process creates (editor tab, CDP target,
++	 * context-menu tab) uses `persist:hp-safe`, and tabs opened before it turned on
++	 * are closed and their pages reopened in it.
  	 */
 -	getOrCreateBrowserView(id: string, scope: BrowserViewStorageScope, workspaceId?: string): Promise<IBrowserViewState>;
-+	getOrCreateBrowserView(id: string, scope: BrowserViewStorageScope, workspaceId?: string, safe?: IBrowserSafeSessionOptions): Promise<IBrowserViewState>;
++	setSafeSession(safe: IBrowserSafeSessionOptions | undefined): Promise<void>;
  
  	/**
  	 * Destroy a browser view instance
@@ -299,7 +307,7 @@ index 23d840d..94c99bf 100644
  	}
  
 diff --git a/src/vs/platform/browserView/electron-main/browserViewMainService.ts b/src/vs/platform/browserView/electron-main/browserViewMainService.ts
-index 150bfd6..aa81bc7 100644
+index 150bfd6..16c555f 100644
 --- a/src/vs/platform/browserView/electron-main/browserViewMainService.ts
 +++ b/src/vs/platform/browserView/electron-main/browserViewMainService.ts
 @@ -7,7 +7,7 @@ import { Emitter, Event } from '../../../base/common/event.js';
@@ -311,30 +319,169 @@ index 150bfd6..aa81bc7 100644
  import { IElementData } from '../../browserElements/common/browserElements.js';
  import { clipboard, Menu, MenuItem } from 'electron';
  import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
-@@ -70,7 +70,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+@@ -70,19 +70,57 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
  		super();
  	}
  
 -	async getOrCreateBrowserView(id: string, scope: BrowserViewStorageScope, workspaceId?: string): Promise<IBrowserViewState> {
++	/**
++	 * Studio (REQ-N11) — the hardened session state the workbench last pushed. While set,
++	 * no view is created outside `persist:hp-safe`, whatever session or CDP browser context
++	 * the caller asked for.
++	 */
++	private _hpSafe: IBrowserSafeSessionOptions | undefined;
++
++	async setSafeSession(safe: IBrowserSafeSessionOptions | undefined): Promise<void> {
++		this._hpSafe = safe ? { allowlist: [...safe.allowlist] } : undefined;
++		if (!this._hpSafe) {
++			return;
++		}
++		BrowserSession.getOrCreateSafe(this._hpSafe.allowlist);
++		// Tabs opened before the flip live in a normal session and cannot move: close each
++		// one and reopen its page in the hardened session, where the allowlist decides.
++		for (const view of [...this.browserViews.values()]) {
++			if (view.session.sessionKind === 'safe' || !this.browserViews.has(view.id)) {
++				continue;
++			}
++			const url = view.getState().url;
++			const windowId = view.getTopCodeWindow()?.id;
++			await this.destroyBrowserView(view.id);
++			if (url && url !== 'about:blank' && windowId !== undefined) {
++				try {
++					await this.openNew(url, { session: undefined, windowId, editorOptions: { preserveFocus: true, inactive: true }, source: 'browserLinkBackground' });
++				} catch {
++					// The window went away; the tab stays closed.
++				}
++			}
++		}
++	}
++
 +	async getOrCreateBrowserView(id: string, scope: BrowserViewStorageScope, workspaceId?: string, safe?: IBrowserSafeSessionOptions): Promise<IBrowserViewState> {
++		const hpSafe = safe ?? this._hpSafe;
  		if (this.browserViews.has(id)) {
  			// Note: scope will be ignored if the view already exists.
  			// Browser views cannot be moved between sessions after creation.
-@@ -82,7 +82,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 			const view = this.browserViews.get(id)!;
+-			return view.getState();
++			if (!hpSafe || view.session.sessionKind === 'safe') {
++				return view.getState();
++			}
++			// Studio (REQ-N11): a view from before the hardened session turned on is not reused.
++			await this.destroyBrowserView(id);
+ 		}
+ 
+ 		const browserSession = BrowserSession.getOrCreate(
  			id,
  			scope,
  			this.environmentMainService.workspaceStorageHome,
 -			workspaceId
 +			workspaceId,
-+			safe
++			hpSafe
  		);
  
  		const view = this.createBrowserView(id, browserSession);
+@@ -392,6 +430,16 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 			throw new Error(`Browser view with id ${id} already exists`);
+ 		}
+ 
++		// Studio (REQ-N11): while the hardened session is on, no view is created outside it
++		// (CDP targets and browser contexts, context-menu tabs). A popup child whose contents
++		// Electron already made in another session fails closed.
++		if (this._hpSafe && browserSession.sessionKind !== 'safe') {
++			if (options?.webContents) {
++				throw new Error('Studio: popup outside the hardened browser session');
++			}
++			browserSession = BrowserSession.getOrCreateSafe(this._hpSafe.allowlist);
++		}
++
+ 		browserSession.connectStorage(this.applicationStorageMainService);
+ 
+ 		const view = this.instantiationService.createInstance(
+@@ -429,7 +477,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 		}
+ 	): Promise<ICDPTarget> {
+ 		const targetId = generateUuid();
+-		const view = this.createBrowserView(targetId, session || BrowserSession.getOrCreateEphemeral(targetId));
++		const view = this.createBrowserView(targetId, session || (this._hpSafe ? BrowserSession.getOrCreateSafe(this._hpSafe.allowlist) : BrowserSession.getOrCreateEphemeral(targetId)));
+ 
+ 		const window = windowId !== undefined ? this.windowsMainService.getWindowById(windowId) : this.windowsMainService.getFocusedWindow();
+ 		if (!window) {
+@@ -458,6 +506,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 			return;
+ 		}
+ 		const menu = new Menu();
++		// Studio (REQ-N11): a hardened-session tab offers no way to the system browser or devtools.
++		const hpSafe = view.session.sessionKind === 'safe';
+ 
+ 		if (params.linkURL) {
+ 			menu.append(new MenuItem({
+@@ -471,10 +521,12 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 					});
+ 				}
+ 			}));
+-			menu.append(new MenuItem({
+-				label: localize('browser.contextMenu.openLinkInExternalBrowser', 'Open Link in External Browser'),
+-				click: () => { void this.nativeHostMainService.openExternal(undefined, params.linkURL); }
+-			}));
++			if (!hpSafe) {
++				menu.append(new MenuItem({
++					label: localize('browser.contextMenu.openLinkInExternalBrowser', 'Open Link in External Browser'),
++					click: () => { void this.nativeHostMainService.openExternal(undefined, params.linkURL); }
++				}));
++			}
+ 			menu.append(new MenuItem({ type: 'separator' }));
+ 			menu.append(new MenuItem({
+ 				label: localize('browser.contextMenu.copyLink', 'Copy Link'),
+@@ -545,11 +597,13 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
+ 			}));
+ 		}
+ 
+-		menu.append(new MenuItem({ type: 'separator' }));
+-		menu.append(new MenuItem({
+-			label: localize('browser.contextMenu.inspect', 'Inspect'),
+-			click: () => webContents.inspectElement(params.x, params.y)
+-		}));
++		if (!hpSafe) {
++			menu.append(new MenuItem({ type: 'separator' }));
++			menu.append(new MenuItem({
++				label: localize('browser.contextMenu.inspect', 'Inspect'),
++				click: () => webContents.inspectElement(params.x, params.y)
++			}));
++		}
+ 
+ 		const viewBounds = view.getWebContentsView().getBounds();
+ 		menu.popup({
 diff --git a/src/vs/workbench/contrib/browserView/common/browserView.ts b/src/vs/workbench/contrib/browserView/common/browserView.ts
-index 47b003b..c954ff4 100644
+index 47b003b..e87693b 100644
 --- a/src/vs/workbench/contrib/browserView/common/browserView.ts
 +++ b/src/vs/workbench/contrib/browserView/common/browserView.ts
-@@ -344,9 +344,19 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
+@@ -27,6 +27,7 @@ import {
+ 	IBrowserViewNewPageRequest,
+ 	IBrowserViewDevToolsStateEvent,
+ 	IBrowserViewService,
++	IBrowserSafeSessionOptions,
+ 	BrowserViewStorageScope,
+ 	IBrowserViewCaptureScreenshotOptions,
+ 	IBrowserViewFindInPageOptions,
+@@ -44,6 +45,17 @@ import { IWorkspaceTrustManagementService } from '../../../../platform/workspace
+ import { IAgentNetworkFilterService } from '../../../../platform/networkFilter/common/networkFilterService.js';
+ import { IBrowserZoomService } from './browserZoomService.js';
+ 
++/**
++ * Studio (REQ-N11) — the hardened session options the settings ask for, or `undefined`
++ * when `hypeproof.browser.hardenedSessionEnabled` or `hypeproof.browser.safeSession` is off.
++ */
++export function hpSafeSessionOptions(configurationService: IConfigurationService): IBrowserSafeSessionOptions | undefined {
++	const on = configurationService.getValue<boolean>('hypeproof.browser.hardenedSessionEnabled') === true
++		&& configurationService.getValue<boolean>('hypeproof.browser.safeSession') === true;
++	const allowlist = configurationService.getValue<string[]>('hypeproof.browser.safeAllowlist');
++	return on ? { allowlist: Array.isArray(allowlist) ? allowlist : [] } : undefined;
++}
++
+ /** Extracts the host from a URL string for zoom tracking purposes. */
+ function parseZoomHost(url: string): string | undefined {
+ 	const parsed = URL.parse(url);
+@@ -344,9 +356,19 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
  		// Always use ephemeral sessions for untrusted workspaces
  		const dataStorage = isWorkspaceUntrusted ? BrowserViewStorageScope.Ephemeral : dataStorageSetting;
  
@@ -356,18 +503,27 @@ index 47b003b..c954ff4 100644
  
  		this._url = state.url;
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
-index be1e6c7..99b599b 100644
+index be1e6c7..a318476 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
-@@ -19,6 +19,7 @@ import { Schemas } from '../../../../base/common/network.js';
- import { IBrowserViewCDPService, IBrowserViewWorkbenchService } from '../common/browserView.js';
+@@ -16,9 +16,15 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
+ import { IEditorResolverService, RegisteredEditorPriority } from '../../../services/editor/common/editorResolverService.js';
+ import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+ import { Schemas } from '../../../../base/common/network.js';
+-import { IBrowserViewCDPService, IBrowserViewWorkbenchService } from '../common/browserView.js';
++import { IBrowserViewCDPService, IBrowserViewWorkbenchService, hpSafeSessionOptions } from '../common/browserView.js';
  import { BrowserViewWorkbenchService } from './browserViewWorkbenchService.js';
  import { BrowserViewCDPService } from './browserViewCDPService.js';
 +import { ConfigurationScope, IConfigurationRegistry, Extensions as ConfigurationExtensions } from '../../../../platform/configuration/common/configurationRegistry.js';
++import { Disposable } from '../../../../base/common/lifecycle.js';
++import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
++import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
++import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
++import { IBrowserViewService, ipcBrowserViewChannelName } from '../../../../platform/browserView/common/browserView.js';
  
  // Register actions and browser features
  import './browserViewActions.js';
-@@ -96,3 +97,36 @@ registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEdit
+@@ -96,3 +102,61 @@ registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEdit
  
  registerSingleton(IBrowserViewWorkbenchService, BrowserViewWorkbenchService, InstantiationType.Delayed);
  registerSingleton(IBrowserViewCDPService, BrowserViewCDPService, InstantiationType.Delayed);
@@ -404,3 +560,62 @@ index be1e6c7..99b599b 100644
 +		}
 +	}
 +});
++
++/**
++ * Studio (REQ-N11) — keep the main process told whether the hardened session is on, from
++ * startup and on every change, so CDP targets and tabs opened before the flip follow it too.
++ */
++class HpSafeSessionContribution extends Disposable implements IWorkbenchContribution {
++	static readonly ID = 'workbench.contrib.hpSafeSession';
++
++	constructor(
++		@IMainProcessService mainProcessService: IMainProcessService,
++		@IConfigurationService configurationService: IConfigurationService
++	) {
++		super();
++		const browserViewService = ProxyChannel.toService<IBrowserViewService>(mainProcessService.getChannel(ipcBrowserViewChannelName));
++		const push = () => { void browserViewService.setSafeSession(hpSafeSessionOptions(configurationService)); };
++		push();
++		this._register(configurationService.onDidChangeConfiguration(e => {
++			if (e.affectsConfiguration('hypeproof.browser')) {
++				push();
++			}
++		}));
++	}
++}
++
++registerWorkbenchContribution2(HpSafeSessionContribution.ID, HpSafeSessionContribution, WorkbenchPhase.BlockStartup);
+diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
+index eb04e8d..72493cd 100644
+--- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
++++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
+@@ -16,6 +16,8 @@ import { BrowserViewCommandId } from '../../../../platform/browserView/common/br
+ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+ import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
+ import { BrowserEditorInput } from '../common/browserEditorInput.js';
++import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
++import { hpSafeSessionOptions } from '../common/browserView.js';
+ 
+ // Context key expression to check if browser editor is active
+ export const BROWSER_EDITOR_ACTIVE = ContextKeyExpr.equals('activeEditor', BrowserEditorInput.EDITOR_ID);
+@@ -193,7 +195,8 @@ class OpenInExternalBrowserAction extends Action2 {
+ 			icon: Codicon.linkExternal,
+ 			f1: true,
+ 			// Note: We do allow opening in an external browser even if there is an error page shown
+-			precondition: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL),
++			// Studio (REQ-N11): never from the hardened session (both settings on).
++			precondition: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL, ContextKeyExpr.or(ContextKeyExpr.not('config.hypeproof.browser.hardenedSessionEnabled'), ContextKeyExpr.not('config.hypeproof.browser.safeSession'))),
+ 			menu: {
+ 				id: MenuId.BrowserActionsToolbar,
+ 				group: BrowserActionGroup.Page,
+@@ -203,6 +206,10 @@ class OpenInExternalBrowserAction extends Action2 {
+ 	}
+ 
+ 	async run(accessor: ServicesAccessor, browserEditor = accessor.get(IEditorService).activeEditorPane): Promise<void> {
++		// Studio (REQ-N11): a command call with the precondition bypassed still stays inside.
++		if (hpSafeSessionOptions(accessor.get(IConfigurationService))) {
++			return;
++		}
+ 		if (browserEditor instanceof BrowserEditor) {
+ 			const url = browserEditor.getUrl();
+ 			if (url) {
