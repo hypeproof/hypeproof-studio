@@ -24,7 +24,8 @@ concurrency:
 jobs:
   classroom-browser:
     name: classroom / browser
-    runs-on: ubuntu-latest
+    # Playwright 1.60 refuses Chromium on ubuntu-latest (= 26.04 since 2026-11); pin until it supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
