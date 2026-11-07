@@ -17313,6 +17313,74 @@
           "path": "e2e/store/mac-store.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-RC-BUILD-ALARM",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-UNIFIED",
+        "ST-REQ-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/rc-build-failure-alarm.md",
+          "section": "## Requirements"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## RC build failure alarm intent (#3547)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-RC-BUILD-ALARM",
+      "stage": "design",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RC-BUILD-ALARM"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/rc-build-failure-alarm.md",
+          "section": "## Design and reuse boundary"
+        },
+        {
+          "path": "docs/requirements/rc-build-failure-alarm.md",
+          "section": "## Invocation and failure contract"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RC-BUILD-ALARM",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RC-BUILD-ALARM"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/rc-build-failure-alarm.md"
+        },
+        {
+          "path": "scripts/release/test/rc-failure-alarm.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-RC-BUILD-ALARM",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RC-BUILD-ALARM",
+        "ST-DES-RC-BUILD-ALARM",
+        "ST-TEST-RC-BUILD-ALARM"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/rc-failure-alarm.mjs"
+        }
+      ]
     }
   ]
 }
