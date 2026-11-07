@@ -1,6 +1,6 @@
 Studio persist:hp-safe hardened integrated-browser session for minor cohorts (REQ-N11, ported from vscodium fork branch feat/306-hp-safe-session, #306).
 Off unless hypeproof.browser.hardenedSessionEnabled is true (default false until a real-device check); then a minor seat the chat extension marks
-with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools, external-browser exits) confined to hypeproof.browser.safeAllowlist, for every tab (CDP and pre-flip tabs too).
+with hypeproof.browser.safeSession gets a deny-all session (permissions, downloads, popups, devtools, external-browser exits) confined to hypeproof.browser.safeAllowlist, for every tab (CDP and pre-flip tabs too). For a minor or safe seat the chat extension's lock in its globalState decides; settings can only tighten.
 
 diff --git a/src/vs/platform/browserView/common/browserView.ts b/src/vs/platform/browserView/common/browserView.ts
 index ca9ad6d..cb56fe1 100644
@@ -452,7 +452,7 @@ index 150bfd6..16c555f 100644
  		const viewBounds = view.getWebContentsView().getBounds();
  		menu.popup({
 diff --git a/src/vs/workbench/contrib/browserView/common/browserView.ts b/src/vs/workbench/contrib/browserView/common/browserView.ts
-index 47b003b..e87693b 100644
+index 47b003b..ee07378 100644
 --- a/src/vs/workbench/contrib/browserView/common/browserView.ts
 +++ b/src/vs/workbench/contrib/browserView/common/browserView.ts
 @@ -27,6 +27,7 @@ import {
@@ -463,25 +463,65 @@ index 47b003b..e87693b 100644
  	BrowserViewStorageScope,
  	IBrowserViewCaptureScreenshotOptions,
  	IBrowserViewFindInPageOptions,
-@@ -44,6 +45,17 @@ import { IWorkspaceTrustManagementService } from '../../../../platform/workspace
+@@ -44,6 +45,57 @@ import { IWorkspaceTrustManagementService } from '../../../../platform/workspace
  import { IAgentNetworkFilterService } from '../../../../platform/networkFilter/common/networkFilterService.js';
  import { IBrowserZoomService } from './browserZoomService.js';
  
++/** Studio (REQ-N11) — the chat extension (`hypeproof.hypeproof-chat`) and its settings lock in its globalState. */
++export const HP_CHAT_EXTENSION_ID = 'hypeproof.hypeproof-chat';
++export const HP_BROWSER_SETTINGS_LOCK_KEY = 'hypeproofChat.browserSettingsLock';
++
++/** Studio (REQ-N11) — the hardened-session values the served profile set for a minor or safe seat. */
++export interface IHpBrowserSettingsLock {
++	readonly hardened: boolean;
++	readonly safeSession: boolean;
++	readonly allowlist: readonly string[];
++}
++
 +/**
-+ * Studio (REQ-N11) — the hardened session options the settings ask for, or `undefined`
-+ * when `hypeproof.browser.hardenedSessionEnabled` or `hypeproof.browser.safeSession` is off.
++ * Studio (REQ-N11) — the chat extension's last assertion for a minor or safe seat, read from the
++ * extension's own globalState (only the extension host writes it; settings files cannot). The
++ * profile's copy first, then the default profile's, so a new VS Code profile does not drop it.
++ * `undefined` for an adult seat, no seat yet, or a build without the extension.
 + */
-+export function hpSafeSessionOptions(configurationService: IConfigurationService): IBrowserSafeSessionOptions | undefined {
-+	const on = configurationService.getValue<boolean>('hypeproof.browser.hardenedSessionEnabled') === true
-+		&& configurationService.getValue<boolean>('hypeproof.browser.safeSession') === true;
-+	const allowlist = configurationService.getValue<string[]>('hypeproof.browser.safeAllowlist');
-+	return on ? { allowlist: Array.isArray(allowlist) ? allowlist : [] } : undefined;
++export function hpBrowserSettingsLock(storageService: IStorageService): IHpBrowserSettingsLock | undefined {
++	for (const scope of [StorageScope.PROFILE, StorageScope.APPLICATION]) {
++		const raw = storageService.get(HP_CHAT_EXTENSION_ID, scope);
++		if (!raw) {
++			continue;
++		}
++		let lock: { v?: unknown; hardened?: unknown; safeSession?: unknown; allowlist?: unknown } | undefined;
++		try {
++			lock = JSON.parse(raw)?.[HP_BROWSER_SETTINGS_LOCK_KEY];
++		} catch {
++			continue;
++		}
++		if (lock && lock.v === 1 && typeof lock.hardened === 'boolean' && typeof lock.safeSession === 'boolean' && Array.isArray(lock.allowlist)) {
++			return { hardened: lock.hardened, safeSession: lock.safeSession, allowlist: lock.allowlist.filter((e): e is string => typeof e === 'string' && e.length > 0) };
++		}
++	}
++	return undefined;
++}
++
++/**
++ * Studio (REQ-N11) — the hardened session options, or `undefined` when it is off. Off unless
++ * `hypeproof.browser.hardenedSessionEnabled` and `hypeproof.browser.safeSession` are both on.
++ * While the extension's lock exists (minor or safe seat) a settings value can only tighten: the
++ * lock's `true` wins over a settings `false`, and the lock's allowlist replaces the settings list.
++ * Adult seats (no lock) read the settings as before.
++ */
++export function hpSafeSessionOptions(configurationService: IConfigurationService, storageService: IStorageService): IBrowserSafeSessionOptions | undefined {
++	const lock = hpBrowserSettingsLock(storageService);
++	const on = (configurationService.getValue<boolean>('hypeproof.browser.hardenedSessionEnabled') === true || lock?.hardened === true)
++		&& (configurationService.getValue<boolean>('hypeproof.browser.safeSession') === true || lock?.safeSession === true);
++	const allowlist = lock ? lock.allowlist : configurationService.getValue<string[]>('hypeproof.browser.safeAllowlist');
++	return on ? { allowlist: Array.isArray(allowlist) ? [...allowlist] : [] } : undefined;
 +}
 +
  /** Extracts the host from a URL string for zoom tracking purposes. */
  function parseZoomHost(url: string): string | undefined {
  	const parsed = URL.parse(url);
-@@ -344,9 +356,19 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
+@@ -344,9 +396,17 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
  		// Always use ephemeral sessions for untrusted workspaces
  		const dataStorage = isWorkspaceUntrusted ? BrowserViewStorageScope.Ephemeral : dataStorageSetting;
  
@@ -490,10 +530,8 @@ index 47b003b..e87693b 100644
 +		// `persist:hp-safe` session with the configured navigation allowlist. Studio
 +		// ships it behind `hypeproof.browser.hardenedSessionEnabled` (default off until
 +		// a real-device check); off, absent or not a minor, behavior is unchanged upstream.
-+		const hpSafe = this.configurationService.getValue<boolean>('hypeproof.browser.hardenedSessionEnabled') === true
-+			&& this.configurationService.getValue<boolean>('hypeproof.browser.safeSession') === true;
-+		const hpAllowlist = this.configurationService.getValue<string[]>('hypeproof.browser.safeAllowlist') ?? [];
-+		const safe = hpSafe ? { allowlist: hpAllowlist } : undefined;
++		// REQ-N11: for a minor or safe seat the extension's lock decides, not settings.json.
++		const safe = hpSafeSessionOptions(this.configurationService, this.storageService);
 +
  		const workspaceId = this.workspaceContextService.getWorkspace().id;
  		const state = create
@@ -503,15 +541,15 @@ index 47b003b..e87693b 100644
  
  		this._url = state.url;
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
-index be1e6c7..a318476 100644
+index be1e6c7..fdc7a3c 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserView.contribution.ts
-@@ -16,9 +16,15 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
+@@ -16,9 +16,17 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
  import { IEditorResolverService, RegisteredEditorPriority } from '../../../services/editor/common/editorResolverService.js';
  import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
  import { Schemas } from '../../../../base/common/network.js';
 -import { IBrowserViewCDPService, IBrowserViewWorkbenchService } from '../common/browserView.js';
-+import { IBrowserViewCDPService, IBrowserViewWorkbenchService, hpSafeSessionOptions } from '../common/browserView.js';
++import { IBrowserViewCDPService, IBrowserViewWorkbenchService, hpSafeSessionOptions, HP_CHAT_EXTENSION_ID } from '../common/browserView.js';
  import { BrowserViewWorkbenchService } from './browserViewWorkbenchService.js';
  import { BrowserViewCDPService } from './browserViewCDPService.js';
 +import { ConfigurationScope, IConfigurationRegistry, Extensions as ConfigurationExtensions } from '../../../../platform/configuration/common/configurationRegistry.js';
@@ -520,10 +558,12 @@ index be1e6c7..a318476 100644
 +import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 +import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 +import { IBrowserViewService, ipcBrowserViewChannelName } from '../../../../platform/browserView/common/browserView.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
  
  // Register actions and browser features
  import './browserViewActions.js';
-@@ -96,3 +102,61 @@ registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEdit
+@@ -96,3 +104,73 @@ registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEdit
  
  registerSingleton(IBrowserViewWorkbenchService, BrowserViewWorkbenchService, InstantiationType.Delayed);
  registerSingleton(IBrowserViewCDPService, BrowserViewCDPService, InstantiationType.Delayed);
@@ -561,59 +601,72 @@ index be1e6c7..a318476 100644
 +	}
 +});
 +
++/** Studio (REQ-N11) — true while the hardened session is in effect (drives the toolbar exit's precondition). */
++export const CONTEXT_HP_SAFE_SESSION = new RawContextKey<boolean>('hypeproofBrowserSafeSession', false);
++
 +/**
 + * Studio (REQ-N11) — keep the main process told whether the hardened session is on, from
 + * startup and on every change, so CDP targets and tabs opened before the flip follow it too.
++ * The pushed value is the effective one (`hpSafeSessionOptions`): for a minor or safe seat the
++ * chat extension's lock in its globalState decides, so a settings.json edit, a new VS Code
++ * profile, or running before the extension activates cannot loosen it. Pushed again when that
++ * lock changes (a served profile, a seat change).
 + */
 +class HpSafeSessionContribution extends Disposable implements IWorkbenchContribution {
 +	static readonly ID = 'workbench.contrib.hpSafeSession';
 +
 +	constructor(
 +		@IMainProcessService mainProcessService: IMainProcessService,
-+		@IConfigurationService configurationService: IConfigurationService
++		@IConfigurationService configurationService: IConfigurationService,
++		@IStorageService storageService: IStorageService,
++		@IContextKeyService contextKeyService: IContextKeyService
 +	) {
 +		super();
 +		const browserViewService = ProxyChannel.toService<IBrowserViewService>(mainProcessService.getChannel(ipcBrowserViewChannelName));
-+		const push = () => { void browserViewService.setSafeSession(hpSafeSessionOptions(configurationService)); };
++		const active = CONTEXT_HP_SAFE_SESSION.bindTo(contextKeyService);
++		const push = () => { const safe = hpSafeSessionOptions(configurationService, storageService); active.set(!!safe); void browserViewService.setSafeSession(safe); };
 +		push();
 +		this._register(configurationService.onDidChangeConfiguration(e => {
 +			if (e.affectsConfiguration('hypeproof.browser')) {
 +				push();
 +			}
 +		}));
++		this._register(storageService.onDidChangeValue(StorageScope.PROFILE, HP_CHAT_EXTENSION_ID, this._store)(() => push()));
++		this._register(storageService.onDidChangeValue(StorageScope.APPLICATION, HP_CHAT_EXTENSION_ID, this._store)(() => push()));
 +	}
 +}
 +
 +registerWorkbenchContribution2(HpSafeSessionContribution.ID, HpSafeSessionContribution, WorkbenchPhase.BlockStartup);
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
-index eb04e8d..72493cd 100644
+index eb04e8d..533778c 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewActions.ts
-@@ -16,6 +16,8 @@ import { BrowserViewCommandId } from '../../../../platform/browserView/common/br
+@@ -16,6 +16,9 @@ import { BrowserViewCommandId } from '../../../../platform/browserView/common/br
  import { IOpenerService } from '../../../../platform/opener/common/opener.js';
  import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
  import { BrowserEditorInput } from '../common/browserEditorInput.js';
 +import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 +import { hpSafeSessionOptions } from '../common/browserView.js';
++import { IStorageService } from '../../../../platform/storage/common/storage.js';
  
  // Context key expression to check if browser editor is active
  export const BROWSER_EDITOR_ACTIVE = ContextKeyExpr.equals('activeEditor', BrowserEditorInput.EDITOR_ID);
-@@ -193,7 +195,8 @@ class OpenInExternalBrowserAction extends Action2 {
+@@ -193,7 +196,8 @@ class OpenInExternalBrowserAction extends Action2 {
  			icon: Codicon.linkExternal,
  			f1: true,
  			// Note: We do allow opening in an external browser even if there is an error page shown
 -			precondition: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL),
-+			// Studio (REQ-N11): never from the hardened session (both settings on).
-+			precondition: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL, ContextKeyExpr.or(ContextKeyExpr.not('config.hypeproof.browser.hardenedSessionEnabled'), ContextKeyExpr.not('config.hypeproof.browser.safeSession'))),
++			// Studio (REQ-N11): never from the hardened session (the effective value, which a settings edit cannot clear).
++			precondition: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL, ContextKeyExpr.not('hypeproofBrowserSafeSession')),
  			menu: {
  				id: MenuId.BrowserActionsToolbar,
  				group: BrowserActionGroup.Page,
-@@ -203,6 +206,10 @@ class OpenInExternalBrowserAction extends Action2 {
+@@ -203,6 +207,10 @@ class OpenInExternalBrowserAction extends Action2 {
  	}
  
  	async run(accessor: ServicesAccessor, browserEditor = accessor.get(IEditorService).activeEditorPane): Promise<void> {
 +		// Studio (REQ-N11): a command call with the precondition bypassed still stays inside.
-+		if (hpSafeSessionOptions(accessor.get(IConfigurationService))) {
++		if (hpSafeSessionOptions(accessor.get(IConfigurationService), accessor.get(IStorageService))) {
 +			return;
 +		}
  		if (browserEditor instanceof BrowserEditor) {

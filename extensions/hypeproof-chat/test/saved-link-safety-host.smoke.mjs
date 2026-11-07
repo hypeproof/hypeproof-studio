@@ -170,7 +170,12 @@ const minimalProfile = (extra) => ({ ux: { coach: {} }, ...extra });
 {
   const h = host();
   token = otherToken;
-  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "integrated", "another seat: no copy (fail closed to the integrated browser, as before)");
+  // REQ-N11 (2026-11-07): the minor seat's settings lock stays until another seat's profile is served, so until
+  // then the other seat's click is still blocked outside the served list (fail closed); without the lock it is integrated.
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "blocked", "another seat before its profile: the lock still decides");
+  const lockCopy = state.get("hypeproofChat.browserSettingsLock"); state.delete("hypeproofChat.browserSettingsLock");
+  assert.equal((await h.learnerLinkRoute(NEWS)).kind, "integrated", "another seat, no copy, no lock: integrated, as before");
+  state.set("hypeproofChat.browserSettingsLock", lockCopy);
   await h.reconcileSavedLinkSafety();
   assert.equal(state.has(SAVED_LINK_SAFETY_KEY), false, "seat change removes the copy");
 }
