@@ -9,6 +9,22 @@ export const NO_LOCAL_RUNTIME_MESSAGE = "강사 채팅은 지금 내 Claude 구�
 
 export type InstructorRuntime = "legacy" | "chalk-extension";
 export type ConnectionKind = "server" | "subscription-claude" | "subscription-codex";
+
+/**
+ * Optional model choices for the Chalk instructor band (#3564). Studio sends them only when a local
+ * runner exists, and they are the same values the legacy panel shows (`localModelSelection`). They do
+ * not change the model that runs a turn: that stays `local.model`.
+ */
+export interface ContractModels {
+  default: string;
+  choices: Array<{ alias: string; id: string; label: string }>;
+}
+
+/** Narrows a model selection to the contract shape. Absent selection means no field is sent. */
+export function contractModels(sel: { default: string; choices: Array<{ alias: string; id: string; label: string }> } | null | undefined): ContractModels | undefined {
+  if (!sel) return undefined;
+  return { default: sel.default, choices: sel.choices.map((c) => ({ alias: c.alias, id: c.id, label: c.label })) };
+}
 export type DeactivateReason = "issuerRemoved" | "rejected" | "studentSlotWins" | "superseded";
 export type TurnEvent =
   | { kind: "delta"; text: string }
@@ -142,6 +158,7 @@ export class ChalkContractHost {
     issuerToken: string;
     verifiedServerUrl: string;
     connection: ConnectionKind;
+    models?: ContractModels;
   }): Promise<{ ok: boolean; reason?: string }> {
     const sessionNonce = this.newId();
     const reply = await this.bus.executeCommand<{ ok?: boolean; reason?: string }>("hypeproof.chalk.activateInstructor", {
@@ -150,6 +167,8 @@ export class ChalkContractHost {
       issuerToken: input.issuerToken,
       verifiedServerUrl: input.verifiedServerUrl,
       connection: input.connection,
+      // Optional and omitted when absent, so a Chalk that does not know the field is unaffected.
+      ...(input.models ? { models: input.models } : {}),
     });
     if (reply?.ok !== true) return { ok: false, reason: reply?.reason };
     this.nonce = sessionNonce;
@@ -340,6 +359,7 @@ export interface ContractWant {
   issuerToken: string | undefined;
   url: string;
   connection: ConnectionKind;
+  models?: ContractModels;
 }
 
 // Keeps the Chalk session in step with the instructor verdict (#2556). A new server address
@@ -349,7 +369,8 @@ export async function syncInstructorSession(host: ChalkContractHost, current: Co
     const sameSession = current.token === want.issuerToken && current.connection === want.connection;
     if (host.active && sameSession && current.url === want.url) return current;
     if (host.active && !sameSession) await host.deactivate("superseded").catch(() => undefined);
-    const reply = await host.activate({ issuerToken: want.issuerToken, verifiedServerUrl: want.url, connection: want.connection })
+    // Models are not part of sameSession: the local model is fixed while the app runs (#3564).
+    const reply = await host.activate({ issuerToken: want.issuerToken, verifiedServerUrl: want.url, connection: want.connection, models: want.models })
       .catch(() => ({ ok: false }));
     return reply.ok ? { token: want.issuerToken, url: want.url, connection: want.connection } : {};
   }

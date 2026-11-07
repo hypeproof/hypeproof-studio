@@ -6,10 +6,13 @@ import {
   CONTRACT_VERSION,
   NO_LOCAL_RUNTIME_MESSAGE,
   connectionFor,
+  contractModels,
   needsChalkPrompt,
   reportSourceLabel,
   resolveInstructorRuntime,
+  syncInstructorSession,
 } from "../src/chalkContract.ts";
+import { localModelSelection } from "../src/localRuntime/index.ts";
 
 let failed = 0;
 async function t(name, fn) {
@@ -383,6 +386,63 @@ await t("connection values follow the legacy label source (chatPanelProvider ins
   assert.equal(connectionFor("codex", true), "subscription-codex");
   assert.equal(connectionFor("claude", false), "server");
   assert.equal(connectionFor(undefined, true), "server");
+});
+
+console.log("=== activateInstructor models (#3564) ===");
+// The local runner's choices, as the legacy panel shows them (localRuntime/index.ts localModelSelection).
+const LOCAL = { provider: "claude", executable: "claude", model: "claude-test", label: "Claude Code · 로컬 구독 · claude-test" };
+await t("with a local runner, activateInstructor carries models equal to localModelSelection (default and choices)", async () => {
+  const bus = makeBus();
+  const models = contractModels(localModelSelection(LOCAL));
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  const r = await host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "subscription-claude", models });
+  assert.equal(r.ok, true);
+  const call = bus.calls.find((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.deepEqual(call.args[0].models, { default: LOCAL.model, choices: [{ alias: LOCAL.model, id: LOCAL.model, label: LOCAL.label }] });
+});
+
+await t("with no local runner, activateInstructor sends no models field at all", async () => {
+  const bus = makeBus();
+  await activated(bus, makeRunner({ available: false }));
+  const call = bus.calls.find((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.equal("models" in call.args[0], false, "models must be absent without a local runner");
+});
+
+await t("contractModels returns nothing for an absent selection and copies only default and choices", () => {
+  assert.equal(contractModels(null), undefined);
+  assert.equal(contractModels(undefined), undefined);
+  const sel = localModelSelection(LOCAL);
+  assert.deepEqual(Object.keys(contractModels(sel)).sort(), ["choices", "default"]);
+});
+
+await t("syncInstructorSession passes the wanted models into activation, and omits them when not wanted", async () => {
+  const models = contractModels(localModelSelection(LOCAL));
+  const seen = [];
+  const host = {
+    active: false,
+    activate: async (input) => { seen.push(input); return { ok: true }; },
+    deactivate: async () => undefined,
+  };
+  const base = { isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  await syncInstructorSession(host, {}, { ...base, models });
+  await syncInstructorSession(host, {}, base);
+  assert.deepEqual(seen[0].models, models);
+  assert.equal(seen[1].models, undefined);
+});
+
+// Models stay out of the session-sameness check (#3564): a steady session is not re-activated for them.
+await t("a steady session is not re-activated when only the models differ", async () => {
+  let activations = 0;
+  const host = {
+    active: true,
+    activate: async () => { activations++; return { ok: true }; },
+    deactivate: async () => undefined,
+  };
+  const base = { isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  const view = { token: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  await syncInstructorSession(host, view, { ...base, models: contractModels(localModelSelection(LOCAL)) });
+  assert.equal(activations, 0);
 });
 
 if (failed > 0) {
