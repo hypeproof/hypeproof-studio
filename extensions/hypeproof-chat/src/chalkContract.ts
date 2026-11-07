@@ -364,6 +364,17 @@ export interface ContractWant {
   models?: ContractModels;
 }
 
+// #3578: the setting listener's handler. Leaving chalk-extension ends an active Chalk session FIRST,
+// before any refresh, so a refresh that throws or returns early cannot keep the session alive.
+// The refresh error is returned to the caller; the end has already been requested by then.
+export async function applyInstructorRuntimeSetting(
+  runtimeValue: unknown,
+  deps: { endSession: () => void | Promise<void>; refresh: () => unknown },
+): Promise<void> {
+  if (resolveInstructorRuntime(runtimeValue) !== "chalk-extension") await deps.endSession();
+  await deps.refresh();
+}
+
 // #3578: leaving the chalk-extension runtime ends an active Chalk session. With no active session
 // nothing is sent, so a repeated refresh on the legacy runtime sends at most one deactivate.
 export async function endSessionForRuntime(host: ChalkContractHost, current: ContractView, runtime: InstructorRuntime): Promise<ContractView> {

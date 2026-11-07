@@ -7668,7 +7668,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   // #3578: sends runtimeChanged once when a session is active; nothing when none is.
-  private endChalkSessionForRuntime(): void {
+  endChalkSessionForRuntime(): void {
     const host = this.chalkContract;
     if (!host) return;
     this.contractSync = this.contractSync

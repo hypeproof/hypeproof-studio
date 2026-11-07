@@ -39,7 +39,7 @@ import {
   LEGACY_HISTORY_KEY,
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
-import { ChalkContractHost } from "./chalkContract";
+import { ChalkContractHost, applyInstructorRuntimeSetting } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
@@ -452,8 +452,14 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
     // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
     if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
-    // #3578: the instructor runtime switch takes effect without a reload; leaving chalk-extension ends the Chalk session.
-    if (event.affectsConfiguration("hypeproofChat.instructorRuntime")) void provider.refreshConfig();
+    // #3578: the instructor runtime switch takes effect without a reload. The Chalk session ends first, so a
+    // failing or slow refresh (profile, whoami) cannot keep it alive; this path does not depend on the chat view.
+    if (event.affectsConfiguration("hypeproofChat.instructorRuntime")) {
+      void applyInstructorRuntimeSetting(vscode.workspace.getConfiguration("hypeproofChat").get("instructorRuntime"), {
+        endSession: () => provider.endChalkSessionForRuntime(),
+        refresh: () => provider.refreshConfig(),
+      }).catch(() => undefined);
+    }
   }));
   void classroomOps.resume();
   context.subscriptions.push(
