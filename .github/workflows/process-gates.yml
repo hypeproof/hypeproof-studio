@@ -36,3 +36,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/release/escaped-bug-case.mjs --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+
+  release-check:
+    # Name is load-bearing: hypeproof-harness loop/gates/required_checks.yaml lists it once it is required.
+    name: process / release-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The PR head tree supplies the contract and the Smoke check paths. The default branch is
+      # fetched only for the hotfix lane, which is policy read from main (as hype-pr does).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release
+            scripts/hype-pr
+            config
+      - name: Fetch the default branch for the hotfix lane
+        run: git fetch --no-tags --depth=1 origin main
+      # #3568: the Release check body contract, judged again on every PR body edit. Exemptions are
+      # logged inside the script (dependabot, release bot branches, harness sync).
+      - name: Release check contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 scripts/release/release-check-gate.py --pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --checkout .
