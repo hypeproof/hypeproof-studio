@@ -309,10 +309,167 @@ def prune_inactive(state, keep=None):
             discard_inactive(path)
 
 
-def prepare(repo, base, state, service, account_preview=False):
+CHALK_ID = 'hypeproof.hypeproof-chalk'
+CHALK_ORIGIN = 'hypeproof/hypeproof-chalk'
+NO_CHALK_HINT = 'Run again with --no-chalk (or HPS_DEV_CHALK=0) to build the Dev app without Chalk.'
+
+
+def chalk_mode(with_chalk, no_chalk):
+    flag = os.environ.get('HPS_DEV_CHALK')
+    if flag not in (None, '', '0', '1'):
+        raise ValueError('HPS_DEV_CHALK must be 0 or 1.')
+    if with_chalk and no_chalk:
+        raise ValueError('Use only one of --with-chalk and --no-chalk.')
+    if no_chalk or (not with_chalk and flag == '0'):
+        return 'off'
+    if with_chalk or flag == '1':
+        return 'on'
+    return 'auto'
+
+
+def main_checkout(repo):
+    common = subprocess.check_output(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], cwd=repo, text=True, encoding='utf-8').strip()
+    return Path(common).parent
+
+
+def chalk_checkout(repo):
+    """Return (checkout, None) for a verified Chalk checkout, else (None, reason)."""
+    explicit = os.environ.get('HPS_CHALK_CHECKOUT')
+    path = Path(explicit) if explicit else main_checkout(repo).parent / 'hypeproof-chalk'
+    if not (path / 'package.json').is_file():
+        return None, f'no Chalk checkout at {path}'
+    try:
+        top = subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], cwd=path, text=True, encoding='utf-8', stderr=subprocess.DEVNULL).strip()
+        origin = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], cwd=path, text=True, encoding='utf-8', stderr=subprocess.DEVNULL).strip()
+    except subprocess.CalledProcessError:
+        return None, f'{path} is not a git checkout'
+    if Path(top).resolve() != path.resolve() or not re.search(r'[:/]' + re.escape(CHALK_ORIGIN) + r'(\.git)?/?$', origin):
+        return None, f'{path} is not a checkout of {CHALK_ORIGIN}'
+    manifest = json.loads((path / 'package.json').read_text(encoding='utf-8'))
+    if f"{manifest.get('publisher')}.{manifest.get('name')}" != CHALK_ID:
+        return None, f'{path} package.json is not {CHALK_ID}'
+    return path.resolve(), None
+
+
+def chalk_cli(app):
+    return app_resources(app) / ('bin/hypeproof-studio' if is_mac_app(app) else 'bin/hypeproof-studio.cmd')
+
+
+def chalk_cli_args(state):
+    user_data = state / 'user-data'
+    user_data.mkdir(parents=True, exist_ok=True)
+    return ['--extensions-dir=' + str(state / 'extensions'), '--user-data-dir=' + str(user_data)]
+
+
+def remove_chalk(state, app):
+    """Uninstall Chalk through the app CLI; fall back to deleting its folders only if that fails."""
+    cli = chalk_cli(app)
+    if cli.is_file():
+        try:
+            with (state / 'chalk-build.log').open('a', encoding='utf-8') as out:
+                run([cli, *chalk_cli_args(state), '--uninstall-extension', CHALK_ID], stdout=out, stderr=subprocess.STDOUT)
+            return
+        except subprocess.CalledProcessError:
+            pass
+    for old in (state / 'extensions').glob(CHALK_ID + '-*'):
+        if old.is_dir() and not old.is_symlink():
+            shutil.rmtree(old)
+
+
+def chalk_failure(step, log):
+    return RuntimeError(f'Chalk {step} failed; see {log}. {NO_CHALK_HINT}')
+
+
+def package_chalk(checkout, state):
+    if not (checkout / 'node_modules').is_dir():
+        raise RuntimeError(f'Chalk checkout has no node_modules. Run npm ci in {checkout}. {NO_CHALK_HINT}')
+    dist = checkout / 'dist'
+    dist.mkdir(exist_ok=True)
+    for old in dist.glob('*.vsix'):
+        old.unlink()
+    log = state / 'chalk-build.log'
+    with log.open('w', encoding='utf-8') as out:
+        try:
+            run([shutil.which('npm') or 'npm', 'run', 'vsix'], cwd=checkout, stdout=out, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            raise chalk_failure('npm run vsix', log) from None
+    packages = sorted(dist.glob('*.vsix'))
+    if len(packages) != 1:
+        raise RuntimeError(f'Chalk build must leave exactly one vsix; found {len(packages)} in {dist}. {NO_CHALK_HINT}')
+    return packages[0]
+
+
+def engine_satisfied(engine, version):
+    """Check a VS Code engines range against the app's product.json version.
+
+    Only the forms Chalk uses are supported: '>=X.Y.Z', '^X.Y.Z' (major > 0) and 'X.Y.Z'.
+    Anything else raises, so a rule this code does not know cannot pass silently.
+    """
+    match = re.fullmatch(r'\s*(\^|>=)?\s*(\d+)\.(\d+)\.(\d+)\s*', engine)
+    if not match or (match.group(1) == '^' and match.group(2) == '0'):
+        raise ValueError(f'unsupported engines.vscode range: {engine!r}')
+    want = tuple(int(part) for part in match.group(2, 3, 4))
+    current = re.fullmatch(r'\s*(\d+)\.(\d+)\.(\d+)\s*', version)
+    if not current:
+        raise ValueError(f'unsupported app version: {version!r}')
+    have = tuple(int(part) for part in current.groups())
+    if match.group(1) == '>=':
+        return have >= want
+    if match.group(1) == '^':
+        return have[0] == want[0] and have >= want
+    return have == want
+
+
+def check_chalk_engine(app, checkout):
+    product = json.loads((app_resources(app) / 'product.json').read_text(encoding='utf-8'))
+    engine = json.loads((checkout / 'package.json').read_text(encoding='utf-8')).get('engines', {}).get('vscode', '')
+    version = product.get('version', '')
+    if not engine or not engine_satisfied(engine, version):
+        raise RuntimeError(f"Chalk requires VS Code '{engine}', but the Dev app product.json version is '{version}'. {NO_CHALK_HINT}")
+
+
+def install_chalk(app, state, vsix, checkout):
+    cli = chalk_cli(app)
+    if not cli.is_file():
+        raise RuntimeError(f'Dev app CLI not found: {cli}. {NO_CHALK_HINT}')
+    check_chalk_engine(app, checkout)
+    remove_chalk(state, app)
+    log = state / 'chalk-build.log'
+    with log.open('a', encoding='utf-8') as out:
+        try:
+            run([cli, *chalk_cli_args(state), '--install-extension', vsix, '--force'], stdout=out, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            raise chalk_failure('install', log) from None
+
+
+def chalk_record(checkout, vsix):
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=checkout, text=True, encoding='utf-8').strip()
+    return {'commit': git('rev-parse', 'HEAD'), 'dirty': bool(git('status', '--porcelain', '--', '.', ':!dist')),
+            'ref': git('branch', '--show-current') or 'detached', 'vsix_sha256': sha(vsix)}
+
+
+def plan_chalk(repo, state, app, mode):
+    """Check and pack Chalk before the Studio build, so its errors come first. Return a plan or None."""
+    if mode == 'off':
+        remove_chalk(state, app)
+        print('NOTE: Chalk extension removed from the Dev app (--no-chalk).', flush=True)
+        return None
+    checkout, reason = chalk_checkout(repo)
+    if checkout is None:
+        if mode == 'on':
+            raise RuntimeError(f'{reason}. Set HPS_CHALK_CHECKOUT to a Chalk checkout. {NO_CHALK_HINT}')
+        remove_chalk(state, app)
+        print('NOTE: Chalk checkout not found; Dev app runs without the Chalk extension.', flush=True)
+        return None
+    return {'checkout': checkout, 'vsix': package_chalk(checkout, state)}
+
+
+def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
     app = state / ('HypeProof Studio Dev.app' if is_mac_app(base) else 'HypeProof Studio Dev')
     if app_running(app):
         raise RuntimeError('Save your work and quit only the development app before applying changes. It will not be killed.')
+    chalk_plan = plan_chalk(repo, state, app, chalk)
     source_before = source_snapshot(repo)
     stage = state / 'build'
     metadata = build(repo, stage)
@@ -346,6 +503,14 @@ def prepare(repo, base, state, service, account_preview=False):
     if is_mac_app(base):
         run(['codesign', '--force', '--deep', '--sign', '-', candidate])
         run(['codesign', '--verify', '--deep', candidate])
+    chalk_entry = None
+    try:
+        if chalk_plan is not None:
+            install_chalk(candidate, state, chalk_plan['vsix'], chalk_plan['checkout'])
+            chalk_entry = chalk_record(chalk_plan['checkout'], chalk_plan['vsix'])
+    except Exception:
+        shutil.rmtree(candidate, ignore_errors=True)
+        raise
     if before != file_manifest(base):
         raise RuntimeError('Installed app changed during preparation. Candidate not applied.')
     # Check again before switching: an app opened during build must not be replaced.
@@ -376,7 +541,7 @@ def prepare(repo, base, state, service, account_preview=False):
                'source_dirty': source_before['dirty'], 'source_binding': source_before,
                'branch': branch, 'app': str(app), 'platform': platform.system(),
                'service': service, 'official_app_unchanged': True, 'extension_sha256': sha(app_resources(app) / 'extensions/hypeproof-chat/dist/extension.js'),
-               'sdk_vendor': metadata.get('hps_sdk_vendor'),
+               'sdk_vendor': metadata.get('hps_sdk_vendor'), 'chalk': chalk_entry,
                'previous_app': str(kept_backup) if kept_backup else None, 'prepared_at': time.time()}
     (state / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps(receipt, ensure_ascii=False, indent=2), flush=True)
@@ -536,7 +701,10 @@ def main():
     parser.add_argument('--cli-executable', type=Path, help='Explicit installed native Claude Code or Codex CLI.')
     parser.add_argument('--setup-local', action='store_true', help='Prepare a developer activity/code through an already running local development Service.')
     parser.add_argument('--inmemory-secrets', action='store_true', help='Launch with --use-inmemory-secretstorage: no OS keychain access (scripts/cr-dev-kit.sh).')
+    parser.add_argument('--with-chalk', action='store_true', help='Install the Chalk extension from the sibling hypeproof-chalk checkout; fail when it is missing. Env: HPS_DEV_CHALK=1.')
+    parser.add_argument('--no-chalk', action='store_true', help='Do not install Chalk and remove an installed copy. Env: HPS_DEV_CHALK=0.')
     args = parser.parse_args()
+    mode = chalk_mode(args.with_chalk, args.no_chalk)
     if not (platform.system() == 'Windows' or (platform.system() == 'Darwin' and platform.machine() == 'arm64')):
         raise RuntimeError('This development launcher supports macOS arm64 and Windows only.')
     if args.setup_local and args.service != 'local':
@@ -581,7 +749,7 @@ def main():
         with locked(state):
             if args.setup_local:
                 setup_local_participant(REPO, state)
-            app = prepare(REPO, args.base_app.resolve(), state, args.service, args.account_preview)
+            app = prepare(REPO, args.base_app.resolve(), state, args.service, args.account_preview, mode)
             if args.action == 'run':
                 if args.account_preview:
                     register_account_protocol(app, state)
