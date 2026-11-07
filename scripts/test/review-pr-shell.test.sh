@@ -872,6 +872,15 @@ else
   fail "83: studio-dev.py failure path not wired in review-pr.sh"
 fi
 
+# 85. review-pr.sh runs the Dev app with --inmemory-secrets (no macOS keychain prompt).
+# Check the studio-dev.py run call itself: the flag must sit between "run" and the closing "2>&1".
+RUN_BLOCK="$(awk '/studio-dev\.py" run \\/{f=1} f{print} f&&/2>&1\)"/{exit}' "$SCRIPT")"
+if [[ -n "$RUN_BLOCK" ]] && grep -q -- '--inmemory-secrets' <<<"$RUN_BLOCK"; then
+  ok "85: review-pr.sh studio-dev.py run call passes --inmemory-secrets"
+else
+  fail "85: studio-dev.py run call in review-pr.sh lacks --inmemory-secrets"
+fi
+
 # 84. review-pr.sh sources the failure helper from the main checkout, like the state helper.
 if grep -q 'source "\$REPO/scripts/review-pr-dev-failure.sh"' "$SCRIPT"; then
   ok "84: review-pr.sh sources review-pr-dev-failure.sh from the main checkout"

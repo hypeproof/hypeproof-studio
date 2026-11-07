@@ -31,6 +31,8 @@ bash scripts/review-pr.sh <PR번호-또는-브랜치> [--provider claude|codex|s
 
 **Ctrl+C** 를 누르면 앱·서버·worktree를 자동 정리합니다.
 
+The review app runs with the in-memory secret store (`--inmemory-secrets`), so macOS shows no keychain prompt. The store is emptied when the app closes, and each review launches a fresh app.
+
 ## 사전 조건
 
 - `/Applications/HypeProof Studio.app` 설치돼 있어야 함 (base app)
