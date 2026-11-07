@@ -153,6 +153,8 @@ export interface FileAttachmentPreview {
 }
 
 export interface ChatConfig {
+  // #3563 — true when the Chalk runtime verified this user as an instructor. The Studio chat then points to the Chalk tab. Absent otherwise.
+  chalkInstructorTab?: true;
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -740,6 +742,7 @@ export type WebviewMessage = (
   | { type: "answerToWiki"; messageId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
+  | { type: "openChalkInstructorPanel" } // #3563 — the Chalk tab button in the instructor notice; the host runs the Chalk command
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
   | { type: "setTextSize"; size: string }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
