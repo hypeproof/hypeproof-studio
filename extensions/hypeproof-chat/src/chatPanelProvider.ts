@@ -39,7 +39,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
@@ -7658,7 +7658,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let local: LocalRuntimeConfig | null = null;
     try { local = localRuntimeConfig(vscode.env.appName, s.proxyUrl); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
-    const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection };
+    // Same choices as the legacy panel (instructorModelChoices); only with a local runner (#3564).
+    const models = contractModels(local ? localModelSelection(local) : null);
+    const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection, models };
     this.contractSync = this.contractSync
       .then(async () => { this.contractView = await syncInstructorSession(host, this.contractView, want); })
       .catch(() => undefined);
