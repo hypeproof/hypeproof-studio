@@ -39,6 +39,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
+import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
@@ -9808,6 +9809,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           // #1297 (E4-2): chalkToolsEnabled is a first-pass filter (button display).
           // #1295 (E2-6): cwd and requestConfirmation added for file I/O and overwrite confirm.
+          // #3582: the wait for the person does not spend the turn budget, and a dialog answered after
+          // the turn has ended is denied, so the overwrite cannot run late.
+          const humanWait = createHumanWait();
           const chalkCtx = (await chalkToolsEnabled(this.context.secrets))
             ? {
                 serverUrl: proxyUrl,
@@ -9815,10 +9819,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 cwd,
                 currentModel: local.model,
                 requestConfirmation: async (message: string): Promise<boolean> => {
-                  const answer = await vscode.window.showWarningMessage(
-                    message, { modal: true }, "계속", "취소",
-                  );
-                  return answer === "계속";
+                  return humanWait.track(() => confirmUnlessTurnEnds(
+                    Promise.resolve(vscode.window.showWarningMessage(message, { modal: true }, "계속", "취소")),
+                    ctrl.signal,
+                    "계속",
+                  ));
                 },
               }
             : undefined;
@@ -9830,6 +9835,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             brief:this._instructorMode.brief,
             chalkCtx,
             browserTools,
+            humanWait,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};

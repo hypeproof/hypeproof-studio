@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import type { CoachToolAction, SdkActivity } from "../sdkCoachHelpers.ts";
 import { workspaceTools } from "./tools.ts";
 import { localEmailTools, localTurnBudget } from "./emailTools.ts";
+import { answerUnlessTurnEnds, createHumanWait, type HumanWait } from "./humanWait.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
 import { CodexLocalClient } from "./codexClient.mjs";
 import { runClaude } from "./claudeClient.mjs";
@@ -140,18 +141,29 @@ export async function runLocalCoach(args: {
   /** 강사 모드 browser tools (live_preview_start + browser_open). 없으면 붙이지 않는다. */
   browserTools?: BrowserToolsForLocal;
   emailAutomationHost?: GoogleAutomationMcpHost;
+  /** Counts the waits for a person (approval, confirmation). Created here when the caller passes none (#3582). */
+  humanWait?: HumanWait;
 }) {
   const lifetime = new AbortController();
-  let isWaiting = () => false;
-  const budget = localTurnBudget(() => isWaiting());
+  const humanWait = args.humanWait ?? createHumanWait();
+  let emailWaiting = () => false;
+  // #3582: time spent waiting for a person does not spend the turn budget.
+  const budget = localTurnBudget(() => humanWait.active() || emailWaiting());
   const signal = AbortSignal.any([args.signal, lifetime.signal, budget.signal]);
   const cancelQuestion = () => args.emailAutomationHost?.cancelPendingQuestion?.();
   signal.addEventListener("abort", cancelQuestion, { once: true });
+  // One gate for every approval in this turn. A turn that ends while the person is answering is denied,
+  // so a late answer cannot run the write (#3582).
+  const approve = (a: CoachToolAction) => humanWait.track(() => answerUnlessTurnEnds(
+    Promise.resolve(args.requestApproval(a)),
+    signal,
+    false,
+  ));
   const workTools = workspaceTools({
     cwd: args.cwd,
     profile: args.profile,
     signal,
-    approve: args.requestApproval,
+    approve,
     activity: args.onActivity,
   });
 
@@ -160,7 +172,7 @@ export async function runLocalCoach(args: {
   // Browser tools (live_preview_start + browser_open)은 강사 모드에서만 붙는다.
   const withBrowser = mergeBrowserTools(withChalk, args.browserTools);
   const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });
-  isWaiting = email.isWaiting;
+  emailWaiting = email.isWaiting;
   const tools = mergeBrowserTools(withBrowser, email);
   const system = args.systemPrompt ??
     ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
