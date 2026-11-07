@@ -11,6 +11,7 @@ import { workspaceTools } from "../src/localRuntime/tools.ts";
 import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
 
 let failed = 0;
+async function work(dir) { const { writeFile } = await import("node:fs/promises"); await writeFile(path.join(dir, "course.html"), "new course"); }
 async function t(name, fn) {
   try {
     await fn();
@@ -127,6 +128,33 @@ await t("a late approval never writes the file after the turn ended", async () =
     assert.equal(await writing, "refused");
     assert.equal(existsSync(path.join(dir, "course.html")), false, "the write did not run");
     assert.equal(humanWait.active(), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+await t("a dialog left open when the turn fails (not aborted by the user) is denied when answered later", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "hps-human-wait-err-"));
+  try {
+    // ctrl is the user's stop button: it stays open here. The turn ends by an error, which aborts turnEnded.
+    const ctrl = new AbortController();
+    const turnEnded = new AbortController();
+    let pick;
+    const dialog = new Promise((resolve) => { pick = resolve; });
+    const decided = confirmUnlessTurnEnds(dialog, AbortSignal.any([ctrl.signal, turnEnded.signal]), "계속");
+    try {
+      throw new Error("runner exited");
+    } catch {
+      // the turn fails here
+    } finally {
+      turnEnded.abort();
+    }
+    pick("계속");
+    const yes = await decided;
+    if (yes) await work(dir);
+    assert.equal(ctrl.signal.aborted, false, "the user never pressed stop");
+    assert.equal(yes, false, "a late 계속 after the turn failed is not a yes");
+    assert.equal(existsSync(path.join(dir, "course.html")), false, "the overwrite did not run");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -9812,6 +9812,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           // #3582: the wait for the person does not spend the turn budget, and a dialog answered after
           // the turn has ended is denied, so the overwrite cannot run late.
           const humanWait = createHumanWait();
+          // #3582 review: the turn can end for other reasons (runner error, CLI exit, budget), which does not
+          // abort ctrl. This signal ends with the turn itself, so a dialog left open is denied when the turn ends.
+          const turnEnded = new AbortController();
           const chalkCtx = (await chalkToolsEnabled(this.context.secrets))
             ? {
                 serverUrl: proxyUrl,
@@ -9821,7 +9824,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 requestConfirmation: async (message: string): Promise<boolean> => {
                   return humanWait.track(() => confirmUnlessTurnEnds(
                     Promise.resolve(vscode.window.showWarningMessage(message, { modal: true }, "계속", "취소")),
-                    ctrl.signal,
+                    AbortSignal.any([ctrl.signal, turnEnded.signal]),
                     "계속",
                   ));
                 },
@@ -9829,7 +9832,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             : undefined;
           // Browser tools for the local runtime: the same builder the Chalk contract turn uses.
           const browserTools = instructorLocalBrowserTools(() => this.buildBrowserMcpHost(text));
-          const result=await runInstructorTurn({
+          let result: Awaited<ReturnType<typeof runInstructorTurn>>;
+          try {
+          result=await runInstructorTurn({
             local,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             brief:this._instructorMode.brief,
@@ -9845,6 +9850,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               await this.captureTurnWrite(streamId,action,approved);
               return {approved,actor:prompted?'user':'policy',denialSource};
             }});
+          } finally {
+            turnEnded.abort();
+          }
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
         } else {
           if (!profile) throw new Error(profileNotReadyNotice(this.coachDisplayName()));
