@@ -549,7 +549,8 @@ await t("the instructorRuntime listener calls the handler, which ends the sessio
   assert.match(ext, /affectsConfiguration\("hypeproofChat\.instructorRuntime"\)\) \{\s*void applyInstructorRuntimeSetting\(/);
   assert.match(ext, /endSession: \(\) => provider\.endChalkSessionForRuntime\(\),\s*refresh: \(\) => provider\.refreshConfig\(\)/);
   const panel = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.match(panel, /^  endChalkSessionForRuntime\(\): void \{/m);
+  assert.match(panel, /^  endChalkSessionForRuntime\(\): Promise<void> \{/m);
+  assert.match(panel, /return this\.contractSync;\n  \}/);
 });
 
 await t("a chalk-extension runtime keeps the session untouched", async () => {

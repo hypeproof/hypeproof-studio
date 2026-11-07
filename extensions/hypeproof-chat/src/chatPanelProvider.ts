@@ -7668,12 +7668,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   // #3578: sends runtimeChanged once when a session is active; nothing when none is.
-  endChalkSessionForRuntime(): void {
+  endChalkSessionForRuntime(): Promise<void> {
     const host = this.chalkContract;
-    if (!host) return;
+    if (!host) return Promise.resolve();
+    // Returns the chain so an awaiting caller (applyInstructorRuntimeSetting) sees the end finish first.
     this.contractSync = this.contractSync
       .then(async () => { this.contractView = await endSessionForRuntime(host, this.contractView, 'legacy'); })
       .catch(() => undefined);
+    return this.contractSync;
   }
 
   chalkRunner(): LocalRunner {
