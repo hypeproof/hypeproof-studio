@@ -8802,3 +8802,14 @@ Custody follows the Epic's design v1 (comment on #3418): the seller's private la
 | REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the seller's first-lecture origin, `attribution`), policy version and status (refund window, payout hold by `tier.*` hold days, payable). Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale and no-origin tests |
 | REQ-STORE-MINOR | A self-declared 14–18 account may install free items only (`minor.buy`), may sell within `tier.minor`, sees its own ledger, and its payout is marked linked adult required (`minor.sell`). The age question appears before the first purchase or sale. | W `skill-store.test.tsx` · Service `store.test.mjs` minors test |
 | REQ-STORE-FRAUD | An order is refused when buyer and seller share a recorded device or network address, and a payment made with a card the seller used is cancelled and never recorded as a sale (`fraud.shared_signal`). A seller's monthly paid total cannot exceed `fraud.seller_monthly_cap_krw`. Reports from `reports.auto_unlist` distinct buyers unlist an item. | Service `store.test.mjs` fraud and report tests |
+
+## RC build failure alarm intent (#3547)
+
+| Requirement | Observable acceptance | Implementation / verification |
+|---|---|---|
+| REQ-STUDIO-RC-BUILD-ALARM | A release operator can classify a recorded RC platform failure without a new build or remote write. Exact repository/run identity is required; success and out-of-scope events are ignored, malformed inputs are rejected, and unclassified terminal outcomes remain undetermined. Repeated input yields a stable intent key, not a remote-delivery guarantee. | [RCAL-01–05](requirements/rc-build-failure-alarm.md) and [RCAL-T01–05](testing/rc-build-failure-alarm.md); `scripts/release/rc-failure-alarm.mjs` and its focused CLI tests. |
+
+This is the offline intent component of #3173. Workflow activation, unified
+acceptance failure identity, delivery to the existing alarm issue, remote duplicate
+prevention and an observed production alarm remain under that parent. No App
+behavior, build dispatch, publication or install/update acceptance is implied.
