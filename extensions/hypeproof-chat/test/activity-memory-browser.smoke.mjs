@@ -25,33 +25,56 @@ const color=value=>value.match(/[\d.]+/g).map(Number);
 const contrast=(a,b)=>{const x=luminance(color(a)),y=luminance(color(b));return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
 const evidence=process.env.ACTIVITY_MEMORY_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
 const b=await launch(bin);
+// A committed React tree and an opaque drawer are different milestones. In particular,
+// the drawer's entry animation can still be running after a host reply has rendered (#3524).
+// Wait for the milestone, then keep the geometry, opacity and hit-test assertions below.
+async function waitFor(expression, description) {
+ const deadline=Date.now()+5000;
+ do {
+  if(await b.evaluate(expression))return;
+  await new Promise(r=>setTimeout(r,10));
+ }while(Date.now()<deadline);
+ assert.fail(`Timed out waiting for ${description}`);
+}
+let visibilityControlChecked=false;
 try{for(const seat of ['personal','classroom'])for(const dark of [true,false])for(const width of [800,1420])for(const forcedColors of [false,true]){
  const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
  // The panel sits in the 작업 자료 drawer; 360px is its default width.
  await b.load(`<!doctype html><style>:root{${vars}}${css}</style><body class="${dark?'vscode-dark':'vscode-light'}" style="margin:0;background:var(--hp-bg-app-default);color:var(--hp-text-primary-default)"><div class="hps-shell" ${seat==='personal'?'data-chat-detail="personal"':''}><div class="tw-workspace"><aside class="tw-sources" style="width:360px;max-width:100%"><div id="root"></div></aside></div></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__posted.push(m),getState(){},setState(){}});</script><script>${fixture.outputFiles[0].text.replaceAll('</script','<\\/script')}</script></body>`,{width,height:1400,dark,forcedColors});
- await new Promise(r=>setTimeout(r,30));
+ await waitFor(`!![...document.querySelectorAll('.tw-works-filter button')].find(e=>e.textContent==='기억')`,'the memory filter to mount');
  // CGP-KNOW-D-030: the memory view is the 기억 filter of the 내 작품 drawer; pick it first.
- await b.evaluate(`[...document.querySelectorAll('.tw-works-filter button')].find(e=>e.textContent==='기억').click()`);await new Promise(r=>setTimeout(r,30));
+ await b.evaluate(`[...document.querySelectorAll('.tw-works-filter button')].find(e=>e.textContent==='기억').click()`);
+ await waitFor(`window.__posted.some(m=>m.type==='activityMemoryRequest')`,'the mounted memory view to request its store');
  assert.ok(await b.evaluate(`window.__posted.some(m=>m.type==='activityMemoryRequest')`),'mount asks the host for the list');
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory]')`),false,'no view, no panel');
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
  // REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): a store that could not be read still says memory is on and says why, unexpanded.
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify({...view,entries:[],other:0,unsafe:true})}},'*')`);
- await new Promise(r=>setTimeout(r,50));
+ await waitFor(`document.querySelector('[data-testid=activity-memory]')?.textContent.includes('읽지 않았어요')`,'the unreadable store reply to render');
  const u=await b.evaluate(`({state:document.querySelector('[data-testid=activity-memory-state]')?.textContent,text:document.querySelector('[data-testid=activity-memory]').textContent})`);
  assert.equal(u.state,'AI 기억: 켜짐 · .hypeproof/memory/');assert.ok(u.text.includes('읽지 않았어요'),'an unreadable store is named before expanding');
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify(view)}},'*')`);
- await new Promise(r=>setTimeout(r,50));
+ await waitFor(`document.querySelectorAll('.tw-memory-list li').length===${view.entries.length}`,'the memory file reply to render');
+ await waitFor(`(()=>{const drawer=document.querySelector('.tw-works-drawer');return !!drawer&&drawer.getAnimations().every(animation=>animation.playState==='finished');})()`,'the drawer entry animation to finish');
  // The state line shows before the list is opened: on, and where the files live; a text, never a control.
- const st=await b.evaluate(`(()=>{const line=document.querySelector('[data-testid=activity-memory-state]');const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
+ const stateProbe=`(()=>{const line=document.querySelector('[data-testid=activity-memory-state]');const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
   return {text:line?.textContent,tag:line?.localName,fonts:line?[line,...line.querySelectorAll('*')].map(e=>parseFloat(getComputedStyle(e).fontSize)):[],fg:line&&getComputedStyle(line).color,bg:bg==='rgba(0, 0, 0, 0)'?page:bg,
   visible:!!line&&(()=>{const r=line.getBoundingClientRect();let o=1;for(let e=line;e;e=e.parentElement)o*=parseFloat(getComputedStyle(e).opacity);const hit=document.elementFromPoint(r.left+Math.min(r.width,40)/2,r.top+Math.min(r.height,20)/2);
    return r.height>=parseFloat(getComputedStyle(line).fontSize)&&r.right<=innerWidth&&o>=.99&&getComputedStyle(line).visibility==='visible'&&!!hit&&line.contains(hit);})(),code:line?.querySelector('code')?.textContent,
   controls:line?line.querySelectorAll('button,input,select,[role=switch],[role=checkbox],[aria-pressed],[aria-checked],[tabindex]').length:-1,
   off:/꺼짐|끄기|선생님이 정해요/.test(panel.textContent),switches:panel.querySelectorAll('input,[role=switch],[role=checkbox],[aria-checked]').length,
-  listOpen:!!document.querySelector('[data-testid=activity-memory] [aria-expanded]')}})()`);
+  listOpen:!!document.querySelector('[data-testid=activity-memory] [aria-expanded]')}})()`;
+ const st=await b.evaluate(stateProbe);
  assert.equal(st.text,'AI 기억: 켜짐 · .hypeproof/memory/','the state line names on and the folder');assert.equal(st.code,'.hypeproof/memory/');
  assert.equal(st.listOpen,false);assert.ok(st.visible,'the state line is drawn without opening the list');
+ if(!visibilityControlChecked){
+  // Waiting for an animation must not make a genuinely hidden state line pass.
+  await b.evaluate(`document.querySelector('[data-testid=activity-memory-state]').style.visibility='hidden'`);
+  assert.equal((await b.evaluate(stateProbe)).visible,false,'negative control: hidden state line is rejected');
+  await b.evaluate(`document.querySelector('[data-testid=activity-memory-state]').style.removeProperty('visibility')`);
+  assert.ok((await b.evaluate(stateProbe)).visible,'restoring visibility restores the positive control');
+  visibilityControlChecked=true;
+ }
  assert.equal(st.tag,'p');assert.equal(st.controls,0,'the state is text, not a switch');assert.equal(st.switches,0);assert.equal(st.off,false,'no off state or instructor choice');
  for(const f of st.fonts)assert.ok(f>=14,`state line ${f}px`);if(!forcedColors)assert.ok(contrast(st.fg,st.bg)>=4.5,`state line contrast ${st.fg}/${st.bg}`);
  // REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005): the scope is named in the memory view, as text that offers no change.
@@ -92,11 +115,12 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  // The host answers: the row is gone, a status line says so, and focus stays in the panel.
  await b.evaluate(`document.querySelector('[aria-label="지우기: big.md"]').focus()`);
  await b.evaluate(`window.postMessage({type:'activityMemoryState',requestId:${JSON.stringify(asked[0].requestId)},result:{action:'delete',name:'big.md'},view:${JSON.stringify({...view,entries:view.entries.slice(0,2)})}},'*')`);
- await new Promise(r=>setTimeout(r,100));
+ await waitFor(`document.querySelectorAll('.tw-memory-list li').length===2&&document.activeElement?.textContent==='기억'`,'the deletion reply and focus restoration');
  const after=await b.evaluate(`({rows:document.querySelectorAll('.tw-memory-list li').length,status:document.querySelector('.tw-memory [role=status]').textContent,focus:document.activeElement?.textContent})`);
  assert.equal(after.rows,2);assert.match(after.status,/big\.md.*지웠어요/);assert.equal(after.focus,'기억','focus lands on the drawer\'s 기억 filter, not body');
  // The store goes away (an instructor seat, no task workspace): the state line goes with it.
- await b.evaluate(`window.postMessage({type:'activityMemoryState',view:null},'*')`);await new Promise(r=>setTimeout(r,50));
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:null},'*')`);
+ await waitFor(`!document.querySelector('[data-testid=activity-memory]')`,'the missing store reply to unmount the panel');
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-scope]')`),false,'no store, no scope label');
  console.log(`PASS activity memory panel ${seat} ${dark?'dark':'light'} ${width} ${forcedColors?'forced':'normal'}`);
