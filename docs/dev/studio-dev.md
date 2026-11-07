@@ -204,6 +204,8 @@ reports a shadowed source, move the generated companion out before rebuilding.
 Actual native evidence is recorded separately in the PR.
 Neither a unit-test pass nor a three-second running process proves AI/tool use.
 
+`--no-workspace-trust` (used by `review-pr.sh`) sets `security.workspace.trust.enabled` to false in the Dev copy's settings only; without it the key is removed. With it, the copy does not ask the trust question for any folder it opens. The launcher owns this key: a value set by hand in the Dev copy's settings is removed on the next run without the option. The official app and user settings are not changed.
+
 Windows checks also cover native CLI paths, isolated app identity, byte-range build
 locks, production refusal during local setup, and descendant termination on cancel.
 Actual Windows model/file-tool evidence belongs in a separate execution record.

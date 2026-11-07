@@ -881,6 +881,14 @@ else
   fail "85: studio-dev.py run call in review-pr.sh lacks --inmemory-secrets"
 fi
 
+# 86. review-pr.sh passes --no-workspace-trust to the Dev app run (the review Dev copy only).
+RUN_BLOCK_TRUST="$(awk '/studio-dev\.py" run \\/{f=1} f{print} f&&/2>&1\)"/{exit}' "$SCRIPT")"
+if [[ -n "$RUN_BLOCK_TRUST" ]] && grep -q -- '--no-workspace-trust' <<<"$RUN_BLOCK_TRUST"; then
+  ok "86: review-pr.sh studio-dev.py run call passes --no-workspace-trust"
+else
+  fail "86: studio-dev.py run call in review-pr.sh lacks --no-workspace-trust"
+fi
+
 # 84. review-pr.sh sources the failure helper from the main checkout, like the state helper.
 if grep -q 'source "\$REPO/scripts/review-pr-dev-failure.sh"' "$SCRIPT"; then
   ok "84: review-pr.sh sources review-pr-dev-failure.sh from the main checkout"
