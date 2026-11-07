@@ -7,6 +7,7 @@ import {
   NO_LOCAL_RUNTIME_MESSAGE,
   connectionFor,
   contractModels,
+  endSessionForRuntime,
   needsChalkPrompt,
   reportSourceLabel,
   resolveInstructorRuntime,
@@ -443,6 +444,70 @@ await t("a steady session is not re-activated when only the models differ", asyn
   const view = { token: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
   await syncInstructorSession(host, view, { ...base, models: contractModels(localModelSelection(LOCAL)) });
   assert.equal(activations, 0);
+});
+
+console.log("=== runtime switch (#3578) ===");
+const DEACT = "hypeproof.chalk.deactivateInstructor";
+const wantFor = () => ({ isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "server" });
+await t("leaving chalk-extension ends an active session with reason runtimeChanged, exactly once", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  view = await endSessionForRuntime(host, view, "legacy");
+  view = await endSessionForRuntime(host, view, "legacy");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "one deactivate for the switch, none for the repeated refresh");
+  assert.equal(sent[0].args[0].reason, "runtimeChanged");
+  assert.equal(host.active, false);
+});
+
+await t("leaving chalk-extension with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  await endSessionForRuntime(host, {}, "legacy");
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("after the switch to legacy, a turn with the old nonce is refused noSession", async () => {
+  const bus = makeBus();
+  const runner = makeRunner();
+  const host = await activated(bus, runner);
+  await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  const reply = await bus.call("hypeproof.runtime.runLocalTurn", { contractVersion: 1, sessionNonce: "nonce-1", turnId: "t-old", policy: "chalk-instructor", messages: [], tools: [] });
+  assert.equal(reply.accepted, false);
+  assert.equal(reply.reason, "noSession");
+  assert.equal(runner.runs.length, 0, "the runner never sees the old-nonce turn");
+});
+
+await t("returning to chalk-extension activates again with a new nonce", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  view = await syncInstructorSession(host, view, { ...wantFor(), connection: "server" });
+  const activations = bus.calls.filter((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.equal(activations.length, 2, "the first activation and the one after returning");
+  assert.equal(host.active, true);
+  assert.notEqual(activations[1].args[0].sessionNonce, activations[0].args[0].sessionNonce);
+});
+
+// The switch is driven by the configuration event alone (no reload): the listener re-runs refreshConfig,
+// and the legacy branch of refreshConfig ends the session. Checked on the wiring source.
+await t("the instructorRuntime setting is listened to and the legacy branch ends the Chalk session", async () => {
+  const fs = await import("node:fs");
+  const ext = fs.readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
+  assert.match(ext, /affectsConfiguration\("hypeproofChat\.instructorRuntime"\)\) void provider\.refreshConfig\(\)/);
+  const panel = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  assert.match(panel, /\} else \{\n\s*\/\/ #3578: the runtime left chalk-extension[^\n]*\n\s*this\.endChalkSessionForRuntime\(\);/);
+});
+
+await t("a chalk-extension runtime keeps the session untouched", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  assert.equal(await endSessionForRuntime(host, view, "chalk-extension"), view);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
 });
 
 if (failed > 0) {

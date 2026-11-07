@@ -19,7 +19,7 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 | Command | Arguments | Result | Notes |
 |---|---|---|---|
 | `hypeproof.chalk.activateInstructor` | `{ contractVersion, sessionNonce, issuerToken, verifiedServerUrl, connection?, models? }` | `{ ok, contractVersion, reason? }` | Called once Studio has decided the seat is an instructor. Chalk opens its own surface. `reason` (when `ok:false`): `serverChanged`, `serverMissing`, `contractVersion`, `invalidArgs`. |
-| `hypeproof.chalk.deactivateInstructor` | `{ contractVersion, sessionNonce, reason }` | `{ ok }` | `reason`: `issuerRemoved`, `rejected`, `studentSlotWins`, `superseded`. Chalk aborts open turns, drops the token and the nonce, and shows nothing. |
+| `hypeproof.chalk.deactivateInstructor` | `{ contractVersion, sessionNonce, reason }` | `{ ok }` | `reason`: `issuerRemoved`, `rejected`, `studentSlotWins`, `superseded`, `runtimeChanged` (#3578: `hypeproofChat.instructorRuntime` left `chalk-extension`). Chalk aborts open turns, drops the token and the nonce, and shows nothing. A Chalk that does not know a reason ends the session as a general end, so the new value is backward-compatible. Studio sends this only when a session is active. |
 | `hypeproof.chalk.status` | — | `{ instructorMode, version }` | Read-only. Student-slot precedence (#1463) is decided by Studio; Studio passes the result. |
 | `hypeproof.chalk.onTurnEvent` | `{ contractVersion, sessionNonce, turnId, event }` | depends on the event (§2.4) | Studio sends turn events to Chalk. |
 
@@ -143,6 +143,7 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-07): `deactivateInstructor` reason `runtimeChanged` (#3578). Backward-compatible: a Chalk that does not know the reason ends the session as a general end. Studio sends it once when the runtime leaves `chalk-extension` and a session is active.
 - v0 (2026-11-07): `activateInstructor` gets an optional `models` field (§5, #3564). Backward-compatible addition; sent only with a local runner.
 - v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.
 - v0 (2026-10-23): first contract (S-2 in Studio; M-2 in Chalk). Adds `connection?` and `runLocalTurn` `message` as backward-compatible additions.

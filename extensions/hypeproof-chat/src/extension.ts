@@ -452,6 +452,8 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
     // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
     if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
+    // #3578: the instructor runtime switch takes effect without a reload; leaving chalk-extension ends the Chalk session.
+    if (event.affectsConfiguration("hypeproofChat.instructorRuntime")) void provider.refreshConfig();
   }));
   void classroomOps.resume();
   context.subscriptions.push(

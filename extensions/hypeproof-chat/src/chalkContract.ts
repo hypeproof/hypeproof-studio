@@ -25,7 +25,9 @@ export function contractModels(sel: { default: string; choices: Array<{ alias: s
   if (!sel) return undefined;
   return { default: sel.default, choices: sel.choices.map((c) => ({ alias: c.alias, id: c.id, label: c.label })) };
 }
-export type DeactivateReason = "issuerRemoved" | "rejected" | "studentSlotWins" | "superseded";
+// "runtimeChanged" (#3578): the instructor runtime left chalk-extension. A Chalk that does not know a
+// reason ends the session the same way as before, so the value is backward-compatible.
+export type DeactivateReason = "issuerRemoved" | "rejected" | "studentSlotWins" | "superseded" | "runtimeChanged";
 export type TurnEvent =
   | { kind: "delta"; text: string }
   | { kind: "activity"; activity: unknown }
@@ -360,6 +362,14 @@ export interface ContractWant {
   url: string;
   connection: ConnectionKind;
   models?: ContractModels;
+}
+
+// #3578: leaving the chalk-extension runtime ends an active Chalk session. With no active session
+// nothing is sent, so a repeated refresh on the legacy runtime sends at most one deactivate.
+export async function endSessionForRuntime(host: ChalkContractHost, current: ContractView, runtime: InstructorRuntime): Promise<ContractView> {
+  if (runtime === "chalk-extension") return current;
+  if (host.active) await host.deactivate("runtimeChanged").catch(() => undefined);
+  return {};
 }
 
 // Keeps the Chalk session in step with the instructor verdict (#2556). A new server address
