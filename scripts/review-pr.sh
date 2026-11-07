@@ -582,6 +582,7 @@ else
   DEV_APP_RAW="$(python3 "$WORKTREE_DIR/scripts/studio-dev.py" run \
     --provider "$PROVIDER" \
     --service local \
+    --inmemory-secrets \
     ${CHALK_FLAG:+$CHALK_FLAG} \
     ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)" || DEV_APP_RC=$?
   if [[ "$DEV_APP_RC" -ne 0 ]]; then
