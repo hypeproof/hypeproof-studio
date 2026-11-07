@@ -11128,7 +11128,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       isInstructor = false;
     } else {
       // #3578: the runtime left chalk-extension, so an active Chalk session must end now.
-      this.endChalkSessionForRuntime();
+      if (this.chalkContract) void this.endChalkSessionForRuntime();
     }
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
     if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
