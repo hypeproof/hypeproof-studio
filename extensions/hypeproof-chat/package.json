@@ -429,6 +429,9 @@
         }
       ],
       "commandPalette": [
+        { "command": "hypeproof-chat.chalk.checkPlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
+        { "command": "hypeproof-chat.chalk.openCourse", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
+        { "command": "hypeproof-chat.chalk.savePlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         {
           "command": "hypeproof-chat.skillStore",
           "when": "false"

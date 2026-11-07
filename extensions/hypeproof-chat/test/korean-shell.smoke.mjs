@@ -207,12 +207,16 @@ try {
     // explorer/context, any menu) must carry such a gate as its `when`.
     const baseCommands=new Set((baseManifest.contributes?.commands??[]).map(x=>x.command));
     const baseMenuKeys=new Set(Object.keys(baseManifest.contributes?.menus??{}));
+    const CHALK_PALETTE_GATE=new Set(['hypeproof-chat.chalk.checkPlan','hypeproof-chat.chalk.openCourse','hypeproof-chat.chalk.savePlan']);
+    const CHALK_PALETTE_GATE_WHEN="config.hypeproofChat.instructorRuntime != 'chalk-extension'";
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
       if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&(k.startsWith('workbench.')||k==='update.showReleaseNotes'))delete d[k];
       if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
       for(const [k,list] of Object.entries(c.contributes?.menus??{}))if(Array.isArray(list)){
-        c.contributes.menus[k]=list.filter(x=>!x.command||baseCommands.has(x.command));
+        // #3563 — the three Studio Chalk commands are hidden while the Chalk runtime is selected. Only these exact
+        // palette entries are outside the copy-only rule; any other new menu entry still fails the comparison.
+        c.contributes.menus[k]=list.filter(x=>(!x.command||baseCommands.has(x.command))&&!(k==='commandPalette'&&CHALK_PALETTE_GATE.has(x.command)&&x.when===CHALK_PALETTE_GATE_WHEN));
         if(!c.contributes.menus[k].length&&!baseMenuKeys.has(k))delete c.contributes.menus[k];}
       return c;};
     const featureClause=w=>typeof w==='string'&&/^!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+)(\s*&&\s*!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+))*$/.test(w.trim());

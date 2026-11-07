@@ -40,6 +40,7 @@ const BANNER_POSTED_ARROW =
 //   logLevel: the --log-level value; null means esbuild's default (flag omitted)
 const OVERRIDES = {
   "goal-status": { banner: BANNER_POSTED },
+  "chalk-instructor-tab": { banner: BANNER_POSTED },
   "keyboard-navigation": { banner: BANNER_STATE },
   "task-archive-ui": { banner: BANNER_POSTED },
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },

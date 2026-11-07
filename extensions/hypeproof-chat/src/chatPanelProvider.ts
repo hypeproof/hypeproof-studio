@@ -39,7 +39,8 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
@@ -8395,6 +8396,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "openSettings":
         void vscode.commands.executeCommand("workbench.action.openSettings", "hypeproofChat");
         return;
+      case "openChalkInstructorPanel":
+        void this.openChalkInstructorTab();
+        return;
       case "setToken":
         void vscode.commands.executeCommand("hypeproof-chat.setToken");
         return;
@@ -11045,6 +11049,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch (err) { await this.post({ type: "rehearsalState", state: "error", message: "Service에 연결하지 못했습니다: " + (err as Error).message }); }
   }
 
+  // #3563 — opens the Chalk instructor tab from the Studio notice. Without the Chalk extension, say so.
+  private async openChalkInstructorTab(): Promise<void> {
+    if (!vscode.extensions.getExtension(CHALK_EXTENSION_ID)) {
+      void vscode.window.showWarningMessage("Chalk 확장이 설치되어 있지 않아요. Chalk 확장을 설치한 뒤 다시 눌러 주세요.");
+      return;
+    }
+    await vscode.commands.executeCommand(CHALK_INSTRUCTOR_TAB_COMMAND);
+  }
+
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
     // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
@@ -11094,6 +11107,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._instructorMode.reset();
       isInstructor = false;
     }
+    // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
+    const chalkInstructorTab = chalkInstructorTabField(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime'), isInstructor);
     if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
       this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
       this._instructorMode.reset();
@@ -11148,6 +11163,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.post({
       type: "config",
       config: {
+        ...chalkInstructorTab,
         classWindow: visibleClassWindow,
         folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),

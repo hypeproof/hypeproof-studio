@@ -100,6 +100,7 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
+import { ChalkInstructorNotice } from "./ChalkInstructorNotice";
 import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
@@ -1408,6 +1409,8 @@ export function ChatPanel(props: Props) {
   ) : null;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
+  // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
+  if (config?.chalkInstructorTab) return <>{updateBanner}<ChalkInstructorNotice /></>;
   if (!config) return <>{updateBanner}<DisconnectedChat open={props.onSetToken} /></>;
   if (!config.profile && !config.activity && !props.instructor) return <>{updateBanner}<DisconnectedChat open={props.onSetToken} /></>;
   if ((needsNaming || forceNaming) && config?.profile) {
