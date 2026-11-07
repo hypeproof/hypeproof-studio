@@ -1,12 +1,15 @@
 // Chalk command contract v0, studio side. A stub command bus stands in for the Chalk extension,
 // and a stub runner stands in for the local executor. No vscode module is loaded.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   ChalkContractHost,
   CONTRACT_VERSION,
   NO_LOCAL_RUNTIME_MESSAGE,
   connectionFor,
   contractModels,
+  applyInstructorRuntimeSetting,
+  endSessionForRuntime,
   needsChalkPrompt,
   reportSourceLabel,
   resolveInstructorRuntime,
@@ -443,6 +446,120 @@ await t("a steady session is not re-activated when only the models differ", asyn
   const view = { token: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
   await syncInstructorSession(host, view, { ...base, models: contractModels(localModelSelection(LOCAL)) });
   assert.equal(activations, 0);
+});
+
+console.log("=== runtime switch (#3578) ===");
+const DEACT = "hypeproof.chalk.deactivateInstructor";
+const wantFor = () => ({ isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "server" });
+await t("leaving chalk-extension ends an active session with reason runtimeChanged, exactly once", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  view = await endSessionForRuntime(host, view, "legacy");
+  view = await endSessionForRuntime(host, view, "legacy");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "one deactivate for the switch, none for the repeated refresh");
+  assert.equal(sent[0].args[0].reason, "runtimeChanged");
+  assert.equal(host.active, false);
+});
+
+await t("leaving chalk-extension with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  await endSessionForRuntime(host, {}, "legacy");
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("after the switch to legacy, a turn with the old nonce is refused noSession", async () => {
+  const bus = makeBus();
+  const runner = makeRunner();
+  const host = await activated(bus, runner);
+  await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  const reply = await bus.call("hypeproof.runtime.runLocalTurn", { contractVersion: 1, sessionNonce: "nonce-1", turnId: "t-old", policy: "chalk-instructor", messages: [], tools: [] });
+  assert.equal(reply.accepted, false);
+  assert.equal(reply.reason, "noSession");
+  assert.equal(runner.runs.length, 0, "the runner never sees the old-nonce turn");
+});
+
+await t("returning to chalk-extension activates again with a new nonce", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  view = await syncInstructorSession(host, view, { ...wantFor(), connection: "server" });
+  const activations = bus.calls.filter((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.equal(activations.length, 2, "the first activation and the one after returning");
+  assert.equal(host.active, true);
+  assert.notEqual(activations[1].args[0].sessionNonce, activations[0].args[0].sessionNonce);
+});
+
+// The listener's handler is a pure function (applyInstructorRuntimeSetting), so the order and the
+// failure path are tested on behaviour, not on source text. The listener in extension.ts only wires it.
+await t("a switch to legacy ends the session once, before a refresh that rejects (profile or whoami down)", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const order = [];
+  let view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  await applyInstructorRuntimeSetting("legacy", {
+    endSession: async () => { order.push("end"); view = await endSessionForRuntime(host, view, "legacy"); },
+    refresh: async () => { order.push("refresh"); throw new Error("whoami unreachable"); },
+  }).catch(() => undefined);
+  assert.deepEqual(order, ["end", "refresh"], "the end comes before the refresh");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "exactly one deactivate although the refresh failed");
+  assert.equal(sent[0].args[0].reason, "runtimeChanged");
+});
+
+await t("a synchronous refresh failure after a switch to legacy still leaves exactly one deactivate", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  await applyInstructorRuntimeSetting("legacy", {
+    endSession: async () => { await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy"); },
+    refresh: () => { throw new Error("config read failed"); },
+  }).catch(() => undefined);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 1);
+});
+
+await t("a repeated legacy switch with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  const deps = { endSession: () => endSessionForRuntime(host, {}, "legacy"), refresh: async () => undefined };
+  await applyInstructorRuntimeSetting("legacy", deps);
+  await applyInstructorRuntimeSetting("legacy", deps);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("a switch to chalk-extension does not end the session and still refreshes", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const order = [];
+  await applyInstructorRuntimeSetting("chalk-extension", {
+    endSession: async () => { order.push("end"); },
+    refresh: async () => { order.push("refresh"); },
+  });
+  assert.deepEqual(order, ["refresh"]);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
+});
+
+// Wiring: the listener in extension.ts uses the handler, and the provider exposes the end helper.
+await t("the instructorRuntime listener calls the handler, which ends the session before the refresh", () => {
+  const ext = readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
+  assert.match(ext, /affectsConfiguration\("hypeproofChat\.instructorRuntime"\)\) \{\s*void applyInstructorRuntimeSetting\(/);
+  assert.match(ext, /endSession: \(\) => provider\.endChalkSessionForRuntime\(\),\s*refresh: \(\) => provider\.refreshConfig\(\)/);
+  const panel = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  assert.match(panel, /^  endChalkSessionForRuntime\(\): Promise<void> \{/m);
+  assert.match(panel, /return this\.contractSync;\n  \}/);
+});
+
+await t("a chalk-extension runtime keeps the session untouched", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  assert.equal(await endSessionForRuntime(host, view, "chalk-extension"), view);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
 });
 
 if (failed > 0) {

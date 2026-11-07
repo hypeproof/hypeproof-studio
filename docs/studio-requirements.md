@@ -2931,6 +2931,7 @@ PR — 이 도메인은 "각 PC 에 빠짐없이, 깨지지 않게 쌓인다"까
 | ID | Requirement | Acceptance | Layer |
 |---|---|---|---|
 | REQ-STUDIO-CHALK-AUTHORING-UI | Instructor can import and edit course drafts, save/reopen and view frozen versions | Preserve edits on 401/403/409; no token in URLs/storage/export; support request draft is explicitly unsubmitted | Surface; `e2e/chalk-authoring/run.mjs` |
+| REQ-STUDIO-CHALK-RUNTIME-SWITCH | Changing `hypeproofChat.instructorRuntime` takes effect without a reload. Leaving `chalk-extension` ends the active Chalk session once (`deactivateInstructor` with `reason: "runtimeChanged"`); with no session nothing is sent. Returning to `chalk-extension` activates again with a new nonce. | After the switch to legacy, a turn with the old nonce is refused `noSession`; the switch runs from the configuration event alone, and the session ends before the refresh, so a failing refresh (profile or whoami) cannot keep it alive and the chat view need not be resolved. Chalk-side screen text: hypeproof/hypeproof-chalk#38, checked in an agent Dev run (👁). | Unit (`test/chalk-contract.smoke.mjs`, runtime switch checks incl. a rejecting refresh, via `applyInstructorRuntimeSetting`); wiring by source (`src/extension.ts` listener); Dev run pending |
 
 REQ-A8 fixture isolation: both the environment flag and the existing user-data test-state file keep an explicitly opened practice folder. The activation verdict is shared with spool suppression and passed through onboarding and token changes (#713). Normal cohort switching remains unchanged.
 

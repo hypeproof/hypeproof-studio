@@ -39,7 +39,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
@@ -7667,6 +7667,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       .catch(() => undefined);
   }
 
+  // #3578: sends runtimeChanged once when a session is active; nothing when none is.
+  endChalkSessionForRuntime(): Promise<void> {
+    const host = this.chalkContract;
+    if (!host) return Promise.resolve();
+    // Returns the chain so an awaiting caller (applyInstructorRuntimeSetting) sees the end finish first.
+    this.contractSync = this.contractSync
+      .then(async () => { this.contractView = await endSessionForRuntime(host, this.contractView, 'legacy'); })
+      .catch(() => undefined);
+    return this.contractSync;
+  }
+
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
@@ -11115,6 +11126,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
       this._instructorMode.reset();
       isInstructor = false;
+    } else {
+      // #3578: the runtime left chalk-extension, so an active Chalk session must end now.
+      if (this.chalkContract) void this.endChalkSessionForRuntime();
     }
     // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
     if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
