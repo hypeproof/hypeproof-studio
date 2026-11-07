@@ -666,4 +666,28 @@ class DevChalkTests(DevLauncherTests):
             self.assertTrue(any('--install-extension' in call for call in calls))
             self.assertTrue((state/'extensions/hypeproof.hypeproof-chalk-0.1.0/package.json').is_file())
 
+    def test_workspace_trust_key_is_added_only_when_asked(self):
+        KEY = 'security.workspace.trust.enabled'
+        plain = dev.settings_for({'kept': 1}, 'local', 'main')
+        self.assertNotIn(KEY, plain)
+        trusted = dev.settings_for({'kept': 1}, 'local', 'main', no_workspace_trust=True)
+        self.assertIs(trusted[KEY], False)
+        self.assertEqual({k: v for k, v in trusted.items() if k != KEY}, plain)
+
+    def test_a_value_from_an_earlier_review_run_is_removed_by_a_plain_run(self):
+        KEY = 'security.workspace.trust.enabled'
+        earlier = {KEY: False, 'kept': 1}
+        self.assertNotIn(KEY, dev.settings_for(earlier, 'local', 'main'))
+        self.assertEqual(earlier[KEY], False)
+
+    def test_prepare_writes_the_trust_setting_only_for_the_review_run(self):
+        KEY = 'security.workspace.trust.enabled'
+        for asked, expected in [(True, False), (False, None)]:
+            with tempfile.TemporaryDirectory() as tmp:
+                repo, base, state, _old = self.prepared_fixture(Path(tmp))
+                with patch.object(dev, 'build', side_effect=self.stub_build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                    dev.prepare(repo, base, state, 'local', False, 'off', asked)
+                written = json.loads((state/'user-data/User/settings.json').read_text(encoding='utf-8'))
+                self.assertEqual(written.get(KEY), expected, f'no_workspace_trust={asked}')
+
 if __name__=='__main__': unittest.main()

@@ -583,6 +583,7 @@ else
     --provider "$PROVIDER" \
     --service local \
     --inmemory-secrets \
+    --no-workspace-trust \
     ${CHALK_FLAG:+$CHALK_FLAG} \
     ${HPS_REVIEW_CDP_PORT:+--cdp-port "$HPS_REVIEW_CDP_PORT"} 2>&1)" || DEV_APP_RC=$?
   if [[ "$DEV_APP_RC" -ne 0 ]]; then

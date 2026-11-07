@@ -235,7 +235,7 @@ def register_account_protocol(app, state):
         run(['reg.exe', 'add', key + '\\shell\\open\\command', '/ve', '/d', command, '/f'])
 
 
-def settings_for(existing, service, branch, account_preview=False):
+def settings_for(existing, service, branch, account_preview=False, no_workspace_trust=False):
     result = dict(existing)
     result.update({'update.mode': 'none', 'extensions.autoUpdate': False,
                    'extensions.autoCheckUpdates': False,
@@ -247,6 +247,13 @@ def settings_for(existing, service, branch, account_preview=False):
         result.update({'hypeproofChat.accountsPreview': True, 'hypeproofChat.proxyUrl': 'http://127.0.0.1:8793/v1', 'hypeproofChat.siteBase': 'http://localhost:3193'})
     else:
         result['hypeproofChat.accountsPreview'] = False
+    # Dev copy only, and only when asked (review runs): the state workspace would otherwise ask the
+    # workspace trust question on every run. Without the option the key is removed, so an earlier
+    # run's value cannot persist into a plain development run.
+    if no_workspace_trust:
+        result['security.workspace.trust.enabled'] = False
+    else:
+        result.pop('security.workspace.trust.enabled', None)
     colors = dict(result.get('workbench.colorCustomizations', {}))
     colors.update({'titleBar.activeBackground': '#493262', 'titleBar.activeForeground': '#ffffff'})
     result['workbench.colorCustomizations'] = colors
@@ -465,7 +472,7 @@ def plan_chalk(repo, state, app, mode):
     return {'checkout': checkout, 'vsix': package_chalk(checkout, state)}
 
 
-def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
+def prepare(repo, base, state, service, account_preview=False, chalk='auto', no_workspace_trust=False):
     app = state / ('HypeProof Studio Dev.app' if is_mac_app(base) else 'HypeProof Studio Dev')
     if app_running(app):
         raise RuntimeError('Save your work and quit only the development app before applying changes. It will not be killed.')
@@ -534,7 +541,7 @@ def prepare(repo, base, state, service, account_preview=False, chalk='auto'):
     user.mkdir(parents=True, exist_ok=True)
     settings = user / 'settings.json'
     existing = json.loads(settings.read_text(encoding='utf-8')) if settings.exists() else {}
-    settings.write_text(json.dumps(settings_for(existing, service, branch, account_preview), ensure_ascii=False, indent=2), encoding='utf-8')
+    settings.write_text(json.dumps(settings_for(existing, service, branch, account_preview, no_workspace_trust), ensure_ascii=False, indent=2), encoding='utf-8')
     workspace = state / 'workspace'
     workspace.mkdir(exist_ok=True)
     receipt = {'format': FORMAT, 'source': str(repo), 'source_sha': source_before['sha'],
@@ -700,6 +707,7 @@ def main():
                         help='Development funding: local Codex subscription (Windows default), Claude Code subscription (macOS default), or Service API.')
     parser.add_argument('--cli-executable', type=Path, help='Explicit installed native Claude Code or Codex CLI.')
     parser.add_argument('--setup-local', action='store_true', help='Prepare a developer activity/code through an already running local development Service.')
+    parser.add_argument('--no-workspace-trust', action='store_true', help='Dev copy only: turn off the workspace trust prompt (security.workspace.trust.enabled=false). Review runs pass it; the default is unchanged.')
     parser.add_argument('--inmemory-secrets', action='store_true', help='Launch with --use-inmemory-secretstorage: no OS keychain access (scripts/cr-dev-kit.sh).')
     parser.add_argument('--with-chalk', action='store_true', help='Install the Chalk extension from the sibling hypeproof-chalk checkout; fail when it is missing. Env: HPS_DEV_CHALK=1.')
     parser.add_argument('--no-chalk', action='store_true', help='Do not install Chalk and remove an installed copy. Env: HPS_DEV_CHALK=0.')
@@ -749,7 +757,7 @@ def main():
         with locked(state):
             if args.setup_local:
                 setup_local_participant(REPO, state)
-            app = prepare(REPO, args.base_app.resolve(), state, args.service, args.account_preview, mode)
+            app = prepare(REPO, args.base_app.resolve(), state, args.service, args.account_preview, mode, args.no_workspace_trust)
             if args.action == 'run':
                 if args.account_preview:
                     register_account_protocol(app, state)

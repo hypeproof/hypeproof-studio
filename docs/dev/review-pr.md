@@ -52,6 +52,7 @@ The review app runs with the in-memory secret store (`--inmemory-secrets`), so m
 - 매 실행마다 임의 서명 값(32자 hex)을 새로 생성 — 운영 `.dev.vars`를 복사하거나 심링크하지 않습니다.
 - 포트 8787이 이미 점유돼 있으면 점유 프로세스 PID를 출력하고 즉시 종료합니다.
 - 환경 변수에 운영 URL(`hypeproof-ai.xyz`)이 있으면 즉시 종료합니다.
+- The Dev app runs with `--no-workspace-trust`: the review copy's state workspace does not ask the workspace trust question. Only the Dev copy changes; the official app, user settings and the official build are not affected.
 
 ## 문제 해결
 
