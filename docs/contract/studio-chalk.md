@@ -18,7 +18,7 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 
 | Command | Arguments | Result | Notes |
 |---|---|---|---|
-| `hypeproof.chalk.activateInstructor` | `{ contractVersion, sessionNonce, issuerToken, verifiedServerUrl, connection? }` | `{ ok, contractVersion, reason? }` | Called once Studio has decided the seat is an instructor. Chalk opens its own surface. `reason` (when `ok:false`): `serverChanged`, `serverMissing`, `contractVersion`, `invalidArgs`. |
+| `hypeproof.chalk.activateInstructor` | `{ contractVersion, sessionNonce, issuerToken, verifiedServerUrl, connection?, models? }` | `{ ok, contractVersion, reason? }` | Called once Studio has decided the seat is an instructor. Chalk opens its own surface. `reason` (when `ok:false`): `serverChanged`, `serverMissing`, `contractVersion`, `invalidArgs`. |
 | `hypeproof.chalk.deactivateInstructor` | `{ contractVersion, sessionNonce, reason }` | `{ ok }` | `reason`: `issuerRemoved`, `rejected`, `studentSlotWins`, `superseded`. Chalk aborts open turns, drops the token and the nonce, and shows nothing. |
 | `hypeproof.chalk.status` | — | `{ instructorMode, version }` | Read-only. Student-slot precedence (#1463) is decided by Studio; Studio passes the result. |
 | `hypeproof.chalk.onTurnEvent` | `{ contractVersion, sessionNonce, turnId, event }` | depends on the event (§2.4) | Studio sends turn events to Chalk. |
@@ -83,6 +83,13 @@ Studio sends `done` exactly once per turn.
   - `subscription-codex` → `내 Codex 구독`
 - Studio's source for the value is the legacy computation (`chatPanelProvider.ts`, `instructorConnection`), which depends on the local executor. The value is fixed for the life of a process. A change (for example, a restart with other settings) starts a new session, so `activateInstructor` carries the new value. No separate notification is needed.
 
+- `models` (optional in `activateInstructor`, added 2026-11-07, #3564): `{ default: string, choices: [{ alias, id, label }] }`.
+  - Studio sends it only when a local runner exists. Its values are the ones the legacy panel shows (`localModelSelection`): one choice, the local model.
+  - It is display data only. The model that runs a turn is still Studio's `local.model`, whatever `model?` Chalk sends in `runLocalTurn`.
+  - Absent means no choices are known. Chalk must then show no model choice (the band shows "—" as before).
+  - Chalk reads the named field and ignores fields it does not know. A Chalk without this change still activates.
+  - `models` is not part of the session-sameness check. The local model is fixed for the life of the app, so a steady session is not re-activated for it.
+
 ## 6. Approval
 
 Approval policy is owned by Studio: Studio decides whether an action needs approval (`hypeproofChat.requireApprovalFor`). Chalk is asked only through `approvalRequest` and answers with the human's choice; Chalk's answer is only the answer.
@@ -136,5 +143,6 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-07): `activateInstructor` gets an optional `models` field (§5, #3564). Backward-compatible addition; sent only with a local runner.
 - v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.
 - v0 (2026-10-23): first contract (S-2 in Studio; M-2 in Chalk). Adds `connection?` and `runLocalTurn` `message` as backward-compatible additions.
