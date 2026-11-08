@@ -256,6 +256,27 @@ try {
     }
   });
 
+  await t('a replacement write that throws gives its slot back, also under parallel calls (catch path)', async () => {
+    const host = h.memoryRememberHostFor('turn-probe');
+    assert.equal((await runRemember(host, { note: '프로브 A' })).isError, undefined);
+    const name = [...h.rememberedNames.values()].flatMap(s => [...s]).find(n => fs.existsSync(path.join(memDir(work), n)) && fs.readFileSync(path.join(memDir(work), n), 'utf8').includes('프로브 A'));
+    assert.ok(name);
+    fs.writeFileSync(path.join(memDir(work), name), 'a'.repeat(MEMORY_LIMITS.bytes + 1));
+    const bad = await runRemember(host, { note: '교체 실패', item: name });
+    assert.equal(bad.isError, true);
+    assert.equal(h.rememberTurnWrites.get('turn-probe'), 1, 'slot released after throw');
+    for (let i = 0; i < MEMORY_REMEMBER_TURN_CAP - 1; i++) assert.equal((await runRemember(host, { note: `프로브 ${i}` })).isError, undefined, 'slot ' + i);
+    assert.equal((await runRemember(host, { note: '넘침' })).isError, true);
+    // mixed: in-flight successes with concurrent throwing calls
+    const host2 = h.memoryRememberHostFor('turn-probe2');
+    const reps = await Promise.all([runRemember(host2, { note: 'x1' }), runRemember(host2, { note: 'bad', item: name }), runRemember(host2, { note: 'x2' }), runRemember(host2, { note: 'bad2', item: name }), runRemember(host2, { note: 'x3' })]);
+    assert.deepEqual(reps.map(r => !!r.isError), [false, true, false, true, false]);
+    assert.equal(h.rememberTurnWrites.get('turn-probe2'), 3);
+    for (let i = 0; i < 2; i++) assert.equal((await runRemember(host2, { note: `y${i}` })).isError, undefined);
+    assert.equal(text(await runRemember(host2, { note: 'z' })), REMEMBER_REPLIES.limit);
+    for (const n of fs.readdirSync(memDir(work))) fs.rmSync(path.join(memDir(work), n));
+  });
+
   await t('the coach cannot replace an item the learner wrote or one from another scope', async () => {
     const learner = await new ActivityMemory(work).append('학생이 직접 쓴 기억');
     const host = h.memoryRememberHostFor('turn-10');
