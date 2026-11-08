@@ -962,6 +962,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // CGP-KNOW-D-005 / REQ-KNOW-47: a "기록 없이 묻기" task keeps and uses no memory, so its header must not say memory is on.
+  const inTemporaryTask = !!config?.taskWorkspace?.temporaryTaskId && config.taskWorkspace.temporaryTaskId === config.taskWorkspace.activeTaskId;
   // Optional classroom controls must not compete with a working automation conversation.
   const automationCompact = config?.profile?.automations?.enabled === true;
   // Sending is held (the draft stays) while the task's folder is missing.
@@ -1750,7 +1752,7 @@ export function ChatPanel(props: Props) {
         })()}
         {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
             switch; it names its scope (CGP-KNOW-D-005); the folder yields first on a narrow header (the tooltip names it). */}
-        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
+        {personalWorkspace && config?.memoryState && !inTemporaryTask && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked

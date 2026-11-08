@@ -8365,6 +8365,12 @@ keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMO
   "AI 기억은 이 작업 공간의 `.hypeproof/memory/` 폴더에만 남고, 수업 활동에서는 이 기억을 읽거나 쓰지 않아요." The words carry it
   (no colour or icon stands for the scope). A class or lesson seat has no memory store and therefore no line: there is no
   "이 수업 안에서만" wording until a class store exists (decisions.md "CGP-KNOW-D-005").
+- **A "기록 없이 묻기" task shows no memory line (CGP-KNOW-D-005 / REQ-KNOW-47).** While the open task is the temporary one
+  (`taskWorkspace.temporaryTaskId` equals the active task), the task heading omits the state and scope line: that task reads
+  and writes no memory, so "AI 기억: 켜짐" would say the opposite of the band "이 기기에 기록이 남지 않는 작업". There is no
+  off wording; the line returns in the next ordinary task. Evidence: `extensions/hypeproof-chat/test/memory-scope-line-render.test.tsx`
+  (the real ChatPanel: personal and trial seats show the state with the scope and the scope sentence, a class seat shows
+  neither the line nor "이 수업 안에서만", a temporary task shows no line).
 
 Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
 a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no
