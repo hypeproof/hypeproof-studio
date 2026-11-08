@@ -15,6 +15,7 @@ import { folderRemovedFeatures } from "../folderConsent.ts";
 import { canonicalizeExistingPath } from "../workspaceRouting.ts";
 
 const LIMIT = 200_000;
+const WRITE_TIMEOUT_TEXT = "[시간 초과] 확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 요청하면 확인 창이 다시 떠요.";
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
   type: "object",
   properties,
@@ -116,7 +117,8 @@ export function workspaceTools(args: {
           actor: typeof approval === "boolean" ? "user" : approval.actor,
           denialSource: typeof approval === "boolean" ? undefined : approval.denialSource,
         });
-        if (!allowed) throw Error("사용자가 파일 변경을 허용하지 않았습니다.");
+        // #3586 — a timed-out window is tagged so the card names the timeout; a learner refusal keeps its sentence.
+        if (!allowed) throw Error(typeof approval === "object" && approval.denialSource === "timeout" ? WRITE_TIMEOUT_TEXT : "사용자가 파일 변경을 허용하지 않았습니다.");
       }
       if ((await gate()) !== actual)
         throw Error("승인 중 파일 경로가 바뀌었습니다. 다시 요청하세요.");

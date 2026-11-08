@@ -91,15 +91,15 @@ export class WriteApprovalRequest {
   generation=0;
   private observedScope?:string;
   private pending?: {id:string;scope:string;finish:(approved:boolean)=>void};
-  private readonly ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>};
+  private readonly ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void};
   private readonly timeoutMs:number;
-  constructor(ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>}, timeoutMs=180_000) {this.ports=ports;this.timeoutMs=timeoutMs;}
+  constructor(ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void}, timeoutMs=180_000) {this.ports=ports;this.timeoutMs=timeoutMs;}
   confirm(prompt:WriteApprovalPrompt):Promise<boolean> {
     this.invalidate();
     if(this.pending || !prompt.id || !prompt.files.length) return Promise.resolve(false);
     const frozen=structuredClone(prompt), scope=this.ports.scope();
     return new Promise(resolve=>{
-      const timer=setTimeout(()=>this.cancel(),this.timeoutMs);
+      const timer=setTimeout(()=>this.expire(),this.timeoutMs);
       this.pending={id:frozen.id,scope,finish:approved=>{clearTimeout(timer);this.pending=undefined;void this.ports.present(null).catch(()=>{});resolve(approved);}};
       void this.ports.present(frozen).then(shown=>{if(shown!==true && this.pending?.id===frozen.id)this.cancel();}).catch(()=>{if(this.pending?.id===frozen.id)this.cancel();});
     });
@@ -113,5 +113,7 @@ export class WriteApprovalRequest {
     if(this.observedScope!==undefined && this.observedScope!==scope)this.cancel();
     this.observedScope=scope;
   }
+  /** #3586 — the 180 s window ran out: report it to the host before the refusal, then close as today. */
+  expire():void {const id=this.pending?.id; if(id!==undefined)this.ports.expired?.(id); this.cancel();}
   cancel():void {this.generation++;this.pending?.finish(false);}
 }
