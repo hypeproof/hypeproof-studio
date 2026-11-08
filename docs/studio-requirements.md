@@ -8824,7 +8824,7 @@ REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-USE.
 - **No write where writes are refused (REQ-KNOW-47).** In a "기록 없이 묻기" task and in a work folder the learner set to
   read-only the tool is not offered, and a late call (and `recordTurnMemoryWrite()` itself) refuses and writes nothing: the
   store path passes `folderWriteRefusalFor`. The host pins the store it was made for; a switch to another folder or scope
-  refuses. At most 5 writes per turn (each keeps a receipt and so an undo), and `item` may only name a file this tool wrote in
+  refuses. At most 5 writes per turn (each keeps a receipt and so an undo; the slot is reserved before the write starts, so parallel calls in one turn cannot pass the cap, and a refused or failed write gives its slot back), and `item` may only name a file this tool wrote in
   this window, never a learner-written one.
 - **Approval.** The call is a work-folder write for the approval path (verdict "ask", host kind `writeFile`, path
   `.hypeproof/memory/`): an adult seat on auto sees no new prompt, a minor or a lesson preset keeps what a file write has

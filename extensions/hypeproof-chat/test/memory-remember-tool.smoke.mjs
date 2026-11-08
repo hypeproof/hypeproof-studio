@@ -186,6 +186,97 @@ try {
     assert.equal((await runRemember(h.memoryRememberHostFor('turn-9'), { note: '다음 턴은 다시 쓸 수 있어요' })).isError, undefined);
   });
 
+  await t('parallel calls in one turn cannot pass the cap: exactly the cap is written, the rest are refused, every write is undoable', async () => {
+    const host = h.memoryRememberHostFor('turn-par');
+    const before = files(work).length;
+    const logsBefore = logs().length;
+    const replies = await Promise.all(Array.from({ length: 12 }, (_, i) => runRemember(host, { note: `동시 기억 ${i}` })));
+    const saved = replies.filter(r => !r.isError);
+    const refused = replies.filter(r => r.isError);
+    assert.equal(saved.length, MEMORY_REMEMBER_TURN_CAP);
+    assert.equal(refused.length, 12 - MEMORY_REMEMBER_TURN_CAP);
+    for (const r of refused) assert.equal(text(r), REMEMBER_REPLIES.limit, 'calm refusal, no retry');
+    assert.equal(files(work).length, before + MEMORY_REMEMBER_TURN_CAP);
+    const lines = logs().slice(logsBefore);
+    assert.equal(lines.length, MEMORY_REMEMBER_TURN_CAP);
+    for (const line of lines) {
+      assert.equal(line.streamId, 'turn-par');
+      await press(line.id);
+      assert.equal(results().at(-1).state, 'undone');
+    }
+    assert.equal(files(work).length, before);
+    // A refused write gives its slot back: a failed call does not eat the cap.
+    const again = h.memoryRememberHostFor('turn-par-2');
+    h.temporaryStreams = new Set(['turn-par-2']);
+    assert.equal((await runRemember(again, { note: '기록 없이' })).isError, true);
+    h.temporaryStreams = undefined;
+    for (let i = 0; i < MEMORY_REMEMBER_TURN_CAP; i++) assert.equal((await runRemember(again, { note: `다시 ${i}` })).isError, undefined, 'slot was released');
+    assert.equal((await runRemember(again, { note: '넘침' })).isError, true);
+  });
+
+  await t('a read-only folder through the REAL consent guard: not offered, a late call is refused with no write', async () => {
+    const readOnly = path.join(top, 'ro-folder');
+    const home = path.join(top, 'served-home');
+    fs.mkdirSync(readOnly); fs.mkdirSync(home);
+    const ro = fs.realpathSync(readOnly);
+    const savedFolders = f.vscode.workspace.workspaceFolders;
+    const savedRoot = h.servedWorkspaceRoot;
+    const savedCwd = h.resolveCoachCwd;
+    const consent = new Map();
+    const hadOwn = Object.prototype.hasOwnProperty.call(h.context, 'globalState');
+    const savedGlobal = h.context.globalState;
+    h.context.globalState = { get: key => consent.get(key), update: async (key, value) => { consent.set(key, value); } };
+    try {
+      f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: ro, scheme: 'file' } }];
+      h.servedWorkspaceRoot = home;
+      h.resolveCoachCwd = () => ro;
+      // The shipping guard is untouched: it must be the prototype's own method.
+      assert.equal(Object.prototype.hasOwnProperty.call(h, 'folderWriteRefusalFor'), false);
+      consent.set('hps.folderConsent.v1', { [f.activity.id]: { [ro]: { level: 'read', at: 1 } } });
+      assert.ok(h.folderWriteRefusalFor(path.join(ro, '.hypeproof', 'memory')), 'the real guard says read-only');
+      assert.equal(h.memoryRememberHostFor('turn-ro'), undefined, 'not offered');
+      // A host made while the folder was writable, then the learner chose read-only.
+      consent.set('hps.folderConsent.v1', { [f.activity.id]: { [ro]: { level: 'full', at: 2 } } });
+      const host = h.memoryRememberHostFor('turn-ro-2');
+      assert.ok(host, 'offered where the folder may be written');
+      consent.set('hps.folderConsent.v1', { [f.activity.id]: { [ro]: { level: 'read', at: 3 } } });
+      const logsBefore = logs().length;
+      const r = await runRemember(host, { note: '읽기 전용으로 바꾼 뒤' });
+      assert.equal(r.isError, true);
+      assert.equal(text(r), REMEMBER_REPLIES.unavailable);
+      assert.equal(files(ro).length, 0);
+      assert.equal(fs.existsSync(memDir(ro)), false, 'no store directory was created');
+      assert.equal(logs().length, logsBefore);
+      assert.equal(await h.recordTurnMemoryWrite('turn-ro-2', 'x'), null, 'the entry itself refuses too');
+    } finally {
+      f.vscode.workspace.workspaceFolders = savedFolders;
+      h.servedWorkspaceRoot = savedRoot;
+      h.resolveCoachCwd = savedCwd;
+      if (hadOwn) h.context.globalState = savedGlobal; else delete h.context.globalState;
+    }
+  });
+
+  await t('a replacement write that throws gives its slot back, also under parallel calls (catch path)', async () => {
+    const host = h.memoryRememberHostFor('turn-probe');
+    assert.equal((await runRemember(host, { note: '프로브 A' })).isError, undefined);
+    const name = [...h.rememberedNames.values()].flatMap(s => [...s]).find(n => fs.existsSync(path.join(memDir(work), n)) && fs.readFileSync(path.join(memDir(work), n), 'utf8').includes('프로브 A'));
+    assert.ok(name);
+    fs.writeFileSync(path.join(memDir(work), name), 'a'.repeat(MEMORY_LIMITS.bytes + 1));
+    const bad = await runRemember(host, { note: '교체 실패', item: name });
+    assert.equal(bad.isError, true);
+    assert.equal(h.rememberTurnWrites.get('turn-probe'), 1, 'slot released after throw');
+    for (let i = 0; i < MEMORY_REMEMBER_TURN_CAP - 1; i++) assert.equal((await runRemember(host, { note: `프로브 ${i}` })).isError, undefined, 'slot ' + i);
+    assert.equal((await runRemember(host, { note: '넘침' })).isError, true);
+    // mixed: in-flight successes with concurrent throwing calls
+    const host2 = h.memoryRememberHostFor('turn-probe2');
+    const reps = await Promise.all([runRemember(host2, { note: 'x1' }), runRemember(host2, { note: 'bad', item: name }), runRemember(host2, { note: 'x2' }), runRemember(host2, { note: 'bad2', item: name }), runRemember(host2, { note: 'x3' })]);
+    assert.deepEqual(reps.map(r => !!r.isError), [false, true, false, true, false]);
+    assert.equal(h.rememberTurnWrites.get('turn-probe2'), 3);
+    for (let i = 0; i < 2; i++) assert.equal((await runRemember(host2, { note: `y${i}` })).isError, undefined);
+    assert.equal(text(await runRemember(host2, { note: 'z' })), REMEMBER_REPLIES.limit);
+    for (const n of fs.readdirSync(memDir(work))) fs.rmSync(path.join(memDir(work), n));
+  });
+
   await t('the coach cannot replace an item the learner wrote or one from another scope', async () => {
     const learner = await new ActivityMemory(work).append('학생이 직접 쓴 기억');
     const host = h.memoryRememberHostFor('turn-10');
