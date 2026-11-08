@@ -40,6 +40,8 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
+import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
+import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
@@ -7650,6 +7652,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Browser tools for the instructor local runner, shared by the legacy and the Chalk contract turns (#3464). */
+  private instructorBrowserTools(userText: string, workspaceRoot: string | null): BrowserToolsForLocal | undefined {
+    const host = this.buildBrowserMcpHost(userText);
+    return withBrowserOpenApproval(instructorLocalBrowserTools(() => host), { host, workspaceRoot });
+  }
+
   attachChalkContract(host: ChalkContractHost): void {
     this.chalkContract = host;
   }
@@ -7713,7 +7721,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: local,
       profile: INSTRUCTOR_TOOL_PROFILE,
       cwd,
-      browserTools: instructorLocalBrowserTools(() => this.buildBrowserMcpHost(last.content)),
+      browserTools: this.instructorBrowserTools(last.content, cwd),
       history: input.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
       userText: last.content,
       systemPrompt: input.systemBrief,
@@ -9831,7 +9839,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               }
             : undefined;
           // Browser tools for the local runtime: the same builder the Chalk contract turn uses.
-          const browserTools = instructorLocalBrowserTools(() => this.buildBrowserMcpHost(text));
+          const browserTools = this.instructorBrowserTools(text, cwd);
           let result: Awaited<ReturnType<typeof runInstructorTurn>>;
           try {
           result=await runInstructorTurn({
@@ -10858,22 +10866,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the approval gate was meant to train. It is the same device as the shell's
     // `항상 허용` (above) and, likewise, session-scoped.
     if (req.kind === "openBrowser") {
-      const url = browserOpenUrl((req.payload as {url?:unknown}|null|undefined)?.url);
-      if (!url) return false;
-      const target = browserTarget(url, {workspaceRoot:this.resolveCoachCwd() ?? null});
-      const blank = url === BLANK_BROWSER_URL;
-      if (!blank && !target.host) return false;
-      const origin = target.web ? originOfUrl(url) : null;
-      if (origin && !forgetAllows && this.approvedBrowserOrigins.has(origin)) return true;
-      const rememberLabel = origin && !forgetAllows ? browserRememberLabel(url) : null;
-      onPrompted?.();
-      const pick = await this.browserApprovalRequest.confirm({
-        id:crypto.randomUUID(), title:cleanName(browserApprovalTitle(this.coachDisplayName())),
-        host:blank?'빈 브라우저':target.host!, label:blank?'아직 주소 없음':target.label,
-        place:blank?'blank':target.place, rememberLabel,
+      // #3464 — one rule for every path that opens a browser for the coach (browserOpenDecision.ts).
+      return decideBrowserOpen({
+        rawUrl: (req.payload as {url?:unknown}|null|undefined)?.url,
+        forget: forgetAllows,
+        remembered: this.approvedBrowserOrigins,
+        workspaceRoot: this.resolveCoachCwd() ?? null,
+        onPrompted,
+        confirm: (prompt) => this.browserApprovalRequest.confirm({
+          id:crypto.randomUUID(), title:cleanName(browserApprovalTitle(this.coachDisplayName())), ...prompt,
+        }),
       });
-      if (pick === 'remember' && origin) { this.approvedBrowserOrigins.add(origin); return true; }
-      return pick === 'open';
     }
 
     // Tier 1.6 — publishing the workspace to a public GitHub repository (publish_site).
