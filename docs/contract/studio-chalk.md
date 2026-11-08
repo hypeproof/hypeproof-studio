@@ -30,6 +30,7 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 | `hypeproof.runtime.runLocalTurn` | `{ contractVersion, sessionNonce, turnId, messages, model?, tools, systemBrief, cwd, policy }` | `{ accepted: true, requestedModel, executorModel }` or `{ accepted: false, reason, message? }` | Starts a turn. Execution is asynchronous; the result arrives as events. `policy` must be `"chalk-instructor"`. |
 | `hypeproof.runtime.cancelTurn` | `{ contractVersion, sessionNonce, turnId }` | `{ cancelled }` | Stops the turn; Studio then sends `done(cancelled)`. |
 | `hypeproof.runtime.previewOpen` | `{ contractVersion, webPath }` | `{ ok, error? }` | No session nonce in v0 (this command is not tied to a turn). `webPath` must stay inside the Studio folder. |
+| `hypeproof.runtime.humanWait` | `{ contractVersion, sessionNonce, turnId, waitId, state }`, `state` is `start`, `keepalive` or `end` | `{ ok }` or `{ ok: false, reason }` | Chalk announces a wait for a person (approval, overwrite confirmation) in a Chalk turn (#3601). The turn's stall watch counts it as a pause. `reason`: `contractVersion`, `stale` (no session, unknown turn or waitId), `turn-ended`, `invalidArgs`, `limit` (more than 4 waits open). Ended by Chalk, by the turn closing, or by deactivate; a wait with no keepalive for 90 s ends by itself. Optional: a Chalk that does not send it leaves the stall watch to the tool rule. |
 
 ### 2.3 Refusal reasons from `runLocalTurn`
 
@@ -143,6 +144,7 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-08): `hypeproof.runtime.humanWait` (§2.2, #3601). Backward-compatible addition: a Chalk that does not send it leaves the stall watch to the tool rule; a Studio without the command makes Chalk's call fail, which Chalk ignores.
 - v0 (2026-11-07): `deactivateInstructor` reason `runtimeChanged` (#3578). Backward-compatible: a Chalk that does not know the reason ends the session as a general end. Studio sends it once when the runtime leaves `chalk-extension` and a session is active.
 - v0 (2026-11-07): `activateInstructor` gets an optional `models` field (§5, #3564). Backward-compatible addition; sent only with a local runner.
 - v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.

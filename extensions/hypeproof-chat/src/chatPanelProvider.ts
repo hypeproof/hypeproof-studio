@@ -40,6 +40,7 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
+import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
 import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
@@ -3253,6 +3254,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     /** #580 — the local session-log spool. Optional: tests and older callers run without recording. */
     spool?: SessionSpool,
   ) {
+    // #3601: the local runner's stall watch reads the same setting as the SDK path (0 = off).
+    setLocalStallTimeoutProvider(() => vscode.workspace.getConfiguration('hypeproofChat').get<number>('sdkStallTimeoutMs'));
     this.spoolSink = spool;
     // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
@@ -7867,6 +7870,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       systemPrompt: input.systemBrief,
       extraTools,
       signal: input.signal,
+      humanWait: input.humanWait,
+      coachName: this.coachDisplayName(),
       onDelta: (text) => emit({ kind: 'delta', text }),
       onRefusal: () => emit({ kind: 'refusal' }),
       onActivity: (activity) => emit({ kind: 'activity', activity }),
@@ -10009,7 +10014,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          const result=await runLocalCoach({config:local,profile,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
