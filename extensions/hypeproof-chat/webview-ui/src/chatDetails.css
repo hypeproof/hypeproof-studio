@@ -26,6 +26,12 @@
   .tw-heading .hps-memory-now-state { max-width: 50%; white-space: normal; text-align: end; line-height: var(--hp-leading-label); }
   .tw-heading .hps-memory-now-on { white-space: nowrap; }
   .tw-heading .hps-memory-now-scope { display: inline-block; word-break: keep-all; }
+  /* A 기록 없이 묻기 task adds a no-write phrase: it is one unbreakable unit on its own line, so the state may take the full
+     band width and the band grows by one line (tokens only). */
+  .tw-heading:has(.hps-memory-now-temp) { padding-bottom: calc(3 * var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state:has(.hps-memory-now-temp) { max-width: 100%; }
+  .tw-heading .hps-memory-now-temp { display: block; white-space: nowrap; }
+  .tw-heading .hps-memory-now-temp-sep { display: none; }
 }
 .hps-memory-now code, .hps-memory-state-setting code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); background: transparent; padding: 0; }
 .hps-memory-state-setting { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
