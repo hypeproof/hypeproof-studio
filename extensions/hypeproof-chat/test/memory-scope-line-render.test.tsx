@@ -1,11 +1,11 @@
 // CGP-KNOW-D-005 (DES-KNOW-07) / REQ-KNOW-47 — the memory scope line in the real ChatPanel header, per seat.
 //   personal / trial  — "AI 기억: 켜짐 · 이 작업 공간 안에서만" with the scope sentence as accessible text
 //   class             — no store, so no line and no "이 수업 안에서만" promise
-//   temporary task    — a "기록 없이 묻기" task keeps and uses no memory: the header must not say memory is on
+//   temporary task    — a "기록 없이 묻기" task reads memory but writes none (R-029): scope line stays, plus the no-write phrase
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { MEMORY_FOLDER_LABEL, MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL } from "../src/activityMemoryView";
+import { MEMORY_FOLDER_LABEL, MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL, MEMORY_TEMPORARY_NOTE, MEMORY_TEMPORARY_SENTENCE } from "../src/activityMemoryView";
 import type { ChatConfig } from "../src/protocol";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined };
@@ -46,6 +46,7 @@ const has = (html: string, s: string) => html.includes(s);
 for (const kind of ["personal", "trial"] as const) {
   t(`${kind}: header names state and scope`, () => {
     const html = render(config(kind));
+    if (has(html, MEMORY_TEMPORARY_NOTE)) throw new Error("no-write phrase in a normal task");
     if (!has(html, 'data-testid="memory-state-header"')) throw new Error("no memory line");
     if (!has(html, MEMORY_STATE_LABEL) || !has(html, MEMORY_SCOPE_HEADER)) throw new Error("state or scope words missing");
     if (!has(html, MEMORY_SCOPE_SENTENCE)) throw new Error("scope sentence missing");
@@ -56,14 +57,18 @@ t("class: no memory line and no class-store promise", () => {
   const html = render(config("classroom"));
   if (has(html, 'data-testid="memory-state-header"') || has(html, MEMORY_STATE_LABEL) || has(html, "이 수업 안에서만") || has(html, MEMORY_SCOPE_HEADER)) throw new Error("memory words on a class seat");
 });
-t("temporary task: header does not claim memory is kept", () => {
+t("temporary task: scope line stays and says nothing new is kept", () => {
   const html = render(config("personal", true));
-  if (has(html, 'data-testid="memory-state-header"') || has(html, 'hps-memory-now')) throw new Error("memory line shown in a temporary task");
+  if (!has(html, 'data-testid="memory-state-header"') || !has(html, MEMORY_STATE_LABEL) || !has(html, MEMORY_SCOPE_HEADER)) throw new Error("scope line missing in a temporary task");
+  if (!has(html, MEMORY_TEMPORARY_NOTE) || !has(html, MEMORY_TEMPORARY_SENTENCE)) throw new Error("no-write phrase or its sentence missing");
+  if (has(html, "꺼짐")) throw new Error("off wording");
 });
 t("a normal task of a seat that has a temporary task elsewhere keeps the line", () => {
   const c = config("personal");
   (c.taskWorkspace as { temporaryTaskId?: string }).temporaryTaskId = "other";
-  if (!has(render(c), 'data-testid="memory-state-header"')) throw new Error("line missing");
+  const html = render(c);
+  if (!has(html, 'data-testid="memory-state-header"')) throw new Error("line missing");
+  if (has(html, MEMORY_TEMPORARY_NOTE) || has(html, MEMORY_TEMPORARY_SENTENCE)) throw new Error("no-write phrase in a normal task");
 });
 if (fail) { console.error(`${fail} failed`); process.exit(1); }
 console.log("memory scope line render: ok");

@@ -141,7 +141,7 @@ import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } fro
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
 import { TEMPORARY_TASK_COPY, TEMPORARY_TASK_UNAVAILABLE } from "../../src/temporaryTask";
-import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
+import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL, MEMORY_TEMPORARY_NOTE, MEMORY_TEMPORARY_SENTENCE } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -962,7 +962,7 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
-  // CGP-KNOW-D-005 / REQ-KNOW-47: a "기록 없이 묻기" task keeps and uses no memory, so its header must not say memory is on.
+  // CGP-KNOW-D-005 / R-029: a "기록 없이 묻기" task reads memory and writes none; its header says so after the scope.
   const inTemporaryTask = !!config?.taskWorkspace?.temporaryTaskId && config.taskWorkspace.temporaryTaskId === config.taskWorkspace.activeTaskId;
   // Optional classroom controls must not compete with a working automation conversation.
   const automationCompact = config?.profile?.automations?.enabled === true;
@@ -1752,7 +1752,7 @@ export function ChatPanel(props: Props) {
         })()}
         {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
             switch; it names its scope (CGP-KNOW-D-005); the folder yields first on a narrow header (the tooltip names it). */}
-        {personalWorkspace && config?.memoryState && !inTemporaryTask && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
+        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" temporary={inTemporaryTask} />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
@@ -3094,12 +3094,12 @@ function StepDivider({ id, label }: { id: string; label: string }) {
  * CGP-KNOW-R-005), and the tooltip and the accessible text explain it in one sentence. A class seat has no store, so it has
  * no line and there is no class wording.
  */
-function MemoryStateLine({ folder, place }: { folder: string; place: 'header' | 'settings' }) {
+function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 'header' | 'settings'; temporary?: boolean }) {
   return place === 'header'
     // Two items of the header row (the wrapper is display: contents): the state with its scope never shrinks or cuts, the
     // folder yields first and is visually hidden on a narrow header (screen readers still read it; the tooltip names it).
     ? <span className="hps-memory-now" data-testid="memory-state-header">
-        <span className="hps-memory-now-state" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}</span></span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}</span>
+        <span className="hps-memory-now-state" data-hp-tooltip={temporary ? `${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}{temporary && <span data-testid="memory-temporary-note">{' · '}{MEMORY_TEMPORARY_NOTE}</span>}</span></span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}{temporary && ` ${MEMORY_TEMPORARY_SENTENCE}`}</span>
       </span>
     : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · {MEMORY_SCOPE_HEADER} · <code dir="ltr">{folder}</code></p>;
 }
