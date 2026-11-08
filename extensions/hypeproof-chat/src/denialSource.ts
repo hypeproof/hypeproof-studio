@@ -138,7 +138,7 @@ export function denialCopy(d: Denial, audience: DenialAudience = "classroom"): s
       return `이 기능은 지금 앱에서 쓸 수 없어요 — ${clause(d.reason, "이 앱이 아직 지원하지 않아요")}. ${next(`앱을 업데이트하거나 ${solo ? SOLO_REPORT : "선생님께 알려 주세요"}`)}`;
     case "timeout":
       // #3586 — a window ran out of time: nobody decided, so no policy wording and no next step to report.
-      return "확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 보내면 확인 창이 다시 떠요.";
+      return "확인 창을 오래 고르지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.";
     default:
       return `지금은 ${object(feature)} 쓸 수 없어요 — ${clause(d.reason, "왜 막혔는지 Studio가 확인하지 못했어요")}. ${next(`계속되면 ${solo ? SOLO_REPORT : "선생님께 알려 주세요"}`)}`;
   }

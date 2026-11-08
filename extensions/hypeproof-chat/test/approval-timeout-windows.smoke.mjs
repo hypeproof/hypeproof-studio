@@ -111,5 +111,28 @@ await t("l: one card per tool call — the approval branch sets deniedCalls and 
   assert.match(src, /const denial = deniedCalls\.get\(a\.id\) \?\?/, "tool_result branch reuses the recorded card");
 });
 
+// Source for m and n: folderConsentPrompt.ts:19-24 (ask: a pending window refuses a second ask; the timer
+// calls expire), :41-42 (cancel and expire clear `pending` through finish), and the presenter wired at
+// chatPanelProvider.ts:3265 (setFolderConsentPresenter → folderConsentRequest.ask). Every 'present' call with a
+// prompt is one shown window, so a second call means the window was shown again.
+await t("m: after a folder window ran out, a re-pick shows a new consent window (the expired one does not block it)", async () => {
+  const shown = [];
+  const req = new FolderConsentRequest({ id: (() => { let n = 0; return () => `f-r${++n}`; })(), scope: () => "s", present: async (prompt) => { if (prompt) shown.push(prompt.id); return true; }, expired: () => {} }, 5);
+  assert.equal(await req.ask("/work/c"), undefined, "first window times out");
+  const again = req.ask("/work/c");
+  assert.equal(shown.length, 2, "the re-pick shows a second window");
+  assert.notEqual(shown[0], shown[1], "a new id, not the old window");
+  req.respond(shown[1], "read");
+  assert.equal(await again, "read", "the new window answers normally");
+});
+
+await t("n: without a re-pick, a timed-out folder window is not shown again", async () => {
+  const shown = [];
+  const req = new FolderConsentRequest({ id: () => "f-n1", scope: () => "s", present: async (prompt) => { if (prompt) shown.push(prompt.id); return true; }, expired: () => {} }, 5);
+  assert.equal(await req.ask("/work/d"), undefined);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(shown.length, 1, "nothing asks again on its own");
+});
+
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log("\nall approval-timeout-windows checks passed");

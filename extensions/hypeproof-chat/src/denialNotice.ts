@@ -40,7 +40,7 @@ export function denialNoticeView(value: DenialNotice) {
     folder: '이 폴더에 허락한 범위 밖의 동작이라 실행하지 않았어요.',
     unknown: '이 동작을 마치지 못했어요. 이유를 확인하지 못했어요.',
     // #3586 — a window ran out of time: no report button, the learner only needs to ask again.
-    timeout: '확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 보내면 확인 창이 다시 떠요.',
+    timeout: '확인 창을 오래 고르지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.',
   };
   if (d.detail === 'macos_privacy') return { source: d.source, label: DENIAL_SOURCE_LABEL[d.source], text: DETAIL_TEXT.macos_privacy, action: 'macOS 설정 열기', settings: true as const };
   return { source: d.source, label: DENIAL_SOURCE_LABEL[d.source], text: d.detail ? DETAIL_TEXT[d.detail] : text[d.source], action: d.source === 'timeout' ? undefined : '문제 신고하기' };
