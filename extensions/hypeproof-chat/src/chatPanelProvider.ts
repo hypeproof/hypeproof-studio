@@ -7272,18 +7272,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!now || now.root !== pinned.root || now.scope !== pinned.scope || this.memoryWriteRefusal(now, streamId)) return { ok: false as const, reason: "unavailable" as const };
         const mine = this.rememberedNames.get(now.scope) ?? new Set<string>();
         if (item && !mine.has(item)) return { ok: false as const, reason: "invalid" as const };
-        const count = this.rememberTurnWrites.get(streamId) ?? 0;
-        if (count >= MEMORY_REMEMBER_TURN_CAP) return { ok: false as const, reason: "limit" as const };
+        // The slot is taken before the first await: parallel calls in one turn all pass this check in the same tick, so a
+        // count raised only after the write would let every one of them through. A refused or failed write gives it back.
+        const reserved = this.rememberTurnWrites.get(streamId) ?? 0;
+        if (reserved >= MEMORY_REMEMBER_TURN_CAP) return { ok: false as const, reason: "limit" as const };
+        this.rememberTurnWrites.set(streamId, reserved + 1);
+        if (this.rememberTurnWrites.size > 64) this.rememberTurnWrites.delete(this.rememberTurnWrites.keys().next().value as string);
+        const release = () => {
+          const held = this.rememberTurnWrites.get(streamId);
+          if (held === undefined) return;
+          if (held <= 1) this.rememberTurnWrites.delete(streamId); else this.rememberTurnWrites.set(streamId, held - 1);
+        };
         try {
           const written = await this.recordTurnMemoryWrite(streamId, note, { task: this.currentTaskStore?.()?.getView().activeTaskId ?? null, ...(item ? { replacing: item } : {}) });
-          if (!written) return { ok: false as const, reason: "unavailable" as const };
-          this.rememberTurnWrites.set(streamId, count + 1);
-          if (this.rememberTurnWrites.size > 64) this.rememberTurnWrites.delete(this.rememberTurnWrites.keys().next().value as string);
-          if (item) mine.delete(item);
-          mine.add(written.name);
-          this.rememberedNames.set(now.scope, mine);
+          if (!written) { release(); return { ok: false as const, reason: "unavailable" as const }; }
+          // Read the set again: a parallel call may have created it while this write was in flight.
+          const names = this.rememberedNames.get(now.scope) ?? new Set<string>();
+          if (item) names.delete(item);
+          names.add(written.name);
+          this.rememberedNames.set(now.scope, names);
           return { ok: true as const, item: note };
         } catch (error) {
+          release();
           const code = error instanceof MemoryStoreError ? error.code : null;
           return { ok: false as const, reason: code === "full" ? "full" as const : code === "invalid" || code === "empty" || code === "missing" || code === "not_file" ? "invalid" as const : "failed" as const };
         }
