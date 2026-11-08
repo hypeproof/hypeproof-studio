@@ -11008,7 +11008,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #3586 — a timed-out window reports its own source; the answer stays a refusal either way.
       const approvalId=randomId();
       const approved=await this.confirmWriteFiles(approvalId,title,verb,writeEntries,req.payload);
-      if(!approved && this.timedOutApprovals.delete(approvalId)) onDenied?.('timeout');
+      if(!approved && this.timedOutApprovals?.delete(approvalId)) onDenied?.('timeout');
       return approved;
     }
     onPrompted?.();
