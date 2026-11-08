@@ -57,15 +57,29 @@ export function localEmailTools(args: {
   };
 }
 
-/** Bounds active model time while allowing the human to answer without a timer. */
-export function localTurnBudget(isWaiting: () => boolean, budgetMs = 180000) {
+export interface BudgetClock {
+  now(): number;
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(id: unknown): void;
+}
+const systemClock: BudgetClock = {
+  now: () => Date.now(),
+  setInterval: (fn, ms) => setInterval(fn, ms),
+  clearInterval: (id) => clearInterval(id as ReturnType<typeof setInterval>),
+};
+
+/**
+ * Bounds active model time while a person is not being asked. Time spent waiting for a person
+ * (approval, confirmation, email question) is not charged (#3582). The clock is injectable for tests.
+ */
+export function localTurnBudget(isWaiting: () => boolean, budgetMs = 180000, clock: BudgetClock = systemClock) {
   const controller = new AbortController();
-  let remaining = budgetMs, last = Date.now();
-  const timer = setInterval(() => {
-    const now = Date.now();
+  let remaining = budgetMs, last = clock.now();
+  const timer = clock.setInterval(() => {
+    const now = clock.now();
     if (!isWaiting()) remaining -= now - last;
     last = now;
     if (remaining <= 0) controller.abort();
   }, Math.min(1000, Math.max(1, Math.floor(budgetMs / 10))));
-  return { signal: controller.signal, dispose() { clearInterval(timer); } };
+  return { signal: controller.signal, dispose() { clock.clearInterval(timer); } };
 }
