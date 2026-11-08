@@ -835,8 +835,7 @@ the controls and reasons render, Korean labels, negative controls for streaming,
 classroom, lesson and instructor).
 
 `REQ-STUDIO-PLAN-FIRST` (CGP-CHAT-R-004 / CGP-CHAT-D-004, same behavior as CGP-AGENT-R-011 / D-010, 2026-11-08): a learner-selectable
-"계획 먼저" mode, per task, off by default. A `계획 먼저` chip (`aria-pressed`, 44px, stroke icon) sits directly above the composer on every
-seat that is not the instructor console. With the mode on, the next message is a planning turn: the coach answers with a short numbered plan and
+"계획 먼저" mode, per task, off by default. The switch adds no composer row (the compact window keeps its message area): on a classroom seat a `계획 먼저` chip (`aria-pressed`, 44px, stroke icon) sits in the composer's button row; on a personal seat it is a `계획 먼저` item in the tools menu and a selected-tool pill with × shows while it is on. The instructor console has none. With the mode on, the next message is a planning turn: the coach answers with a short numbered plan and
 the host runs no tool for that turn: no file write, shell, browser, publish, memory write, subagent or read. The refusal is host-side on every
 runtime that runs tools (Agent SDK: nothing advertised or registered and `canUseTool` denies; local CLI: no tool offered and the tool server
 refuses; proxy browser loop: the call returns an error result before `browser.execute`), and a planning turn also skips the app shortcuts,

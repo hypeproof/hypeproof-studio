@@ -9016,7 +9016,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingSends++;
     // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
     // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
-    const planTurn = this._instructorMode?.isInstructor === true ? null : this.planFirst.beginTurn(this.planTaskKey(), text);
+    // The instructor console has no chip, so its mode is never on; it is not read here (admission checks run first).
+    const planTurn = this.planFirst.beginTurn(this.planTaskKey(), text);
     const planning = planTurn?.mode === 'planning';
     const planGate: PlanFirstGate | undefined = planning ? planTurn?.gate : undefined;
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),

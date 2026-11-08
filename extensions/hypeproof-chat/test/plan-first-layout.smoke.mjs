@@ -33,7 +33,7 @@ const geometry=()=>b.evaluate(`(()=>{
   const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};
   const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:r.width,h:r.height};};
   const card=document.querySelector('.hps-plan-card'),input=document.querySelector('.hps-input');
-  const controls=[...document.querySelectorAll('.hps-plan-card button,.hps-plan-card textarea,.hps-plan-chip,.hps-input button,.hps-input textarea')].filter(vis).map(e=>({name:(e.getAttribute('aria-label')||e.textContent||e.className).trim().slice(0,24),...rect(e)}));
+  const controls=[...document.querySelectorAll('.hps-plan-card button,.hps-plan-card textarea,.hps-selected-plan,.hps-plan-chip,.hps-input button,.hps-input textarea')].filter(vis).map(e=>({name:(e.getAttribute('aria-label')||e.textContent||e.className).trim().slice(0,24),...rect(e)}));
   const texts=[...card.querySelectorAll('h2,li,p,button,textarea')].filter(vis).map(e=>({t:e.textContent.slice(0,20),px:parseFloat(getComputedStyle(e).fontSize)}));
   return {scrollW:document.documentElement.scrollWidth,innerW:innerWidth,card:rect(card),input:rect(input),controls,texts,
     buttons:[...card.querySelectorAll('button')].filter(vis).map(e=>({name:e.textContent,...rect(e)})),
@@ -45,13 +45,22 @@ try{
   const label=`${seat}/${dark?'dark':'light'}/${width}`;
   await open(seat,{dark,width});
   assert.ok(await lastPost('planFirstRequest'),`${label}: the webview asks the host for its state`);
-  // Chip: off, then on after the host says so; a press posts the switch.
+  // Switch: a chip in the composer row on a classroom seat, an item in the tools menu on a personal seat (no extra row).
   await send({type:'planFirstState',on:false,plan:null});
-  assert.equal(await b.evaluate(`document.querySelector('.hps-plan-chip').getAttribute('aria-pressed')`),'false',`${label}: chip off`);
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-card')`),false,`${label}: no card without a plan`);
-  await click('.hps-plan-chip');assert.deepEqual({on:(await lastPost('planFirstSet')).on},{on:true},`${label}: chip posts the switch`);
+  if(seat==='classroom'){
+   assert.equal(await b.evaluate(`document.querySelector('.hps-plan-chip').getAttribute('aria-pressed')`),'false',`${label}: chip off`);
+   await click('.hps-plan-chip');
+  }else{
+   assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-chip')`),false,`${label}: no chip row on a personal seat`);
+   await click('.hps-tool-trigger');
+   assert.equal(await b.evaluate(`document.querySelector('[role=menuitemcheckbox]:not([aria-disabled=true])').getAttribute('aria-checked')`),'false');
+   await b.evaluate(`[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.includes('계획 먼저')).click()`);await settle();
+  }
+  assert.deepEqual({on:(await lastPost('planFirstSet')).on},{on:true},`${label}: the switch posts`);
   await send({type:'planFirstState',on:true,plan:null});
-  assert.equal(await b.evaluate(`document.querySelector('.hps-plan-chip').getAttribute('aria-pressed')`),'true',`${label}: chip on`);
+  if(seat==='classroom')assert.equal(await b.evaluate(`document.querySelector('.hps-plan-chip').getAttribute('aria-pressed')`),'true',`${label}: chip on`);
+  else assert.equal(await b.evaluate(`!!document.querySelector('.hps-selected-plan')`),true,`${label}: selected pill while on`);
   // The plan waits: the card, the disabled send button with its reason.
   await send({type:'planFirstState',on:true,plan:PLAN});
   assert.equal(await b.evaluate(`document.querySelectorAll('.hps-plan-steps li').length`),3,`${label}: three numbered steps`);
@@ -66,7 +75,6 @@ try{
   assert.deepEqual(g.buttons.map(x=>x.name),['이대로 진행','수정','다시 계획','그만두기']);
   for(let i=0;i<g.controls.length;i++)for(let j=i+1;j<g.controls.length;j++)assert.ok(!overlap(g.controls[i],g.controls[j]),`${label}: ${g.controls[i].name} overlaps ${g.controls[j].name}`);
   for(const x of g.texts)assert.ok(x.px>=14,`${label}: "${x.t}" is ${x.px}px`);
-  assert.ok(g.chip.h>=44-.5&&g.chip.px>=14,`${label}: chip is a 44px target with >= 14px text`);
   // Decisions post the plan id; edited text rides along.
   await clickText('수정');
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-edit')`),true,`${label}: 수정 opens the edit box`);

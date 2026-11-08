@@ -281,10 +281,12 @@ const OLD_SCREENS = {
 // `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
 // flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "abc9d947ef4a6ac530b289fafe383cb584073e1626528e1e337d5632a8494aee",
-  "ChatPanel/adult-effort-observed": "8c338503c359b5128b2f1402fb16c57c7e1e66fea6cb3231cb29a8ac19367870",
-  "ChatPanel/adult-timeline": "e8e2a03ba53fbaf59ceb37246fe9cffb0cfe801e83fd3899abaf67605af10616",
-  "ChatPanel/kids": "57138be22802bf9e05377fa324ff320be276f342ded0c5c3f737daacc62403cb",
+  // Re-recorded for CGP-CHAT-R-004 (TZ=UTC): a non-personal ChatPanel draws the 계획 먼저 chip in the composer's button row;
+  // that button is the only markup change, so the composer height is unchanged (the personal seat uses the tools menu).
+  "ChatPanel/adult-plain": "2efea1fca1844739144d71b3edf39368ce21b51eed9282902c598d65ed08c51e",
+  "ChatPanel/adult-effort-observed": "ca5a4dadc0a39ea724499e2f3fd6272f4b73052ae6eae069ccce50d7bd9a6af4",
+  "ChatPanel/adult-timeline": "bda0079450cd02c1db65426fba6fcd18f4a72e870f982f2c91a41bb6676ed927",
+  "ChatPanel/kids": "9bb1ba3357d45f821812db1f86364ff28d52e4eb4c0fabc86343c226dc739d06",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -304,8 +306,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "02db001eef8de70e1feb1242524bc79bdbaf61c33b78961af4199144a963d4f2",
-  "ChatPanel/classroom-access-unknown": "594c24481414a1f1d647d3efb2ef8d05f51e708f2eab064fafde54445d0b7941",
+  "ChatPanel/classroom-class-funded": "3f860bff0dfc8155e26078d7e62417688a39e396d33db977b5d7f409251477ca",
+  "ChatPanel/classroom-access-unknown": "f74342404565c9bfc4ec10817f467e0d599c96f036f97657338351fb029faea7",
 };
 
 const status = rendererStatus();

@@ -1,5 +1,4 @@
 /* CGP-CHAT-R-004 / CGP-CHAT-D-004 — the "계획 먼저" chip and the plan card. In flow above the composer, never over it. */
-.hps-plan-chip-row { display: flex; min-inline-size: 0; }
 .hps-plan-chip {
   display: inline-flex;
   align-items: center;
@@ -76,3 +75,5 @@
 @media (forced-colors: active) {
   .hps-plan-chip, .hps-plan-card, .hps-plan-edit, .hps-plan-actions button { border-color: ButtonText; }
 }
+.hps-selected-tools { grid-row: 2; grid-column: 2; justify-self: start; display: flex; flex-wrap: wrap; gap: var(--hp-space-2); min-inline-size: 0; max-inline-size: 100%; }
+.hps-selected-tools .hps-selected-tool { grid-row: auto; grid-column: auto; }

@@ -58,3 +58,8 @@ export function PlanCard({ plan }: { plan: { id: string; text: string } }) {
     </div>
   </section>;
 }
+
+/** Personal seat: the mode shows as a selected-tool pill (like 웹 검색) and is switched on in the tools menu. */
+export function SelectedPlanFirst({ locked }: { locked: boolean }) {
+  return <button type="button" className="hps-selected-tool hps-selected-plan" disabled={locked} aria-label="계획 먼저 해제" onClick={() => postToHost({ type: 'planFirstSet', on: false })}><ChatIcon kind="check-square" size={16} /><span>계획 먼저</span><span aria-hidden="true">×</span></button>;
+}
