@@ -34,7 +34,9 @@ async function run() {
   for (const classroom of [true, false]) {
     const host = mountPoint(), root = createRoot(host);
     let reported = 0;
-    const messages: ChatMessage[] = Object.keys(DENIAL_SOURCE_LABEL).map((source, i) => ({
+    // Every source renders one card, timeout included (#3586). Only the reportable cards have a report button.
+    const SOURCES = Object.keys(DENIAL_SOURCE_LABEL);
+    const messages: ChatMessage[] = SOURCES.map((source, i) => ({
       id: `denied-${i}`, role: 'tool', content: '', createdAt: i + 1,
       tool: { icon: '🔒', state: 'error', label: denialNoticeLabel(denialNotice(source, classroom)) },
     }));
@@ -42,23 +44,25 @@ async function run() {
     if (!classroom) cfg.profile = { ...cfg.profile, activity_kind: 'personal' } as any;
     await act(() => root.render(<ChatPanel {...PROPS} messages={messages} config={cfg} instructor={false} onReportProblem={() => { reported++; }} />));
     const rows = host.querySelectorAll('.hps-denial-notice');
-    assert.equal(rows.length, 6);
+    assert.equal(rows.length, SOURCES.length, 'one card per source, timeout included');
     for (const row of rows) {
       assert.equal(row.getAttribute('aria-live'), 'polite');
       assert.equal(row.getAttribute('aria-atomic'), 'true');
       assert.equal(row.getAttribute('role'), 'status');
-      assert.equal(row.querySelectorAll('button').length, 1);
       const key = row.getAttribute('data-denial-source');
+      assert.equal(row.querySelectorAll('button').length, key === 'timeout' ? 0 : 1, 'timeout has no report button');
       assert.equal(row.querySelector('.hps-denial-source').textContent, DENIAL_SOURCE_LABEL[key]);
-      const bodies = { lesson: classroom ? '수업에서 정한 범위 밖의 동작이라 실행하지 않았어요.' : '지금 활동에서 정한 범위 밖의 동작이라 실행하지 않았어요.', safety: '안전 규칙에 맞지 않아 실행하지 않았어요.', runtime: '지금 앱 환경에서는 이 동작을 할 수 없어요.', access: '지금 고른 이용권에서는 이 동작을 할 수 없어요.', folder: '이 폴더에 허락한 범위 밖의 동작이라 실행하지 않았어요.', unknown: '이 동작을 마치지 못했어요. 이유를 확인하지 못했어요.' };
+      const bodies = { lesson: classroom ? '수업에서 정한 범위 밖의 동작이라 실행하지 않았어요.' : '지금 활동에서 정한 범위 밖의 동작이라 실행하지 않았어요.', safety: '안전 규칙에 맞지 않아 실행하지 않았어요.', runtime: '지금 앱 환경에서는 이 동작을 할 수 없어요.', access: '지금 고른 이용권에서는 이 동작을 할 수 없어요.', folder: '이 폴더에 허락한 범위 밖의 동작이라 실행하지 않았어요.', unknown: '이 동작을 마치지 못했어요. 이유를 확인하지 못했어요.', timeout: '확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 보내면 확인 창이 다시 떠요.' };
       assert.equal(row.querySelector('p').textContent, bodies[key]);
-      assert.equal(row.querySelector('button').textContent, '문제 신고하기');
-      await act(() => click(row.querySelector('button')));
+      if (key !== 'timeout') {
+        assert.equal(row.querySelector('button').textContent, '문제 신고하기');
+        await act(() => click(row.querySelector('button')));
+      }
     }
-    assert.equal(reported, 6, 'one click invokes the existing report action once');
+    assert.equal(reported, SOURCES.length - 1, 'one click per reportable card; the timeout card has none');
     if (!classroom) assert.doesNotMatch(rows.map(r => r.textContent).join(''), /선생님|수업에서/);
     await act(() => root.render(<ChatPanel {...PROPS} messages={[...messages, { id: 'next', role: 'user', content: '다음 질문', createdAt: 20 }]} config={cfg} instructor={false} onReportProblem={() => { reported++; }} />));
-    assert.equal(host.querySelectorAll('.hps-denial-notice').length, 6, 'next message does not clear notices');
+    assert.equal(host.querySelectorAll('.hps-denial-notice').length, SOURCES.length, 'next message does not clear notices');
     await act(() => root.unmount());
   }
   // The real App must accept an idle notice without a stream and reject another task's notice.

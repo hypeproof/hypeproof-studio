@@ -3113,7 +3113,8 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
     return <div className="hps-denial-notice" role="status" aria-live="polite" aria-atomic="true" data-denial-source={view.source}>
       <ChatIcon kind="lock" size={16} />
       <div><span className="hps-denial-source">{view.label}</span><p>{view.text}</p></div>
-      <button type="button" onClick={'settings' in view ? () => postToHost({ type: "openMacPrivacySettings" }) : onReport}>{view.action}</button>
+      {/* #3586 — a card with no action (the timeout) has no button at all. */}
+      {view.action ? <button type="button" onClick={'settings' in view ? () => postToHost({ type: "openMacPrivacySettings" }) : onReport}>{view.action}</button> : null}
     </div>;
   }
   // CGP-KNOW-D-021 — a Studio-browser download is a quiet secondary line, not a tool row.

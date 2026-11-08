@@ -1196,9 +1196,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'commandApprovalPrompt',prompt});
     },
   });
+  /** #3586 — write approval ids whose 180 s window ran out; read once by the write branch of resolveActionApproval. */
+  private readonly timedOutApprovals=new Set<string>();
   private readonly writeApprovalRequest = new WriteApprovalRequest({
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
+    expired:id=>{this.timedOutApprovals.add(id);},
   });
   /** CGP-KNOW-D-006 — every R-006 manifest opens as the in-panel dialog while a chat panel is visible. */
   private readonly outboundApproval = new OutboundApproval({
@@ -9530,7 +9533,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (isInsideWorkspace(absolute)) observationFiles.set(a.id,absolute);
           }
         }
-        if (a.kind==='approval') recordObservation('approval',a.actor==='user'?'사용자가 승인 창에서 선택했습니다.':'런타임 정책이 처리했습니다.',{tool_id:a.id,actor:a.actor,outcome:a.allowed?'allowed':'denied'});
+        if (a.kind==='approval') recordObservation('approval',a.denialSource==='timeout'?'승인 창을 시간 안에 고르지 않아 실행하지 않았습니다.':a.actor==='user'?'사용자가 승인 창에서 선택했습니다.':'런타임 정책이 처리했습니다.',{tool_id:a.id,actor:a.actor,outcome:a.allowed?'allowed':'denied'});
         if (a.kind==='tool_result') {
           const recordDefault = () => recordObservation('tool_result',a.isError?(a.reason??'도구 실패'):(toolLabels.get(a.id)??'도구 실행 완료'),{tool_id:a.id,outcome:a.isError?'error':'success'});
           const crResult = this.crSdkResults.onToolResult(a.id, a.isError);
@@ -9897,7 +9900,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               let denialSource: import("./denialSource").DenialSource | undefined;
               const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
               await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:prompted?'user':'policy',denialSource};
+              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
             }});
           } finally {
             turnEnded.abort();
@@ -9918,7 +9921,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               let denialSource: import("./denialSource").DenialSource | undefined;
               const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;},source=>{denialSource=source;});
               await this.captureTurnWrite(streamId,action,approved);
-              return {approved,actor:prompted?'user':'policy',denialSource};
+              return {approved,actor:denialSource==='timeout'?'policy':prompted?'user':'policy',denialSource};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
         }
@@ -10036,7 +10039,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; }, source => { denialSource = source; });
               // #3427 — copy on first write: the file's pre-turn bytes are kept before the tool runs.
               await this.captureTurnWrite(streamId, action, approved);
-              return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
+              return {approved, actor: denialSource === 'timeout' ? 'policy' as const : prompted ? 'user' as const : 'policy' as const, denialSource};
             },
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
             // MCP tools. Always passed; runSdkCoach registers the server only
@@ -11046,7 +11049,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // DES-CGP-AGENT-05 changes presentation only; the opt-in policy and path gates above remain.
     if (req.kind === "writeFile") {
       onPrompted?.();
-      return this.confirmWriteFiles(randomId(),title,verb,writeEntries,req.payload);
+      // #3586 — a timed-out window reports its own source; the answer stays a refusal either way.
+      const approvalId=randomId();
+      const approved=await this.confirmWriteFiles(approvalId,title,verb,writeEntries,req.payload);
+      if(!approved && this.timedOutApprovals?.delete(approvalId)) onDenied?.('timeout');
+      return approved;
     }
     onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
