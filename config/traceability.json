@@ -6863,6 +6863,42 @@
       ]
     },
     {
+      "id": "ST-IMP-PLAN-FIRST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/planFirst.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PlanFirst.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PLAN-FIRST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-PLAN-FIRST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CODE-BLOCK-TOOLS",
       "stage": "implementation",
       "owner": "jayleekr",

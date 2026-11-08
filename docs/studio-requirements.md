@@ -834,6 +834,24 @@ verdict data, with an injected `answer_verdict` spool line as the negative contr
 the controls and reasons render, Korean labels, negative controls for streaming, user lines,
 classroom, lesson and instructor).
 
+`REQ-STUDIO-PLAN-FIRST` (CGP-CHAT-R-004 / CGP-CHAT-D-004, same behavior as CGP-AGENT-R-011 / D-010, 2026-11-08): a learner-selectable
+"계획 먼저" mode, per task, off by default. The switch adds no composer row (the compact window keeps its message area): on a classroom seat a `계획 먼저` chip (`aria-pressed`, 44px, stroke icon) sits in the composer's button row; on a personal seat it is a `계획 먼저` item in the tools menu and a selected-tool pill with × shows while it is on. The instructor console has none. With the mode on, the next message is a planning turn: the coach answers with a short numbered plan and
+the host runs no tool for that turn: no file write, shell, browser, publish, memory write, subagent or read. The refusal is host-side on every
+runtime that runs tools (Agent SDK: nothing advertised or registered and `canUseTool` denies; local CLI: no tool offered and the tool server
+refuses; proxy browser loop: the call returns an error result before `browser.execute`), and a planning turn also skips the app shortcuts,
+the fenced-HTML preview write and the `agent.md` save. A prompt line asks for the plan, but it is never what stops a tool. When the planning turn
+ends with an answer, the answer becomes a plan card above the composer (region "이렇게 해 볼까요?", numbered steps, "승인하기 전에는 아무것도 실행하지
+않아요") with four 44px actions: `이대로 진행`, `수정` (inline edit), `다시 계획`, `그만두기`. While the plan waits the send button reads
+`계획 승인 기다리는 중` and is disabled, and the host treats any other send as superseding the plan. `이대로 진행` mints a one-time approval bound to
+exactly the send the host then makes ("계획대로 진행해 주세요." + the plan text as approved or edited); that turn is an ordinary turn under the
+profile grants and the lesson's approval preset, so every approval modal still fires. `다시 계획` runs another planning turn (an edit is passed as
+direction); `그만두기` runs nothing. Images or files the learner attached to the planning message are saved with that message exactly as on any turn (a planning turn writes no *coach* file, not no learner attachment). The mode can only add a restriction: it never grants a tool, never loosens a preset, and minor and classroom
+seats behave identically. The approved revision (1 as written, 2 when edited) is kept in the task's local record; only the learner's approval and
+edit count as evidence (AE-35), and the spool receives revision and edited flag only, never the plan text. Tests: `test/plan-first.test.mjs` (state
+machine, real `runSdkCoach`, real `runLocalCoach` through the tool server, host wiring of the proxy loop), `test/plan-first.test.tsx`,
+`test/plan-first-layout.smoke.mjs` (actual App, 320/480/800 px, both seats and themes). Follow-up (Service, not changed here): coach prompt
+guidance for the plan wording and a cohort-profile switch for availability; the host-side refusal stays authoritative.
+
 `REQ-STUDIO-CODE-BLOCK-TOOLS` (CGP-CHAT-R-008 / CGP-CHAT-R39 and design CGP-CHAT-D39, 2026-10-20,
 extending CP-R1's confirmed answer copy): every code block in an answer offers `복사` and `줄 바꿈`,
 in personal and classroom chat. That is the open code pill (a ``` fence) and a code block inside

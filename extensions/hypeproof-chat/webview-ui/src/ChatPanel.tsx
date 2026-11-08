@@ -123,6 +123,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -648,6 +649,9 @@ export function ChatPanel(props: Props) {
   composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
+  // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
+  const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
   const composerFailures = [...attachmentSend.failures, ...attachmentFailures.items, ...stagedPhotos.filter(p=>p.error).map(p=>({id:p.id,name:p.name,reason:p.error!}))];
@@ -1142,6 +1146,7 @@ export function ChatPanel(props: Props) {
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
+    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
@@ -2458,6 +2463,7 @@ export function ChatPanel(props: Props) {
           {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
@@ -2476,7 +2482,7 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
@@ -2560,7 +2566,10 @@ export function ChatPanel(props: Props) {
             }
             rows={personalWorkspace ? 1 : automationCompact ? 2 : 3}
           />
-          {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
+          {personalWorkspace && !folderMissing && planFirst.on && !props.instructor
+            ? <div className="hps-selected-tools">{toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}<SelectedPlanFirst locked={streaming} /></div>
+            : null}
+          {personalWorkspace && !folderMissing && !(planFirst.on && !props.instructor) && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           {(!folderMissing || streaming) && <div className="hps-input-buttons">
             {personalWorkspace && !folderMissing && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!folderMissing && !streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
@@ -2573,6 +2582,7 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
+            {!props.instructor && !personalWorkspace && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
             <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
               <button
@@ -2601,12 +2611,12 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={planAwaiting || attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
-                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
+                aria-label={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
+                {planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>}

@@ -51,6 +51,7 @@ export async function runInstructorTurn(args: {
   browserTools?: BrowserToolsForLocal;
   /** Counts waits for a person (#3582). Forwarded only; the chalk tools are unchanged. */
   humanWait?: HumanWait;
+  planGate?: import("../planFirst.ts").PlanFirstGate;
   signal: AbortSignal;
   onDelta: (text: string) => void;
   onRefusal?: () => void;
@@ -72,6 +73,7 @@ export async function runInstructorTurn(args: {
     extraTools: chalkExtraTools(args.chalkCtx),
     browserTools: args.browserTools,
     humanWait: args.humanWait,
+    planGate: args.planGate,
     signal: args.signal,
     onDelta: args.onDelta,
     onRefusal: args.onRefusal,

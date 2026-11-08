@@ -1758,3 +1758,15 @@ Jay, 2026-11-08: add a coach `remember` tool so the coach can save short notes t
 - Guidance (agent-selected): Studio-side in the tool description. The Service composes the SDK runtime's system prompt, so the same sentence in the served coach prompt is a Service follow-up, not part of this change.
 - #3596 follow-ups (agent-selected): a replaced file above the 16 KiB restore cap is refused before any write (every accepted replacement is undoable); an undone line is rewritten in the stored turn so a reload does not offer 되돌리기 again.
 - Still open: receipts live in the extension host's memory, so 되돌리기 on a line from before a window reload answers the calm "unknown" sentence.
+
+## "먼저 계획 보기" (CGP-CHAT-R-004 / D-004, CGP-AGENT-R-011 / D-010, REQ-STUDIO-PLAN-FIRST) (2026-11-08)
+
+Behavior from the register: a plan, then learner approval, before any tool runs. The choices below were made by the agent while building it.
+- Scope of the mode (agent-selected): per task, a toggle chip on the composer, off by default, available to every seat. The register's "availability follows the cohort profile" needs a Service field, so it is a Service follow-up; today no cohort can switch it off. Open question 7 in chat-core.md (fifth help mode vs learner toggle) is answered as a learner toggle for now.
+- What a planning turn forbids (agent-selected): every tool, including reads. The register says no write, shell or browser; refusing reads too is stricter, simpler to prove on each runtime, and the plan is written from what the learner said. A planning turn also skips app shortcuts, the fenced-HTML preview write and the `agent.md` save, because those write files without a tool call.
+- Where it is enforced (agent-selected): on the host per turn. SDK: no tool advertised or registered, `canUseTool` denies. Local CLI: no tool offered, the tool server refuses. Proxy browser loop: error result before the browser runs. The model-facing prompt line is host guidance only; wording served by the Service is a follow-up.
+- Approval (agent-selected): a one-time token bound to the exact send text the host makes after the press, cleared by any other turn. The approved turn is ordinary, so presets and modals still apply; the mode never relaxes them and minors behave the same.
+- Plan text and actions (agent-selected): the model's answer is the plan (6000 characters at most). Actions are 이대로 진행, 수정, 다시 계획 and 그만두기 (the register lists the first three; 그만두기 is the explicit decline). 다시 계획 sends an edit as direction. A new message while a plan waits supersedes it.
+- Evidence (agent-selected): the approved plan text and revision stay in the task's local record (workspace state, 50 tasks); the spool gets `plan_first_shown`, `plan_first_approved` (revision, edited) and `plan_first_declined`, never the text. AE-35: only approval and learner edits are evidence; the coach's plan alone is not.
+- Not covered: the instructor console has no chip and runs no planning turn; real-app validation is NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above; the mode is off by default).

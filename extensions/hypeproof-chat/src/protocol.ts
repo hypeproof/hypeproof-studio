@@ -732,6 +732,12 @@ export type WebviewMessage = (
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
   /** CGP-SHELL-R-035 — "새로운 기능" after an update; local record only, no telemetry. */
+  /** CGP-CHAT-R-004 — "먼저 계획 보기": the mode switch and the learner's decision on the waiting plan. */
+  | { type: "planFirstRequest" }
+  | { type: "planFirstSet"; on: boolean }
+  | { type: "planFirstApprove"; planId: string; text: string }
+  | { type: "planFirstRedo"; planId: string; text: string }
+  | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
   | { type: "whatsNewShown"; notesId: string }
   | { type: "whatsNewDismiss"; notesId: string }
@@ -1079,6 +1085,7 @@ export type HostMessage = (
   | { type: "aiDisclosure"; text: string }
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
+  | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null }
   | { type: "whatsNewChanged" }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
