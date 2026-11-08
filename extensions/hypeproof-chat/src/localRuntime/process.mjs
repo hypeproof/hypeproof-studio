@@ -55,6 +55,8 @@ export function jsonProcess(
     input = "",
     signal,
     onEvent = () => {},
+    // #3601: every parsed stream line is progress for the stall watch.
+    onProgress = () => {},
     timeout = 180000,
   } = {},
 ) {
@@ -109,6 +111,7 @@ export function jsonProcess(
       try {
         const event = JSON.parse(line);
         if (event.type === "result") result = event;
+        onProgress();
         onEvent(event);
       } catch {
         // A CLI prints update notices and warnings on stdout too (#1041 review).

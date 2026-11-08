@@ -2,7 +2,9 @@ import type { ResolvedProfile } from "../protocol";
 import { isAbsolute } from "node:path";
 import type { CoachToolAction, SdkActivity } from "../sdkCoachHelpers.ts";
 import { workspaceTools } from "./tools.ts";
-import { localEmailTools, localTurnBudget } from "./emailTools.ts";
+import { localEmailTools } from "./emailTools.ts";
+import { CoachStallError, createStallWatch, localStallTimeoutMs } from "./stallWatch.ts";
+import { stallNotice } from "../coachIdentity.ts";
 import { answerUnlessTurnEnds, createHumanWait, type HumanWait } from "./humanWait.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
 import { localRememberTools, type MemoryRememberHost } from "../memoryRememberTool.ts";
@@ -151,9 +153,10 @@ export async function runLocalCoach(args: {
   const lifetime = new AbortController();
   const humanWait = args.humanWait ?? createHumanWait();
   let emailWaiting = () => false;
-  // #3582: time spent waiting for a person does not spend the turn budget.
-  const budget = localTurnBudget(() => humanWait.active() || emailWaiting());
-  const signal = AbortSignal.any([args.signal, lifetime.signal, budget.signal]);
+  // #3601: a fixed turn budget is replaced by the no-progress stall watch (the SDK rule). A person being
+  // asked, or a tool that ran within one budget, pauses it. The setting 0 turns it off.
+  const watch = createStallWatch({ stallMs: localStallTimeoutMs(), isPaused: () => humanWait.active() || emailWaiting() });
+  const signal = AbortSignal.any([args.signal, lifetime.signal, watch.signal]);
   const cancelQuestion = () => args.emailAutomationHost?.cancelPendingQuestion?.();
   signal.addEventListener("abort", cancelQuestion, { once: true });
   // One gate for every approval in this turn. A turn that ends while the person is answering is denied,
@@ -186,7 +189,20 @@ export async function runLocalCoach(args: {
     const approval = await approve({ toolName: name, input });
     return typeof approval === "boolean" ? approval : approval.approved;
   });
-  const tools = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
+  const toolsBase = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
+  // One gate for every tool call (Claude's tool server and Codex's tool calls both come here): a tool
+  // start and end are progress, and the call counts as paused for one budget (stall watch).
+  const tools = {
+    definitions: toolsBase.definitions,
+    call: async (name: string, input: unknown): Promise<string> => {
+      watch.toolStarted();
+      try {
+        return await toolsBase.call(name, input);
+      } finally {
+        watch.toolEnded();
+      }
+    },
+  };
   const system = args.systemPrompt ??
     ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
     JSON.stringify({
@@ -239,7 +255,8 @@ export async function runLocalCoach(args: {
           onDelta: args.onDelta,
           onRefusal: args.onRefusal,
           toolServer: server,
-          timeout: 0, // The shared active-time budget owns cancellation while questions wait.
+          onProgress: () => watch.progress(),
+          timeout: 0, // The stall watch owns cancellation while a person is asked or a tool runs.
         });
       } finally {
         server.close();
@@ -256,14 +273,19 @@ export async function runLocalCoach(args: {
         maxOutputBytes: 200000,
         tools: tools.definitions,
         onToolCall: tools.call,
+        onProgress: () => watch.progress(),
       });
     } finally {
       client.close();
     }
+  } catch (err) {
+    // #3601: a stall ends the turn with the SDK's stall error and text; a user stop keeps its own message.
+    if (watch.stalled()) throw new CoachStallError(stallNotice());
+    throw err;
   } finally {
     if (email.isWaiting()) cancelQuestion();
     signal.removeEventListener("abort", cancelQuestion);
-    budget.dispose();
+    watch.dispose();
     lifetime.abort();
   }
 }
