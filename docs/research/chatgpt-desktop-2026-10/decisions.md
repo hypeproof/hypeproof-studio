@@ -1676,7 +1676,7 @@ Builds DES-KNOW-07 on REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-D-022) and the 
 Refines the CGP-KNOW-D-005 section above for a "기록 없이 묻기" task (CGP-KNOW-R-029: it reads memory, DEC-02, and writes none).
 - Words: the header keeps "AI 기억: 켜짐 · 이 작업 공간 안에서만" and appends "· 이 작업은 기억에 남기지 않아요" in that task only. Hiding the line would hide that memory is still read; "꺼짐" would be false.
 - Tooltip and screen-reader text add "이 작업은 기억을 읽기만 하고 새로 남기지 않아요."
-- The phrase sits inside the scope words, so the narrow-header rule (whole, breaking only between words) covers it. Settings paragraph unchanged.
+- Narrow: the phrase is its own unbreakable element. At 480px and below it takes its own line under the state, the state may use the full band width and the band grows to three lines (tokens only); the verifier measured 3 lines in a 2-line slot at 320px with the phrase inside the scope words, which this replaces. Settings paragraph unchanged.
 - Confirmed by Jay: no
 
 ## CGP-KNOW-D-026: "기억 사용 N" chip in the action row, opening the shelf's 기억 tab (2026-11-01, agent-selected)

@@ -8369,9 +8369,10 @@ keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMO
   and writes none. While the open task is the temporary one (`taskWorkspace.temporaryTaskId` equals the active task), the task
   heading keeps "AI 기억: 켜짐 · 이 작업 공간 안에서만" and appends "· 이 작업은 기억에 남기지 않아요", inside the scope words (whole, never cut);
   the tooltip and the screen-reader sentence add "이 작업은 기억을 읽기만 하고 새로 남기지 않아요." There is no "꺼짐" wording. An ordinary task
-  of the same seat has no such phrase. Evidence: `extensions/hypeproof-chat/test/memory-scope-line-render.test.tsx` (the real
+  of the same seat has no such phrase. At 480px and below the phrase is its own element, one unbreakable line under the state
+  (never split), the state may take the full band width and the band is three lines tall, so nothing overlaps the heading row. Evidence: `extensions/hypeproof-chat/test/memory-scope-line-render.test.tsx` (the real
   ChatPanel: personal and trial seats show the state with the scope and no phrase, a class seat shows neither the line nor
-  "이 수업 안에서만", a temporary task shows the scope line and the phrase).
+  "이 수업 안에서만", a temporary task shows the scope line and the phrase) and `memory-state-line-browser.smoke.mjs` (the temporary task at 320, 480, 800 and 1420 px in both themes: the phrase whole on one line, overlapping nothing).
 
 Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
 a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no

@@ -21,10 +21,11 @@ export const MEMORY_SCOPE_LABEL = "기억 범위: 이 작업 공간 안에서만
 export const MEMORY_SCOPE_HEADER = "이 작업 공간 안에서만";
 
 /** CGP-KNOW-D-005 — the one sentence the header line's tooltip and accessible text give for the scope. */
+export const MEMORY_SCOPE_SENTENCE = `AI 기억은 이 작업 공간의 ${MEMORY_FOLDER_LABEL} 폴더에만 남고, 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.`;
+
 /** CGP-KNOW-D-005 / R-029: a "기록 없이 묻기" task reads memory but writes none; the header says so (agent-chosen copy). */
 export const MEMORY_TEMPORARY_NOTE = "이 작업은 기억에 남기지 않아요";
 export const MEMORY_TEMPORARY_SENTENCE = "이 작업은 기억을 읽기만 하고 새로 남기지 않아요.";
-export const MEMORY_SCOPE_SENTENCE = `AI 기억은 이 작업 공간의 ${MEMORY_FOLDER_LABEL} 폴더에만 남고, 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.`;
 
 /**
  * REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023 / REQ-KNOW-41) — the task an item was kept from, as the host resolved it on
