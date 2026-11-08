@@ -151,10 +151,9 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', result: 'ok', u
 });
 
 // ---- runtime 3: the proxy browser loop, and the host wiring of every runtime ----
-test('host wiring: every runtime call site receives the gate, and a planning turn skips shortcuts, reveal and agent.md', () => {
+test('host wiring (the proxy loop itself runs in plan-first-browser-loop.test.mjs): every runtime call site receives the gate, and a planning turn skips shortcuts, reveal and agent.md', () => {
   const host = fs.readFileSync(src('../src/chatPanelProvider.ts'), 'utf8');
   for (const call of ['runLocalCoach({planGate,', 'runInstructorTurn({\n            planGate,', 'runSdkCoach({\n            planGate,', 'this.runBrowserLoop({\n            planGate,']) assert.ok(host.includes(call), call);
-  assert.match(host, /const tr = p\.planGate\s*\n\s*\? \(planFirstToolResult\(p\.planGate, call\.name\)/, 'the proxy browser loop refuses before browser.execute');
-  for (const guard of ["mode === 'auto' && !planning && wikiSwitch", "mode === 'auto' && !planning && !carriesAnnotations && isShowIntent", "mode === 'auto' && !planning && !carriesAnnotations && isProjectSwitchRequest", 'generalBrowserRequest || revealed || planning', '!generalBrowserRequest && !planning) await this.saveAgentMdIfPresent']) assert.ok(host.includes(guard), guard);
+  for (const guard of ["mode === 'auto' && !planning && wikiSwitch", "mode === 'auto' && !planning && !carriesAnnotations && isShowIntent", "mode === 'auto' && !planning && !carriesAnnotations && isProjectSwitchRequest", 'generalBrowserRequest || revealed || planning', '!generalBrowserRequest && !planning) await this.saveAgentMdIfPresent', 'openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning })']) assert.ok(host.includes(guard), guard);
   assert.ok(host.includes('this.planFirst.beginTurn(this.planTaskKey(), text)'));
 });

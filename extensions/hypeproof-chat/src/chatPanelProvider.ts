@@ -6114,6 +6114,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * it through revealBuilt. False on failure — the coach then builds it itself as
    * before (slow, but it works).
    */
+  /**
+   * The pre-built world shortcut: a message naming a guest saves that world into index.html. CGP-CHAT-R-004 — a planning
+   * turn writes no file, so the shortcut is skipped there and the message goes to the coach as a plan request.
+   */
+  private async openPrebuiltWorldForTurn(a: { text: string; worlds: Parameters<typeof matchWorldRef>[1]; token: string | undefined; proxyUrl: string; planning: boolean }): Promise<{ world: NonNullable<ReturnType<typeof matchWorldRef>>; shown: boolean } | null> {
+    if (a.planning) return null;
+    const world = matchWorldRef(a.text, a.worlds);
+    if (!world || !a.token) return null;
+    this.lastArchivedWorldFile = null; // only tell the coach about an archive made this turn
+    return { world, shown: await this.revealPrebuiltWorld(world.id, a.proxyUrl, a.token) };
+  }
   private async revealPrebuiltWorld(id: string, proxyUrl: string, token: string): Promise<boolean> {
     // 2026-08-20 review — when a child hammers the friend buttons (초코, then 나비
     // within a second) this function ran overlapped and the archive and the index.html
@@ -9302,12 +9313,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // "it is already up — just the opening line".
     let openedWorldThisTurn = false;
     {
-      const world = matchWorldRef(text, profile?.worlds);
-      if (world && token) {
-        this.lastArchivedWorldFile = null; // only tell the coach about an archive made this turn
-
-        const shown = await this.revealPrebuiltWorld(world.id, proxyUrl, token);
-        if (shown) {
+      const opened = await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning });
+      const world = opened?.world;
+      {
+        if (world && opened?.shown) {
           openedWorldThisTurn = true;
           // 2026-08-20 review — archived copies ('이전 세상/…') are hidden from the
           // coach's file listing (to stop "another world" contamination, #644), so even
@@ -10670,7 +10679,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // rubric loop re-reads iteration-0's HTML every round and can't
         // converge on later fixes. tryReveal's once-per-stream latch does not
         // fire here (browser loop path), so reveal explicitly per iteration.
-        if (result.text && !p.generalBrowserRequest) {
+        // CGP-CHAT-R-004 — a planning turn saves no file, so the model's HTML is not revealed (the plan shows it as text only).
+        if (result.text && !p.generalBrowserRequest && !p.planGate) {
           const iterHtml = extractRenderableHtml(result.text);
           // #580 — pass spoolTurnId only: passing streamId would create a logReveal
           // timeline line on every iteration and change the UI. Only the spool

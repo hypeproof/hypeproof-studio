@@ -795,7 +795,7 @@
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
     "test:automation": "node --experimental-strip-types --test test/automation*.smoke.mjs test/google-automation.smoke.mjs test/appsScriptRuntime.test.ts test/automationQuest.test.ts",
     "test:apps-script": "node --experimental-strip-types --test test/appsScriptRuntime.test.ts test/automationQuest.test.ts",
-    "test:plan-first": "node --experimental-strip-types --test test/plan-first.test.mjs",
+    "test:plan-first": "node --experimental-strip-types --test test/plan-first.test.mjs test/plan-first-browser-loop.test.mjs",
     "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-move.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
   },
   "devDependencies": {
