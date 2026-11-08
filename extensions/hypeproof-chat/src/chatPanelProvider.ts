@@ -9013,12 +9013,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"streamError",streamId:"activity",error:"제품 테스트가 끝난 뒤에 보내 주세요."});
       return;
     }
+    this.pendingSends++;
     // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
     // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
-    const planTurn = this._instructorMode.isInstructor === true ? null : this.planFirst.beginTurn(this.planTaskKey(), text);
+    const planTurn = this._instructorMode?.isInstructor === true ? null : this.planFirst.beginTurn(this.planTaskKey(), text);
     const planning = planTurn?.mode === 'planning';
     const planGate: PlanFirstGate | undefined = planning ? planTurn?.gate : undefined;
-    this.pendingSends++;
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
     const lowDiskCheck = this.refreshLowDisk();
@@ -10074,7 +10074,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({planGate,config:local,profile,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          const result=await runLocalCoach({config:local,profile,planGate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{

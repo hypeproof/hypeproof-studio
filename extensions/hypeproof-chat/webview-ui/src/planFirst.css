@@ -1,5 +1,5 @@
 /* CGP-CHAT-R-004 / CGP-CHAT-D-004 — the "계획 먼저" chip and the plan card. In flow above the composer, never over it. */
-.hps-plan-chip-row { display: flex; margin-block-end: var(--hp-space-2); min-inline-size: 0; }
+.hps-plan-chip-row { display: flex; min-inline-size: 0; }
 .hps-plan-chip {
   display: inline-flex;
   align-items: center;
@@ -16,12 +16,11 @@
   cursor: pointer;
 }
 .hps-plan-chip[aria-pressed="true"] {
-  background: var(--hp-bg-accent-default);
-  color: var(--hp-text-inverse-default);
-  border-color: var(--hp-border-accent-default);
+  border-color: var(--hp-border-control-selected);
+  font-weight: var(--hp-weight-strong);
 }
 .hps-plan-chip:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
-.hps-plan-chip[aria-pressed="true"]:hover:not(:disabled) { background: var(--hp-bg-accent-default); }
+.hps-plan-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-plan-chip:disabled { opacity: .6; cursor: default; }
 .hps-plan-chip:focus-visible,
 .hps-plan-card button:focus-visible,
@@ -71,9 +70,9 @@
 .hps-plan-approve { color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default); border: var(--ds-c-focus-width) solid var(--hp-border-accent-default); font-weight: var(--hp-weight-strong); }
 .hps-plan-secondary { color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-focus-width) solid var(--hp-border-control-default); }
 .hps-plan-secondary:hover { background-color: var(--hp-bg-control-hover); }
+.hps-plan-secondary:active { background-color: var(--hp-bg-control-pressed); }
 .hps-plan-secondary[aria-pressed="true"] { border-color: var(--hp-border-control-selected); }
 .hps-plan-actions button:disabled { opacity: .6; cursor: default; }
 @media (forced-colors: active) {
   .hps-plan-chip, .hps-plan-card, .hps-plan-edit, .hps-plan-actions button { border-color: ButtonText; }
-  .hps-plan-chip[aria-pressed="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 }

@@ -846,7 +846,7 @@ ends with an answer, the answer becomes a plan card above the composer (region "
 `계획 승인 기다리는 중` and is disabled, and the host treats any other send as superseding the plan. `이대로 진행` mints a one-time approval bound to
 exactly the send the host then makes ("계획대로 진행해 주세요." + the plan text as approved or edited); that turn is an ordinary turn under the
 profile grants and the lesson's approval preset, so every approval modal still fires. `다시 계획` runs another planning turn (an edit is passed as
-direction); `그만두기` runs nothing. The mode can only add a restriction: it never grants a tool, never loosens a preset, and minor and classroom
+direction); `그만두기` runs nothing. Images or files the learner attached to the planning message are saved with that message exactly as on any turn (a planning turn writes no *coach* file, not no learner attachment). The mode can only add a restriction: it never grants a tool, never loosens a preset, and minor and classroom
 seats behave identically. The approved revision (1 as written, 2 when edited) is kept in the task's local record; only the learner's approval and
 edit count as evidence (AE-35), and the spool receives revision and edited flag only, never the plan text. Tests: `test/plan-first.test.mjs` (state
 machine, real `runSdkCoach`, real `runLocalCoach` through the tool server, host wiring of the proxy loop), `test/plan-first.test.tsx`,

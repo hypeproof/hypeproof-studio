@@ -26,7 +26,7 @@ export function usePlanFirst(scope: string, instructor: boolean): PlanFirstView 
 export function PlanFirstChip({ on, disabled }: { on: boolean; disabled: boolean }) {
   return <button type="button" className="hps-plan-chip" aria-pressed={on} disabled={disabled}
     onClick={() => postToHost({ type: 'planFirstSet', on: !on })}>
-    <ChatIcon kind="check-square" size={16} /><span>계획 먼저</span>
+    <ChatIcon kind={on ? 'check-square' : 'square'} size={16} /><span>계획 먼저</span>
   </button>;
 }
 

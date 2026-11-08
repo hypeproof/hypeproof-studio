@@ -15,7 +15,7 @@ t("the chip is a pressed-state button named 계획 먼저, off and on", () => {
   const off = renderToStaticMarkup(<PlanFirstChip on={false} disabled={false} />);
   const on = renderToStaticMarkup(<PlanFirstChip on={true} disabled={false} />);
   ok(off.includes('aria-pressed="false"') && on.includes('aria-pressed="true"'), "aria-pressed");
-  ok(off.includes("계획 먼저") && off.includes('type="button"') && off.includes('data-icon="check-square"'), "label, type, stroke icon");
+  ok(off.includes("계획 먼저") && off.includes('type="button"') && off.includes('data-icon="square"') && on.includes('data-icon="check-square"'), "label, type, stroke icon");
   ok(renderToStaticMarkup(<PlanFirstChip on={true} disabled={true} />).includes("disabled"), "disabled while a turn runs");
 });
 t("the card shows numbered steps and the four actions, approve first", () => {

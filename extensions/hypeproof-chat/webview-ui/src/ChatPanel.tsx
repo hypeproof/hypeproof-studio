@@ -1144,9 +1144,9 @@ export function ChatPanel(props: Props) {
     return false;
   };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
-    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
+    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
