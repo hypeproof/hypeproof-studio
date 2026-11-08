@@ -16,7 +16,7 @@ import { THEMES } from './lib/vscode-default-themes.mjs';
 import { chatConfig } from './sx-screen-fixtures.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
 
-const { MEMORY_STATE_LABEL, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE } = await import('../src/activityMemoryView.ts');
+const { MEMORY_STATE_LABEL, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_TEMPORARY_NOTE, MEMORY_TEMPORARY_SENTENCE } = await import('../src/activityMemoryView.ts');
 assert.equal(MEMORY_SCOPE_HEADER, '이 작업 공간 안에서만');
 assert.ok(MEMORY_SCOPE_SENTENCE.includes(MEMORY_FOLDER_LABEL) && MEMORY_SCOPE_SENTENCE.includes('수업 활동에서는') && MEMORY_SCOPE_SENTENCE.endsWith('요.'), 'one sentence naming the folder and the class rule');
 const bin = findChromium();
@@ -39,14 +39,17 @@ const bgOf = `e=>{let n=e;while(n){const c=getComputedStyle(n).backgroundColor;i
 
 let states = 0;
 try {
-  for (const [seat, dark, width, forcedColors, minor] of [
+  for (const [seat, dark, width, forcedColors, minor, temp = false] of [
     ['personal', true, 1420, false, false], ['personal', false, 1420, false, false], ['personal', true, 800, false, false], ['personal', false, 800, false, true],
     ['personal', true, 320, false, false], ['personal', false, 320, false, false], ['personal', true, 800, true, false], ['classroom', false, 800, false, false],
+    // A "기록 없이 묻기" task (R-029) adds the no-write phrase: whole and overlapping nothing at the narrow widths.
+    ['personal', true, 320, false, false, true], ['personal', false, 320, false, false, true], ['personal', true, 480, false, false, true], ['personal', false, 480, false, false, true],
+    ['personal', true, 800, false, false, true], ['personal', false, 1420, false, false, true],
   ]) {
-    const tag = `${seat}-${width}-${dark ? 'dark' : 'light'}${forcedColors ? '-forced' : ''}${minor ? '-minor' : ''}`;
+    const tag = `${seat}${temp ? '-temporary' : ''}-${width}-${dark ? 'dark' : 'light'}${forcedColors ? '-forced' : ''}${minor ? '-minor' : ''}`;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
     await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 760, dark, forcedColors });
-    const workspace = { scope: 'ms-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
+    const workspace = { scope: 'ms-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null, ...(temp ? { temporaryTaskId: 'task' } : {}) };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null, ...(minor ? { minor_cohort: true } : {}) }, taskWorkspace: seat === 'personal' ? workspace : undefined });
     const config = seat === 'personal' ? { ...base, memoryState: { folder: MEMORY_FOLDER_LABEL } } : base;
     await send({ type: 'config', config });
@@ -60,7 +63,8 @@ try {
       // DES-KNOW-07: every scope word is drawn whole on one line (wrapping between words is allowed, a cut is not).
       const scope=e.querySelector('.hps-memory-now-scope');const words=[];if(scope){const text=scope.textContent;let i=0;for(const w of text.split(/\\s+/)){if(!w)continue;const at=text.indexOf(w,i);i=at+w.length;const node=[...scope.childNodes].find(n=>n.nodeType===3&&n.textContent.includes(w));if(!node)continue;const off=node.textContent.indexOf(w);const g=document.createRange();g.setStart(node,off);g.setEnd(node,off+w.length);const rs=[...g.getClientRects()].filter(q=>q.width>0);const box=s.getBoundingClientRect();words.push({w,lines:new Set(rs.map(q=>Math.round(q.top))).size,inside:rs.every(q=>q.left>=box.left-.5&&q.right<=box.right+.5&&q.left>=0&&q.right<=innerWidth+.5)});}}
       const sr=e.querySelector('[data-testid=memory-scope-sentence]');const srText=sr?.textContent.trim();
-      return {words,sentence:srText,srHidden:sr?getComputedStyle(sr).clipPath.includes('inset(50%'):null,scopeTip:e.querySelector('.hps-memory-now-folder')?.getAttribute('data-hp-tooltip'),out,overlap,label:e.textContent.replace(/\u00a0/g,' '),tip:s.getAttribute('data-hp-tooltip'),text:e.textContent.replace(/\u00a0/g,' '),state:s.textContent,whole:s.scrollWidth<=s.clientWidth+1&&r.width>0,inside:r.left>=0&&r.right<=innerWidth+.5,visible:r.width>0&&r.height>0&&getComputedStyle(s).visibility!=='hidden'&&!getComputedStyle(s).clipPath.includes('inset(50%'),
+      const tp=e.querySelector('.hps-memory-now-temp');const temp=tp?(()=>{const q=tp.getBoundingClientRect();const g=document.createRange();g.selectNodeContents(tp);const t=g.getBoundingClientRect();return {whole:tp.scrollWidth<=tp.clientWidth+1,inside:t.left>=0&&t.right<=innerWidth,height:t.height,lineHeight:parseFloat(getComputedStyle(tp).lineHeight)||parseFloat(getComputedStyle(tp).fontSize)*1.5}})():null;
+      return {temp,words,sentence:srText,srHidden:sr?getComputedStyle(sr).clipPath.includes('inset(50%'):null,scopeTip:e.querySelector('.hps-memory-now-folder')?.getAttribute('data-hp-tooltip'),out,overlap,label:e.textContent.replace(/\u00a0/g,' '),tip:s.getAttribute('data-hp-tooltip'),text:e.textContent.replace(/\u00a0/g,' '),state:s.textContent,whole:s.scrollWidth<=s.clientWidth+1&&r.width>0,inside:r.left>=0&&r.right<=innerWidth+.5,visible:r.width>0&&r.height>0&&getComputedStyle(s).visibility!=='hidden'&&!getComputedStyle(s).clipPath.includes('inset(50%'),
         font:parseFloat(c.fontSize),fg:c.color,bg:(${bgOf})(s),controls:e.querySelectorAll('button,input,select,textarea,[role=switch],[tabindex]').length,tab:e.tabIndex}})()`);
     if (seat === 'classroom') {
       assert.equal(header, null, `${tag}: no memory state on a seat without the store`);
@@ -69,16 +73,18 @@ try {
       await shot(tag); states++; continue;
     }
     assert.ok(header, `${tag}: the header line is drawn`);
-    assert.equal(header.label, `${FULL} ${MEMORY_SCOPE_SENTENCE}`, `${tag}: the full line and the scope sentence are in the text a screen reader reads`);
-    assert.equal(header.sentence, MEMORY_SCOPE_SENTENCE, `${tag}: the accessible scope sentence`);
+    assert.equal(header.label, temp ? `${STATE} · ${MEMORY_TEMPORARY_NOTE} · ${MEMORY_FOLDER_LABEL} ${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : `${FULL} ${MEMORY_SCOPE_SENTENCE}`, `${tag}: the full line and the scope sentence are in the text a screen reader reads`);
+    assert.equal(header.sentence, temp ? `${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : MEMORY_SCOPE_SENTENCE, `${tag}: the accessible scope sentence`);
     assert.equal(header.srHidden, true, `${tag}: the sentence is for screen readers; the tooltip shows it on hover`);
     assert.equal(header.scopeTip, MEMORY_SCOPE_SENTENCE, `${tag}: the folder's tooltip explains the scope too`);
     assert.deepEqual(header.words.map(w => w.w), ['·', ...MEMORY_SCOPE_HEADER.split(' ')], `${tag}: the scope words are drawn`);
     for (const w of header.words) assert.ok(w.lines === 1 && w.inside, `${tag}: scope word "${w.w}" whole on one line, in view (${JSON.stringify(w)})`);
+    if (temp) assert.ok(header.temp && header.temp.whole && header.temp.inside && header.temp.height < header.temp.lineHeight * 1.5, `${tag}: the no-write phrase is one whole line in view (${JSON.stringify(header.temp)})`);
+    else assert.equal(header.temp, null, `${tag}: no no-write phrase outside a temporary task`);
     assert.equal(header.overlap, false, `${tag}: nothing in the header row overlaps the state words`);
     assert.equal(header.out, 0, `${tag}: every header control stays inside the window`);
-    assert.equal(header.tip, MEMORY_SCOPE_SENTENCE, `${tag}: the tooltip explains the scope in one sentence (naming the folder)`);
-    assert.equal(header.state, STATE, `${tag}: state and scope`);
+    assert.equal(header.tip, temp ? `${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : MEMORY_SCOPE_SENTENCE, `${tag}: the tooltip explains the scope in one sentence (naming the folder)`);
+    assert.equal(header.state, temp ? `${STATE} · ${MEMORY_TEMPORARY_NOTE}` : STATE, `${tag}: state and scope`);
     assert.ok(header.visible && header.whole && header.inside, `${tag}: the state words are whole and in view (${JSON.stringify(header)})`);
     assert.ok(header.font >= 14, `${tag}: ${header.font}px`);
     if (!forcedColors) assert.ok(contrast(header.fg, header.bg) >= 4.5, `${tag}: contrast ${header.fg} on ${header.bg}`);
