@@ -26,6 +26,8 @@ import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
 import { downloadLineView } from "../../src/browserDownloadNotice";
 import { DownloadLine } from "./DownloadLine";
+import { MemoryWriteLine } from "./MemoryWriteLine";
+import { isMemoryWriteId, memoryWriteLineView } from "../../src/memoryWriteLine";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { useAttachmentSendPreparation } from "./AttachmentSendPreparation";
@@ -3120,6 +3122,9 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
   // CGP-KNOW-D-021 — a Studio-browser download is a quiet secondary line, not a tool row.
   const download = message.id.startsWith('download-') ? downloadLineView(t.label, t.state) : null;
   if (download) return <DownloadLine id={message.id} view={download} />;
+  // CGP-KNOW-D-027 — a memory write is a quiet secondary line with its own 되돌리기, not a tool row.
+  const memoryWrite = isMemoryWriteId(message.id) ? memoryWriteLineView(t.label) : null;
+  if (memoryWrite) return <MemoryWriteLine id={message.id} view={memoryWrite} />;
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;

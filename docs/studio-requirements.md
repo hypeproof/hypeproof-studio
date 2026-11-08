@@ -8785,6 +8785,40 @@ option writes it; NOT RUN without the vendored binary). The provider smoke also 
 extracts it) holds none on proxy and on agent-sdk (real CLI request bodies),
 that the agent-sdk turn is asked for no transcript, trial seats, and that unknown kinds fail closed.
 
+## Memory write line: a turn's memory write shows in the turn, with an undo (CGP-KNOW-R-027, CGP-KNOW-D-027)
+
+REQ-STUDIO-MEMORY-WRITE-LINE / REQ-KNOW-45 (CGP-KNOW-045) and DES-KNOW-45 / PI#2 (the learner sees what the AI keeps) and
+PI#5 (the learner owns what is kept about them); DEC-01, DEC-02. Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES (the store),
+REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-USE.
+
+- **One write path, one line.** A memory item a coach turn writes or changes (any runtime) goes through
+  `ChatPanelProvider.recordTurnMemoryWrite()` (`memoryWrite.ts`, `MemoryWriteLedger.write()`), which returns the receipt the
+  host turns into a timeline line in that turn (`postToolLog`, row id `memwrite-…`): no write through this path without a
+  line. The line is saved with the turn like any tool line. Writes use `append()` (a new file, exclusive create); a changed
+  item is a new file plus the removal of the old one, and the old file's exact bytes stay in the receipt.
+- **Same seats as the store.** Personal and trial seats through the R-005 binding, minors included (memory is always on);
+  a class or lesson seat has no binding, so the entry writes nothing and returns null.
+- **The line (DES-KNOW-45).** Secondary text in the download line's style: a 16px bookmark glyph, "기억에 남겼어요:" and the
+  quoted item on one line (an ellipsis), with 전체 보기 / 접기 (`aria-expanded`) and 되돌리기. The item is one run of text
+  (line breaks collapsed; control, bidi and zero-width characters removed; at most 400 characters). Both buttons are real
+  buttons (keyboard reachable) with an accessible name that includes the item, 44px targets and a solid focus ring.
+- **Undo reverts exactly that write.** 되돌리기 posts the row id; the host checks the binding is still the one the write
+  was made in and that the file written is still the file written (device, inode, change and birth time, size, content
+  digest), then removes it. For a changed item it first puts the prior file back under its own name with its exact bytes
+  (exclusive create), then removes the new file. Nothing else in the store is touched.
+- **Refusals are calm and touch nothing.** A file edited, replaced or deleted since, a prior name taken again, a switched
+  task or activity, an id the host does not know, or a second press answer under the line: "그 사이 기억 파일이 바뀌어서
+  되돌리지 않았어요. 기억 목록에서 직접 확인해 주세요." / "이 기억은 지금 되돌릴 수 없어요. 기억 목록에서 직접 지울 수
+  있어요." The line stays with its button.
+- **After an undo.** The line reads "되돌렸어요: …" (or "이전 기억으로 되돌렸어요: …" for a changed item), loses its
+  button, and the memory list refreshes. The next request no longer carries the item (`contextItems()` reads fresh).
+- **Not in this row.** The coach-facing tool that calls `recordTurnMemoryWrite()` (so far the learner's own correction is
+  the only other write) and the "memory full" sentence of REQ-STUDIO-MEMORY-CAPACITY (a refused write throws
+  `MemoryStoreError("full")` to that caller). The receipts live in the extension host's memory: after a window reload a
+  line is still shown but its 되돌리기 answers "이 기억은 지금 되돌릴 수 없어요…".
+- **Tests.** `test/memory-write-line.smoke.mjs` (real files: add, change with byte-exact restore, edited-since refusal,
+  prior name taken, unknown id, refused writes, label words) and `test/memory-write-line.test.tsx` (the real ChatPanel row).
+
 ## Public skill store (#3418)
 
 [Intent](intents/skill-store.md) INT-ST-01..03. Rows cite keys of [docs/policy/skill-store-policy.md](policy/skill-store-policy.md); a policy value change does not reopen a row.
