@@ -363,6 +363,8 @@ import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { ActivityMemory, personalMemoryActivity } from "./activityMemory";
+import { MemoryWriteLedger } from "./memoryWrite";
+import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
@@ -7226,6 +7228,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     catch { /* display-only: the request carried the items either way; the chip is missing after a failed save */ }
     await this.postMemoryUseMarks();
   }
+  // REQ-STUDIO-MEMORY-WRITE-LINE (CGP-KNOW-R-027 / D-027) — the one entry a coach turn (any runtime) uses to write or
+  // change a memory item. It writes through the ledger and leaves the timeline line with its 되돌리기 in the same turn:
+  // a write with no line cannot happen through this path. Personal and trial seats only (the R-005 binding), minors
+  // included; a class or lesson seat has no binding, so nothing is written and null comes back.
+  private memoryWriteLedgers = new Map<string, { root: string; ledger: MemoryWriteLedger; streams: Map<string, string> }>();
+  async recordTurnMemoryWrite(streamId: string, text: string, opts: { task?: string | null; replacing?: string } = {}): Promise<{ id: string; name: string } | null> {
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    if (!binding) return null;
+    let held = this.memoryWriteLedgers.get(binding.scope);
+    if (!held || held.root !== binding.root) {
+      held = { root: binding.root, ledger: new MemoryWriteLedger(new ActivityMemory(binding.root), () => randomId()), streams: new Map() };
+      this.memoryWriteLedgers.set(binding.scope, held);
+    }
+    const receipt = await held.ledger.write(text, opts);
+    // The turn that caused this write: its undone line is drawn there, whatever turn runs later.
+    held.streams.set(receipt.id, streamId);
+    while (held.streams.size > 64) held.streams.delete(held.streams.keys().next().value as string);
+    this.postToolLog(streamId, { id: receipt.id, icon: "🔖", label: memoryWriteLabel("written", receipt.item), state: "done" });
+    return { id: receipt.id, name: receipt.name };
+  }
+  private async runMemoryWriteUndo(msg: { id?: unknown }): Promise<void> {
+    const id = msg.id;
+    if (!isMemoryWriteId(id)) return;
+    const reply = (state: "undone" | "restored" | "refused", notice: string | null) => this.post({ type: "memoryWriteResult", id, state, notice });
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    const held = binding ? this.memoryWriteLedgers.get(binding.scope) : undefined;
+    // A task or activity switch since the write: the write belongs to another scope, nothing is touched.
+    if (!binding || !held || held.root !== binding.root) { await reply("refused", MEMORY_WRITE_COPY.unknown); return; }
+    const result = await held.ledger.undo(id).catch(() => ({ ok: false as const, reason: "failed" as const }));
+    if (!result.ok) { await reply("refused", result.reason === "changed" ? MEMORY_WRITE_COPY.changed : result.reason === "unknown" ? MEMORY_WRITE_COPY.unknown : MEMORY_WRITE_COPY.failed); return; }
+    this.postToolLog(held.streams.get(id) ?? '', { id, icon: "🔖", label: memoryWriteLabel(result.kind, result.item), state: "done" });
+    await reply(result.kind, null);
+    await this.postActivityMemory();
+  }
   private async postMemoryUseMarks(): Promise<void> {
     // Instructor mode (or a host not yet told the seat) has no memory view and no marks.
     const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
@@ -8143,6 +8179,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashRequest": await this.postActivityTrash(); return;
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "activityMemoryRequest": await this.postActivityMemory(); return;
+      case "memoryWriteUndo": await this.runMemoryWriteUndo(msg); return;
       case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
       case "memoryNoticeRequest": case "memoryNoticeAck": await this.answerMemoryNotice(msg, source); return;
       case "memoryUseRequest": await this.runMemoryUse(msg); return;

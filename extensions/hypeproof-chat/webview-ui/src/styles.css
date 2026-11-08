@@ -1481,6 +1481,31 @@ html, body, #root {
 .hps-download-actions button:hover { background-color: var(--hp-bg-control-hover); }
 .hps-download-actions button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-download-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+/* CGP-KNOW-D-027 (DES-KNOW-45) — a memory write line: same quiet treatment as the download line. The quoted item is one
+   line with an ellipsis until 전체 보기 opens it; both buttons are 44px targets with a visible focus ring. */
+.hps-memory-write {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15);
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+  color: var(--hp-text-muted-default); font-size: inherit; line-height: var(--hp-leading-label);
+}
+.hps-memory-write-text { flex: 1 1 auto; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: var(--ds-c-studio-styles-space-15); }
+.hps-memory-write-mark { display: inline-flex; flex: none; align-self: center; }
+.hps-memory-write-lead { flex: none; font-weight: var(--ds-c-studio-styles-typography-7); }
+.hps-memory-write-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-memory-write-item-open { white-space: normal; overflow-wrap: anywhere; }
+.hps-memory-write button {
+  min-height: var(--ds-c-studio-styles-size-8);
+  min-width: var(--ds-c-studio-styles-size-8);
+  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-studio-styles-radius-10);
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.hps-memory-write button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-memory-write button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-memory-write button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-memory-write-notice { flex-basis: 100%; margin: 0; color: var(--hp-text-primary-default); }
+@media (forced-colors: active) { .hps-memory-write button { border-color: ButtonText; } }
 .hps-download-notice { flex-basis: 100%; margin: 0; color: var(--hp-text-primary-default); }
 @media (forced-colors: active) { .hps-download-actions button { border-color: ButtonText; } }
 

@@ -212,6 +212,26 @@ export class ActivityMemory {
     return { file, dev: stat.dev, ino: stat.ino, ctimeNs: stat.ctimeNs, birthtimeNs: stat.birthtimeNs, size: stat.size, digest };
   }
 
+  /** A listed file's bytes exactly as stored, for a write that may need to put them back (REQ-STUDIO-MEMORY-WRITE-LINE). */
+  async readRaw(name: string): Promise<Buffer> {
+    const { file, size } = await this.identify(name);
+    if (size > BigInt(MEMORY_PIN_BYTES)) throw new MemoryStoreError("invalid");
+    const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => { throw new MemoryStoreError("changed"); });
+    try { return await handle.readFile(); } finally { await handle.close(); }
+  }
+
+  /**
+   * REQ-STUDIO-MEMORY-WRITE-LINE — puts back a file that an undone replacement removed: the same name and the same bytes, an
+   * exclusive create (an existing name is `changed`, never an overwrite). The only write path besides `append()`.
+   */
+  async restore(name: string, bytes: Buffer): Promise<void> {
+    if (!memoryFileName(name) || bytes.length > MEMORY_LIMITS.bytes) throw new MemoryStoreError("invalid");
+    const dir = await this.folder(true);
+    const handle = await fs.open(path.join(dir!, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+      .catch(() => { throw new MemoryStoreError("changed"); });
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+  }
+
   /** The absolute path of a listed file, for opening it in the editor. */
   async pathOf(name: string): Promise<string> {
     return (await this.identify(name)).file;
