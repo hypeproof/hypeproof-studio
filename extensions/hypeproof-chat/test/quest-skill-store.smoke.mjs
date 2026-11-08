@@ -106,7 +106,8 @@ const recipe = defaultAutomationRecipe();
   // seat's outcome is decided, a store-run task is refused.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
-  const route = src.indexOf('const local = localRuntimeConfig(vscode.env.appName, proxyUrl);');
+  // #3597: the local route also carries the release instructor runner (?? this.releaseRuntime); the guard is the same.
+  const route = src.indexOf('const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? this.releaseRuntime;');
   const routeGuard = src.indexOf('throw new Error(STORE_RUN_NEEDS_SERVICE)', route);
   assert.ok(route > 0 && routeGuard > route && routeGuard < src.indexOf('if (local) {', route), 'refused before the runtime route');
   const fallback = src.indexOf('if (!(err instanceof SdkUnavailableError)) throw err;');

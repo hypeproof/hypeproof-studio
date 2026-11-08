@@ -22,5 +22,6 @@
   "hypeproofChat.lowDiskWarningMB": "저장 공간 부족 안내 기준(MB)",
   "hypeproofChat.performanceTraceEnabled": "느려요 기록",
   "hypeproofChat.automationGoogleClientId": "업무 자동화 Google 클라이언트 ID",
-  "hypeproofChat.googleOperatorSetup": "Google 운영자 설정 명령"
+  "hypeproofChat.googleOperatorSetup": "Google 운영자 설정 명령",
+  "hypeproofChat.instructorSubscription": "강사 구독으로 강사 채팅 실행"
 }
