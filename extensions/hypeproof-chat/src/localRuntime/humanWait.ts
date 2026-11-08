@@ -80,7 +80,8 @@ export interface ContractWaits extends HumanWait {
 }
 
 export function createContractWaits(clock: { now(): number } = { now: () => Date.now() }): ContractWaits {
-  const waits = new Map<string, number>(); // waitId -> last signal time
+  const waits = new Map<string, number>(); // Chalk waitId -> last signal time (liveness and the limit apply here only)
+  let studioWaits = 0; // Studio's own waits (approvals it asked for itself): no keepalive, no liveness, no limit
   let lastSweep = clock.now();
 
   // Judges liveness on the caller's clock. A clock that jumped (sleep) is refreshed, not judged.
@@ -98,17 +99,16 @@ export function createContractWaits(clock: { now(): number } = { now: () => Date
 
   return {
     async track<T>(run: () => T | Promise<T>): Promise<T> {
-      const id = `track-${Math.random()}`;
-      waits.set(id, clock.now());
+      studioWaits++;
       try {
         return await run();
       } finally {
-        waits.delete(id);
+        studioWaits--;
       }
     },
     active() {
       sweep();
-      return waits.size > 0;
+      return studioWaits > 0 || waits.size > 0;
     },
     start(waitId) {
       sweep();

@@ -293,6 +293,8 @@ export class ChalkContractHost {
     turn.done = true;
     turn.waits.endAll();
     this.endedTurns.add(turnId);
+    // Bounded: only the most recent 64 closed turns are remembered for turn-ended refusals.
+    if (this.endedTurns.size > 64) this.endedTurns.delete(this.endedTurns.values().next().value as string);
     this.turns.delete(turnId);
     const sessionNonce = this.nonce;
     if (sessionNonce === null) return;

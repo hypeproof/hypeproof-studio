@@ -97,6 +97,25 @@ await t("C7 끝 신호와 턴 정리: endAll 은 모든 대기를 끝낸다", ()
   assert.equal(w.open(), 0);
 });
 
+await t("C8 Studio 가 직접 여는 승인 대기(track)는 keepalive 가 없어도 90초 판정을 받지 않는다 (200초 동안 active)", async () => {
+  const clock = fakeNow();
+  const w = createContractWaits(clock);
+  let release;
+  const pending = w.track(() => new Promise((resolve) => { release = resolve; }));
+  pollFor(clock, w, 200 * SEC);
+  assert.equal(w.active(), true, "a Studio-side approval wait stays counted");
+  release();
+  await pending;
+  assert.equal(w.active(), false, "and ends when the answer arrives");
+});
+await t("C9 Studio 승인 대기 4개가 열려 있어도 Chalk 대기 start 는 limit 으로 막히지 않는다", async () => {
+  const w = createContractWaits(fakeNow());
+  const releases = [];
+  for (let i = 0; i < 4; i++) w.track(() => new Promise((resolve) => { releases.push(resolve); }));
+  assert.deepEqual(w.start("chalk-1"), { ok: true });
+  assert.equal(w.open(), 1, "Chalk's own waits are counted separately from Studio's approval waits");
+  releases.forEach((r) => r());
+});
 console.log("=== H. 계약 명령 (ChalkContractHost) ===");
 function makeBus() {
   const handlers = new Map();
@@ -229,6 +248,14 @@ await t("H10 계약 턴이 humanWait 를 runLocalCoach 에 넘긴다, 옛 create
   const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   assert.ok(src.includes("humanWait: input.humanWait,"), "contract turn passes its wait counter");
   assert.ok(src.includes("const humanWait = createHumanWait();"), "legacy block is untouched");
+});
+
+await t("H11 로컬 턴의 정지 문구는 코치 이름을 쓴다 (SDK 와 같은 stallNotice(coachName))", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/localRuntime/index.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("stallNotice(args.coachName)"), "the stall text takes the coach name");
+  const cp = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  assert.ok(cp.includes("coachName: this.coachDisplayName(),"), "the contract turn passes the coach name");
 });
 
 if (failed > 0) {

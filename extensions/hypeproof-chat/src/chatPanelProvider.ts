@@ -7871,6 +7871,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       extraTools,
       signal: input.signal,
       humanWait: input.humanWait,
+      coachName: this.coachDisplayName(),
       onDelta: (text) => emit({ kind: 'delta', text }),
       onRefusal: () => emit({ kind: 'refusal' }),
       onActivity: (activity) => emit({ kind: 'activity', activity }),
@@ -10013,7 +10014,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          const result=await runLocalCoach({config:local,profile,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{

@@ -127,6 +127,8 @@ export function mergeBrowserTools(
 export async function runLocalCoach(args: {
   config: LocalRuntimeConfig;
   profile: ResolvedProfile;
+  /** The coach's display name for the stall text (SDK: args.coachName). Omitted → the default name. */
+  coachName?: string;
   cwd: string;
   history: Array<{ role: string; content: string }>;
   userText: string;
@@ -155,7 +157,7 @@ export async function runLocalCoach(args: {
   let emailWaiting = () => false;
   // #3601: a fixed turn budget is replaced by the no-progress stall watch (the SDK rule). A person being
   // asked, or a tool that ran within one budget, pauses it. The setting 0 turns it off.
-  const watch = createStallWatch({ stallMs: localStallTimeoutMs(), isPaused: () => humanWait.active() || emailWaiting() });
+  const watch = createStallWatch({ stallMs: localStallTimeoutMs(), isPaused: () => humanWait.active() || emailWaiting(), message: stallNotice(args.coachName) });
   const signal = AbortSignal.any([args.signal, lifetime.signal, watch.signal]);
   const cancelQuestion = () => args.emailAutomationHost?.cancelPendingQuestion?.();
   signal.addEventListener("abort", cancelQuestion, { once: true });
@@ -280,7 +282,7 @@ export async function runLocalCoach(args: {
     }
   } catch (err) {
     // #3601: a stall ends the turn with the SDK's stall error and text; a user stop keeps its own message.
-    if (watch.stalled()) throw new CoachStallError(stallNotice());
+    if (watch.stalled()) throw new CoachStallError(stallNotice(args.coachName));
     throw err;
   } finally {
     if (email.isWaiting()) cancelQuestion();
