@@ -6,7 +6,7 @@ import { readFileSync, mkdtempSync, writeFileSync, chmodSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { localRuntimeConfig } from "../src/localRuntime/index.ts";
-import { releaseInstructorRuntime, releaseGateNotice } from "../src/localRuntime/releaseInstructorRuntime.ts";
+import { releaseInstructorRuntime, releaseGateNotice, instructorLocalRuntime, shouldRecheckRelease } from "../src/localRuntime/releaseInstructorRuntime.ts";
 import { cliLoginOk, releaseCliEnv } from "../src/localRuntime/cliLocate.ts";
 import { subscriptionEnv } from "../src/localRuntime/process.mjs";
 
@@ -62,7 +62,7 @@ await t("positive control: the Dev name with HPS_DEV_RUNTIME=1 still opens the D
 
 await t("the provider uses the Dev runner first and the release gate only when the Dev runner is absent", () => {
   const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.match(src, /\(localRuntimeConfig\(vscode\.env\.appName, proxyUrl\) \?\? this\.releaseRuntime\)/);
+  assert.match(src, /localRuntimeConfig\(vscode\.env\.appName, proxyUrl\) \?\? instructorLocalRuntime\(/);
   // A stub host without the release fields must still work (the #3580 lesson): no method call on `this` here.
   assert.doesNotMatch(src, /this\.localRuntimeFor\(/);
 });
@@ -158,6 +158,41 @@ await t("no credential file is read by the gate or the CLI probe (static check o
     const src = readFileSync(new URL(f, import.meta.url), "utf8");
     assert.doesNotMatch(src, /readFileSync|readFile\(|createReadStream|auth\.json|\.credentials|keychain|Keychain/, f);
   }
+});
+
+// Review fixes (#3608): the release runner is an instructor-turn resource only, and a closed gate for a missing CLI or a failed login is re-checked on the next instructor turn.
+const RELEASE_CFG = { provider: "claude", executable: ABS, model: "sonnet", label: "Claude Code · 로컬 구독 · sonnet" };
+await t("a learner turn never receives the release runner, even when the gate was open before the panel changed", () => {
+  // The panel changed to a student seat: isInstructor is false, so the learner lookup gets nothing from the release gate.
+  assert.equal(instructorLocalRuntime(false, RELEASE_CFG), null);
+  assert.deepEqual(instructorLocalRuntime(true, RELEASE_CFG), RELEASE_CFG);
+  assert.equal(instructorLocalRuntime(true, null), null);
+});
+
+await t("the provider reads the release runner only through instructorLocalRuntime (no direct learner-path read)", () => {
+  const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const reads = src.split("\n").filter((line) => /this\.releaseRuntime\b/.test(line) && !/private releaseRuntime|this\.releaseRuntime = /.test(line));
+  assert.ok(reads.length > 0);
+  for (const line of reads) assert.match(line, /instructorLocalRuntime\(/, line.trim().slice(0, 120));
+});
+
+await t("a closed gate for a missing CLI or a failed login is checked again on the next instructor turn; other reasons are not", () => {
+  assert.equal(shouldRecheckRelease("no_cli"), true);
+  assert.equal(shouldRecheckRelease("login_failed"), true);
+  assert.equal(shouldRecheckRelease("setting_off"), false);
+  assert.equal(shouldRecheckRelease("not_instructor"), false);
+  assert.equal(shouldRecheckRelease("rehearsal"), false);
+  assert.equal(shouldRecheckRelease(undefined), false);
+});
+
+await t("a gate closed for no CLI opens after the instructor installs and logs in (re-check)", async () => {
+  let installed = false;
+  const deps = { locate: () => (installed ? ABS : null), loginOk: async () => true };
+  const first = await releaseInstructorRuntime({ ...OPEN }, deps);
+  assert.equal(first.reason, "no_cli");
+  installed = true;
+  const again = await releaseInstructorRuntime({ ...OPEN }, deps);
+  assert.equal(again.ok, true);
 });
 
 if (failed > 0) {

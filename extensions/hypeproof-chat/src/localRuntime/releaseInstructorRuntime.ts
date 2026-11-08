@@ -67,3 +67,19 @@ export function releaseGateNotice(reason: ReleaseGateReason): string {
       return "";
   }
 }
+
+/**
+ * The release runner is an instructor-turn resource only (#3608 review). A learner turn never receives it,
+ * even when the gate was open before the panel changed: `isInstructor` is the same decision the instructor branch uses.
+ */
+export function instructorLocalRuntime(isInstructor: boolean, release: LocalRuntimeConfig | null): LocalRuntimeConfig | null {
+  return isInstructor ? release : null;
+}
+
+/**
+ * A gate closed for a missing CLI or a failed login may open after the instructor installs or logs in (the inputs
+ * do not change), so the next instructor turn checks again. Other closed reasons are decided by the seat, not the CLI.
+ */
+export function shouldRecheckRelease(reason: string | undefined): boolean {
+  return reason === "no_cli" || reason === "login_failed";
+}
