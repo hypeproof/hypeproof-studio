@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { PLANNING_GATE } from '../src/planFirst.ts';
+import { PLANNING_GATE, PlanFirstSession } from '../src/planFirst.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-first-loop-'));
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -68,4 +68,32 @@ test('pre-built world shortcut: skipped on a planning turn, opened on an ordinar
   assert.deepEqual(ordinary.opened, ['w1']); assert.equal(ordinary.result.shown, true);
   const planning = await run(true);
   assert.deepEqual(planning.opened, [], 'no world is saved into index.html while a plan is pending'); assert.equal(planning.result, null);
+});
+
+test('instructor seat: a plan mode a learner left on never gates an instructor turn, and the instructor cannot switch it', async () => {
+  const seat = isInstructor => {
+    const fake = Object.create(ChatPanelProvider.prototype);
+    const session = new PlanFirstSession({ newId: () => 'p1' });
+    Object.defineProperty(fake, 'planFirst', { get: () => session });
+    Object.assign(fake, { _instructorMode: { isInstructor }, currentTaskStore: () => ({ getView: () => ({ activeTaskId: 't1' }) }), posts: [], post: async function (m) { this.posts.push(m); } });
+    return { fake, session };
+  };
+  const learner = seat(false);
+  learner.session.setOn('t1', true);
+  const asLearner = ChatPanelProvider.prototype.beginPlanTurn.call(learner.fake, 'q');
+  assert.equal(asLearner.planning, true); assert.equal(asLearner.gate, PLANNING_GATE);
+  // Same workspace state, instructor seat: no gate, no planning.
+  const instructor = seat(true);
+  instructor.session.setOn('t1', true);
+  const asInstructor = ChatPanelProvider.prototype.beginPlanTurn.call(instructor.fake, 'q');
+  assert.equal(asInstructor.planning, false); assert.equal(asInstructor.gate, undefined); assert.equal(asInstructor.ready('1. x'), null);
+  // The instructor's switch message is refused and changes nothing.
+  const off = seat(true); off.session.setOn('t1', false);
+  await ChatPanelProvider.prototype.handlePlanFirst.call(off.fake, { type: 'planFirstSet', on: true });
+  assert.equal(off.session.view('t1').on, false, 'the instructor cannot enable it');
+  // With the mode off nothing reads the instructor flag at all (pending-send keeps its early-return order).
+  const plain = seat(false); let reads = 0;
+  Object.defineProperty(plain.fake, '_instructorMode', { get() { reads++; return { isInstructor: false }; } });
+  const quiet = ChatPanelProvider.prototype.beginPlanTurn.call(plain.fake, 'q');
+  assert.equal(quiet.planning, false); assert.equal(quiet.gate, undefined); assert.equal(reads, 0);
 });

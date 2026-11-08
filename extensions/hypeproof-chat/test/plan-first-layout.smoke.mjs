@@ -75,6 +75,8 @@ try{
   assert.deepEqual(g.buttons.map(x=>x.name),['이대로 진행','수정','다시 계획','그만두기']);
   for(let i=0;i<g.controls.length;i++)for(let j=i+1;j<g.controls.length;j++)assert.ok(!overlap(g.controls[i],g.controls[j]),`${label}: ${g.controls[i].name} overlaps ${g.controls[j].name}`);
   for(const x of g.texts)assert.ok(x.px>=14,`${label}: "${x.t}" is ${x.px}px`);
+  const sw=await b.evaluate(`(()=>{const e=document.querySelector('.hps-plan-chip')||document.querySelector('.hps-selected-plan');const r=e.getBoundingClientRect();return {h:r.height,w:r.width,px:parseFloat(getComputedStyle(e).fontSize)}})()`);
+  assert.ok(sw.h>=44-.5&&sw.w>=44-.5&&sw.px>=14,`${label}: the switch is a 44px target with >= 14px text (${JSON.stringify(sw)})`);
   // Decisions post the plan id; edited text rides along.
   await clickText('수정');
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-edit')`),true,`${label}: 수정 opens the edit box`);

@@ -6118,6 +6118,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * The pre-built world shortcut: a message naming a guest saves that world into index.html. CGP-CHAT-R-004 — a planning
    * turn writes no file, so the shortcut is skipped there and the message goes to the coach as a plan request.
    */
+  /**
+   * CGP-CHAT-R-004 — one turn's view of the plan-first mode. The mode is stored per workspace, so a seat that cannot
+   * switch it (the instructor console has no chip) must never be gated by a flag a learner left on: the gate and
+   * `planning` read the instructor flag only when the mode is on, and an instructor turn is never a planning turn.
+   */
+  private beginPlanTurn(text: string): { readonly planning: boolean; readonly gate: PlanFirstGate | undefined; ready(answer: string): PlanFirstView | null } {
+    const handle = this.planFirst.beginTurn(this.planTaskKey(), text);
+    const active = (): boolean => handle.mode === 'planning' && this._instructorMode?.isInstructor !== true;
+    return { get planning() { return active(); }, get gate() { return active() ? handle.gate : undefined; }, ready: (answer: string) => (active() ? handle.ready(answer) : null) };
+  }
   private async openPrebuiltWorldForTurn(a: { text: string; worlds: Parameters<typeof matchWorldRef>[1]; token: string | undefined; proxyUrl: string; planning: boolean }): Promise<{ world: NonNullable<ReturnType<typeof matchWorldRef>>; shown: boolean } | null> {
     if (a.planning) return null;
     const world = matchWorldRef(a.text, a.worlds);
@@ -9016,10 +9026,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingSends++;
     // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
     // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
-    // The instructor console has no chip, so its mode is never on; it is not read here (admission checks run first).
-    const planTurn = this.planFirst.beginTurn(this.planTaskKey(), text);
-    const planning = planTurn?.mode === 'planning';
-    const planGate: PlanFirstGate | undefined = planning ? planTurn?.gate : undefined;
+    const plan = this.beginPlanTurn(text);
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
     const lowDiskCheck = this.refreshLowDisk();
@@ -9115,7 +9122,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = mode === 'auto' && !planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && !plan.planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
@@ -9124,7 +9131,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
     // when an image is attached — a pasted screenshot is always a real turn.
-    if (mode === 'auto' && !planning && !carriesAnnotations && isShowIntent(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && !plan.planning && !carriesAnnotations && isShowIntent(text) && (!images || images.length === 0)) {
       const lastGame = this.extractLastRenderableCode();
       if (lastGame) {
         const labels = labelsForProfile(this.cachedProfile);
@@ -9156,7 +9163,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
-    if (mode === 'auto' && !planning && !carriesAnnotations && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
+    if (mode === 'auto' && !plan.planning && !carriesAnnotations && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
       await this.appendHistory([userLine(text)]);
       await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion, responseStarted);
       // After this send settles: switchProject refuses while a send is pending (idle()).
@@ -9314,7 +9321,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // "it is already up — just the opening line".
     let openedWorldThisTurn = false;
     {
-      const opened = await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning });
+      const opened = await this.openPrebuiltWorldForTurn({ text, worlds: profile?.worlds, token, proxyUrl, planning: plan.planning });
       const world = opened?.world;
       {
         if (world && opened?.shown) {
@@ -9435,7 +9442,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) void this.post({ type:"attachedImagesSaved",note:attachedNote });
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
-    if (planning) userTextForModel = planFirstTurnText(userTextForModel);
+    if (plan.planning) userTextForModel = planFirstTurnText(userTextForModel);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -9476,7 +9483,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-ARTIFACT-PROVENANCE — reveal writes still in flight; the post-turn scan waits for them.
     const pendingReveals: Promise<unknown>[] = [];
     const tryReveal = (text: string) => {
-      if (generalBrowserRequest || revealed || planning) return;
+      if (generalBrowserRequest || revealed || plan.planning) return;
       const html = extractRenderableHtml(text);
       if (!html) return;
       if (html === lastAttemptedHtml) return; // unchanged → don't re-warn
@@ -9931,7 +9938,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const runProxyRuntime = async () => {
         if (profile?.browser_control?.enabled) {
           await this.runBrowserLoop({
-            planGate,
+            planGate: plan.gate,
             generalBrowserRequest,
             modelEcho,
             proxyUrl,
@@ -10049,7 +10056,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           let result: Awaited<ReturnType<typeof runInstructorTurn>>;
           try {
           result=await runInstructorTurn({
-            planGate,
             local,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             brief:this._instructorMode.brief,
@@ -10075,7 +10081,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({config:local,profile,planGate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          const result=await runLocalCoach({config:local,profile,planGate:plan.gate,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
@@ -10109,7 +10115,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const emailAutomationHost = profile.automations?.enabled && !storeRun ? await this.emailAutomationHost?.() : undefined;
           const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
-            planGate,
+            planGate: plan.gate,
             onDiagnostic: phase => this.ensureLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
             memoryRememberHost: this.memoryRememberHostFor(streamId),
@@ -10306,7 +10312,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
         // window is reopened.
-        if (!generalBrowserRequest && !planning) await this.saveAgentMdIfPresent(assistantText, streamId);
+        if (!generalBrowserRequest && !plan.planning) await this.saveAgentMdIfPresent(assistantText, streamId);
         const finishedItems = this.finishTurnItems(
           streamId,
           messageId,
@@ -10316,8 +10322,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         );
         await this.appendHistory([userLine(historyText), ...finishedItems]);
         // CGP-CHAT-R-004 — the planning turn's answer becomes the plan the learner approves, edits or declines.
-        if (planning && planTurn) {
-          const ready = planTurn.ready(finishedItems.filter(item => item.role === 'assistant').map(item => item.content).join('\n\n'));
+        if (plan.planning) {
+          const ready = plan.ready(finishedItems.filter(item => item.role === 'assistant').map(item => item.content).join('\n\n'));
           if (ready) { this.spool?.recordWorkflow({ turnId: streamId, event: 'plan_first_shown', payload: {} }); void this.postPlanFirst(); }
         }
         // CGP-KNOW-R-026 — the finished answer of a request that carried memory gets the count.
