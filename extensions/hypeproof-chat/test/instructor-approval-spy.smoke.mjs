@@ -53,10 +53,13 @@ check("S-2b spy: the instructor profile exposes only read, write and browser wor
 check("S-2b spy: both instructor paths build browser tools with the one shared function", () => {
   const src = fs.readFileSync(path.join(root, "src/chatPanelProvider.ts"), "utf8");
   // Legacy instructor turn: the browserTools handed to runInstructorTurn.
-  assert.match(src, /const browserTools = instructorLocalBrowserTools\(\(\) => this\.buildBrowserMcpHost\(text\)\);/,
+  // #3464: both paths use the provider helper, which wraps instructorLocalBrowserTools with the open gate.
+  assert.match(src, /const browserTools = this\.instructorBrowserTools\(text, cwd\);/,
     "legacy instructor turn no longer builds browser tools with the shared function");
+  assert.match(src, /private instructorBrowserTools\([^)]*\)[^{]*\{[\s\S]*?instructorLocalBrowserTools\(\(\) => host\)/,
+    "the shared helper no longer builds browser tools with the instructor builder");
   // Chalk contract turn: the browserTools handed to runLocalCoach in runContractTurn.
-  assert.match(src, /browserTools: instructorLocalBrowserTools\(\(\) => this\.buildBrowserMcpHost\(last\.content\)\),/,
+  assert.match(src, /browserTools: this\.instructorBrowserTools\(last\.content, cwd\),/,
     "contract turn does not pass the shared browser tools");
   assert.deepEqual(INSTRUCTOR_LOCAL_BROWSER_DEFS.map((d) => d.name), ["live_preview_start", "browser_open"]);
 });
