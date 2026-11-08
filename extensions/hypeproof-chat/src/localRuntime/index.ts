@@ -92,7 +92,8 @@ export function mergeExtraTools(
  */
 export interface BrowserToolsForLocal {
   definitions: { name: string; description: string; inputSchema: unknown }[];
-  call(name: string, input: unknown): Promise<unknown>;
+  /** `ask` is the turn's approval gate (#3464): a browser tool that needs the learner calls it. */
+  call(name: string, input: unknown, ask?: (action: { toolName: string; input: unknown }) => Promise<boolean | { approved: boolean }>): Promise<unknown>;
 }
 
 /** Append browser tools when provided (instructor mode only). */
@@ -170,7 +171,12 @@ export async function runLocalCoach(args: {
   // 추가 도구는 강사 모드(extraTools 있음)에서만 붙는다(SUB-06).
   const withChalk = mergeExtraTools(workTools, args.extraTools);
   // Browser tools (live_preview_start + browser_open)은 강사 모드에서만 붙는다.
-  const withBrowser = mergeBrowserTools(withChalk, args.browserTools);
+  // #3464 — browser tools get the turn's approval gate, so an outside address is asked through the same gate.
+  const browserTools = args.browserTools && {
+    definitions: args.browserTools.definitions,
+    call: (name: string, input: unknown) => args.browserTools!.call(name, input, approve as never),
+  };
+  const withBrowser = mergeBrowserTools(withChalk, browserTools);
   const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });
   emailWaiting = email.isWaiting;
   const tools = mergeBrowserTools(withBrowser, email);
