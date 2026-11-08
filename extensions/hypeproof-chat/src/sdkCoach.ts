@@ -43,6 +43,7 @@ import {
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
+import { buildMemoryMcpServer, MCP_MEMORY_REMEMBER, MEMORY_MCP_SERVER, type MemoryRememberHost } from "./memoryRememberTool";
 import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
 import {
   resolveOrchestrator,
@@ -219,6 +220,8 @@ export interface SdkCoachArgs {
    */
   browserHost?: BrowserMcpHost;
   emailAutomationHost?: GoogleAutomationMcpHost;
+  /** REQ-STUDIO-MEMORY-REMEMBER-TOOL — present only on a personal activity (the host decides); absent, no `remember` tool exists. */
+  memoryRememberHost?: MemoryRememberHost;
   /**
    * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
    * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
@@ -670,7 +673,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const orchestratorGrants = opts.permittedMcpTools.filter(name => orchestratorNames.includes(name));
   const registerBrowser = !!args.browserHost && browserGrants.length > 0;
   const registerEmail = !!args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => emailGrants.includes(name));
-  if (registerBrowser || registerEmail || (orchestratorTurn && orchestratorGrants.length > 0)) {
+  const registerMemory = !!args.memoryRememberHost && mode === 'auto' && !args.storeRun;
+  if (registerBrowser || registerEmail || registerMemory || (orchestratorTurn && orchestratorGrants.length > 0)) {
     const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
@@ -717,6 +721,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
           grants.push(...emailGrants.filter(name => (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(name) || host.isAppsScriptAllowed?.() === true));
         }
+      }
+      if (registerMemory) {
+        servers[MEMORY_MCP_SERVER] = buildMemoryMcpServer(factory, z, args.memoryRememberHost!) as NonNullable<Options["mcpServers"]>[string];
+        grants.push(MCP_MEMORY_REMEMBER);
       }
       if (grants.length) mcpServers = servers;
       grantedMcpTools = grants;
