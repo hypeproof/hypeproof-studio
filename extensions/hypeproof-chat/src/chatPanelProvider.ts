@@ -8,6 +8,7 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
+import { PlanFirstSession, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
 import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -1810,6 +1811,47 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // panel remount (hide/show) keeps it; a reload or the next launch does not bring it back.
   private whatsNewOpen: string | null = null;
   private whatsNewClosed: string | null = null;
+  // CGP-CHAT-R-004 — "먼저 계획 보기": per-task mode and the plan waiting for the learner. Host state is authoritative.
+  private planFirstSession?: PlanFirstSession;
+  private get planFirst(): PlanFirstSession {
+    return this.planFirstSession ??= new PlanFirstSession({
+      newId: () => randomId(),
+      restore: (() => { try { return this.context.workspaceState.get<Partial<import("./planFirst").PlanFirstSnapshot>>("hps.planFirst.v1") ?? null; } catch { return null; } })(),
+      onChange: snapshot => { try { void this.context.workspaceState.update("hps.planFirst.v1", snapshot); } catch { /* the mode simply starts off next time */ } },
+    });
+  }
+  private planTaskKey(): string | null { return this.currentTaskStore?.()?.getView().activeTaskId ?? null; }
+  private async postPlanFirst(): Promise<void> {
+    const view: PlanFirstView = this._instructorMode.isInstructor === true ? { on: false, plan: null } : this.planFirst.view(this.planTaskKey());
+    await this.post({ type: "planFirstState", ...view });
+  }
+  private async handlePlanFirst(msg: Extract<WebviewMessage, { type: "planFirstSet" | "planFirstApprove" | "planFirstRedo" | "planFirstDecline" | "planFirstRequest" }>): Promise<void> {
+    if (this._instructorMode.isInstructor === true) return;
+    const task = this.planTaskKey();
+    if (msg.type === "planFirstRequest") { await this.postPlanFirst(); return; }
+    if (msg.type === "planFirstSet") {
+      if (msg.on !== true && msg.on !== false) return;
+      this.planFirst.setOn(task, msg.on);
+      await this.postPlanFirst();
+      return;
+    }
+    if (typeof msg.planId !== "string") return;
+    if (msg.type === "planFirstDecline") {
+      this.planFirst.decline(task, msg.planId);
+      this.spool?.recordWorkflow({ turnId: msg.planId, event: "plan_first_declined", payload: {} });
+      await this.postPlanFirst();
+      return;
+    }
+    const action = msg.type === "planFirstApprove" ? this.planFirst.approve(task, msg.planId, msg.text) : this.planFirst.redo(task, msg.planId, msg.text);
+    await this.postPlanFirst();
+    if (!action.ok) return;
+    if (msg.type === "planFirstApprove") {
+      const approved = this.planFirst.approvedFor(task);
+      // Only the learner's own approval and edit are evidence (AE-35); the plan text stays in the local task record.
+      this.spool?.recordWorkflow({ turnId: msg.planId, event: "plan_first_approved", payload: { revision: approved?.revision ?? 1, edited: approved?.edited === true } });
+    }
+    await this.handleSend(action.sendText, [], undefined, undefined, undefined, undefined, undefined, undefined, undefined, false);
+  }
   private async postWhatsNew(requestId?: string): Promise<void> {
     if (!requestId) { await this.post({ type: 'whatsNewChanged' }); return; }
     const notes = learnerNotes(LEARNER_RELEASE_NOTES);
@@ -8293,6 +8335,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postAccuracyEducation();
         return;
       }
+      case "planFirstRequest": case "planFirstSet": case "planFirstApprove": case "planFirstRedo": case "planFirstDecline": await this.handlePlanFirst(msg); return;
       case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
       case "whatsNewShown": {
         if (this._instructorMode.isInstructor) return;
@@ -8959,6 +9002,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"streamError",streamId:"activity",error:"제품 테스트가 끝난 뒤에 보내 주세요."});
       return;
     }
+    // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
+    // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
+    const planTurn = this._instructorMode.isInstructor === true ? null : this.planFirst.beginTurn(this.planTaskKey(), text);
+    const planning = planTurn?.mode === 'planning';
+    const planGate: PlanFirstGate | undefined = planning ? planTurn?.gate : undefined;
     this.pendingSends++;
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
@@ -9055,7 +9103,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && !planning && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
@@ -9064,7 +9112,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
     // when an image is attached — a pasted screenshot is always a real turn.
-    if (mode === 'auto' && !carriesAnnotations && isShowIntent(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && !planning && !carriesAnnotations && isShowIntent(text) && (!images || images.length === 0)) {
       const lastGame = this.extractLastRenderableCode();
       if (lastGame) {
         const labels = labelsForProfile(this.cachedProfile);
@@ -9096,7 +9144,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
-    if (mode === 'auto' && !carriesAnnotations && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
+    if (mode === 'auto' && !planning && !carriesAnnotations && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
       await this.appendHistory([userLine(text)]);
       await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion, responseStarted);
       // After this send settles: switchProject refuses while a send is pending (idle()).
@@ -9377,6 +9425,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) void this.post({ type:"attachedImagesSaved",note:attachedNote });
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
+    if (planning) userTextForModel = planFirstTurnText(userTextForModel);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -9417,7 +9466,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-ARTIFACT-PROVENANCE — reveal writes still in flight; the post-turn scan waits for them.
     const pendingReveals: Promise<unknown>[] = [];
     const tryReveal = (text: string) => {
-      if (generalBrowserRequest || revealed) return;
+      if (generalBrowserRequest || revealed || planning) return;
       const html = extractRenderableHtml(text);
       if (!html) return;
       if (html === lastAttemptedHtml) return; // unchanged → don't re-warn
@@ -9872,6 +9921,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const runProxyRuntime = async () => {
         if (profile?.browser_control?.enabled) {
           await this.runBrowserLoop({
+            planGate,
             generalBrowserRequest,
             modelEcho,
             proxyUrl,
@@ -9989,6 +10039,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           let result: Awaited<ReturnType<typeof runInstructorTurn>>;
           try {
           result=await runInstructorTurn({
+            planGate,
             local,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             brief:this._instructorMode.brief,
@@ -10014,7 +10065,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({config:local,profile,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
+          const result=await runLocalCoach({planGate,config:local,profile,coachName:this.coachDisplayName(profile),cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
@@ -10048,6 +10099,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const emailAutomationHost = profile.automations?.enabled && !storeRun ? await this.emailAutomationHost?.() : undefined;
           const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
+            planGate,
             onDiagnostic: phase => this.ensureLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
             memoryRememberHost: this.memoryRememberHostFor(streamId),
@@ -10244,7 +10296,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
         // window is reopened.
-        if (!generalBrowserRequest) await this.saveAgentMdIfPresent(assistantText, streamId);
+        if (!generalBrowserRequest && !planning) await this.saveAgentMdIfPresent(assistantText, streamId);
         const finishedItems = this.finishTurnItems(
           streamId,
           messageId,
@@ -10253,6 +10305,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           effectiveCoachName,
         );
         await this.appendHistory([userLine(historyText), ...finishedItems]);
+        // CGP-CHAT-R-004 — the planning turn's answer becomes the plan the learner approves, edits or declines.
+        if (planning && planTurn) {
+          const ready = planTurn.ready(finishedItems.filter(item => item.role === 'assistant').map(item => item.content).join('\n\n'));
+          if (ready) { this.spool?.recordWorkflow({ turnId: streamId, event: 'plan_first_shown', payload: {} }); void this.postPlanFirst(); }
+        }
         // CGP-KNOW-R-026 — the finished answer of a request that carried memory gets the count.
         await this.rememberMemoryTurn(streamId, finishedItems);
         const answer = finishedItems.filter(item => item.role === 'assistant' && item.content.trim()).at(-1);
@@ -10517,6 +10574,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the terminal (non-tool) turn only.
    */
   private async runBrowserLoop(p: {
+    /** CGP-CHAT-R-004 — planning turn: every tool call is refused on the host. */
+    planGate?: PlanFirstGate;
     generalBrowserRequest?: boolean;
     effort?: import('./protocol').CourseEffort;
     fundingSource?: string;
@@ -10648,7 +10707,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
           this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
-          const tr = outsideBrowserIntent
+          const tr = p.planGate
+            ? (planFirstToolResult(p.planGate, call.name) as Awaited<ReturnType<typeof browser.execute>>)
+            : outsideBrowserIntent
             ? { isError: true, content: [{ type: "text" as const, text: "브라우저만 열어 달라는 요청이에요. browser_navigate로 about:blank를 열어 주세요." }] }
             : isCrVerifyTool(fixed.call.name) && this.isCurriculumRuntimeEnabled()
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)

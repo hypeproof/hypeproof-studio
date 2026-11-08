@@ -123,6 +123,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -648,6 +649,9 @@ export function ChatPanel(props: Props) {
   composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
+  // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
+  const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
   const composerFailures = [...attachmentSend.failures, ...attachmentFailures.items, ...stagedPhotos.filter(p=>p.error).map(p=>({id:p.id,name:p.name,reason:p.error!}))];
@@ -1140,6 +1144,7 @@ export function ChatPanel(props: Props) {
     return false;
   };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
+    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
@@ -2458,6 +2463,8 @@ export function ChatPanel(props: Props) {
           {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {!props.instructor && !statusScreen && <div className="hps-plan-chip-row"><PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} /></div>}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
@@ -2601,12 +2608,12 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={planAwaiting || attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
-                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
+                aria-label={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
+                {planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>}

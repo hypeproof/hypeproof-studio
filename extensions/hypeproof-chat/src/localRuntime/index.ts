@@ -8,6 +8,7 @@ import { stallNotice } from "../coachIdentity.ts";
 import { answerUnlessTurnEnds, createHumanWait, type HumanWait } from "./humanWait.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
 import { localRememberTools, type MemoryRememberHost } from "../memoryRememberTool.ts";
+import type { PlanFirstGate } from "../planFirst.ts";
 import { CodexLocalClient } from "./codexClient.mjs";
 import { runClaude } from "./claudeClient.mjs";
 import { startToolServer } from "./toolServer.mjs";
@@ -151,6 +152,8 @@ export async function runLocalCoach(args: {
   memoryRememberHost?: MemoryRememberHost;
   /** Counts the waits for a person (approval, confirmation). Created here when the caller passes none (#3582). */
   humanWait?: HumanWait;
+  /** CGP-CHAT-R-004 — set on a "먼저 계획 보기" planning turn: no tool is offered and any call is refused on the host. */
+  planGate?: PlanFirstGate;
 }) {
   const lifetime = new AbortController();
   const humanWait = args.humanWait ?? createHumanWait();
@@ -192,19 +195,23 @@ export async function runLocalCoach(args: {
     return typeof approval === "boolean" ? approval : approval.approved;
   });
   const toolsBase = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
+  const gate = args.planGate;
   // One gate for every tool call (Claude's tool server and Codex's tool calls both come here): a tool
   // start and end are progress, and the call counts as paused for one budget (stall watch).
-  const tools = {
-    definitions: toolsBase.definitions,
-    call: async (name: string, input: unknown): Promise<string> => {
-      watch.toolStarted();
-      try {
-        return await toolsBase.call(name, input);
-      } finally {
-        watch.toolEnded();
-      }
-    },
-  };
+  // CGP-CHAT-R-004 — on a planning turn no tool is offered and any call is refused on the host.
+  const tools = gate
+    ? { definitions: [] as typeof toolsBase.definitions, call: async (name: string): Promise<string> => gate.refusal(name) }
+    : {
+        definitions: toolsBase.definitions,
+        call: async (name: string, input: unknown): Promise<string> => {
+          watch.toolStarted();
+          try {
+            return await toolsBase.call(name, input);
+          } finally {
+            watch.toolEnded();
+          }
+        },
+      };
   const system = args.systemPrompt ??
     ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
     JSON.stringify({
@@ -229,10 +236,10 @@ export async function runLocalCoach(args: {
     ] : []),
     'For Claude these tools appear under the studio MCP server. Never invent an unavailable tool name. Google and recipient details remain on the host; do not request them as tool arguments.',
   ].join('\n') : '';
-  const providerEmailGuide = args.config.provider === 'claude'
+  const providerEmailGuide = gate ? '' : args.config.provider === 'claude'
     ? emailGuide.replace(/\bemail_[a-z_]+\b/g, name => 'mcp__studio__' + name)
     : emailGuide;
-  const rememberGuide = remember.definitions.length
+  const rememberGuide = remember.definitions.length && !gate
     ? 'The `remember` tool saves one short note to the learner\'s personal memory. Use it only for stable preferences or facts the learner stated themselves; never for sensitive personal data or guesses. The learner sees the note under your answer and can undo it.'
     : '';
   const messages = [
