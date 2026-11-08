@@ -362,8 +362,9 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
-import { ActivityMemory, personalMemoryActivity } from "./activityMemory";
+import { ActivityMemory, MemoryStoreError, personalMemoryActivity } from "./activityMemory";
 import { MemoryWriteLedger } from "./memoryWrite";
+import { MEMORY_REMEMBER_TURN_CAP, type MemoryRememberHost } from "./memoryRememberTool";
 import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
@@ -7241,7 +7242,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private memoryWriteLedgers = new Map<string, { root: string; ledger: MemoryWriteLedger; streams: Map<string, string> }>();
   async recordTurnMemoryWrite(streamId: string, text: string, opts: { task?: string | null; replacing?: string } = {}): Promise<{ id: string; name: string } | null> {
     const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
-    if (!binding) return null;
+    // A temporary task or a read-only work folder writes nothing, whatever the caller (REQ-KNOW-47).
+    if (!binding || this.memoryWriteRefusal(binding, streamId)) return null;
     let held = this.memoryWriteLedgers.get(binding.scope);
     if (!held || held.root !== binding.root) {
       held = { root: binding.root, ledger: new MemoryWriteLedger(new ActivityMemory(binding.root), () => randomId()), streams: new Map() };
@@ -7254,6 +7256,52 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postToolLog(streamId, { id: receipt.id, icon: "🔖", label: memoryWriteLabel("written", receipt.item), state: "done" });
     return { id: receipt.id, name: receipt.name };
   }
+  /**
+   * REQ-STUDIO-MEMORY-REMEMBER-TOOL — the host behind the coach's `remember` tool for one turn, or undefined where the
+   * seat has no personal memory (instructor, class, lesson) or may not write at all (a "기록 없이 묻기" task, a work folder
+   * the learner set to read-only): then the tool is not offered. The host pins the store (root and scope) it was made for
+   * and every call re-checks both the pin and the write refusal, so a switch to a class or another folder, a temporary
+   * task or a read-only choice refuses and writes nothing. At most MEMORY_REMEMBER_TURN_CAP writes per turn, and `item`
+   * may only name a file this tool wrote in this window: a file the learner wrote is never replaced by the coach.
+   */
+  private rememberedNames = new Map<string, Set<string>>();
+  private rememberTurnWrites = new Map<string, number>();
+  private memoryWriteRefusal(binding: { root: string }, streamId: string): string | null {
+    return this.folderWriteRefusalFor(path.join(binding.root, ".hypeproof", "memory"), streamId);
+  }
+  memoryRememberHostFor(streamId: string): MemoryRememberHost | undefined {
+    const pinned = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    if (!pinned || this.memoryWriteRefusal(pinned, streamId)) return undefined;
+    return {
+      write: async (note, item) => {
+        const now = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+        if (!now || now.root !== pinned.root || now.scope !== pinned.scope || this.memoryWriteRefusal(now, streamId)) return { ok: false as const, reason: "unavailable" as const };
+        const mine = this.rememberedNames.get(now.scope) ?? new Set<string>();
+        if (item && !mine.has(item)) return { ok: false as const, reason: "invalid" as const };
+        const count = this.rememberTurnWrites.get(streamId) ?? 0;
+        if (count >= MEMORY_REMEMBER_TURN_CAP) return { ok: false as const, reason: "limit" as const };
+        try {
+          const written = await this.recordTurnMemoryWrite(streamId, note, { task: this.currentTaskStore?.()?.getView().activeTaskId ?? null, ...(item ? { replacing: item } : {}) });
+          if (!written) return { ok: false as const, reason: "unavailable" as const };
+          this.rememberTurnWrites.set(streamId, count + 1);
+          if (this.rememberTurnWrites.size > 64) this.rememberTurnWrites.delete(this.rememberTurnWrites.keys().next().value as string);
+          if (item) mine.delete(item);
+          mine.add(written.name);
+          this.rememberedNames.set(now.scope, mine);
+          return { ok: true as const, item: note };
+        } catch (error) {
+          const code = error instanceof MemoryStoreError ? error.code : null;
+          return { ok: false as const, reason: code === "full" ? "full" as const : code === "invalid" || code === "empty" || code === "missing" || code === "not_file" ? "invalid" as const : "failed" as const };
+        }
+      },
+    };
+  }
+  /** The undone label goes into the stored turn too, so a reload does not offer 되돌리기 for a write already undone. */
+  private async persistMemoryWriteLine(id: string, label: string): Promise<void> {
+    const stored = this.getHistory().find(message => message.id === id && message.tool);
+    if (!stored?.tool || stored.tool.label === label) return;
+    await this.appendHistory([{ ...stored, tool: { ...stored.tool, label, state: "done" } }]).catch(() => undefined);
+  }
   private async runMemoryWriteUndo(msg: { id?: unknown }): Promise<void> {
     const id = msg.id;
     if (!isMemoryWriteId(id)) return;
@@ -7264,7 +7312,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!binding || !held || held.root !== binding.root) { await reply("refused", MEMORY_WRITE_COPY.unknown); return; }
     const result = await held.ledger.undo(id).catch(() => ({ ok: false as const, reason: "failed" as const }));
     if (!result.ok) { await reply("refused", result.reason === "changed" ? MEMORY_WRITE_COPY.changed : result.reason === "unknown" ? MEMORY_WRITE_COPY.unknown : MEMORY_WRITE_COPY.failed); return; }
-    this.postToolLog(held.streams.get(id) ?? '', { id, icon: "🔖", label: memoryWriteLabel(result.kind, result.item), state: "done" });
+    const undoneLabel = memoryWriteLabel(result.kind, result.item);
+    this.postToolLog(held.streams.get(id) ?? '', { id, icon: "🔖", label: undoneLabel, state: "done" });
+    await this.persistMemoryWriteLine(id, undoneLabel);
     await reply(result.kind, null);
     await this.postActivityMemory();
   }
@@ -9955,7 +10005,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
-          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,
+          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,memoryRememberHost:mode==="auto"&&!generalBrowserRequest?this.memoryRememberHostFor(streamId):undefined,
             history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
@@ -9991,6 +10041,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const sdkEnd = await runSdkCoach({
             onDiagnostic: phase => this.ensureLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
+            memoryRememberHost: this.memoryRememberHostFor(streamId),
             processes: { registry: this.runningProcesses, prefix: `sdk:${streamId}:` },
             toolMode: mode,
             gatewayUrl: proxyUrl,

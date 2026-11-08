@@ -5,6 +5,7 @@ import { workspaceTools } from "./tools.ts";
 import { localEmailTools, localTurnBudget } from "./emailTools.ts";
 import { answerUnlessTurnEnds, createHumanWait, type HumanWait } from "./humanWait.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
+import { localRememberTools, type MemoryRememberHost } from "../memoryRememberTool.ts";
 import { CodexLocalClient } from "./codexClient.mjs";
 import { runClaude } from "./claudeClient.mjs";
 import { startToolServer } from "./toolServer.mjs";
@@ -142,6 +143,8 @@ export async function runLocalCoach(args: {
   /** 강사 모드 browser tools (live_preview_start + browser_open). 없으면 붙이지 않는다. */
   browserTools?: BrowserToolsForLocal;
   emailAutomationHost?: GoogleAutomationMcpHost;
+  /** REQ-STUDIO-MEMORY-REMEMBER-TOOL — set only on a personal activity; absent, the coach has no `remember` tool. */
+  memoryRememberHost?: MemoryRememberHost;
   /** Counts the waits for a person (approval, confirmation). Created here when the caller passes none (#3582). */
   humanWait?: HumanWait;
 }) {
@@ -179,7 +182,11 @@ export async function runLocalCoach(args: {
   const withBrowser = mergeBrowserTools(withChalk, browserTools);
   const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });
   emailWaiting = email.isWaiting;
-  const tools = mergeBrowserTools(withBrowser, email);
+  const remember = localRememberTools(args.memoryRememberHost, async (name, input) => {
+    const approval = await approve({ toolName: name, input });
+    return typeof approval === "boolean" ? approval : approval.approved;
+  });
+  const tools = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
   const system = args.systemPrompt ??
     ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
     JSON.stringify({
@@ -207,8 +214,11 @@ export async function runLocalCoach(args: {
   const providerEmailGuide = args.config.provider === 'claude'
     ? emailGuide.replace(/\bemail_[a-z_]+\b/g, name => 'mcp__studio__' + name)
     : emailGuide;
+  const rememberGuide = remember.definitions.length
+    ? 'The `remember` tool saves one short note to the learner\'s personal memory. Use it only for stable preferences or facts the learner stated themselves; never for sensitive personal data or guesses. The learner sees the note under your answer and can undo it.'
+    : '';
   const messages = [
-    { role: "system", content: system + (providerEmailGuide ? '\n\n' + providerEmailGuide : '') },
+    { role: "system", content: system + (providerEmailGuide ? '\n\n' + providerEmailGuide : '') + (rememberGuide ? '\n\n' + rememberGuide : '') },
     ...args.history.filter((m) => m.role === "user" || m.role === "assistant"),
     { role: "user", content: args.userText },
   ];

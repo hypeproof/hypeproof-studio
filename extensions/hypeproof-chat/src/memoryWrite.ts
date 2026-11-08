@@ -8,7 +8,7 @@
 //   - a changed item: the new file is removed (same check) and the prior file is put back with its exact bytes under
 //     its own name, an exclusive create. If the prior name is taken again, or the new file changed, nothing is touched.
 
-import { ActivityMemory, MemoryStoreError, type MemoryFileId } from "./activityMemory.ts";
+import { ActivityMemory, MemoryStoreError, MEMORY_LIMITS, type MemoryFileId } from "./activityMemory.ts";
 import { memoryWriteItem } from "./memoryWriteLine.ts";
 
 export interface MemoryWriteReceipt {
@@ -46,6 +46,9 @@ export class MemoryWriteLedger {
     if (opts.replacing !== undefined) {
       priorId = await this.store.identify(opts.replacing);
       prior = { name: opts.replacing, bytes: await this.store.readRaw(opts.replacing) };
+      // restore() puts back at most MEMORY_LIMITS.bytes, the size the store lists and reads as an item. A larger file (readRaw
+      // reads up to the 1 MiB pin) could not be undone, so such a replacement is refused before anything is written.
+      if (prior.bytes.length > MEMORY_LIMITS.bytes) throw new MemoryStoreError("invalid");
     }
     const name = await this.store.append(text, opts.now ?? Date.now(), opts.task, opts.replacing);
     if (prior && priorId) {

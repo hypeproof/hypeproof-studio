@@ -50,6 +50,7 @@ import {
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
 import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
+import { MCP_MEMORY_REMEMBER } from "./memoryRememberTool.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
 import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
@@ -2666,6 +2667,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
     (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
+    toolName === MCP_MEMORY_REMEMBER ||
     toolName === MCP_PUBLISH_SITE
   );
 }
@@ -2749,6 +2751,11 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     const page = firstString(action.input, ["path"]) ?? "";
     const pdf = page ? page.replace(/\.html?$/i, "") + ".pdf" : "";
     return { kind: "writeFile", description: `PDF로 저장: ${pdf || "알 수 없는 파일"}`, payload: { path: pdf } };
+  }
+  // REQ-STUDIO-MEMORY-REMEMBER-TOOL — a note saved to the activity's memory store is a write inside the work folder
+  // (`.hypeproof/memory/`), so it is shown and decided as that: the same approval preset, no modal where a file write has none.
+  if (action.toolName === MCP_MEMORY_REMEMBER) {
+    return { kind: "writeFile", description: "기억에 남기기", payload: { path: ".hypeproof/memory/", paths: [{ path: ".hypeproof/memory/", change: "new" }] } };
   }
   if (action.toolName === MCP_PUBLISH_SITE) {
     const repo = firstString(action.input, ["repo_name"]) ?? "";
@@ -3222,6 +3229,9 @@ export function evaluateSdkToolUse(args: {
   // the single source of that choice (#499). Helpers have no tools, so a
   // consult can cause no external effect.
   if (toolName === MCP_SITE_CHECK) return { decision: "allow" };
+  // REQ-STUDIO-MEMORY-REMEMBER-TOOL — registered by the host only on a personal activity; like a work-folder write it
+  // goes to the approval path, where the preset (and not this tool) decides whether a modal opens.
+  if (toolName === MCP_MEMORY_REMEMBER) return { decision: "ask" };
   if (toolName === MCP_CONSULT) return { decision: "ask" };
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────

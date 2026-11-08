@@ -17067,6 +17067,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryRememberTool.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/localRuntime/index.ts"
         }
       ]
     },
@@ -17102,6 +17114,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-remember-tool.smoke.mjs"
         }
       ]
     },

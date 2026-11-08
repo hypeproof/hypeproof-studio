@@ -8812,12 +8812,38 @@ REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-USE.
   있어요." The line stays with its button.
 - **After an undo.** The line reads "되돌렸어요: …" (or "이전 기억으로 되돌렸어요: …" for a changed item), loses its
   button, and the memory list refreshes. The next request no longer carries the item (`contextItems()` reads fresh).
-- **Not in this row.** The coach-facing tool that calls `recordTurnMemoryWrite()` (so far the learner's own correction is
-  the only other write) and the "memory full" sentence of REQ-STUDIO-MEMORY-CAPACITY (a refused write throws
-  `MemoryStoreError("full")` to that caller). The receipts live in the extension host's memory: after a window reload a
-  line is still shown but its 되돌리기 answers "이 기억은 지금 되돌릴 수 없어요…".
+- **The coach's `remember` tool (REQ-STUDIO-MEMORY-REMEMBER-TOOL, Jay 2026-11-08).** On by default, no flag, personal and
+  trial activities only (the R-005 binding; minors included, R-022): `memoryRememberHostFor(streamId)` is undefined for an
+  instructor, class, team or lesson seat, so the tool is not offered there, and a call after a switch of activity refuses
+  ("Memory is not available…") and writes nothing. One tool per runtime, both ending in `recordTurnMemoryWrite()`: the
+  Agent SDK runtime registers the in-process MCP server `hypeproof_memory` (`mcp__hypeproof_memory__remember`) in an
+  all-tools turn (not in a web-only turn, not in a store run); the local CLI runtime gets `remember` (`localRuntime`).
+  Input: `note` (plain text, one run, at most 300 characters) and optional `item` (the file name of an existing item this note
+  replaces); empty, oversized, non-string and any `item` that is not a plain memory file name (`..`, `/`, absolute paths) are
+  refused before the host is called. The tool never names a path: the store is the activity's `.hypeproof/memory/`.
+- **No write where writes are refused (REQ-KNOW-47).** In a "기록 없이 묻기" task and in a work folder the learner set to
+  read-only the tool is not offered, and a late call (and `recordTurnMemoryWrite()` itself) refuses and writes nothing: the
+  store path passes `folderWriteRefusalFor`. The host pins the store it was made for; a switch to another folder or scope
+  refuses. At most 5 writes per turn (each keeps a receipt and so an undo), and `item` may only name a file this tool wrote in
+  this window, never a learner-written one.
+- **Approval.** The call is a work-folder write for the approval path (verdict "ask", host kind `writeFile`, path
+  `.hypeproof/memory/`): an adult seat on auto sees no new prompt, a minor or a lesson preset keeps what a file write has
+  today (the preset decides). The local runtime asks the same gate before the write.
+- **Coach guidance.** Studio-side, in the tool description (and one system line on the local runtime): remember only stable
+  preferences or facts the learner stated, never sensitive personal data or guesses, and mention that the learner can undo.
+  The SDK runtime's system prompt is composed by the Service and is not changed by this row (follow-up: the same sentence in
+  the served coach prompt).
+- **Undo survives a reload (follow-up to #3596).** After a successful undo the stored turn's line is rewritten to the undone
+  label, so a reloaded window shows "되돌렸어요: …" without 되돌리기. A reload before any undo still loses the receipt (host
+  memory): 되돌리기 then answers the calm "unknown" sentence.
+- **Replacing a large file.** `MemoryWriteLedger.write()` with `replacing` refuses (before any write) a file above the 16 KiB
+  item size the store lists and restores, so every accepted replacement can be undone byte for byte.
+- **Not in this row.** The "memory full" sentence of REQ-STUDIO-MEMORY-CAPACITY is told to the coach as a refusal result
+  ("The memory is full…"); the learner-facing notice is unchanged.
 - **Tests.** `test/memory-write-line.smoke.mjs` (real files: add, change with byte-exact restore, edited-since refusal,
-  prior name taken, unknown id, refused writes, label words) and `test/memory-write-line.test.tsx` (the real ChatPanel row).
+  prior name taken, unknown id, refused writes, label words), `test/memory-write-line.test.tsx` (the real ChatPanel row) and
+  `test/memory-remember-tool.smoke.mjs` (the tool on both runtimes, the real provider, class refusal, traversal and oversize,
+  a minor seat, persisted undo, the oversized replaced file).
 
 ## Public skill store (#3418)
 
