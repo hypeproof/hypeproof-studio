@@ -19,6 +19,8 @@ export interface BrowserSafetyProfileLike {
   browser_session?: {
     mode?: string;
     allowlist?: unknown;
+    /** REQ-N11 — the served switch for `hypeproof.browser.hardenedSessionEnabled` (absent → off). */
+    hardened?: unknown;
   } | null;
 }
 
@@ -221,6 +223,81 @@ export function savedLinkSafetyFor(saved: unknown, seat: string | null): SavedLi
 /** Sign-out (no credential) or a seat change: the saved copy no longer belongs here and is removed. */
 export function savedLinkSafetyStale(saved: unknown, seat: string | null): boolean {
   return saved !== undefined && saved !== null && savedLinkSafetyFor(saved, seat) === null;
+}
+
+/**
+ * REQ-N11 (Jay 2026-11-07) — the settings lock: the three hardened-session settings for a minor or safe seat,
+ * as the served profile set them. Kept in the extension's globalState, which the core patch
+ * (`hps-safe-session.patch`, `hpBrowserSettingsLock`) reads directly, so the workbench and the main process
+ * follow it even when settings.json says otherwise, before this extension activates, and in a new VS Code
+ * profile. Only a served profile replaces or removes it (sign-out keeps it: the Mac stays locked until
+ * another seat's profile is served). Support override: change the cohort's served profile on the Service.
+ */
+export const BROWSER_SETTINGS_LOCK_KEY = "hypeproofChat.browserSettingsLock";
+
+export interface BrowserSettingsLock {
+  v: 1;
+  /** `hypeproof.browser.hardenedSessionEnabled`: served `browser_session.hardened`, or the registered default. */
+  hardened: boolean;
+  /** `hypeproof.browser.safeSession`: served `browser_session.mode === "safe"`. */
+  safeSession: boolean;
+  /** `hypeproof.browser.safeAllowlist`: the served list (strings only). */
+  allowlist: string[];
+  savedAt: number;
+}
+
+/** The lock a served profile asks for: a minor or safe seat gets one; any other seat (adult) gets none. */
+export function browserSettingsLockFrom(
+  profile: BrowserSafetyProfileLike & { minor_cohort?: boolean },
+  registeredHardenedDefault: unknown,
+  now: number,
+): BrowserSettingsLock | null {
+  const { safeSession, safeAllowlist } = resolveBrowserSafety(profile);
+  if (!safeSession && profile.minor_cohort !== true) return null;
+  return { v: 1, hardened: profile.browser_session?.hardened === true || registeredHardenedDefault === true, safeSession, allowlist: safeAllowlist, savedAt: now };
+}
+
+/** The saved lock when well formed; anything else is "no lock". */
+export function browserSettingsLockOf(saved: unknown): BrowserSettingsLock | null {
+  if (!saved || typeof saved !== "object") return null;
+  const r = saved as Partial<BrowserSettingsLock>;
+  if (r.v !== 1 || typeof r.hardened !== "boolean" || typeof r.safeSession !== "boolean" || !Array.isArray(r.allowlist)) return null;
+  return {
+    v: 1, hardened: r.hardened, safeSession: r.safeSession,
+    allowlist: r.allowlist.filter((e): e is string => typeof e === "string" && e.length > 0),
+    savedAt: typeof r.savedAt === "number" ? r.savedAt : 0,
+  };
+}
+
+export type BrowserSettingKey = "hardenedSessionEnabled" | "safeSession" | "safeAllowlist";
+
+/**
+ * The settings writes that put a locked seat back: a setting looser than the lock is reverted; a stricter
+ * one (`true` where the lock says `false`) is left alone. The allowlist is always exactly the served one.
+ * No lock → nothing (adult seats keep their own settings). Equal values → nothing, so a write never loops.
+ */
+export function browserSettingsReverts(
+  lock: BrowserSettingsLock | null,
+  current: { hardenedSessionEnabled: unknown; safeSession: unknown; safeAllowlist: unknown },
+): Array<[BrowserSettingKey, boolean | string[]]> {
+  if (!lock) return [];
+  const out: Array<[BrowserSettingKey, boolean | string[]]> = [];
+  if (lock.hardened && current.hardenedSessionEnabled !== true) out.push(["hardenedSessionEnabled", true]);
+  if (lock.safeSession && current.safeSession !== true) out.push(["safeSession", true]);
+  const list = current.safeAllowlist;
+  const same = Array.isArray(list) && list.length === lock.allowlist.length && list.every((e, i) => e === lock.allowlist[i]);
+  if (!same) out.push(["safeAllowlist", [...lock.allowlist]]);
+  return out;
+}
+
+/**
+ * REQ-N11 — the settings file is shared by every window; two windows in different VS Code profiles can hold
+ * different locks and would rewrite each other's allowlist forever. A key written less than `windowMs` ago is
+ * not written again (the workbench enforces the lock either way; this only stops the settings-file ping-pong).
+ */
+export const BROWSER_SETTINGS_REWRITE_MS = 5000;
+export function browserSettingsWritable(lastWrite: number | undefined, now: number, windowMs = BROWSER_SETTINGS_REWRITE_MS): boolean {
+  return lastWrite === undefined || now - lastWrite >= windowMs;
 }
 
 /**

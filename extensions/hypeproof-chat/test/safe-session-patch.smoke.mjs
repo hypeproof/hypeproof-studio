@@ -49,8 +49,9 @@ try {
 
   // 2. Default off, application-scoped.
   const model = read(FILES[4]);
-  assert.match(model, /const hpSafe = this\.configurationService\.getValue<boolean>\('hypeproof\.browser\.hardenedSessionEnabled'\) === true\n\t\t\t&& this\.configurationService\.getValue<boolean>\('hypeproof\.browser\.safeSession'\) === true;/, "the gate: flag AND minor seat");
-  assert.match(model, /const safe = hpSafe \? \{ allowlist: hpAllowlist \} : undefined;/, "off → no safe options, upstream call unchanged");
+  // The gate (flag AND minor seat, REQ-N11 lock included) lives in hpSafeSessionOptions; browser-settings-lock.smoke.mjs runs it.
+  assert.match(model, /const on = \(configurationService\.getValue<boolean>\('hypeproof\.browser\.hardenedSessionEnabled'\) === true \|\| lock\?\.hardened === true\)\n\t\t&& \(configurationService\.getValue<boolean>\('hypeproof\.browser\.safeSession'\) === true \|\| lock\?\.safeSession === true\);/, "the gate: flag AND minor seat");
+  assert.match(model, /const safe = hpSafeSessionOptions\(this\.configurationService, this\.storageService\);/, "off → no safe options, upstream call unchanged");
   const contribution = read(FILES[5]);
   for (const key of ["hardenedSessionEnabled", "safeSession", "safeAllowlist"]) {
     const block = contribution.split(`'hypeproof.browser.${key}': {`)[1]?.split("\n\t\t}")[0] ?? "";
@@ -111,6 +112,10 @@ try {
 // The chat extension's side: no settings write without a served profile (the keys are registered now).
 const provider = fs.readFileSync(path.join(repo, "extensions/hypeproof-chat/src/chatPanelProvider.ts"), "utf8");
 assert.match(provider, /private async applyBrowserSafety\(profile: ResolvedProfile \| null\): Promise<void> \{\n    if \(profile\) \{/, "a failed fetch keeps the last served values");
-assert.doesNotMatch(provider, /hardenedSessionEnabled/, "the extension never turns the hardened session on (real-device check first)");
+// REQ-N11 (2026-11-07): the extension writes hardenedSessionEnabled only through the settings lock, whose value is the
+// served `browser_session.hardened` or the registered default (off): never on by itself before the real-device check.
+assert.doesNotMatch(provider, /update\("hardenedSessionEnabled"/, "no direct write of the flag");
+const { browserSettingsLockFrom } = await import("../src/browserSafetyHelpers.ts");
+assert.equal(browserSettingsLockFrom({ minor_cohort: true, browser_session: { mode: "safe", allowlist: ["a.example"] } }, false, 1).hardened, false, "not served: stays off");
 
 console.log("safe-session core patch: applies to pristine 1.116, default off, application-scoped, every top-level load checked, matcher matches the extension, staged PASS");

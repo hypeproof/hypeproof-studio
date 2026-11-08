@@ -198,8 +198,11 @@ try {
   const model = read(MODEL);
   const fn = model.slice(model.indexOf("export function hpSafeSessionOptions("), model.indexOf("\n}\n", model.indexOf("export function hpSafeSessionOptions(")) + 3);
   const fnFile = path.join(tmp, "options.ts");
-  fs.writeFileSync(fnFile, fn.replace(/: IConfigurationService/, ": any").replace(/: IBrowserSafeSessionOptions \| undefined/, ""));
-  const { hpSafeSessionOptions } = await import(pathToFileURL(fnFile).href);
+  fs.writeFileSync(fnFile, fn.replace(/: IConfigurationService/, ": any").replace(/, storageService: IStorageService/, ", storageService: any").replace(/: IBrowserSafeSessionOptions \| undefined/, "")
+    + "\nfunction hpBrowserSettingsLock(_s: any) { return undefined; }\n");
+  const { hpSafeSessionOptions: withLock } = await import(pathToFileURL(fnFile).href);
+  // No REQ-N11 lock here (adult seat): the settings decide. The lock is covered by browser-settings-lock.smoke.mjs.
+  const hpSafeSessionOptions = (c) => withLock(c, {});
   const conf = (o) => ({ getValue: (k) => o[k.replace("hypeproof.browser.", "")] });
   assert.equal(hpSafeSessionOptions(conf({ hardenedSessionEnabled: false, safeSession: true, safeAllowlist: ["a.example"] })), undefined, "flag off → upstream");
   assert.equal(hpSafeSessionOptions(conf({ hardenedSessionEnabled: true, safeSession: false })), undefined, "adult seat → upstream");
@@ -208,13 +211,13 @@ try {
 
   assert.match(read(PLATFORM), /setSafeSession\(safe: IBrowserSafeSessionOptions \| undefined\): Promise<void>;/, "IPC surface");
   const contribution = read(CONTRIB);
-  assert.match(contribution, /const push = \(\) => \{ void browserViewService\.setSafeSession\(hpSafeSessionOptions\(configurationService\)\); \};\n\t\tpush\(\);/, "pushed at startup");
+  assert.match(contribution, /const push = \(\) => \{ const safe = hpSafeSessionOptions\(configurationService, storageService\); active\.set\(!!safe\); void browserViewService\.setSafeSession\(safe\); \};\n\t\tpush\(\);/, "pushed at startup");
   assert.match(contribution, /if \(e\.affectsConfiguration\('hypeproof\.browser'\)\) \{\n\t\t\t\tpush\(\);/, "pushed on every change");
   assert.match(contribution, /registerWorkbenchContribution2\(HpSafeSessionContribution\.ID, HpSafeSessionContribution, WorkbenchPhase\.BlockStartup\);/, "before editors restore");
   const actions = read(ACTIONS);
   const ext = actions.slice(actions.indexOf("class OpenInExternalBrowserAction"), actions.indexOf("class OpenBrowserSettingsAction"));
-  assert.match(ext, /precondition: ContextKeyExpr\.and\(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL, ContextKeyExpr\.or\(ContextKeyExpr\.not\('config\.hypeproof\.browser\.hardenedSessionEnabled'\), ContextKeyExpr\.not\('config\.hypeproof\.browser\.safeSession'\)\)\),/, "toolbar button disabled while on");
-  assert.match(ext, /async run\(accessor: ServicesAccessor, browserEditor = accessor\.get\(IEditorService\)\.activeEditorPane\): Promise<void> \{\n\t\t\/\/ Studio \(REQ-N11\)[^\n]*\n\t\tif \(hpSafeSessionOptions\(accessor\.get\(IConfigurationService\)\)\) \{\n\t\t\treturn;\n\t\t\}/, "a direct command call refuses too");
+  assert.match(ext, /precondition: ContextKeyExpr\.and\(BROWSER_EDITOR_ACTIVE, CONTEXT_BROWSER_HAS_URL, ContextKeyExpr\.not\('hypeproofBrowserSafeSession'\)\),/, "toolbar button disabled while on");
+  assert.match(ext, /async run\(accessor: ServicesAccessor, browserEditor = accessor\.get\(IEditorService\)\.activeEditorPane\): Promise<void> \{\n\t\t\/\/ Studio \(REQ-N11\)[^\n]*\n\t\tif \(hpSafeSessionOptions\(accessor\.get\(IConfigurationService\), accessor\.get\(IStorageService\)\)\) \{\n\t\t\treturn;\n\t\t\}/, "a direct command call refuses too");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

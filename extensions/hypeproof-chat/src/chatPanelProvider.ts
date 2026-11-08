@@ -264,7 +264,7 @@ import { isWriteToolName, writePathLine, writePathEntries, writeScopeKeys, write
 import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
+import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLockOf, browserSettingsReverts, browserSettingsWritable, BROWSER_SETTINGS_REWRITE_MS, externalLinkDialog, learnerLinkPolicy, linkSeatKey, resolveBrowserSafety, routeExternalLink, SAVED_LINK_SAFETY_KEY, savedLinkSafetyFor, savedLinkSafetyFrom, savedLinkSafetyStale, type ExternalLinkRoute } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
@@ -3275,6 +3275,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
     if (sub) context.subscriptions.push(sub);
+    // REQ-N11 (Jay 2026-11-07) — a locked (minor or safe) seat's hardened-session settings are put back on
+    // every change and at startup; the core patch reads the same lock, so the window in between stays locked.
+    const lockSub = vscode.workspace.onDidChangeConfiguration?.((e) => { if (e.affectsConfiguration("hypeproof.browser")) void this.reassertBrowserSettings(); });
+    if (lockSub) context.subscriptions.push(lockSub);
+    void this.reassertBrowserSettings();
     // cr-review (CR-02) — the Service's switch can go off while the App stays open: while the
     // director's key is on, it is asked again every five minutes, so the palette entry outlives the
     // switch by at most that long. While the key is off the timer sends nothing, so an instructor
@@ -3568,13 +3573,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async applyBrowserSafety(profile: ResolvedProfile | null): Promise<void> {
     if (profile) {
       const { safeSession, safeAllowlist } = resolveBrowserSafety(profile);
+      const cfg = vscode.workspace.getConfiguration("hypeproof.browser");
+      // REQ-N11 (2026-11-07) — the lock first: the core patch follows it while the settings are written.
+      const lock = browserSettingsLockFrom(profile, cfg.inspect?.<boolean>("hardenedSessionEnabled")?.defaultValue, Date.now());
+      try { await this.context.globalState.update(BROWSER_SETTINGS_LOCK_KEY, lock ?? undefined); } catch { /* best-effort */ }
       try {
-        const cfg = vscode.workspace.getConfiguration("hypeproof.browser");
         await cfg.update("safeSession", safeSession, vscode.ConfigurationTarget.Global);
         await cfg.update("safeAllowlist", safeAllowlist, vscode.ConfigurationTarget.Global);
       } catch {
         /* setting not registered → build without the core patch; nothing to enforce */
       }
+      await this.reassertBrowserSettings();
     }
     // CGP-KNOW-R-021 — the cohort (safe session) and workspace root decide where downloads go.
     await this.downloadWatcher?.reapply();
@@ -3589,6 +3598,35 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seat = linkSeatKey(token);
     if (!seat) return;
     try { await this.context.globalState.update(SAVED_LINK_SAFETY_KEY, savedLinkSafetyFrom(profile, seat, Date.now())); } catch { /* best-effort */ }
+  }
+  /**
+   * REQ-N11 (Jay 2026-11-07) — put a locked seat's hardened-session settings back to what the served profile set
+   * (`browserSettingsReverts`: looser values only; a stricter one stays). No lock (adult seat) → nothing.
+   */
+  /** REQ-N11 — when this window last wrote each hardened-session setting (`browserSettingsWritable`). */
+  private browserSettingsWrites?: Map<string, number>;
+  private browserSettingsRecheck?: ReturnType<typeof setTimeout>;
+  private async reassertBrowserSettings(): Promise<void> {
+    try {
+      const lock = browserSettingsLockOf(this.context.globalState.get(BROWSER_SETTINGS_LOCK_KEY));
+      if (!lock) return;
+      const cfg = vscode.workspace.getConfiguration("hypeproof.browser");
+      const reverts = browserSettingsReverts(lock, { hardenedSessionEnabled: cfg.get("hardenedSessionEnabled"), safeSession: cfg.get("safeSession"), safeAllowlist: cfg.get("safeAllowlist") });
+      const writes = (this.browserSettingsWrites ??= new Map<string, number>());
+      for (const [key, value] of reverts) {
+        // Only the allowlist can ping-pong between two windows' locks (the booleans only ever go to true): a list this
+        // window wrote under 5 s ago is not rewritten now, and is checked again once the window has passed.
+        if (key === "safeAllowlist") {
+          const last = writes.get(key);
+          if (!browserSettingsWritable(last, Date.now())) {
+            if (!this.browserSettingsRecheck) this.browserSettingsRecheck = setTimeout(() => { this.browserSettingsRecheck = undefined; void this.reassertBrowserSettings(); }, BROWSER_SETTINGS_REWRITE_MS - (Date.now() - (last ?? 0)) + 50);
+            continue;
+          }
+          writes.set(key, Date.now());
+        }
+        try { await cfg.update(key, value, vscode.ConfigurationTarget.Global); } catch { /* not registered → build without the core patch */ }
+      }
+    } catch { /* best-effort: the core patch reads the same lock */ }
   }
   /** REQ-N11 — sign-out (no credential) or another seat: the saved copy is removed. */
   private async reconcileSavedLinkSafety(): Promise<void> {
@@ -4870,7 +4908,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const browser = vscode.workspace.getConfiguration("hypeproof.browser");
     const profile = this.cachedProfile;
     const saved = profile ? null : savedLinkSafetyFor(this.context.globalState.get(SAVED_LINK_SAFETY_KEY), linkSeatKey(await this.context.secrets.get(TOKEN_KEY)));
-    const { safety, enforceAllowlist } = learnerLinkPolicy({ profile: profile ?? this.cachedProfile, saved, persistedSafeSession: browser.get<boolean>("safeSession"), persistedAllowlist: browser.get<string[]>("safeAllowlist"), setting: vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled") });
+    // REQ-N11 (2026-11-07) — the settings lock outranks the settings file as the last fallback (sign-out or a seat
+    // change keeps the lock but drops the saved copy): a lock that says safe stays safe with the served list.
+    const lock = browserSettingsLockOf(this.context.globalState.get(BROWSER_SETTINGS_LOCK_KEY));
+    const { safety, enforceAllowlist } = learnerLinkPolicy({ profile: profile ?? this.cachedProfile, saved, persistedSafeSession: lock?.safeSession ? true : browser.get<boolean>("safeSession"), persistedAllowlist: lock ? lock.allowlist : browser.get<string[]>("safeAllowlist"), setting: vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("safeLinkAllowlistEnabled") });
     return routeExternalLink(raw, safety, { enforceAllowlist });
   }
   private opsLastArtifact: string | undefined;
