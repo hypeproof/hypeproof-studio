@@ -58,7 +58,6 @@ import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTu
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
 import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
 
-/** The first-turn note a project switch leaves for the folder it opens (takeProjectSwitchBrief). */
 /** #3597 — the release gate state a provider holds; a module function keeps plain-object test hosts working (#3580). */
 interface ReleaseGateHost {
   cachedProfile?: { rehearsal?: boolean } | null;
@@ -86,6 +85,7 @@ async function refreshReleaseGate(host: ReleaseGateHost, isInstructor: boolean, 
   host.releaseGateReason = gate.ok ? undefined : gate.reason;
 }
 
+/** The first-turn note a project switch leaves for the folder it opens (takeProjectSwitchBrief). */
 const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
 const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
@@ -7872,10 +7872,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       available: () => local() !== null,
       executorModel: () => local()?.model,
       run: async (input) => {
-      // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
-      if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
-      return this.runContractTurn(input, local());
-    },
+        // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
+        if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
+        return this.runContractTurn(input, local());
+      },
       previewOpen: (webPath) => this.contractPreviewOpen(webPath),
     };
   }
