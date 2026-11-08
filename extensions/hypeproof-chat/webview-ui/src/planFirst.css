@@ -1,5 +1,8 @@
 /* CGP-CHAT-R-004 / CGP-CHAT-D-004 — the "계획 먼저" chip and the plan card. In flow above the composer, never over it. */
 .hps-plan-chip {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: var(--hp-space-1);
@@ -77,3 +80,8 @@
 }
 .hps-selected-tools { grid-row: 2; grid-column: 2; justify-self: start; display: flex; flex-wrap: wrap; gap: var(--hp-space-2); min-inline-size: 0; max-inline-size: 100%; }
 .hps-selected-tools .hps-selected-tool { grid-row: auto; grid-column: auto; }
+/* Narrow windows: the chip keeps its 44px target and accessible name but draws only its icon, so the composer's button row does not wrap. */
+@media (max-width: 420px) {
+  .hps-plan-chip { padding-inline: 0; justify-content: center; }
+  .hps-plan-chip > span { position: absolute; inline-size: var(--ds-c-studio-chatdetails-size-3); block-size: var(--ds-c-studio-chatdetails-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}

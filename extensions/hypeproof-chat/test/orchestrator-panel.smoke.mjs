@@ -283,10 +283,10 @@ const OLD_SCREENS = {
 const BASE = {
   // Re-recorded for CGP-CHAT-R-004 (TZ=UTC): a non-personal ChatPanel draws the 계획 먼저 chip in the composer's button row;
   // that button is the only markup change, so the composer height is unchanged (the personal seat uses the tools menu).
-  "ChatPanel/adult-plain": "2efea1fca1844739144d71b3edf39368ce21b51eed9282902c598d65ed08c51e",
-  "ChatPanel/adult-effort-observed": "ca5a4dadc0a39ea724499e2f3fd6272f4b73052ae6eae069ccce50d7bd9a6af4",
-  "ChatPanel/adult-timeline": "bda0079450cd02c1db65426fba6fcd18f4a72e870f982f2c91a41bb6676ed927",
-  "ChatPanel/kids": "9bb1ba3357d45f821812db1f86364ff28d52e4eb4c0fabc86343c226dc739d06",
+  "ChatPanel/adult-plain": "678b2d12ee36be5397348a9da9c52e11eed81a57d598d6388be6ee23114a5ad0",
+  "ChatPanel/adult-effort-observed": "9dc5952704e7281b99b990a6a617f4f24a002be149751d8a9b56a1ea374f5e03",
+  "ChatPanel/adult-timeline": "cbe4cb81ade432dedeeffbff1f57efc51d0a60862840a92f338dc5c190399821",
+  "ChatPanel/kids": "e61c491814778e4706135d07690af1386227324589b744c1ce1aeb6bed6edb0c",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -306,8 +306,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "3f860bff0dfc8155e26078d7e62417688a39e396d33db977b5d7f409251477ca",
-  "ChatPanel/classroom-access-unknown": "f74342404565c9bfc4ec10817f467e0d599c96f036f97657338351fb029faea7",
+  "ChatPanel/classroom-class-funded": "afbcd2b862d678b4498e59d3802e2d9c062730c5013002ae2411d16e8cd5c70c",
+  "ChatPanel/classroom-access-unknown": "2a1dbf781a0996c9fb64e87093982ba86373dd5ca0652e381078bc82f2be5aa4",
 };
 
 const status = rendererStatus();
