@@ -71,7 +71,8 @@ export function releaseContract({pr, commit, rcTag, candidate, version, assets, 
   require(sections.length === 2, 'one frozen black-box checklist is required');
   const markdown = sections[1].split(/^#{1,3} /m)[0].trim();
   const book = parseYaml(read(`${candidate}:docs/operations/release-casebook/cases.yaml`));
-  const cases = markdown.split('\n').filter(line => /^\s*- \[[ xX]\]/.test(line)).map(line => {
+  const cases = markdown.split('\n').filter(line => /^\s*(?:[-+*]|\d+[.)])\s+/.test(line) &&
+    (/\[[ xX]\]/.test(line) || /\bBB-\d{3}\b/.test(line))).map(line => {
     const match = /^- \[[ xX]\] \*\*(BB-\d{3})\*\* (P[012]) (.+)$/.exec(line.trim());
     require(match, 'unrecognized checklist row; never drop a checkbox');
     const item = book.cases.find(c => c.id === match[1]);

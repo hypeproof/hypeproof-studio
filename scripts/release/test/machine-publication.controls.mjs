@@ -111,6 +111,10 @@ test('frozen checklist parser refuses missing P0, changed case text and unrecogn
   assert.throws(() => releaseContract({...args, read: rev => rev.includes('releases/') ? record.replace('Starts —', 'Other —') : read(rev)}), /differs/);
   assert.throws(() => releaseContract({...args, read: rev => rev.includes('releases/') ? record.replace('- [ ]', '- [ ] unparsed') : read(rev)}), /unrecognized/);
   assert.throws(() => releaseContract({...args, read: rev => rev.endsWith('cases.yaml') ? book + '  - id: BB-005\n    priority: P0\n' : read(rev)}), /omitted a required P0/);
+  for (const marker of ['*', '+', '1.', '2)']) {
+    assert.throws(() => releaseContract({...args, read: rev => rev.includes('releases/') ?
+      record.replace('## 5.', `${marker} [ ] **BB-005** P1 Stops — Close\n## 5.`) : read(rev)}), /unrecognized/);
+  }
 });
 
 test('actual Service deployment version resolves to full annotated source independently of a dependency pin', () => {
