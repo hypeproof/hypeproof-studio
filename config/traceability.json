@@ -9983,6 +9983,56 @@
       ]
     },
     {
+      "id": "ST-REQ-TRUST-OWN-FOLDERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## A. Lifecycle & autoOnboard"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TRUST-OWN-FOLDERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studioFolderTrust.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "scripts/patches/core/hps-studio-folder-trust.patch"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TRUST-OWN-FOLDERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS",
+        "ST-IMP-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/studio-folder-trust.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-OUTBOUND-CONFIRMATION",
       "stage": "requirement",
       "owner": "jayleekr",
