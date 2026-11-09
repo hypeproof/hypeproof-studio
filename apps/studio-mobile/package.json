@@ -4,7 +4,7 @@
   "type": "module",
   "version": "2026.1109.0",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/model.test.mjs test/service.test.mjs",
     "start": "node dev.mjs"
   },
   "engines": {

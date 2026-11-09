@@ -10,7 +10,7 @@ The static opening question is labeled separately, never attributed to an AI run
 
 Native boundary: no Xcode installed on the development Mac; existing Studio repository secrets have macOS signing only. iOS distribution provisioning and App Store Connect/TestFlight access need confirmation. Home Screen installation is PWA installation, not native acceptance.
 
-Rollback: remove this isolated test deployment or redeploy its previous version. Existing Studio, Service, and Lab production deployments are not changed.
+Rollback/exit: keep the origin reachable for local record export, and redeploy a known prior version or disable AI admission while retaining the reading/export surface. Remove the isolated project only after an explicit retention decision for test users. Existing Studio, Service, and Lab production deployments and server-side grant accounting are not changed. Under `products.yaml`, this web-delivered participant code follows the Service (`w`) train because it requires no native filesystem/shell access or binary installation.
 
 ## Requirements
 

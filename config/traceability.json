@@ -17628,6 +17628,9 @@
         },
         {
           "path": "apps/studio-mobile/public/icon-512.png"
+        },
+        {
+          "path": "products.yaml"
         }
       ]
     },

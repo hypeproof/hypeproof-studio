@@ -13,7 +13,8 @@ permissions:
   contents: read
 jobs:
   mobile:
-    runs-on: ubuntu-latest
+    # Match the Ubuntu 24.04 validation host and the pinned browser support.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
