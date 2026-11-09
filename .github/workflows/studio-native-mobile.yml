@@ -1,0 +1,56 @@
+name: Studio native mobile
+on:
+  push:
+    branches: ['feat/studio-native-mobile-20261110']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
+  pull_request:
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build device binary and test native simulator
+        run: bash apps/studio-native/scripts/ios-verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-unsigned-${{ github.sha }}
+          path: |
+            apps/studio-native/evidence/
+            apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
+          retention-days: 14
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Native APK and local record controls
+        working-directory: apps/studio-native/android
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-android-preview-${{ github.sha }}
+          path: |
+            apps/studio-native/android/app/build/outputs/apk/debug/*.apk
+            apps/studio-native/android/app/build/reports/
+          retention-days: 14
