@@ -127,6 +127,17 @@ test('DEC-10 class switch: served false hides the mode, turns a learner\'s own "
   await handle(s, { type: 'planFirstApprove', planId: 'p1', text: '1. a' });
   assert.deepEqual(s.sent, [], 'no approved turn runs');
   assert.deepEqual(s.fake.posts.at(-1), { type: 'planFirstState', on: false, plan: null, available: false });
+  // The switch flips off in the instant after an approval (the profile refreshes while the state post is in flight):
+  // the approved text must not go out as a normal turn; the plan is dropped and the learner sees the status line once.
+  const w = seat({});
+  w.session.setOn('t1', true); w.session.beginTurn('t1', 'x').ready('1. a');
+  w.fake.post = async function (m) { this.posts.push(m); this.cachedProfile = { plan_first: { available: false } }; };
+  await handle(w, { type: 'planFirstApprove', planId: 'p1', text: '1. a' });
+  assert.deepEqual(w.sent, [], 'a plan approved just before the switch went off is not sent');
+  assert.deepEqual(w.fake.posts.at(-1), { type: 'planFirstState', on: false, plan: null, available: false, switchedOff: true }, 'calm status line, mode off');
+  assert.equal(w.session.view('t1').plan, null); assert.equal(w.session.view('t1').on, false);
+  const next = ChatPanelProvider.prototype.beginPlanTurn.call(w.fake, '1. a');
+  assert.equal(next.planning, false, 'no approval is left to spend');
   // A stale chip press cannot turn it back on.
   await handle(s, { type: 'planFirstSet', on: true });
   assert.equal(s.session.view('t1').on, false);

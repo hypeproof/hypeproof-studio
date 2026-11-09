@@ -1865,6 +1865,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const action = msg.type === "planFirstApprove" ? this.planFirst.approve(task, msg.planId, msg.text) : this.planFirst.redo(task, msg.planId, msg.text);
     await this.postPlanFirst();
     if (!action.ok) return;
+    // DEC-10 — the class switch is served by the Service and can flip in the instant after the learner approved (or asked
+    // for a redo). Re-check right before the send: with it off the minted approval is dropped, one status line is shown
+    // (postPlanFirst retires the held mode) and nothing is sent or run.
+    if (!planFirstAvailable(this.cachedProfile)) { await this.postPlanFirst(); return; }
     if (msg.type === "planFirstApprove") {
       const approved = this.planFirst.approvedFor(task);
       // Only the learner's own approval and edit are evidence (AE-35); the plan text stays in the local task record.
