@@ -69,7 +69,7 @@ const OVERRIDES = {
   "shell-processes-app": { banner: BANNER_POSTED },
   "checkpoint": { banner: BANNER_POSTED },
   "memory-write-line": { banner: BANNER_POSTED },
-  "voice-ui": { banner: BANNER_POSTED },
+  "voice-ui": { banner: BANNER_POSTED_STATE },
   "voice-mount": { banner: BANNER_POSTED },
 };
 

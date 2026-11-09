@@ -1792,9 +1792,9 @@ Jay decided that availability follows the class: a per-class switch is added (th
 ## CGP-VOICE-R-004 / CGP-VOICE-D-003: disclosure sheet (2026-11-09, policy-backed)
 
 - Sentences are the policy's Appendix B, verbatim, keyed by policy version in `voiceCopy.ts`; one paragraph per served half; the button is `시작하기`. DES-CGPV-04's "at most 3 short sentences at a 2nd-grade level" gives way to the approved copy, which is what the register's own text says ("copy is generated from the active policy").
-- Remembered once per policy version in the host's `globalState` (version string only), install-wide: an account has no id on this side. A different version shows the sheet again.
+- Remembered once per seat and policy version (policy 5: once per account and policy version), in the host's `globalState` as one record keyed by the seat's own scope (activity connection plus profile id) holding version strings only. On a shared class laptop each seat reads the sheet once; a seat switch asks the host again. A different version shows the sheet again. An earlier revision of this change keyed it per install; that did not match the policy and was corrected.
 - The sheet reuses the shared modal surface (focus trap, Escape, focus return). The title `음성 사용 안내` is agent-chosen.
-- Confirmed by Jay: yes (2026-11-09) for the sentences and the button; no for the title.
+- Confirmed by Jay: yes (2026-11-09) for the sentences, the button and the once-per-seat-and-version rule (the policy's own); no for the title and for the seat-key construction.
 
 ## CGP-VOICE-R-012 / R-016, REQ-CGPV-17b/17c/18/19: dictation (2026-11-09, policy-backed with agent choices)
 
@@ -1803,6 +1803,8 @@ Jay decided that availability follows the class: a per-class switch is added (th
 - The request said "hard stop at 60 s". Studio stops at 58 s: the Service refuses a clip it measures over 60 s from the bytes, and the encoder flushes one more packet after `stop()`, so a stop at exactly 60 s could throw away a whole clip. Agent-chosen margin.
 - No auto-send, ever; no "받아쓰고 보내기" action (REQ-CGPV-17 allows one as a separate action; not built).
 - Retry (R-016): a failed clip is kept in memory for one retry for ten minutes (the policy's own figure), dropped on success, dismiss or unmount; a retried transcript needs `메시지에 넣기`.
+- Hiding the window, `pagehide`, a task or seat switch (the chat remounts) and disposing the panel stop a recording, release the microphone and drop the clip and any kept retry copy: the chat view keeps its webview alive while hidden (`retainContextWhenHidden`), so without this a hidden window would keep recording for up to 58 s. Agent-chosen.
+- A transcript that was inserted but never sent stays in the composer draft and is saved like any typed draft; that is ordinary chat text under DEC-05, not stored audio.
 - Not an outbound-consent dialog: the first-use disclosure carries the statement, and a prompt per clip would be noise a learner learns to click through.
 - Softer line `소리가 잘 들리지 않았어요. 다시 말해 볼까요?` for unreadable or silent clips is from the task brief, agent-written. The cap line is the policy's.
 - Key: Alt+Shift+M start/stop, Escape cancels a recording, in-app only (beside the existing Alt+Shift+J). Agent-chosen.

@@ -26,21 +26,27 @@ function hubFor(make: () => SpeechEnv): ReadAloud {
   return shared;
 }
 
+const IDLE = { kind: "idle" } as const;
+const idleStore = { subscribe: () => () => {}, getStatus: () => IDLE };
+
 export function ReadAloudButton({ answerId, content }: { answerId: string; content: string }) {
   const voice = useVoice();
   const make = useContext(SpeechEnvContext);
-  const hub = hubFor(make);
-  const status = useSyncExternalStore(hub.subscribe, hub.getStatus, hub.getStatus);
+  // Nothing speech-related is touched unless read-aloud is served: no hub, no synthesizer lookup, no cancel().
+  const enabled = voice.availability.kind === "on" && voice.availability.served.readAloud;
+  const hub = enabled ? hubFor(make) : null;
+  const store = hub ?? idleStore;
+  const status = useSyncExternalStore(store.subscribe, store.getStatus, store.getStatus);
   const [note, setNote] = useState("");
   const playing = status.kind === "playing" && status.id === answerId;
-  // An answer that goes away, or voice that goes off, stops its own reading.
-  useEffect(() => () => { const s = hub.getStatus(); if (s.kind === "playing" && s.id === answerId) hub.stop(); }, [hub, answerId]);
-  useEffect(() => { if (voice.availability.kind !== "on") hub.stop(); }, [voice.availability.kind, hub]);
+  // An answer that goes away, or voice that goes off, stops its own reading (a no-op when it is not playing).
+  useEffect(() => () => { const s = hub?.getStatus(); if (hub && s?.kind === "playing" && s.id === answerId) hub.stop(); }, [hub, answerId]);
+  useEffect(() => { if (!enabled && shared) shared.stop(); }, [enabled]);
 
   if (voice.availability.kind === "class_off") {
     return <button type="button" className="hps-answer-action hps-voice-listen" disabled aria-label={`${READ_ALOUD_LABEL}, ${CLASS_OFF}`} data-hp-tooltip={CLASS_OFF}><ChatIcon kind="speaker" size={16} /><span>{READ_ALOUD_LABEL}</span></button>;
   }
-  if (voice.availability.kind !== "on" || !voice.availability.served.readAloud) return null;
+  if (!hub) return null;
   if (!hub.available) {
     return <button type="button" className="hps-answer-action hps-voice-listen" disabled aria-label={`${READ_ALOUD_LABEL}, ${READ_ALOUD_UNAVAILABLE}`} data-hp-tooltip={READ_ALOUD_UNAVAILABLE}><ChatIcon kind="speaker" size={16} /><span>{READ_ALOUD_LABEL}</span></button>;
   }

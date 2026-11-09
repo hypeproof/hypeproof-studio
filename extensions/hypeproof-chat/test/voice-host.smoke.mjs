@@ -2,7 +2,7 @@
 // fetch stands in for POST /v1/voice/transcribe; nothing here reaches a network.
 // Run: node --experimental-strip-types test/voice-host.smoke.mjs
 import assert from "node:assert/strict";
-import { transcribeClip, micSettingsUri, readAcknowledged, withAcknowledged } from "../src/voiceHost.ts";
+import { transcribeClip, micSettingsUri, readAcknowledged, withAcknowledged, seatKeyOf } from "../src/voiceHost.ts";
 import { SOFT_UNREADABLE, NETWORK, GENERIC_UNAVAILABLE } from "../src/voiceCopy.ts";
 
 const audio = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]).toString("base64");
@@ -76,11 +76,23 @@ assert.equal(SOFT_UNREADABLE, "소리가 잘 들리지 않았어요. 다시 말�
 assert.equal(micSettingsUri("darwin"), "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
 assert.equal(micSettingsUri("win32"), "ms-settings:privacy-microphone");
 assert.equal(micSettingsUri("linux"), null);
-// Disclosure acknowledgements: metadata, bounded, only well-formed versions.
-assert.deepEqual(readAcknowledged(["hps-voice-policy/1", 5, "<script>", "x"]), ["hps-voice-policy/1"]);
-assert.deepEqual(readAcknowledged(undefined), []);
-assert.deepEqual(withAcknowledged([], "hps-voice-policy/1"), ["hps-voice-policy/1"]);
-assert.deepEqual(withAcknowledged(["hps-voice-policy/1"], "hps-voice-policy/1"), ["hps-voice-policy/1"]);
+// Disclosure acknowledgements: per seat and policy version (policy 5), metadata only, bounded.
+{
+  const A = seatKeyOf("act-a", "kid-1"), B = seatKeyOf("act-a", "kid-2"), V = "hps-voice-policy/1";
+  assert.notEqual(A, B);
+  assert.deepEqual(readAcknowledged(undefined, A), []);
+  const one = withAcknowledged(undefined, A, V);
+  assert.deepEqual(readAcknowledged(one, A), [V]);
+  assert.deepEqual(readAcknowledged(one, B), [], "a second seat on the same computer has not read it");
+  const both = withAcknowledged(one, B, V);
+  assert.deepEqual([readAcknowledged(both, A), readAcknowledged(both, B)], [[V], [V]]);
+  assert.deepEqual(readAcknowledged(withAcknowledged(one, A, V), A), [V], "idempotent");
+  assert.deepEqual(readAcknowledged({ [A]: [V, 5, "<script>", "x"] }, A), [V], "only well-formed versions");
+  assert.deepEqual(readAcknowledged(["old", "format"], A), [], "the old install-wide list is not read as a seat");
+  let big; for (let i = 0; i < 200; i++) big = withAcknowledged(big, seatKeyOf("s" + i, "p"), V);
+  assert.ok(Object.keys(big).length <= 64, "bounded");
+  assert.deepEqual(readAcknowledged(big, seatKeyOf("s199", "p")), [V], "the newest seat survives");
+}
 
 // The audio and the transcript are never logged: run a clip through while console and stdout are watched.
 {

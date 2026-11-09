@@ -50,12 +50,14 @@ export function useVoiceController(profile: ResolvedProfile | null | undefined, 
   const version = availability.kind === "on" ? availability.served.policyVersion : null;
 
   // Which disclosure versions were read: asked once, and only when voice is on.
+  // The host answers for the current seat; a seat switch asks again and forgets the last answer.
   useEffect(() => {
+    setAcknowledged(null);
     if (!version) return;
     const off = onHostMessage((m) => { if (m.type === "voiceDisclosureState") setAcknowledged(m.acknowledged); });
     postToHost({ type: "voiceDisclosureRead" });
     return off;
-  }, [version]);
+  }, [version, scopeKey]);
 
   const gate = useCallback((go: () => void) => {
     if (!version) return;

@@ -107,11 +107,32 @@ export function micSettingsUri(platform: string): string | null {
   return null;
 }
 
-/** The policy versions this install's learner has read the disclosure for. Metadata, never content. */
-export const VOICE_DISCLOSURE_KEY = "hps.voice.disclosure.acknowledged";
-export function readAcknowledged(raw: unknown): string[] {
-  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string" && /^[a-z0-9-]+\/[0-9]+$/.test(v)).slice(0, 20) : [];
+/**
+ * Which policy versions each seat has read the disclosure for (policy 5: once per account and policy version).
+ * One record keyed by the seat's own scope (the activity connection plus profile id), so on a shared laptop each
+ * child's seat sees the sheet once. Metadata only: a seat key and version strings, never audio or text.
+ */
+export const VOICE_DISCLOSURE_KEY = "hps.voice.disclosure.bySeat";
+const VERSION = /^[a-z0-9-]+\/[0-9]+$/;
+const SEAT_MAX = 64;
+export function seatKeyOf(scope: unknown, profileId: unknown): string {
+  return `${typeof scope === "string" ? scope : ""}|${typeof profileId === "string" ? profileId : ""}`.slice(0, 200);
 }
-export function withAcknowledged(list: string[], version: string): string[] {
-  return list.includes(version) ? list : [...list, version].slice(-20);
+function recordOf(raw: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>).slice(0, SEAT_MAX)) {
+    if (Array.isArray(v)) out[k] = v.filter((x): x is string => typeof x === "string" && VERSION.test(x)).slice(0, 20);
+  }
+  return out;
+}
+export function readAcknowledged(raw: unknown, seat: string): string[] { return recordOf(raw)[seat] ?? []; }
+export function withAcknowledged(raw: unknown, seat: string, version: string): Record<string, string[]> {
+  const rec = recordOf(raw);
+  const list = rec[seat] ?? [];
+  delete rec[seat]; // re-inserted last, so the oldest seats fall off first
+  rec[seat] = list.includes(version) ? list : [...list, version].slice(-20);
+  const keys = Object.keys(rec);
+  for (const k of keys.slice(0, Math.max(0, keys.length - SEAT_MAX))) delete rec[k];
+  return rec;
 }

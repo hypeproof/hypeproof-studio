@@ -38,7 +38,7 @@ const hostSays = (data: Record<string, unknown>) => act(() => { g.window.dispatc
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
 // ---- scripted browser objects ----
-interface Rig { recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; cancels: number; inserted: string[]; insertOk: boolean }
+interface Rig { speechEnvCalls: number; recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; cancels: number; inserted: string[]; insertOk: boolean }
 class FakeRecorder {
   static supported = ["audio/webm;codecs=opus"];
   static isTypeSupported(m: string) { return FakeRecorder.supported.includes(m); }
@@ -59,11 +59,11 @@ const dictEnv = () => ({
   setTimeout: (fn: () => void, ms: number) => { const tm = { at: clock + ms, fn, id: timers.length + 1 }; timers.push(tm); return tm.id; },
   clearTimeout: (id: unknown) => { const i = timers.findIndex((x) => x.id === id); if (i >= 0) timers.splice(i, 1); },
 });
-const speechEnv = () => ({
+const speechEnv = () => (rig.speechEnvCalls++, {
   synth: { speak: (u: { text: string; lang: string; voice: unknown }) => rig.spoken.push({ text: u.text, lang: u.lang, voice: u.voice }), cancel: () => { rig.cancels++; }, getVoices: () => [{ lang: "ko-KR", localService: true, name: "Yuna" }] },
   makeUtterance: (text: string) => ({ text, lang: "", rate: 1, voice: null, onend: null, onerror: null }),
 });
-const noSpeech = () => ({ synth: undefined, makeUtterance: () => ({}) as never });
+const noSpeech = () => (rig.speechEnvCalls++, { synth: undefined, makeUtterance: () => ({}) as never });
 
 function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }: { profile: unknown; scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; insertOk?: boolean }) {
   const controller = useVoiceController(profile as never, scope, true);
@@ -79,7 +79,7 @@ function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }:
 const profileOn = (extra: Record<string, unknown> = {}) => ({ profile_id: "p", voice: { dictation: true, read_aloud: true, policy_version: V1, ...extra } });
 
 async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean } = {}) {
-  rig = { recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], cancels: 0, inserted: [], insertOk: true };
+  rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], cancels: 0, inserted: [], insertOk: true };
   timers.length = 0; clock = 0; denyMic = false; g.__posted.length = 0;
   await act(() => root.render(createElement(Harness, { profile, ...opts, key: Math.random() })));
   if (opts.acked && posted("voiceDisclosureRead").length) await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
@@ -303,6 +303,107 @@ t("a profile that stops serving voice stops a reading in progress", async () => 
   const before = rig.cancels;
   await act(() => root.render(createElement(Harness, { profile: { profile_id: "p" }, scope: "other" })));
   ok(rig.cancels > before, "cancelled");
+});
+
+const hide = (state: "hidden" | "visible") => act(() => { (document as unknown as { visibilityState: string }).visibilityState = state; (document as unknown as { dispatchEvent(e: unknown): void }).dispatchEvent({ type: "visibilitychange", bubbles: false }); });
+const startRecording = async () => { await act(() => click(byLabel("받아쓰기") as never)); await flush(); rig.recorders[rig.recorders.length - 1].emit(new Uint8Array(20)); await advance(1200); };
+
+t("hiding the window stops the recording, releases the microphone and sends nothing", async () => {
+  await mount(profileOn(), { acked: true });
+  await startRecording();
+  ok(byLabel("받아쓰기 끝내기"), "recording");
+  const before = rig.tracksStopped;
+  await hide("hidden"); await flush();
+  await hide("visible");
+  ok(rig.tracksStopped > before, "microphone released");
+  eq(posted("voiceTranscribe").length, 0, "the clip was discarded, not sent");
+  ok(byLabel("받아쓰기"), "back to idle");
+  await act(() => click(byLabel("받아쓰기") as never)); await flush();
+  eq(rig.mediaCalls, 2, "a fresh press starts a fresh clip");
+});
+
+t("hiding the window drops a clip kept for retry; the pagehide event does the same", async () => {
+  await mount(profileOn(), { acked: true });
+  await startRecording();
+  await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); await flush();
+  const id = posted("voiceTranscribe")[0].requestId;
+  await hostSays({ type: "voiceTranscribeResult", requestId: id, ok: false, kind: "network", message: "연결", retry: true });
+  ok(byText("다시 시도"), "retry offered");
+  await hide("hidden"); await hide("visible");
+  ok(!byText("다시 시도"), "kept clip gone");
+  await startRecording();
+  await act(() => { g.window.dispatchEvent({ type: "pagehide", bubbles: false }); });
+  eq(posted("voiceTranscribe").length, 1, "pagehide discards the recording too");
+  ok(byLabel("받아쓰기"), "idle");
+});
+
+t("leaving the panel or switching seat or task (the chat remounts) stops the recording and sends nothing", async () => {
+  await mount(profileOn(), { acked: true, scope: "seat-a" });
+  await startRecording();
+  const before = rig.tracksStopped;
+  await act(() => root.render(createElement(Harness, { profile: profileOn(), scope: "seat-b", key: "other-seat" })));
+  ok(rig.tracksStopped > before, "microphone released when the chat remounts");
+  eq(posted("voiceTranscribe").length, 0, "nothing sent");
+  await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
+  await startRecording();
+  const b2 = rig.tracksStopped;
+  await act(() => root.render(createElement("div", {})));
+  ok(rig.tracksStopped > b2, "microphone released when the panel is disposed");
+  eq(posted("voiceTranscribe").length, 0, "nothing sent");
+});
+
+t("inert without read_aloud: nothing speech-related is looked up or called", async () => {
+  for (const profile of [null, { profile_id: "p" }, profileOn({ read_aloud: false }), profileOn({ dictation: false, read_aloud: false })]) {
+    await mount(profile, { acked: true });
+    await act(() => root.render(createElement(Harness, { profile, key: Math.random() })));
+    eq([rig.speechEnvCalls, rig.cancels, rig.spoken.length], [0, 0, 0], `no speech call for ${JSON.stringify(profile)?.slice(0, 50)}`);
+  }
+  await mount(profileOn()); // class off after being on
+  await act(() => root.render(createElement(Harness, { profile: { profile_id: "p" }, scope: "s1" })));
+  eq(rig.cancels, 0, "class-off draws a disabled button and never cancels");
+  await mount(profileOn(), { acked: true }); // served and idle: an idle hub never cancels
+  eq(rig.cancels, 0, "a served, idle seat does not cancel either");
+});
+
+t("a full record, transcribe, retry cycle persists no audio: no setState, storage, blob url, clipboard or extra host message", async () => {
+  const spies: string[] = [];
+  const gw = globalThis as unknown as Record<string, unknown>;
+  const keep = { ls: gw.localStorage, ss: gw.sessionStorage, idb: gw.indexedDB, cou: (URL as unknown as { createObjectURL?: unknown }).createObjectURL };
+  const trap = (name: string) => new Proxy({}, { get: (_t, k) => () => { spies.push(`${name}.${String(k)}`); } });
+  gw.localStorage = trap("localStorage"); gw.sessionStorage = trap("sessionStorage"); gw.indexedDB = trap("indexedDB");
+  (URL as unknown as { createObjectURL: unknown }).createObjectURL = () => { spies.push("URL.createObjectURL"); return ""; };
+  (globalThis as unknown as { __vsState: unknown }).__vsState = undefined;
+  await mount(profileOn(), { acked: true });
+  const bytes = new Uint8Array(64).map((_, i) => (i * 7 + 3) & 255);
+  const b64 = Buffer.from(bytes).toString("base64");
+  await act(() => click(byLabel("받아쓰기") as never)); await flush();
+  rig.recorders[0].emit(bytes); await advance(2000);
+  await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); await flush();
+  const first = posted("voiceTranscribe")[0];
+  eq(first.audio, b64, "the cycle really carried the audio");
+  await hostSays({ type: "voiceTranscribeResult", requestId: first.requestId, ok: false, kind: "network", message: "연결", retry: true });
+  await act(() => click(byText("다시 시도") as never));
+  const second = posted("voiceTranscribe")[1];
+  await hostSays({ type: "voiceTranscribeResult", requestId: second.requestId, ok: true, text: "받아쓴 문장" });
+  const copyKeep = (navigator as unknown as { clipboard?: unknown }).clipboard;
+  gw.localStorage = keep.ls; gw.sessionStorage = keep.ss; gw.indexedDB = keep.idb; (URL as unknown as { createObjectURL: unknown }).createObjectURL = keep.cou; void copyKeep;
+  eq(spies, [], "no storage or blob url used");
+  const state = JSON.stringify((globalThis as unknown as { __vsState: unknown }).__vsState ?? null);
+  ok(!state.includes(b64) && !state.includes(b64.slice(0, 16)), "webview state (setState) holds no audio");
+  const others = g.__posted.filter((m) => m.type !== "voiceTranscribe");
+  ok(others.every((m) => !JSON.stringify(m).includes(b64.slice(0, 16))), "no other host message carries the audio");
+  ok(posted("voiceTranscribe").length === 2, "only the send and the one retry carry it");
+});
+
+t("the disclosure is asked per seat: a second seat on the same computer sees the sheet", async () => {
+  await mount(profileOn(), { acked: true, scope: "seat-a" });
+  eq(posted("voiceDisclosureRead").length, 1);
+  await act(() => root.render(createElement(Harness, { profile: profileOn(), scope: "seat-b", key: "same-tree" })));
+  await act(() => root.render(createElement(Harness, { profile: profileOn(), scope: "seat-c", key: "same-tree" })));
+  ok(posted("voiceDisclosureRead").length >= 2, "the host is asked again for the new seat");
+  await act(() => click(byLabel("받아쓰기") as never));
+  ok(all((e) => e.tagName === "DIALOG")[0], "the new seat reads the disclosure first");
+  eq(rig.mediaCalls, 0, "and no microphone before 시작하기");
 });
 
 t("insertAtCaret: caret, selection, spacing and the length limit", async () => {

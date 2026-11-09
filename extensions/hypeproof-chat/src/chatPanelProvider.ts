@@ -296,7 +296,7 @@ import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, 
 import { parseVerdictRequest, promptIdFor, verdictTargets, type VerdictEvent } from "./answerVerdict";
 import { capturePageContext } from "./nativeBrowser";
 import { openMicrophoneSettings } from "./voiceMicSettings";
-import { transcribeClip, readAcknowledged, withAcknowledged, VOICE_DISCLOSURE_KEY, type TranscribeResult } from "./voiceHost";
+import { transcribeClip, readAcknowledged, withAcknowledged, seatKeyOf, VOICE_DISCLOSURE_KEY, type TranscribeResult } from "./voiceHost";
 import { readServedVoice, VOICE_POLICY_VERSIONS } from "./voiceServed";
 import { runShowThis, showThisMenu, ShowThisLedger, SHOW_THIS_COPY, withRevision, isOwnPreviewTab, type ShowThisEnv } from "./voiceShowThis";
 import { isShowThisRequestId } from "./voicePopupHelpers";
@@ -3933,6 +3933,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // ── Dictation (hps-voice-policy/1). One clip per seat at a time; the audio is an argument and nothing
   // else: no disk, no log line, no state kept after the answer. Metadata (kind, status) is all that leaves.
   private voiceInFlight = false;
+  private voiceSeatKey(): string { return seatKeyOf(activityConnections(this.context)?.scope, this.cachedProfile?.profile_id); }
   private async postVoice(source: vscode.Webview | undefined, msg: Extract<HostMessage, { type: "voiceTranscribeResult" | "voiceMicSettingsResult" | "voiceDisclosureState" }>): Promise<void> {
     if (source) { try { await source.postMessage(msg); } catch { /* the panel closed */ } return; }
     await this.post(msg);
@@ -8627,13 +8628,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postVoice(source, { type: "voiceMicSettingsResult", ok: await openMicrophoneSettings() });
         return;
       case "voiceDisclosureRead":
-        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)) });
+        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY), this.voiceSeatKey()) });
         return;
       case "voiceDisclosureAck":
         if (typeof msg.policyVersion === "string" && (VOICE_POLICY_VERSIONS as readonly string[]).includes(msg.policyVersion)) {
-          await this.context.globalState.update(VOICE_DISCLOSURE_KEY, withAcknowledged(readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)), msg.policyVersion));
+          await this.context.globalState.update(VOICE_DISCLOSURE_KEY, withAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY), this.voiceSeatKey(), msg.policyVersion));
         }
-        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)) });
+        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY), this.voiceSeatKey()) });
         return;
       case "voiceCapabilityProbeResult": {
         // #897 — hand the raw observation to whoever is waiting for it. No verdict

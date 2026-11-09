@@ -141,6 +141,21 @@ function useDictation(api: ComposerAddonApi): DictationController {
     };
   }, [recorder, dropClip]);
 
+  // The chat view keeps its webview alive while hidden (retainContextWhenHidden), so a hidden window would
+  // keep the microphone open. Hiding stops the recording and drops the clip and any kept retry copy.
+  useEffect(() => {
+    const hide = () => {
+      recorder.cancel();
+      dropClip();
+      stopTick();
+      handlers.current.set({ kind: "idle" });
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") hide(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", hide);
+    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", hide); };
+  }, [recorder, dropClip]);
+
   const toggle = useCallback(() => {
     if (apiRef.current.disabled) return;
     if (recorder.current === "recording") { recorder.stop(); return; }

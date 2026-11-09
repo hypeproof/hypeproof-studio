@@ -125,8 +125,9 @@ export class ReadAloud {
 
   stop(): void {
     this.generation++;
-    const wasActive = this.status.kind !== "idle";
+    // Nothing playing means nothing to cancel: an idle hub never touches the synthesizer.
+    if (this.status.kind === "idle") return;
     try { this.env.synth?.cancel(); } catch { /* ignore */ }
-    if (wasActive) this.set({ kind: "idle" });
+    this.set({ kind: "idle" });
   }
 }

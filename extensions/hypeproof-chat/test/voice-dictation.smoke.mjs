@@ -166,16 +166,41 @@ for (const [name, kind] of [["NotAllowedError", "denied"], ["SecurityError", "de
 // The recorder, the control and the host client may not write audio anywhere. A scan of the source
 // (with a planted positive control, so a broken scanner cannot pass) for every way a webview or
 // extension host could keep bytes.
-const PERSIST = /createObjectURL|URL\.createObjectURL|indexedDB|localStorage|sessionStorage|writeFile|createWriteStream|appendFile|globalState|workspaceState|FileSystem|console\.(log|info|warn|error|debug)|appendLine|postMessage\(\{[^}]*audio/;
+const PERSIST = /createObjectURL|indexedDB|localStorage|sessionStorage|writeFile|createWriteStream|appendFile|globalState|workspaceState|secrets\.store|FileSystem|\bfs\.|patchWebviewState|\bsetState\b|console\.(log|info|warn|error|debug)|appendLine|postMessage\(\{[^}]*audio/;
 assert.match("const u = URL.createObjectURL(blob);", PERSIST, "positive control");
 assert.match("localStorage.setItem('clip', b64)", PERSIST, "positive control");
 assert.match("fs.writeFileSync(p, bytes)", PERSIST, "positive control");
+assert.match("patchWebviewState({ voiceClip: base64 })", PERSIST, "positive control: webview state (mutant M2b)");
+assert.match("api.setState({ clip })", PERSIST, "positive control: setState");
+assert.match("await this.context.globalState.update('hps.voice.last', msg.audio)", PERSIST, "positive control: host globalState (mutant M2c)");
+assert.match("this.context.workspaceState.update('k', audio)", PERSIST, "positive control: workspaceState");
+assert.match("await this.context.secrets.store('k', audio)", PERSIST, "positive control: SecretStorage");
 assert.doesNotMatch("const x = clip.bytes.length;", PERSIST, "negative control");
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "");
-for (const f of ["src/voiceDictation.ts", "src/voiceHost.ts", "webview-ui/src/DictationControl.tsx", "src/voiceReadAloud.ts"]) {
+for (const f of ["src/voiceDictation.ts", "src/voiceHost.ts", "src/voiceMicSettings.ts", "webview-ui/src/DictationControl.tsx", "webview-ui/src/ReadAloudButton.tsx", "src/voiceReadAloud.ts"]) {
   const code = strip(readFileSync(new URL(`../${f}`, import.meta.url), "utf8"));
-  assert.ok(code.length > 500, `${f}: scanned the real file`);
+  assert.ok(code.length > 300, `${f}: scanned the real file`);
   assert.doesNotMatch(code, PERSIST, `${f} keeps or logs something it must not`);
+}
+// voiceHost.ts legitimately names the disclosure key (metadata); its words are checked separately above only for the
+// storage verbs, so make sure it never touches the audio argument with them: it has no store call at all.
+// The host handler that receives the audio lives in chatPanelProvider.ts: scan exactly that region.
+{
+  const host = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const from = host.indexOf("// ── Dictation (hps-voice-policy/1)"), to = host.indexOf("private async postShowThis(", from);
+  assert.ok(from > 0 && to > from, "found the host dictation region");
+  const region = strip(host.slice(from, to));
+  assert.ok(region.includes("transcribeClip(") && region.includes("msg.audio"), "the region is the one that receives the audio");
+  assert.doesNotMatch(region, PERSIST, "the host handler that receives the audio stores or logs something");
+  // The only host storage voice uses is the disclosure record: it is written in its own case arms and never sees audio.
+  for (const arm of ['case "voiceDisclosureRead":', 'case "voiceDisclosureAck":']) {
+    const at = host.indexOf(arm); assert.ok(at > 0, arm);
+    const end = host.indexOf("\n      case ", at + arm.length);
+    assert.doesNotMatch(host.slice(at, end), /audio/i, `${arm} must not touch audio`);
+  }
+  const uses = [...host.matchAll(/globalState\.update\(VOICE_DISCLOSURE_KEY/g)].length;
+  assert.equal(uses, 1, "exactly one voice write to globalState, the disclosure record");
+  assert.equal((host.match(/hps\.voice\./g) ?? []).length, 0, "no other voice storage key in the provider");
 }
 
 console.log("voice-dictation smoke OK");
