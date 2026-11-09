@@ -1,11 +1,12 @@
 // Controls for release promotion (#3172). Pure decisions plus the workflow wiring; no GitHub calls.
 //   node --test scripts/release/test/promote.test.mjs
 import assert from 'node:assert/strict';
+import {fixture as machineFixture} from './machine-publication.controls.mjs';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan} from '../promote.mjs';
+import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan, rcTagsOf} from '../promote.mjs';
 import {buildTagMessage, expectedAppVersion, resolveBuildContract} from '../build-contract.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -35,6 +36,35 @@ const good = () => ({
   rcRelease: {isDraft: false, assets: rcAssets}, mergeState: 'CLEAN',
 });
 const with_ = (patch) => { const f = good(); for (const [k, v] of Object.entries(patch)) f[k] = typeof v === 'function' ? v(f[k]) : v; return f; };
+
+test('RC reads use current remote refs and peel annotated tags without a cached checkout list', () => {
+  let phase = 1;
+  const read = (...args) => {
+    assert.deepEqual(args, ['ls-remote','--tags','origin',`refs/tags/${V}-rc.*`]);
+    return `${OTHER}\trefs/tags/${V}-rc.1\n${CAND}\trefs/tags/${V}-rc.1^{}\n` +
+      (phase === 2 ? `${HEAD}\trefs/tags/${V}-rc.2\n` : '');
+  };
+  assert.deepEqual(rcTagsOf(V, read), [{name: `${V}-rc.1`, sha: CAND}]);
+  phase = 2;
+  assert.equal(rcTagsOf(V, read).length, 2);
+});
+
+test('verified complete machine PASS promotes without human review; invalid machine evidence never falls back to approval', t => {
+  const f = machineFixture(t), c = f.contract, authority = f.verify();
+  const facts = good();
+  facts.pr = {...facts.pr, number: c.releasePr, head: c.releaseHead, headRef: `release/${c.version}`, reviews: [], comments: []};
+  facts.commit = {...facts.commit, sha: c.releaseHead, parents: [c.candidate], message: `release: record ${c.rcTag}`, files: [`releases/${c.version}.md`]};
+  facts.rcTags = [{name: c.rcTag, sha: c.candidate}];
+  facts.rcRelease.assets = [...c.artifacts.map(a => ({name: a.name, digest: 'sha256:' + a.sha256})), {name: 'unified-acceptance.json'}];
+  facts.writers = new Set();
+  assert.equal(promotionDecision(facts).allow, false);
+  assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, true);
+  facts.pr.reviews = [{user: 'minhan', state: 'APPROVED', commit: c.releaseHead}];
+  facts.pr.comments = [OVERRIDE]; facts.writers.add('minhan');
+  for (const change of [{allow: false}, {candidate: OTHER}, {releaseHead: OTHER}, {tag: 'v2026.1109.9'}, {status: 'READY'}]) {
+    assert.equal(promotionDecision({...facts, machineAuthority: {...authority, ...change}}).allow, false);
+  }
+});
 
 test('branch and record parsing', () => {
   assert.equal(branchVersion(`release/${V}`), V);

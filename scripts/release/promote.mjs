@@ -20,6 +20,7 @@
 // publication in verify-unified-release.yml; promotion only prepares the draft.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
@@ -56,7 +57,7 @@ const MERGEABLE_STATES = new Set(['CLEAN', 'UNSTABLE', 'HAS_HOOKS']);
 //   commit:  the PR head commit {sha, parents: [sha], message, files: [path]}
 //   rcTags:  [{name, sha}] for <version>-rc.*; vTagSha: the v tag's commit, or '' when absent
 //   rcRelease: {isDraft, assets: [{name, digest}]} of the recorded rc, or null
-export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), p0, vTagSha = '', rcRelease = null, mergeState = ''}) {
+export function promotionInputs({pr, commit, rcTags = [], vTagSha = '', rcRelease = null, mergeState = ''}) {
   const refuse = reason => ({allow: false, reasons: [reason]});
   const version = branchVersion(pr.headRef);
   if (!version) return refuse(`#${pr.number}: head ${pr.headRef} is not release/vX.Y.Z`);
@@ -81,18 +82,29 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   if (!rc) return refuse(`${rcTag} does not exist`);
   if (rc.sha !== candidate) return refuse(`${rcTag} is on ${rc.sha.slice(0, 8)}, the release branch on ${candidate.slice(0, 8)}`);
   if (vTagSha && vTagSha !== candidate) return refuse(`${version} already exists on ${vTagSha.slice(0, 8)}, not on the rc commit ${candidate.slice(0, 8)}`);
-  // The same rule the publish gate applies later: a writer's approval on the PR's current head, and
-  // the casebook run (or a release manager override) on that head (#3429). Without p0, the comments
-  // and the head date the gate refuses every approval (#3513), so pass exactly what it reads.
-  const gate = decide({tag: version, tagSha: candidate, rcTags, writers, p0,
-    releasePrs: [{number: pr.number, labels: pr.labels, head: pr.head, headDate: pr.headDate, comments: pr.comments ?? [], reviews: pr.reviews}]});
-  if (gate.route !== 'approval') return {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
   if (!rcRelease) return refuse(`${rcTag} has no release: its builds have not uploaded`);
   if (rcRelease.isDraft) return refuse(`${rcTag} is still a draft: its acceptance has not passed yet. Rerun release-promote after it publishes`);
   const assets = rcRelease.assets.filter(a => isAppPackage(a.name) || a.name === ACCEPTANCE);
   if (!assets.some(a => a.name === ACCEPTANCE)) return refuse(`${rcTag} has no ${ACCEPTANCE}`);
   if (!assets.some(a => isAppPackage(a.name))) return refuse(`${rcTag} has no App package`);
-  return {allow: true, version, rcTag, candidate, assets: assets.map(a => a.name), reasons: gate.reasons};
+  return {allow: true, version, rcTag, candidate, assets: assets.map(a => a.name), reasons: []};
+}
+
+export function promotionDecision(facts) {
+  const inputs = promotionInputs(facts);
+  if (!inputs.allow) return inputs;
+  const {pr, rcTags, writers, p0, machineAuthority} = facts;
+  if (machineAuthority) {
+    const match = machineAuthority.allow === true && machineAuthority.status === 'READY_FOR_PUBLISHER' &&
+      machineAuthority.candidate === inputs.candidate && machineAuthority.tag === inputs.version &&
+      machineAuthority.rcTag === inputs.rcTag && machineAuthority.releasePr === pr.number && machineAuthority.releaseHead === pr.head;
+    return match ? {...inputs, reasons: ['Complete signed machine PASS; no per-candidate human approval']}
+      : {allow: false, reasons: ['Machine authority is missing, stale or belongs to another release']};
+  }
+  const gate = decide({tag: inputs.version, tagSha: inputs.candidate, rcTags, writers, p0,
+    releasePrs: [{number: pr.number, labels: pr.labels, head: pr.head, headDate: pr.headDate, comments: pr.comments ?? [], reviews: pr.reviews}]});
+  return gate.route === 'approval' ? {...inputs, reasons: gate.reasons}
+    : {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
 }
 
 // Which promoted files still need uploading to the v draft. A same-named asset with other bytes,
@@ -128,9 +140,51 @@ const git = (...a) => execFileSync('git', a, {encoding: 'utf8', stdio: ['ignore'
 const gh = (...a) => execFileSync('gh', a, {encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'inherit']}).trim();
 const ghJson = apiPath => JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', apiPath], {encoding: 'utf8', maxBuffer: 64 << 20})).flat();
 
-function rcTagsOf(version) {
-  return git('tag', '--list', `${version}-rc.*`).split('\n').filter(Boolean)
-    .map(name => ({name, sha: git('rev-parse', `${name}^{commit}`)}));
+export function rcTagsOf(version, read = git) {
+  if (!VERSION.test(version)) throw Error('exact release version required');
+  const refs = new Map();
+  for (const line of read('ls-remote', '--tags', 'origin', `refs/tags/${version}-rc.*`).split('\n').filter(Boolean)) {
+    const [sha, ref] = line.split(/\s+/);
+    if (!/^[a-f0-9]{40}$/.test(sha)) throw Error('remote RC identity is invalid');
+    const tail = ref?.slice(`refs/tags/${version}-rc.`.length);
+    if (!ref?.startsWith(`refs/tags/${version}-rc.`) || !/^[1-9]\d*(?:\^\{\})?$/.test(tail)) throw Error('remote RC tag is invalid');
+    if (refs.has(ref) && refs.get(ref) !== sha) throw Error('conflicting remote RC ref');
+    refs.set(ref, sha);
+  }
+  return [...refs].filter(([ref]) => !ref.endsWith('^{}')).map(([ref, sha]) => ({name: ref.slice(10), sha: refs.get(ref + '^{}') ?? sha}));
+}
+
+export function readImmutableSource(repo, revisionPath) {
+  if (!/^[a-f0-9]{40}:(?:releases\/v\d+\.\d+\.\d+\.md|docs\/operations\/release-casebook\/cases\.yaml|config\/(?:release-platforms|service-deployment)\.json)$/.test(revisionPath)) throw Error('fixed immutable release source required');
+  try { return git('show', revisionPath); } catch {
+    // A squash merge can delete the original release branch. The PR's exact
+    // immutable commit remains the source; never fall back to main or PR body.
+    const [sha, filename] = revisionPath.split(':');
+    const value = JSON.parse(gh('api', `repos/${repo}/contents/${filename}?ref=${sha}`));
+    if (value.encoding !== 'base64' || typeof value.content !== 'string') throw Error('immutable release source is unavailable');
+    return Buffer.from(value.content, 'base64').toString('utf8');
+  }
+}
+
+export function readAcceptedReceipt(facts, repo, directory) {
+  const input = promotionInputs(facts);
+  if (!input.allow) throw Error(input.reasons.join('; '));
+  let temporary;
+  try {
+    const folder = directory ?? (temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'machine-rc-receipt-')));
+    const file = path.join(folder, ACCEPTANCE);
+    if (!directory) gh('release', 'download', input.rcTag, '--repo', repo, '--pattern', ACCEPTANCE, '--dir', folder);
+    if (fs.lstatSync(file).isSymbolicLink() || fs.statSync(file).size > 2 * 1024 * 1024) throw Error('invalid accepted receipt file');
+    const expected = facts.rcRelease.assets.find(a => a.name === ACCEPTANCE)?.digest;
+    if (expected !== 'sha256:' + sha256(file)) throw Error('receipt differs from the accepted RC bytes');
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } finally {
+    if (temporary) {
+      if (path.dirname(path.resolve(temporary)) !== fs.realpathSync(os.tmpdir()) ||
+          !path.basename(temporary).startsWith('machine-rc-receipt-') || fs.lstatSync(temporary).isSymbolicLink()) throw Error('unsafe receipt cleanup target');
+      fs.rmSync(temporary, {recursive: true, force: true});
+    }
+  }
 }
 
 function releaseOf(tag) {
