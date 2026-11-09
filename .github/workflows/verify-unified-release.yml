@@ -16,6 +16,10 @@ on:
         description: Immutable commit in the fixed private evidence repository
         required: false
         default: ''
+      machine_dispatch_key:
+        description: Exact reserved parent publication dispatch key
+        required: false
+        default: ''
 permissions:
   contents: write
   actions: write
@@ -343,6 +347,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           MACHINE_PR: ${{ inputs.machine_pr }}
+          HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+          HPS_MACHINE_DISPATCH_KEY: ${{ inputs.machine_dispatch_key }}
         run: |
           set -euo pipefail
           args=()
@@ -466,6 +472,8 @@ jobs:
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
           MACHINE_PR: ${{ inputs.machine_pr }}
+          HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+          HPS_MACHINE_DISPATCH_KEY: ${{ inputs.machine_dispatch_key }}
           HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
           HPS_FREEZE_CONTEXT: Final machine publication after installer and notes preparation
         run: |
