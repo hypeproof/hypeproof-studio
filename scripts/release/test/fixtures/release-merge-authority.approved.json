@@ -1,0 +1,22 @@
+{
+  "schema": "hps-release-merge-authority/1",
+  "repository": "hypeproof/hypeproof-studio",
+  "authority": "trusted-machine-publisher",
+  "workflow": ".github/workflows/release-promote.yml",
+  "defaultBranch": "main",
+  "headPrefix": "release/",
+  "recordTemplate": "releases/<version>.md",
+  "commitTitleTemplate": "release: record <version>-rc.<number>",
+  "enrollment": {"path": "config/release-automation.json", "mode": "active"},
+  "requiredGates": [
+    "exact-head-single-parent-record-only",
+    "current-accepted-rc-and-package-bytes",
+    "complete-signed-machine-pass",
+    "current-live-cas-and-policy",
+    "current-required-checks",
+    "no-holds-or-changes-requested",
+    "current-freeze-and-budget"
+  ],
+  "genericMerge": "refuse-delegate-to-publisher",
+  "sourcePullRequests": "unchanged-canonical-non-author-review"
+}

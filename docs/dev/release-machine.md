@@ -154,3 +154,23 @@ does not replace that original parent identity.
 Controls cover complete-view drift, excluded bookkeeping, fixed immutable reads,
 receipt/dispatch mismatch, independent Python vectors and native manual proof.
 Real publication remains NOT RUN; default enrollment remains shadow.
+
+
+## Canonical merge delegation (Harness #544)
+
+Active machine effects additionally read current Harness main and immutable
+policy/repos.yaml plus policy/release-merge-authority.json using only the separate
+HPS_MERGE_POLICY_READ_TOKEN. Both workflows mint this capability for Harness alone
+with contents:read. The reviewed raw JSON SHA-256 and full known rule must match;
+the same index commit must retain Studio's product/public-product/main entry and
+delegation pointer. Missing token/files, unlink, retirement or changed rule block.
+
+Every tag/draft/merge/final-publication guard checks the current exact PR head's
+rollup against all canonical required names, and refuses any current red/pending/
+unknown check or latest failing control-plane gate. CI SUCCESS/SKIPPED/NEUTRAL
+semantics match the canonical monitor; native evidence still requires strict PASS.
+Blocking labels and any current changes-requested reviewer remain holds. Ordinary
+source approvals and shadow/legacy behavior are unchanged; this rule delegates
+only the existing exact same-repository release-record shape with complete machine proof.
+Checks use explicit GraphQL context pagination with final-page proof and stable head
+identity; review history uses complete paginated REST reads.

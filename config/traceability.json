@@ -6171,6 +6171,9 @@
         },
         {
           "path": "scripts/release/publisher-anchor.mjs"
+        },
+        {
+          "path": "scripts/release/merge-authority.mjs"
         }
       ]
     },
@@ -6207,6 +6210,15 @@
         },
         {
           "path": "scripts/release/test/live-anchor.controls.mjs"
+        },
+        {
+          "path": "scripts/release/test/merge-authority.controls.mjs"
+        },
+        {
+          "path": "scripts/release/test/fixtures/release-merge-authority.approved.json"
+        },
+        {
+          "path": "scripts/release/test/fixtures/release-merge-index.approved.yaml"
         }
       ]
     },

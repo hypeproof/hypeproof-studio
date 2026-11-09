@@ -31,6 +31,7 @@ import {pickRelease} from './release-draft.mjs';
 import {automationConfig, CONFIG, releaseContract, verifyBundleSignature, verifyMachineBundle} from './machine-publication.mjs';
 import {readLiveAnchor, publicationWorkflowHead} from './publisher-anchor.mjs';
 import {digest} from './engine/core.mjs';
+import {readCanonicalMergeAuthority, machineReviewHolds, validateMachineChecks, readMachineCheckSnapshot} from './merge-authority.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -98,6 +99,8 @@ export function promotionDecision(facts) {
   if (!inputs.allow) return inputs;
   const {pr, rcTags, writers, p0, machineAuthority} = facts;
   if (machineAuthority) {
+    const holds = machineReviewHolds(pr);
+    if (holds.length) return {allow: false, reasons: holds};
     const match = machineAuthority.allow === true && machineAuthority.status === 'READY_FOR_PUBLISHER' &&
       machineAuthority.candidate === inputs.candidate && machineAuthority.tag === inputs.version &&
       machineAuthority.rcTag === inputs.rcTag && machineAuthority.releasePr === pr.number && machineAuthority.releaseHead === pr.head;
@@ -203,8 +206,8 @@ function remoteTagSha(tag) {
 export function gatherPromotion(number, repo) {
   const p = JSON.parse(gh('api', `repos/${repo}/pulls/${number}`));
   const pr = {number: p.number, state: p.state, merged: Boolean(p.merged_at), labels: p.labels.map(l => l.name),
-    base: p.base.ref, headRef: p.head.ref, head: p.head.sha,
-    reviews: ghJson(`repos/${repo}/pulls/${number}/reviews?per_page=100`).map(r => ({user: r.user?.login, state: r.state, commit: r.commit_id}))};
+    base: p.base.ref, headRef: p.head.ref, head: p.head.sha, headRepository: p.head.repo?.full_name, baseRepository: p.base.repo?.full_name,
+    reviews: ghJson(`repos/${repo}/pulls/${number}/reviews?per_page=100`).map(r => ({user: r.user?.login, state: r.state, commit: r.commit_id, submittedAt: r.submitted_at}))};
   pr.comments = ghJson(`repos/${repo}/issues/${number}/comments?per_page=100`)
     .map(x => ({user: x.user?.login, association: x.author_association, created_at: x.created_at, body: x.body ?? '', url: x.html_url}));
   const c = JSON.parse(gh('api', `repos/${repo}/commits/${pr.head}`));
@@ -257,6 +260,7 @@ function draftAssets(repo, tag) {
 export async function currentMachineAuthority({number, repo, packageDirectory, evidenceDirectory, stage = 'parent'}) {
   const config = automationConfig(JSON.parse(fs.readFileSync(path.join(scriptDir, '../..', CONFIG), 'utf8')));
   if (config.mode !== 'active') return null;
+  if (repo !== config.repository) throw Error('Fixed Studio machine publication scope required');
   const workflowHead = publicationWorkflowHead({stage, githubSha: process.env.GITHUB_SHA,
     checkoutHead: stage === 'parent' ? execFileSync('git', ['-C', path.join(scriptDir, '../..'), 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim() : undefined,
     parentWorkflowHead: process.env.HPS_MACHINE_PARENT_WORKFLOW_HEAD});
@@ -267,6 +271,11 @@ export async function currentMachineAuthority({number, repo, packageDirectory, e
   const facts = gatherPromotion(number, repo);
   const input = promotionInputs(facts);
   if (!input.allow) throw Error(input.reasons.join('; '));
+  const holds = machineReviewHolds(facts.pr);
+  if (holds.length) throw Error(holds.join('; '));
+  const mergeAuthority = readCanonicalMergeAuthority();
+  const checks = readMachineCheckSnapshot({number, repository: repo, head: facts.pr.head});
+  validateMachineChecks(checks, facts.pr.head, mergeAuthority.requiredChecks);
   const highestRc = Math.max(...facts.rcTags.map(t => Number(t.name.split('-rc.')[1])));
   if (Number(input.rcTag.split('-rc.')[1]) !== highestRc) throw Error('A replacement RC supersedes this candidate');
   const acceptance = readAcceptedReceipt(facts, repo, packageDirectory);
@@ -286,7 +295,7 @@ export async function currentMachineAuthority({number, repo, packageDirectory, e
     evidenceCommit: process.env.HPS_MACHINE_EVIDENCE_COMMIT, dispatchKey: process.env.HPS_MACHINE_DISPATCH_KEY, workflowHead},
     endpoint => JSON.parse(gh('api', '--method', 'GET', endpoint)));
   const authority = verifyMachineBundle({bundle, config, contract, packageDirectory, evidenceDirectory, serviceVersion});
-  return {...authority, decision: promotionDecision({...facts, machineAuthority: authority})};
+  return {...authority, mergeAuthority, decision: promotionDecision({...facts, machineAuthority: authority})};
 }
 
 async function run({pr: number, out, machineBundle}) {
@@ -354,6 +363,7 @@ async function run({pr: number, out, machineBundle}) {
   }
 
   // 3. The v draft with the same bytes.
+  await guardMachine();
   const draft = draftAssets(repo, version);
   if (draft.published) say(`${version} is already published; nothing to upload.`);
   else {
