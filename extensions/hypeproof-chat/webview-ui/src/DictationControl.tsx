@@ -68,12 +68,19 @@ function useDictation(api: ComposerAddonApi): DictationController {
   const afterRetry = useRef(false);
   const mounted = useRef(true);
   const inFlight = useRef<string | null>(null);
+  const offInFlight = useRef<(() => void) | null>(null);
   const tick = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dropClip = useCallback(() => {
     clip.current = null; afterRetry.current = false;
     if (keepTimer.current !== null) { clearTimeout(keepTimer.current); keepTimer.current = null; }
   }, []);
+  // Forgets the clip being transcribed: stops listening for its answer, so a late reply can neither keep it
+  // for a retry nor insert text.
+  const forgetInFlight = () => {
+    offInFlight.current?.(); offInFlight.current = null;
+    inFlight.current = null;
+  };
   const stopTick = () => { if (tick.current !== null) { clearInterval(tick.current); tick.current = null; } };
   const set = useCallback((next: View) => { if (mounted.current) setView(next); }, []);
 
@@ -91,6 +98,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
     const off = onHostMessage((m) => {
       if (m.type !== "voiceTranscribeResult" || m.requestId !== requestId) return;
       off();
+      offInFlight.current = null;
       if (inFlight.current !== requestId) return;
       inFlight.current = null;
       if (m.ok) {
@@ -106,6 +114,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
       if (m.retry) keepForRetry(kept); else dropClip();
       set({ kind: "notice", text: m.message, retry: m.retry });
     });
+    offInFlight.current = off;
     postToHost({ type: "voiceTranscribe", requestId, mime: kept.mime, seconds: kept.seconds, audio: base64Of(kept.bytes) });
   }, [dropClip, keepForRetry, set, voice]);
 
@@ -137,16 +146,17 @@ function useDictation(api: ComposerAddonApi): DictationController {
       stopTick();
       recorder.cancel();     // closes the microphone
       dropClip();            // and drops any kept audio (window close, panel gone)
-      inFlight.current = null;
+      forgetInFlight();
     };
   }, [recorder, dropClip]);
 
   // The chat view keeps its webview alive while hidden (retainContextWhenHidden), so a hidden window would
-  // keep the microphone open. Hiding stops the recording and drops the clip and any kept retry copy.
+  // keep the microphone open. Hiding stops the recording and drops the clip, any kept retry copy and a clip still being transcribed.
   useEffect(() => {
     const hide = () => {
       recorder.cancel();
       dropClip();
+      forgetInFlight();   // a clip still being transcribed is dropped too: no retry copy outlives the hide
       stopTick();
       handlers.current.set({ kind: "idle" });
     };

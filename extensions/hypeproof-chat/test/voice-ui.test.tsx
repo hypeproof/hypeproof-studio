@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { VoiceProvider, useVoiceController } from "../webview-ui/src/VoiceProvider";
 import { dictationAddonFor } from "../webview-ui/src/dictationAddon";
 import { DictationEnvContext } from "../webview-ui/src/DictationControl";
-import { ReadAloudButton, SpeechEnvContext } from "../webview-ui/src/ReadAloudButton";
+import { ReadAloudButton, SpeechEnvContext, browserSpeechEnv } from "../webview-ui/src/ReadAloudButton";
 import { insertAtCaret } from "../webview-ui/src/composerAddon";
 import { DICTATION_STOP_AT_MS } from "../src/voiceDictation";
 
@@ -337,6 +337,25 @@ t("hiding the window drops a clip kept for retry; the pagehide event does the sa
   ok(byLabel("받아쓰기"), "idle");
 });
 
+t("hiding the window while a clip is being transcribed drops that clip: a late failure keeps no retry copy and a late success inserts nothing", async () => {
+  for (const late of [
+    { ok: false, kind: "network", message: "연결", retry: true },
+    { ok: true, text: "늦게 온 문장" },
+  ]) {
+    await mount(profileOn(), { acked: true });
+    await startRecording();
+    await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); await flush();
+    const id = posted("voiceTranscribe")[0].requestId;
+    ok(all((e) => (e.getAttribute("class") ?? "").includes("hps-voice")).length > 0 && !byText("다시 시도"), "transcribing, nothing to retry yet");
+    await hide("hidden"); await hide("visible");
+    await hostSays({ type: "voiceTranscribeResult", requestId: id, ...late });
+    ok(!byText("다시 시도"), "no retry offered: the clip is not kept");
+    eq(rig.inserted, [], "nothing inserted from a clip the learner hid");
+    ok(byLabel("받아쓰기"), "idle");
+    eq(posted("voiceTranscribe").length, 1, "and nothing was re-sent");
+  }
+});
+
 t("leaving the panel or switching seat or task (the chat remounts) stops the recording and sends nothing", async () => {
   await mount(profileOn(), { acked: true, scope: "seat-a" });
   await startRecording();
@@ -363,6 +382,31 @@ t("inert without read_aloud: nothing speech-related is looked up or called", asy
   eq(rig.cancels, 0, "class-off draws a disabled button and never cancels");
   await mount(profileOn(), { acked: true }); // served and idle: an idle hub never cancels
   eq(rig.cancels, 0, "a served, idle seat does not cancel either");
+});
+
+t("read-aloud not served: speechSynthesis and SpeechSynthesisUtterance are never even looked up (no property access)", async () => {
+  const gw = globalThis as unknown as Record<string, unknown>;
+  const win = g.window as unknown as Record<string, unknown>;
+  const looked: string[] = [];
+  const keep = { syn: Object.getOwnPropertyDescriptor(win, "speechSynthesis"), utt: Object.getOwnPropertyDescriptor(gw, "SpeechSynthesisUtterance") };
+  Object.defineProperty(win, "speechSynthesis", { configurable: true, get() { looked.push("window.speechSynthesis"); return undefined; } });
+  Object.defineProperty(gw, "SpeechSynthesisUtterance", { configurable: true, get() { looked.push("SpeechSynthesisUtterance"); return undefined; } });
+  try {
+    for (const profile of [null, { profile_id: "p" }, profileOn({ read_aloud: false }), profileOn({ dictation: false, read_aloud: false })]) {
+      await mount(profile, { acked: true, speech: browserSpeechEnv as never });
+      await act(() => root.render(createElement(Harness, { profile, speech: browserSpeechEnv as never, key: Math.random() })));
+      eq(looked, [], `no lookup for ${JSON.stringify(profile)?.slice(0, 50)}`);
+    }
+    await mount(profileOn(), { speech: browserSpeechEnv as never }); // served (a lookup is expected here), then class turns it off
+    looked.length = 0;
+    await act(() => root.render(createElement(Harness, { profile: { profile_id: "p" }, scope: "s1", speech: browserSpeechEnv as never })));
+    eq(looked, [], "class-off draws a disabled button without a lookup");
+    // Control: with read_aloud served the same trap does fire, so the checks above can fail.
+    await mount(profileOn(), { acked: true, speech: (() => browserSpeechEnv()) as never }); // a fresh factory, so the shared hub is rebuilt
+    ok(looked.length > 0, "the trap sees a lookup when read-aloud is served");
+  } finally {
+    for (const [o, k, d] of [[win, "speechSynthesis", keep.syn], [gw, "SpeechSynthesisUtterance", keep.utt]] as const) { if (d) Object.defineProperty(o, k, d); else delete o[k]; }
+  }
 });
 
 t("a full record, transcribe, retry cycle persists no audio: no setState, storage, blob url, clipboard or extra host message", async () => {
@@ -404,6 +448,25 @@ t("the disclosure is asked per seat: a second seat on the same computer sees the
   await act(() => click(byLabel("받아쓰기") as never));
   ok(all((e) => e.tagName === "DIALOG")[0], "the new seat reads the disclosure first");
   eq(rig.mediaCalls, 0, "and no microphone before 시작하기");
+});
+
+t("a seat change in an open window (same mounted tree) asks the host again, once per change, and forgets the last seat's answer", async () => {
+  await mount(profileOn(), { acked: true, scope: "seat-a" });
+  const stable = (scope: string) => act(() => root.render(createElement(Harness, { profile: profileOn(), scope, key: "open-window" })));
+  await stable("seat-a");                                   // adopt a fixed key; this one remounts
+  const base = () => posted("voiceDisclosureRead").length;
+  await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
+  const n0 = base();
+  await stable("seat-a");
+  eq(base(), n0, "a re-render of the same seat does not ask again");
+  await stable("seat-b");
+  eq(base(), n0 + 1, "seat-b: the host is asked once");
+  // The previous seat's answer is gone until the host answers for this one.
+  await act(() => click(byLabel("받아쓰기") as never));
+  ok(all((e) => e.tagName === "DIALOG")[0], "seat-b sees the sheet, not seat-a's acknowledgement");
+  eq(rig.mediaCalls, 0, "no microphone before 시작하기");
+  await stable("seat-c");
+  eq(base(), n0 + 2, "seat-c: asked again");
 });
 
 t("insertAtCaret: caret, selection, spacing and the length limit", async () => {
