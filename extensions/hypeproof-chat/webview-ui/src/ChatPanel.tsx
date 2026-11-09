@@ -123,7 +123,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
-import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
+import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -2464,6 +2464,7 @@ export function ChatPanel(props: Props) {
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
@@ -2482,7 +2483,7 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
@@ -2582,7 +2583,7 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
-            {!props.instructor && !personalWorkspace && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
+            {!props.instructor && !personalWorkspace && planFirst.available !== false && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
             <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
               <button

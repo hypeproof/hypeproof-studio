@@ -50,6 +50,19 @@ export interface PlanFirstView {
   on: boolean;
   /** The plan waiting for the learner, or null. */
   plan: { id: string; text: string } | null;
+  /** DEC-10 — present (and false) only when the class turned the mode off. Absent means available. */
+  available?: false;
+  /** DEC-10 — present (and true) when this very read turned a learner's own "on" off because the class switched it off. */
+  switchedOff?: true;
+}
+
+/**
+ * DEC-10 (Jay 2026-11-09) — the Service serves `plan_first: { available: false }` when a class turned the mode off.
+ * Only an explicit `false` counts: an absent field, an older Service and a profile not loaded yet all mean available.
+ */
+export function planFirstAvailable(profile: { plan_first?: unknown } | null | undefined): boolean {
+  const field = profile?.plan_first;
+  return !(field && typeof field === 'object' && (field as { available?: unknown }).available === false);
 }
 export interface ApprovedPlan {
   planId: string;
@@ -106,6 +119,26 @@ export class PlanFirstSession {
     const key = keyOf(task);
     const plan = this.plans.get(key);
     return { on: this.on.has(key), plan: plan ? { ...plan } : null };
+  }
+
+  /**
+   * DEC-10 — the class switched the mode off. Whatever this task held (the mode, a waiting plan, an unspent approval)
+   * is dropped, and the serial moves on so a planning turn still in flight cannot plant a plan afterwards.
+   * Returns true when something was actually turned off (so the learner is told once).
+   */
+  retire(task: string | null | undefined): boolean {
+    const key = keyOf(task);
+    const held = this.on.has(key) || this.plans.has(key) || this.tokens.has(key);
+    if (!held) return false;
+    this.setOn(task, false);
+    return true;
+  }
+
+  /** The view for a seat whose class may have switched the mode off. Available seats get exactly `view()`. */
+  viewFor(task: string | null | undefined, available: boolean): PlanFirstView {
+    if (available) return this.view(task);
+    const switchedOff = this.retire(task);
+    return { on: false, plan: null, available: false, ...(switchedOff ? { switchedOff: true as const } : {}) };
   }
 
   /** The last plan the learner approved in this task (kept with the task as evidence of their judgment). */

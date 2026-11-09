@@ -91,6 +91,30 @@ try{
   await send({type:'streamEnd',streamId:'s1',messageId:'m1'});
   cases++;
  }
+ // DEC-10 — a class that switched the mode off: no chip, no menu item, no pill, one status line; absent keeps the switch.
+ for(const seat of ['personal','classroom']){
+  await open(seat);
+  await send({type:'planFirstState',on:true,plan:null});
+  assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-chip,.hps-selected-plan')`),true,`${seat}: the switch shows while the class has not turned it off`);
+  await send({type:'planFirstState',on:false,plan:null,available:false,switchedOff:true});
+  assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-chip,.hps-selected-plan,.hps-plan-card')`),false,`${seat}: switched off hides chip, pill and card`);
+  assert.equal(await b.evaluate(`document.querySelector('[data-testid=plan-switched-off]')?.getAttribute('role')`),'status',`${seat}: the learner is told, as a status line`);
+  assert.match(await b.evaluate(`document.querySelector('[data-testid=plan-switched-off]').textContent`),/쓰지 않아요/,`${seat}: the notice says why`);
+  if(seat==='personal'){
+   await click('.hps-tool-trigger');
+   assert.equal(await b.evaluate(`[...document.querySelectorAll('[role=menuitemcheckbox]')].some(e=>e.textContent.includes('계획 먼저'))`),false,`${seat}: no 계획 먼저 item in the tools menu`);
+   await click('.hps-tool-trigger');
+  }
+  await send({type:'planFirstState',on:false,plan:null,available:false});
+  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=plan-switched-off]')`),true,`${seat}: the notice stays until the task changes`);
+  const g=await b.evaluate(`({scrollW:document.documentElement.scrollWidth,innerW:innerWidth})`);
+  assert.ok(g.scrollW<=g.innerW,`${seat}: no horizontal scroll with the notice`);
+  // The class switches it back on (the served field is gone): the switch returns, unchanged.
+  await send({type:'planFirstState',on:false,plan:null});
+  if(seat==='classroom')assert.equal(await b.evaluate(`!!document.querySelector('.hps-plan-chip')`),true,`${seat}: absent means the chip is back`);
+  else{await click('.hps-tool-trigger');assert.equal(await b.evaluate(`[...document.querySelectorAll('[role=menuitemcheckbox]')].some(e=>e.textContent.includes('계획 먼저'))`),true,`${seat}: absent means the menu item is back`);}
+  cases++;
+ }
  // Without a plan the send button is the ordinary one.
  await open('personal');await send({type:'planFirstState',on:true,plan:null});
  assert.notEqual(await b.evaluate(`document.querySelector('.hps-btn-send').getAttribute('aria-label')`),'계획 승인 기다리는 중');

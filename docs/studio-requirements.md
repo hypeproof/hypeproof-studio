@@ -849,8 +849,14 @@ direction); `그만두기` runs nothing. Images or files the learner attached to
 seats behave identically. The approved revision (1 as written, 2 when edited) is kept in the task's local record; only the learner's approval and
 edit count as evidence (AE-35), and the spool receives revision and edited flag only, never the plan text. Tests: `test/plan-first.test.mjs` (state
 machine, real `runSdkCoach`, real `runLocalCoach` through the tool server, host wiring of the proxy loop), `test/plan-first.test.tsx`,
-`test/plan-first-layout.smoke.mjs` (actual App, 320/480/800 px, both seats and themes). Follow-up (Service, not changed here): coach prompt
-guidance for the plan wording and a cohort-profile switch for availability; the host-side refusal stays authoritative.
+`test/plan-first-layout.smoke.mjs` (actual App, 320/480/800 px, both seats and themes). Class switch (DEC-10, Jay 2026-11-09): the Service may serve `plan_first: { available: false }` on `/v1/profile` for a class
+that does not use the mode. Only an explicit `false` counts; an absent field, an older Service and a profile not loaded yet leave everything
+above unchanged. With it served `false` the `계획 먼저` chip (classroom) and the tools-menu item and pill (personal) are hidden, the host
+treats the mode as off for every turn (every turn is an ordinary turn under the usual grants and modals) and refuses to turn it on. A learner
+who had the mode on has it turned off visibly: one status line in the chat pane, "이 수업에서는 계획 먼저 보기를 쓰지 않아요. 켜 두었던 것을 껐어요.",
+and a plan that was waiting, or an approval not yet spent, is dropped (the send button reads normally again; nothing is sent or run on
+the old approval). Tests: the same files above plus the switch cases in `test/plan-first.test.mjs` and `test/plan-first.test.tsx`.
+Follow-up (Service, not changed here): coach prompt guidance for the plan wording; the host-side refusal stays authoritative.
 
 `REQ-STUDIO-CODE-BLOCK-TOOLS` (CGP-CHAT-R-008 / CGP-CHAT-R39 and design CGP-CHAT-D39, 2026-10-20,
 extending CP-R1's confirmed answer copy): every code block in an answer offers `복사` and `줄 바꿈`,

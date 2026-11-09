@@ -8,7 +8,7 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
-import { PlanFirstSession, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
+import { PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
 import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -1822,13 +1822,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   private planTaskKey(): string | null { return this.currentTaskStore?.()?.getView().activeTaskId ?? null; }
   private async postPlanFirst(): Promise<void> {
-    const view: PlanFirstView = this._instructorMode.isInstructor === true ? { on: false, plan: null } : this.planFirst.view(this.planTaskKey());
+    // DEC-10 — a class that switched the mode off hides the toggle and turns a learner's own "on" off, visibly, once.
+    const view: PlanFirstView = this._instructorMode.isInstructor === true ? { on: false, plan: null } : this.planFirst.viewFor(this.planTaskKey(), planFirstAvailable(this.cachedProfile));
     await this.post({ type: "planFirstState", ...view });
+  }
+  private planFirstServedOff = false;
+  /** The profile just changed: tell the webview when the switch is (or was) off. Nothing is posted for a class that never switched it. */
+  private syncPlanFirstWithProfile(): void {
+    const off = !planFirstAvailable(this.cachedProfile);
+    if (!off && !this.planFirstServedOff) return;
+    this.planFirstServedOff = off;
+    void this.postPlanFirst();
   }
   private async handlePlanFirst(msg: Extract<WebviewMessage, { type: "planFirstSet" | "planFirstApprove" | "planFirstRedo" | "planFirstDecline" | "planFirstRequest" }>): Promise<void> {
     if (this._instructorMode.isInstructor === true) return;
     const task = this.planTaskKey();
-    if (msg.type === "planFirstRequest") { await this.postPlanFirst(); return; }
+    // DEC-10 — with the class switch off nothing here may turn the mode on or run an approval: a stale chip press or a
+    // plan left waiting when the profile changed resolves to "mode off, no plan" and nothing is sent.
+    if (msg.type === "planFirstRequest" || !planFirstAvailable(this.cachedProfile)) { await this.postPlanFirst(); return; }
     if (msg.type === "planFirstSet") {
       if (msg.on !== true && msg.on !== false) return;
       this.planFirst.setOn(task, msg.on);
@@ -5262,6 +5273,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
     if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
     this.cachedProfile = p; this.profileFetchPromise = null;
+    this.syncPlanFirstWithProfile();
     await this.rememberLinkSafety(p, token);
     await this.postConfig();
   }
@@ -5413,6 +5425,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         this.cachedProfile = p;
         this.profileFetchPromise = null;
+        this.syncPlanFirstWithProfile();
         // #278 — gate the "페이지를 코치에게" toolbar button to opted-in cohorts.
         void vscode.commands.executeCommand(
           "setContext",
@@ -6124,6 +6137,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * `planning` read the instructor flag only when the mode is on, and an instructor turn is never a planning turn.
    */
   private beginPlanTurn(text: string): { readonly planning: boolean; readonly gate: PlanFirstGate | undefined; ready(answer: string): PlanFirstView | null } {
+    // DEC-10 — a class that switched the mode off makes every turn ordinary, even one a learner had left on.
+    if (!planFirstAvailable(this.cachedProfile) && this.planFirst.retire(this.planTaskKey())) void this.postPlanFirst();
     const handle = this.planFirst.beginTurn(this.planTaskKey(), text);
     const active = (): boolean => handle.mode === 'planning' && this._instructorMode?.isInstructor !== true;
     return { get planning() { return active(); }, get gate() { return active() ? handle.gate : undefined; }, ready: (answer: string) => (active() ? handle.ready(answer) : null) };

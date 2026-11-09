@@ -322,6 +322,8 @@ export interface ResolvedProfile {
    * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
    */
   conversation_carryover?: { available: boolean };
+  /** CGP-CHAT-R-004 (DEC-10) — a class turned "먼저 계획 보기" off. Only `available: false` counts; absent → the toggle shows as before. */
+  plan_first?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -1085,7 +1087,7 @@ export type HostMessage = (
   | { type: "aiDisclosure"; text: string }
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
-  | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null }
+  | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
   | { type: "whatsNewChanged" }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
