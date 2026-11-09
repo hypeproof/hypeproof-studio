@@ -82,7 +82,7 @@ const CHECK_QUERY = `query($number:Int!,$endCursor:String) {
   repository(owner:"hypeproof",name:"hypeproof-studio") { pullRequest(number:$number) {
     headRefOid isDraft reviewDecision commits(last:1) { nodes { commit { oid statusCheckRollup {
       contexts(first:100,after:$endCursor) { nodes {
-        __typename ... on CheckRun { name status conclusion startedAt completedAt checkSuite { workflowRun { workflow { name } } } }
+        __typename ... on CheckRun { databaseId name status conclusion startedAt completedAt checkSuite { app { id } workflowRun { id databaseId createdAt runNumber runAttempt workflow { id name } } } }
         ... on StatusContext { context state createdAt }
       } pageInfo { hasNextPage endCursor } }
     } } } }
@@ -122,35 +122,60 @@ export function machineReviewHolds(pr) {
   return requested.length ? ['Machine publication held by current changes-requested review: ' + requested.join(', ')] : [];
 }
 
-// Mirrors canonical monitor latest-run and green-result semantics; no approval count is inferred.
+// Completion time is not execution chronology: a slow old success must not hide a newer pending/red run.
+function creationTime(value) {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/.exec(value ?? '');
+  if (!match) return null;
+  const seconds = Date.parse(match[1] + 'Z');
+  if (!Number.isFinite(seconds) || new Date(seconds).toISOString().slice(0, 19) !== match[1]) return null;
+  return BigInt(seconds) * 1000000n + BigInt((match[2] ?? '').padEnd(9, '0'));
+}
+function newerCheck(a, b) {
+  const isRun = check => check.__typename === 'CheckRun' || Object.hasOwn(check, 'conclusion');
+  if (!isRun(a) && !isRun(b)) {
+    const at = creationTime(a.createdAt), bt = creationTime(b.createdAt);
+    return at !== null && bt !== null && at > bt;
+  }
+  if (!a.checkSuite?.app?.id || a.checkSuite.app.id !== b.checkSuite?.app?.id) return false;
+  const ar = a.checkSuite?.workflowRun, br = b.checkSuite?.workflowRun;
+  if (!ar?.workflow?.id || ar.workflow.id !== br?.workflow?.id) return false;
+  const positive = n => Number.isSafeInteger(n) && n > 0;
+  const at = creationTime(ar.createdAt), bt = creationTime(br.createdAt);
+  if (at === null || bt === null || !positive(ar.runNumber) || !positive(br.runNumber)) return false;
+  const sameRun = ar.id && br.id ? ar.id === br.id : positive(ar.databaseId) && ar.databaseId === br.databaseId;
+  if (!sameRun) {
+    return ar.runNumber > br.runNumber && at >= bt;
+  }
+  if (ar.runNumber !== br.runNumber || at !== bt) return false;
+  // WorkflowRun.runAttempt is mutable even on an old check; check IDs identify new jobs within that run.
+  return positive(a.databaseId) && positive(b.databaseId) && a.databaseId > b.databaseId &&
+    positive(ar.runAttempt) && positive(br.runAttempt) && ar.runAttempt >= br.runAttempt;
+}
+
 export function validateMachineChecks(snapshot, head, requiredChecks) {
   require(snapshot?.headRefOid === head && /^[a-f0-9]{40}$/.test(head), 'current check head changed or unreadable');
   require(snapshot.isDraft === false && snapshot.reviewDecision !== 'CHANGES_REQUESTED', 'draft or current changes-requested review blocks machine publication');
   require(Array.isArray(requiredChecks) && requiredChecks.length > 0 && Array.isArray(snapshot.statusCheckRollup) && snapshot.statusCheckRollup.length > 0, 'current required checks unavailable');
   const isRun = check => check?.__typename === 'CheckRun' || Object.hasOwn(check ?? {}, 'conclusion');
-  const stamp = check => Date.parse(check.completedAt || check.startedAt || '');
   const groups = new Map(), latest = [];
   for (const check of snapshot.statusCheckRollup) {
     require(check && typeof check === 'object' && !Array.isArray(check), 'unknown current check');
     if (isRun(check)) {
       require(typeof check.name === 'string' && check.name.length > 0, 'current check name missing');
-      const key = JSON.stringify([check.workflowName ?? '', check.name]);
+      const key = JSON.stringify(['run', check.workflowName ?? '', check.name]);
       if (!groups.has(key)) groups.set(key, []); groups.get(key).push(check);
     } else {
       require((check.__typename === 'StatusContext' || Object.hasOwn(check, 'state')) && typeof check.context === 'string' && check.context.length > 0, 'unknown current check');
-      latest.push(check);
+      const key = JSON.stringify(['status', check.context]);
+      if (!groups.has(key)) groups.set(key, []); groups.get(key).push(check);
     }
   }
   for (const runs of groups.values()) {
-    if (runs.length > 1 && runs.every(run => Number.isFinite(stamp(run)))) {
-      latest.push(runs.reduce((a, b) => stamp(b) > stamp(a) ? b : a));
-    } else latest.push(...runs);
+    // Unknown or contradictory metadata cannot supersede a result; keep every incomparable record.
+    latest.push(...runs.filter(run => !runs.some(other => newerCheck(other, run))));
   }
-  const gates = snapshot.statusCheckRollup.filter(check => isRun(check) && check.name === 'control-plane (human gate)' && (check.conclusion || check.status === 'COMPLETED'));
-  if (gates.length) {
-    const gate = gates.reduce((a, b) => (Number.isFinite(stamp(b)) ? stamp(b) : 0) >= (Number.isFinite(stamp(a)) ? stamp(a) : 0) ? b : a);
-    require(gate.conclusion === 'SUCCESS', 'latest control-plane human gate is not green');
-  }
+  const gates = latest.filter(check => isRun(check) && check.name === 'control-plane (human gate)');
+  require(gates.every(gate => gate.conclusion === 'SUCCESS'), 'latest control-plane human gate is not green');
   const green = check => isRun(check) ? ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(check.conclusion) : check.state === 'SUCCESS';
   require(latest.every(green), 'current checks pending, failed or unknown');
   for (const name of requiredChecks) require(latest.some(check => (check.name || check.context) === name), 'required check missing: ' + name);

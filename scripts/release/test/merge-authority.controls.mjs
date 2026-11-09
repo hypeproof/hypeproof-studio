@@ -9,8 +9,10 @@ const rule = fs.readFileSync(new URL('./fixtures/release-merge-authority.approve
 const index = fs.readFileSync(new URL('./fixtures/release-merge-index.approved.yaml', import.meta.url));
 const sameRepo = {headRepository: 'hypeproof/hypeproof-studio', baseRepository: 'hypeproof/hypeproof-studio'};
 const head = 'a'.repeat(40), required = validateMergeIndex(index).required_status_checks;
-const check = (name, conclusion = 'SUCCESS', at = '2026-11-09T01:00:00Z') => ({__typename: 'CheckRun', name,
-  workflowName: 'studio-pr-ci', conclusion, status: conclusion ? 'COMPLETED' : 'IN_PROGRESS', completedAt: at});
+const check = (name, conclusion = 'SUCCESS', at = '2026-11-09T01:00:00Z', {runNumber = 2, attempt = 1, checkId = 200} = {}) => ({__typename: 'CheckRun', name,
+  workflowName: 'studio-pr-ci', databaseId: checkId, conclusion, status: conclusion ? 'COMPLETED' : 'IN_PROGRESS', completedAt: at,
+  checkSuite: {app: {id: 'actions-app'}, workflowRun: {id: 'run-' + runNumber, databaseId: runNumber, runNumber, runAttempt: attempt,
+    createdAt: `2026-11-09T00:0${runNumber}:00Z`, workflow: {id: 'workflow-1', name: 'studio-pr-ci'}}}});
 const snapshot = () => ({headRefOid: head, isDraft: false, reviewDecision: 'REVIEW_REQUIRED', statusCheckRollup: required.map(name => check(name))});
 test('canonical delegation reads current main and both fixed files at its immutable SHA through a separate read token', () => {
   let current = 'b'.repeat(40), revoked = false; const calls = [];
@@ -53,15 +55,15 @@ test('machine CI requires the current head and every canonical name, with canoni
     s => { s.statusCheckRollup.push({__typename: 'Unknown'}); }, s => { s.statusCheckRollup.push({__typename: 'StatusContext', context: '', state: 'SUCCESS'}); }, s => { s.isDraft = true; }, s => { s.reviewDecision = 'CHANGES_REQUESTED'; }]) {
     const changed = snapshot(); mutate(changed); assert.throws(() => validateMachineChecks(changed, head, required));
   }
-  const rerun = snapshot(); rerun.statusCheckRollup.push(check(required[0], 'FAILURE', '2026-11-09T00:00:00Z'));
+  const rerun = snapshot(); rerun.statusCheckRollup.push(check(required[0], 'FAILURE', '2026-11-09T00:00:00Z', {runNumber: 1, checkId: 100}));
   assert.equal(validateMachineChecks(rerun, head, required).status, 'CURRENT_CHECKS_PASS');
-  rerun.statusCheckRollup.push(check(required[0], 'FAILURE', '2026-11-09T02:00:00Z'));
+  rerun.statusCheckRollup.push(check(required[0], 'FAILURE', '2026-11-09T02:00:00Z', {runNumber: 3, checkId: 300}));
   assert.throws(() => validateMachineChecks(rerun, head, required), /current checks/);
   const unordered = snapshot(); unordered.statusCheckRollup.push({...check(required[0], 'FAILURE'), completedAt: ''});
   assert.throws(() => validateMachineChecks(unordered, head, required), /current checks/);
-  const gate = snapshot(); gate.statusCheckRollup.push(check('control-plane (human gate)', 'FAILURE', '2026-11-09T00:00:00Z'), check('control-plane (human gate)', 'SUCCESS'));
+  const gate = snapshot(); gate.statusCheckRollup.push(check('control-plane (human gate)', 'FAILURE', '2026-11-09T00:00:00Z', {runNumber: 1, checkId: 100}), check('control-plane (human gate)', 'SUCCESS'));
   assert.equal(validateMachineChecks(gate, head, required).status, 'CURRENT_CHECKS_PASS');
-  gate.statusCheckRollup.push(check('control-plane (human gate)', 'SKIPPED', '2026-11-09T02:00:00Z'));
+  gate.statusCheckRollup.push(check('control-plane (human gate)', 'SKIPPED', '2026-11-09T02:00:00Z', {runNumber: 3, checkId: 300}));
   assert.throws(() => validateMachineChecks(gate, head, required), /control-plane/);
 });
 test('machine holds include every blocking label and current substantive changes-requested reviewer', () => {
@@ -93,4 +95,49 @@ test('machine checks consume all context pages and reject partial pages or a mov
   const red = structuredClone(pages); red[1].data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0].conclusion = 'FAILURE';
   assert.throws(() => validateMachineChecks(read(red), head, required), /current checks/);
   const moved = structuredClone(pages); moved[1].data.repository.pullRequest.headRefOid = 'b'.repeat(40); assert.throws(() => read(moved), /head changed/);
+});
+
+test('slow old success cannot hide a newer pending/red execution, and identified green reruns clear old red', () => {
+  const old = check(required[0], 'SUCCESS', '2026-11-09T12:10:00Z', {runNumber: 1, checkId: 100});
+  old.startedAt = '2026-11-09T12:00:00Z'; old.checkSuite.workflowRun.createdAt = old.startedAt;
+  const fresh = check(required[0], null, null, {runNumber: 2, checkId: 200});
+  fresh.startedAt = '2026-11-09T12:05:00Z'; fresh.checkSuite.workflowRun.createdAt = fresh.startedAt;
+  const assess = (...runs) => validateMachineChecks({...snapshot(), statusCheckRollup: [...snapshot().statusCheckRollup.slice(1), ...runs]}, head, required);
+  assert.throws(() => assess(old, fresh), /current checks/);
+  fresh.conclusion = 'FAILURE'; fresh.status = 'COMPLETED'; fresh.completedAt = '2026-11-09T12:06:00Z';
+  assert.throws(() => assess(old, fresh), /current checks/);
+  old.startedAt = '2026-11-09T12:07:00Z'; fresh.startedAt = '2026-11-09T12:06:00Z';
+  assert.throws(() => assess(old, fresh), /current checks/);
+  old.conclusion = 'FAILURE'; fresh.conclusion = 'SUCCESS'; assert.equal(assess(old, fresh).status, 'CURRENT_CHECKS_PASS');
+  fresh.checkSuite.app.id = 'other-app'; assert.throws(() => assess(old, fresh), /current checks/); fresh.checkSuite.app.id = 'actions-app';
+  fresh.checkSuite.workflowRun.workflow.id = 'same-name-other-workflow'; assert.throws(() => assess(old, fresh), /current checks/); fresh.checkSuite.workflowRun.workflow.id = 'workflow-1';
+  const sameRun = structuredClone(old); sameRun.databaseId = 101; sameRun.conclusion = 'SUCCESS';
+  old.checkSuite.workflowRun.runAttempt = 2; sameRun.checkSuite.workflowRun.runAttempt = 2;
+  assert.equal(assess(old, sameRun).status, 'CURRENT_CHECKS_PASS');
+  sameRun.checkSuite.workflowRun.runNumber = 9; assert.throws(() => assess(old, sameRun), /current checks/); sameRun.checkSuite.workflowRun.runNumber = 1;
+  sameRun.checkSuite.workflowRun.runAttempt = 1; assert.throws(() => assess(old, sameRun), /current checks/); sameRun.checkSuite.workflowRun.runAttempt = 2;
+  delete sameRun.databaseId; assert.throws(() => assess(old, sameRun), /current checks/);
+  delete old.checkSuite; delete fresh.checkSuite; old.conclusion = 'SUCCESS'; fresh.conclusion = 'FAILURE';
+  assert.throws(() => assess(old, fresh), /current checks/);
+  fresh.conclusion = null; assert.throws(() => assess(old, fresh), /current checks/);
+  const cpOld = {...old, name: 'control-plane (human gate)'}, cpNew = {...fresh, name: cpOld.name};
+  assert.throws(() => validateMachineChecks({...snapshot(), statusCheckRollup: [...snapshot().statusCheckRollup, cpOld, cpNew]}, head, required), /control-plane/);
+});
+test('status contexts use creation order and preserve unknown or tied results', () => {
+  const old = {__typename: 'StatusContext', context: required[0], state: 'FAILURE', createdAt: '2026-11-09T12:00:00Z'};
+  const fresh = {...old, state: 'SUCCESS', createdAt: '2026-11-09T12:05:00Z'};
+  const assess = () => validateMachineChecks({...snapshot(), statusCheckRollup: [...snapshot().statusCheckRollup.slice(1), old, fresh]}, head, required);
+  assert.equal(assess().status, 'CURRENT_CHECKS_PASS');
+  fresh.createdAt = old.createdAt; assert.throws(assess, /current checks/);
+  fresh.createdAt = ''; assert.throws(assess, /current checks/);
+});
+
+test('fractional creation chronology and contradictory metadata never discard blockers', () => {
+  const old = check(required[0], 'FAILURE', '2026-11-09T12:10:00Z', {runNumber: 1, checkId: 100});
+  const fresh = check(required[0], 'SUCCESS', '2026-11-09T12:06:00Z', {runNumber: 2, checkId: 200});
+  const assess = () => validateMachineChecks({...snapshot(), statusCheckRollup: [...snapshot().statusCheckRollup.slice(1), old, fresh]}, head, required);
+  old.checkSuite.workflowRun.createdAt = '2026-11-09T12:00:00.000000001Z'; fresh.checkSuite.workflowRun.createdAt = '2026-11-09T12:00:00.000000002Z';
+  assert.equal(assess().status, 'CURRENT_CHECKS_PASS');
+  old.checkSuite.workflowRun.createdAt = '2026-11-09T12:00:00.000000003Z'; assert.throws(assess, /current checks/);
+  fresh.checkSuite.workflowRun.createdAt = 'unknown'; assert.throws(assess, /current checks/);
 });

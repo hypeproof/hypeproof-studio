@@ -174,3 +174,11 @@ source approvals and shadow/legacy behavior are unchanged; this rule delegates
 only the existing exact same-repository release-record shape with complete machine proof.
 Checks use explicit GraphQL context pagination with final-page proof and stable head
 identity; review history uses complete paginated REST reads.
+
+
+Check reruns are ordered within one issuer and immutable workflow identity/run number and creation
+chronology (preserving fractional seconds), then new check IDs within the same run with consistent attempt metadata.
+Completion timestamps never establish recency. Unknown/incomparable metadata stays
+in the gate, including control-plane results. Status contexts use creation time.
+Query fields are documented in GitHub's [Checks schema](https://docs.github.com/en/graphql/reference/checks#checkrun)
+and [Actions schema](https://docs.github.com/en/graphql/reference/actions#workflowrun).
