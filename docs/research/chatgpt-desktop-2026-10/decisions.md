@@ -1838,5 +1838,15 @@ Problem (v2026.1109.0-rc.1 clean-Mac black-box run): on first open VS Code's Wor
 - Default off (agent-selected flag): `hypeproofChat.trustStudioFolders`, machine scope, default false. Off, behaviour is unchanged. Turning it on is a later step after the core batch base rebuild and a clean-Mac check.
 - Minor seats: same rule, Studio-created folders only.
 - Ships with the next core batch base rebuild; nothing changes until that base is built and the flag is on.
-- Known limit: a learner who deletes a Studio-created folder and recreates the same path by hand stays trusted while the record exists.
+- Known limit (closed by the blocker fix below): a learner who deletes a Studio-created folder and recreates the same path by hand stayed trusted while the record existed.
 - Confirmed by Jay: yes (2026-11-10).
+
+### Blocker fix before the flag is turned on (#3658, same scope, same approval)
+
+Verifier findings S1 and S2 on #3657, plus hardening. The flag stays default off.
+
+- S1 fail closed: the core reads `hypeproofChat.trustStudioFolders` itself at trust-decision time (`configurationService.inspect(...).userLocalValue === true`, never a workspace or default value). Turning the flag off applies to the very next session; the extension no longer writes an `enabled` copy. The core also reads the workbench's disabled-extension list, so with the chat extension disabled the record alone grants nothing. The extension is built in, so uninstalling does not apply; disabling it per workspace is not visible to the core before the folder opens (accepted).
+- S2: an explicit "Don't Trust" on a file folder is stored in the application-scope key `hypeproof.studioFolderTrustDenied` and wins over the record in every later session; an explicit "Trust" removes it.
+- Hardening: Studio creates the leaf folder with a non-recursive `mkdir` and records only when that call succeeded (no check-then-create race). The record stores the real path and the folder's creation time; the core compares it with `fileService.stat().ctime` (cached before the synchronous decision), so delete + recreate at the same path prompts. The record shape is now v2 (`{path, birth}`); the earlier v1 record was never shipped and is ignored.
+- Folders Studio creates while the flag is off are still recorded, so turning the flag on trusts them (intended).
+- Not covered: content cloned or downloaded into a Studio-created folder later runs trusted; a UNC or network `workspace_root` is trusted like any other recorded folder; a symlinked `workspace_root` records the real path and prompts (fails closed).
