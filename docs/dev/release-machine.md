@@ -186,3 +186,18 @@ Completion timestamps never establish recency. Unknown/incomparable metadata sta
 in the gate, including control-plane results. Status contexts use creation time.
 Query fields are documented in GitHub's [Checks schema](https://docs.github.com/en/graphql/reference/checks#checkrun)
 and [Actions schema](https://docs.github.com/en/graphql/reference/actions#workflowrun).
+
+
+## Active release-record review requests (#3647)
+
+Active cut creation/update writes machine-oriented publication instructions, keeping
+all case procedures and unchecked observations. Shadow copy remains unchanged.
+After creation/update, a paginated GraphQL read binds the exact Studio head,
+single-parent RC record and sole version file. Only ReviewRequest.asCodeOwner=true
+User/Team requests are removed with the existing product App capability. Each delete
+rechecks provenance/head; manual false/unknown requests, holds, changes-requested
+reviews and ordinary source PR ownership remain. Uncertain deletion is observed on
+retry rather than blindly repeated. Global CODEOWNERS and draft behavior are unchanged.
+The [official ReviewRequest schema](https://docs.github.com/en/graphql/reference/pulls#reviewrequest)
+and a read-only real shadow PR inspection confirmed the provenance field. No real PR
+requests are modified during protocol controls; installed-App rollout remains #3643.
