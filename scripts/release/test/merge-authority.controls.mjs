@@ -113,7 +113,7 @@ test('slow old success cannot hide a newer pending/red execution, and identified
   fresh.checkSuite.workflowRun.workflow.id = 'same-name-other-workflow'; assert.throws(() => assess(old, fresh), /current checks/); fresh.checkSuite.workflowRun.workflow.id = 'workflow-1';
   const sameRun = structuredClone(old); sameRun.databaseId = 101; sameRun.conclusion = 'SUCCESS';
   old.checkSuite.workflowRun.runAttempt = 2; sameRun.checkSuite.workflowRun.runAttempt = 2;
-  assert.equal(assess(old, sameRun).status, 'CURRENT_CHECKS_PASS');
+  assert.throws(() => assess(old, sameRun), /current checks/, 'same-run job IDs and mutable attempt metadata cannot prove a rerun');
   sameRun.checkSuite.workflowRun.runNumber = 9; assert.throws(() => assess(old, sameRun), /current checks/); sameRun.checkSuite.workflowRun.runNumber = 1;
   sameRun.checkSuite.workflowRun.runAttempt = 1; assert.throws(() => assess(old, sameRun), /current checks/); sameRun.checkSuite.workflowRun.runAttempt = 2;
   delete sameRun.databaseId; assert.throws(() => assess(old, sameRun), /current checks/);
@@ -140,4 +140,24 @@ test('fractional creation chronology and contradictory metadata never discard bl
   assert.equal(assess().status, 'CURRENT_CHECKS_PASS');
   old.checkSuite.workflowRun.createdAt = '2026-11-09T12:00:00.000000003Z'; assert.throws(assess, /current checks/);
   fresh.checkSuite.workflowRun.createdAt = 'unknown'; assert.throws(assess, /current checks/);
+});
+
+test('parallel same-name jobs in one workflow run preserve every blocker regardless of check ID or attempt', () => {
+  const assess = (...runs) => validateMachineChecks({...snapshot(), statusCheckRollup: [...snapshot().statusCheckRollup.slice(1), ...runs]}, head, required);
+  for (const attempt of [1, 2]) for (const conclusion of ['FAILURE', null]) {
+    const red = check(required[0], conclusion, null, {runNumber: 1, checkId: 1000, attempt});
+    const green = check(required[0], 'SUCCESS', '2026-11-09T12:10:00Z', {runNumber: 1, checkId: 1001, attempt});
+    assert.throws(() => assess(red, green), /current checks/);
+    assert.throws(() => assess(green, red), /current checks/, 'provider order cannot discard a parallel blocker');
+    green.checkSuite.workflowRun.runAttempt = attempt + 1;
+    assert.throws(() => assess(red, green), /current checks/, 'runAttempt is not immutable per-job attempt identity');
+    const nextRun = check(required[0], 'SUCCESS', '2026-11-09T12:11:00Z', {runNumber: 2, checkId: 2000});
+    assert.equal(assess(red, green, nextRun).status, 'CURRENT_CHECKS_PASS', 'a proven later distinct workflow run clears the old run');
+  }
+  const old = check(required[0], 'FAILURE', null, {runNumber: 1}), fresh = check(required[0]);
+  delete old.checkSuite.workflowRun.id; delete old.checkSuite.workflowRun.databaseId;
+  assert.throws(() => assess(old, fresh), /current checks/, 'unknown run identity cannot prove supersession');
+  old.checkSuite.workflowRun.id = fresh.checkSuite.workflowRun.id;
+  old.checkSuite.workflowRun.databaseId = 1;
+  assert.throws(() => assess(old, fresh), /current checks/, 'contradictory run identities cannot prove supersession');
 });

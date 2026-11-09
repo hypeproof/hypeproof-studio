@@ -176,8 +176,12 @@ Checks use explicit GraphQL context pagination with final-page proof and stable 
 identity; review history uses complete paginated REST reads.
 
 
-Check reruns are ordered within one issuer and immutable workflow identity/run number and creation
-chronology (preserving fractional seconds), then new check IDs within the same run with consistent attempt metadata.
+Check reruns are ordered across proven distinct runs of one issuer and immutable workflow
+identity, using run number and creation chronology (preserving fractional seconds).
+Same-run duplicate display names remain incomparable: parallel jobs can share a name,
+and neither check ID nor mutable workflow runAttempt proves per-job supersession.
+Every blocker in that run remains until a proven later distinct run supersedes it;
+this is technical evidence ambiguity, not an additional human approval requirement.
 Completion timestamps never establish recency. Unknown/incomparable metadata stays
 in the gate, including control-plane results. Status contexts use creation time.
 Query fields are documented in GitHub's [Checks schema](https://docs.github.com/en/graphql/reference/checks#checkrun)

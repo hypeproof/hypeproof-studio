@@ -142,14 +142,14 @@ function newerCheck(a, b) {
   const positive = n => Number.isSafeInteger(n) && n > 0;
   const at = creationTime(ar.createdAt), bt = creationTime(br.createdAt);
   if (at === null || bt === null || !positive(ar.runNumber) || !positive(br.runNumber)) return false;
-  const sameRun = ar.id && br.id ? ar.id === br.id : positive(ar.databaseId) && ar.databaseId === br.databaseId;
-  if (!sameRun) {
-    return ar.runNumber > br.runNumber && at >= bt;
-  }
-  if (ar.runNumber !== br.runNumber || at !== bt) return false;
-  // WorkflowRun.runAttempt is mutable even on an old check; check IDs identify new jobs within that run.
-  return positive(a.databaseId) && positive(b.databaseId) && a.databaseId > b.databaseId &&
-    positive(ar.runAttempt) && positive(br.runAttempt) && ar.runAttempt >= br.runAttempt;
+  const nodeIds = typeof ar.id === 'string' && ar.id && typeof br.id === 'string' && br.id;
+  const databaseIds = positive(ar.databaseId) && positive(br.databaseId);
+  if (!nodeIds && !databaseIds) return false;
+  if (nodeIds && databaseIds && (ar.id === br.id) !== (ar.databaseId === br.databaseId)) return false;
+  const differentRun = nodeIds ? ar.id !== br.id : ar.databaseId !== br.databaseId;
+  // Display names may belong to parallel jobs. Check IDs and mutable runAttempt cannot prove
+  // that one same-run job supersedes another; retain every same-run result.
+  return differentRun && ar.runNumber > br.runNumber && at >= bt;
 }
 
 export function validateMachineChecks(snapshot, head, requiredChecks) {
