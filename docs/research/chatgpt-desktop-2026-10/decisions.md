@@ -1780,3 +1780,51 @@ Jay decided that availability follows the class: a per-class switch is added (th
 - A learner who had it on (agent-selected): it is turned off visibly (one status line in the chat pane, shown once for that task), and a waiting plan or an unspent approval is dropped so nothing is left pending and nothing runs on a stale approval.
 - Not covered: a lesson-level switch (lesson feature narrowing keeps what `allowed` lists, so adding the key would switch it off for every saved lesson); real-app validation is NOT RUN.
 - Confirmed by Jay: yes (2026-11-09).
+
+## CGP-VOICE-R-024 / CGP-VOICE-D-018: served voice block, class-off state (2026-11-09, policy-backed)
+
+- Policy: `hypeprooflab` `docs/decisions/2026-11-09-studio-voice-policy.md` (active), policy 4 and 6. The only input is the `voice` block on `/v1/profile`; absent means off, so every current seat renders byte-identical markup (`voice-mount.test.tsx` compares the real ChatPanel's markup with and without the wiring, both seats).
+- Fail closed: a `policy_version` this build has no copy for is treated as off. A truthy non-`true` flag is off.
+- Class off (D-018): the Service omits the block when a class turns voice off, so "was served in this window, not now" is the only signal; that state is kept in memory per window and seat, never stored. A Service refusal `voice_off` / `voice_consent_required` has the same effect.
+- Copy: the policy's `이 수업에서는 쓸 수 없어요` (also what the Service answers with). The request named `이 수업에서는 음성을 쓰지 않아요`; the confirmed policy line was used, because the Service sends it verbatim and one line should not exist in two wordings. The follow-up `글로 이야기하면 돼요.` is agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the state and the line; no for `글로 이야기하면 돼요.`.
+
+## CGP-VOICE-R-004 / CGP-VOICE-D-003: disclosure sheet (2026-11-09, policy-backed)
+
+- Sentences are the policy's Appendix B, verbatim, keyed by policy version in `voiceCopy.ts`; one paragraph per served half; the button is `시작하기`. DES-CGPV-04's "at most 3 short sentences at a 2nd-grade level" gives way to the approved copy, which is what the register's own text says ("copy is generated from the active policy").
+- Remembered once per seat and policy version (policy 5: once per account and policy version), in the host's `globalState` as one record keyed by the seat's own scope (activity connection plus profile id) holding version strings only. On a shared class laptop each seat reads the sheet once; a seat switch asks the host again. A different version shows the sheet again. An earlier revision of this change keyed it per install; that did not match the policy and was corrected.
+- The sheet reuses the shared modal surface (focus trap, Escape, focus return). The title `음성 사용 안내` is agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the sentences, the button and the once-per-seat-and-version rule (the policy's own); no for the title and for the seat-key construction.
+
+## CGP-VOICE-R-012 / R-016, REQ-CGPV-17b/17c/18/19: dictation (2026-11-09, policy-backed with agent choices)
+
+- Engine and path: the Service, never the webview (policy 1, D2). The webview's CSP allows no network and is not loosened; the finished clip goes to the host as base64 and the host posts it. Audio is memory only end to end (policy 3, D4); the host keeps no copy after the answer.
+- Format: `audio/webm;codecs=opus` at 32 kbps, `audio/ogg;codecs=opus` as the only fallback, never `audio/mp4` (the Service parses nothing else).
+- The request said "hard stop at 60 s". Studio stops at 58 s: the Service refuses a clip it measures over 60 s from the bytes, and the encoder flushes one more packet after `stop()`, so a stop at exactly 60 s could throw away a whole clip. Agent-chosen margin.
+- No auto-send, ever; no "받아쓰고 보내기" action (REQ-CGPV-17 allows one as a separate action; not built).
+- Retry (R-016): a failed clip is kept in memory for one retry for ten minutes (the policy's own figure), dropped on success, dismiss or unmount; a retried transcript needs `메시지에 넣기`.
+- Hiding the window, `pagehide`, a task or seat switch (the chat remounts) and disposing the panel stop a recording, release the microphone and drop the clip and any kept retry copy: the chat view keeps its webview alive while hidden (`retainContextWhenHidden`), so without this a hidden window would keep recording for up to 58 s. Agent-chosen.
+- A transcript that was inserted but never sent stays in the composer draft and is saved like any typed draft; that is ordinary chat text under DEC-05, not stored audio.
+- Not an outbound-consent dialog: the first-use disclosure carries the statement, and a prompt per clip would be noise a learner learns to click through.
+- Softer line `소리가 잘 들리지 않았어요. 다시 말해 볼까요?` for unreadable or silent clips is from the task brief, agent-written. The cap line is the policy's.
+- Key: Alt+Shift+M start/stop, Escape cancels a recording, in-app only (beside the existing Alt+Shift+J). Agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the engine path, the data rule, the cap line and the ten minutes; no for the 58 s margin, the key, the failure lines and the card copy.
+
+## CGP-VOICE-R-003 / CGP-VOICE-D-002: microphone permission card (2026-11-09, agent-selected)
+
+- A card above the composer (not inside the unmounted VoicePanel): title, one sentence, `마이크 설정 열기` primary, `글로 계속하기` secondary. DES-CGPV-03's labels `설정 열기` / `텍스트로 계속` are made specific.
+- The host picks the OS pane from the platform (macOS, Windows; none elsewhere) and never takes a URL from the webview. No automatic retry.
+- Real-device caveat: on a build without the microphone core patch (DEC-03) `getUserMedia` is refused by Studio itself and a learner sees this card although no OS setting would help. That is exactly what the real-device check must separate.
+- Confirmed by Jay: no.
+
+## CGP-VOICE-R-024 (read-aloud half) / CGP-CHAT-R-009: read-aloud (2026-11-09, policy-backed)
+
+- Engine: the OS voice through `speechSynthesis`, Korean `ko-KR`, no Service call (policy D1). Only an on-device Korean voice is chosen; with none the default voice of the platform speaks (the Electron webview has no streaming voices). Unmeasured: voice quality on macOS and Windows.
+- Per answer: personal seats in the answer action row, classroom seats beside the speaker's name (they have no action row). Plays on a press only; one at a time; the same button stops it; fenced code skipped and announced (`코드는 건너뛰었어요`, REQ-CGPV-24).
+- Label `소리로 듣기` is the register's proposed copy, agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the engine; no for the label and placement.
+
+## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
+
+- R-021 asks for four `hypeproof.voice.*` Command Palette commands for realtime voice; this change binds one webview-local key for dictation instead and leaves the commands to the row that owns them. R-001 is the realtime session state set; `VoicePanel` stays unmounted. Both stay open.
+- Confirmed by Jay: no.

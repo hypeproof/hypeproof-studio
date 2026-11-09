@@ -430,6 +430,11 @@ export interface ResolvedProfile {
     /** Photos attached as files saved to `images/`, paths only to the model (attachedImages.ts). hype-dental D-028. */
     image_files?: boolean;
   };
+  /**
+   * Studio voice (hps-voice-policy/1, voiceServed.ts): present only when the Service serves dictation
+   * and/or read-aloud to this seat. Absent → no voice UI anywhere, byte-identical to before voice existed.
+   */
+  voice?: { dictation?: boolean; read_aloud?: boolean; policy_version?: string; engine?: { dictation?: string; read_aloud?: string }; caps?: { currency?: string; unit?: string; seat_day?: number; class_session?: number; global_day?: number } };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
   /**
@@ -662,6 +667,16 @@ export type WebviewMessage = (
   | { type: "fileMentionCancel"; requestId: string }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
+  /**
+   * Dictation (voiceHost.ts). The finished clip goes to the host, which alone may reach the Service; the
+   * webview's CSP allows no network. `audio` is base64 of one Opus WebM/Ogg clip, held in memory only.
+   */
+  | { type: "voiceTranscribe"; requestId: string; mime: string; seconds: number; audio: string }
+  /** The learner pressed 마이크 설정 열기. The host picks the OS pane; the webview names no URL. */
+  | { type: "voiceOpenMicSettings" }
+  /** Ask which policy versions the learner has already read the disclosure for / record that they did. */
+  | { type: "voiceDisclosureRead" }
+  | { type: "voiceDisclosureAck"; policyVersion: string }
   /** CGP-VOICE-R-009 — voice "보여주기": ask for the two-item menu, then attach one chosen target per click. */
   | { type: "voiceShowThisMenu"; requestId: string }
   | { type: "voiceShowThis"; requestId: string; target: string }
@@ -1059,6 +1074,11 @@ export type HostMessage = (
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
   | { type: "fileMentionPicked"; requestId: string; ok: boolean }
+  /** Dictation answer: text for the composer, or a calm refusal in Korean (voiceHost.ts). */
+  | { type: "voiceTranscribeResult"; requestId: string; ok: true; text: string }
+  | { type: "voiceTranscribeResult"; requestId: string; ok: false; kind: import("./voiceHost").TranscribeKind; message: string; retry: boolean }
+  | { type: "voiceMicSettingsResult"; ok: boolean }
+  | { type: "voiceDisclosureState"; acknowledged: string[] }
   /** CGP-VOICE-R-009 — the menu state (re-read on every open) and the result of one attach click. */
   | { type: "voiceShowThisMenu"; requestId: string; items: import("./voicePopupHelpers").ShowThisItem[] }
   | { type: "voiceShowThisResult"; requestId: string; target: import("./voicePopupHelpers").ShowThisTarget | null; ok: boolean; reference?: import("./voicePopupHelpers").ReferenceTarget; error?: string }

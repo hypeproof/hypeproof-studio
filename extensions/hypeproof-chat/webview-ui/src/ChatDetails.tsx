@@ -1,4 +1,5 @@
 import { AnswerWikiReview } from './AnswerWikiReview';
+import { AnswerExtras } from './answerExtras';
 import { CopyFeedback } from './CopyFeedback';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useLayoutLoopGuard } from './layoutLoopGuard';
@@ -19,7 +20,7 @@ export type IconKind =
   | 'back' | 'forward' | 'message' | 'chevron-down' | 'chevron-up' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
-  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban' | 'bookmark';
+  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban' | 'bookmark' | 'mic' | 'speaker';
 export type IconSize = 16 | 20 | 24;
 
 export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: IconSize; label?: string }) {
@@ -84,6 +85,8 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'return' && <path d="m9 5-7 7 7 7M2 12h13a6 6 0 0 0 6-6" />}
     {kind === 'minus' && <path d="M7 12h10" />}
     {kind === 'ban' && <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>}
+    {kind === 'mic' && <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" /></>}
+    {kind === 'speaker' && <><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>}
     {kind === 'bookmark' && <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.5L12 16l-6.5 4.5V5A1.5 1.5 0 0 1 7 3.5Z" />}
     {kind === 'game' && <><rect x="2.5" y="7" width="19" height="11" rx="4" /><path d="M7 10.5v4M5 12.5h4M15.5 12h.01M18 14h.01" /></>}
     {kind === 'menu' && <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -143,7 +146,7 @@ export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>]
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
 export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 
-export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status, memory }: { /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; /** CGP-KNOW-D-026 — the answer's "기억 사용 N" chip, metadata before the elapsed receipt. */ memory?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
+export function CopyAnswer({ content, answerId, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status, memory }: { /** The answer's message id: an extra control on the answer (answerExtras.tsx) keys itself by it. */ answerId?: string; /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; /** CGP-KNOW-D-026 — the answer's "기억 사용 N" chip, metadata before the elapsed receipt. */ memory?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
   const [wikiOpen, setWikiOpen] = useState(false);
   const wikiAction = useRef<HTMLButtonElement>(null);
@@ -159,6 +162,7 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTur
     {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" data-hp-tooltip="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
+    {answerId && <AnswerExtras answerId={answerId} content={content} />}
     {onToWiki && wikiTurnId && <button ref={wikiAction} type="button" className="hps-answer-wiki hps-answer-action" aria-label={ANSWER_TO_WIKI_LABEL} aria-expanded={wikiOpen} onClick={() => setWikiOpen(true)} data-hp-tooltip={ANSWER_TO_WIKI_LABEL}>
       <ChatIcon kind="book" size={16} />
     </button>}
