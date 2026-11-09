@@ -49,6 +49,7 @@
   border: 0; border-radius: var(--hp-radius-8); background: transparent; color: var(--hp-text-muted-default); font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
 }
 .hps-msg-role .hps-voice-listen:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-msg-role .hps-voice-listen:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-msg-role .hps-voice-listen:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 .hps-msg-role .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }
 .hps-answer-actions .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }

@@ -295,7 +295,8 @@ import {
 import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, versionCount } from "./editResend";
 import { parseVerdictRequest, promptIdFor, verdictTargets, type VerdictEvent } from "./answerVerdict";
 import { capturePageContext } from "./nativeBrowser";
-import { transcribeClip, micSettingsUri, readAcknowledged, withAcknowledged, VOICE_DISCLOSURE_KEY, type TranscribeResult } from "./voiceHost";
+import { openMicrophoneSettings } from "./voiceMicSettings";
+import { transcribeClip, readAcknowledged, withAcknowledged, VOICE_DISCLOSURE_KEY, type TranscribeResult } from "./voiceHost";
 import { readServedVoice, VOICE_POLICY_VERSIONS } from "./voiceServed";
 import { runShowThis, showThisMenu, ShowThisLedger, SHOW_THIS_COPY, withRevision, isOwnPreviewTab, type ShowThisEnv } from "./voiceShowThis";
 import { isShowThisRequestId } from "./voicePopupHelpers";
@@ -8621,14 +8622,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "voiceTranscribe":
         await this.voiceTranscribe(msg, source);
         return;
-      case "voiceOpenMicSettings": {
-        // The pane is chosen here from the platform (voiceHost.micSettingsUri); the webview names nothing.
-        const uri = micSettingsUri(process.platform);
-        let ok = false;
-        if (uri) { try { ok = await vscode.env.openExternal(vscode.Uri.parse(uri)); } catch { ok = false; } }
-        await this.postVoice(source, { type: "voiceMicSettingsResult", ok });
+      case "voiceOpenMicSettings":
+        // The pane is chosen from the platform (voiceMicSettings.ts); the webview names nothing.
+        await this.postVoice(source, { type: "voiceMicSettingsResult", ok: await openMicrophoneSettings() });
         return;
-      }
       case "voiceDisclosureRead":
         await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)) });
         return;

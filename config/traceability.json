@@ -17489,6 +17489,9 @@
           "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/voiceMicSettings.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/VoiceProvider.tsx"
         },
         {

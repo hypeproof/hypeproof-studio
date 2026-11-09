@@ -9,7 +9,7 @@ import type { ResolvedProfile } from "../../src/protocol";
 import { readsMinorDisclosure, voiceAvailability, type VoiceAvailability } from "../../src/voiceServed";
 import { onHostMessage, postToHost } from "./vscode";
 import { VoiceDisclosureSheet } from "./VoiceDisclosureSheet";
-import { AnswerExtrasContext } from "./answerExtras";
+import { registerAnswerExtras } from "./answerExtras";
 import { ReadAloudButton } from "./ReadAloudButton";
 
 export interface VoiceContextValue {
@@ -26,6 +26,9 @@ export interface VoiceController {
   accept(): void;
   minor: boolean;
 }
+
+// The read-aloud control goes on every completed answer; it draws nothing unless voice is served (useVoice).
+registerAnswerExtras(ReadAloudButton);
 
 const NONE: VoiceContextValue = { availability: { kind: "none" }, gate: () => {}, markClassOff: () => {} };
 const VoiceContext = createContext<VoiceContextValue>(NONE);
@@ -79,7 +82,7 @@ export function VoiceProvider({ controller, children }: { controller: VoiceContr
   const { value } = controller;
   return (
     <VoiceContext.Provider value={value}>
-      <AnswerExtrasContext.Provider value={ReadAloudButton}>{children}</AnswerExtrasContext.Provider>
+      {children}
       {controller.sheet && value.availability.kind === "on" && (
         <VoiceDisclosureSheet served={value.availability.served} minor={controller.minor} onStart={controller.accept} onCancel={controller.closeSheet} />
       )}
