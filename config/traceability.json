@@ -17565,6 +17565,100 @@
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MOBILE-INTENT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-mobile/README.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MOBILE-INTENT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-INTENT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-mobile/vercel.json"
+        },
+        {
+          "path": "apps/studio-mobile/package.json"
+        },
+        {
+          "path": "apps/studio-mobile/dev.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/public/index.html"
+        },
+        {
+          "path": "apps/studio-mobile/public/icon.svg"
+        },
+        {
+          "path": "apps/studio-mobile/public/style.css"
+        },
+        {
+          "path": "apps/studio-mobile/public/app.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/public/manifest.webmanifest"
+        },
+        {
+          "path": "apps/studio-mobile/public/model.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/public/sw.js"
+        },
+        {
+          "path": "apps/studio-mobile/api/service.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/public/icon-192.png"
+        },
+        {
+          "path": "apps/studio-mobile/public/icon-180.png"
+        },
+        {
+          "path": "apps/studio-mobile/public/icon-512.png"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MOBILE-INTENT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-INTENT",
+        "ST-IMP-MOBILE-INTENT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-mobile/test/live-smoke.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/test/model.test.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/test/service.test.mjs"
+        },
+        {
+          "path": "apps/studio-mobile/test/browser.mjs"
+        },
+        {
+          "path": "scripts/release/smoke/checks/mobile-intent.mjs"
+        },
+        {
+          "path": ".github/workflows/studio-mobile.yml"
+        }
+      ]
     }
   ]
 }

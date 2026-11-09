@@ -1,0 +1,37 @@
+name: Studio mobile MVP
+on:
+  pull_request:
+    paths:
+      - 'apps/studio-mobile/**'
+      - '.github/workflows/studio-mobile.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/studio-mobile/**'
+      - '.github/workflows/studio-mobile.yml'
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test test/*.test.mjs
+        working-directory: apps/studio-mobile
+      - name: Install isolated browser test tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/mobile-browser" --ignore-scripts --no-audit --no-fund playwright@1.60.0
+          "$RUNNER_TEMP/mobile-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Mobile browser scenarios with fixture AI
+        working-directory: apps/studio-mobile
+        run: |
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/mobile-browser/node_modules/playwright/index.mjs" MOBILE_TEST_OUTPUT="$RUNNER_TEMP/mobile-evidence" node test/browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-browser-evidence
+          path: ${{ runner.temp }}/mobile-evidence
