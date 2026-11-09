@@ -48,3 +48,8 @@ export async function syncStudioFolderRecord(store: StudioFolderStore, flag: boo
     await store.update(STUDIO_FOLDERS_KEY, next);
   } catch { /* the folder simply keeps the normal trust prompt */ }
 }
+
+/** The flag, read lazily; false (fail closed) when the configuration API is unavailable or throws. */
+export function studioFoldersFlag(read: () => { get<T>(key: string, fallback: T): T } | undefined): boolean {
+  try { return read()?.get<boolean>('trustStudioFolders', false) === true; } catch { return false; }
+}

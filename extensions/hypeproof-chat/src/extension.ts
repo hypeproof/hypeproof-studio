@@ -15,7 +15,7 @@ import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
-import { directoryIsAbsent, syncStudioFolderRecord } from './studioFolderTrust';
+import { directoryIsAbsent, studioFoldersFlag, syncStudioFolderRecord } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -114,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context = connections.wrap();
   registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
-  void syncStudioFolderRecord(context.globalState, vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('trustStudioFolders', false));
+  void syncStudioFolderRecord(context.globalState, studioFoldersFlag(() => vscode.workspace.getConfiguration('hypeproofChat')));
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
@@ -1275,7 +1275,7 @@ async function openWorkspaceFolder(
   const checkpoint = context && previousRecord && previousRecord.serverId === profile?.activity_id && activityConnections(context)?.matchesService
     ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
-  if (context) await syncStudioFolderRecord(context.globalState, vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('trustStudioFolders', false), dir, absentBefore);
+  if (context) await syncStudioFolderRecord(context.globalState, studioFoldersFlag(() => vscode.workspace.getConfiguration('hypeproofChat')), dir, absentBefore);
 
   // Binding is committed first; the marker grants no authority and contains no credential.
   const record = context && activityConnections(context)?.current;

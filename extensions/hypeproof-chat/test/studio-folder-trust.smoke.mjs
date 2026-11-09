@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const { STUDIO_FOLDERS_KEY, directoryIsAbsent, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
+const { studioFoldersFlag, STUDIO_FOLDERS_KEY, directoryIsAbsent, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
 const { prepareWorkspaceDirectory } = await import("../src/workspacePreparation.ts");
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const coreDir = path.join(repo, "scripts/patches/core");
@@ -42,6 +42,11 @@ try {
   assert.deepEqual(studioFolderRecordOf(store.get(STUDIO_FOLDERS_KEY)), { v: 1, enabled: false, folders: [created] });
   await syncStudioFolderRecord(store, true);
   assert.deepEqual(studioFolderRecordOf({ folders: [1, "", "/a"], enabled: "yes" }), { v: 1, enabled: false, folders: ["/a"] }, "malformed -> disabled");
+
+  assert.equal(studioFoldersFlag(() => { throw new TypeError("getConfiguration is not a function"); }), false, "API unavailable: fail closed");
+  assert.equal(studioFoldersFlag(() => undefined), false);
+  assert.equal(studioFoldersFlag(() => ({ get: (_k, d) => d })), false, "default off");
+  assert.equal(studioFoldersFlag(() => ({ get: () => true })), true);
 
   // 2. Core patch on a stand-in checkout of the pristine upstream file.
   const tree = path.join(tmp, "vscode");
