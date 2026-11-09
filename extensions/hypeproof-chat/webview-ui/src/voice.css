@@ -1,0 +1,70 @@
+/* Studio voice: dictation in the composer, read-aloud on an answer, the disclosure sheet.
+   Tokens only (test/design-tokens.smoke.mjs): no literal colour, length or duration here. 14px is the
+   floor for learner text (--hp-font-caption); every control is at least --hp-control-min square. */
+
+/* ---- the mic button, in the composer's button row ---- */
+.hps-input .hps-voice-mic {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-full);
+  background: transparent; color: var(--hp-text-primary-default); cursor: pointer;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-input .hps-voice-mic:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-input .hps-voice-mic:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-input .hps-voice-mic:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-input .hps-voice-mic:disabled { opacity: 0.5; cursor: default; }
+.hps-input .hps-voice-mic-on { background-color: var(--hp-bg-control-pressed); border-color: var(--hp-ring-focus-default); }
+/* The composer's button column is fixed at one control wide; with an addon it fits the buttons it holds. */
+.hps-shell[data-chat-detail="personal"] .hps-input[data-addon] { grid-template-columns: var(--hp-control-min) minmax(0, 1fr) auto; }
+.hps-input[data-addon] .hps-input-buttons { flex-wrap: nowrap; }
+
+/* ---- the status area above the text box ---- */
+.hps-voice-note {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2) var(--hp-space-3);
+  box-sizing: border-box; margin: 0 0 var(--hp-space-2); padding: var(--hp-space-2) var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+  color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+  overflow-wrap: anywhere; word-break: keep-all; min-width: 0;
+}
+.hps-voice-card { flex-direction: column; align-items: flex-start; }
+.hps-voice-classoff { color: var(--hp-text-muted-default); }
+.hps-voice-recording { gap: var(--hp-space-2) var(--hp-space-3); }
+.hps-voice-rec-dot { width: var(--hp-space-3); height: var(--hp-space-3); border-radius: var(--hp-radius-full); background: var(--hp-ring-focus-default); flex-shrink: 0; }
+.hps-voice-time { color: var(--hp-text-muted-default); font-variant-numeric: tabular-nums; }
+.hps-voice-limit { color: var(--hp-text-muted-default); }
+.hps-voice-recovered { white-space: pre-wrap; }
+.hps-voice-btns { display: flex; flex-wrap: wrap; gap: var(--hp-space-2) var(--hp-space-3); }
+.hps-voice-link, .hps-voice-primary {
+  min-height: var(--hp-control-min); min-width: var(--hp-control-min); padding: 0 var(--hp-space-3);
+  border-radius: var(--hp-radius-8); font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
+}
+.hps-voice-link { border: 0; background: transparent; color: var(--hp-text-accent-default); text-decoration: underline; }
+.hps-voice-primary { border: 0; background: var(--hp-bg-accent-default); color: var(--hp-text-inverse-default); font-weight: var(--hp-weight-strong); }
+.hps-voice-link:focus-visible, .hps-voice-primary:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+
+/* ---- read-aloud, in the answer's action row (personal) or beside the speaker's name (classroom) ---- */
+.hps-msg-role .hps-voice-listen {
+  display: inline-flex; align-items: center; gap: var(--hp-space-1); min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--hp-space-2);
+  border: 0; border-radius: var(--hp-radius-8); background: transparent; color: var(--hp-text-muted-default); font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
+}
+.hps-msg-role .hps-voice-listen:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-msg-role .hps-voice-listen:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-msg-role .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }
+.hps-answer-actions .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }
+.hps-voice-skipped { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+
+/* ---- the disclosure sheet (inside the shared modal surface) ---- */
+.hps-voice-disclosure-body { display: flex; flex-direction: column; gap: var(--hp-space-3); font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
+.hps-voice-disclosure-body p { margin: 0; overflow-wrap: anywhere; word-break: keep-all; }
+.hps-voice-disclosure-actions { display: flex; justify-content: flex-end; margin-top: var(--hp-space-4); }
+.hps-voice-disclosure-start {
+  min-height: var(--hp-control-min); min-width: var(--hp-control-min); padding: 0 var(--hp-space-4); border: 0; border-radius: var(--hp-radius-8);
+  background: var(--hp-bg-accent-default); color: var(--hp-text-inverse-default); font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); cursor: pointer;
+}
+.hps-voice-disclosure-start:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+
+@media (forced-colors: active) {
+  .hps-input .hps-voice-mic, .hps-voice-note { border-color: ButtonText; }
+  .hps-voice-primary, .hps-voice-disclosure-start { border: var(--ds-c-studio-styles-size-3) solid ButtonText; }
+}

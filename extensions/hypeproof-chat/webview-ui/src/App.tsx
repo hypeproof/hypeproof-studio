@@ -44,6 +44,8 @@ import { askAboutFileAllowed } from './askAboutFile';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
+import { VoiceProvider, useVoiceController } from "./VoiceProvider";
+import { dictationAddonFor } from "./dictationAddon";
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { PanelBoundary } from "./PanelBoundary";
 import { VerifyPanel } from "./VerifyPanel";
@@ -817,7 +819,10 @@ export function App() {
     lastOutcome: state.lastOutcome,
   });
 
-  return (<>
+  // Studio voice (voiceServed.ts): `none` unless the served profile carries a `voice` block. Nothing below draws then.
+  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor);
+
+  return (<VoiceProvider controller={voice}>
     {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up
         (the card's 문제 신고하기 opens them), so they render beside the boundary, behind a panel boundary of their own. */}
     <PanelBoundary panel="report">
@@ -889,6 +894,7 @@ export function App() {
         />
       ) : (
       <ChatPanel
+        composerAddon={dictationAddonFor(voice.value.availability)}
         delegationStops={delegationStops}
         onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
         key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
@@ -986,7 +992,7 @@ export function App() {
       )}
       </TaskWorkspaceFrame>
     </ChatErrorBoundary>
-  </>);
+  </VoiceProvider>);
 }
 
 /**

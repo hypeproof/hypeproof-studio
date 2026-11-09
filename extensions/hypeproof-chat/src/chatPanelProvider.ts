@@ -295,6 +295,8 @@ import {
 import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, versionCount } from "./editResend";
 import { parseVerdictRequest, promptIdFor, verdictTargets, type VerdictEvent } from "./answerVerdict";
 import { capturePageContext } from "./nativeBrowser";
+import { transcribeClip, micSettingsUri, readAcknowledged, withAcknowledged, VOICE_DISCLOSURE_KEY, type TranscribeResult } from "./voiceHost";
+import { readServedVoice, VOICE_POLICY_VERSIONS } from "./voiceServed";
 import { runShowThis, showThisMenu, ShowThisLedger, SHOW_THIS_COPY, withRevision, isOwnPreviewTab, type ShowThisEnv } from "./voiceShowThis";
 import { isShowThisRequestId } from "./voicePopupHelpers";
 import { isGeneralBrowserOpenRequest } from "./browserIntent";
@@ -3927,6 +3929,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       scope: this.turnRequestScope(),
     };
   }
+  // ── Dictation (hps-voice-policy/1). One clip per seat at a time; the audio is an argument and nothing
+  // else: no disk, no log line, no state kept after the answer. Metadata (kind, status) is all that leaves.
+  private voiceInFlight = false;
+  private async postVoice(source: vscode.Webview | undefined, msg: Extract<HostMessage, { type: "voiceTranscribeResult" | "voiceMicSettingsResult" | "voiceDisclosureState" }>): Promise<void> {
+    if (source) { try { await source.postMessage(msg); } catch { /* the panel closed */ } return; }
+    await this.post(msg);
+  }
+  private async voiceTranscribe(msg: Extract<WebviewMessage, { type: "voiceTranscribe" }>, source: vscode.Webview | undefined): Promise<void> {
+    const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(msg.requestId) ? msg.requestId : "";
+    if (!requestId) return;
+    const reply = (result: TranscribeResult) => this.postVoice(source, result.ok
+      ? { type: "voiceTranscribeResult", requestId, ok: true, text: result.text }
+      : { type: "voiceTranscribeResult", requestId, ok: false, kind: result.kind, message: result.message, retry: result.retry });
+    if (this.voiceInFlight) { await reply({ ok: false, kind: "busy", message: "지금 다른 받아쓰기가 끝나길 기다리고 있어요. 잠시 뒤에 다시 해 주세요.", retry: false }); return; }
+    // Only a seat the Service serves dictation to may send audio, even if a webview asks.
+    const served = this.isInstructor === false ? readServedVoice(this.cachedProfile) : null;
+    if (!served?.dictation) { await reply({ ok: false, kind: "class_off", message: "이 수업에서는 쓸 수 없어요", retry: false }); return; }
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    if (!token) { await reply({ ok: false, kind: "auth", message: "연결이 끊어졌어요. 다시 로그인한 뒤 해 보세요. 글로는 계속 이야기할 수 있어요.", retry: false }); return; }
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    this.voiceInFlight = true;
+    try {
+      await reply(await transcribeClip({ proxyUrl, token, request: { mime: msg.mime, seconds: msg.seconds, audio: msg.audio } }));
+    } finally { this.voiceInFlight = false; }
+  }
+
   private async postShowThis(source: vscode.Webview | undefined, msg: Extract<HostMessage, { type: 'voiceShowThisMenu' | 'voiceShowThisResult' }>): Promise<void> {
     if (!source) { await this.post(msg); return; }
     // A panel this provider does not know still gets an answer, or it would wait on "붙이는 중" forever.
@@ -8589,6 +8617,26 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.prompt, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.prompt, msg.images, requestedMode); return; }
         await this.handleSend(msg.prompt, msg.history, msg.images, undefined, undefined, requestedMode, msg.userMessageId, msg.sourceMessageId);
+        return;
+      case "voiceTranscribe":
+        await this.voiceTranscribe(msg, source);
+        return;
+      case "voiceOpenMicSettings": {
+        // The pane is chosen here from the platform (voiceHost.micSettingsUri); the webview names nothing.
+        const uri = micSettingsUri(process.platform);
+        let ok = false;
+        if (uri) { try { ok = await vscode.env.openExternal(vscode.Uri.parse(uri)); } catch { ok = false; } }
+        await this.postVoice(source, { type: "voiceMicSettingsResult", ok });
+        return;
+      }
+      case "voiceDisclosureRead":
+        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)) });
+        return;
+      case "voiceDisclosureAck":
+        if (typeof msg.policyVersion === "string" && (VOICE_POLICY_VERSIONS as readonly string[]).includes(msg.policyVersion)) {
+          await this.context.globalState.update(VOICE_DISCLOSURE_KEY, withAcknowledged(readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)), msg.policyVersion));
+        }
+        await this.postVoice(source, { type: "voiceDisclosureState", acknowledged: readAcknowledged(this.context.globalState.get<unknown>(VOICE_DISCLOSURE_KEY)) });
         return;
       case "voiceCapabilityProbeResult": {
         // #897 — hand the raw observation to whoever is waiting for it. No verdict

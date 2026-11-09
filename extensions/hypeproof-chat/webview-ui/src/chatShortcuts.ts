@@ -5,7 +5,7 @@
 export type ShortcutPlatform = 'mac' | 'other';
 
 export interface ChatShortcut {
-  id: 'send' | 'newline' | 'close' | 'find' | 'conversation' | 'help';
+  id: 'send' | 'newline' | 'close' | 'find' | 'conversation' | 'dictate' | 'help';
   /** Key caps in press order, already in the platform's names. */
   keys: string[];
   label: string;
@@ -28,7 +28,7 @@ function modifier(name: 'Command' | 'Alt' | 'Shift', platform: ShortcutPlatform)
  * The rows, in the order a learner meets them. `taskWorkspace`: the personal task layout is
  * mounted, so its Alt+Shift+J conversation shortcut (TaskWorkspace.tsx, D019) is bound.
  */
-export function chatShortcuts(platform: ShortcutPlatform, options: { taskWorkspace: boolean }): ChatShortcut[] {
+export function chatShortcuts(platform: ShortcutPlatform, options: { taskWorkspace: boolean; dictation?: boolean }): ChatShortcut[] {
   const rows: ChatShortcut[] = [
     // ChatPanel composer onKeyDown: Enter sends; during an answer it books the message (#416).
     { id: 'send', keys: ['Enter'], label: '메시지 보내기', note: '답하는 중에 누르면 끝나고 보내도록 예약해요' },
@@ -42,6 +42,8 @@ export function chatShortcuts(platform: ShortcutPlatform, options: { taskWorkspa
     { id: 'find', keys: [modifier('Command', platform), 'F'], label: '대화에서 찾기', note: `찾기 칸에서 Enter는 다음, ${modifier('Shift', platform)} + Enter는 이전 결과` },
   ];
   if (options.taskWorkspace) rows.push({ id: 'conversation', keys: [modifier('Alt', platform), modifier('Shift', platform), 'J'], label: '대화로 바로 가기', note: '작업 화면 안에서 눌러요' });
+  // DictationButton (in-app, bound while this webview has focus; never a global shortcut). Listed only where the mic button is drawn.
+  if (options.dictation) rows.push({ id: 'dictate', keys: [modifier('Alt', platform), modifier('Shift', platform), 'M'], label: '받아쓰기 시작·끝내기', note: '받아쓰기 중에 Esc를 누르면 취소해요' });
   // useShortcutSheetKey below.
   rows.push({ id: 'help', keys: ['?'], label: '이 단축키 목록 열기', note: '입력창 밖에서 눌러요' });
   return rows;

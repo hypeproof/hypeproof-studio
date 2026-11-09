@@ -69,6 +69,8 @@ const OVERRIDES = {
   "shell-processes-app": { banner: BANNER_POSTED },
   "checkpoint": { banner: BANNER_POSTED },
   "memory-write-line": { banner: BANNER_POSTED },
+  "voice-ui": { banner: BANNER_POSTED },
+  "voice-mount": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step
