@@ -195,8 +195,13 @@ all case procedures and unchecked observations. Shadow copy remains unchanged.
 After creation/update, a paginated GraphQL read binds the exact Studio head,
 single-parent RC record and sole version file. Only ReviewRequest.asCodeOwner=true
 User/Team requests are removed with the existing product App capability. Each delete
-rechecks provenance/head; manual false/unknown requests, holds, changes-requested
-reviews and ordinary source PR ownership remain. Uncertain deletion is observed on
+rechecks provenance/head and independently paginated review history, including
+when unprotected repositories return no aggregate reviewDecision. Every page must
+retain the exact head, total count, unique IDs and pagination proof. COMMENTED or
+PENDING cannot clear CHANGES_REQUESTED; only a proven later APPROVED/DISMISSED
+from that reviewer can clear it. Unknown attribution/state/time, conflicting ties
+or incomplete history stop cleanup. Sub-millisecond timestamps remain distinct.
+Manual false/unknown requests, holds and ordinary source PR ownership remain. Uncertain deletion is observed on
 retry rather than blindly repeated. Global CODEOWNERS and draft behavior are unchanged.
 The [official ReviewRequest schema](https://docs.github.com/en/graphql/reference/pulls#reviewrequest)
 and a read-only real shadow PR inspection confirmed the provenance field. No real PR
