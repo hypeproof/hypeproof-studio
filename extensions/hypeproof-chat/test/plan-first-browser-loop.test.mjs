@@ -97,3 +97,52 @@ test('instructor seat: a plan mode a learner left on never gates an instructor t
   const quiet = ChatPanelProvider.prototype.beginPlanTurn.call(plain.fake, 'q');
   assert.equal(quiet.planning, false); assert.equal(quiet.gate, undefined); assert.equal(reads, 0);
 });
+
+test('DEC-10 class switch: served false hides the mode, turns a learner\'s own "on" off visibly, and resolves a pending plan safely; absent changes nothing', async () => {
+  const seat = profile => {
+    const fake = Object.create(ChatPanelProvider.prototype);
+    const session = new PlanFirstSession({ newId: () => 'p1' });
+    const sent = [];
+    Object.defineProperty(fake, 'planFirst', { get: () => session });
+    Object.assign(fake, { cachedProfile: profile, _instructorMode: { isInstructor: false }, currentTaskStore: () => ({ getView: () => ({ activeTaskId: 't1' }) }), posts: [], post: async function (m) { this.posts.push(m); }, handleSend: async (...a) => { sent.push(a[0]); } });
+    return { fake, session, sent };
+  };
+  const handle = (s, msg) => ChatPanelProvider.prototype.handlePlanFirst.call(s.fake, msg);
+  // Absent (and an explicit true): the switch works exactly as before, and the message carries no new field.
+  for (const profile of [{}, { plan_first: { available: true } }, null]) {
+    const s = seat(profile);
+    await handle(s, { type: 'planFirstSet', on: true });
+    assert.deepEqual(s.fake.posts.at(-1), { type: 'planFirstState', on: true, plan: null });
+    s.session.beginTurn('t1', 'x').ready('1. a');
+    await handle(s, { type: 'planFirstApprove', planId: 'p1', text: '1. a' });
+    assert.equal(s.sent.length, 1, 'an available seat still runs the approved turn');
+  }
+  // Served false while the learner had it on and a plan was waiting.
+  const s = seat({ plan_first: { available: false } });
+  s.session.setOn('t1', true); s.session.beginTurn('t1', 'x').ready('1. a');
+  await handle(s, { type: 'planFirstRequest' });
+  assert.deepEqual(s.fake.posts.at(-1), { type: 'planFirstState', on: false, plan: null, available: false, switchedOff: true }, 'turned off visibly');
+  assert.equal(s.session.view('t1').on, false); assert.equal(s.session.view('t1').plan, null);
+  // A stale press on the card the learner still sees: nothing is sent, nothing is left pending.
+  await handle(s, { type: 'planFirstApprove', planId: 'p1', text: '1. a' });
+  assert.deepEqual(s.sent, [], 'no approved turn runs');
+  assert.deepEqual(s.fake.posts.at(-1), { type: 'planFirstState', on: false, plan: null, available: false });
+  // A stale chip press cannot turn it back on.
+  await handle(s, { type: 'planFirstSet', on: true });
+  assert.equal(s.session.view('t1').on, false);
+  // A mode left on (restored workspace state) with an unspent approval: the next turn is ordinary.
+  const t = seat({ plan_first: { available: false } });
+  t.session.setOn('t1', true); t.session.beginTurn('t1', 'x').ready('1. a');
+  const approval = t.session.approve('t1', 'p1', '1. a');
+  const turn = ChatPanelProvider.prototype.beginPlanTurn.call(t.fake, approval.sendText);
+  assert.equal(turn.planning, false); assert.equal(turn.gate, undefined); assert.equal(turn.ready('1. late'), null);
+  assert.equal(t.session.view('t1').on, false);
+  // The profile sync posts only for a class that switched it off (or just switched it back on).
+  const u = seat({ plan_first: { available: false } });
+  ChatPanelProvider.prototype.syncPlanFirstWithProfile.call(u.fake); await new Promise(r => setImmediate(r));
+  assert.equal(u.fake.posts.length, 1);
+  u.fake.cachedProfile = {}; ChatPanelProvider.prototype.syncPlanFirstWithProfile.call(u.fake); await new Promise(r => setImmediate(r));
+  assert.deepEqual(u.fake.posts.at(-1), { type: 'planFirstState', on: false, plan: null }, 'back to available: the old field is gone');
+  const v = seat({}); ChatPanelProvider.prototype.syncPlanFirstWithProfile.call(v.fake); await new Promise(r => setImmediate(r));
+  assert.equal(v.fake.posts.length, 0, 'a class that never switched it sees no new message');
+});

@@ -85,3 +85,4 @@
   .hps-plan-chip { padding-inline: 0; justify-content: center; }
   .hps-plan-chip > span { position: absolute; inline-size: var(--ds-c-studio-chatdetails-size-3); block-size: var(--ds-c-studio-chatdetails-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+.hps-plan-switched-off { margin-inline: var(--hp-space-3); }

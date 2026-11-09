@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { PlanFirstSession, PLAN_FIRST_REFUSAL, PLANNING_GATE, planFirstToolResult, planFirstTurnText, withoutTools } from '../src/planFirst.ts';
+import { PlanFirstSession, planFirstAvailable, PLAN_FIRST_REFUSAL, PLANNING_GATE, planFirstToolResult, planFirstTurnText, withoutTools } from '../src/planFirst.ts';
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'plan-first-')));
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -83,6 +83,49 @@ test('the mode is per task and survives a restore; turning it off drops the plan
   assert.equal(new PlanFirstSession({ restore: snap }).view('t2').on, false);
   s.beginTurn('t1', 'x').ready('1. a'); s.setOn('t1', false);
   assert.deepEqual(s.view('t1'), { on: false, plan: null });
+});
+// ---- DEC-10: the per-class switch (Service serves plan_first: { available: false }) ----
+test('switch: only an explicit available:false turns the mode off; absent, older Service, no profile and true leave it available', () => {
+  assert.equal(planFirstAvailable({ plan_first: { available: false } }), false);
+  for (const profile of [null, undefined, {}, { plan_first: {} }, { plan_first: { available: true } }, { plan_first: null }, { plan_first: 'false' }, { plan_first: { available: 'false' } }]) assert.equal(planFirstAvailable(profile), true, JSON.stringify(profile));
+});
+test('switch absent: the view carries exactly what it did before (no available, no switchedOff)', () => {
+  const s = new PlanFirstSession({ newId: () => 'p1' });
+  s.setOn('t1', true); s.beginTurn('t1', 'x').ready('1. a');
+  assert.deepEqual(s.viewFor('t1', true), { on: true, plan: { id: 'p1', text: '1. a' } });
+  assert.deepEqual(s.viewFor('t2', true), { on: false, plan: null });
+});
+test('switch off: a learner who had the mode on is turned off visibly once, and the waiting plan is dropped', () => {
+  const s = new PlanFirstSession({ newId: () => 'p1' });
+  s.setOn('t1', true); s.beginTurn('t1', 'x').ready('1. a');
+  assert.deepEqual(s.viewFor('t1', false), { on: false, plan: null, available: false, switchedOff: true });
+  assert.deepEqual(s.viewFor('t1', false), { on: false, plan: null, available: false }, 'told once: nothing is left to turn off');
+  assert.deepEqual(s.viewFor('t2', false), { on: false, plan: null, available: false }, 'a task that never had it on is not told');
+  assert.equal(s.view('t1').on, false);
+  assert.equal(s.beginTurn('t1', 'next').mode, 'off', 'the next turn is ordinary');
+});
+test('switch off: a pending plan cannot be approved, redone or leave an approval behind', () => {
+  const s = new PlanFirstSession({ newId: () => 'p1' });
+  s.setOn('t1', true); s.beginTurn('t1', 'x').ready('1. a');
+  s.viewFor('t1', false);
+  assert.deepEqual(s.approve('t1', 'p1', '1. a'), { ok: false, reason: 'no_plan' });
+  assert.deepEqual(s.redo('t1', 'p1', '1. a'), { ok: false, reason: 'no_plan' });
+});
+test('switch off after an approval was minted: the unspent approval is dropped and a planning turn in flight cannot plant a plan', () => {
+  const s = new PlanFirstSession({ newId: () => 'p1' });
+  s.setOn('t1', true); s.beginTurn('t1', 'x').ready('1. a');
+  const a = s.approve('t1', 'p1', '1. a'); assert.ok(a.ok);
+  assert.equal(s.retire('t1'), true);
+  assert.equal(s.beginTurn('t1', a.sendText).mode, 'off', 'no approval left to spend, and the mode is off');
+  s.setOn('t2', true); const inFlight = s.beginTurn('t2', 'y');
+  assert.equal(s.retire('t2'), true);
+  assert.equal(inFlight.ready('1. late'), null, 'a late answer plants no plan');
+  assert.equal(s.retire('t2'), false);
+});
+test('switch off: the host gates every entry on the served profile (viewFor, handlePlanFirst, beginPlanTurn, profile sync)', () => {
+  const host = fs.readFileSync(src('../src/chatPanelProvider.ts'), 'utf8');
+  for (const piece of ['this.planFirst.viewFor(this.planTaskKey(), planFirstAvailable(this.cachedProfile))', 'msg.type === "planFirstRequest" || !planFirstAvailable(this.cachedProfile)', '!planFirstAvailable(this.cachedProfile) && this.planFirst.retire(this.planTaskKey())']) assert.ok(host.includes(piece), piece);
+  assert.equal(host.split('this.syncPlanFirstWithProfile();').length - 1, 2, 'both places that adopt a served profile re-read the switch');
 });
 test('gate helpers: the model-facing line, the proxy tool result, and no advertised tools', () => {
   assert.match(planFirstTurnText('q'), /먼저 계획 보기/);

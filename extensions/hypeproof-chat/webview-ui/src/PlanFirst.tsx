@@ -5,7 +5,7 @@ import { ChatIcon } from './ChatDetails';
 import { onHostMessage, postToHost } from './vscode';
 import './planFirst.css';
 
-export interface PlanFirstView { on: boolean; plan: { id: string; text: string } | null }
+export interface PlanFirstView { on: boolean; plan: { id: string; text: string } | null; /** False only when the class turned the mode off; absent otherwise. */ available?: false; /** True once the class switched off a mode this learner had on (kept until the task changes). */ switchedOff?: true }
 export const PLAN_WAITING_LABEL = '계획 승인 기다리는 중';
 
 /** The host's view for the open task; asked again whenever the task changes. */
@@ -15,12 +15,21 @@ export function usePlanFirst(scope: string, instructor: boolean): PlanFirstView 
     if (instructor) return;
     setView({ on: false, plan: null });
     const off = onHostMessage(message => {
-      if (message.type === 'planFirstState') setView({ on: message.on === true, plan: message.plan ?? null });
+      if (message.type === 'planFirstState') {
+        setView(prev => ({ on: message.on === true, plan: message.plan ?? null, ...(message.available === false ? { available: false as const } : {}), ...(message.switchedOff === true || (message.available === false && prev.switchedOff) ? { switchedOff: true as const } : {}) }));
+      }
     });
     postToHost({ type: 'planFirstRequest' });
     return off;
   }, [scope, instructor]);
   return instructor ? { on: false, plan: null } : view;
+}
+
+export const PLAN_SWITCHED_OFF_NOTICE = '이 수업에서는 계획 먼저 보기를 쓰지 않아요. 켜 두었던 것을 껐어요.';
+
+/** DEC-10 — told once, in the chat pane, when the class switched off a mode the learner had turned on. */
+export function PlanSwitchedOffNotice() {
+  return <p className="hps-plan-note hps-plan-switched-off" role="status" data-testid="plan-switched-off">{PLAN_SWITCHED_OFF_NOTICE}</p>;
 }
 
 export function PlanFirstChip({ on, disabled }: { on: boolean; disabled: boolean }) {
