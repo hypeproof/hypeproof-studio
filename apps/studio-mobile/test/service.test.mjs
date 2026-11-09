@@ -56,7 +56,8 @@ test("proxy retains Service admission and native turn accounting without client 
   assert.equal(outgoing.options.headers["x-hps-turn-id"], turn);
   assert.ok(outgoing.options.headers["x-hps-trial-request-id"]);
   assert.equal(outgoing.body.model, "hypeproof-fast");
-  assert.equal(outgoing.body.max_tokens, 700);
+  assert.equal(outgoing.body.max_tokens, 2048);
+  assert.equal(outgoing.options.headers["x-hps-effort"], "low");
   assert.equal(outgoing.body.system, undefined);
   assert.equal(outgoing.body.tools, undefined);
   assert.deepEqual(res.value, {

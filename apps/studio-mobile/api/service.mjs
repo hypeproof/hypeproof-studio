@@ -69,13 +69,18 @@ export default async function handler(req, res) {
     headers["anthropic-version"] = "2023-06-01";
     headers["x-hps-turn-id"] = body.turn_id;
     headers["x-hps-trial-request-id"] = crypto.randomUUID();
+    // The free profile explicitly allows low/medium. Ask for low effort for a
+    // short reflection; Service may still enforce its own profile/model policy.
+    headers["x-hps-effort"] = "low";
     // Anthropic-compatible text transport, not a claimed Agent SDK execution.
     // Service still owns model routing, policy, allowance and cost settlement.
     body = {
       model: "hypeproof-fast",
       messages: body.messages,
       stream: false,
-      max_tokens: 700,
+      // Reasoning and visible text share this budget. 700 could be exhausted
+      // before any answer; leave bounded headroom while Service meters all use.
+      max_tokens: 2048,
     };
   }
   const controller = new AbortController();
