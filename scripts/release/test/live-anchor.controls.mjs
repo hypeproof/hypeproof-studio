@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {digest} from '../engine/core.mjs';
 import {inspectFile} from '../engine/store.mjs';
 import {attest, verifyHarness} from '../native-producer.mjs';
-import {typedDigest, validateAnchor, readLiveAnchor} from '../publisher-anchor.mjs';
+import {typedDigest, validateAnchor, readLiveAnchor, publicationWorkflowHead} from '../publisher-anchor.mjs';
 import {fixture as nativeFixture} from './native-producer.controls.mjs';
 const privatePem = key => key.export({format: 'pem', type: 'pkcs8'});
 function fixture(t) {
@@ -31,7 +31,7 @@ for v in json.load(sys.stdin):print(hashlib.sha256(json.dumps(n(v),sort_keys=Tru
   assert.throws(() => typedDigest(String.fromCharCode(0xD800)));
 });
 test('live full CAS rejects same-candidate FAIL and every semantic drift while accepting only own settlement bookkeeping', t => {
-  const f = fixture(t), receipt = {bundleDigest: '2'.repeat(64), evidenceCommit: '3'.repeat(40), dispatchKey: 'd'.repeat(64)};
+  const f = fixture(t), receipt = {bundleDigest: '2'.repeat(64), evidenceCommit: '3'.repeat(40), dispatchKey: 'd'.repeat(64), workflowHead: '9'.repeat(40)};
   f.input.state.operations.publish.result = {...receipt};
   assert.equal(validateAnchor(f.input.anchor, f.input.state, f.input.registry, f.context.contract, receipt).status, 'UNKNOWN');
   const done = structuredClone(f.input.state); done.revision++; done.operations.publish.status = 'DONE'; done.operations.publish.finishedAt = new Date().toISOString();
@@ -55,7 +55,7 @@ test('live full CAS rejects same-candidate FAIL and every semantic drift while a
   }
 });
 test('live reader derives product-only branches and reads immutable exact commit bytes', t => {
-  const f = fixture(t), receipt = {bundleDigest: '2'.repeat(64), evidenceCommit: '3'.repeat(40), dispatchKey: 'd'.repeat(64)};
+  const f = fixture(t), receipt = {bundleDigest: '2'.repeat(64), evidenceCommit: '3'.repeat(40), dispatchKey: 'd'.repeat(64), workflowHead: '9'.repeat(40)};
   f.input.state.operations.publish.result = {...receipt};
   const calls = [], get = endpoint => {
     calls.push(endpoint);
@@ -90,4 +90,25 @@ test('native source/role guards refuse cross-platform signing, changed validator
   const packetDir = g.makePacket('win32-x64'); assert.ok(packetDir);
   fs.rmSync(packetDir, {recursive: true}); row.observation.verdict = 'FAIL';
   assert.throws(() => g.makePacket('win32-x64'), /cannot override/);
+});
+
+test('parent source race refuses effects while the verification child retains the original parent head', t => {
+  const f = fixture(t), reserved = '9'.repeat(40), advanced = 'a'.repeat(40);
+  const receipt = {bundleDigest: '2'.repeat(64), evidenceCommit: '3'.repeat(40), dispatchKey: 'd'.repeat(64)};
+  f.input.state.operations.publish.result = {...receipt};
+  const check = workflowHead => validateAnchor(f.input.anchor, f.input.state, f.input.registry, f.context.contract, {...receipt, workflowHead});
+  assert.equal(check(publicationWorkflowHead({stage: 'parent', githubSha: reserved, checkoutHead: reserved})).status, 'UNKNOWN');
+  assert.throws(() => check(publicationWorkflowHead({stage: 'parent', githubSha: advanced, checkoutHead: advanced})), /workflow\/readiness/);
+  assert.throws(() => publicationWorkflowHead({stage: 'parent', githubSha: reserved, checkoutHead: advanced}), /checkout/);
+  assert.equal(check(publicationWorkflowHead({stage: 'verify', githubSha: advanced, checkoutHead: advanced, parentWorkflowHead: reserved})).status, 'UNKNOWN');
+  assert.throws(() => publicationWorkflowHead({stage: 'verify', githubSha: advanced, checkoutHead: advanced}), /explicit original parent/);
+  assert.throws(() => check(publicationWorkflowHead({stage: 'verify', parentWorkflowHead: advanced})), /workflow\/readiness/);
+  const parent = fs.readFileSync(new URL('../../../.github/workflows/release-promote.yml', import.meta.url), 'utf8');
+  const child = fs.readFileSync(new URL('../../../.github/workflows/verify-unified-release.yml', import.meta.url), 'utf8');
+  const promote = fs.readFileSync(new URL('../promote.mjs', import.meta.url), 'utf8');
+  const gate = fs.readFileSync(new URL('../publish-gate.mjs', import.meta.url), 'utf8');
+  assert.ok(parent.includes("github.event_name == 'workflow_dispatch' && github.sha"));
+  assert.equal((child.match(/HPS_MACHINE_PARENT_WORKFLOW_HEAD: \$\{\{ inputs.machine_parent_workflow_head \}\}/g) ?? []).length, 2);
+  assert.ok(promote.includes('machine_parent_workflow_head=${process.env.GITHUB_SHA'));
+  assert.ok(gate.includes("currentMachineAuthority({number, repo, stage: 'verify'"));
 });

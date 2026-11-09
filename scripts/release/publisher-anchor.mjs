@@ -28,6 +28,16 @@ export function publisherView(state, registry, operationId) {
 export const viewDigest = (state, registry, operationId) => typedDigest(publisherView(state, registry, operationId));
 export const stateBranch = (repository, tag) => 'ops/release-state/' + digest({repository, tag}).slice(0, 32);
 
+// Parent source is the actual checked-out dispatch commit; child retains that validated parent identity.
+export function publicationWorkflowHead({stage, githubSha, checkoutHead, parentWorkflowHead}) {
+  if (stage === 'parent') {
+    require(/^[a-f0-9]{40}$/.test(githubSha ?? '') && checkoutHead === githubSha, 'parent checkout differs from actual GITHUB_SHA');
+    return githubSha;
+  }
+  require(stage === 'verify' && /^[a-f0-9]{40}$/.test(parentWorkflowHead ?? ''), 'explicit original parent workflow head required');
+  return parentWorkflowHead;
+}
+
 export function validateAnchor(anchor, state, registry, contract, receipt) {
   require(anchor?.schema === 'hps-publisher-anchor/1' && anchor.algorithm === 'typed-double-v1' && anchor.status === 'READY', 'ready publisher anchor required');
   require(anchor.repository === contract.repository && anchor.candidateDigest === state.candidateDigest && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(anchor.operationId), 'publisher anchor scope mismatch');
@@ -47,7 +57,7 @@ export function validateAnchor(anchor, state, registry, contract, receipt) {
     Date.parse(quote.observedAt) <= started && started < Date.parse(quote.expiresAt) &&
     Number.isFinite(reserved) && Number.isFinite(upper) && upper >= 0 && reserved >= upper,
     'publication quote/reservation binding differs');
-  require(/^[a-f0-9]{40}$/.test(request.workflowHead) && request.workflow === 'release-promote.yml' &&
+  require(/^[a-f0-9]{40}$/.test(request.workflowHead) && request.workflowHead === receipt.workflowHead && request.workflow === 'release-promote.yml' &&
     /^[a-f0-9]{64}$/.test(request.readinessDigest) && request.readinessDigest === anchor.readinessDigest, 'publication workflow/readiness scope differs');
   return operation;
 }
