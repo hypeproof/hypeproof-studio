@@ -47,6 +47,8 @@ import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
+import { insertAtCaret, PassThrough } from './composerAddon';
+import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
 import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
@@ -185,6 +187,8 @@ interface Props {
   onAttachFile?: () => void;
   /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed file under it for 되돌리기. */
   onRemoveFileAttachment?: (undoId?: string) => void;
+  /** A control that is not part of the text flow (composerAddon.ts). Absent → the composer draws exactly what it always did. */
+  composerAddon?: import("./composerAddon").ComposerAddon;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** A transient private question, outside normal chat messages. */
@@ -476,6 +480,7 @@ export function ChatPanel(props: Props) {
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
   const [draftParts, setDraftParts] = useState<DraftPart[]>(() => [{ text: separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null) }]);
   const draft = fullDraft(draftParts), composerText = visibleDraft(draftParts);
+  const draftPartsRef = useRef(draftParts); draftPartsRef.current = draftParts;
   const pasteId = useRef(0);
   // External replacements/imports operate on the complete draft and restore it inline.
   const setDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => {
@@ -494,6 +499,7 @@ export function ChatPanel(props: Props) {
   const [editingId, setEditingId] = useState<string | null>(saved?.inlineEdit?.messageId ?? null);
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false); composingRef.current = composing;
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
@@ -1038,7 +1044,30 @@ export function ChatPanel(props: Props) {
   // CGP-KNOW-R-002: inside a task workspace whose rail has the 자료 view, the list lives there, not here.
   const { materialsHome } = useContext(ActivityHomeContext);
   const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
+  // composerAddon.insert: text at the caret, caret after it, focus in the composer. An open IME
+  // composition keeps the keyboard until compositionend, so a Korean syllable is never split.
+  const pendingAddonInsert = useRef<string[]>([]);
+  const insertAtCaretNow = (text: string): boolean => {
+    const editor = textareaRef.current;
+    const value = visibleDraft(draftPartsRef.current);
+    const start = editor?.selectionStart ?? value.length, end = editor?.selectionEnd ?? start;
+    const result = insertAtCaret(value, start, end, text, 200000 - (fullDraft(draftPartsRef.current).length - value.length));
+    if (!result) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.'); return false; }
+    const next = result.value;
+    draftPartsRef.current = editVisible(draftPartsRef.current, next);
+    setDraftParts(draftPartsRef.current);
+    lastReplyChoice.current = null;
+    requestAnimationFrame(() => { const el = textareaRef.current; if (!el) return; el.focus({ preventScroll: true }); el.setSelectionRange(result.caret, result.caret); });
+    return true;
+  };
+  const insertFromAddon = (text: string): boolean => {
+    if (composingRef.current) { pendingAddonInsert.current.push(text); return true; }
+    return insertAtCaretNow(text);
+  };
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
+  const addon = !props.instructor ? props.composerAddon ?? null : null;
+  const AddonScope = addon?.Scope ?? PassThrough;
+  const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
@@ -2269,6 +2298,7 @@ export function ChatPanel(props: Props) {
         />
       )}
 
+      <AddonScope api={addonApi}>
       <footer className="hps-input-area">
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2466,6 +2496,7 @@ export function ChatPanel(props: Props) {
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
+        {addon && <addon.Notice />}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2473,6 +2504,7 @@ export function ChatPanel(props: Props) {
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
           data-activity-status={statusScreen ? "true" : undefined}
+          data-addon={addon ? "true" : undefined}
           hidden={!!statusScreen}
         >
           {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
@@ -2509,7 +2541,7 @@ export function ChatPanel(props: Props) {
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => setComposing(false)}
+            onCompositionEnd={() => { setComposing(false); composingRef.current = false; const waiting = pendingAddonInsert.current.splice(0); if (waiting.length) setTimeout(() => { for (const text of waiting) insertAtCaretNow(text); }, 0); }}
             onKeyDown={(e) => {
               const isComposing = imeComposing(e, composing);
               if (!isComposing && fileMentions.keyDown(e)) return;
@@ -2583,6 +2615,7 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
+            {addon && <addon.Control />}
             {!props.instructor && !personalWorkspace && planFirst.available !== false && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
             <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
@@ -2625,6 +2658,7 @@ export function ChatPanel(props: Props) {
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
         <CopyFeedbackOutlet />
       </footer>
+      </AddonScope>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
         imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
@@ -3326,6 +3360,7 @@ function MessageItem({
             <ChatIcon kind="retry" size={16} />
           </button>
         )}
+        {!personal && message.role === "assistant" && !isStreamingThis && !!message.content.trim() && <AnswerExtras answerId={message.id} content={message.content} />}
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       {message.role === 'user' && editing && onCancelEdit && onSaveEdit ? <EditPrompt
@@ -3373,6 +3408,7 @@ function MessageItem({
       {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
         memory={memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : undefined}
         content={message.content}
+        answerId={message.id}
         status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
