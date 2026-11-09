@@ -13,10 +13,19 @@ rotating manager approval and recoverable event decisions. It follows
 [human judgment and evidence](../PRODUCT-INTENT.md) and preserves the
 [existing App acceptance gates](unified-release-and-migration.md).
 
+`ST-REL-AUTH-01`: reviewed `publicationAuthority: "machine"` makes a complete PASS
+eligible for the existing publisher without a per-candidate manager approval.
+Omission or explicit `manager` retains the signed manager path. Invalid authority
+values, missing/FAIL/BLOCKED/NOT_RUN evidence, identity drift, unverified bytes,
+stale quota and unsettled work remain BLOCKED in both modes. Changing authority
+changes the policy digest and requires a new candidate. This engine slice does
+not activate a product policy, workflow, reporter key or publisher integration;
+that adapter work is tracked by #3629 and Harness #519.
+
 - Every required artifact and black-box test comes from trusted policy, never
   from a candidate's requested subset. Missing, FAIL, BLOCKED and NOT_RUN refuse
   approval. Candidate, Service, test/rubric revision, bytes and evidence are bound.
-- An explicitly signed approval binds the manifest and evidence digests to the
+- In manager mode an explicitly signed approval binds manifest and evidence to the
   on-duty manager's roster revision and term. Rotation, revocation, expiry,
   changed bytes or a newer channel intent invalidate promotion. Jay is the first
   manager; roster dates and keys must be configured by the operator.
@@ -35,6 +44,15 @@ rotating manager approval and recoverable event decisions. It follows
   observed App run; mock execution is not.
 
 ## Design
+
+`ST-REL-AUTH-02`: machine readiness returns `MACHINE_READY`. Promotion produces an
+intent with `authority: {schema: hps-machine-publication/1, policyDigest,
+manifestDigest, evidenceDigest}` and no `approval` field. Manager approval APIs
+refuse machine mode. Both publication paths rerun the same complete evidence,
+file, failure and quota gates immediately before accepting an intent, including
+duplicate promotion events. Imported ledgers cannot bypass report contract,
+execution-environment, timestamp or signature validation at readiness. Machine
+and manager intents cannot substitute for one another.
 
 `scripts/release/engine/core.mjs` makes provider-independent decisions.
 `store.mjs` hashes actual files, serializes local writers, atomically persists the
@@ -151,11 +169,12 @@ node scripts/release/engine/cli.mjs check-intent \
 ```
 
 The intent preserves existing release-cut `version`, `candidate`, `rcTag`, plus
-artifact digests and the exact signed approval. `check-intent` rereads the current
-ledger, files, quota and roster; a cached intent or duplicate event is not authority
+artifact digests and its explicit machine authority or exact signed approval.
+`check-intent` rereads the current ledger, files, quota and applicable roster;
+a cached intent or duplicate event is not authority
 to publish later. The existing tag/PR publish gate in
 [PR #1684](https://github.com/hypeproof/hypeproof-studio/pull/1684) must also pass.
-Its hotfix bypass cannot stand in for this engine's manager approval. Do not feed
+Its hotfix bypass cannot stand in for this engine's publication gate. Do not feed
 this intent into `create.mjs` (which creates/builds an rc again).
 
 **Workflow wiring is NOT RUN and not included here.** The remote adapter still
@@ -166,6 +185,16 @@ Current workflows are not changed to claim these guarantees. The local intent
 state is never `PUBLISHED` and does not prove customer update delivery.
 
 ## Verification
+
+`ST-REL-AUTH-03`: `node --test scripts/release/test/machine-authority.controls.mjs`
+exercises complete machine PASS without a manager, explicit authority and no
+fabricated approval, manager compatibility, FAIL/BLOCKED/NOT_RUN, missing or
+tampered evidence, imported identity/contract/time/environment drift, byte
+changes, stale quota and duplicate intent revalidation. These generated-key
+protocol controls run on native Windows and Linux; they do not claim real Mac
+installation, a trusted reporter deployment or actual publication.
+The existing mandatory `engine.test.mjs` imports them, so its CI command executes
+them without a separate workflow entry or a silently skipped test file.
 
 `node --test scripts/release/test/engine.test.mjs` runs eight integrated local
 scenarios: CLI restart through intent; required-evidence/byte tamper controls;
@@ -184,7 +213,7 @@ This closes the local decision/persistence slice, not the daily-release program.
 ## Shared decision package (FIN-02)
 
 The same `scripts/release/engine/core.mjs` is packaged as
-`@hypeproof/release-engine-core@0.1.0`; no decision implementation is moved or
+`@hypeproof/release-engine-core@0.2.0`; no decision implementation is moved or
 copied. `package.json` exports only the root and `/core`, both pointing at that
 file. The tarball contains the core, package metadata, README and source-hash
 provenance. It excludes the Node filesystem store and CLI. The package remains
@@ -192,7 +221,7 @@ private/unpublished; local packing does not authorize package publication.
 
 ```bash
 npm pack ./scripts/release/engine --ignore-scripts --pack-destination /private/packages
-npm install --ignore-scripts --save-exact /private/packages/hypeproof-release-engine-core-0.1.0.tgz
+npm install --ignore-scripts --save-exact /private/packages/hypeproof-release-engine-core-0.2.0.tgz
 ```
 
 Consumers commit the exact lockfile integrity and retain the tarball SHA-256 and

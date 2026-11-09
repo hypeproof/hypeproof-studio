@@ -14,12 +14,13 @@ const engine = fileURLToPath(new URL('../engine/', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
 const now = Date.parse('2026-10-19T00:00:00Z');
 const bytes = 'FIN02 protocol fixture bytes; not installed-App evidence';
-function fixture(filePath = 'fixture:bytes') {
+function fixture(filePath = 'fixture:bytes', authority = 'manager') {
   const key = generateKeyPairSync('ed25519');
   const other = generateKeyPairSync('ed25519');
   const publicKey = key.publicKey.export({format: 'pem', type: 'spki'});
   const policy = {
     schema: 'hps-release-policy/1', revision: 'fin02-fixture-1',
+    ...(authority === 'machine' ? {publicationAuthority: 'machine'} : {}),
     requiredArtifacts: [{id: 'mac', target: 'darwin-arm64'}],
     requiredTests: [{id: 'INSTALL-MAC', artifactId: 'mac', requirementId: 'REQ-I4', expected: 'Fixture starts.', environment: 'installed-app', reporterIds: ['runner']}],
     reporters: [{id: 'runner', publicKey}], requiredWork: [{id: 'build', resourceId: 'builder'}], fixResourceId: 'builder',
@@ -51,8 +52,10 @@ function fixture(filePath = 'fixture:bytes') {
   };
   const evidence = signed(body);
   emit('evidence.recorded', {candidateId: id, envelope: evidence});
-  const approval = signed(local.approvalRequest(state, id, policy, '2026-10-19T00:05:00Z', now, () => {}));
-  emit('approval.recorded', {candidateId: id, envelope: approval});
+  if (authority === 'manager') {
+    const approval = signed(local.approvalRequest(state, id, policy, '2026-10-19T00:05:00Z', now, () => {}));
+    emit('approval.recorded', {candidateId: id, envelope: approval});
+  }
   emit('promotion.requested', {candidateId: id});
   return {policy, events, candidateId: id, now, bytes, evidence, wrongKey: signed(body, other.privateKey)};
 }
@@ -113,7 +116,7 @@ function packed(t) {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({name: 'isolated-release-core-consumer', private: true, type: 'module'}));
   run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', path.join(root, info.filename)]);
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json')));
-  assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].version, '0.1.0');
+  assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].version, '0.2.0');
   assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].integrity, info.integrity);
   const packageRoot = path.join(root, 'node_modules/@hypeproof/release-engine-core');
   assert.equal(fs.lstatSync(packageRoot).isSymbolicLink(), false);
@@ -122,11 +125,12 @@ function packed(t) {
   return {root, run, packageRoot};
 }
 
-test('FIN02 installed tarball replays signed release decisions in an isolated consumer', t => {
+for (const authority of ['manager', 'machine']) {
+test(`FIN02 ${authority} installed tarball replays signed release decisions in an isolated consumer`, t => {
   const consumer = packed(t);
   const filePath = path.join(consumer.root, 'fixture-bytes');
   fs.writeFileSync(filePath, bytes);
-  const f = fixture(filePath);
+  const f = fixture(filePath, authority);
   fs.writeFileSync(path.join(consumer.root, 'fixture.json'), JSON.stringify(f));
   fs.writeFileSync(path.join(consumer.root, 'consumer.mjs'), `import * as core from '@hypeproof/release-engine-core'; import assert from 'node:assert/strict'; import {createHash} from 'node:crypto'; import fs from 'node:fs'; globalThis.fixtureHash = data => createHash('sha256').update(data).digest('hex'); for (const name of ['store.mjs', 'cli.mjs', 'core.mjs', 'provenance.json']) { await assert.rejects(import('@hypeproof/release-engine-core/' + name), {code:'ERR_PACKAGE_PATH_NOT_EXPORTED'}); } assert.deepEqual(await import('@hypeproof/release-engine-core/core'), core); console.log(JSON.stringify((${replay.toString()})(core, JSON.parse(fs.readFileSync('fixture.json')))));`);
   const result = JSON.parse(consumer.run(process.execPath, ['consumer.mjs']));
@@ -157,12 +161,12 @@ console.log('Rejected async and ordinary Promise verifiers blocked; process surv
 });
 
 // Always exercise workerd: install the pinned runtime with npm ci --prefix scripts/release/engine.
-test('FIN02 workerd nodejs_compat matches the installed Node consumer', async t => {
+test(`FIN02 ${authority} workerd nodejs_compat matches the installed Node consumer`, async t => {
   const consumer = packed(t);
   const requireEngine = createRequire(new URL('../engine/package.json', import.meta.url));
   const modulePath = process.env.RELEASE_ENGINE_MINIFLARE_MODULE || requireEngine.resolve('miniflare');
   const {Miniflare} = await import(pathToFileURL(modulePath));
-  const f = fixture();
+  const f = fixture(undefined, authority);
   globalThis.fixtureHash = data => hash(data);
   const expected = replay(local, f); assertReplay(expected);
   const script = `import * as core from './core.mjs'; import {createHash} from 'node:crypto'; globalThis.fixtureHash=data=>createHash('sha256').update(data).digest('hex'); export default {async fetch(request){return Response.json((${replay.toString()})(core,await request.json()));}}`;
@@ -173,3 +177,4 @@ test('FIN02 workerd nodejs_compat matches the installed Node consumer', async t 
     const actual = await response.json(); assertReplay(actual); assert.deepEqual(actual, expected);
   } finally { await mf.dispose(); }
 });
+}

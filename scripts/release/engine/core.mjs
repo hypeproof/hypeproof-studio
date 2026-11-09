@@ -55,6 +55,7 @@ function publicKey(pem) {
 
 export function validatePolicy(policy) {
   require(policy?.schema === 'hps-release-policy/1' && text(policy.revision), 'invalid policy schema/revision');
+  require(policy.publicationAuthority === undefined || ['manager', 'machine'].includes(policy.publicationAuthority), 'invalid publication authority');
   uniqueIds(policy.requiredArtifacts, 'requiredArtifacts');
   require(policy.requiredArtifacts.every(a => text(a.target)), 'artifact target is required');
   uniqueIds(policy.requiredTests, 'requiredTests');
@@ -109,22 +110,36 @@ export function manifestFor(item, policy) {
   const artifacts = policy.requiredArtifacts.map(required => {
     const artifact = own(item.artifacts, required.id);
     require(artifact, `artifact ${required.id} NOT_RUN`);
+    require(artifact.id === required.id && artifact.target === required.target && HASH.test(artifact.sha256) &&
+      Number.isSafeInteger(artifact.size) && artifact.size > 0 && text(artifact.path), `artifact ${required.id} identity is invalid`);
     return {id: required.id, target: required.target, sha256: artifact.sha256, size: artifact.size};
   });
   return {schema: 'hps-release-manifest/1', ...item.input, candidateId: item.id, policyDigest: item.policyDigest,
     requiredTests: policy.requiredTests, artifacts};
 }
 
-function evidenceFor(item, policy, manifest) {
+function validateEvidence(envelope, item, policy, manifest, check, now, checkFile) {
+  const report = envelope?.body;
+  require(report?.testId === check.id, 'evidence test mismatch');
+  const reporter = policy.reporters.find(r => r.id === report.reporterId && check.reporterIds.includes(r.id));
+  require(reporter, `untrusted reporter for ${check.id}`);
+  signed(envelope, reporter.publicKey);
+  require(report.schema === 'hps-black-box-evidence/1' && report.candidateId === item.id && report.manifestDigest === digest(manifest), 'evidence candidate/manifest mismatch');
+  require(report.artifactDigest === item.artifacts[check.artifactId].sha256 && report.serviceSha === item.input.serviceSha && report.testRevision === item.input.testRevision && report.rubricRevision === item.input.rubricRevision, 'evidence artifact/service/test/rubric mismatch');
+  require(report.requirementId === check.requirementId && report.expected === check.expected && text(report.observed), 'evidence contract missing or changed');
+  require(VERDICTS.has(report.verdict) && report.environment?.kind === check.environment && report.environment.target === item.artifacts[check.artifactId].target && text(report.environment.runnerId), 'installed-app environment required');
+  // An observed App may use the approved synthetic cohort; replayed execution may not authorize publication.
+  require(report.execution === 'observed' && report.fixture !== true, 'fixture results cannot authorize a release');
+  require(validTime(report.startedAt) && validTime(report.endedAt) && time(report.startedAt) <= time(report.endedAt) && time(report.endedAt) <= now && time(report.startedAt) >= time(item.createdAt), 'invalid evidence execution time');
+  verifiedFile(checkFile, report.file);
+}
+
+function evidenceFor(item, policy, manifest, now, checkFile) {
   return policy.requiredTests.map(check => {
     const envelope = own(item.evidence, check.id);
     require(envelope, `${check.id} NOT_RUN`);
-    const report = envelope.body;
-    const reporter = policy.reporters.find(r => r.id === report.reporterId && check.reporterIds.includes(r.id));
-    require(reporter, `untrusted reporter for ${check.id}`);
-    signed(envelope, reporter.publicKey);
-    require(report.manifestDigest === digest(manifest), `${check.id} belongs to a different manifest`);
-    require(report.verdict === 'PASS', `${check.id} ${report.verdict}`);
+    validateEvidence(envelope, item, policy, manifest, check, now, checkFile);
+    require(envelope.body.verdict === 'PASS', `${check.id} ${envelope.body.verdict}`);
     return envelope;
   });
 }
@@ -149,16 +164,16 @@ export function readiness(state, candidateId, policy, now = Date.now(), checkFil
     require(!Object.values(state.failures).some(f => ['product', 'test-contract'].includes(f.kind) && f.observations.some(o => o.candidateId === item.id)), 'recorded failure requires investigation and a new candidate');
     const manifest = manifestFor(item, policy);
     for (const artifact of Object.values(item.artifacts)) verifiedFile(checkFile, artifact);
-    const evidence = evidenceFor(item, policy, manifest);
-    for (const report of evidence) verifiedFile(checkFile, report.body.file);
+    const evidence = evidenceFor(item, policy, manifest, now, checkFile);
     budgetGate(state, item, policy, now);
-    return {status: 'AWAITING_APPROVAL', manifest, manifestDigest: digest(manifest), evidenceDigest: digest(evidence.map(envelope => envelope.body))};
+    return {status: policy.publicationAuthority === 'machine' ? 'MACHINE_READY' : 'AWAITING_APPROVAL', manifest, manifestDigest: digest(manifest), evidenceDigest: digest(evidence.map(envelope => envelope.body))};
   } catch (error) {
     return {status: 'BLOCKED', reason: error.message};
   }
 }
 
 export function approvalRequest(state, candidateId, policy, expiresAt, now, checkFile) {
+  require(policy.publicationAuthority !== 'machine', 'machine publication does not request manager approval');
   const ready = readiness(state, candidateId, policy, now, checkFile);
   require(ready.status === 'AWAITING_APPROVAL', ready.reason);
   const term = manager(policy, now);
@@ -169,6 +184,7 @@ export function approvalRequest(state, candidateId, policy, expiresAt, now, chec
 }
 
 function approvalGate(state, item, policy, now, checkFile) {
+  require(policy.publicationAuthority !== 'machine', 'manager approval cannot authorize machine publication');
   const ready = readiness(state, item.id, policy, now, checkFile);
   require(ready.status === 'AWAITING_APPROVAL', ready.reason);
   const term = manager(policy, now);
@@ -184,6 +200,18 @@ function approvalGate(state, item, policy, now, checkFile) {
   require(validTime(approval.body.approvedAt) && time(approval.body.approvedAt) <= now && validTime(approval.body.expiresAt) &&
     now < time(approval.body.expiresAt) && time(approval.body.expiresAt) <= time(term.endsAt) && time(approval.body.approvedAt) >= time(term.startsAt), 'approval expired or outside manager term');
   return ready;
+}
+
+function publicationGate(state, item, policy, now, checkFile) {
+  if (policy.publicationAuthority !== 'machine') return approvalGate(state, item, policy, now, checkFile);
+  const ready = readiness(state, item.id, policy, now, checkFile);
+  require(ready.status === 'MACHINE_READY', ready.reason);
+  return ready;
+}
+
+function machineAuthority(item, ready) {
+  return {schema: 'hps-machine-publication/1', policyDigest: item.policyDigest,
+    manifestDigest: ready.manifestDigest, evidenceDigest: ready.evidenceDigest};
 }
 
 function transition(state, event, policy, now, checkFile) {
@@ -244,20 +272,9 @@ function transition(state, event, policy, now, checkFile) {
     const check = policy.requiredTests.find(c => c.id === report?.testId);
     require(check, 'test is not required by policy');
     const manifest = manifestFor(item, policy);
-    const reporter = policy.reporters.find(r => r.id === report.reporterId && check.reporterIds.includes(r.id));
-    require(reporter, 'reporter is not allowed for this test');
-    signed(data.envelope, reporter.publicKey);
-    require(report.schema === 'hps-black-box-evidence/1' && report.candidateId === item.id && report.manifestDigest === digest(manifest), 'evidence candidate/manifest mismatch');
-    require(report.artifactDigest === item.artifacts[check.artifactId].sha256 && report.serviceSha === item.input.serviceSha && report.testRevision === item.input.testRevision && report.rubricRevision === item.input.rubricRevision, 'evidence artifact/service/test/rubric mismatch');
-    require(report.requirementId === check.requirementId && report.expected === check.expected && text(report.observed), 'evidence contract missing or changed');
-    require(VERDICTS.has(report.verdict) && report.environment?.kind === check.environment && report.environment.target === item.artifacts[check.artifactId].target && text(report.environment.runnerId), 'installed-app environment required');
-    // A real App using the existing synthetic acceptance cohort is valid execution;
-    // mocked/replayed test evidence is not. Test data and execution scope are distinct.
-    require(report.execution === 'observed' && report.fixture !== true, 'fixture results cannot authorize a release');
-    require(validTime(report.startedAt) && validTime(report.endedAt) && time(report.startedAt) <= time(report.endedAt) && time(report.endedAt) <= now && time(report.startedAt) >= time(item.createdAt), 'invalid evidence execution time');
+    validateEvidence(data.envelope, item, policy, manifest, check, now, checkFile);
     const previous = own(item.evidence, check.id);
     require(!previous || time(report.endedAt) > time(previous.body.endedAt) || digest(previous) === digest(data.envelope), 'older/conflicting evidence cannot replace the latest result');
-    verifiedFile(checkFile, report.file);
     item.evidence[check.id] = data.envelope;
     return {status: 'EVIDENCE_RECORDED', testId: check.id, verdict: report.verdict};
   }
@@ -333,13 +350,14 @@ function transition(state, event, policy, now, checkFile) {
     return {status: 'FIX_INTENT', failureId: failure.id, attempt: failure.fixAttempts, reservationId: reservation.reservationId};
   }
   if (event.type === 'promotion.requested') {
-    const ready = approvalGate(state, item, policy, now, checkFile);
+    const ready = publicationGate(state, item, policy, now, checkFile);
     const previous = own(state.promotions, item.input.channel);
     require(!previous || previous.sequence <= item.input.sequence, 'newer channel intent already exists');
     require(!previous || previous.sequence !== item.input.sequence || previous.manifestDigest === ready.manifestDigest, 'channel sequence already belongs to another manifest');
     const intent = {schema: 'hps-promotion-intent/1', status: 'READY_FOR_PUBLISHER', ...item.input, candidateId: item.id,
       manifestDigest: ready.manifestDigest, evidenceDigest: ready.evidenceDigest, manifest: ready.manifest,
-      approval: item.approval, createdAt: new Date(now).toISOString()};
+      ...(policy.publicationAuthority === 'machine' ? {authority: machineAuthority(item, ready)} : {approval: item.approval}),
+      createdAt: new Date(now).toISOString()};
     state.promotions[item.input.channel] = intent;
     return {status: 'PROMOTION_INTENT', intent};
   }
@@ -383,9 +401,14 @@ export function validateIntent(state, intent, policy, now = Date.now(), checkFil
   require(intent?.schema === 'hps-promotion-intent/1', 'promotion intent required');
   validatePolicy(policy);
   const item = candidate(state, intent.candidateId);
-  const ready = approvalGate(state, item, policy, now, checkFile);
-  signed(intent.approval, manager(policy, now).publicKey);
-  require(signedPayloadDigest(intent.approval) === signedPayloadDigest(item.approval), 'intent approval has been superseded');
+  const ready = publicationGate(state, item, policy, now, checkFile);
+  if (policy.publicationAuthority === 'machine') {
+    require(!Object.hasOwn(intent, 'approval') && digest(intent.authority) === digest(machineAuthority(item, ready)), 'intent machine authority mismatch');
+  } else {
+    require(!Object.hasOwn(intent, 'authority'), 'machine authority cannot authorize manager publication');
+    signed(intent.approval, manager(policy, now).publicKey);
+    require(signedPayloadDigest(intent.approval) === signedPayloadDigest(item.approval), 'intent approval has been superseded');
+  }
   require(digest(intent.manifest) === ready.manifestDigest && intent.manifestDigest === ready.manifestDigest && intent.evidenceDigest === ready.evidenceDigest, 'intent is stale');
   require(intent.candidate === item.input.candidate && intent.version === item.input.version && intent.rcTag === item.input.rcTag && intent.sequence === item.input.sequence, 'intent source/version mismatch');
   const latest = own(state.promotions, item.input.channel);
