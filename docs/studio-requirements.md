@@ -854,8 +854,8 @@ that does not use the mode. Only an explicit `false` counts; an absent field, an
 above unchanged. With it served `false` the `계획 먼저` chip (classroom) and the tools-menu item and pill (personal) are hidden, the host
 treats the mode as off for every turn (every turn is an ordinary turn under the usual grants and modals) and refuses to turn it on. A learner
 who had the mode on has it turned off visibly: one status line in the chat pane, "이 수업에서는 계획 먼저 보기를 쓰지 않아요. 켜 두었던 것을 껐어요.",
-and a plan that was waiting, or an approval not yet spent, is dropped (the send button reads normally again; nothing is sent or run on
-the old approval). Tests: the same files above plus the switch cases in `test/plan-first.test.mjs` and `test/plan-first.test.tsx`.
+and a plan that was waiting, or an approval not yet spent, is dropped (also when the switch flips in the instant after approval: availability is re-checked right before the send) (the send button reads normally again; nothing is sent or run on
+the old approval). Tests: the switch cases are in `test/plan-first-browser-loop.test.mjs` (host: hidden, turned off visibly, stale approval dropped, and the approval re-check right before the send) and `test/plan-first-layout.smoke.mjs` (the actual App: chip, menu item, pill and status line).
 Follow-up (Service, not changed here): coach prompt guidance for the plan wording; the host-side refusal stays authoritative.
 
 `REQ-STUDIO-CODE-BLOCK-TOOLS` (CGP-CHAT-R-008 / CGP-CHAT-R39 and design CGP-CHAT-D39, 2026-10-20,

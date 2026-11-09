@@ -6895,6 +6895,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/plan-first-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first-browser-loop.test.mjs"
         }
       ]
     },
