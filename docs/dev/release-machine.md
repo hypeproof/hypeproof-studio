@@ -1,9 +1,9 @@
-# Machine release evidence adapter (#3629; Harness #519)
+# Machine release publisher (#3631; Harness #519)
 
-This slice supplies portable signed evidence, frozen policy derivation and private
-transport. Host/workflow integration is #3631; native production is #3632. The
-requirements below describe the connected target. Enrollment remains shadow until
-those integrations and actual native prerequisites are verified.
+This slice connects the portable adapter (#3629) to the existing publisher and
+workflows. Native production is #3632 and the RC-ready coordinator is Harness #526.
+Enrollment remains shadow until those integrations and real native prerequisites
+are verified. This code does not activate the currently failing candidate.
 
 ## Requirements
 

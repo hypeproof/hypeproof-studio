@@ -8,6 +8,14 @@ on:
       override_live_session:
         type: boolean
         default: false
+      machine_pr:
+        description: Exact release PR for an enrolled machine promotion
+        required: false
+        default: ''
+      machine_evidence_commit:
+        description: Immutable commit in the fixed private evidence repository
+        required: false
+        default: ''
 permissions:
   contents: write
   actions: write
@@ -29,6 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -44,10 +53,32 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
       - name: Publish gate — early check before acceptance wait
+        if: inputs.machine_pr == ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: node scripts/release/publish-gate.mjs --tag "$TAG"
+      - name: Private evidence capability before machine acceptance wait
+        if: inputs.machine_pr != ''
+        id: evidence
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          repositories: hypeproof-studio-releases
+          permission-contents: read
+      - name: Authenticate machine source before waiting (publication remains unapproved)
+        if: inputs.machine_pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HPS_EVIDENCE_READ_TOKEN: ${{ steps.evidence.outputs.token }}
+          PR: ${{ inputs.machine_pr }}
+          EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          node scripts/release/machine-evidence.mjs fetch --pr "$PR" --commit "$EVIDENCE_COMMIT" --out "$RUNNER_TEMP/machine-evidence"
+          node scripts/release/machine-evidence.mjs request --pr "$PR" --tag "$TAG" --bundle "$RUNNER_TEMP/machine-evidence"
       # Which OS packages to wait for, test and require comes from the tag's own
       # config/release-platforms.json (scripts/release/platforms.mjs). Mac only
       # since 2026-10-19; a tag without that file requires both.
@@ -237,6 +268,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -276,6 +308,22 @@ jobs:
           const response=await fetch(expected.base+'/health',{signal:AbortSignal.timeout(15000)});
           if(!response.ok||(await response.json()).version!==expected.version)throw Error('Public Service changed; rerun acceptance');
           NODE
+      - name: Private evidence capability for final machine validation
+        if: inputs.machine_pr != ''
+        id: evidence
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          repositories: hypeproof-studio-releases
+          permission-contents: read
+      - name: Fetch private machine evidence again before publication
+        if: inputs.machine_pr != ''
+        env:
+          HPS_EVIDENCE_READ_TOKEN: ${{ steps.evidence.outputs.token }}
+          PR: ${{ inputs.machine_pr }}
+          EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+        run: node scripts/release/machine-evidence.mjs fetch --pr "$PR" --commit "$EVIDENCE_COMMIT" --out "$RUNNER_TEMP/machine-evidence"
       - name: Live-session freeze immediately before publication
         env:
           HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
@@ -294,7 +342,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-        run: node scripts/release/publish-gate.mjs --tag "$TAG"
+          MACHINE_PR: ${{ inputs.machine_pr }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "$MACHINE_PR" ]]; then
+            args+=(--machine-pr "$MACHINE_PR" --machine-bundle "$RUNNER_TEMP/machine-evidence" --package-directory dist)
+          fi
+          node scripts/release/publish-gate.mjs --tag "$TAG" "${args[@]}"
       # studio-public-sdk-seed (US-01). The zips vendor the Agent SDK JS but never
       # the native `claude` binary, and verify-branding.sh keeps it that way. A
       # public-zip user has no installer to seed it, so the release carries the
@@ -410,6 +465,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          MACHINE_PR: ${{ inputs.machine_pr }}
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_CONTEXT: Final machine publication after installer and notes preparation
         run: |
           set -euo pipefail
           gh release view "$TAG" --json isDraft --jq .isDraft | grep -qx true
@@ -417,7 +475,17 @@ jobs:
           gh release view "$TAG" --json body,assets | node scripts/release/install-kit.mjs check --tag "$TAG" \
             --platforms "$(node scripts/release/platforms.mjs list "$SOURCE_SHA")"
           gh release upload "$TAG" dist/unified-acceptance.json --clobber
+          if [[ -n "$MACHINE_PR" ]]; then
+            node scripts/release/publish-gate.mjs --tag "$TAG" --machine-pr "$MACHINE_PR" \
+              --machine-bundle "$RUNNER_TEMP/machine-evidence" --package-directory dist
+            HPS_FREEZE_OVERRIDE=false bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
+          fi
           gh release edit "$TAG" --draft=false
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" | node --input-type=module -e '
+            let input=""; for await (const part of process.stdin) input+=part;
+            const release=JSON.parse(input);
+            if(release.draft || release.tag_name!==process.env.TAG || (process.env.MACHINE_PR && release.prerelease)) throw Error("Publication has not been observed");
+          '
           gh workflow run mirror-release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false
           # A release published with the workflow token fires no `release: published` event, so the
           # Discord announcement is dispatched here (v2026.1103.0 went out silent until dispatched by hand).

@@ -23,6 +23,10 @@ on:
       pr:
         description: "Release PR number to promote (rerun after an approval)"
         required: true
+      machine_evidence_commit:
+        description: "Immutable private evidence commit for an enrolled complete machine PASS"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -57,6 +61,24 @@ jobs:
       - name: Controls
         run: node --test scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
 
+      - name: Private evidence capability (one repository)
+        if: inputs.machine_evidence_commit != ''
+        id: evidence
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          repositories: hypeproof-studio-releases
+          permission-contents: read
+
+      - name: Fetch immutable private machine evidence
+        if: inputs.machine_evidence_commit != ''
+        env:
+          HPS_EVIDENCE_READ_TOKEN: ${{ steps.evidence.outputs.token }}
+          PR: ${{ inputs.pr }}
+          EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+        run: node scripts/release/machine-evidence.mjs fetch --pr "$PR" --commit "$EVIDENCE_COMMIT" --out "$RUNNER_TEMP/machine-evidence"
+
       # The release PR is merged with the org bot App, as release-cut opens it: a protected main
       # may refuse the workflow token.
       - name: Bot token (hypeproof-org-lab-bot)
@@ -71,8 +93,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           PR: ${{ inputs.pr || github.event.pull_request.number }}
+          HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          node scripts/release/promote.mjs run --pr "$PR" --out "$RUNNER_TEMP/promote"
+          node scripts/release/promote.mjs run --pr "$PR" --out "$RUNNER_TEMP/promote" --machine-bundle "$RUNNER_TEMP/machine-evidence"

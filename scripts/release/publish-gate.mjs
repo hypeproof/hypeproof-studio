@@ -22,6 +22,9 @@ import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {parseYaml} from './casebook.mjs';
 import {SCHEMA, extractRun, validateRun} from './validate-blackbox-run.mjs';
+import {automationConfig, CONFIG} from './machine-publication.mjs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
 
@@ -187,7 +190,7 @@ export function gatherHotfix({tag, tagSha, repo}) {
   return {previous, rangePrs};
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(process.argv[1])}`).href) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(process.argv[1])) {
   const arg = (flag, fallback) => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : fallback; };
   const tag = arg('--tag', process.env.TAG);
   const repo = arg('--repo', process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio');
@@ -198,8 +201,22 @@ if (process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(pro
       verdict = decide({tag});
     } else {
       const approval = gatherApproval({tag, repo});
-      verdict = decide(approval);
-      if (!verdict.allow) verdict = decide({...approval, ...gatherHotfix({tag, tagSha: approval.tagSha, repo})});
+      const config = automationConfig(JSON.parse(fs.readFileSync(new URL('../../' + CONFIG, import.meta.url), 'utf8')));
+      if (config.mode === 'active' && (approval.releasePrs.length || arg('--machine-pr'))) {
+        const number = Number(arg('--machine-pr'));
+        if (!Number.isSafeInteger(number) || !approval.releasePrs.some(p => p.number === number)) throw Error('Active release requires the exact machine release PR; human approval/override cannot replace its evidence');
+        const {currentMachineAuthority} = await import('./promote.mjs');
+        const authority = await currentMachineAuthority({number, repo,
+          packageDirectory: path.resolve(arg('--package-directory', 'dist')),
+          evidenceDirectory: arg('--machine-bundle')});
+        const decision = authority.decision;
+        if (!decision.allow || decision.version !== tag || decision.candidate !== approval.tagSha) throw Error(decision.reasons.join('; ') || 'Machine tag identity mismatch');
+        verdict = {allow: true, route: 'machine', reasons: decision.reasons, notesLine: authority.notesLine};
+      } else {
+        // The unenrolled/shadow lane and the separately admitted hotfix route retain their gates.
+        verdict = config.mode === 'active' ? {allow: false} : decide(approval);
+        if (!verdict.allow) verdict = decide({...approval, ...gatherHotfix({tag, tagSha: approval.tagSha, repo})});
+      }
     }
   } catch (error) {
     verdict = {allow: false, route: 'error', reasons: [`lookup failed: ${error.message.split('\n')[0]}`]};
