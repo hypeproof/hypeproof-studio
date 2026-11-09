@@ -15,7 +15,7 @@ import { folderRemovedFeatures } from "../folderConsent.ts";
 import { canonicalizeExistingPath } from "../workspaceRouting.ts";
 
 const LIMIT = 200_000;
-const WRITE_TIMEOUT_TEXT = "[시간 초과] 확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 요청하면 확인 창이 다시 떠요.";
+const WRITE_TIMEOUT_TEXT = "[시간 초과] 확인 창이 시간 안에 선택되지 않아 실행하지 않았어요. 사용자가 원하면 다시 요청할 수 있어요.";
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
   type: "object",
   properties,

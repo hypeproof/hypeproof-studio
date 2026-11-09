@@ -67,7 +67,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
-import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
+import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED, FOLDER_CONSENT_TIMED_OUT } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
 import { verifyActivity } from './proxyClient';
@@ -1193,6 +1193,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if(prompt && !(this.editorChat?.visible || this.view?.visible))return Promise.resolve(false);
       return this.post({type:'browserApprovalPrompt',prompt});
     },
+    expired:id=>{this.timedOutApprovals.add(id);},
   });
   private readonly commandApprovalRequest = new CommandApprovalRequest({
     scope:()=>JSON.stringify([this.taskCommandAllowState(),this.taskCommandAllows.generation]),
@@ -1200,6 +1201,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if(prompt && !(this.editorChat?.visible || this.view?.visible))return Promise.resolve(false);
       return this.post({type:'commandApprovalPrompt',prompt});
     },
+    expired:id=>{this.timedOutApprovals.add(id);},
   });
   /** #3586 — write approval ids whose 180 s window ran out; read once by the write branch of resolveActionApproval. */
   private readonly timedOutApprovals=new Set<string>();
@@ -1214,12 +1216,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     id:()=>crypto.randomUUID(),
     present:prompt=>this.presentOutbound(prompt),
   });
+  /** #3586 — counts folder-window timeouts; the folder choice reads it before and after its consent call. */
+  private folderConsentExpired = 0;
   private readonly folderConsentRequest = new FolderConsentRequest({
     scope: () => this.writeApprovalScope(), id: () => crypto.randomUUID(),
     present: async prompt => {
       if (prompt && !(this.editorChat?.visible || this.view?.visible)) return false;
       return this.post({ type: 'folderConsentPrompt', prompt });
     },
+    expired: () => { this.folderConsentExpired += 1; },
   });
   private async presentOutbound(prompt:AnyOutboundPrompt|null):Promise<boolean|void> {
     if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
@@ -1643,10 +1648,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (choice.kind === "invalid") { note = MISSING_TASK_FOLDER_NOT_A_FOLDER; return; }
       const profile = this.cachedProfile ?? (await this.ensureProfile());
       if (!profile || !this.projectOpener) { note = MISSING_TASK_FOLDER_FAILED; return; }
+      const folderExpiredBefore = this.folderConsentExpired;
       let consent: Awaited<ReturnType<typeof folderConsentForFolder>>;
       try { consent = await folderConsentForFolder(this.context, profile, this.folderConsentOpts(), choice.folder); }
       catch (error) { if (error instanceof FolderConsentRefusal) { note = error.message; return; } throw error; }
-      if (!consent) { note = MISSING_TASK_FOLDER_UNDECIDED; return; }
+      if (!consent) { note = this.folderConsentExpired !== folderExpiredBefore ? FOLDER_CONSENT_TIMED_OUT : MISSING_TASK_FOLDER_UNDECIDED; return; }
       if (consent === "none") { note = MISSING_TASK_FOLDER_NO_AI; return; }
       try { await this.setConnectionChanging(true); }
       catch (error) { note = error instanceof ActivityConnectionError ? error.message : MISSING_TASK_FOLDER_FAILED; return; }
@@ -11011,7 +11017,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * that repository and its remote and remembered as that (repository, destination) pair. Without it, only a work
    * folder with no other repository inside places a bare push.
    */
-  private async approveOutwardCommand(command: string, reading: OutwardReading, destructive: boolean, onPrompted?: () => void, shellCwd?: string | null): Promise<boolean> {
+  private async approveOutwardCommand(command: string, reading: OutwardReading, destructive: boolean, onPrompted?: () => void, shellCwd?: string | null, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
     const cwd = this.resolveCoachCwd() ?? null;
     let folder: string | null = null;
     try { folder = cwd ? canonicalFolder(cwd) : null; } catch { folder = null; }
@@ -11026,11 +11032,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const keys = pairs.map(outwardPairKey);
     if (known && memory.remembersAll(scope, keys)) return true;
     onPrompted?.();
+    const outwardPromptId = crypto.randomUUID();
     const pick = await this.commandApprovalRequest.confirm({
-      id: crypto.randomUUID(), purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
+      id: outwardPromptId, purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
       outward: { destinations: known ? destinations : [], remembers: known && scope !== null },
     });
-    if (pick !== "allow") return false;
+    if (pick !== "allow") { if (this.timedOutApprovals?.delete(outwardPromptId)) onDenied?.("timeout"); return false; }
     if (known) await memory.remember(scope, keys);
     return true;
   }
@@ -11075,7 +11082,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // DEC-11e — a command that may send data off this computer asks once per destination, then remembers it.
         const outward = readOutward(command);
         const shellCwd = (req.payload as { shellCwd?: unknown } | null | undefined)?.shellCwd;
-        return outward.outward ? this.approveOutwardCommand(command, outward, destructive, onPrompted, typeof shellCwd === "string" ? shellCwd : null) : true;
+        return outward.outward ? this.approveOutwardCommand(command, outward, destructive, onPrompted, typeof shellCwd === "string" ? shellCwd : null, onDenied) : true;
       }
       const exact = destructive || forgetAllows ? null : taskCommandExact(command);
 
@@ -11085,10 +11092,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const allowGeneration = this.taskCommandAllows.generation;
 
       onPrompted?.();
+      const commandPromptId = crypto.randomUUID();
       const pick = await this.commandApprovalRequest.confirm({
-        id: crypto.randomUUID(), purpose: commandApprovalPurposeFor(req.payload, destructive),
+        id: commandPromptId, purpose: commandApprovalPurposeFor(req.payload, destructive),
         command: describeCommandForApproval(command), destructive, rememberAllowed: Boolean(exact),
       });
+      if (pick === 'deny' && this.timedOutApprovals?.delete(commandPromptId)) onDenied?.('timeout');
       if (pick === 'remember' && exact) {
         if (this.taskCommandAllows.generation === allowGeneration && this.taskCommandAllowState().key === scope.key) this.taskCommandAllows.remember(scope.key, exact.key);
         return true;
@@ -11107,15 +11116,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // `항상 허용` (above) and, likewise, session-scoped.
     if (req.kind === "openBrowser") {
       // #3464 — one rule for every path that opens a browser for the coach (browserOpenDecision.ts).
+      let browserPromptId: string | undefined;
       return decideBrowserOpen({
         rawUrl: (req.payload as {url?:unknown}|null|undefined)?.url,
         forget: forgetAllows,
         remembered: this.approvedBrowserOrigins,
         workspaceRoot: this.resolveCoachCwd() ?? null,
         onPrompted,
-        confirm: (prompt) => this.browserApprovalRequest.confirm({
-          id:crypto.randomUUID(), title:cleanName(browserApprovalTitle(this.coachDisplayName())), ...prompt,
-        }),
+        confirm: (prompt) => { browserPromptId = crypto.randomUUID(); return this.browserApprovalRequest.confirm({
+          id:browserPromptId, title:cleanName(browserApprovalTitle(this.coachDisplayName())), ...prompt,
+        }); },
+      }).then(opened => {
+        if (!opened && browserPromptId !== undefined && this.timedOutApprovals?.delete(browserPromptId)) onDenied?.('timeout');
+        return opened;
       });
     }
 

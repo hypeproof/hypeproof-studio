@@ -15,7 +15,7 @@ async function t(name, fn) {
   catch (err) { failed++; console.log(`  FAIL ${name}\n       ${err && err.message}`); }
 }
 const USER_REFUSAL = "사용자가 파일 변경을 허용하지 않았습니다.";
-const TIMEOUT_TEXT = "[시간 초과] 확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 요청하면 확인 창이 다시 떠요.";
+const TIMEOUT_TEXT = "[시간 초과] 확인 창이 시간 안에 선택되지 않아 실행하지 않았어요. 사용자가 원하면 다시 요청할 수 있어요.";
 
 async function writeWith(approveResult) {
   const cwd = mkdtempSync(path.join(tmpdir(), "approval-timeout-"));
