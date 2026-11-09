@@ -1,0 +1,100 @@
+Studio REQ-STUDIO-TRUST-OWN-FOLDERS: folders Studio itself created open trusted, with no Workspace Trust modal.
+Off unless the chat extension's default-off setting hypeproofChat.trustStudioFolders is on (it writes enabled=true into its globalState record).
+Core trusts a local folder only when its real path is in that record (written by the extension when Studio creates the folder); every other folder prompts as upstream. Workspace trust stays enabled globally.
+Hand-maintained: edit by applying to scripts/patches/core/upstream, then write git diff back under this header.
+
+diff --git a/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
+new file mode 100644
+index 0000000..f447fcd
+--- /dev/null
++++ b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
+@@ -0,0 +1,47 @@
++/*---------------------------------------------------------------------------------------------
++ *  HypeProof Studio (REQ-STUDIO-TRUST-OWN-FOLDERS) - folders Studio itself created are trusted.
++ *  Pure decision, no imports: the chat extension (`hypeproof.hypeproof-chat`) keeps the record in
++ *  its globalState; `workspaceTrust.ts` hands the stored JSON and an URI equality here.
++ *--------------------------------------------------------------------------------------------*/
++
++/** Key inside the extension's globalState blob. */
++export const HPS_STUDIO_FOLDERS_KEY = 'hypeproofChat.studioCreatedFolders';
++
++export interface IHpsStudioFolderRecord {
++	/** Off unless the default-off setting `hypeproofChat.trustStudioFolders` is on. */
++	readonly enabled: boolean;
++	/** Real paths of folders Studio created (never a folder it only found). */
++	readonly folders: readonly string[];
++}
++
++/** The record from the extension's stored globalState JSON; anything malformed is "no record". */
++export function hpsStudioFolderRecordOf(raw: string | undefined): IHpsStudioFolderRecord | undefined {
++	if (!raw) {
++		return undefined;
++	}
++	let record: { v?: unknown; enabled?: unknown; folders?: unknown } | undefined;
++	try {
++		record = JSON.parse(raw)?.[HPS_STUDIO_FOLDERS_KEY];
++	} catch {
++		return undefined;
++	}
++	if (!record || record.v !== 1 || record.enabled !== true || !Array.isArray(record.folders)) {
++		return undefined;
++	}
++	return { enabled: true, folders: record.folders.filter((p): p is string => typeof p === 'string' && p.length > 0) };
++}
++
++/**
++ * True only for a local folder that is in the record, exactly (no parent, no child, no name match),
++ * while the flag is on. Everything else keeps the normal trust prompt.
++ */
++export function hpsIsStudioCreatedFolder(
++	record: IHpsStudioFolderRecord | undefined,
++	uri: { readonly scheme: string; readonly fsPath: string },
++	isSamePath: (a: string, b: string) => boolean,
++): boolean {
++	if (!record || !record.enabled || uri.scheme !== 'file') {
++		return false;
++	}
++	return record.folders.some(folder => isSamePath(folder, uri.fsPath));
++}
+diff --git a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
+index e349da9..391f358 100644
+--- a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
++++ b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
+@@ -25,6 +25,7 @@ import { isWeb } from '../../../../base/common/platform.js';
+ import { IFileService } from '../../../../platform/files/common/files.js';
+ import { promiseWithResolvers } from '../../../../base/common/async.js';
+ import { ResourceMap } from '../../../../base/common/map.js';
++import { hpsIsStudioCreatedFolder, hpsStudioFolderRecordOf } from './hpsStudioFolderTrust.js';
+ 
+ export const WORKSPACE_TRUST_ENABLED = 'security.workspace.trust.enabled';
+ export const WORKSPACE_TRUST_STARTUP_PROMPT = 'security.workspace.trust.startupPrompt';
+@@ -381,6 +382,12 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 			return { trusted: true, uri };
+ 		}
+ 
++		// Studio (REQ-STUDIO-TRUST-OWN-FOLDERS) - a folder the chat extension recorded as created by Studio
++		// is trusted while its default-off flag is on. Trust stays enabled; any other folder prompts as upstream.
++		if (this.isHpsStudioCreatedFolder(uri)) {
++			return { trusted: true, uri };
++		}
++
+ 		let resultState = false;
+ 		let maxLength = -1;
+ 
+@@ -400,6 +407,16 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 		return { trusted: resultState, uri: resultUri };
+ 	}
+ 
++	private isHpsStudioCreatedFolder(uri: URI): boolean {
++		for (const scope of [StorageScope.PROFILE, StorageScope.APPLICATION]) {
++			const record = hpsStudioFolderRecordOf(this.storageService.get('hypeproof.hypeproof-chat', scope));
++			if (record) {
++				return hpsIsStudioCreatedFolder(record, uri, (a, b) => this.uriIdentityService.extUri.isEqual(URI.file(a), URI.file(b)));
++			}
++		}
++		return false;
++	}
++
+ 	private async doSetUrisTrust(uris: URI[], trusted: boolean): Promise<void> {
+ 		let changed = false;
+ 
