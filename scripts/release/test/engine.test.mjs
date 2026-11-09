@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import './machine-authority.controls.mjs';
+import './native-producer.controls.mjs';
 import test from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';

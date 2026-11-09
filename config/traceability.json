@@ -6165,6 +6165,12 @@
         },
         {
           "path": "config/release-automation.json"
+        },
+        {
+          "path": "scripts/release/native-producer.mjs"
+        },
+        {
+          "path": "scripts/release/publisher-anchor.mjs"
         }
       ]
     },
@@ -6195,6 +6201,9 @@
         {
           "path": "docs/dev/release-machine.md",
           "section": "## Verification and rollout"
+        },
+        {
+          "path": "scripts/release/test/native-producer.controls.mjs"
         }
       ]
     },

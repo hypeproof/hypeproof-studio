@@ -1,7 +1,7 @@
-# Machine release publisher (#3631; Harness #519)
+# Machine release publisher and native producer (#3631, #3632; Harness #519)
 
 This slice connects the portable adapter (#3629) to the existing publisher and
-workflows. Native production is #3632 and the RC-ready coordinator is Harness #526.
+workflows. The native producer is #3632 and the RC-ready coordinator is Harness #526.
 Enrollment remains shadow until those integrations and real native prerequisites
 are verified. This code does not activate the currently failing candidate.
 
@@ -102,3 +102,32 @@ The current Windows driver automates BB-004 and reports unsupported work BLOCKED
 capacity, pinned producer and a complete real RC run must precede activation.
 The existing FAIL/BLOCKED RC is not made passing. Protected policy/workflow changes
 retain maintainer review/merge and workflow-authorized credentials.
+
+## Native producer CLI (#3632)
+
+Default stays shadow without keys/pins. Live effect revalidation requires the child
+slice. No model calls, dispatch or publication. `machine-evidence.mjs prepare-current
+--pr N --packages DIR --sequence N --out FILE` reads product/accepted Service facts;
+sequence comes from Harness product CAS.
+
+`native-producer.mjs` accepts these explicit private inputs:
+
+- `context`: `--input` publisher JSON, `--context` current product JSON, `--packages`,
+  persistent `--store`, exclusive `--out`. Returns candidateId/stage reservationIds.
+- `attest`: `--input`, `--context`, approved `--harness`, raw `--snapshot`, owned
+  `--run-directory`/`--evidence-root`, native `--target`, `--reporter`, private `--key`, `--out`.
+- `assemble`: `--input`, `--context`, `--packets` directory-list JSON, `--packages`,
+  shared `--store`, `--attestor`, private `--key`, exclusive `--out`.
+
+Attest checks actual native host, platform role, official Harness origin/commit/full
+tool digest and pinned `desktop_cli.py export`, owned captures, cleanup and accepted
+Service. Human resolution fills only BLOCKED/NOT_RUN/missing observations. Its proof
+schema is `hps-native-human-proof/1`: matching actor/caseId/platform/identity,
+execution human-observed, cleanup status PASS, accepted service {base,version}, ISO
+startedAt/endedAt and files {owned relative path,sha256,size}; include PNG and nonempty
+AX JSON. recordedAt follows execution. Original observations stay separate.
+
+Assembly preserves actual capacity IDs/times and blocked overruns in persistent
+transact/applyEvent; @candidate resolves to its engine ID. All captures travel signed;
+packages stay cached. Controls use generated keys/files and known exporter output.
+Mac #516 and real all-PASS installed-App acceptance remain NOT RUN.
