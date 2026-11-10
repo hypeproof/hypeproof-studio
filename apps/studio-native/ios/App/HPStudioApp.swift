@@ -13,7 +13,11 @@ struct StudioHome: View {
     @State private var ageOK = false
     @State private var transferOK = false
     @State private var exportURL: URL?
-    private let ink = Color(red: 0.10, green: 0.20, blue: 0.18)
+    private let ink = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.45, green: 0.82, blue: 0.67, alpha: 1)
+            : UIColor(red: 0.10, green: 0.20, blue: 0.18, alpha: 1)
+    })
     var body: some View {
         NavigationStack {
             ScrollViewReader { scroll in
@@ -49,7 +53,7 @@ struct StudioHome: View {
                         } else {
                             Text("질문에서 시작하는\n나의 다음 한 걸음").font(.largeTitle.bold())
                             introduction
-                            Button("첫 생각 기록하기") { model.newProject() }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("startProject").disabled(model.readOnly)
+                            Button("첫 생각 기록하기") { model.newProject() }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground)).controlSize(.large).accessibilityIdentifier("startProject").disabled(model.readOnly)
                             if let error = model.error { Text(error).foregroundStyle(.red) }
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -77,7 +81,7 @@ struct StudioHome: View {
                         HStack(alignment: .bottom, spacing: 12) {
                             TextField("정리되지 않은 말도 괜찮아요", text: Binding(get: { model.draftText }, set: { text in model.editDraft(text) }), axis: .vertical)
                                 .lineLimit(1...5).padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("thoughtInput")
-                            Button { model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent)
+                            Button { model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground))
                                 .accessibilityLabel(model.connected ? "생각 보내기" : "생각 기록하기").accessibilityIdentifier("sendThought")
                                 .disabled(model.busy || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
                         }
