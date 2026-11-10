@@ -405,11 +405,11 @@ $('freeze').onclick=()=>run(async()=>{if(dirty||revision<1||bound!==identity())t
 // summary built from the same content() the save sends, so it cannot drift from what learners get. DEC-30 adds assistant.role,
 // assistant.tone and starters to the same rows.
 function aiRows(c,labels){
-  const model=c.model,effort=model?.effort,feats=c.features,name=c.assistant?.display_name,steps=c.steps||[];
+  const model=c.model,effort=model?.effort,feats=c.features,name=c.assistant?.display_name,steps=c.steps||[];const minorOf=['lv1','lv2'].includes(c.audience_tier);
   const mlabel=a=>labels?.model?.get(a)||a,flabel=k=>labels?.feature?.get(k)||k,elabel=v=>effortLabels[v]||v;
   return [
     ['AI 이름',name||'코호트 기본 규칙을 따릅니다'],
-    ...(styleServed()?[['AI 역할',c.assistant?.role||'정하지 않음'],['AI 말투',toneWords(c.assistant?.tone)+(minorTier()&&toneEntry(c.assistant?.tone)?.minor_safe===false?' (미성년자 수업에서는 적용되지 않음)':'')]]:[]),
+    ...(styleServed()?[['AI 역할',c.assistant?.role||'정하지 않음'],['AI 말투',toneWords(c.assistant?.tone)+(minorOf&&toneEntry(c.assistant?.tone)?.minor_safe===false?' (미성년자 수업에서는 적용되지 않음)':'')]]:[]),
     ['지시문','단계 '+steps.length+'개 · 안내를 쓴 단계 '+steps.filter(x=>String(x.instructions||'').trim()).length+'개'],
     ['모델',!model?'코호트 기본값':model.allowed.length===1?mlabel(model.default)+' (고정)':mlabel(model.default)+' 기본 · 학생이 '+model.allowed.map(mlabel).join(', ')+' 중 선택'],
     ['처리 수준(Effort)',!effort?'코호트 기본값':effort.allowed.length===1?elabel(effort.default)+' (고정)':elabel(effort.default)+' 기본 · 학생이 '+effort.allowed.map(elabel).join(', ')+' 중 선택'],

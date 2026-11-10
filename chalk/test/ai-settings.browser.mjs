@@ -47,7 +47,7 @@ const FROZEN = { schema: 'hps-session-design/1', assistant: { display_name: '고
 const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)=>{const p=String(path),m=(init&&init.method)||'GET';if(window.__hold&&m==='GET'&&!p.includes('/models/')&&!p.includes('/features/')&&!p.includes('/versions/'))await window.__hold;
   const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:{'content-type':'application/json'}});
   if(p.includes('/models/'))return json(${JSON.stringify(MODELS)});
-  if(p.includes('/features/'))return json(window.__old?${JSON.stringify(OLD_FEATURES)}:${JSON.stringify(FEATURES)});
+  if(p.includes('/features/'))return json(window.__old?${JSON.stringify(OLD_FEATURES)}:window.__tones?{...${JSON.stringify(FEATURES)},assistant_tones:window.__tones}:${JSON.stringify(FEATURES)});
   if(p.includes('/versions/'))return json({module:{content:${JSON.stringify(FROZEN)}},source_revision:1,rehearsal:'passed',activated:false});
   if(m==='PUT'&&window.__fail){window.__puts.push(JSON.parse(init.body));return json({error:window.__fail},400);}
   if(m==='PUT'){const body=JSON.parse(init.body);window.__puts.push(body);window.__saved=body.content;return json({revision:body.expected_revision+1});}
@@ -192,6 +192,40 @@ try {
       assert.match(await ev(`return document.getElementById('status').textContent`), /아직 받지 않습니다/, `${width}px: an older Service gets the hint`);
       await ev(`window.__fail=null;return 0`);
     }
+    // 6c. A save with a role or a tone but no AI name sends nothing and hands focus to the name field.
+    const nameWas = await ev(`return document.getElementById('assistant_name').value`);
+    for (const [label, role] of [['role and tone', '글쓰기 코치'], ['tone only', '']]) {
+      await ev(`${set('assistant_name', '')}${set('assistant_role', role)}document.activeElement&&document.activeElement.blur();return 0`);
+      const before = await ev(`return window.__puts.length`);
+      await ev(`document.getElementById('save').click();return 0`);
+      await until(`return !busy && document.activeElement===document.getElementById('assistant_name')`, `focus on the name field (${label})`);
+      assert.equal(await ev(`return window.__puts.length`), before, `${width}px: ${label} without a name sends no PUT`);
+      assert.match(await ev(`return document.getElementById('status').textContent`), /AI 이름도 함께 적어 주세요/, `${width}px: ${label} without a name is explained`);
+      checks += 3;
+    }
+    await ev(`${set('assistant_name', nameWas)}${set('assistant_role', '글쓰기 코치')}return 0`);
+
+    // 6d. The radios show the labels the Service serves, not Chalk's fallback names.
+    const SERVED = TONES.map((t) => ({ ...t, label: '서버 ' + t.id }));
+    await ev(`window.__tones=${JSON.stringify(SERVED)};document.getElementById('features-load').click();return 0`);
+    await until(`return !busy && toneCatalog()&&toneCatalog()[0].label==='서버 friendly'`, 'the relabelled catalog');
+    const served = await ev(`return {rows:[...document.querySelectorAll('#tone-choices label > span')].map(e=>e.textContent),status:document.getElementById('tone-status').textContent,preview:document.getElementById('ai-preview-draft').textContent}`);
+    assert.deepEqual(served.rows, ['코호트 기본', ...SERVED.map((t) => t.label)], `${width}px: the radios show the served labels`);
+    assert.ok(served.status.includes('서버 playful') && served.preview.includes('서버 playful'), `${width}px: status and preview use the served label`);
+    for (const t of TONES) assert.ok(!served.rows.includes(t.label), `${width}px: fallback name ${t.label} is not shown`);
+    await ev(`window.__tones=null;document.getElementById('features-load').click();return 0`);
+    await until(`return !busy && toneCatalog()&&toneCatalog()[0].label===${JSON.stringify(TONES[0].label)}`, 'the catalog to return');
+    checks += 3 + TONES.length;
+
+    // 6e. A frozen version's minor note follows the frozen content's tier, not the draft's.
+    await ev(`${set('audience_tier', 'lv1')}return 0`);
+    const fm = await ev(`return aiRows({schema:'hps-session-design/1',audience_tier:'adult',steps:[],assistant:{display_name:'a',tone:'playful'}},null).map(r=>r.join(':')).join('|')+'##'+aiRows({schema:'hps-session-design/1',audience_tier:'lv2',steps:[],assistant:{display_name:'a',tone:'playful'}},null).map(r=>r.join(':')).join('|')`);
+    const [adultRows, minorRows] = fm.split('##');
+    assert.ok(!adultRows.includes('적용되지 않음'), `${width}px: an adult frozen lesson shows no minor note even while the draft is minor`);
+    assert.ok(minorRows.includes('적용되지 않음'), `${width}px: a minor frozen lesson shows the note`);
+    await ev(`${set('audience_tier', '')}return 0`);
+    checks += 2;
+
     // Unset: clear role, tone (pick 코호트 기본) and every starter; the next save carries none of the three keys.
     await ev(`${set('assistant_role', '')}${set('ai-starter-1', '')}${set('ai-starter-2', '')}${set('ai-starter-3', '')}[...document.querySelectorAll('#tone-choices input')].find(i=>i.value==='').click();document.getElementById('save').click();return 0`);
     await until(`return window.__puts.length>=${putsBefore + 4} && !busy`, 'the unset save');
