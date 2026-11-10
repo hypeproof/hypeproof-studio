@@ -442,6 +442,16 @@ export interface ResolvedProfile {
    * app's own approval tiers. Read with servedApprovalPreset(), which ignores an unknown id.
    */
   approval_preset?: import("./approvalPreset").ServedApprovalPreset;
+  /**
+   * DEC-30 step 3 (CGP-KNOW-R-037) — the lesson's starter sentences, 0..4 single lines. Absent when the lesson has none.
+   * Read with servedLessonStarters(), which drops anything that is not a safe single line.
+   */
+  starters?: string[];
+  /**
+   * DEC-30 — the lesson's AI role and tone as the Service serves them to this seat (the tone is already clamped on a
+   * minor seat: `tone_clamped` replaces `tone`). Display only; nothing here reaches a coach prompt (step 4). Absent when unset.
+   */
+  assistant_style?: { role?: string; tone?: { id: string; label: string }; tone_clamped?: true };
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
   tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */

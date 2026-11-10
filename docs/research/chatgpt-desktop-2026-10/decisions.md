@@ -1879,3 +1879,12 @@ DEC-30 (starter prompts plus AI role and tone in the lesson contract) is decided
 - Older Service (no `assistant_tones`): the three inputs and the nav link hide after the features read and are not sent; before that read they show, and the Service's 400 gets a Korean hint.
 - Section and copy wording (시작 문장, 역할, 말투, the CGP-KNOW-R-037 disclosure next to the material field) is the agent's wording.
 - Not in this change: Studio chips (step 3) and the coach style block (step 4).
+
+## DEC-30 step 3: starter chips in Studio (CGP-KNOW-R-037 learner side, CGP-KNOW-D-037; 2026-11-10)
+
+Agent implementation choice for the Studio part of DEC-30, which Jay decided; the Service serves the data (hypeproof-service#348, service-v2026.11.10-1) and Chalk authors it (#3685). Confirmed by Jay: no.
+
+- Read path: `starters` is a top-level `/v1/profile` key (not inside `lesson.content`), read with `servedLessonStarters()`, which keeps at most four safe, distinct single lines and skips anything else. Absent means no UI.
+- Behaviour: wrapping compact chips above the composer; a click inserts into the draft and never sends; a manual draft is kept (the personal-starter rule); hidden after the learner's first message in the task; not drawn in the instructor console; a minor seat behaves the same.
+- Layout: 44px targets (`--hp-control-min`), 14px floor (`--hp-font-caption`), tokens only, no icon. Hint line and group label ("이 수업의 시작 문장", "누르면 입력창에 들어가요. 고쳐서 보내세요.") are the agent's wording.
+- Not in this change: the AI role line under the name (optional; the header has no second row today, and `assistant_style` is typed only) and any role/tone in a coach prompt (step 4, after a safety review).
