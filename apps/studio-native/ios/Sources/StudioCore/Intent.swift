@@ -45,8 +45,14 @@ public struct Notebook: Codable, Equatable, Sendable {
     public var version = 1
     public var projects: [Project] = []
     public init() {}
+    public func encode() throws -> Data {
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .millisecondsSince1970
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(self)
+    }
     public static func decode(_ data: Data) throws -> Notebook {
-        let value = try JSONDecoder().decode(Notebook.self, from: data)
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .millisecondsSince1970
+        let value = try decoder.decode(Notebook.self, from: data)
         guard value.version == 1, value.projects.count <= 100,
               Set(value.projects.map(\.id)).count == value.projects.count,
               value.projects.allSatisfy({ project in

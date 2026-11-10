@@ -7,6 +7,19 @@ import SwiftUI
     @Published var busy = false
     @Published var connected = false
     @Published private(set) var readOnly = false
+    @Published private var editing: [String: String] = [:]
+    var draftText: String { editing[(active ?? "") + ":draft"] ?? project?.draft ?? "" }
+    var intentText: String { editing[(active ?? "") + ":intent"] ?? project?.intentDraft ?? "" }
+    func editDraft(_ text: String, intent: Bool = false) {
+        guard let active else { return }
+        editing[active + (intent ? ":intent" : ":draft")] = text
+        update { if intent { $0.intentDraft = text } else { $0.draft = text } }
+    }
+    func confirmIntent() -> Bool {
+        let text = intentText
+        if update({ try $0.confirm(text) }) { editing[(active ?? "") + ":intent"] = nil; return true }
+        return false
+    }
     private var grant: Grant?
     private var task: Task<Void, Never>?
     private var generation = UUID()
@@ -28,8 +41,8 @@ import SwiftUI
     }
     private func persist(_ value: Notebook) throws {
         guard !readOnly else { throw StudioError.message("기록을 읽지 못한 상태에서는 덮어쓰지 않아요.") }
-        let data = try JSONEncoder().encode(value)
-        try data.write(to: file, options: [.atomic, .completeUntilFirstUserAuthentication])
+        let data = try value.encode()
+        try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         var url = file
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try url.setResourceValues(values)
@@ -68,10 +81,10 @@ import SwiftUI
     func send() {
         guard !busy, let project else { return }
         do {
-            var changed = project; try changed.append(project.draft)
+            var changed = project; try changed.append(draftText)
             var value = notebook
             guard let i = value.projects.firstIndex(where: { $0.id == project.id }) else { return }
-            value.projects[i] = changed; try persist(value)
+            value.projects[i] = changed; try persist(value); editing[project.id + ":draft"] = nil
             if connected { ask() }
         } catch { self.error = error.localizedDescription }
     }
@@ -89,11 +102,20 @@ import SwiftUI
             if generation == attempt { busy = false }
         }
     }
+    func recover() {
+        guard readOnly else { return }
+        do {
+            let backup = file.deletingLastPathComponent().appendingPathComponent("recovery-\(UUID().uuidString).json")
+            try FileManager.default.copyItem(at: file, to: backup)
+            readOnly = false
+            do { try persist(Notebook()); active = nil; error = nil } catch { readOnly = true; throw error }
+        } catch { self.error = "원본을 보존하지 못해 초기화하지 않았어요. 먼저 원본을 내보내 주세요." }
+    }
     func export() -> URL? {
         do {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("HP-Studio-records.json")
-            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(notebook).write(to: url, options: [.atomic, .completeUntilFirstUserAuthentication]); return url
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(readOnly ? "HP-Studio-recovery-original.json" : "HP-Studio-records.json")
+            let bytes = try readOnly ? Data(contentsOf: file) : notebook.encode()
+            try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]); return url
         } catch { self.error = error.localizedDescription; return nil }
     }
 }

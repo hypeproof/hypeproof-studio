@@ -37,7 +37,7 @@ public final class StudioState {
     public String create() throws JSONException {
         if (projects().length() >= 100) throw new JSONException("기록이 100개예요. 내보낸 뒤 기록을 정리해 주세요.");
         String id = UUID.randomUUID().toString();
-        JSONObject p = new JSONObject().put("id", id).put("title", "새로운 생각").put("draft", "").put("intentDraft", "").put("messages", new JSONArray()).put("revisions", new JSONArray());
+        JSONObject p = new JSONObject().put("id", id).put("updatedAt", System.currentTimeMillis()).put("title", "새로운 생각").put("draft", "").put("intentDraft", "").put("messages", new JSONArray()).put("revisions", new JSONArray());
         JSONArray next = new JSONArray().put(p); for (int i = 0; i < projects().length(); i++) next.put(projects().get(i));
         data.put("projects", next); return id;
     }
@@ -48,11 +48,11 @@ public final class StudioState {
     public void append(String id, String text) throws JSONException {
         JSONObject p = find(id); text = checked(text);
         if (p.getJSONArray("messages").length() == 0) p.put("title", text.substring(0, Math.min(text.length(), 32)));
-        p.getJSONArray("messages").put(message("user", text)); p.put("draft", "");
+        p.getJSONArray("messages").put(message("user", text)); p.put("draft", ""); p.put("updatedAt", System.currentTimeMillis());
     }
     public void confirm(String id, String text) throws JSONException {
         JSONObject p = find(id); JSONArray revisions = p.getJSONArray("revisions");
-        revisions.put(new JSONObject().put("revision", revisions.length() + 1).put("text", checked(text)).put("author", "user").put("confirmedAt", System.currentTimeMillis())); p.put("intentDraft", "");
+        revisions.put(new JSONObject().put("revision", revisions.length() + 1).put("text", checked(text)).put("author", "user").put("confirmedAt", System.currentTimeMillis())); p.put("intentDraft", ""); p.put("updatedAt", System.currentTimeMillis());
     }
     public JSONArray conversation(String id) throws JSONException {
         JSONObject p = find(id);

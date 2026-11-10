@@ -17568,6 +17568,118 @@
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-MOBILE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/README.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-MOBILE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/.gitignore"
+        },
+        {
+          "path": "apps/studio-native/package.json"
+        },
+        {
+          "path": "apps/studio-native/ios/Package.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Service.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Intent.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/xcshareddata/xcschemes/HPStudio.xcscheme"
+        },
+        {
+          "path": "apps/studio-native/android/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/gradle.properties"
+        },
+        {
+          "path": "apps/studio-native/android/settings.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/values/styles.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/xml/paths.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioService.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-verify.sh"
+        },
+        {
+          "path": "products.yaml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-MOBILE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ServiceTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java"
+        },
+        {
+          "path": ".github/workflows/studio-native-mobile.yml"
+        }
+      ]
     }
   ]
 }

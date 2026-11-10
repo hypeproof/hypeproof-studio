@@ -17,17 +17,17 @@ final class IntentTests: XCTestCase {
     func testDraftAndRevisionsSurviveRestart() throws {
         var value = Notebook(); var project = Project(); project.draft = "내일 물어볼 질문"; project.intentDraft = "아직 확정하지 않았다"
         try project.confirm("오늘 세 사람을 관찰한다"); value.projects = [project]
-        let decoded = try Notebook.decode(JSONEncoder().encode(value))
+        let decoded = try Notebook.decode(value.encode())
         XCTAssertEqual(decoded, value)
         XCTAssertThrowsError(try Project.checked("  "))
         XCTAssertThrowsError(try Project.checked(String(repeating: "가", count: 4001)))
     }
     func testUnknownSchemaAndForgedAuthorDoNotOverwrite() throws {
         var value = Notebook(); value.version = 9
-        XCTAssertThrowsError(try Notebook.decode(JSONEncoder().encode(value)))
+        XCTAssertThrowsError(try Notebook.decode(value.encode()))
         value = Notebook(); var project = Project(); try project.confirm("사용자가 확인한 문장")
         project.revisions[0].author = "assistant"; value.projects = [project]
-        XCTAssertThrowsError(try Notebook.decode(JSONEncoder().encode(value)))
+        XCTAssertThrowsError(try Notebook.decode(value.encode()))
     }
     func testContextIsBoundedAndErrorCausesDistinct() throws {
         var project = Project()

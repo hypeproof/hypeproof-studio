@@ -8928,3 +8928,13 @@ Not covered, by design: real-device behaviour. This row set is synthetic and hea
 `getUserMedia` inside the packaged Electron webview, the OS Korean voices on macOS and Windows class laptops, and
 the OS settings handoff are the real-device check (policy 6 step 4). Not built here: CGP-VOICE-R-001 (realtime
 session states), CGP-VOICE-R-021 (the four `hypeproof.voice.*` Command Palette commands).
+
+
+## Standalone native mobile preview — 2026-11-10
+
+`ST-REQ-NATIVE-MOBILE` follows `ST-INT-NATIVE`: native iOS and Android capture,
+project-local context, consented Service questioning and human-confirmed intent
+revisions. Drafts survive restart; export/deletion are explicit. This is separate
+from the desktop companion and the web-only MVP. Implementation and native build
+commands: [native preview](../apps/studio-native/README.md). Physical iPhone and
+TestFlight acceptance remain blocked by enrollment/signing, not satisfied by CI.

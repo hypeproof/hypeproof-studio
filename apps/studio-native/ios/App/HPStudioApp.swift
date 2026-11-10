@@ -9,6 +9,7 @@ struct StudioHome: View {
     @State private var showIntent = false
     @State private var showHistory = false
     @State private var showDelete = false
+    @State private var showRecovery = false
     @State private var ageOK = false
     @State private var transferOK = false
     @State private var exportURL: URL?
@@ -63,7 +64,8 @@ struct StudioHome: View {
                     Menu {
                         Button("새 생각") { model.newProject() }
                         Button(model.connected ? "AI 연결 해제" : "무료 AI 연결") { if model.connected { model.disconnect() } else { showConsent = true } }
-                        Button("전체 기록 내보내기") { exportURL = model.export() }
+                        Button(model.readOnly ? "읽지 못한 원본 내보내기" : "전체 기록 내보내기") { exportURL = model.export() }
+                        if model.readOnly { Button("원본 보존 후 새로 시작") { showRecovery = true } }
                         if model.project != nil { Button("현재 기록 삭제", role: .destructive) { showDelete = true } }
                     } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("기록 메뉴")
                 }
@@ -73,11 +75,11 @@ struct StudioHome: View {
                     VStack(spacing: 10) {
                         if !model.connected { Button("무료 AI 연결하고 질문 받기") { showConsent = true }.font(.callout).accessibilityIdentifier("connectAI") }
                         HStack(alignment: .bottom, spacing: 12) {
-                            TextField("정리되지 않은 말도 괜찮아요", text: Binding(get: { model.project?.draft ?? "" }, set: { text in model.update { $0.draft = text } }), axis: .vertical)
+                            TextField("정리되지 않은 말도 괜찮아요", text: Binding(get: { model.draftText }, set: { text in model.editDraft(text) }), axis: .vertical)
                                 .lineLimit(1...5).padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("thoughtInput")
                             Button { model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent)
                                 .accessibilityLabel(model.connected ? "생각 보내기" : "생각 기록하기").accessibilityIdentifier("sendThought")
-                                .disabled(model.busy || (model.project?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) || model.readOnly)
+                                .disabled(model.busy || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
                         }
                         Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "AI 연결 전에는 이 기기에만 기록해요.").font(.caption2).foregroundStyle(.secondary)
                     }.padding(.horizontal, 20).padding(.vertical, 12).background(.regularMaterial)
@@ -103,6 +105,9 @@ struct StudioHome: View {
             }
         }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
+        .confirmationDialog("원본을 보존하고 새로 시작할까요?", isPresented: $showRecovery, titleVisibility: .visible) {
+            Button("원본 보존 후 새로 시작") { model.recover() }
+        } message: { Text("읽지 못한 원본은 기기에 별도 보관해요. 먼저 원본 내보내기로 외부에 복사해 두세요.") }
         .confirmationDialog("이 기록을 삭제할까요?", isPresented: $showDelete, titleVisibility: .visible) {
             Button("이 기기에서 삭제", role: .destructive) { model.deleteProject() }
         } message: { Text("대화와 의도 변경 기록을 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.") }
@@ -119,11 +124,10 @@ struct StudioHome: View {
             Form {
                 Section("지금 내가 원하는 변화") {
                     Text("누구를 위해, 무엇을 바꾸고, 어떤 작은 행동으로 확인할지 내 말로 적어 보세요.")
-                    TextEditor(text: Binding(get: { model.project?.intentDraft ?? "" }, set: { text in model.update { $0.intentDraft = text } })).frame(minHeight: 140).accessibilityIdentifier("intentInput")
+                    TextEditor(text: Binding(get: { model.intentText }, set: { text in model.editDraft(text, intent: true) })).frame(minHeight: 140).accessibilityIdentifier("intentInput")
                     Button("내 의도로 확인") {
-                        guard let text = model.project?.intentDraft, (try? Project.checked(text)) != nil else { return }
-                        if model.update({ try $0.confirm(text) }) { showIntent = false }
-                    }.disabled((try? Project.checked(model.project?.intentDraft ?? "")) == nil).accessibilityIdentifier("confirmIntent")
+                        if model.confirmIntent() { showIntent = false }
+                    }.disabled((try? Project.checked(model.intentText)) == nil).accessibilityIdentifier("confirmIntent")
                 }
                 if let revisions = model.project?.revisions, !revisions.isEmpty {
                     Section("생각이 바뀐 기록") {

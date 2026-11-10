@@ -20,6 +20,7 @@ import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
     private StudioState state;
+    private final java.util.Map<String,String> editing = new java.util.HashMap<>();
     private String activeID, installID, token, error;
     private long expiresAt;
     private boolean busy, readOnly;
@@ -75,7 +76,7 @@ public final class MainActivity extends Activity {
     private void watch(EditText field, String key, String id) {
         field.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
-            public void onTextChanged(CharSequence s,int start,int before,int count) { change(() -> state.find(id).put(key,s.toString())); }
+            public void onTextChanged(CharSequence s,int start,int before,int count) { editing.put(id+":"+key,s.toString()); change(() -> state.find(id).put(key,s.toString())); }
             public void afterTextChanged(Editable e) {}
         });
     }
@@ -112,11 +113,12 @@ public final class MainActivity extends Activity {
                 if (!busy && token!=null && messages.length()>0 && messages.getJSONObject(messages.length()-1).getString("role").equals("user")) content.addView(button("이 생각에 질문 받기",this::ask));
                 if (token==null) root.addView(button("무료 AI 연결하고 질문 받기",this::consent));
                 LinearLayout composer=new LinearLayout(this); composer.setGravity(Gravity.BOTTOM);
-                EditText draft=editor("정리되지 않은 말도 괜찮아요",p.optString("draft"),"생각 입력"); watch(draft,"draft",activeID);
+                EditText draft=editor("정리되지 않은 말도 괜찮아요",editing.getOrDefault(activeID+":draft",p.optString("draft")),"생각 입력"); watch(draft,"draft",activeID);
                 composer.addView(draft,new LinearLayout.LayoutParams(0,-2,1)); Button send=button(token==null?"기록":"보내기",this::send); send.setEnabled(!busy&&!readOnly); composer.addView(send); root.addView(composer);
                 root.addView(text(token==null?"AI 연결 전에는 이 기기에만 기록해요.":"최근 대화와 확인한 의도를 AI에 보내요.",11,false));
             }
             if (busy) content.addView(button("답변을 준비하고 있어요 · 취소",()->{cancel();render();}));
+            if (readOnly) content.addView(button("원본 보존 후 새로 시작",this::recover));
             if (error!=null) { TextView status=text(error,14,false); status.setTextColor(Color.rgb(160,45,35)); content.addView(status); }
         } catch(Exception e) { content.addView(text("기록을 표시하지 못했어요.",16,false)); }
         setContentView(root); root.requestApplyInsets();
@@ -128,9 +130,9 @@ public final class MainActivity extends Activity {
     }
     private void send() {
         JSONObject p=project(); if(p==null||busy)return;
-        if(change(()->state.append(activeID,p.optString("draft")))) {
+        if(change(()->state.append(activeID,editing.getOrDefault(activeID+":draft",p.optString("draft"))))) {
             ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(root.getWindowToken(),0);
-            render(); if(token!=null)ask();
+            editing.remove(activeID+":draft"); render(); if(token!=null)ask();
         }
     }
     private void consent() {
@@ -162,13 +164,14 @@ public final class MainActivity extends Activity {
     private void intent(){
         JSONObject p=project();if(p==null)return;String id=activeID;
         LinearLayout box=column();box.setPadding(dp(24),dp(12),dp(24),dp(12));box.addView(text("누구를 위해, 무엇을 바꾸고, 어떤 작은 행동으로 확인할지 내 말로 적어 보세요.",16,false));
-        EditText field=editor("지금 내가 원하는 변화",p.optString("intentDraft"),"의도 입력");field.setMinLines(4);watch(field,"intentDraft",id);box.addView(field);
+        EditText field=editor("지금 내가 원하는 변화",editing.getOrDefault(id+":intentDraft",p.optString("intentDraft")),"의도 입력");field.setMinLines(4);watch(field,"intentDraft",id);box.addView(field);
         try {JSONArray revisions=p.getJSONArray("revisions");if(revisions.length()>0){box.addView(text("생각이 바뀐 기록",14,true));for(int i=0;i<revisions.length();i++)box.addView(text((i+1)+". "+revisions.getJSONObject(i).getString("text"),14,false));}}catch(Exception ignored){}
         ScrollView scroller=new ScrollView(this);scroller.addView(box);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("나의 의도").setView(scroller).setNegativeButton("닫기",null).setPositiveButton("내 의도로 확인",null).create();
-        dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->{if(change(()->state.confirm(id,field.getText().toString()))){dialog.dismiss();render();}}));dialog.show();
+        dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->{if(change(()->state.confirm(id,field.getText().toString()))){editing.remove(id+":intentDraft");dialog.dismiss();render();}}));dialog.show();
     }
     private void history(){try{JSONArray all=state.projects();String[] labels=new String[all.length()+1];labels[0]="새 생각 기록하기";for(int i=0;i<all.length();i++)labels[i+1]=all.getJSONObject(i).getString("title");new AlertDialog.Builder(this).setTitle("나의 기록").setItems(labels,(d,index)->{if(index==0)newProject();else try{cancel();activeID=all.getJSONObject(index-1).getString("id");render();}catch(Exception ignored){}}).show();}catch(Exception ignored){}}
-    private void menu(){new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제","전체 기록 내보내기","현재 기록 삭제"},(d,i)->{if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
-    private void export(){try{File dir=new File(getCacheDir(),"exports");if(!dir.exists()&&!dir.mkdirs())throw new IOException();File file=new File(dir,"HP-Studio-records.json");try(FileOutputStream out=new FileOutputStream(file)){out.write(state.data.toString(2).getBytes(StandardCharsets.UTF_8));}Intent share=new Intent(Intent.ACTION_SEND);share.setType("application/json");share.putExtra(Intent.EXTRA_STREAM,FileProvider.getUriForFile(this,getPackageName()+".files",file));share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(share,"나의 기록 내보내기"));}catch(Exception e){error="기록을 내보내지 못했어요.";render();}}
+    private void menu(){new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제",readOnly?"읽지 못한 원본 내보내기":"전체 기록 내보내기","현재 기록 삭제"},(d,i)->{if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
+    private void recover(){new AlertDialog.Builder(this).setTitle("원본을 보존하고 새로 시작할까요?").setMessage("읽지 못한 원본은 기기에 별도 보관해요. 먼저 원본 내보내기로 외부에 복사해 두세요.").setNegativeButton("취소",null).setPositiveButton("원본 보존 후 새로 시작",(d,w)->{try{File backup=new File(getFilesDir(),"recovery-"+UUID.randomUUID()+".json");try(FileOutputStream out=new FileOutputStream(backup)){out.write(records.readFully());}readOnly=false;if(change(()->{state=new StudioState();activeID=null;})){error=null;render();}else readOnly=true;}catch(Exception e){error="원본을 보존하지 못해 초기화하지 않았어요.";render();}}).show();}
+    private void export(){try{File dir=new File(getCacheDir(),"exports");if(!dir.exists()&&!dir.mkdirs())throw new IOException();File file=new File(dir,readOnly?"HP-Studio-recovery-original.json":"HP-Studio-records.json");try(FileOutputStream out=new FileOutputStream(file)){out.write(readOnly?records.readFully():state.data.toString(2).getBytes(StandardCharsets.UTF_8));}Intent share=new Intent(Intent.ACTION_SEND);share.setType("application/json");share.putExtra(Intent.EXTRA_STREAM,FileProvider.getUriForFile(this,getPackageName()+".files",file));share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(share,"나의 기록 내보내기"));}catch(Exception e){error="기록을 내보내지 못했어요.";render();}}
 }
