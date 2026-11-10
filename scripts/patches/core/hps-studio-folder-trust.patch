@@ -5,7 +5,7 @@ Hand-maintained: edit by applying to scripts/patches/core/upstream, then write g
 
 diff --git a/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
 new file mode 100644
-index 0000000..4356f15
+index 0000000..5c00b79
 --- /dev/null
 +++ b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
 @@ -0,0 +1,127 @@
@@ -21,7 +21,7 @@ index 0000000..4356f15
 +/** Machine-scope, default-off setting. The core reads the user-local value itself. */
 +export const HPS_STUDIO_FLAG = 'hypeproofChat.trustStudioFolders';
 +export const HPS_STUDIO_EXTENSION_ID = 'hypeproof.hypeproof-chat';
-+/** Storage key (PROFILE scope) where the workbench keeps the disabled extension identifiers. */
++/** Storage key (PROFILE and WORKSPACE scope) where the workbench keeps the disabled extension identifiers. */
 +export const HPS_DISABLED_EXTENSIONS_KEY = 'extensionsIdentifiers/disabled';
 +/** Application-scope list of folders the learner explicitly refused ("Don't Trust"). */
 +export const HPS_STUDIO_DENIED_KEY = 'hypeproof.studioFolderTrustDenied';
@@ -99,8 +99,8 @@ index 0000000..4356f15
 +export interface IHpsStudioTrustInput {
 +	/** `inspect(HPS_STUDIO_FLAG).userLocalValue === true`, never a workspace or default value. */
 +	readonly flagOn: boolean;
-+	/** Raw `extensionsIdentifiers/disabled` (PROFILE). */
-+	readonly disabledExtensionsRaw: string | undefined;
++	/** Raw `extensionsIdentifiers/disabled` from the PROFILE and the WORKSPACE scope; either disables the extension. */
++	readonly disabledExtensionsRaws: readonly (string | undefined)[];
 +	/** Raw extension globalState blobs, in lookup order (PROFILE, APPLICATION). The first present record decides. */
 +	readonly recordRaws: readonly (string | undefined)[];
 +	/** Raw `HPS_STUDIO_DENIED_KEY` value. */
@@ -121,7 +121,7 @@ index 0000000..4356f15
 +	if (!input.flagOn || input.uri.scheme !== 'file' || input.birth === undefined) {
 +		return false;
 +	}
-+	if (hpsExtensionDisabled(input.disabledExtensionsRaw)) {
++	if (input.disabledExtensionsRaws.some(hpsExtensionDisabled)) {
 +		return false;
 +	}
 +	const denied = hpsDeniedOf(input.deniedRaw);
@@ -137,7 +137,7 @@ index 0000000..4356f15
 +	return false;
 +}
 diff --git a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
-index e349da9..a4b3161 100644
+index e349da9..43a0904 100644
 --- a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
 +++ b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
 @@ -25,6 +25,7 @@ import { isWeb } from '../../../../base/common/platform.js';
@@ -178,7 +178,7 @@ index e349da9..a4b3161 100644
  		let resultState = false;
  		let maxLength = -1;
  
-@@ -400,10 +410,57 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+@@ -400,10 +410,58 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
  		return { trusted: resultState, uri: resultUri };
  	}
  
@@ -189,7 +189,7 @@ index e349da9..a4b3161 100644
 +		} catch { }
 +		return hpsIsStudioCreatedFolder({
 +			flagOn,
-+			disabledExtensionsRaw: this.storageService.get(HPS_DISABLED_EXTENSIONS_KEY, StorageScope.PROFILE),
++			disabledExtensionsRaws: [StorageScope.PROFILE, StorageScope.WORKSPACE].map(scope => this.storageService.get(HPS_DISABLED_EXTENSIONS_KEY, scope)),
 +			recordRaws: [StorageScope.PROFILE, StorageScope.APPLICATION].map(scope => this.storageService.get(HPS_STUDIO_EXTENSION_ID, scope)),
 +			deniedRaw: this.storageService.get(HPS_STUDIO_DENIED_KEY, StorageScope.APPLICATION),
 +			uri,
@@ -221,7 +221,8 @@ index e349da9..a4b3161 100644
 +		if (uri.scheme !== Schemas.file) {
 +			return false;
 +		}
-+		// An explicit "Don't Trust" wins over the Studio record and is remembered (fail closed).
++		// An explicit "Don't Trust" wins over the Studio record and is remembered (fail closed). It is stored even while
++		// the flag is off: it can only add prompts, and a refusal should survive the flag being turned on later.
 +		this.storageService.store(HPS_STUDIO_DENIED_KEY, hpsDeniedWith(previous, uri.fsPath, isSamePath), StorageScope.APPLICATION, StorageTarget.MACHINE);
 +		return true;
 +	}
@@ -236,7 +237,7 @@ index e349da9..a4b3161 100644
  			if (trusted) {
  				if (this.isTrustedVirtualResource(uri)) {
  					continue;
-@@ -616,7 +673,9 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+@@ -616,7 +674,9 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
  			return { trusted: true, uri };
  		}
  

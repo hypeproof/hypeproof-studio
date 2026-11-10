@@ -52,13 +52,6 @@ export function createStudioFolder(dir: string): StudioFolder | undefined {
   } catch { return undefined; }
 }
 
-/** Make the folder (see `createStudioFolder`) then run `prepare`. Returns the creation entry, or undefined when the folder was not made by this call. */
-export function prepareStudioFolder(dir: string, prepare: () => void): StudioFolder | undefined {
-  const created = createStudioFolder(dir);
-  prepare();
-  return created;
-}
-
 export interface StudioFolderStore { get(key: string): unknown; update(key: string, value: unknown): PromiseLike<void> | void; }
 
 /** Record `created` (only what `prepareStudioFolder` returned). Never throws (a failure only means the normal prompt). */

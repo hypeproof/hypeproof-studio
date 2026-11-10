@@ -15,7 +15,7 @@ import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
-import { prepareStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
+import { createStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -1261,7 +1261,9 @@ async function openWorkspaceFolder(
   // REQ-STUDIO-TRUST-OWN-FOLDERS - only a leaf folder this call makes (non-recursive mkdir) is recorded.
   let createdFolder: StudioFolder | undefined;
   try {
-    const prepare=()=>{ createdFolder = prepareStudioFolder(dir, () => prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile))); };
+    // ActivityConnections.prepare makes the folder itself, so the leaf is created here first.
+    createdFolder = createStudioFolder(dir);
+    const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
     // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();

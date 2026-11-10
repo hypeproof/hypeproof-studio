@@ -17,7 +17,7 @@ import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ts = createRequire(import.meta.url)("typescript");
-const { STUDIO_FOLDERS_KEY, createStudioFolder, prepareStudioFolder, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
+const { STUDIO_FOLDERS_KEY, createStudioFolder, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
 const { prepareWorkspaceDirectory } = await import("../src/workspacePreparation.ts");
 const repo = path.resolve(here, "../../..");
 const coreDir = path.join(repo, "scripts/patches/core");
@@ -40,7 +40,9 @@ try {
   const store = memory();
   const makes = [];
   for (const dir of [created, preexisting, path.join(home, "deep", "er", "Trial")]) {
-    makes.push(prepareStudioFolder(dir, () => prepareWorkspaceDirectory(dir, "empty", () => "")));
+    const made = createStudioFolder(dir);
+    prepareWorkspaceDirectory(dir, "empty", () => "");
+    makes.push(made);
   }
   assert.equal(makes[1], undefined, "a folder that already existed is not Studio's");
   assert.equal(makes[0].path, created);
@@ -55,10 +57,11 @@ try {
   assert.equal(createStudioFolder(dangling), undefined, "a pre-planted dangling symlink is not recorded");
   // Folder appearing between the caller's decision and our mkdir (TOCTOU): the leaf mkdir fails, nothing is recorded.
   const raced = path.join(home, "raced");
-  assert.equal(prepareStudioFolder(raced, () => {}) !== undefined, true);
+  assert.equal(createStudioFolder(raced) !== undefined, true);
   assert.equal(createStudioFolder(raced), undefined, "second creator of the same leaf records nothing");
-  // A failing prepare after the mkdir records nothing (the error propagates before the caller records).
-  assert.throws(() => prepareStudioFolder(path.join(home, "boom"), () => { throw new Error("x"); }));
+  // A leaf under a file (mkdir fails with ENOTDIR) throws and records nothing.
+  fs.writeFileSync(path.join(home, "afile"), "x");
+  assert.throws(() => createStudioFolder(path.join(home, "afile", "leaf")));
   // Same path re-created by Studio later replaces the entry with the new creation time.
   const again = path.join(home, "again"); const first = createStudioFolder(again);
   await syncStudioFolderRecord(store, first);
@@ -68,12 +71,42 @@ try {
   assert.deepEqual(studioFolderRecordOf(store.get(STUDIO_FOLDERS_KEY)).folders.filter((f) => f.path === again), [second]);
   assert.deepEqual(studioFolderRecordOf({ v: 1, enabled: true, folders: ["/a"] }), { v: 2, folders: [] }, "old shape / malformed -> empty");
 
+  // 1b. The real ActivityConnections.prepare creates the folder itself (mkdir recursive), so the extension must
+  //     create the leaf first. Run the exact sequence openWorkspaceFolder uses, through the real class.
+  {
+    const { build } = await import("esbuild");
+    const bundle = await build({ stdin: { contents: "export {ActivityConnections} from './src/activityConnections';", resolveDir: path.join(here, ".."), loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
+    const mod = { exports: {} }; new Function("module", "exports", "require", bundle.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
+    const gs = new Map(); const secrets = new Map();
+    const rawCtx = { globalStorageUri: { fsPath: path.join(home, "gs") }, globalState: { get: (k) => gs.get(k), update: async (k, v) => { gs.set(k, v); }, keys: () => [...gs.keys()] },
+      secrets: { get: async (k) => secrets.get(k), store: async (k, v) => { secrets.set(k, v); }, delete: async (k) => { secrets.delete(k); }, keys: async () => [...secrets.keys()], onDidChange: () => ({ dispose() {} }) } };
+    const dir = path.join(home, "ClassFolder");
+    const profile = { profile_id: "p", activity_id: "c".repeat(64), activity_kind: "personal", display_name: "x", workspace_start: "empty" };
+    const conn = new mod.exports.ActivityConnections(rawCtx, () => "http://127.0.0.1:8787/v1", () => dir, async () => profile);
+    const open = async (target) => {   // same order as extension.ts openWorkspaceFolder
+      const made = createStudioFolder(target);
+      conn.prepare(target, profile, () => prepareWorkspaceDirectory(target, "empty", () => ""), await conn.folderOwners(target));
+      return made;
+    };
+    const first = await open(dir);
+    assert.ok(first && first.path === dir && fs.existsSync(dir), "class/trial path: the folder Studio makes through ActivityConnections is recorded");
+    const reopened = await open(dir);
+    assert.equal(reopened, undefined, "reopening the same folder records nothing new");
+    const mine = path.join(home, "AlreadyMine"); fs.mkdirSync(mine);
+    assert.equal(await open(mine), undefined, "a pre-existing folder opened through ActivityConnections is not recorded");
+    // The order matters: creating the leaf after prepare finds it already there.
+    const late = path.join(home, "LateOrder");
+    conn.prepare(late, profile, () => prepareWorkspaceDirectory(late, "empty", () => ""), await conn.folderOwners(late));
+    assert.equal(createStudioFolder(late), undefined, "(why the order matters) ActivityConnections.prepare mkdirs first");
+  }
+
   // 2. The real call site.
   const ext = fs.readFileSync(path.join(here, "../src/extension.ts"), "utf8");
   const site = ext.slice(ext.indexOf("async function openWorkspaceFolder("));
   const siteBody = site.slice(0, site.indexOf("\n}\n"));
-  assert.match(siteBody, /createdFolder = prepareStudioFolder\(dir, \(\) => prepareWorkspaceDirectory\(dir,/, "the folder is made through prepareStudioFolder");
-  assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only prepareStudioFolder's result is recorded");
+  assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
+    && siteBody.indexOf("createdFolder = createStudioFolder(dir);") < siteBody.indexOf("connections.prepare("), "the leaf is created before ActivityConnections.prepare (which mkdirs it)");
+  assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");
   assert.ok(!/studioFoldersFlag/.test(ext), "the extension no longer decides trust from the flag");
@@ -166,6 +199,10 @@ try {
   assert.equal(await trusted(w, created), false, "chat extension disabled: the record alone grants nothing");
   w.put(SCOPE.PROFILE, "extensionsIdentifiers/disabled", JSON.stringify([{ id: "some.other" }]));
   assert.equal(await trusted(w, created), true, "another extension disabled: unaffected");
+  w.put(SCOPE.PROFILE, "extensionsIdentifiers/disabled", "[]");
+  w.put(SCOPE.WORKSPACE, "extensionsIdentifiers/disabled", JSON.stringify([{ id: "hypeproof.hypeproof-chat" }]));
+  assert.equal(await trusted(w, created), false, "chat extension disabled for this workspace: prompts");
+  w.values.delete(`${SCOPE.WORKSPACE}|extensionsIdentifiers/disabled`);
   w.put(SCOPE.PROFILE, "extensionsIdentifiers/disabled", "{broken");
   assert.equal(await trusted(w, created), false, "unreadable disabled list: prompts");
   // Records: first present record decides (no fall-through to a stale APPLICATION one).
@@ -194,12 +231,13 @@ try {
   assert.equal(fresh.o.isHpsStudioCreatedFolder(at(deepTrial)), false, "remembered across sessions (storage)");
   assert.equal(fresh.o.rememberHpsStudioChoice(at(deepTrial), true), false);
   assert.equal(fresh.o.isHpsStudioCreatedFolder(at(deepTrial)), true, "an explicit Trust lifts the refusal");
-  w = world(); w.put(SCOPE.APPLICATION, "hypeproof.studioFolderTrustDenied", "{bad");
-  assert.equal(await trusted(w, created), false, "unreadable refusal list: prompts");
+  w = world(); assert.equal(await trusted(w, deepTrial), true, "control: the folder is trusted before the list is damaged");
+  w.put(SCOPE.APPLICATION, "hypeproof.studioFolderTrustDenied", "{bad");
+  assert.equal(await trusted(w, deepTrial), false, "unreadable refusal list: prompts");
 
   // Pure decision edges.
   const same = (a, b) => a === b;
-  const input = (over = {}) => ({ flagOn: true, disabledExtensionsRaw: undefined, deniedRaw: undefined, uri: { scheme: "file", fsPath: "/f" }, birth: 5, isSamePath: same,
+  const input = (over = {}) => ({ flagOn: true, disabledExtensionsRaws: [undefined, undefined], deniedRaw: undefined, uri: { scheme: "file", fsPath: "/f" }, birth: 5, isSamePath: same,
     recordRaws: [JSON.stringify({ [STUDIO_FOLDERS_KEY]: { v: 2, folders: [{ path: "/f", birth: 5 }] } })], ...over });
   assert.equal(pure.hpsIsStudioCreatedFolder(input()), true);
   assert.equal(pure.hpsIsStudioCreatedFolder(input({ flagOn: false })), false, "flag off");
