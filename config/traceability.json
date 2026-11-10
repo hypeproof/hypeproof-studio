@@ -8896,6 +8896,62 @@
       ]
     },
     {
+      "id": "ST-REQ-LESSON-STARTERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-STARTERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonStarters.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonStarters.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-STARTERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS",
+        "ST-IMP-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-starters.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-ACTIVITY-TRASH",
       "stage": "requirement",
       "owner": "jayleekr",
