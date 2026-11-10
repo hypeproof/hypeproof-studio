@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -167,6 +168,38 @@ class AcceptanceContract(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", env)
         self.assertNotIn("APPLE_DISTRIBUTION_PASSWORD", env)
 
+    def test_subprocess_preserves_owned_adb_routing_and_sdk_environment(self):
+        process = Mock(pid=12345)
+        process.wait.return_value = 0
+        routing = {"ADB_SERVER_SOCKET": "tcp:127.0.0.1:5058",
+                   "ANDROID_ADB_SERVER_PORT": "5058", "ANDROID_SERIAL": "emulator-5586",
+                   "ANDROID_HOME": "/synthetic/sdk", "ANDROID_SDK_ROOT": "/synthetic/sdk",
+                   "JAVA_HOME": "/synthetic/java", "GRADLE_USER_HOME": "/synthetic/gradle"}
+        with patch.dict(os.environ, routing, clear=True), patch.object(adapter.subprocess, "Popen", return_value=process) as popen:
+            adapter.invoke(["/bin/bash", "fixed-fixture.sh"], self.root, self.root / "routing.log", 1)
+        for key, value in routing.items():
+            self.assertEqual(popen.call_args.kwargs["env"][key], value)
+
+    def test_invalid_adb_routing_fails_before_subprocess(self):
+        cases = [{"ADB_SERVER_SOCKET": value} for value in (
+            "tcp:192.168.1.2:5058", "tcp:0.0.0.0:5058", "tcp:127.0.0.1:0",
+            "tcp:localhost:65536", "tcp:localhost:abc", "localfilesystem:/tmp/adb", "")]
+        cases += [{"ANDROID_ADB_SERVER_PORT": value} for value in ("", "0", "65536", "5x", " 5058")]
+        cases += [{"ADB_SERVER_SOCKET": "tcp:127.0.0.1:5058", "ANDROID_ADB_SERVER_PORT": "5037"},
+                  {"ANDROID_ADB_SERVER_ADDRESS": "192.168.1.2"}]
+        for routing in cases:
+            with self.subTest(routing=routing), patch.dict(os.environ, routing, clear=True), patch.object(adapter.subprocess, "Popen") as popen:
+                with self.assertRaises(adapter.Refused):
+                    adapter.invoke(["/bin/bash", "fixed-fixture.sh"], self.root, self.root / "refused.log", 1)
+                popen.assert_not_called()
+                self.assertFalse((self.root / "refused.log").exists())
+
+    def test_adb_port_only_and_loopback_socket_forms(self):
+        for routing in ({"ANDROID_ADB_SERVER_PORT": "5058"},
+                        {"ADB_SERVER_SOCKET": "tcp:localhost:5058"}, {}):
+            with self.subTest(routing=routing), patch.dict(os.environ, routing, clear=True):
+                self.assertEqual(adapter.adb_environment(), routing)
+
     def test_subprocess_timeout_signals_only_its_owned_process_group(self):
         process = Mock(pid=12345)
         process.wait.side_effect = [adapter.subprocess.TimeoutExpired("fixture", 1), 0]
@@ -190,6 +223,84 @@ class SourceContract(unittest.TestCase):
                 with self.subTest(responses=responses), patch.object(adapter, "git", side_effect=responses):
                     with self.assertRaises(adapter.Refused):
                         adapter.source_identity(root)
+
+
+class RealGitSourceContract(unittest.TestCase):
+    """Real temporary Git repositories, synthetic source; no build or device."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.source = self.root / adapter.NATIVE / "ios/App/Intent.swift"
+        self.source.parent.mkdir(parents=True)
+        self.source.write_text("// synthetic reviewed source\n")
+        adapter.git(self.root, "init", "-q")
+        adapter.git(self.root, "add", ".")
+        adapter.git(self.root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                    "-c", "commit.gpgsign=false", "commit", "-qm", "synthetic fixture")
+        self.baseline = adapter.source_identity(self.root)
+
+    def test_assume_unchanged_and_skip_worktree_refused(self):
+        relative = str(self.source.relative_to(self.root))
+        for flag in ("assume-unchanged", "skip-worktree"):
+            with self.subTest(flag=flag):
+                adapter.git(self.root, "update-index", "--" + flag, relative)
+                self.source.write_text("// unreviewed hidden mutation\n")
+                with self.assertRaisesRegex(adapter.Refused, "index flags"):
+                    adapter.source_identity(self.root)
+                adapter.git(self.root, "update-index", "--no-" + flag, relative)
+                self.source.write_text("// synthetic reviewed source\n")
+
+    def test_info_exclude_cannot_hide_compiler_input(self):
+        (self.root / ".git/info/exclude").write_text("Unreviewed.swift\n")
+        self.source.with_name("Unreviewed.swift").write_text("// hidden compiler input\n")
+        with self.assertRaisesRegex(adapter.Refused, "ignored native input"):
+            adapter.source_identity(self.root)
+
+    def test_independent_bytes_check_does_not_trust_diff(self):
+        self.source.write_text("// changed bytes\n")
+        with self.assertRaisesRegex(adapter.Refused, "bytes differ"):
+            adapter.verify_native_index(self.root)
+
+    def test_mode_check_ignores_core_filemode_shortcut(self):
+        adapter.git(self.root, "config", "core.filemode", "false")
+        self.source.chmod(0o755)
+        with self.assertRaisesRegex(adapter.Refused, "mode differs"):
+            adapter.source_identity(self.root)
+
+    def test_ignored_build_roots_never_reach_native_invocation(self):
+        native = self.root / adapter.NATIVE
+        (native / ".gitignore").write_text("evidence/\n.build/\nDerivedData*/\n.gradle/\nbuild/\n")
+        (native / "scripts").mkdir()
+        for spec in adapter.PLATFORMS.values():
+            (native / "scripts" / spec["script"]).write_text("# synthetic; never run\n")
+        adapter.git(self.root, "add", ".")
+        adapter.git(self.root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                    "-c", "commit.gpgsign=false", "commit", "-qm", "synthetic recipes")
+        with tempfile.TemporaryDirectory() as outside:
+            for platform in adapter.PLATFORMS:
+                for relative in adapter.GENERATED_BUILD_ROOTS:
+                    with self.subTest(platform=platform, relative=relative):
+                        root = native / relative
+                        root.mkdir(parents=True)
+                        (root / "Build").symlink_to(outside, target_is_directory=True)
+                        with patch.object(adapter, "invoke") as invoke:
+                            code, receipt = adapter.accept(self.root, platform)
+                        self.assertEqual(code, 2)
+                        self.assertEqual(receipt["verdict"], "BLOCKED")
+                        self.assertIn("existing output", receipt["reason"])
+                        invoke.assert_not_called()
+                        self.assertTrue((root / "Build").is_symlink())
+                        shutil.rmtree(root)  # Only this temporary fixture's files.
+                        shutil.rmtree(native / "evidence")
+
+    def test_reviewed_staged_source_still_accepted(self):
+        self.source.write_text("// reviewed new candidate\n")
+        adapter.git(self.root, "add", str(self.source.relative_to(self.root)))
+        candidate = adapter.source_identity(self.root)
+        self.assertTrue(candidate["dirty"])
+        self.assertNotEqual(candidate["candidate_tree"], self.baseline["candidate_tree"])
+        self.assertEqual(candidate["verified_worktree_scope"], str(adapter.NATIVE))
 
 
 if __name__ == "__main__":

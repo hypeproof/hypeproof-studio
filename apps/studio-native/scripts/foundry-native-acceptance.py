@@ -17,6 +17,10 @@ import time
 NATIVE = Path("apps/studio-native")
 CHANGE_ROOTS = tuple((NATIVE / relative).as_posix() + "/" for relative in (
     "ios/App", "ios/Sources", "ios/Tests", "ios/UITests", "android/app/src"))
+# Shared by identity's post-build allowance and the pre-execution freshness gate.
+GENERATED_BUILD_ROOTS = (
+    "ios/.build", "ios/DerivedData", "ios/DerivedData-device", "ios/DerivedData-macos",
+    "android/.gradle", "android/build", "android/app/build")
 PRIVATE_SUFFIXES = {".p8", ".p12", ".pem", ".key", ".mobileprovision", ".keystore", ".jks"}
 PLATFORMS = {
     "ios": {
@@ -110,6 +114,51 @@ def git(workspace: Path, *args: str) -> bytes:
     return p.stdout
 
 
+def verify_native_index(workspace: Path) -> None:
+    """Check actual native inputs, independent of Git's worktree/cache shortcuts."""
+    flags = git(workspace, "ls-files", "-v", "-z").split(b"\0")
+    if any(entry and (entry[:1].islower() or entry[:1] == b"S") for entry in flags):
+        raise Refused("Candidate has assume-unchanged or skip-worktree index flags")
+    # These are generated outputs, never trusted source. Acceptance separately
+    # refuses stale platform outputs before running and inventories outputs after.
+    generated = tuple(str(NATIVE / relative) + "/" for relative in (
+        "evidence", "scripts/__pycache__", "tests/__pycache__", *GENERATED_BUILD_ROOTS))
+    # Omit --exclude-standard deliberately: ignored files are still real inputs.
+    for entry in git(workspace, "ls-files", "--others", "-z", "--", str(NATIVE)).split(b"\0"):
+        if entry:
+            name = os.fsdecode(entry)
+            if not name.startswith(generated):
+                raise Refused("Untracked or ignored native input: " + name)
+    for entry in git(workspace, "ls-files", "--stage", "-z", "--", str(NATIVE)).split(b"\0"):
+        if not entry:
+            continue
+        metadata, raw_name = entry.split(b"\t", 1)
+        mode, object_id, stage = metadata.split()
+        name = os.fsdecode(raw_name)
+        if stage != b"0" or mode not in (b"100644", b"100755"):
+            raise Refused("Native input must be a resolved regular indexed file: " + name)
+        path = safe_path(workspace, workspace / name)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            before = os.fstat(fd)
+            actual_mode = b"100755" if before.st_mode & stat.S_IXUSR else b"100644"
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or mode != actual_mode:
+                raise Refused("Native input mode differs from index: " + name)
+            digest = hashlib.sha1(b"blob " + str(before.st_size).encode() + b"\0")
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            after = os.fstat(fd)
+            current = path.lstat()
+            identity = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+            if identity(before) != identity(after) or identity(after) != identity(current):
+                raise Refused("Native input changed while hashing: " + name)
+            if digest.hexdigest().encode() != object_id:
+                raise Refused("Native input bytes differ from index: " + name)
+        finally:
+            os.close(fd)
+
+
 def source_identity(workspace: Path) -> dict:
     top = Path(git(workspace, "rev-parse", "--show-toplevel").decode().strip()).resolve()
     if top != workspace:
@@ -129,9 +178,38 @@ def source_identity(workspace: Path) -> dict:
                 or Path(name).name.startswith(".env")):
             raise Refused("Reviewed patch exceeds native app/test scope or contains credential material")
         safe_path(workspace, workspace / name, missing=True)
+    verify_native_index(workspace)
     return {"head": head, "candidate_tree": git(workspace, "write-tree").decode().strip(),
+            "verified_worktree_scope": str(NATIVE),
             "patch_sha256": sha(patch), "patch_format": "git diff --cached --full-index --binary HEAD",
             "dirty": bool(changed), "changed_paths": changed}
+
+
+def adb_environment() -> dict[str, str]:
+    """Preserve explicit local runner routing; never silently replace it with 5037.
+
+    Address validation does not prove server ownership; the caller owns that gate.
+    Unsupported address/socket forms fail closed before any subprocess starts.
+    """
+    if "ANDROID_ADB_SERVER_ADDRESS" in os.environ:
+        raise Refused("Unsupported ANDROID_ADB_SERVER_ADDRESS; use a loopback ADB_SERVER_SOCKET")
+    result = {}
+    socket_port = None
+    if "ADB_SERVER_SOCKET" in os.environ:
+        value = os.environ["ADB_SERVER_SOCKET"]
+        match = re.fullmatch(r"tcp:(127\.0\.0\.1|localhost):([0-9]{1,5})", value)
+        if not match or not 1 <= int(match[2]) <= 65535:
+            raise Refused("ADB_SERVER_SOCKET must be tcp:127.0.0.1:PORT or tcp:localhost:PORT")
+        socket_port = int(match[2])
+        result["ADB_SERVER_SOCKET"] = value
+    if "ANDROID_ADB_SERVER_PORT" in os.environ:
+        value = os.environ["ANDROID_ADB_SERVER_PORT"]
+        if not re.fullmatch(r"[0-9]{1,5}", value) or not 1 <= int(value) <= 65535:
+            raise Refused("ANDROID_ADB_SERVER_PORT must be a port from 1 through 65535")
+        if socket_port is not None and socket_port != int(value):
+            raise Refused("Conflicting ADB server socket and port")
+        result["ANDROID_ADB_SERVER_PORT"] = value
+    return result
 
 
 def invoke(argv: list[str], workspace: Path, log: Path, timeout: int) -> dict:
@@ -139,6 +217,7 @@ def invoke(argv: list[str], workspace: Path, log: Path, timeout: int) -> dict:
     env = {k: v for k, v in os.environ.items() if k in {
         "PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "JAVA_HOME", "ANDROID_HOME",
         "ANDROID_SDK_ROOT", "ANDROID_SERIAL", "GRADLE_USER_HOME", "DEVELOPER_DIR"}}
+    env.update(adb_environment())
     start = time.monotonic()
     with log.open("xb") as stream:
         process = subprocess.Popen(argv, cwd=workspace, env=env, stdout=stream,
@@ -230,9 +309,11 @@ def accept(workspace: Path, platform: str, expected_source: str | None = None,
         if expected_script is not None and receipt["recipe"]["sha256"] != expected_script:
             raise Refused("Platform recipe SHA256 mismatch")
         # Refuse stale outputs, including symlinks, without deleting owner data.
-        stale_roots = spec["roots"] if platform != "ios" else ["ios/DerivedData-device", "ios/DerivedData", "ios/.build"]
+        # Every identity-exempt build root must be absent, including its ancestors
+        # being symlinks. No cached build tree is trusted merely because ignored.
+        stale_roots = list(GENERATED_BUILD_ROOTS) + (spec["roots"] if platform != "ios" else [])
         for relative in stale_roots:
-            path = workspace / NATIVE / relative
+            path = safe_path(workspace, workspace / NATIVE / relative, missing=True)
             if path.exists() or path.is_symlink():
                 raise Refused("Use a fresh candidate: existing output " + relative)
         if platform == "ios":

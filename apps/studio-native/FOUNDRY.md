@@ -89,3 +89,37 @@ native subprocess execution, explicitly checking identity refusal, byte hashes,
 failed/missing/unsafe outputs, stale evidence, source mutation and duplicate
 invocation. They establish the recipe contract only, not native UI quality,
 Foundry runtime admission, signing or release readiness.
+
+## Android runner routing
+
+The caller must own the selected disposable emulator and ADB server. The recipe
+preserves `ANDROID_SERIAL`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `JAVA_HOME` and
+`GRADLE_USER_HOME`, which the existing Android recipe/build tools consume.
+Explicit `ADB_SERVER_SOCKET` supports only `tcp:127.0.0.1:PORT` or
+`tcp:localhost:PORT`; `ANDROID_ADB_SERVER_PORT` accepts ports 1–65535. Both can be
+set only with matching ports. Malformed, nonloopback and unsupported socket
+forms, and `ANDROID_ADB_SERVER_ADDRESS`, are refused before subprocess execution;
+explicit routing is never silently dropped in favor of port 5037. Without either
+routing variable, ADB retains its ordinary default, so the runner must provision
+and own that default server or supply its dedicated endpoint. Loopback validation
+alone does not establish ownership. No emulator or server is started by this
+adapter. Tests of propagation/refusal use mocked subprocesses only.
+
+Source binding also rejects Git assume-unchanged and skip-worktree flags. It
+compares actual tracked native input bytes and executable mode directly with the
+index; Git diff cleanliness alone is insufficient. Ignored files under the native
+workspace are rejected too, except enumerated generated build/evidence and Python
+cache directories. Use SDK environment variables instead of an ignored
+`android/local.properties`. Tracked native symlinks are refused. This byte check
+is explicitly scoped to `apps/studio-native`; the receipt retains the whole
+candidate tree identity separately. Real temporary Git negative fixtures cover
+hidden tracked edits, ignored compiler inputs and disabled Git mode checking;
+their files remain synthetic, not application build evidence.
+
+All enumerated generated build roots must be absent before any platform command
+runs, including `ios/DerivedData-macos`, `android/app/build`, `android/build` and
+`android/.gradle`. This shared list also defines the post-build source-check
+exemption, so ignored outputs cannot become a preexisting trusted build cache.
+Existing trees or symlink ancestors are refused without cleanup or execution.
+Real-Git fixtures cover every listed root on each platform with an external
+symlink beneath the ignored tree and assert that the native command never starts.
