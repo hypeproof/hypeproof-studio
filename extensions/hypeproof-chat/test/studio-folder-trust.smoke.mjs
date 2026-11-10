@@ -17,7 +17,7 @@ import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ts = createRequire(import.meta.url)("typescript");
-const { STUDIO_FOLDERS_KEY, createStudioFolder, discardStudioFolder, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
+const { STUDIO_FOLDERS_KEY, createStudioFolder, discardStudioFolder, discardStudioFolderAfterFailure, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
 const { prepareWorkspaceDirectory } = await import("../src/workspacePreparation.ts");
 const repo = path.resolve(here, "../../..");
 const coreDir = path.join(repo, "scripts/patches/core");
@@ -87,7 +87,7 @@ try {
       let made;
       try { made = createStudioFolder(target); } catch { made = undefined; }
       try { conn.prepare(target, prof, () => prepareWorkspaceDirectory(target, "empty", () => ""), await conn.folderOwners(target)); }
-      catch (error) { if (!(error instanceof mod.exports.ActivityFolderInUseError)) discardStudioFolder(made); throw error; }
+      catch (error) { discardStudioFolderAfterFailure(made, error); throw error; }
       return made;
     };
     const first = await open(dir);
@@ -119,6 +119,23 @@ try {
       assert.ok(busyErr instanceof mod.exports.ActivityFolderInUseError, "the loser sees the busy error");
       assert.equal(fs.existsSync(race), true, "busy loser does not remove the folder the other window is opening");
       fs.rmSync(lockFile + ".recovery", { recursive: true }); fs.rmSync(lockFile);
+      // Live window: the other window holds the lock with a live pid (no recovery dir) - the realistic race.
+      const live = path.join(home, "LiveLock");
+      const liveLock = conn.bindingPath(live) + ".lock";
+      fs.writeFileSync(liveLock, JSON.stringify({ pid: process.ppid, nonce: "window-b" }));
+      let liveErr; try { await open(live); } catch (e) { liveErr = e; }
+      assert.ok(liveErr instanceof mod.exports.ActivityFolderInUseError, "live-window lock is the in-use error");
+      assert.equal(fs.existsSync(live), true, "live-window lock loser keeps the folder");
+      // A lock file still being written (empty) is also someone else's.
+      const part = path.join(home, "PartialLock");
+      fs.writeFileSync(conn.bindingPath(part) + ".lock", "");
+      let partErr; try { await open(part); } catch (e) { partErr = e; }
+      assert.ok(partErr instanceof mod.exports.ActivityFolderInUseError, "partial lock is the in-use error");
+      assert.equal(fs.existsSync(part), true, "partial-lock loser keeps the folder");
+      fs.rmSync(liveLock); fs.rmSync(conn.bindingPath(part) + ".lock");
+      // The shared cleanup still removes for any other error.
+      const other = path.join(home, "OtherFail"); const madeOther = createStudioFolder(other);
+      discardStudioFolderAfterFailure(madeOther, new Error("x")); assert.equal(fs.existsSync(other), false, "other failures still discard");
       const taken = path.join(home, "TakenFolder");
       fs.writeFileSync(conn.bindingPath(taken), JSON.stringify({ version: 1, id: "another-activity" }), { mode: 0o600 });   // another activity holds this path; the folder itself is gone
       let takenErr; try { await open(taken, profile); } catch (e) { takenErr = e; }
@@ -147,7 +164,7 @@ try {
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
     && siteBody.indexOf("createdFolder = createStudioFolder(dir);") < siteBody.indexOf("connections.prepare("), "the leaf is created before ActivityConnections.prepare (which mkdirs it)");
   assert.match(siteBody, /try \{ createdFolder = createStudioFolder\(dir\); \} catch \{ createdFolder = undefined; \}/, "a create failure must not replace prepare's guidance");
-  assert.match(siteBody, /catch\(error\) \{\n[^\n]*\n\s+if\(!\(error instanceof ActivityFolderInUseError\)\)discardStudioFolder\(createdFolder\);/, "a failed open discards the folder it just made, except busy / taken");
+  assert.match(siteBody, /catch\(error\) \{\n[^\n]*\n\s+discardStudioFolderAfterFailure\(createdFolder, error\);/, "a failed open goes through the shared cleanup (keeps busy / taken)");
   assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");

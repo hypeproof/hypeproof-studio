@@ -64,6 +64,15 @@ export function discardStudioFolder(created: StudioFolder | undefined): void {
   } catch { /* leave it: it only ever means a normal prompt */ }
 }
 
+/**
+ * Cleanup after a failed open. An error that says someone else holds the folder (`folderInUse`: busy lock,
+ * FOLDER_TAKEN) means another window may be opening it right now, so the folder is left alone.
+ */
+export function discardStudioFolderAfterFailure(created: StudioFolder | undefined, error: unknown): void {
+  if ((error as { folderInUse?: unknown } | null)?.folderInUse === true) return;
+  discardStudioFolder(created);
+}
+
 export interface StudioFolderStore { get(key: string): unknown; update(key: string, value: unknown): PromiseLike<void> | void; }
 
 /** Record `created` (only what `prepareStudioFolder` returned). Never throws (a failure only means the normal prompt). */

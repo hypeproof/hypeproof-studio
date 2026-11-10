@@ -11,7 +11,7 @@ export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
 /** Someone else holds this folder (another activity, or another window mid-open): the folder is not ours to remove. */
-export class ActivityFolderInUseError extends ActivityConnectionError {}
+export class ActivityFolderInUseError extends ActivityConnectionError { readonly folderInUse = true; }
 /** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
 export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
 /**
@@ -397,9 +397,11 @@ export class ActivityConnections {
         return () => { if (fs.existsSync(lock) && JSON.parse(fs.readFileSync(lock,'utf8')).nonce === nonce) fs.unlinkSync(lock); };
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-        const owner = JSON.parse(fs.readFileSync(lock,'utf8'));
-        if (!Number.isInteger(owner.pid) || owner.pid < 1) throw new ActivityConnectionError('작업 폴더 잠금 정보를 확인할 수 없습니다.');
-        try { process.kill(owner.pid,0); }
+        // A lock another window is still writing (or one we cannot read) is someone else's: in use, not a generic failure.
+        let owner: { pid?: unknown; nonce?: unknown };
+        try { owner = JSON.parse(fs.readFileSync(lock,'utf8')); } catch { throw busy(); }
+        if (!Number.isInteger(owner.pid) || (owner.pid as number) < 1) throw busy();
+        try { process.kill(owner.pid as number,0); }
         catch (error) {
           if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
             // Serialize dead-owner recovery. Acquirers check this barrier both
@@ -407,17 +409,17 @@ export class ActivityConnections {
             try { fs.mkdirSync(recovery,{mode:0o700}); } catch { throw busy(); }
             try {
               if (fs.existsSync(lock)) {
-                const latest=JSON.parse(fs.readFileSync(lock,'utf8'));
+                let latest: { nonce?: unknown }; try { latest=JSON.parse(fs.readFileSync(lock,'utf8')); } catch { throw busy(); }
                 if (latest.nonce===owner.nonce) fs.unlinkSync(lock);
               }
             } finally { fs.rmdirSync(recovery); }
             continue;
           }
         }
-        throw new ActivityConnectionError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
+        throw busy();
       }
     }
-    throw new ActivityConnectionError('작업 폴더 잠금을 얻지 못했습니다. 다시 시도해 주세요.');
+    throw new ActivityFolderInUseError('작업 폴더 잠금을 얻지 못했습니다. 다시 시도해 주세요.');
   }
   wrap(): vscode.ExtensionContext {
     const original = this.raw.secrets;

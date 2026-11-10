@@ -9,13 +9,13 @@ export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
-import { ActivityConnectionError, ActivityFolderInUseError, ActivityConnections, activityConnections } from './activityConnections';
+import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
 import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
-import { createStudioFolder, discardStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
+import { createStudioFolder, discardStudioFolderAfterFailure, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -1270,7 +1270,7 @@ async function openWorkspaceFolder(
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
     // Busy or taken means another window/activity owns the folder (maybe opening it right now): leave it alone.
-    if(!(error instanceof ActivityFolderInUseError))discardStudioFolder(createdFolder); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
+    discardStudioFolderAfterFailure(createdFolder, error); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
     if(error instanceof ActivityConnectionError)throw error;
     noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
