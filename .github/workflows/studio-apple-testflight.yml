@@ -1,0 +1,44 @@
+name: Studio Apple TestFlight
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/studio-native-mobile-20261110']
+    paths: ['.github/workflows/studio-apple-testflight.yml', 'apps/studio-native/scripts/apple-upload.sh']
+permissions:
+  contents: read
+concurrency:
+  group: studio-apple-testflight
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: github.repository == 'hypeproof/hypeproof-studio'
+    environment: apple-native-preview
+    runs-on: macos-15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, macos]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive, validate and upload signed preview
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_DEVELOPER_TEAM_ID: ${{ vars.APPLE_DEVELOPER_TEAM_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPLE_DISTRIBUTION_P12: ${{ secrets.APPLE_DISTRIBUTION_P12 }}
+          APPLE_DISTRIBUTION_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_PASSWORD }}
+          APPLE_MAC_INSTALLER_P12: ${{ secrets.APPLE_MAC_INSTALLER_P12 }}
+          APPLE_MAC_INSTALLER_PASSWORD: ${{ secrets.APPLE_MAC_INSTALLER_PASSWORD }}
+          APPLE_PROFILE: ${{ matrix.platform == 'ios' && secrets.APPLE_IOS_PROFILE || secrets.APPLE_MACOS_PROFILE }}
+        run: bash apps/studio-native/scripts/apple-upload.sh '${{ matrix.platform }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-testflight-${{ matrix.platform }}-${{ github.sha }}
+          path: apps/studio-native/evidence/apple-${{ matrix.platform }}/
+          retention-days: 14

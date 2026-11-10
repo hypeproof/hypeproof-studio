@@ -70,3 +70,27 @@ privacy answers are separate from that API declaration.
 App Store Connect access is active as of 2026-11-10; both platform records,
 signing credentials, archive validation, upload and installed-device verification
 must be observed independently. No private signing key belongs in this repository.
+
+### Signed TestFlight pipeline
+
+`.github/workflows/studio-apple-testflight.yml` archives iOS and Mac Catalyst on
+separate disposable macOS runners, validates each package with Apple's upload
+tool, then uploads to App Store Connect. Both jobs are capped at 25 minutes.
+The initial preview branch triggers uploads only when the deployment workflow or
+script changes; subsequent runs can be dispatched once the workflow is on main.
+This pipeline distributes the native preview, not the existing VSCodium desktop.
+
+The `apple-native-preview` GitHub Environment must restrict deployment branches
+to the preview branch and `main`. It requires variables `APP_STORE_CONNECT_KEY_ID`,
+`APP_STORE_CONNECT_ISSUER_ID`, `APPLE_DEVELOPER_TEAM_ID`, and secrets
+`APP_STORE_CONNECT_PRIVATE_KEY`, `APPLE_DISTRIBUTION_P12`,
+`APPLE_DISTRIBUTION_PASSWORD`, `APPLE_MAC_INSTALLER_P12`,
+`APPLE_MAC_INSTALLER_PASSWORD`, `APPLE_IOS_PROFILE`, `APPLE_MACOS_PROFILE`.
+P12 and provisioning profile secrets are base64; the API key is PEM text.
+The runner uses a temporary keychain and deletes its signing material on exit.
+Only packages, public identity metadata and build/upload evidence are retained.
+The app uses operating-system HTTPS, not custom or non-exempt encryption.
+
+An upload success is not tester availability. Verify Apple's processing status,
+attach each valid build to an internal TestFlight group, and observe test account
+access separately. Internal-only builds do not require public App Store release.

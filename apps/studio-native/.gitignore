@@ -6,6 +6,7 @@ build/
 local.properties
 *.keystore
 *.p12
+*.p8
 *.mobileprovision
 DerivedData-device/
 DerivedData-macos/

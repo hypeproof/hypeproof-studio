@@ -17735,6 +17735,12 @@
         },
         {
           "path": "apps/studio-native/scripts/macos-verify.sh"
+        },
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
         }
       ]
     }
