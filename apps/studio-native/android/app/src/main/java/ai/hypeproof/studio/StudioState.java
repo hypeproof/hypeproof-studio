@@ -29,6 +29,14 @@ public final class StudioState {
             }
         }
     }
+    public StudioState includingEdits(java.util.Map<String,String> edits) throws JSONException {
+        StudioState snapshot = new StudioState(data.toString());
+        for (int i = 0; i < snapshot.projects().length(); i++) {
+            JSONObject p = snapshot.projects().getJSONObject(i); String id = p.getString("id");
+            for (String key : new String[]{"draft", "intentDraft"}) if (edits.containsKey(id + ":" + key)) p.put(key, edits.get(id + ":" + key));
+        }
+        return snapshot;
+    }
     public JSONArray projects() throws JSONException { return data.getJSONArray("projects"); }
     public JSONObject find(String id) throws JSONException {
         for (int i = 0; i < projects().length(); i++) if (projects().getJSONObject(i).getString("id").equals(id)) return projects().getJSONObject(i);

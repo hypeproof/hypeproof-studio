@@ -2,6 +2,15 @@ import XCTest
 @testable import StudioCore
 
 final class IntentTests: XCTestCase {
+    func testExportRetainsVisibleEditsWhenPersistedDraftIsOlder() throws {
+        var saved = Notebook(); var project = Project(); project.draft = "old draft A"; saved.projects = [project]
+        let edits = [project.id + ":draft": "visible draft B", project.id + ":intent": "unconfirmed intention B"]
+        let export = try Notebook.decode(saved.includingEdits(edits).encode())
+        XCTAssertEqual(export.projects[0].draft, "visible draft B")
+        XCTAssertEqual(export.projects[0].intentDraft, "unconfirmed intention B")
+        XCTAssertTrue(export.projects[0].revisions.isEmpty)
+        XCTAssertEqual(saved.projects[0].draft, "old draft A")
+    }
     func testHumanRevisionAndContextIsolation() throws {
         var first = Project(); try first.append("동네 가게의 빈 시간을 줄이고 싶다")
         first.messages.append(Message(role: "assistant", content: "누가 가장 불편할까요?"))

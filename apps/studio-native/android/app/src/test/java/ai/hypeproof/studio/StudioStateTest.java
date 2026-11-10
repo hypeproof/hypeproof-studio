@@ -2,6 +2,14 @@ package ai.hypeproof.studio;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class StudioStateTest {
+    @Test public void exportRetainsVisibleEditsWhenPersistedDraftIsOlder() throws Exception {
+        StudioState saved = new StudioState(); String id = saved.create(); saved.find(id).put("draft", "old draft A");
+        StudioState exported = saved.includingEdits(java.util.Map.of(id+":draft", "visible draft B", id+":intentDraft", "unconfirmed intention B"));
+        assertEquals("visible draft B", exported.find(id).getString("draft"));
+        assertEquals("unconfirmed intention B", exported.find(id).getString("intentDraft"));
+        assertEquals(0, exported.find(id).getJSONArray("revisions").length());
+        assertEquals("old draft A", saved.find(id).getString("draft"));
+    }
     @Test public void humanRevisionContextAndRestore() throws Exception {
         StudioState state=new StudioState();String first=state.create();state.append(first,"Observe a local shop");
         state.find(first).getJSONArray("messages").put(StudioState.message("assistant","Who needs this?"));

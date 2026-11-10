@@ -45,6 +45,15 @@ public struct Notebook: Codable, Equatable, Sendable {
     public var version = 1
     public var projects: [Project] = []
     public init() {}
+    public func includingEdits(_ edits: [String: String]) -> Notebook {
+        var snapshot = self
+        for index in snapshot.projects.indices {
+            let id = snapshot.projects[index].id
+            if let draft = edits[id + ":draft"] { snapshot.projects[index].draft = draft }
+            if let intent = edits[id + ":intent"] { snapshot.projects[index].intentDraft = intent }
+        }
+        return snapshot
+    }
     public func encode() throws -> Data {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .millisecondsSince1970
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -17652,6 +17652,18 @@
         },
         {
           "path": "products.yaml"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/Contents.json"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/Icon.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/Contents.json"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/drawable/studio_icon.xml"
         }
       ]
     },

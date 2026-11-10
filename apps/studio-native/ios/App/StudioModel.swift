@@ -114,7 +114,8 @@ import SwiftUI
     func export() -> URL? {
         do {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(readOnly ? "HP-Studio-recovery-original.json" : "HP-Studio-records.json")
-            let bytes = try readOnly ? Data(contentsOf: file) : notebook.encode()
+            let snapshot = notebook.includingEdits(editing)
+            let bytes = try readOnly ? Data(contentsOf: file) : snapshot.encode()
             try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]); return url
         } catch { self.error = error.localizedDescription; return nil }
     }
