@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+import { SERVICE_APPROVAL_PRESETS } from './fixtures/approval-preset-catalog.mjs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
 const bin = findChromium();
@@ -43,9 +44,7 @@ async function until(js, what) {
 // The Service catalog, verbatim (strictest first). The hostile label and the extra full-access entry are negative samples:
 // a server string is text, and an id outside the closed set is never a choice.
 const CATALOG = [
-  { id: 'always_ask', label: '항상 묻기', description: '파일을 고치거나 명령을 실행하기 전에 매번 묻고, 한 번 허락한 일도 다시 물어봐요.' },
-  { id: 'before_changes', label: '바꾸기 전에 묻기', description: '파일을 고치거나 명령을 실행하기 전에 물어봐요.' },
-  { id: 'important_only', label: '중요한 것만 묻기<img src=x id=injected>', description: '되돌리기 어려운 명령, 브라우저 열기, 보조 AI 맡기기처럼 중요한 일만 물어봐요.' },
+  ...SERVICE_APPROVAL_PRESETS.map((p) => (p.id === 'important_only' ? { ...p, label: p.label + '<img src=x id=injected>' } : { ...p })),
   { id: 'full_access', label: '전부 허용', description: '묻지 않아요.' },
 ];
 const DRAFT = { title: '첫 홈페이지', steps: [], approval_preset: 'before_changes' };
