@@ -2430,6 +2430,17 @@ Adult instructor practice (`homepage-practice-s1`, #737) uses a separate `homepa
 | REQ-D6 | previewReady handshake | host → webview 사이 `previewReady` 메시지 전에 보낸 HTML 은 pending 큐 → ready 시점에 flush | U + E |
 | REQ-D7 | 생성물 구조 가드 (#359) | reveal 직전 `validateAndRepairHtml`: 미종료 HTML 주석의 오타 close(`*/`)를 `-->` 로 자동복구(정상 CSS/JS `*/` 는 불간섭); 복구 후에도 주석/`<script>` 불균형이면 reveal **차단**(직전 빌드 유지)+경고. 순수 구조 검사 — 법·의료광고 관련 검사 없음(#384로 제거). 경고 표면 = 스트림 중 `toolLog` 한 줄, 스트림 밖(▶ Run) 경고 토스트 | U (`test/html-structure`) |
 
+### Named HTML auto-preview (REQ-D5)
+
+When a successful coach Write or Edit triggers an
+automatic preview of a named HTML file, Studio opens the existing file at its own path. A nested
+page resolves assets from its own directory. Previewing it leaves the home page and the named
+file's bytes intact and records the named path in the preview snapshot. The default home page used
+by the existing class approval and publishing flows remains the explicit root `index.html`.
+The home-page build and structural checks still apply to a direct root `index.html` edit and
+generated chat builds. Host regressions in `test/turn-tools.test.mjs` and
+`test/preview-recovery-provider.test.mjs` cover the write event, sandbox base, live URL, and home page.
+
 ## E. Manual-approve modal
 
 | ID | 요구사항 | 수용 기준 | Layer |
