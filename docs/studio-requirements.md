@@ -8938,3 +8938,12 @@ revisions. Drafts survive restart; export/deletion are explicit. This is separat
 from the desktop companion and the web-only MVP. Implementation and native build
 commands: [native preview](../apps/studio-native/README.md). Physical iPhone and
 TestFlight acceptance remain blocked by enrollment/signing, not satisfied by CI.
+
+Android 0.1.1 extends this contract with device speech input. Per-use disclosure
+precedes recognition; the returned text is an editable, project-bound draft until
+the person records/sends it. Cancellation or unavailable recognition preserves
+keyboard work. Offline recognition is a provider preference, not a guarantee.
+Native instrumentation covers record/revision persistence across activity
+recreation and relaunch, project isolation, speech handoff controls with a fixture,
+and AI consent. Actual microphone recognition and physical-device use require
+separate evidence; instrumentation never establishes a growth outcome.

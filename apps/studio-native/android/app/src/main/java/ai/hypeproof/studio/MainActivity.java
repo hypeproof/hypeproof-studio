@@ -11,6 +11,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import android.text.*;
 import android.util.AtomicFile;
+import android.speech.RecognizerIntent;
 import androidx.core.content.FileProvider;
 import org.json.*;
 import java.io.*;
@@ -19,9 +20,11 @@ import java.util.UUID;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
+    private static final int SPEECH_REQUEST = 104;
     private StudioState state;
     private final java.util.Map<String,String> editing = new java.util.HashMap<>();
     private String activeID, installID, token, error;
+    private String speechProjectID;
     private long expiresAt;
     private boolean busy, readOnly;
     private int generation;
@@ -42,10 +45,11 @@ public final class MainActivity extends Activity {
             if (records.getBaseFile().exists()) state = new StudioState(new String(records.readFully(), StandardCharsets.UTF_8)); else state = new StudioState();
             if (state.projects().length() > 0) activeID = state.projects().getJSONObject(0).getString("id");
             if (saved != null && state.find(saved.getString("active")) != null) activeID = saved.getString("active");
+            if (saved != null) speechProjectID = saved.getString("speechProject");
         } catch (Exception e) { readOnly = true; error = "기록을 읽지 못했어요. 원본을 보존하기 위해 저장을 멈췄어요."; try { state = new StudioState(); } catch (Exception ignored) {} }
         render();
     }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("active", activeID); }
+    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("active", activeID); out.putString("speechProject", speechProjectID); }
     @Override protected void onDestroy() { cancel(); executor.shutdownNow(); super.onDestroy(); }
     private void cancel() { generation++; if (pending != null) pending.cancel(true); service.cancel(); busy = false; }
     interface Change { void run() throws Exception; }
@@ -112,9 +116,10 @@ public final class MainActivity extends Activity {
                 if (messages.length()>0) content.addView(button("지금의 의도 정리하기",this::intent));
                 if (!busy && token!=null && messages.length()>0 && messages.getJSONObject(messages.length()-1).getString("role").equals("user")) content.addView(button("이 생각에 질문 받기",this::ask));
                 if (token==null) root.addView(button("무료 AI 연결하고 질문 받기",this::consent));
+                Button speak=button("말로 적기",this::voice); speak.setEnabled(!busy&&!readOnly); root.addView(speak);
                 LinearLayout composer=new LinearLayout(this); composer.setGravity(Gravity.BOTTOM);
                 EditText draft=editor("정리되지 않은 말도 괜찮아요",editing.getOrDefault(activeID+":draft",p.optString("draft")),"생각 입력"); watch(draft,"draft",activeID);
-                composer.addView(draft,new LinearLayout.LayoutParams(0,-2,1)); Button send=button(token==null?"기록":"보내기",this::send); send.setEnabled(!busy&&!readOnly); composer.addView(send); root.addView(composer);
+                composer.addView(draft,new LinearLayout.LayoutParams(0,-2,1)); Button send=button(token==null?"기록":"보내기",this::send); send.setContentDescription("생각 기록 또는 보내기"); send.setEnabled(!busy&&!readOnly); composer.addView(send); root.addView(composer);
                 root.addView(text(token==null?"AI 연결 전에는 이 기기에만 기록해요.":"최근 대화와 확인한 의도를 AI에 보내요.",11,false));
             }
             if (busy) content.addView(button("답변을 준비하고 있어요 · 취소",()->{cancel();render();}));
@@ -127,6 +132,47 @@ public final class MainActivity extends Activity {
         content.addView(text("주변 사람의 작은 불편, 바꾸고 싶은 일, 아직 이름 붙이지 못한 생각부터 시작해요.",18,false));
         content.addView(text("관찰 → 다른 관점 → 작은 실천 → 성찰",15,true));
         content.addView(text("동양철학의 성찰과 배움에서 출발합니다. 답을 정하는 사람은 나예요.",14,false));
+    }
+    private void voice() {
+        if (project()==null||busy||readOnly) return;
+        String id=activeID;
+        new AlertDialog.Builder(this).setTitle("말로 생각 적기")
+            .setMessage("기기의 음성 인식 앱을 열어요. 해당 앱과 설정에 따라 음성이 음성 인식 제공자에게 전송될 수 있어요. 변환된 글은 입력창에만 담기며, 직접 기록하거나 보내기 전에는 대화에 추가되지 않아요.")
+            .setNegativeButton("취소",null)
+            .setPositiveButton("음성 입력 시작",(dialog,which)->{
+                if (!id.equals(activeID)||busy||readOnly) return;
+                Intent capture=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                capture.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                capture.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ko-KR");
+                capture.putExtra(RecognizerIntent.EXTRA_PROMPT,"정리되지 않은 말도 괜찮아요");
+                capture.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1);
+                capture.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);
+                speechProjectID=id;
+                try { startActivityForResult(capture,SPEECH_REQUEST); }
+                catch (ActivityNotFoundException|SecurityException e) {
+                    speechProjectID=null;
+                    error="음성 입력을 열 수 없어요. 키보드로 계속 적거나 기기의 음성 인식 앱을 확인해 주세요.";
+                    render();
+                }
+            }).show();
+    }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if (requestCode!=SPEECH_REQUEST) return;
+        String id=speechProjectID; speechProjectID=null;
+        if (id==null||resultCode!=RESULT_OK) return;
+        if (!id.equals(activeID)||project()==null||readOnly) {
+            error="기록이 바뀌어 음성 입력을 추가하지 않았어요. 원하는 기록에서 다시 말해 주세요."; render(); return;
+        }
+        java.util.ArrayList<String> results=data==null?null:data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        if (results==null||results.isEmpty()||results.get(0)==null||results.get(0).trim().isEmpty()) {
+            error="말한 내용을 받지 못했어요. 다시 말하거나 글로 적어 주세요."; render(); return;
+        }
+        String before=editing.getOrDefault(id+":draft",project().optString("draft"));
+        String draft=before+(before.isEmpty()?"":"\n")+results.get(0).trim();
+        editing.put(id+":draft",draft);
+        if (change(()->state.find(id).put("draft",draft))) error=null;
+        render();
     }
     private void send() {
         JSONObject p=project(); if(p==null||busy)return;

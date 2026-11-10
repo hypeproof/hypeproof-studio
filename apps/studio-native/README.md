@@ -12,7 +12,30 @@ Philosophy → Product Intent → behavior: introspection, multiple perspectives
 
 Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
 
-Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. This preview has no account sync, independent speech recognition, handwriting, push notifications, Foundry deployment, or financial telemetry.
+Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. This preview has no account sync, independent speech recognition engine, handwriting, push notifications, Foundry deployment, or financial telemetry.
+
+## Android voice capture and native acceptance
+
+The Android 0.1.1 preview adds **말로 적기**. Each use discloses that the device's
+speech recognition provider may process audio, then opens the native speech input
+activity only after **음성 입력 시작**. Korean recognition prefers offline processing;
+the [platform documentation](https://developer.android.com/reference/android/speech/RecognizerIntent#EXTRA_PREFER_OFFLINE)
+says providers may ignore that preference, so the app never promises offline ASR.
+The returned transcript appends to the selected project's editable draft. It does
+not send a model request, create a message or confirm an intention. Cancellation
+preserves the draft; unavailable recognition leaves keyboard input available.
+
+`StudioJourneyTest` exercises actual Android Views and private disk persistence:
+capture → human confirmation → activity recreation/relaunch → project isolation;
+speech disclosure/result/cancellation with a stubbed recognizer; and both AI
+consent checkboxes. The recognizer fixture does not establish microphone quality
+or real ASR, and these local tests do not make paid model calls.
+
+Run `bash apps/studio-native/scripts/android-verify.sh` with JDK 17, SDK 35,
+Gradle 8.9 and `ANDROID_SERIAL` set to a **disposable emulator**. It rejects
+physical devices before the instrumentation suite replaces local preview records.
+Screenshots and logs go to `apps/studio-native/evidence/android/`. Real microphone,
+physical-phone acceptance, live native AI and Google Play release remain separate.
 
 ## Build and evidence
 
@@ -23,7 +46,7 @@ Records stay in app-private storage; iOS uses file protection and excludes noteb
 
 ## iPhone installation gate
 
-Apple Developer membership and iOS signing are currently unavailable. TestFlight upload and physical iPhone installation are **BLOCKED** pending enrollment/signing. A simulator app or unsigned device app is not an installable iPhone deliverable. Free Personal Team installation is also possible with Xcode, an Apple Account and the connected iPhone, but must be re-provisioned after seven days. The current Mac has no Xcode installation.
+Apple Developer membership purchase was confirmed on 2026-11-10; the account still displayed **pending** after checkout. TestFlight upload and physical iPhone installation are **BLOCKED** pending activation/signing. A simulator app or unsigned device app is not an installable iPhone deliverable. Free Personal Team installation is also possible with Xcode, an Apple Account and the connected iPhone, but must be re-provisioned after seven days. The current Mac has no Xcode installation.
 
 After membership is ready: select the enrolled team in `ios/HPStudio.xcodeproj`, provision `ai.hypeproof.studio.mobile`, archive the Release scheme, upload via Xcode Organizer, complete App Store Connect processing and invite the test account through TestFlight. Do not commit certificates, provisioning profiles or private keys. App Store icon/privacy/store metadata and a signed archive must be verified before upload.
 
