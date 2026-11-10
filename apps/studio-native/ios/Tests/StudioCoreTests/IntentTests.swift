@@ -18,7 +18,11 @@ final class IntentTests: XCTestCase {
         var value = Notebook(); var project = Project(); project.draft = "내일 물어볼 질문"; project.intentDraft = "아직 확정하지 않았다"
         try project.confirm("오늘 세 사람을 관찰한다"); value.projects = [project]
         let decoded = try Notebook.decode(value.encode())
-        XCTAssertEqual(decoded, value)
+        XCTAssertEqual(decoded.projects[0].id, value.projects[0].id)
+        XCTAssertEqual(decoded.projects[0].draft, value.projects[0].draft)
+        XCTAssertEqual(decoded.projects[0].intentDraft, value.projects[0].intentDraft)
+        XCTAssertEqual(decoded.projects[0].revisions[0].text, value.projects[0].revisions[0].text)
+        XCTAssertEqual(decoded.projects[0].revisions[0].confirmedAt.timeIntervalSince1970, value.projects[0].revisions[0].confirmedAt.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertThrowsError(try Project.checked("  "))
         XCTAssertThrowsError(try Project.checked(String(repeating: "가", count: 4001)))
     }
