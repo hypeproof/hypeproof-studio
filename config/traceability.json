@@ -17709,6 +17709,9 @@
         },
         {
           "path": "apps/studio-native/android/app/src/main/res/values-night/styles.xml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
         }
       ]
     },
@@ -17756,6 +17759,9 @@
         },
         {
           "path": "apps/studio-native/scripts/ios-verify.sh"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
         }
       ]
     },

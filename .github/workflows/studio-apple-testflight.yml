@@ -10,7 +10,29 @@ concurrency:
   group: studio-apple-testflight
   cancel-in-progress: false
 jobs:
+  native-candidate:
+    if: github.repository == 'hypeproof/hypeproof-studio'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require successful native CI for this exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 apps/studio-native/scripts/verify-native-candidate.py gate --output "$RUNNER_TEMP/native-release-gate.json" --timeout 1500 --interval 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-native-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-release-gate.json
+          if-no-files-found: error
+          retention-days: 14
   upload:
+    needs: native-candidate
     if: github.repository == 'hypeproof/hypeproof-studio'
     environment: apple-native-preview
     runs-on: macos-15

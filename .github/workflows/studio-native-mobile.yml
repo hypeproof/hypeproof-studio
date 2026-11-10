@@ -2,9 +2,9 @@ name: Studio native mobile
 on:
   push:
     branches: ['main']
-    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
   pull_request:
-    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,6 +19,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Bind native CI to the actual checked-out source
+        env:
+          NATIVE_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 apps/studio-native/scripts/verify-native-candidate.py identity --output "$RUNNER_TEMP/native-candidate.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-native-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-candidate.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify trusted native acceptance recipe controls
         run: python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v
   ios:
