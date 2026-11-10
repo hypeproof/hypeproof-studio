@@ -15091,6 +15091,9 @@
           "path": "chalk/test/approval-preset.browser.mjs"
         },
         {
+          "path": "chalk/test/approval-preset-drift.test.mjs"
+        },
+        {
           "path": "docs/testing/chalk-authoring.md",
           "section": "### T-51 수업 버전별 AI가 묻는 방식 (CH-08, CGP-AGENT-R-001) · 2026-11-04"
         }
