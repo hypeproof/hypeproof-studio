@@ -140,6 +140,8 @@ import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type Se
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { servedApprovalPreset } from "../../src/approvalPreset";
 import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
+import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
+import { LessonStarters } from "./LessonStarters";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
@@ -1655,6 +1657,8 @@ export function ChatPanel(props: Props) {
     worlds.length > 0
       ? ux.suggestions.initial.filter((c) => !stripChips.has(c.text))
       : ux.suggestions.initial;
+  // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
+  const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -2318,6 +2322,8 @@ export function ChatPanel(props: Props) {
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
+        {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
+        {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
