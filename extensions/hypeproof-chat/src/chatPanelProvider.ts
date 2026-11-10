@@ -9718,6 +9718,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
       const stepLines = new StepLines();
       const deniedCalls = new Map<string, DenialNotice>();
+      // #3594 — one denial card for an approval that timed out or that the learner refused (one per tool call).
+      const approvalDenialCard = (a: { id: string; denialSource?: unknown; denialDetail?: unknown }) => {
+        const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
+        deniedCalls.set(a.id, denial);
+        tracker.settle(a.id);
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+      };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
       delegations = tracker;
@@ -9895,12 +9902,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // the approve/deny modal ("승인 기다리는 중") is never counted as running time.
             if (!a.allowed) {
               stepLines.end(a.id);
-              if (a.actor === 'policy' || a.denialSource === 'declined') {
-                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
-                deniedCalls.set(a.id, denial);
-                tracker.settle(a.id);
-                this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
-              }
+              if (a.actor === 'policy' || a.denialSource === 'declined') approvalDenialCard(a);
               break;
             }
             const startedAt = Date.now();
