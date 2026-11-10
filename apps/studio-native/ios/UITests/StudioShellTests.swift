@@ -34,6 +34,16 @@ final class StudioShellTests: XCTestCase {
         let restored = editable("reflection-observation", in: app)
         XCTAssertEqual(restored.value as? String, "Two customers waited outside")
         app.buttons["닫기"].tap()
+        // Voice auto-send consent is explicit. Cancelling it cannot capture,
+        // send or replace an existing keyboard draft.
+        let draft = editable("thoughtInput", in: app)
+        draft.tap(); draft.typeText("Keep this unfinished thought")
+        app.buttons["voiceConversation"].tap()
+        XCTAssertTrue(app.buttons["음성 대화 시작"].waitForExistence(timeout: 5))
+        app.buttons["나중에"].tap()
+        XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
+        XCTAssertTrue(app.buttons["dictateVoice"].exists)
+        XCTAssertFalse(app.buttons["stopVoice"].exists)
         XCTAssertEqual(app.webViews.count, 0)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "native-iphone-intent"; shot.lifetime = .keepAlways; add(shot)
     }

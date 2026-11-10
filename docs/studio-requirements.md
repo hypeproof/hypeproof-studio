@@ -8936,14 +8936,14 @@ session states), CGP-VOICE-R-021 (the four `hypeproof.voice.*` Command Palette c
 project-local context, consented Service questioning and human-confirmed intent
 revisions. Drafts survive restart; export/deletion are explicit. This is separate
 from the desktop companion and the web-only MVP. Implementation and native build
-commands: [native preview](../apps/studio-native/README.md). Physical iPhone and
-TestFlight acceptance remain blocked by enrollment/signing, not satisfied by CI.
+commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
+0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
+voice changes need their own package/device evidence.
 
-Android 0.1.1 extends this contract with device speech input. Per-use disclosure
-precedes recognition; the returned text is an editable, project-bound draft until
-the person records/sends it. Cancellation or unavailable recognition preserves
-keyboard work. Offline recognition is a provider preference, not a guarantee.
-Native instrumentation covers record/revision persistence across activity
-recreation and relaunch, project isolation, speech handoff controls with a fixture,
-and AI consent. Actual microphone recognition and physical-device use require
-separate evidence; instrumentation never establishes a growth outcome.
+`ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
+extend expression with project-bound editable dictation and consented final-text
+auto-send/read-aloud. System on-device recognition is required with no cloud
+recognizer fallback. Next-turn recording requires a visible tap; stop, background,
+permission denial and expired access preserve text and fence late callbacks.
+The shared Service owns policy/admission. Core/native fixtures do not establish
+physical Korean ASR, five-turn acceptance or a human growth outcome.

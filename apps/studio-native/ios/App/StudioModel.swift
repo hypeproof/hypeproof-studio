@@ -33,6 +33,7 @@ import SwiftUI
         }
     }
     private var grant: Grant?
+    var canUseAI: Bool { connected && grant?.isValid == true }
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private let service = StudioService()
@@ -91,14 +92,15 @@ import SwiftUI
             if generation == attempt { busy = false }
         }
     }
-    func send() {
-        guard !busy, let project else { return }
+    @discardableResult func send() -> Bool {
+        guard !busy, let project else { return false }
         do {
             let text = draftText
             try persist(notebook.updating(project.id, visibleEdits: editing) { try $0.append(text) })
             editing[project.id + ":draft"] = nil
             if connected { ask() }
-        } catch { self.error = error.localizedDescription }
+            return true
+        } catch { self.error = error.localizedDescription; return false }
     }
     func ask() {
         guard !busy, let project, let grant, grant.isValid else {

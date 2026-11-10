@@ -17830,6 +17830,92 @@
         },
         {
           "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MOBILE-VOICE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-MOBILE-VOICE",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MOBILE-VOICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/App/VoiceController.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MOBILE-VOICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-VOICE",
+        "ST-IMP-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
         }
       ]
     }

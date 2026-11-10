@@ -907,14 +907,19 @@
         "MREF-02",
         "MREF-03",
         "MREF-04",
-        "MREF-05"
+        "MREF-05",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "c7dede36e190b3bda416c3c8895612d33cdbe73dfee61c5d5fd26c00395b317a",
+      "sha256": "745bfdc53933618197846aa31d3e4a228fa713b28c1cea0bbca61a50d940284c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
-      "test": "docs/requirements/mobile-growth-roadmap.md"
+      "test": "docs/testing/native-mobile-growth.md"
     }
   ],
   "work_items": [
@@ -4472,8 +4477,47 @@
         "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java",
-        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java",
-        "docs/requirements/mobile-growth-roadmap.md"
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "mobile-voice-v1",
+      "title": "Native on-device voice with explicit send and stop boundaries",
+      "issue": 3687,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MVOICE-01",
+            "MVOICE-02",
+            "MVOICE-03",
+            "MVOICE-04",
+            "MVOICE-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
+      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
+      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
+      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
+      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
       ]
     }
   ]

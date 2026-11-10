@@ -14,28 +14,36 @@ Native filesystem, share sheet, and application lifecycle belong to the App laye
 
 Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. This preview has no account sync, independent speech recognition engine, handwriting, push notifications, Foundry deployment, or financial telemetry.
 
-## Android voice capture and native acceptance
+## Native voice and acceptance
 
-The Android 0.1.1 preview adds **말로 적기**. Each use discloses that the device's
-speech recognition provider may process audio, then opens the native speech input
-activity only after **음성 입력 시작**. Korean recognition prefers offline processing;
-the [platform documentation](https://developer.android.com/reference/android/speech/RecognizerIntent#EXTRA_PREFER_OFFLINE)
-says providers may ignore that preference, so the app never promises offline ASR.
-The returned transcript appends to the selected project's editable draft. It does
-not send a model request, create a message or confirm an intention. Cancellation
-preserves the draft; unavailable recognition leaves keyboard input available.
+The next candidate adds two explicit modes on iOS and Android. **말로 적기**
+appends recognized Korean to an editable project draft without sending. **음성
+대화** discloses final-transcript auto-send and read-aloud before starting. It
+requires current AI consent/access and no unsent draft. After a reply is read,
+**다시 말하기** starts the next turn; the microphone never reopens automatically.
+Stop, background, project switch and audio interruption end the local turn and
+fence stale callbacks. Recognition failures preserve partial draft text.
 
-`StudioJourneyTest` exercises actual Android Views and private disk persistence:
-capture → human confirmation → activity recreation/relaunch → project isolation;
-speech disclosure/result/cancellation with a stubbed recognizer; and both AI
-consent checkboxes. The recognizer fixture does not establish microphone quality
-or real ASR, and these local tests do not make paid model calls.
+Only platform on-device recognition is used. iOS checks both
+[supportsOnDeviceRecognition](https://developer.apple.com/documentation/Speech/SFSpeechRecognizer/supportsOnDeviceRecognition)
+and requires it on the request. Android uses
+[createOnDeviceSpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer#createOnDeviceSpeechRecognizer(android.content.Context))
+where available. Missing Korean assets/engine or denied permission returns to
+text. There is no cloud recognizer fallback, paid speech provider or raw audio
+upload/storage in the app. Read-aloud uses installed OS Korean voices; Android
+rejects network-required voices. Physical offline behavior still needs observation.
+
+Unit tests exercise stale/duplicate turn fences; native UI tests cover record
+persistence, consent, draft recovery and permission/error paths. Fixtures do not
+prove microphone quality, Korean ASR, natural-language policy or learning. Actual
+five-turn spoken sessions on iPhone and Android remain separate acceptance.
+Question policy/measurement are shared Service work, not a mobile prompt fork.
 
 Run `bash apps/studio-native/scripts/android-verify.sh` with JDK 17, SDK 35,
 Gradle 8.9 and `ANDROID_SERIAL` set to a **disposable emulator**. It rejects
-physical devices before the instrumentation suite replaces local preview records.
-Screenshots and logs go to `apps/studio-native/evidence/android/`. Real microphone,
-physical-phone acceptance, live native AI and Google Play release remain separate.
+physical devices before instrumentation replaces local preview records.
+Screenshots/logs go to `apps/studio-native/evidence/android/`. The detailed
+requirements and physical acceptance are in the [mobile roadmap](../../docs/requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687).
 
 ## Build and evidence
 

@@ -72,8 +72,47 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 
 | ID | Required behavior | Evidence boundary |
 |---|---|---|
-| MREF-01 | Five optional human-owned notes can be edited in any order on iOS and Android; blank/skip is valid. | Native UI journey and actual device observation. |
-| MREF-02 | v1 notes/drafts/revisions remain readable; notes persist across restart; a later successful save includes earlier visible failed-save edits. | Migration, save-candidate recovery and Android failure-injection regression. |
-| MREF-03 | Notes do not become AI context or human-confirmed intention automatically; project data remains isolated. | Captured context and cross-project tests. |
-| MREF-04 | Reflection-only projects are distinguishable and searchable; visible unsaved text remains exportable. | Library journey and export round-trip regression. |
-| MREF-05 | Native controls remain usable with keyboard, system theme and accessibility; exact candidate CI is retained before a testing build. | Native iOS/Android evidence; physical-device accessibility remains a separate acceptance. |
+| MREF-01 | Five optional human-owned notes can be edited in any order on iOS and Android; blank/skip is valid. | Native UI journey and actual device observation.  MREF-T01. |
+| MREF-02 | v1 notes/drafts/revisions remain readable; notes persist across restart; a later successful save includes earlier visible failed-save edits. | Migration, save-candidate recovery and Android failure-injection regression.  MREF-T02. |
+| MREF-03 | Notes do not become AI context or human-confirmed intention automatically; project data remains isolated. | Captured context and cross-project tests.  MREF-T03. |
+| MREF-04 | Reflection-only projects are distinguishable and searchable; visible unsaved text remains exportable. | Library journey and export round-trip regression.  MREF-T04. |
+| MREF-05 | Native controls remain usable with keyboard, system theme and accessibility; exact candidate CI is retained before a testing build. | Native iOS/Android evidence; physical-device accessibility remains a separate acceptance.  MREF-T05. |
+
+
+## Native voice client slice — #3687
+
+The objective is lower expression burden while preserving the person's words,
+choice to send, and ability to stop. Voice is optional; fluent speech and use of
+voice do not measure learning. The shared Service remains responsible for
+question policy, model routing and financial admission. This client slice does
+not assert that the separate Service policy/measurement work is integrated.
+
+| ID | Requirement | Verification boundary |
+|---|---|---|
+| MVOICE-01 | Dictation appends a Korean transcript to the selected project's editable draft and never automatically sends or confirms intent. | Native control/persistence regressions; actual Korean ASR separately.  MVOICE-T01. |
+| MVOICE-02 | Conversation starts only after explicit disclosure of final-transcript auto-send and read-aloud. Unsent draft, expired access and changed project block auto-send. | Native consent/expiry/draft tests and generation-token checks.  MVOICE-T02. |
+| MVOICE-03 | Final transcript sends at most once through existing Service admission; read-aloud ends with a visible next-turn button. Microphone never reopens automatically. | State/duplicate callback regression; five spoken turns on each physical platform remain required.  MVOICE-T03. |
+| MVOICE-04 | Stop, background, project change, audio interruption and late permission callbacks release/fence microphone, playback and pending client work. Partial words remain recoverable. | Native lifecycle/permission tests plus physical interruption check.  MVOICE-T04. |
+| MVOICE-05 | Require platform on-device recognition; no network recognizer fallback or paid voice API. Missing engine, permission, voice or network keeps text usable. | Capability/error paths and source review; offline physical Korean recognition is not inferred from a simulator.  MVOICE-T05. |
+
+Interaction: '말로 적기' keeps text for review. '음성 대화' explains final-transcript
+transmission before starting. '말하기 끝' bounds capture/finalization; '음성 멈춤'
+stops the local turn. Read-aloud finishes at '다시 말하기', which rechecks current
+project, access and pending draft. Keyboard use remains available outside capture;
+recording never continues behind another screen. A failed or cancelled service
+reply preserves the already saved human message; it is not automatically replayed.
+
+Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
+No raw audio is stored or uploaded by the app. Recognized text is a local draft,
+then follows existing project-scoped AI consent/admission when explicitly sent or
+when a consented conversation finalizes. On-device speech may be unavailable
+because of OS/language assets; the text path is always the recovery route.
+There are zero added hosted ASR/TTS calls; device energy, human time, existing AI
+inference, and native CI are still costs. No monetary savings or efficacy is
+claimed without measured comparisons.
+
+Acceptance remains partial until exact-source native checks, installed iPhone
+and Android five-turn Korean sessions, offline recognition, interruption,
+permission-denial and text recovery are observed. Synthetic transitions and
+emulator UI are reported separately. The current TestFlight baseline does not
+contain this source merely because a branch or PR exists.

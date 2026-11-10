@@ -1,10 +1,15 @@
 import SwiftUI
+import AVFoundation
 
 @main struct HPStudioApp: App {
     var body: some Scene { WindowGroup { StudioHome() } }
 }
 struct StudioHome: View {
     @StateObject private var model = StudioModel()
+    @StateObject private var voice = VoiceController()
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showVoiceConsent = false
+    @State private var voiceConsentProject: String?
     @State private var showConsent = false
     @State private var showIntent = false
     @State private var showHistory = false
@@ -35,7 +40,7 @@ struct StudioHome: View {
                                 }.padding().frame(maxWidth: .infinity, alignment: .leading).background(.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 18))
                             }
                             if project.messages.isEmpty { introduction }
-                            Button { showReflection = true } label: {
+                            Button { stopVoice(); showReflection = true } label: {
                                 HStack(alignment: .top, spacing: 12) {
                                     Image(systemName: "book.pages").font(.title2)
                                     VStack(alignment: .leading, spacing: 5) {
@@ -55,13 +60,13 @@ struct StudioHome: View {
                             }
                             if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("statusError") }
                             if model.busy {
-                                HStack { ProgressView(); Text("생각을 이어가고 있어요"); Spacer(); Button("취소") { model.cancel() } }.font(.callout)
+                                HStack { ProgressView(); Text("생각을 이어가고 있어요"); Spacer(); Button("취소") { stopVoice(); model.cancel() } }.font(.callout)
                             }
                             if !model.busy, project.messages.last?.role == "user", model.connected {
-                                Button("이 생각에 질문 받기") { model.ask() }.accessibilityIdentifier("askAgain")
+                                Button("이 생각에 질문 받기") { stopVoice(); model.ask() }.accessibilityIdentifier("askAgain")
                             }
                             if !project.messages.isEmpty {
-                                Button { showIntent = true } label: { Label("지금의 의도 정리하기", systemImage: "square.and.pencil") }.buttonStyle(.bordered).accessibilityIdentifier("openIntent")
+                                Button { stopVoice(); showIntent = true } label: { Label("지금의 의도 정리하기", systemImage: "square.and.pencil") }.buttonStyle(.bordered).accessibilityIdentifier("openIntent")
                             }
                         } else {
                             Text("질문에서 시작하는\n나의 다음 한 걸음").font(.largeTitle.bold())
@@ -76,33 +81,63 @@ struct StudioHome: View {
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("HP Studio").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button { showHistory = true } label: { Image(systemName: "square.stack") }.accessibilityLabel("나의 기록") }
+                ToolbarItem(placement: .topBarLeading) { Button { stopVoice(); showHistory = true } label: { Image(systemName: "square.stack") }.accessibilityLabel("나의 기록") }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("새 생각") { model.newProject() }
-                        Button(model.connected ? "AI 연결 해제" : "무료 AI 연결") { if model.connected { model.disconnect() } else { showConsent = true } }
-                        Button(model.readOnly ? "읽지 못한 원본 내보내기" : "전체 기록 내보내기") { exportURL = model.export() }
-                        if model.readOnly { Button("원본 보존 후 새로 시작") { showRecovery = true } }
-                        if model.project != nil { Button("현재 기록 삭제", role: .destructive) { showDelete = true } }
+                        Button("새 생각") { stopVoice(); model.newProject() }
+                        Button(model.connected ? "AI 연결 해제" : "무료 AI 연결") { stopVoice(); if model.connected { model.disconnect() } else { showConsent = true } }
+                        Button(model.readOnly ? "읽지 못한 원본 내보내기" : "전체 기록 내보내기") { stopVoice(); exportURL = model.export() }
+                        if model.readOnly { Button("원본 보존 후 새로 시작") { stopVoice(); showRecovery = true } }
+                        if model.project != nil { Button("현재 기록 삭제", role: .destructive) { stopVoice(); showDelete = true } }
                     } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("기록 메뉴")
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 if model.project != nil {
                     VStack(spacing: 10) {
-                        if !model.connected { Button("무료 AI 연결하고 질문 받기") { showConsent = true }.font(.callout).accessibilityIdentifier("connectAI") }
+                        voiceControls
+                        if !model.connected { Button("무료 AI 연결하고 질문 받기") { stopVoice(); showConsent = true }.font(.callout).accessibilityIdentifier("connectAI") }
                         HStack(alignment: .bottom, spacing: 12) {
                             TextField("정리되지 않은 말도 괜찮아요", text: Binding(get: { model.draftText }, set: { text in model.editDraft(text) }), axis: .vertical)
                                 .lineLimit(1...5).padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("thoughtInput")
-                            Button { model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground))
+                                .disabled(voice.isCapturing)
+                            Button { stopVoice(); model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground))
                                 .accessibilityLabel(model.connected ? "생각 보내기" : "생각 기록하기").accessibilityIdentifier("sendThought")
-                                .disabled(model.busy || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
+                                .disabled(model.busy || voice.isCapturing || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
                         }
                         Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "AI 연결 전에는 이 기기에만 기록해요.").font(.caption2).foregroundStyle(.secondary)
                     }.padding(.horizontal, 20).padding(.vertical, 12).background(.regularMaterial)
                 }
             }
         }.tint(ink)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { voice.resumeIfActive() }
+            else if phase == .background || voice.turn.phase != .authorizing { stopVoice() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { _ in stopVoice() }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: RunLoop.main)) { event in
+            guard let raw = event.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                  let reason = AVAudioSession.RouteChangeReason(rawValue: raw),
+                  [.oldDeviceUnavailable, .newDeviceAvailable].contains(reason) else { return }
+            stopVoice()
+        }
+        .onChange(of: model.active) { _, _ in stopVoice() }
+        .onChange(of: model.connected) { _, connected in if !connected, voice.turn.mode == .conversation { stopVoice() } }
+        .onChange(of: model.busy) { _, busy in
+            guard !busy, voice.turn.phase == .waiting else { return }
+            if model.error == nil, let project = model.project, let last = project.messages.last, last.role == "assistant" {
+                voice.reply(last.content, projectID: project.id)
+            } else { voice.fail("답변을 받지 못했어요. 기록을 확인하고 글로 계속할 수 있어요.") }
+        }
+        .onDisappear { stopVoice() }
+        .confirmationDialog("말로 대화할까요?", isPresented: $showVoiceConsent, titleVisibility: .visible) {
+            Button("음성 대화 시작") {
+                guard let pending = voiceConsentProject, pending == model.active else { return }
+                voiceConsentProject = nil
+                beginVoice(.conversation)
+            }
+            Button("나중에", role: .cancel) { voiceConsentProject = nil }
+        } message: { Text("인식이 끝난 글을 현재 대화의 AI에 자동으로 보내고 답변을 소리 내어 읽어요. 다음 말은 ‘다시 말하기’를 눌러 시작해요. 무료 AI 사용 한도가 적용돼요. 언제든 ‘음성 멈춤’으로 끝낼 수 있어요.") }
         .sheet(isPresented: $showConsent) {
             NavigationStack {
                 Form {
@@ -138,6 +173,49 @@ struct StudioHome: View {
         .confirmationDialog("이 기록을 삭제할까요?", isPresented: $showDelete, titleVisibility: .visible) {
             Button("이 기기에서 삭제", role: .destructive) { model.deleteProject() }
         } message: { Text("대화와 의도 변경 기록을 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.") }
+    }
+    private func stopVoice() {
+        showVoiceConsent = false; voiceConsentProject = nil
+        if voice.turn.phase == .waiting { model.cancel() }
+        voice.stop()
+    }
+    private func beginVoice(_ mode: VoiceTurn.Mode) {
+        guard let id = model.active, !model.busy, !model.readOnly else { return }
+        if mode == .conversation {
+            guard model.canUseAI else { model.disconnect(); showConsent = true; return }
+            guard model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                voice.fail("작성 중인 글을 먼저 보내거나, ‘말로 적기’로 이어 적어 주세요."); return
+            }
+        }
+        let prefix = model.draftText
+        voice.start(projectID: id, mode: mode, transcript: { text in
+            guard model.active == id else { return }
+            model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
+        }, final: { _, mode in
+            guard model.active == id else { return false }
+            if mode == .dictation { return true }
+            guard model.canUseAI else { model.disconnect(); return false }
+            return model.send() && model.busy
+        })
+    }
+    private var voiceControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                if voice.isActive {
+                    if voice.turn.phase == .listening { Button("말하기 끝") { voice.endSpeech() }.accessibilityIdentifier("finishVoice") }
+                    Spacer()
+                    Button("음성 멈춤") { stopVoice() }.accessibilityIdentifier("stopVoice")
+                } else {
+                    Button { beginVoice(.dictation) } label: { Label("말로 적기", systemImage: "mic") }.accessibilityIdentifier("dictateVoice")
+                    Spacer()
+                    Button(voice.turn.phase == .ready && voice.turn.mode == .conversation ? "다시 말하기" : "음성 대화") {
+                        if voice.turn.phase == .ready && voice.turn.mode == .conversation { beginVoice(.conversation) }
+                        else { stopVoice(); voiceConsentProject = model.active; showVoiceConsent = true }
+                    }.accessibilityIdentifier("voiceConversation")
+                }
+            }.buttonStyle(.bordered).controlSize(.large).disabled(model.readOnly || (model.busy && !voice.isActive))
+            if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("voiceStatus") }
+        }
     }
     private var reflectionSheet: some View {
         NavigationStack {
