@@ -125,6 +125,40 @@ export function mergeBrowserTools(
   };
 }
 
+/**
+ * The lesson as the dev local runtime puts it in the prompt. Mirrors the Service's `coachVisibleLesson` for the DEC-30
+ * fields: `assistant.role`, `assistant.tone` and `starters` are removed, because the raw values are unclamped (a
+ * `playful`/`formal` tone on a minor seat, a hostile role string) and starters are learner chips, not teaching data.
+ * When none of those keys is present the object is returned as is (same reference, same bytes).
+ */
+export function devCoachVisibleLesson<T extends { assistant?: object; starters?: unknown }>(content: T): T {
+  const a = content.assistant as Record<string, unknown> | undefined;
+  const hasA = !!a && ("role" in a || "tone" in a);
+  const hasS = "starters" in content;
+  if (!hasA && !hasS) return content;
+  const { starters: _s, ...rest } = content;
+  const base = (hasS ? rest : content) as T;
+  if (!hasA) return base;
+  const { role: _r, tone: _t, ...keep } = a!;
+  return { ...base, assistant: keep };
+}
+
+/**
+ * The dev-only local rehearsal system prompt (used when the caller passes none). DEC-30 step 4 decision: the dev
+ * runtime OMITS the instructor's role and tone entirely (no style block, `assistant_style` is not read). The Service
+ * builds that block after the cohort safety rules with a minor clamp; re-implementing the clamp and quoting here would
+ * be a second copy to keep in sync for a rehearsal-only path. The safe default is no style, not unclamped style.
+ */
+export function localDevSystemPrompt(profile: ResolvedProfile): string {
+  const lesson = profile.lesson?.content;
+  return "You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
+    JSON.stringify({
+      lesson: lesson ? devCoachVisibleLesson(lesson) : null,
+      welcome: profile.welcome,
+      assets: profile.assets_focus ?? [],
+    });
+}
+
 export async function runLocalCoach(args: {
   config: LocalRuntimeConfig;
   profile: ResolvedProfile;
@@ -212,13 +246,7 @@ export async function runLocalCoach(args: {
           }
         },
       };
-  const system = args.systemPrompt ??
-    ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
-    JSON.stringify({
-      lesson: args.profile.lesson?.content ?? null,
-      welcome: args.profile.welcome,
-      assets: args.profile.assets_focus ?? [],
-    }));
+  const system = args.systemPrompt ?? localDevSystemPrompt(args.profile);
   const emailGuide = email.definitions.length ? [
     'Email automation is available through these exact local tool names: ' + email.definitions.map(tool => tool.name).join(', ') + '.',
     'First understand the actual work in natural Korean conversation. Ask one necessary question at a time with email_ask_user (question, choices as JSON array of {id,label}, allowFreeText as "true" or "false"). Do not repeat known answers or impose a fixed form.',
