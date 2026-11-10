@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { exportWork, isInside, WorkExportTooLarge, type TranscriptTask } from './workExport';
+import { exportWork, isInside, redactCredentials, WorkExportTooLarge, type TranscriptTask } from './workExport';
 
 export interface WorkExportSource { root: string; secrets: string[]; tasks: TranscriptTask[]; current(): boolean }
 
@@ -12,6 +12,7 @@ export const WORK_EXPORT_COPY = {
   pickLabel: '여기에 저장',
   progress: '내 작업을 내보내는 중이에요',
   saved: (folder: string) => `저장했어요: ${folder}`,
+  htmlMissing: (count: number) => `ZIP은 저장했지만 HTML 파일 ${count}개가 빠졌어요. 공유하기 전에 ZIP 안의 내보내기-안내.txt에서 이유를 확인해 주세요. 원본을 점검한 뒤 다시 내보낼 수 있어요.`,
   openFolder: '폴더 열기',
   inside: '작업 폴더 밖의 폴더를 골라 주세요. 작업 폴더 안에 두면 다음 내보내기에 섞여 들어가요.',
   remote: '이 컴퓨터의 폴더만 고를 수 있어요.',
@@ -54,10 +55,18 @@ export async function runWorkExport(source: WorkExportSource): Promise<string | 
     return undefined;
   }
   if (result === 'stale') { void vscode.window.showWarningMessage(WORK_EXPORT_COPY.stale); return undefined; }
-  // A non-modal message shows no `detail`, so the one line carries the file and the counts.
-  const line = [WORK_EXPORT_COPY.saved(displayFolder(path.dirname(result.file))), path.basename(result.file), `작업 파일 ${result.files}개 · 대화 ${result.tasks}개`,
-    ...(result.skipped ? [`넣지 않은 파일 ${result.skipped}개는 zip 안 내보내기-안내.txt에 적었어요`] : [])].join(' · ');
-  void vscode.window.showInformationMessage(line, WORK_EXPORT_COPY.openFolder).then(answer => {
+  let notification: Thenable<string | undefined>;
+  if (result.htmlSkipped) {
+    notification = vscode.window.showWarningMessage(WORK_EXPORT_COPY.htmlMissing(result.htmlSkipped), WORK_EXPORT_COPY.openFolder);
+  } else {
+    // A non-modal message shows no `detail`, so the one line carries the file and the counts.
+    const folder = displayFolder(redactCredentials(path.dirname(result.file), source.secrets));
+    const line = [WORK_EXPORT_COPY.saved(folder), path.basename(result.file), `작업 파일 ${result.files}개 · 대화 ${result.tasks}개`,
+      ...(result.htmlIncluded ? [`HTML 파일 ${result.htmlIncluded}개 포함`] : []),
+      ...(result.skipped ? [`넣지 않은 파일 ${result.skipped}개는 zip 안 내보내기-안내.txt에 적었어요`] : [])].join(' · ');
+    notification = vscode.window.showInformationMessage(line, WORK_EXPORT_COPY.openFolder);
+  }
+  void notification.then(answer => {
     if (answer === WORK_EXPORT_COPY.openFolder) void vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(result.file));
   });
   return result.file;
