@@ -1,3 +1,5 @@
+import type { ObservationEvent } from "./nativeObservationContract";
+
 /** REQ-KNOW-09: describe the immutable content of one outward action, never remembered consent. */
 /** REQ-KNOW-33: the pinned Service exposes no destination-specific receiver AI storage policy.
  * Content exclusion, expiry and our own memory settings cannot establish the receiver's policy. */
@@ -5,12 +7,24 @@ export const RECIPIENT_AI_MEMORY_UNKNOWN = "받는 사람의 AI 기억: 확인 �
 export const RECIPIENT_AI_MEMORY_NATIVE = `ⓘ ${RECIPIENT_AI_MEMORY_UNKNOWN}`;
 export const OUTBOUND_EXCLUDED = "포함하지 않는 것: AI 기억, 개인 메모";
 /** `memory`: a memory-store file the learner selected by hand (REQ-KNOW-51). Without it a memory path refuses the dialog. */
-export interface OutboundItem { name: string; bytes: number; memory?: true }
+export const ASSESSMENT_GROUPS = [
+  { id: "learner", label: "내가 남긴 기록" },
+  { id: "coach", label: "AI 답변" },
+  { id: "tools", label: "도구 사용과 허용 여부" },
+  { id: "work", label: "결과물과 그 밖의 작업 기록" },
+] as const;
+type AssessmentGroup = typeof ASSESSMENT_GROUPS[number]["id"];
+export interface AssessmentRecordReview { group: AssessmentGroup; text: string }
+export interface OutboundItem { name: string; bytes: number; memory?: true; assessment?: AssessmentRecordReview }
 export interface OutboundSection { recipient: string; items: readonly OutboundItem[] }
 /** `also`: a second send the same action makes to another recipient (e.g. the session record after a gallery publish). Each is its own block. */
 /** `notes`: plain facts about where the content shows up that are not bytes the app sends (e.g. the server adds the learner's name). */
 export interface OutboundManifest { recipient: string; items: readonly OutboundItem[]; public?: boolean; notes?: readonly string[]; also?: readonly OutboundSection[] }
 export type OutboundConfirmation = (manifest: OutboundManifest) => Promise<boolean>;
+/** Only the single-recipient assessment manifest can use group approval. */
+export const isGroupedAssessment = (manifest: OutboundManifest): boolean =>
+  !manifest.public && !manifest.also?.length && manifest.items.length > 0
+  && manifest.items.every(item => item.assessment !== undefined && !item.memory);
 export const contentBytes = (value: string): number => new TextEncoder().encode(value).byteLength;
 /** Native dialogs and React text still need control/bidi isolation; never interpret names as markup. */
 export function outboundLabel(value: string): string {
@@ -31,10 +45,25 @@ export function outboundDetails(manifest: OutboundManifest): string | null {
     "", OUTBOUND_EXCLUDED,
   ].join("\n");
 }
-/** One line per recorded event the observation assessment would send: what it is and the size of exactly that JSON. */
-export function observationOutboundItems(events: readonly unknown[]): OutboundItem[] {
-  const label: Record<string, string> = { user: "내가 보낸 말", assistant: "AI의 답", tool_request: "AI가 요청한 도구 사용", correction: "내가 고친 것", student_text: "내가 쓴 글" };
-  return events.map((e, i) => { const kind = typeof (e as { kind?: unknown })?.kind === "string" ? (e as { kind: string }).kind : ""; return { name: `기록 ${i + 1} · ${label[kind] ?? "작업 기록"}`, bytes: contentBytes(JSON.stringify(e)) }; });
+/** One entry per event. The group and text are only for the local review surface. */
+export function observationOutboundItems(events: readonly ObservationEvent[]): OutboundItem[] {
+  const kinds: Partial<Record<ObservationEvent["kind"], { group: AssessmentGroup; label: string }>> = {
+    user: { group: "learner", label: "내가 보낸 말" },
+    correction: { group: "learner", label: "내가 고친 것" },
+    coach: { group: "coach", label: "AI의 답" },
+    tool_request: { group: "tools", label: "AI가 요청한 도구 사용" },
+    approval: { group: "tools", label: "도구 사용 허용 여부" },
+    tool_result: { group: "tools", label: "도구 사용 결과" },
+    artifact: { group: "work", label: "저장한 결과물" },
+  };
+  return events.map((event, index) => {
+    const kind = kinds[event.kind];
+    return {
+      name: `기록 ${index + 1} · ${kind?.label ?? "작업 기록"}`,
+      bytes: contentBytes(JSON.stringify(event)),
+      assessment: { group: kind?.group ?? (event.student_text ? "learner" : "work"), text: event.student_text ?? event.text },
+    };
+  });
 }
 const MEMORY_NAMES = ["wiki", "notes", "memory", "memories", "개인 메모", "ai 기억"];
 const pathKey = (value: string) => value.replace(/\\/g, "/").normalize("NFKC").toLowerCase().replace(/^\/+|\/+$/g, "");

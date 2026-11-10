@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { OutboundDialog } from '../webview-ui/src/OutboundDialog';
-import { outboundPrompt } from '../src/outboundApproval';
+import { outboundPrompt, outboundPromptItemIds } from '../src/outboundApproval';
+import { observationOutboundItems } from '../src/outboundConsent';
+import type { ObservationEvent } from '../src/nativeObservationContract';
 for (const name of ['Node', 'Element']) (globalThis as any)[name] ??= (globalThis.window as any)[name];
 (globalThis as any).HTMLElement ??= (globalThis.window as any).Element;
 const act = (React as any).act;
@@ -98,6 +100,34 @@ async function main() {
   await toggle(twoInputs[3]); await press(twoDialog.querySelector('.hps-outbound-send'));
   assert.deepEqual(twoAnswers, [['r3', ['0:0', '0:1', '0:2', '1:0']]]);
   await act(async () => twoRoot.unmount());
+  const kinds = ['user', 'coach', 'tool_result', 'artifact'] as const;
+  const events: ObservationEvent[] = Array.from({ length: 155 }, (_, i) => ({
+    id: `event-${i}`, seq: i + 1, task: 'practice', at: i, kind: kinds[i % kinds.length],
+    text: `검토할 기록 ${i + 1}`, assistance: 'unknown',
+  }));
+  const assessment = outboundPrompt('assessment', { recipient: '관찰 평가 · service.invalid', items: observationOutboundItems(events) })!;
+  const assessmentHost: any = mountPoint(), assessmentRoot = createRoot(assessmentHost), assessmentAnswers: any[] = [];
+  await act(async () => assessmentRoot.render(<OutboundDialog prompt={assessment} onAnswer={(...a) => assessmentAnswers.push(a)} />));
+  const assessmentDialog = assessmentHost.querySelector('dialog');
+  const groupsToCheck = assessmentDialog.querySelectorAll('input');
+  const records = assessmentDialog.querySelectorAll('details');
+  const send = assessmentDialog.querySelector('.hps-outbound-send');
+  assert.equal(groupsToCheck.length, 4, '155 records require four choices');
+  assert.ok(groupsToCheck.every((input: any) => !input.checked));
+  assert.ok(records.every((group: any) => !group.hasAttribute('open')));
+  assert.equal(records.flatMap((group: any) => group.querySelectorAll('li')).length, 155, 'all records can be inspected');
+  assert.match(records[0].textContent, /검토할 기록 1/);
+  for (const input of groupsToCheck.slice(0, -1)) await toggle(input);
+  assert.ok(send.hasAttribute('disabled'), 'every group requires consent');
+  await toggle(groupsToCheck.at(-1));
+  await toggle(groupsToCheck[0]);
+  assert.ok(send.hasAttribute('disabled'), 'unchecking a group withdraws all of its approvals');
+  await toggle(groupsToCheck[0]);
+  await press(send);
+  assert.equal(assessmentAnswers.length, 1);
+  assert.equal(assessmentAnswers[0][0], 'assessment');
+  assert.deepEqual(assessmentAnswers[0][1].sort(), outboundPromptItemIds(assessment).sort(), 'the host receives all original item IDs');
+  await act(async () => assessmentRoot.unmount());
   console.log('PASS outbound dialog memory group (DES-KNOW-51): collapsed, unchecked, per recipient, counted, empty state, full-set send');
   console.log('PASS outbound dialog: recipient, unchecked checklist, sizes, exclusion box, full-set gating, focus, Escape, IME, single answer');
 }
