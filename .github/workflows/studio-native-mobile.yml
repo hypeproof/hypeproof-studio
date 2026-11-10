@@ -14,6 +14,8 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
