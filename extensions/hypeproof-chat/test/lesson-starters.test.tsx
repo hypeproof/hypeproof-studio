@@ -128,6 +128,32 @@ t("absent or empty starters render byte-identical to a lesson that never had the
   eq(html(config({ assistant_style: { role: "수학 도우미", tone: { id: "calm", label: "차분하게" } } })) === base, true, "assistant_style alone changed the UI");
 });
 
+t("a starter that looks like HTML renders as text, never as an element", async () => {
+  const evil = "<img src=x onerror=alert(1)>";
+  const out = html(config({ starters: [evil, "<b>굵게</b>"] }));
+  const group = /<div class="hps-lesson-starters"[\s\S]*?<\/ul><\/div>/.exec(out)?.[0] ?? "";
+  ok(group.includes("&lt;img src=x onerror=alert(1)&gt;"), "not escaped as text");
+  ok(!/<img|<b>/.test(group), "an element was created from starter text");
+  const h = await harness(config({ starters: [evil] }));
+  eq(h.chips()[0].textContent, evil, "chip text");
+  eq(h.chips()[0].findAll((e) => e.localName === "img" || e.localName === "b").length, 0, "child element in the chip");
+  await h.press(h.chips()[0]);
+  eq(h.draft(), evil, "the literal text is inserted into the draft");
+});
+
+t("restored history: a task that already has a sent message shows no chips, a tool-only or coach-only history still does", async () => {
+  const restored = [
+    { id: "a0", role: "assistant", content: "이어서 해요", createdAt: 1 },
+    { id: "t0", role: "tool", content: "", createdAt: 2 },
+    { id: "u0", role: "user", content: "지난번 질문", createdAt: 3 },
+    { id: "a1", role: "assistant", content: "답이에요", createdAt: 4 },
+  ];
+  const h = await harness(config({ starters: STARTERS }), { messages: restored });
+  eq(h.chips().length, 0, "chips shown over a restored sent message");
+  const fresh = await harness(config({ starters: STARTERS }), { messages: restored.slice(0, 2) });
+  eq(fresh.chips().length, 3, "negative control: no sent message");
+});
+
 t("a minor seat behaves the same: the chips come from the served starters, with no tone change", () => {
   const minor = html(config({ starters: STARTERS, minor_cohort: true, assistant_style: { tone_clamped: true } }));
   ok(minor.includes('data-lesson-starters="3"'), "minor seat lost the chips");
