@@ -46,9 +46,11 @@ physical-phone acceptance, live native AI and Google Play release remain separat
 
 ## iPhone installation gate
 
-Apple Developer membership purchase was confirmed on 2026-11-10; the account initially displayed **pending** after checkout. App Store Connect access was subsequently confirmed on 2026-11-10. TestFlight upload and physical iPhone installation still require signing and successful upload. A simulator app or unsigned device app is not an installable iPhone deliverable. Free Personal Team installation is also possible with Xcode, an Apple Account and the connected iPhone, but must be re-provisioned after seven days. The current Mac has no Xcode installation.
+Apple enrollment and App Store Connect access were confirmed on 2026-11-10. The signed iOS and Mac Catalyst **0.1.1 (2.1)** packages from `11154686e881033ca49cdced974d4399fb4cbd41` passed Apple processing and became available to internal TestFlight testers in [run 42800520204](https://github.com/hypeproof/hypeproof-studio/actions/runs/42800520204). The user reported successful phone use; the Mac copy was installed and launched with an App Store receipt. This is a bounded baseline observation, not full acceptance of every feature or a public App Store release.
 
-After membership is ready: select the enrolled team in `ios/HPStudio.xcodeproj`, provision `ai.hypeproof.studio.mobile`, archive the Release scheme, upload via Xcode Organizer, complete App Store Connect processing and invite the test account through TestFlight. Do not commit certificates, provisioning profiles or private keys. App Store icon/privacy/store metadata and a signed archive must be verified before upload.
+The current Mac has Command Line Tools but no full Xcode installation. Native iOS/Catalyst build and UI validation use the pinned GitHub macOS runner. Signing certificates, provisioning profiles and API keys stay in the Apple release environment; never commit them. The Catalyst preview and existing desktop IDE RC remain different apps. Subsequent source changes require fresh verification and a separately identified testing build.
+
+The next vertical slice and dependent work are recorded in [mobile growth roadmap](../../docs/requirements/mobile-growth-roadmap.md). Reflection notes stay local and separate from automatically transmitted context and confirmed intentions.
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
 

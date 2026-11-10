@@ -16,4 +16,4 @@ xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -de
 xcrun simctl launch "$device" ai.hypeproof.studio.mobile
 sleep 2
 xcrun simctl io "$device" screenshot ../evidence/native-iphone.png
-printf '%s\n' "source=${GITHUB_SHA:-local}" "runtime=$runtime" "device=$device" "physical_iphone=NOT_RUN" "testflight=BLOCKED_NO_MEMBERSHIP" > ../evidence/identity.txt
+printf '%s\n' "source=${GITHUB_SHA:-local}" "runtime=$runtime" "device=$device" "physical_iphone=NOT_RUN" "testflight=NOT_RUN_BY_THIS_CHECK" > ../evidence/identity.txt

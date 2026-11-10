@@ -5,6 +5,7 @@ import java.util.UUID;
 
 /** Versioned local records. AI text never creates a confirmed revision. */
 public final class StudioState {
+    public static final String[] REFLECTION_FIELDS = {"observation", "audience", "change", "experiment", "learning"};
     public JSONObject data;
     public StudioState() throws JSONException { data = new JSONObject().put("version", 1).put("projects", new JSONArray()); }
     public StudioState(String raw) throws JSONException {
@@ -15,6 +16,13 @@ public final class StudioState {
             JSONObject p = projects().getJSONObject(i);
             if (!ids.add(p.getString("id"))) throw new JSONException("Duplicate project");
             p.getString("draft"); p.getString("intentDraft"); p.getString("title");
+            // v1 notebooks predate reflection. Missing fields migrate without touching existing text.
+            if (!p.has("reflection")) p.put("reflection", emptyReflection());
+            JSONObject reflection = p.getJSONObject("reflection");
+            for (String field : REFLECTION_FIELDS) {
+                if (!reflection.has(field)) reflection.put(field, "");
+                if (!(reflection.get(field) instanceof String)) throw new JSONException("Invalid reflection field");
+            }
             JSONArray messages = p.getJSONArray("messages");
             for (int j = 0; j < messages.length(); j++) {
                 JSONObject m = messages.getJSONObject(j);
@@ -34,6 +42,7 @@ public final class StudioState {
         for (int i = 0; i < snapshot.projects().length(); i++) {
             JSONObject p = snapshot.projects().getJSONObject(i); String id = p.getString("id");
             for (String key : new String[]{"draft", "intentDraft"}) if (edits.containsKey(id + ":" + key)) p.put(key, edits.get(id + ":" + key));
+            for (String key : REFLECTION_FIELDS) if (edits.containsKey(id + ":reflection:" + key)) p.getJSONObject("reflection").put(key, edits.get(id + ":reflection:" + key));
         }
         return snapshot;
     }
@@ -45,9 +54,48 @@ public final class StudioState {
     public String create() throws JSONException {
         if (projects().length() >= 100) throw new JSONException("기록이 100개예요. 내보낸 뒤 기록을 정리해 주세요.");
         String id = UUID.randomUUID().toString();
-        JSONObject p = new JSONObject().put("id", id).put("updatedAt", System.currentTimeMillis()).put("title", "새로운 생각").put("draft", "").put("intentDraft", "").put("messages", new JSONArray()).put("revisions", new JSONArray());
+        JSONObject p = new JSONObject().put("id", id).put("updatedAt", System.currentTimeMillis()).put("title", "새로운 생각").put("draft", "").put("intentDraft", "").put("reflection", emptyReflection()).put("messages", new JSONArray()).put("revisions", new JSONArray());
         JSONArray next = new JSONArray().put(p); for (int i = 0; i < projects().length(); i++) next.put(projects().get(i));
         data.put("projects", next); return id;
+    }
+    private static JSONObject emptyReflection() throws JSONException {
+        JSONObject notes = new JSONObject(); for (String field : REFLECTION_FIELDS) notes.put(field, ""); return notes;
+    }
+    public void edit(String id, String key, String value) throws JSONException {
+        JSONObject p = find(id); if (p == null) throw new JSONException("Missing project");
+        if (key.equals("draft") || key.equals("intentDraft")) p.put(key, value);
+        else {
+            boolean allowed = false;
+            for (String field : REFLECTION_FIELDS) if (key.equals("reflection:" + field)) { p.getJSONObject("reflection").put(field, value); allowed = true; break; }
+            if (!allowed) throw new JSONException("Invalid editable field");
+        }
+        p.put("updatedAt", System.currentTimeMillis());
+    }
+    public String subtitle(String id) throws JSONException {
+        JSONObject p = find(id); JSONArray revisions = p.getJSONArray("revisions");
+        if (revisions.length() > 0) return "확인한 의도 · " + revisions.getJSONObject(revisions.length() - 1).getString("text");
+        if (!p.getString("intentDraft").trim().isEmpty()) return "의도 작성 중 · " + p.getString("intentDraft");
+        if (!p.getString("draft").trim().isEmpty()) return "작성 중 · " + p.getString("draft");
+        for(String field:REFLECTION_FIELDS)if(!p.getJSONObject("reflection").getString(field).trim().isEmpty())return "생각 정리 · "+p.getJSONObject("reflection").getString(field);
+        return "아직 확인한 의도가 없어요";
+    }
+    public String displayTitle(String id) throws JSONException {
+        JSONObject p=find(id);
+        if(p.getJSONArray("messages").length()>0 || !p.getString("title").equals("새로운 생각"))return p.getString("title");
+        for(String field:REFLECTION_FIELDS) {
+            String note=p.getJSONObject("reflection").getString(field).trim();
+            if(!note.isEmpty())return note.substring(0,note.offsetByCodePoints(0,Math.min(32,note.codePointCount(0,note.length()))));
+        }
+        return p.getString("title");
+    }
+    public boolean matches(String id, String query) throws JSONException {
+        String needle = query.trim().toLowerCase(java.util.Locale.ROOT);
+        JSONObject p = find(id);
+        for(String field:REFLECTION_FIELDS)if(p.getJSONObject("reflection").getString(field).toLowerCase(java.util.Locale.ROOT).contains(needle))return true;
+        return p.getString("title").toLowerCase(java.util.Locale.ROOT).contains(needle)
+            || subtitle(id).toLowerCase(java.util.Locale.ROOT).contains(needle)
+            || p.getString("draft").toLowerCase(java.util.Locale.ROOT).contains(needle)
+            || p.getString("intentDraft").toLowerCase(java.util.Locale.ROOT).contains(needle);
     }
     public static String checked(String raw) {
         String text = raw.trim(); if (text.isEmpty() || text.codePointCount(0, text.length()) > 4000) throw new IllegalArgumentException("1~4,000자로 적어 주세요."); return text;

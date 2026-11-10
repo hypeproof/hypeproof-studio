@@ -10,6 +10,8 @@ struct StudioHome: View {
     @State private var showHistory = false
     @State private var showDelete = false
     @State private var showRecovery = false
+    @State private var showReflection = false
+    @State private var search = ""
     @State private var ageOK = false
     @State private var transferOK = false
     @State private var exportURL: URL?
@@ -23,7 +25,7 @@ struct StudioHome: View {
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        HStack { Text("생각을 실천으로").font(.caption.weight(.semibold)); Spacer(); Text("NATIVE PREVIEW").font(.caption2.monospaced()) }.foregroundStyle(.secondary)
+                        Text("생각을 실천으로").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         if let project = model.project {
                             Text(project.messages.isEmpty ? "마음에 남은 장면이\n있나요?" : project.title).font(.largeTitle.bold()).accessibilityIdentifier("projectTitle")
                             if let revision = project.revisions.last {
@@ -33,6 +35,17 @@ struct StudioHome: View {
                                 }.padding().frame(maxWidth: .infinity, alignment: .leading).background(.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 18))
                             }
                             if project.messages.isEmpty { introduction }
+                            Button { showReflection = true } label: {
+                                HStack(alignment: .top, spacing: 12) {
+                                    Image(systemName: "book.pages").font(.title2)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("생각 정리").font(.headline)
+                                        Text("관찰한 것부터, 해보고 배운 것까지").font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.caption)
+                                }.padding(.vertical, 12)
+                            }.buttonStyle(.plain).accessibilityIdentifier("openReflection")
                             ForEach(project.messages) { message in
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(message.role == "user" ? "나의 생각" : "함께 생각하기").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -100,12 +113,22 @@ struct StudioHome: View {
             }.presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showIntent) { intentSheet }
+        .sheet(isPresented: $showReflection) { reflectionSheet }
         .sheet(isPresented: $showHistory) {
             NavigationStack {
                 List {
                     Button("새 생각 기록하기") { model.newProject(); showHistory = false }
-                    ForEach(model.notebook.projects) { project in Button(project.title) { model.select(project.id); showHistory = false } }
-                }.navigationTitle("나의 기록").toolbar { Button("닫기") { showHistory = false } }
+                    ForEach(model.visibleNotebook.projects.filter { $0.matches(search) }) { project in
+                        Button { model.select(project.id); showHistory = false } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(project.displayTitle).font(.headline).foregroundStyle(.primary)
+                                if !project.summary.isEmpty { Text(project.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
+                                Text(project.updatedAt, style: .date).font(.caption).foregroundStyle(.secondary)
+                            }.padding(.vertical, 6)
+                        }
+                    }
+                }.searchable(text: $search, prompt: "생각이나 의도로 찾기")
+                    .navigationTitle("나의 기록").toolbar { Button("닫기") { showHistory = false } }
             }
         }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
@@ -115,6 +138,25 @@ struct StudioHome: View {
         .confirmationDialog("이 기록을 삭제할까요?", isPresented: $showDelete, titleVisibility: .visible) {
             Button("이 기기에서 삭제", role: .destructive) { model.deleteProject() }
         } message: { Text("대화와 의도 변경 기록을 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.") }
+    }
+    private var reflectionSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("한 칸부터 적어도 괜찮아요. 순서나 정답은 없어요.")
+                    Text("이 메모는 기기에 저장해요. AI에 자동으로 보내거나 내 의도로 확정하지 않아요.").font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach(ReflectionField.allCases) { field in
+                    Section(field.title) {
+                        Text(field.question).font(.subheadline).foregroundStyle(.secondary)
+                        TextField("내 말로 적기", text: Binding(get: { model.reflectionText(field) }, set: { model.editReflection($0, field: field) }), axis: .vertical)
+                            .lineLimit(3...8).accessibilityLabel(field.question).accessibilityIdentifier("reflection-" + field.rawValue).disabled(model.readOnly)
+                    }
+                }
+                if let error = model.error { Section { Text(error).foregroundStyle(.red) } }
+            }.navigationTitle("생각 정리").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("닫기") { showReflection = false } }
+        }
     }
     private var introduction: some View {
         VStack(alignment: .leading, spacing: 12) {

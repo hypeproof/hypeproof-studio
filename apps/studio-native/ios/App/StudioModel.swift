@@ -20,13 +20,26 @@ import SwiftUI
         if update({ try $0.confirm(text) }) { editing[(active ?? "") + ":intent"] = nil; return true }
         return false
     }
+    func reflectionText(_ field: ReflectionField) -> String {
+        editing[(active ?? "") + ":reflection:" + field.rawValue] ?? project?.reflection?[field.rawValue] ?? ""
+    }
+    func editReflection(_ text: String, field: ReflectionField) {
+        guard let active else { return }
+        editing[active + ":reflection:" + field.rawValue] = text
+        update {
+            if $0.reflection == nil { $0.reflection = [:] }
+            $0.reflection?[field.rawValue] = text
+            $0.updatedAt = Date()
+        }
+    }
     private var grant: Grant?
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private let service = StudioService()
     private let file: URL
     let installID: String
-    var project: Project? { notebook.projects.first { $0.id == active } }
+    var visibleNotebook: Notebook { notebook.includingEdits(editing) }
+    var project: Project? { visibleNotebook.projects.first { $0.id == active } }
     init() {
         let defaults = UserDefaults.standard
         if let id = defaults.string(forKey: "studio.installation") { installID = id.lowercased() }
@@ -49,19 +62,19 @@ import SwiftUI
         notebook = value
     }
     @discardableResult func update(_ edit: (inout Project) throws -> Void) -> Bool {
-        guard let index = notebook.projects.firstIndex(where: { $0.id == active }) else { return false }
-        do { var value = notebook; try edit(&value.projects[index]); try persist(value); return true }
+        guard let active else { return false }
+        do { try persist(notebook.updating(active, visibleEdits: editing, edit: edit)); return true }
         catch { self.error = error.localizedDescription; return false }
     }
     func newProject() {
         cancel()
         guard notebook.projects.count < 100 else { error = "기록이 100개예요. 내보낸 뒤 필요 없는 기록을 정리해 주세요."; return }
-        var value = notebook; let project = Project(); value.projects.insert(project, at: 0)
+        var value = notebook.includingEdits(editing); let project = Project(); value.projects.insert(project, at: 0)
         do { try persist(value); active = project.id } catch { self.error = error.localizedDescription }
     }
     func select(_ id: String) { cancel(); active = id }
     func deleteProject() {
-        cancel(); var value = notebook; value.projects.removeAll { $0.id == active }
+        cancel(); var value = notebook.includingEdits(editing); value.projects.removeAll { $0.id == active }
         do { try persist(value); active = value.projects.first?.id } catch { self.error = error.localizedDescription }
     }
     func cancel() { generation = UUID(); task?.cancel(); task = nil; busy = false }
@@ -81,10 +94,9 @@ import SwiftUI
     func send() {
         guard !busy, let project else { return }
         do {
-            var changed = project; try changed.append(draftText)
-            var value = notebook
-            guard let i = value.projects.firstIndex(where: { $0.id == project.id }) else { return }
-            value.projects[i] = changed; try persist(value); editing[project.id + ":draft"] = nil
+            let text = draftText
+            try persist(notebook.updating(project.id, visibleEdits: editing) { try $0.append(text) })
+            editing[project.id + ":draft"] = nil
             if connected { ask() }
         } catch { self.error = error.localizedDescription }
     }

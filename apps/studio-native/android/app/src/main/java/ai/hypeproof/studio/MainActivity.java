@@ -3,6 +3,7 @@ package ai.hypeproof.studio;
 import android.app.*;
 import android.os.*;
 import android.content.*;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -33,7 +34,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private Future<?> pending;
     private LinearLayout root, content;
-    private int ink = Color.rgb(28,65,54);
+    private int ink = Color.rgb(28,65,54), paper = Color.rgb(245,244,239), notePaper = Color.WHITE, aiPaper = Color.rgb(230,239,230), muted = Color.rgb(82,101,91), failureInk = Color.rgb(160,45,35);
     private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density); }
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -46,10 +47,17 @@ public final class MainActivity extends Activity {
             if (state.projects().length() > 0) activeID = state.projects().getJSONObject(0).getString("id");
             if (saved != null && state.find(saved.getString("active")) != null) activeID = saved.getString("active");
             if (saved != null) speechProjectID = saved.getString("speechProject");
+            if (saved != null && saved.getBundle("pendingEdits") != null) {
+                Bundle edits=saved.getBundle("pendingEdits");
+                for(String key:edits.keySet()) { String value=edits.getString(key);if(value!=null)editing.put(key,value); }
+            }
         } catch (Exception e) { readOnly = true; error = "기록을 읽지 못했어요. 원본을 보존하기 위해 저장을 멈췄어요."; try { state = new StudioState(); } catch (Exception ignored) {} }
         render();
     }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("active", activeID); out.putString("speechProject", speechProjectID); }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out); out.putString("active", activeID); out.putString("speechProject", speechProjectID);
+        Bundle edits=new Bundle();for(java.util.Map.Entry<String,String> entry:editing.entrySet())edits.putString(entry.getKey(),entry.getValue());out.putBundle("pendingEdits",edits);
+    }
     @Override protected void onDestroy() { cancel(); executor.shutdownNow(); super.onDestroy(); }
     private void cancel() { generation++; if (pending != null) pending.cancel(true); service.cancel(); busy = false; }
     interface Change { void run() throws Exception; }
@@ -58,7 +66,9 @@ public final class MainActivity extends Activity {
         String previous = state.data.toString(); String previousID = activeID;
         FileOutputStream output = null;
         try {
-            edit.run(); output = records.startWrite(); output.write(state.data.toString().getBytes(StandardCharsets.UTF_8)); records.finishWrite(output); return true;
+            // A later successful write must also retain any visible fields whose earlier save failed.
+            state=state.includingEdits(editing);
+            edit.run(); output = records.startWrite(); output.write(state.data.toString().getBytes(StandardCharsets.UTF_8)); records.finishWrite(output); editing.clear(); return true;
         } catch (Exception e) {
             if (output != null) records.failWrite(output);
             try { state = new StudioState(previous); activeID = previousID; } catch (Exception ignored) { readOnly = true; }
@@ -75,18 +85,35 @@ public final class MainActivity extends Activity {
     private LinearLayout column() { LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); return layout; }
     private EditText editor(String hint, String value, String description) {
         EditText field = new EditText(this); field.setHint(hint); field.setText(value); field.setTextSize(17); field.setContentDescription(description);
+        field.setTextColor(ink); field.setHintTextColor(muted); field.setMinHeight(dp(48));
         field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); field.setMaxLines(5); return field;
     }
     private void watch(EditText field, String key, String id) {
+        watch(field, key, id, null);
+    }
+    private void watch(EditText field, String key, String id, TextView saved) {
         field.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
-            public void onTextChanged(CharSequence s,int start,int before,int count) { editing.put(id+":"+key,s.toString()); change(() -> state.find(id).put(key,s.toString())); }
+            public void onTextChanged(CharSequence s,int start,int before,int count) {
+                String value=s.toString(); editing.put(id+":"+key,value);
+                boolean stored=change(() -> state.edit(id,key,value));
+                if (stored) editing.remove(id+":"+key);
+                if (saved!=null) {
+                    String status=stored?"이 기기에 저장했어요.":"저장하지 못했어요. 작성한 글은 화면에 남아 있어요. 다시 저장하거나 내보내 주세요.";
+                    if(!saved.getText().toString().equals(status))saved.setText(status);
+                    saved.setTextColor(stored?muted:failureInk);
+                }
+            }
             public void afterTextChanged(Editable e) {}
         });
     }
     private void newProject() { cancel(); if (change(() -> activeID = state.create())) render(); }
     private void render() {
-        root = column(); root.setBackgroundColor(Color.rgb(245,244,239)); root.setPadding(dp(20),dp(8),dp(20),dp(8));
+        boolean dark=(getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+        ink=dark?Color.rgb(224,239,231):Color.rgb(28,65,54); paper=dark?Color.rgb(22,32,28):Color.rgb(245,244,239);
+        notePaper=dark?Color.rgb(33,46,39):Color.WHITE; aiPaper=dark?Color.rgb(41,59,46):Color.rgb(230,239,230);
+        muted=dark?Color.rgb(180,201,188):Color.rgb(82,101,91); failureInk=dark?Color.rgb(255,180,169):Color.rgb(160,45,35);
+        root = column(); root.setBackgroundColor(paper); root.setPadding(dp(20),dp(8),dp(20),dp(8));
         root.setOnApplyWindowInsetsListener((view,insets) -> {
             int bottom = insets.getSystemWindowInsetBottom();
             if (Build.VERSION.SDK_INT >= 30) bottom = Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
@@ -105,11 +132,12 @@ public final class MainActivity extends Activity {
             } else {
                 JSONArray messages = p.getJSONArray("messages"), revisions = p.getJSONArray("revisions");
                 content.addView(text(messages.length()==0 ? "마음에 남은 장면이\n있나요?" : p.getString("title"),28,true));
+                Button reflect=button("생각 정리",this::reflection); reflect.setEnabled(!readOnly); content.addView(reflect);
                 if (revisions.length()>0) { JSONObject r = revisions.getJSONObject(revisions.length()-1); content.addView(text("내가 확인한 의도 · "+r.getInt("revision"),13,true)); content.addView(text(r.getString("text"),19,true)); }
                 if (messages.length()==0) introduction();
                 for (int i=0;i<messages.length();i++) {
                     JSONObject m=messages.getJSONObject(i); LinearLayout card=column(); card.setPadding(dp(16),dp(12),dp(16),dp(12));
-                    GradientDrawable bg=new GradientDrawable(); bg.setColor(m.getString("role").equals("user")?Color.WHITE:Color.rgb(230,239,230)); bg.setCornerRadius(dp(18)); card.setBackground(bg);
+                    GradientDrawable bg=new GradientDrawable(); bg.setColor(m.getString("role").equals("user")?notePaper:aiPaper); bg.setCornerRadius(dp(18)); card.setBackground(bg);
                     card.addView(text(m.getString("role").equals("user")?"나의 생각":"함께 생각하기",12,true)); TextView body=text(m.getString("content"),17,false); body.setTextIsSelectable(true); card.addView(body);
                     LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2); params.bottomMargin=dp(12); content.addView(card,params);
                 }
@@ -124,7 +152,7 @@ public final class MainActivity extends Activity {
             }
             if (busy) content.addView(button("답변을 준비하고 있어요 · 취소",()->{cancel();render();}));
             if (readOnly) content.addView(button("원본 보존 후 새로 시작",this::recover));
-            if (error!=null) { TextView status=text(error,14,false); status.setTextColor(Color.rgb(160,45,35)); content.addView(status); }
+            if (error!=null) { TextView status=text(error,14,false); status.setTextColor(failureInk); content.addView(status); }
         } catch(Exception e) { content.addView(text("기록을 표시하지 못했어요.",16,false)); }
         setContentView(root); root.requestApplyInsets();
     }
@@ -216,8 +244,64 @@ public final class MainActivity extends Activity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("나의 의도").setView(scroller).setNegativeButton("닫기",null).setPositiveButton("내 의도로 확인",null).create();
         dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->{if(change(()->state.confirm(id,field.getText().toString()))){editing.remove(id+":intentDraft");dialog.dismiss();render();}}));dialog.show();
     }
-    private void history(){try{JSONArray all=state.projects();String[] labels=new String[all.length()+1];labels[0]="새 생각 기록하기";for(int i=0;i<all.length();i++)labels[i+1]=all.getJSONObject(i).getString("title");new AlertDialog.Builder(this).setTitle("나의 기록").setItems(labels,(d,index)->{if(index==0)newProject();else try{cancel();activeID=all.getJSONObject(index-1).getString("id");render();}catch(Exception ignored){}}).show();}catch(Exception ignored){}}
-    private void menu(){new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제",readOnly?"읽지 못한 원본 내보내기":"전체 기록 내보내기","현재 기록 삭제"},(d,i)->{if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
+    private void reflection() {
+        JSONObject p=project(); if(p==null||readOnly)return; String id=activeID;
+        LinearLayout box=column();box.setPadding(dp(24),dp(12),dp(24),dp(12));
+        box.addView(text("떠오르는 것부터 편하게 적어요. 순서는 자유롭고, 빈칸으로 남겨도 괜찮아요.",16,false));
+        box.addView(text("이 메모는 이 기기에만 저장돼요. AI에 자동 전송하거나 내 의도로 확정하지 않아요.",14,false));
+        String[] questions={"직접 본 것은 무엇인가요?","누구의 어떤 불편인가요?","무엇이 달라지면 좋을까요?","가장 작게 확인할 행동은 무엇인가요?","해보니 무엇이 달랐나요?"};
+        try {
+            JSONObject notes=p.getJSONObject("reflection");
+            for(int i=0;i<StudioState.REFLECTION_FIELDS.length;i++) {
+                String key="reflection:"+StudioState.REFLECTION_FIELDS[i];
+                TextView label=text(questions[i],18,true);androidx.core.view.ViewCompat.setAccessibilityHeading(label,true);box.addView(label);
+                EditText field=editor("지금 떠오르는 생각을 적어 주세요",editing.getOrDefault(id+":"+key,notes.getString(StudioState.REFLECTION_FIELDS[i])),questions[i]);
+                field.setId(View.generateViewId());label.setLabelFor(field.getId());field.setMinLines(2);box.addView(field);
+                boolean unsaved=editing.containsKey(id+":"+key);
+                TextView saved=text(unsaved?"아직 저장하지 못한 글이 있어요.":"이 기기에 자동 저장해요.",12,false);saved.setTextColor(unsaved?failureInk:muted);
+                saved.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);box.addView(saved);watch(field,key,id,saved);
+            }
+        } catch(JSONException e) { error="생각 정리 기록을 읽지 못했어요. 원본을 보존했어요.";render();return; }
+        ScrollView scroller=new ScrollView(this);scroller.addView(box);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("생각 정리").setView(scroller).setNegativeButton("대화로 돌아가기",null).setNeutralButton("다시 저장",null).setPositiveButton("내보내기",null).create();
+        dialog.setOnShowListener(v->{
+            dialog.getButton(-3).setOnClickListener(b->{
+                if(change(()->state=state.includingEdits(editing))) {
+                    editing.clear();error=null;dialog.dismiss();render();reflection();
+                }
+            });
+            dialog.getButton(-1).setOnClickListener(b->export());
+        });dialog.show();
+    }
+    private void history() {
+        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),dp(8));
+        EditText query=editor("제목이나 의도로 찾기","","기록 검색");query.setSingleLine(true);box.addView(query);
+        Button create=button("새 생각 기록하기",()->{});create.setEnabled(!readOnly);box.addView(create);
+        LinearLayout list=column();ScrollView scroll=new ScrollView(this);scroll.addView(list);box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(320)));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("나의 기록").setView(box).setNegativeButton("닫기",null).create();
+        create.setOnClickListener(v->{dialog.dismiss();newProject();});
+        Runnable filter=()->{
+            list.removeAllViews();
+            try {
+                StudioState visible=state.includingEdits(editing);JSONArray all=visible.projects();
+                for(int i=0;i<all.length();i++) {
+                    JSONObject item=all.getJSONObject(i);String id=item.getString("id");if(!visible.matches(id,query.getText().toString()))continue;
+                    String title=visible.displayTitle(id),subtitle=visible.subtitle(id);
+                    LinearLayout row=column();row.setPadding(dp(4),dp(8),dp(4),dp(8));row.setMinimumHeight(dp(64));
+                    TextView heading=text(title,17,true),detail=text(subtitle,14,false);detail.setMaxLines(2);detail.setEllipsize(android.text.TextUtils.TruncateAt.END);detail.setTextColor(muted);
+                    heading.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);detail.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                    row.addView(heading);row.addView(detail);row.setContentDescription(title+". "+subtitle);row.setFocusable(true);
+                    android.util.TypedValue background=new android.util.TypedValue();getTheme().resolveAttribute(android.R.attr.selectableItemBackground,background,true);row.setBackgroundResource(background.resourceId);
+                    row.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,android.view.accessibility.AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName(Button.class.getName());}});
+                    row.setOnClickListener(v->{cancel();activeID=id;dialog.dismiss();render();});list.addView(row);
+                }
+                if(list.getChildCount()==0)list.addView(text("찾는 기록이 없어요. 다른 말로 찾아보세요.",16,false));
+            }catch(JSONException e){list.addView(text("기록을 읽지 못했어요. 작성한 내용은 그대로 있어요.",16,false));}
+        };
+        query.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){filter.run();}public void afterTextChanged(Editable e){}});
+        filter.run();dialog.show();
+    }
+    private void menu(){new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제",readOnly?"읽지 못한 원본 내보내기":"전체 기록 내보내기","현재 기록 삭제"},(d,i)->{if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화, 생각 정리 메모와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
     private void recover(){new AlertDialog.Builder(this).setTitle("원본을 보존하고 새로 시작할까요?").setMessage("읽지 못한 원본은 기기에 별도 보관해요. 먼저 원본 내보내기로 외부에 복사해 두세요.").setNegativeButton("취소",null).setPositiveButton("원본 보존 후 새로 시작",(d,w)->{try{File backup=new File(getFilesDir(),"recovery-"+UUID.randomUUID()+".json");try(FileOutputStream out=new FileOutputStream(backup)){out.write(records.readFully());}readOnly=false;if(change(()->{state=new StudioState();activeID=null;})){error=null;render();}else readOnly=true;}catch(Exception e){error="원본을 보존하지 못해 초기화하지 않았어요.";render();}}).show();}
     private byte[] exportBytes() throws Exception {
         if(readOnly)return records.readFully();

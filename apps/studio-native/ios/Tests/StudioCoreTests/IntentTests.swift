@@ -2,6 +2,43 @@ import XCTest
 @testable import StudioCore
 
 final class IntentTests: XCTestCase {
+    func testNextSuccessfulSaveIncludesEarlierFailedReflectionEdits() throws {
+        var disk = Notebook(); var project = Project()
+        project.reflection = ["observation": "old observation"]
+        disk.projects = [project]
+        let visible = [project.id + ":reflection:observation": "unsaved observation"]
+        // The first save failed: disk is still old, but visible edits survive.
+        let next = try disk.updating(project.id, visibleEdits: visible) { $0.reflection?["learning"] = "later successful edit" }
+        let restarted = try Notebook.decode(next.encode())
+        XCTAssertEqual(restarted.projects[0].reflection?["observation"], "unsaved observation")
+        XCTAssertEqual(restarted.projects[0].reflection?["learning"], "later successful edit")
+        XCTAssertEqual(restarted.projects[0].displayTitle, "unsaved observation")
+        XCTAssertTrue(restarted.projects[0].matches("observation"))
+        XCTAssertTrue(restarted.projects[0].revisions.isEmpty)
+        XCTAssertFalse(restarted.projects[0].conversation().description.contains("unsaved observation"))
+    }
+    func testReflectionSurvivesRestartWithoutBecomingAIContextOrConfirmedIntent() throws {
+        var notebook = Notebook(); var first = Project()
+        first.reflection = ["observation": "동네 가게의 실제 관찰", "learning": "내 추측과 달랐다"]
+        notebook.projects = [first, Project(title: "다른 생각")]
+        let restored = try Notebook.decode(notebook.encode())
+        XCTAssertEqual(restored.projects[0].reflection?["learning"], "내 추측과 달랐다")
+        XCTAssertNil(restored.projects[1].reflection)
+        XCTAssertTrue(restored.projects[0].revisions.isEmpty)
+        XCTAssertFalse(restored.projects[0].conversation().description.contains("동네 가게의 실제 관찰"))
+        let exported = try Notebook.decode(restored.includingEdits([first.id + ":reflection:learning": "저장 실패 후 보이는 수정"]).encode())
+        XCTAssertEqual(exported.projects[0].reflection?["learning"], "저장 실패 후 보이는 수정")
+        XCTAssertEqual(restored.projects[0].reflection?["learning"], "내 추측과 달랐다")
+    }
+    func testOriginalV1RecordsRemainReadableWithoutReflection() throws {
+        var notebook = Notebook(); notebook.projects = [Project()]
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: notebook.encode()) as? [String: Any])
+        var projects = try XCTUnwrap(json["projects"] as? [[String: Any]])
+        projects[0].removeValue(forKey: "reflection"); json["projects"] = projects
+        let restored = try Notebook.decode(JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(restored.version, 1)
+        XCTAssertNil(restored.projects[0].reflection)
+    }
     func testExportRetainsVisibleEditsWhenPersistedDraftIsOlder() throws {
         var saved = Notebook(); var project = Project(); project.draft = "old draft A"; saved.projects = [project]
         let edits = [project.id + ":draft": "visible draft B", project.id + ":intent": "unconfirmed intention B"]

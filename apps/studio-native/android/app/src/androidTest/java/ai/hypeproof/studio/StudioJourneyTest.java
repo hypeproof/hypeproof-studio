@@ -61,6 +61,69 @@ public class StudioJourneyTest {
         try (FileOutputStream out=new FileOutputStream(new File(directory,name+".png"))) { assertTrue(pixels.compress(Bitmap.CompressFormat.PNG,100,out)); }
         pixels.recycle();
     }
+    @Test public void reflectionIsOptionalPersistentAndExcludedFromAIContext() throws Exception {
+        begin();
+        onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("해보니 무엇이 달랐나요?")).perform(scrollTo(),replaceText("먼저 적은 배움"),closeSoftKeyboard());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(scrollTo(),replaceText("손님이 문 앞에서 기다렸다"),closeSoftKeyboard());
+        String first=notebook().projects().getJSONObject(0).getString("id");
+        assertEquals("",notebook().find(first).getJSONObject("reflection").getString("audience"));
+        assertEquals(0,notebook().find(first).getJSONArray("messages").length());
+        assertEquals(0,notebook().find(first).getJSONArray("revisions").length());
+        assertFalse(notebook().conversation(first).toString().contains("문 앞"));
+        screenshot("android-reflection");
+        onView(withText("대화로 돌아가기")).perform(click());app.recreate();
+        onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("손님이 문 앞에서 기다렸다")));
+        onView(withContentDescription("해보니 무엇이 달랐나요?")).perform(scrollTo()).check(matches(withText("먼저 적은 배움")));
+        onView(withText("대화로 돌아가기")).perform(click());
+        draft("동네 가게 관찰");record();
+        onView(withText("지금의 의도 정리하기")).perform(scrollTo(),click());
+        onView(withContentDescription("의도 입력")).perform(replaceText("대기 시간을 줄인다"),closeSoftKeyboard());
+        onView(withText("내 의도로 확인")).perform(click());
+        onView(allOf(withText("기록"),not(withContentDescription("생각 기록 또는 보내기")))).perform(click());
+        onView(withContentDescription("기록 검색")).perform(replaceText("대기 시간"),closeSoftKeyboard());
+        onView(withText("확인한 의도 · 대기 시간을 줄인다")).check(matches(isDisplayed()));
+        screenshot("android-project-search");
+        onView(withText("새 생각 기록하기")).perform(click());
+        String second=notebook().projects().getJSONObject(0).getString("id");
+        onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("")));
+        onView(withContentDescription("누구의 어떤 불편인가요?")).perform(scrollTo(),replaceText("버스를 기다리는 사람"),closeSoftKeyboard());
+        assertEquals("손님이 문 앞에서 기다렸다",notebook().find(first).getJSONObject("reflection").getString("observation"));
+        assertEquals("버스를 기다리는 사람",notebook().find(second).getJSONObject("reflection").getString("audience"));
+        assertFalse(notebook().conversation(second).toString().contains("버스를"));
+    }
+    @Test public void failedReflectionSaveKeepsVisibleAndExportableTextUntilNextSave() throws Exception {
+        begin();onView(withText("생각 정리")).perform(scrollTo(),click());
+        onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(scrollTo(),replaceText("저장된 관찰"),closeSoftKeyboard());
+        File blocker=new File(context.getCacheDir(),"reflection-save-blocker");
+        try(FileOutputStream output=new FileOutputStream(blocker)){output.write(1);}
+        java.util.concurrent.atomic.AtomicReference<android.util.AtomicFile> original=new java.util.concurrent.atomic.AtomicReference<>();
+        app.onActivity(activity->{try{
+            java.lang.reflect.Field field=MainActivity.class.getDeclaredField("records");field.setAccessible(true);
+            original.set((android.util.AtomicFile)field.get(activity));field.set(activity,new android.util.AtomicFile(new File(blocker,"notebook.json")));
+        }catch(Exception e){throw new AssertionError(e);}});
+        try {
+            onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(replaceText("저장 실패 후에도 지킬 관찰"),closeSoftKeyboard());
+            onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
+            assertEquals("저장된 관찰",notebook().projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
+            app.onActivity(activity->{try{
+                java.lang.reflect.Method method=MainActivity.class.getDeclaredMethod("exportBytes");method.setAccessible(true);
+                StudioState exported=new StudioState(new String((byte[])method.invoke(activity),StandardCharsets.UTF_8));
+                assertEquals("저장 실패 후에도 지킬 관찰",exported.projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
+            }catch(Exception e){throw new AssertionError(e);}});
+            onView(withText("대화로 돌아가기")).perform(click());
+            onView(withText("생각 정리")).perform(scrollTo(),click());
+            onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
+        } finally {
+            app.onActivity(activity->{try{java.lang.reflect.Field field=MainActivity.class.getDeclaredField("records");field.setAccessible(true);field.set(activity,original.get());}catch(Exception e){throw new AssertionError(e);}});
+            Files.deleteIfExists(blocker.toPath());
+        }
+        onView(withContentDescription("누구의 어떤 불편인가요?")).perform(scrollTo(),replaceText("나중에 저장한 다른 항목"),closeSoftKeyboard());
+        assertEquals("저장 실패 후에도 지킬 관찰",notebook().projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
+        assertEquals("나중에 저장한 다른 항목",notebook().projects().getJSONObject(0).getJSONObject("reflection").getString("audience"));
+    }
     @Test public void observationIntentDraftAndProjectsSurviveNativeRelaunch() throws Exception {
         begin(); draft("동네 가게에서 기다리는 사람이 많다"); record();
         onView(withText("지금의 의도 정리하기")).perform(scrollTo(),click());

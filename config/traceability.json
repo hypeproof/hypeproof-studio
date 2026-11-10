@@ -17579,6 +17579,9 @@
       "sources": [
         {
           "path": "apps/studio-native/README.md"
+        },
+        {
+          "path": "apps/studio-native/FOUNDRY.md"
         }
       ]
     },
@@ -17700,6 +17703,12 @@
         },
         {
           "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-512@2x.png"
+        },
+        {
+          "path": "apps/studio-native/scripts/foundry-native-acceptance.py"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/values-night/styles.xml"
         }
       ]
     },
@@ -17741,6 +17750,86 @@
         },
         {
           "path": "apps/studio-native/scripts/apple-upload.sh"
+        },
+        {
+          "path": "apps/studio-native/tests/test_foundry_native_acceptance.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-verify.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MOBILE-REFLECTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-MOBILE-REFLECTION",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MOBILE-REFLECTION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Intent.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MOBILE-REFLECTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-REFLECTION",
+        "ST-IMP-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
         }
       ]
     }

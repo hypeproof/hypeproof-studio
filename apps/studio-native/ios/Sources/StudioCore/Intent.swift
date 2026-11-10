@@ -19,8 +19,21 @@ public struct Project: Codable, Identifiable, Equatable, Sendable {
     public var revisions: [Revision] = []
     public var draft = ""
     public var intentDraft = ""
+    // Optional so every previously exported v1 notebook remains readable.
+    // These are human-owned notes, never an AI-confirmed intention.
+    public var reflection: [String: String]?
     public var updatedAt = Date()
     public init(title: String = "새로운 생각") { self.title = title }
+    public var reflectionSummary: String {
+        ReflectionField.allCases.compactMap { reflection?[$0.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
+    }
+    public var displayTitle: String {
+        messages.isEmpty && title == "새로운 생각" && !reflectionSummary.isEmpty ? String(reflectionSummary.prefix(32)) : title
+    }
+    public var summary: String { revisions.last?.text ?? (!draft.isEmpty ? "작성 중 · " + draft : reflectionSummary) }
+    public func matches(_ search: String) -> Bool {
+        search.isEmpty || ([title, summary] + Array((reflection ?? [:]).values)).contains { $0.localizedCaseInsensitiveContains(search) }
+    }
     public mutating func append(_ text: String) throws {
         let value = try Self.checked(text)
         if messages.isEmpty { title = String(value.prefix(32)) }
@@ -41,6 +54,28 @@ public struct Project: Codable, Identifiable, Equatable, Sendable {
         return [["role": "user", "content": guidance + intent]] + messages.suffix(20).map { ["role": $0.role, "content": $0.content] }
     }
 }
+public enum ReflectionField: String, CaseIterable, Identifiable, Sendable {
+    case observation, audience, change, experiment, learning
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .observation: return "관찰"
+        case .audience: return "사람"
+        case .change: return "바라는 변화"
+        case .experiment: return "작은 실천"
+        case .learning: return "돌아보기"
+        }
+    }
+    public var question: String {
+        switch self {
+        case .observation: return "직접 본 것은 무엇인가요?"
+        case .audience: return "누구의 어떤 불편인가요?"
+        case .change: return "무엇이 달라지면 좋을까요?"
+        case .experiment: return "가장 작게 확인할 행동은 무엇인가요?"
+        case .learning: return "해보니 무엇이 달랐나요?"
+        }
+    }
+}
 public struct Notebook: Codable, Equatable, Sendable {
     public var version = 1
     public var projects: [Project] = []
@@ -51,8 +86,20 @@ public struct Notebook: Codable, Equatable, Sendable {
             let id = snapshot.projects[index].id
             if let draft = edits[id + ":draft"] { snapshot.projects[index].draft = draft }
             if let intent = edits[id + ":intent"] { snapshot.projects[index].intentDraft = intent }
+            for field in ReflectionField.allCases {
+                if let note = edits[id + ":reflection:" + field.rawValue] {
+                    if snapshot.projects[index].reflection == nil { snapshot.projects[index].reflection = [:] }
+                    snapshot.projects[index].reflection?[field.rawValue] = note
+                }
+            }
         }
         return snapshot
+    }
+    public func updating(_ id: String, visibleEdits: [String: String], edit: (inout Project) throws -> Void) throws -> Notebook {
+        var next = includingEdits(visibleEdits)
+        guard let index = next.projects.firstIndex(where: { $0.id == id }) else { throw StudioError.message("기록을 찾지 못했어요.") }
+        try edit(&next.projects[index])
+        return next
     }
     public func encode() throws -> Data {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .millisecondsSince1970

@@ -1,7 +1,7 @@
 name: Studio native mobile
 on:
   push:
-    branches: ['feat/studio-native-mobile-20261110']
+    branches: ['main']
     paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
   pull_request:
     paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml']
@@ -12,7 +12,17 @@ concurrency:
   group: studio-native-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify trusted native acceptance recipe controls
+        run: python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v
   ios:
+    needs: contract
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -32,6 +42,7 @@ jobs:
             apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
           retention-days: 14
   macos:
+    needs: contract
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -49,6 +60,7 @@ jobs:
           path: apps/studio-native/evidence/macos/
           retention-days: 14
   android:
+    needs: contract
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
