@@ -17,7 +17,7 @@ import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ts = createRequire(import.meta.url)("typescript");
-const { STUDIO_FOLDERS_KEY, createStudioFolder, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
+const { STUDIO_FOLDERS_KEY, createStudioFolder, discardStudioFolder, syncStudioFolderRecord, studioFolderRecordOf } = await import("../src/studioFolderTrust.ts");
 const { prepareWorkspaceDirectory } = await import("../src/workspacePreparation.ts");
 const repo = path.resolve(here, "../../..");
 const coreDir = path.join(repo, "scripts/patches/core");
@@ -75,7 +75,7 @@ try {
   //     create the leaf first. Run the exact sequence openWorkspaceFolder uses, through the real class.
   {
     const { build } = await import("esbuild");
-    const bundle = await build({ stdin: { contents: "export {ActivityConnections} from './src/activityConnections';", resolveDir: path.join(here, ".."), loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
+    const bundle = await build({ stdin: { contents: "export {ActivityConnections, ActivityConnectionError} from './src/activityConnections';", resolveDir: path.join(here, ".."), loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
     const mod = { exports: {} }; new Function("module", "exports", "require", bundle.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
     const gs = new Map(); const secrets = new Map();
     const rawCtx = { globalStorageUri: { fsPath: path.join(home, "gs") }, globalState: { get: (k) => gs.get(k), update: async (k, v) => { gs.set(k, v); }, keys: () => [...gs.keys()] },
@@ -83,9 +83,11 @@ try {
     const dir = path.join(home, "ClassFolder");
     const profile = { profile_id: "p", activity_id: "c".repeat(64), activity_kind: "personal", display_name: "x", workspace_start: "empty" };
     const conn = new mod.exports.ActivityConnections(rawCtx, () => "http://127.0.0.1:8787/v1", () => dir, async () => profile);
-    const open = async (target) => {   // same order as extension.ts openWorkspaceFolder
-      const made = createStudioFolder(target);
-      conn.prepare(target, profile, () => prepareWorkspaceDirectory(target, "empty", () => ""), await conn.folderOwners(target));
+    const open = async (target, prof = profile) => {   // same order as extension.ts openWorkspaceFolder
+      let made;
+      try { made = createStudioFolder(target); } catch { made = undefined; }
+      try { conn.prepare(target, prof, () => prepareWorkspaceDirectory(target, "empty", () => ""), await conn.folderOwners(target)); }
+      catch (error) { discardStudioFolder(made); throw error; }
       return made;
     };
     const first = await open(dir);
@@ -94,6 +96,28 @@ try {
     assert.equal(reopened, undefined, "reopening the same folder records nothing new");
     const mine = path.join(home, "AlreadyMine"); fs.mkdirSync(mine);
     assert.equal(await open(mine), undefined, "a pre-existing folder opened through ActivityConnections is not recorded");
+    // B2: when the parent step fails, the guidance ActivityConnectionError from prepare must still surface.
+    const guidance = async (name, target) => {
+      let err; try { await open(target); } catch (e) { err = e; }
+      assert.ok(err instanceof mod.exports.ActivityConnectionError, `${name}: prepare's guidance error, not a generic one (got ${err && err.constructor.name}: ${err && (err.code ?? err.message)})`);
+    };
+    fs.writeFileSync(path.join(home, "pfile"), "x");
+    assert.throws(() => createStudioFolder(path.join(home, "pfile", "Class")), "(why the guard matters) the raw create throws");
+    await guidance("parent is a file", path.join(home, "pfile", "Class"));
+    fs.symlinkSync(path.join(home, "gone"), path.join(home, "plink"));
+    await guidance("parent is a dangling link", path.join(home, "plink", "Class"));
+    fs.mkdirSync(path.join(home, "pro")); fs.chmodSync(path.join(home, "pro"), 0o500);
+    if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(home, "pro", "Class"));
+    fs.chmodSync(path.join(home, "pro"), 0o700);
+    // N8: a prepare that rejects after Studio made the folder removes the empty folder (and records nothing).
+    const badProfile = { ...profile, activity_id: "not-hex" };
+    const failing = path.join(home, "FailingOpen");
+    await assert.rejects(() => open(failing, badProfile));
+    assert.equal(fs.existsSync(failing), false, "failed prepare: the empty folder Studio just made is removed");
+    const keep = path.join(home, "KeepsFiles"); const kept = createStudioFolder(keep); fs.writeFileSync(path.join(keep, "mine.txt"), "x");
+    discardStudioFolder(kept); assert.equal(fs.existsSync(path.join(keep, "mine.txt")), true, "a folder with files is never removed");
+    const swapped = path.join(home, "Swapped"); const sw = createStudioFolder(swapped); fs.rmdirSync(swapped); await sleep(30); fs.mkdirSync(swapped);
+    discardStudioFolder(sw); assert.equal(fs.existsSync(swapped), true, "a different folder at the same path is never removed");
     // The order matters: creating the leaf after prepare finds it already there.
     const late = path.join(home, "LateOrder");
     conn.prepare(late, profile, () => prepareWorkspaceDirectory(late, "empty", () => ""), await conn.folderOwners(late));
@@ -106,6 +130,8 @@ try {
   const siteBody = site.slice(0, site.indexOf("\n}\n"));
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
     && siteBody.indexOf("createdFolder = createStudioFolder(dir);") < siteBody.indexOf("connections.prepare("), "the leaf is created before ActivityConnections.prepare (which mkdirs it)");
+  assert.match(siteBody, /try \{ createdFolder = createStudioFolder\(dir\); \} catch \{ createdFolder = undefined; \}/, "a create failure must not replace prepare's guidance");
+  assert.match(siteBody, /catch\(error\) \{\n\s+discardStudioFolder\(createdFolder\);/, "a failed open discards the folder it just made");
   assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");

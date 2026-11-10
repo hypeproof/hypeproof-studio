@@ -52,6 +52,18 @@ export function createStudioFolder(dir: string): StudioFolder | undefined {
   } catch { return undefined; }
 }
 
+/**
+ * Remove a folder this call just made when preparing it failed (for example a bad activity id). Non-recursive,
+ * so it only goes if still empty, and only if it is still the same folder (creation time). Chosen over recording
+ * it anyway: a failed open leaves nothing behind, and the retry creates and records a fresh folder.
+ */
+export function discardStudioFolder(created: StudioFolder | undefined): void {
+  if (!created) return;
+  try {
+    if (fs.lstatSync(created.path).birthtime.getTime() === created.birth) fs.rmdirSync(created.path);
+  } catch { /* leave it: it only ever means a normal prompt */ }
+}
+
 export interface StudioFolderStore { get(key: string): unknown; update(key: string, value: unknown): PromiseLike<void> | void; }
 
 /** Record `created` (only what `prepareStudioFolder` returned). Never throws (a failure only means the normal prompt). */

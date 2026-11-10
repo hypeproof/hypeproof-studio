@@ -15,7 +15,7 @@ import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
-import { createStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
+import { createStudioFolder, discardStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -1262,12 +1262,14 @@ async function openWorkspaceFolder(
   let createdFolder: StudioFolder | undefined;
   try {
     // ActivityConnections.prepare makes the folder itself, so the leaf is created here first.
-    createdFolder = createStudioFolder(dir);
+    // A failure here (parent is a file, dangling link, read-only) must not hide the guidance prepare gives for it.
+    try { createdFolder = createStudioFolder(dir); } catch { createdFolder = undefined; }
     const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
     // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
+    discardStudioFolder(createdFolder); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
     if(error instanceof ActivityConnectionError)throw error;
     noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
