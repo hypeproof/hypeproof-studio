@@ -147,6 +147,23 @@ try {
         assert.equal(fs.readFileSync(path.join(dirX, "mine.txt"), "utf8"), "keep", `${name}: learner files untouched`);
         assert.equal(fs.existsSync(lockX + ".recovery"), false, `${name}: no recovery barrier left behind`);
       }
+      // A lock held by a LIVE process is never stale, however old its mtime.
+      const liveOld = path.join(home, "LiveOldLock"); fs.mkdirSync(liveOld);
+      const liveOldLock = conn.bindingPath(liveOld) + ".lock"; const liveOldText = JSON.stringify({ pid: process.ppid, nonce: "window-b" });
+      fs.writeFileSync(liveOldLock, liveOldText); age(liveOldLock, 3600);
+      let liveOldErr; try { await open(liveOld); } catch (e) { liveOldErr = e; }
+      assert.ok(liveOldErr instanceof mod.exports.ActivityFolderInUseError, "an hour-old lock of a live process is in use");
+      assert.equal(fs.readFileSync(liveOldLock, "utf8"), liveOldText, "the live lock is unchanged");
+      assert.equal(fs.existsSync(liveOld), true, "the folder is kept");
+      fs.rmSync(liveOldLock);
+      // The grace period is 10 s: 5 s old unreadable stays in use, 11 s old is cleaned.
+      const graceDir = path.join(home, "GraceEdge"); fs.mkdirSync(graceDir);
+      const graceLock = conn.bindingPath(graceDir) + ".lock"; fs.writeFileSync(graceLock, "{broken"); age(graceLock, 5);
+      let graceErr; try { await open(graceDir); } catch (e) { graceErr = e; }
+      assert.ok(graceErr instanceof mod.exports.ActivityFolderInUseError, "5 s old unreadable lock is still in use");
+      assert.equal(fs.existsSync(graceLock), true, "5 s old lock is left alone");
+      age(graceLock, 11); await open(graceDir);
+      assert.equal(fs.existsSync(graceLock), false, "11 s old unreadable lock is cleaned");
       // An aged lock replaced by a new owner between the check and the cleanup is never removed.
       const swap = path.join(home, "StaleSwap"); fs.mkdirSync(swap);
       const swapLock = conn.bindingPath(swap) + ".lock"; fs.writeFileSync(swapLock, ""); age(swapLock, 30);
@@ -201,6 +218,8 @@ try {
   // Only a comment may sit between the catch and the shared cleanup (an unconditional discardStudioFolder on that line must not pass).
   assert.match(siteBody, /catch\(error\) \{\n\s*\/\/[^\n]*\n\s+discardStudioFolderAfterFailure\(createdFolder, error\);/, "a failed open goes through the shared cleanup (keeps busy / taken)");
   assert.ok(!/discardStudioFolder\(/.test(siteBody), "no direct discardStudioFolder at the call site");
+  assert.equal((siteBody.match(/discardStudioFolder\w*\(/g) ?? []).length, 1, "exactly one discard call at the call site (no second discard after the shared one)");
+  assert.equal((ext.match(/discardStudioFolder\w*\(/g) ?? []).length, 1, "exactly one discard call in the extension");
   assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");
