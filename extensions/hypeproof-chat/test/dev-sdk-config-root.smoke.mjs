@@ -42,6 +42,7 @@ assert.equal(devSdkConfigRoot("HypeProof Studio Dev", "/gs"), "/gs/claude-config
 assert.equal(sdkConfigDirFor({ HOME: "/Users/student" }, SEAT, devSdkConfigRoot("HypeProof Studio Dev", "/gs")), `/gs/claude-config/${SEAT}`, "Dev seat folder under the Dev root");
 assert.equal(sdkConfigDirFor({ HOME: "/Users/student" }, undefined, devSdkConfigRoot("HypeProof Studio Dev", "/gs")), "/gs/claude-config", "Dev without a seat is the root itself");
 assert.equal(devSdkConfigRoot("HypeProof Studio Dev", "   "), undefined, "an empty global storage path gives no root");
+assert.equal(devSdkConfigRoot("HypeProof Studio Dev", ""), undefined, "Dev name with an empty path gives undefined, never a relative folder");
 console.log("ok dev: positive control yields the Dev root and the seat folder under it");
 
 // 3. Spaces in the path are passed through unchanged (no escaping, no trimming inside).
