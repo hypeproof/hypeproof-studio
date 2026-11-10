@@ -523,6 +523,10 @@ const ANNOTATION_LEAVE_KEPT = '표시를 그대로 두었어요. 계속 고친 �
 /** CGP-CHAT-R-023 — served lesson step per user message id (lessonStepMarks.ts). */
 const STEP_MARKS_KEY = "hps.lessonStepMarks";
 
+function accessScopeKey(proxy: string, token: string | undefined): string | undefined {
+  return token ? createHash('sha256').update(proxy+'\0'+token).digest('hex') : undefined;
+}
+
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -913,7 +917,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async loadAccess(force=false):Promise<void>{
     const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
     const token=await this.context.secrets.get(TOKEN_KEY);
-    const scope=token?createHash('sha256').update(proxy+'\0'+token).digest('hex'):undefined;
+    const scope=accessScopeKey(proxy,token);
     if(scope!==this.accessScope){this.accessScope=scope;this.accessState=undefined;this.accessCheckedAt=0;this.accessLoad=undefined;}
     if(!token)return;
     if(!force&&this.accessState&&Date.now()-this.accessCheckedAt<10000)return;
@@ -8251,6 +8255,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case 'observationAssess':
       case 'observationCorrect': {
+        const requestScope=this.turnRequestScope();
         const token=await this.context.secrets.get(TOKEN_KEY);
         const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
         const recorder=await this.prepareObservation(proxy,token,await this.ensureProfile());
@@ -8265,11 +8270,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(JSON.stringify(msg.eventIds)!==JSON.stringify(snapshot.events.map(e=>e.id))){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'새 작업 기록이 추가됐습니다. 보낼 내용을 다시 확인해 주세요.'});return;}
         const controller=new AbortController();this.observationAssessment=controller;
         try{
+          await this.loadAccess();
+          const accessScope=accessScopeKey(proxy,token);
+          const fundingSource=this.accessState?.selected;
+          const checkFunding=()=>{
+            controller.signal.throwIfAborted();
+            if(this.turnRequestScope()!==requestScope||this.accessScope!==accessScope||this.proxyUrl()!==proxy||this.connectionChanging||
+                this.accessState?.selected!==fundingSource||
+                (!fundingSource&&this.accessState?.view?.required))throw Error('funding_selection_required');
+            if(fundingSource&&!this.accessState?.view?.choices.some(choice=>choice.id===fundingSource&&choice.active&&choice.ends_at>Date.now())){
+              throw Error('funding_unavailable');
+            }
+          };
+          checkFunding();
           // REQ-KNOW-09: the ticked box in the panel is the learner's choice; the host still lists recipient, items and sizes
           // for exactly this body and sends nothing on Cancel. `snapshot` is a structuredClone and assessmentBatch is pure,
           // so the confirmed items and the body below are the same bytes (CR-10 pins the body expression literally).
           if(!await confirmOutbound({recipient:`관찰 평가 API (원문은 저장하지 않음) · ${new URL(proxy).host}`,items:observationOutboundItems(assessmentBatch(snapshot).events)})||await this.context.secrets.get(TOKEN_KEY)!==token){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'보내지 않았습니다. 기록은 그대로 있습니다.'});return;}
-          const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{...observationHeaders(token),'content-type':'application/json'},body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
+          checkFunding();
+          const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{
+            ...observationHeaders(token),
+            'content-type':'application/json',
+            ...(fundingSource?{'x-hps-funding-source':fundingSource}:{}),
+          },body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
           if(!response.ok){const failure=await response.json() as {error?:{code?:string}};throw Error(/^[a-z_0-9]{1,80}$/.test(failure.error?.code??'')?failure.error!.code:'assessment_failed');}
           const result=await response.json() as {findings:unknown;capability_model?:unknown};
           // Against the model the SERVICE says it wrote them in, not a constant. The
@@ -8279,7 +8302,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if(this.nativeObservation?.batch.scope!==snapshot.scope || await this.context.secrets.get(TOKEN_KEY)!==token)return;
           await this.context.workspaceState.update('hps.observation.result.'+snapshot.scope+'.'+snapshot.program,{...result,at:Date.now(),event_ids:snapshot.events.map(e=>e.id)});
           await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:null,findings,capabilityModel:asCapabilityModel(result.capability_model),assessedEventCount:snapshot.events.length});
-        }catch(error){const code=error instanceof Error&&/^[a-z_0-9]{1,80}$/.test(error.message)?error.message:'assessment_failed';if(await this.context.secrets.get(TOKEN_KEY)===token)await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:controller.signal.aborted?'관찰을 취소했습니다. 작업과 기록은 보존돼 있습니다.':'관찰 결과를 확인하지 못했습니다. 작업과 기록은 보존돼 있습니다. ('+code+')'});}finally{if(this.observationAssessment===controller)this.observationAssessment=null;}
+        } catch (error) {
+          const code=error instanceof Error&&/^[a-z_0-9]{1,80}$/.test(error.message)?error.message:'assessment_failed';
+          const reason=code==='funding_selection_required'?'이번 관찰에 사용할 이용권을 선택해 주세요.':
+            code==='funding_unavailable'?'이용권을 확인할 수 없습니다. 사용량을 새로고침한 뒤 다시 선택해 주세요.':
+            '관찰 결과를 확인하지 못했습니다.';
+          if(await this.context.secrets.get(TOKEN_KEY)===token)await this.post({
+            type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,
+            error:controller.signal.aborted?'관찰을 취소했습니다. 작업과 기록은 보존돼 있습니다.':reason+' 작업과 기록은 보존돼 있습니다. ('+code+')',
+          });
+        } finally {
+          if(this.observationAssessment===controller){
+            this.observationAssessment=null;
+            if(this.pendingFundingSelection){this.applyPendingFundingSelection();void this.postConfig().catch(()=>{});}
+          }
+        }
         return;
       }
       case 'observationOpen': {
