@@ -75,7 +75,7 @@ try {
   //     create the leaf first. Run the exact sequence openWorkspaceFolder uses, through the real class.
   {
     const { build } = await import("esbuild");
-    const bundle = await build({ stdin: { contents: "export {ActivityConnections, ActivityConnectionError} from './src/activityConnections';", resolveDir: path.join(here, ".."), loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
+    const bundle = await build({ stdin: { contents: "export {ActivityConnections, ActivityConnectionError, ActivityFolderInUseError} from './src/activityConnections';", resolveDir: path.join(here, ".."), loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
     const mod = { exports: {} }; new Function("module", "exports", "require", bundle.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
     const gs = new Map(); const secrets = new Map();
     const rawCtx = { globalStorageUri: { fsPath: path.join(home, "gs") }, globalState: { get: (k) => gs.get(k), update: async (k, v) => { gs.set(k, v); }, keys: () => [...gs.keys()] },
@@ -87,7 +87,7 @@ try {
       let made;
       try { made = createStudioFolder(target); } catch { made = undefined; }
       try { conn.prepare(target, prof, () => prepareWorkspaceDirectory(target, "empty", () => ""), await conn.folderOwners(target)); }
-      catch (error) { discardStudioFolder(made); throw error; }
+      catch (error) { if (!(error instanceof mod.exports.ActivityFolderInUseError)) discardStudioFolder(made); throw error; }
       return made;
     };
     const first = await open(dir);
@@ -109,6 +109,22 @@ try {
     fs.mkdirSync(path.join(home, "pro")); fs.chmodSync(path.join(home, "pro"), 0o500);
     if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(home, "pro", "Class"));
     fs.chmodSync(path.join(home, "pro"), 0o700);
+    // N9: two windows open the same empty folder; the loser (busy lock or FOLDER_TAKEN) must not remove the winner's folder.
+    {
+      const race = path.join(home, "RaceFolder");
+      const lockFile = conn.bindingPath(race) + ".lock";
+      fs.mkdirSync(path.dirname(lockFile), { recursive: true }); fs.writeFileSync(lockFile, "other-window");
+      fs.mkdirSync(lockFile + ".recovery", { recursive: true });   // window B holds the lock mid-prepare; A creates the leaf, then loses
+      let busyErr; try { await open(race); } catch (e) { busyErr = e; }
+      assert.ok(busyErr instanceof mod.exports.ActivityFolderInUseError, "the loser sees the busy error");
+      assert.equal(fs.existsSync(race), true, "busy loser does not remove the folder the other window is opening");
+      fs.rmSync(lockFile + ".recovery", { recursive: true }); fs.rmSync(lockFile);
+      const taken = path.join(home, "TakenFolder");
+      fs.writeFileSync(conn.bindingPath(taken), JSON.stringify({ version: 1, id: "another-activity" }), { mode: 0o600 });   // another activity holds this path; the folder itself is gone
+      let takenErr; try { await open(taken, profile); } catch (e) { takenErr = e; }
+      assert.ok(takenErr instanceof mod.exports.ActivityFolderInUseError, "FOLDER_TAKEN is the in-use error: " + takenErr);
+      assert.equal(fs.existsSync(taken), true, "FOLDER_TAKEN loser does not remove the folder");
+    }
     // N8: a prepare that rejects after Studio made the folder removes the empty folder (and records nothing).
     const badProfile = { ...profile, activity_id: "not-hex" };
     const failing = path.join(home, "FailingOpen");
@@ -131,7 +147,7 @@ try {
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
     && siteBody.indexOf("createdFolder = createStudioFolder(dir);") < siteBody.indexOf("connections.prepare("), "the leaf is created before ActivityConnections.prepare (which mkdirs it)");
   assert.match(siteBody, /try \{ createdFolder = createStudioFolder\(dir\); \} catch \{ createdFolder = undefined; \}/, "a create failure must not replace prepare's guidance");
-  assert.match(siteBody, /catch\(error\) \{\n\s+discardStudioFolder\(createdFolder\);/, "a failed open discards the folder it just made");
+  assert.match(siteBody, /catch\(error\) \{\n[^\n]*\n\s+if\(!\(error instanceof ActivityFolderInUseError\)\)discardStudioFolder\(createdFolder\);/, "a failed open discards the folder it just made, except busy / taken");
   assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");

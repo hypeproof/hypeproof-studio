@@ -9,7 +9,7 @@ export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
-import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
+import { ActivityConnectionError, ActivityFolderInUseError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
 import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
@@ -1269,7 +1269,8 @@ async function openWorkspaceFolder(
     // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
-    discardStudioFolder(createdFolder); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
+    // Busy or taken means another window/activity owns the folder (maybe opening it right now): leave it alone.
+    if(!(error instanceof ActivityFolderInUseError))discardStudioFolder(createdFolder); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
     if(error instanceof ActivityConnectionError)throw error;
     noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');

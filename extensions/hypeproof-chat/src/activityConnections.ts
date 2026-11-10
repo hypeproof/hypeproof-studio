@@ -10,6 +10,8 @@ import { FREE_FOLDER_COUNT, isFreeSeat } from './seatVocabulary';
 export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
+/** Someone else holds this folder (another activity, or another window mid-open): the folder is not ours to remove. */
+export class ActivityFolderInUseError extends ActivityConnectionError {}
 /** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
 export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
 /**
@@ -226,7 +228,7 @@ export class ActivityConnections {
     if (bound.id === id) return;
     // The earlier activity keeps its saved record; selecting it later reports this folder as taken.
     if (typeof takeover === 'function' ? takeover(bound) : takeover) { fs.writeFileSync(file, fresh, {mode:0o600}); return; }
-    throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
+    throw new ActivityFolderInUseError(FOLDER_TAKEN_MESSAGE);
   }
   /** The binding files that may hold this folder, under the current and the pre-canonicalRoot spelling. */
   private bindingFiles(root: string): string[] {
@@ -306,7 +308,7 @@ export class ActivityConnections {
         return bound.id !== id && !freeTakesOver(p,root,bound,owners?.get(bindingOwnerKey(bound)));
       });
       if (taken && !passTakesOver(p,root)) {
-        throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
+        throw new ActivityFolderInUseError(FOLDER_TAKEN_MESSAGE);
       }
       prepare();
     } finally { release(); }
@@ -386,7 +388,7 @@ export class ActivityConnections {
   private lock(root:string):()=>void {
     const lock = this.bindingPath(root) + '.lock';
     const recovery=lock+'.recovery';
-    const busy=()=>new ActivityConnectionError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
+    const busy=()=>new ActivityFolderInUseError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
     const nonce = crypto.randomUUID();
     for (let attempt=0;attempt<2;attempt++) {
       if (fs.existsSync(recovery)) throw busy();
