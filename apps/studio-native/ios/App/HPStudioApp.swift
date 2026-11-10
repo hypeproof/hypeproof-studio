@@ -11,6 +11,7 @@ struct StudioHome: View {
     @FocusState private var composerFocused: Bool
     @State private var showVoiceConsent = false
     @State private var voiceConsentProject: String?
+    @State private var voiceConsentAccepted = false
     @State private var showConsent = false
     @State private var showIntent = false
     @State private var showHistory = false
@@ -134,14 +135,34 @@ struct StudioHome: View {
             } else { voice.fail("답변을 받지 못했어요. 기록을 확인하고 글로 계속할 수 있어요.") }
         }
         .onDisappear { stopVoice() }
-        .confirmationDialog("말로 대화할까요?", isPresented: $showVoiceConsent, titleVisibility: .visible) {
-            Button("음성 대화 시작") {
-                guard let pending = voiceConsentProject, pending == model.active else { return }
-                voiceConsentProject = nil
-                beginVoice(.conversation)
-            }
-            Button("나중에", role: .cancel) { voiceConsentProject = nil }
-        } message: { Text("인식이 끝난 글을 현재 대화의 AI에 자동으로 보내고 답변을 소리 내어 읽어요. 다음 말은 ‘다시 말하기’를 눌러 시작해요. 무료 AI 사용 한도가 적용돼요. 언제든 ‘음성 멈춤’으로 끝낼 수 있어요.") }
+        .sheet(isPresented: $showVoiceConsent, onDismiss: {
+            let accepted = voiceConsentAccepted && voiceConsentProject == model.active
+            voiceConsentAccepted = false
+            voiceConsentProject = nil
+            // Wait for this sheet to leave before opening AI consent or the
+            // operating-system microphone dialog. A dismissal is not consent.
+            if accepted { beginVoice(.conversation) }
+        }) {
+            NavigationStack {
+                Form {
+                    Section {
+                        Text("인식이 끝난 글을 현재 대화의 AI에 자동으로 보내고 답변을 소리 내어 읽어요. 다음 말은 ‘다시 말하기’를 눌러 시작해요. 무료 AI 사용 한도가 적용돼요. 언제든 ‘음성 멈춤’으로 끝낼 수 있어요.")
+                    }
+                    Section {
+                        Button("음성 대화 시작") {
+                            guard let pending = voiceConsentProject, pending == model.active else { return }
+                            voiceConsentAccepted = true
+                            showVoiceConsent = false
+                        }.accessibilityIdentifier("startVoiceConsent")
+                        Button("나중에", role: .cancel) {
+                            voiceConsentAccepted = false
+                            voiceConsentProject = nil
+                            showVoiceConsent = false
+                        }.accessibilityIdentifier("cancelVoiceConsent")
+                    }
+                }.navigationTitle("말로 대화할까요?").navigationBarTitleDisplayMode(.inline)
+            }.presentationDetents([.medium, .large])
+        }
         .sheet(isPresented: $showConsent) {
             NavigationStack {
                 Form {
@@ -183,7 +204,7 @@ struct StudioHome: View {
         stopVoice()
     }
     private func stopVoice() {
-        showVoiceConsent = false; voiceConsentProject = nil
+        showVoiceConsent = false; voiceConsentProject = nil; voiceConsentAccepted = false
         if voice.turn.phase == .waiting { model.cancel() }
         voice.stop()
     }
