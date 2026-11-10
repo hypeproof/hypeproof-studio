@@ -322,6 +322,8 @@ export interface ResolvedProfile {
    * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
    */
   conversation_carryover?: { available: boolean };
+  /** CGP-CHAT-R-004 (DEC-10) — a class turned "먼저 계획 보기" off. Only `available: false` counts; absent → the toggle shows as before. */
+  plan_first?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -428,6 +430,11 @@ export interface ResolvedProfile {
     /** Photos attached as files saved to `images/`, paths only to the model (attachedImages.ts). hype-dental D-028. */
     image_files?: boolean;
   };
+  /**
+   * Studio voice (hps-voice-policy/1, voiceServed.ts): present only when the Service serves dictation
+   * and/or read-aloud to this seat. Absent → no voice UI anywhere, byte-identical to before voice existed.
+   */
+  voice?: { dictation?: boolean; read_aloud?: boolean; policy_version?: string; engine?: { dictation?: string; read_aloud?: string }; caps?: { currency?: string; unit?: string; seat_day?: number; class_session?: number; global_day?: number } };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
   /**
@@ -435,6 +442,16 @@ export interface ResolvedProfile {
    * app's own approval tiers. Read with servedApprovalPreset(), which ignores an unknown id.
    */
   approval_preset?: import("./approvalPreset").ServedApprovalPreset;
+  /**
+   * DEC-30 step 3 (CGP-KNOW-R-037) — the lesson's starter sentences, 0..4 single lines. Absent when the lesson has none.
+   * Read with servedLessonStarters(), which drops anything that is not a safe single line.
+   */
+  starters?: string[];
+  /**
+   * DEC-30 — the lesson's AI role and tone as the Service serves them to this seat (the tone is already clamped on a
+   * minor seat: `tone_clamped` replaces `tone`). Display only; nothing here reaches a coach prompt (step 4). Absent when unset.
+   */
+  assistant_style?: { role?: string; tone?: { id: string; label: string }; tone_clamped?: true };
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
   tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
@@ -660,6 +677,16 @@ export type WebviewMessage = (
   | { type: "fileMentionCancel"; requestId: string }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
+  /**
+   * Dictation (voiceHost.ts). The finished clip goes to the host, which alone may reach the Service; the
+   * webview's CSP allows no network. `audio` is base64 of one Opus WebM/Ogg clip, held in memory only.
+   */
+  | { type: "voiceTranscribe"; requestId: string; mime: string; seconds: number; audio: string }
+  /** The learner pressed 마이크 설정 열기. The host picks the OS pane; the webview names no URL. */
+  | { type: "voiceOpenMicSettings" }
+  /** Ask which policy versions the learner has already read the disclosure for / record that they did. */
+  | { type: "voiceDisclosureRead" }
+  | { type: "voiceDisclosureAck"; policyVersion: string }
   /** CGP-VOICE-R-009 — voice "보여주기": ask for the two-item menu, then attach one chosen target per click. */
   | { type: "voiceShowThisMenu"; requestId: string }
   | { type: "voiceShowThis"; requestId: string; target: string }
@@ -732,6 +759,12 @@ export type WebviewMessage = (
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
   /** CGP-SHELL-R-035 — "새로운 기능" after an update; local record only, no telemetry. */
+  /** CGP-CHAT-R-004 — "먼저 계획 보기": the mode switch and the learner's decision on the waiting plan. */
+  | { type: "planFirstRequest" }
+  | { type: "planFirstSet"; on: boolean }
+  | { type: "planFirstApprove"; planId: string; text: string }
+  | { type: "planFirstRedo"; planId: string; text: string }
+  | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
   | { type: "whatsNewShown"; notesId: string }
   | { type: "whatsNewDismiss"; notesId: string }
@@ -1051,6 +1084,11 @@ export type HostMessage = (
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
   | { type: "fileMentionPicked"; requestId: string; ok: boolean }
+  /** Dictation answer: text for the composer, or a calm refusal in Korean (voiceHost.ts). */
+  | { type: "voiceTranscribeResult"; requestId: string; ok: true; text: string }
+  | { type: "voiceTranscribeResult"; requestId: string; ok: false; kind: import("./voiceHost").TranscribeKind; message: string; retry: boolean }
+  | { type: "voiceMicSettingsResult"; ok: boolean }
+  | { type: "voiceDisclosureState"; acknowledged: string[] }
   /** CGP-VOICE-R-009 — the menu state (re-read on every open) and the result of one attach click. */
   | { type: "voiceShowThisMenu"; requestId: string; items: import("./voicePopupHelpers").ShowThisItem[] }
   | { type: "voiceShowThisResult"; requestId: string; target: import("./voicePopupHelpers").ShowThisTarget | null; ok: boolean; reference?: import("./voicePopupHelpers").ReferenceTarget; error?: string }
@@ -1079,6 +1117,7 @@ export type HostMessage = (
   | { type: "aiDisclosure"; text: string }
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
+  | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
   | { type: "whatsNewChanged" }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto

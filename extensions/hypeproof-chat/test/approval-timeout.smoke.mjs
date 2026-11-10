@@ -37,7 +37,7 @@ await t("b: a learner answer does not report expiry", async () => {
 await t("c: the timeout card is 시간 초과 with the learner sentence and no report button", async () => {
   const view = denialNoticeView(denialNotice("timeout", false));
   assert.equal(view.label, "시간 초과");
-  assert.equal(view.text, "확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 보내면 확인 창이 다시 떠요.");
+  assert.equal(view.text, "확인 창을 오래 고르지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.");
   assert.equal(view.action, undefined);
 });
 

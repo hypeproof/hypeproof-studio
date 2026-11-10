@@ -47,6 +47,8 @@ import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
+import { insertAtCaret, PassThrough } from './composerAddon';
+import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
 import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
@@ -123,6 +125,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -137,11 +140,13 @@ import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type Se
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { servedApprovalPreset } from "../../src/approvalPreset";
 import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
+import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
+import { LessonStarters } from "./LessonStarters";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
 import { TEMPORARY_TASK_COPY, TEMPORARY_TASK_UNAVAILABLE } from "../../src/temporaryTask";
-import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
+import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL, MEMORY_TEMPORARY_NOTE, MEMORY_TEMPORARY_SENTENCE } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -184,6 +189,8 @@ interface Props {
   onAttachFile?: () => void;
   /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed file under it for 되돌리기. */
   onRemoveFileAttachment?: (undoId?: string) => void;
+  /** A control that is not part of the text flow (composerAddon.ts). Absent → the composer draws exactly what it always did. */
+  composerAddon?: import("./composerAddon").ComposerAddon;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** A transient private question, outside normal chat messages. */
@@ -475,6 +482,7 @@ export function ChatPanel(props: Props) {
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
   const [draftParts, setDraftParts] = useState<DraftPart[]>(() => [{ text: separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null) }]);
   const draft = fullDraft(draftParts), composerText = visibleDraft(draftParts);
+  const draftPartsRef = useRef(draftParts); draftPartsRef.current = draftParts;
   const pasteId = useRef(0);
   // External replacements/imports operate on the complete draft and restore it inline.
   const setDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => {
@@ -493,6 +501,7 @@ export function ChatPanel(props: Props) {
   const [editingId, setEditingId] = useState<string | null>(saved?.inlineEdit?.messageId ?? null);
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false); composingRef.current = composing;
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
@@ -648,6 +657,9 @@ export function ChatPanel(props: Props) {
   composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
+  // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
+  const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
   const composerFailures = [...attachmentSend.failures, ...attachmentFailures.items, ...stagedPhotos.filter(p=>p.error).map(p=>({id:p.id,name:p.name,reason:p.error!}))];
@@ -962,6 +974,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // CGP-KNOW-D-005 / R-029: a "기록 없이 묻기" task reads memory and writes none; its header says so after the scope.
+  const inTemporaryTask = !!config?.taskWorkspace?.temporaryTaskId && config.taskWorkspace.temporaryTaskId === config.taskWorkspace.activeTaskId;
   // Optional classroom controls must not compete with a working automation conversation.
   const automationCompact = config?.profile?.automations?.enabled === true;
   // Sending is held (the draft stays) while the task's folder is missing.
@@ -1032,7 +1046,30 @@ export function ChatPanel(props: Props) {
   // CGP-KNOW-R-002: inside a task workspace whose rail has the 자료 view, the list lives there, not here.
   const { materialsHome } = useContext(ActivityHomeContext);
   const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
+  // composerAddon.insert: text at the caret, caret after it, focus in the composer. An open IME
+  // composition keeps the keyboard until compositionend, so a Korean syllable is never split.
+  const pendingAddonInsert = useRef<string[]>([]);
+  const insertAtCaretNow = (text: string): boolean => {
+    const editor = textareaRef.current;
+    const value = visibleDraft(draftPartsRef.current);
+    const start = editor?.selectionStart ?? value.length, end = editor?.selectionEnd ?? start;
+    const result = insertAtCaret(value, start, end, text, 200000 - (fullDraft(draftPartsRef.current).length - value.length));
+    if (!result) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.'); return false; }
+    const next = result.value;
+    draftPartsRef.current = editVisible(draftPartsRef.current, next);
+    setDraftParts(draftPartsRef.current);
+    lastReplyChoice.current = null;
+    requestAnimationFrame(() => { const el = textareaRef.current; if (!el) return; el.focus({ preventScroll: true }); el.setSelectionRange(result.caret, result.caret); });
+    return true;
+  };
+  const insertFromAddon = (text: string): boolean => {
+    if (composingRef.current) { pendingAddonInsert.current.push(text); return true; }
+    return insertAtCaretNow(text);
+  };
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
+  const addon = !props.instructor ? props.composerAddon ?? null : null;
+  const AddonScope = addon?.Scope ?? PassThrough;
+  const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
@@ -1140,6 +1177,7 @@ export function ChatPanel(props: Props) {
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
+    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
@@ -1619,6 +1657,8 @@ export function ChatPanel(props: Props) {
     worlds.length > 0
       ? ux.suggestions.initial.filter((c) => !stripChips.has(c.text))
       : ux.suggestions.initial;
+  // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
+  const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -1750,7 +1790,7 @@ export function ChatPanel(props: Props) {
         })()}
         {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
             switch; it names its scope (CGP-KNOW-D-005); the folder yields first on a narrow header (the tooltip names it). */}
-        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
+        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" temporary={inTemporaryTask} />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
@@ -2262,6 +2302,7 @@ export function ChatPanel(props: Props) {
         />
       )}
 
+      <AddonScope api={addonApi}>
       <footer className="hps-input-area">
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2281,6 +2322,8 @@ export function ChatPanel(props: Props) {
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
+        {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
+        {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2456,7 +2499,10 @@ export function ChatPanel(props: Props) {
           {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
+        {addon && <addon.Notice />}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2464,6 +2510,7 @@ export function ChatPanel(props: Props) {
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
           data-activity-status={statusScreen ? "true" : undefined}
+          data-addon={addon ? "true" : undefined}
           hidden={!!statusScreen}
         >
           {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
@@ -2474,7 +2521,7 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
@@ -2500,7 +2547,7 @@ export function ChatPanel(props: Props) {
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => setComposing(false)}
+            onCompositionEnd={() => { setComposing(false); composingRef.current = false; const waiting = pendingAddonInsert.current.splice(0); if (waiting.length) setTimeout(() => { for (const text of waiting) insertAtCaretNow(text); }, 0); }}
             onKeyDown={(e) => {
               const isComposing = imeComposing(e, composing);
               if (!isComposing && fileMentions.keyDown(e)) return;
@@ -2558,7 +2605,10 @@ export function ChatPanel(props: Props) {
             }
             rows={personalWorkspace ? 1 : automationCompact ? 2 : 3}
           />
-          {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
+          {personalWorkspace && !folderMissing && planFirst.on && !props.instructor
+            ? <div className="hps-selected-tools">{toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}<SelectedPlanFirst locked={streaming} /></div>
+            : null}
+          {personalWorkspace && !folderMissing && !(planFirst.on && !props.instructor) && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           {(!folderMissing || streaming) && <div className="hps-input-buttons">
             {personalWorkspace && !folderMissing && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!folderMissing && !streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
@@ -2571,6 +2621,8 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
+            {addon && <addon.Control />}
+            {!props.instructor && !personalWorkspace && planFirst.available !== false && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
             <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
               <button
@@ -2599,12 +2651,12 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={planAwaiting || attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
-                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
+                aria-label={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
+                {planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>}
@@ -2612,6 +2664,7 @@ export function ChatPanel(props: Props) {
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
         <CopyFeedbackOutlet />
       </footer>
+      </AddonScope>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
         imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
@@ -3092,12 +3145,12 @@ function StepDivider({ id, label }: { id: string; label: string }) {
  * CGP-KNOW-R-005), and the tooltip and the accessible text explain it in one sentence. A class seat has no store, so it has
  * no line and there is no class wording.
  */
-function MemoryStateLine({ folder, place }: { folder: string; place: 'header' | 'settings' }) {
+function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 'header' | 'settings'; temporary?: boolean }) {
   return place === 'header'
     // Two items of the header row (the wrapper is display: contents): the state with its scope never shrinks or cuts, the
     // folder yields first and is visually hidden on a narrow header (screen readers still read it; the tooltip names it).
     ? <span className="hps-memory-now" data-testid="memory-state-header">
-        <span className="hps-memory-now-state" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}</span></span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}</span>
+        <span className="hps-memory-now-state" data-hp-tooltip={temporary ? `${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}</span>{temporary && <span className="hps-memory-now-temp" data-testid="memory-temporary-note"><span className="hps-memory-now-temp-sep">{' · '}</span>{MEMORY_TEMPORARY_NOTE}</span>}</span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}{temporary && ` ${MEMORY_TEMPORARY_SENTENCE}`}</span>
       </span>
     : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · {MEMORY_SCOPE_HEADER} · <code dir="ltr">{folder}</code></p>;
 }
@@ -3313,6 +3366,7 @@ function MessageItem({
             <ChatIcon kind="retry" size={16} />
           </button>
         )}
+        {!personal && message.role === "assistant" && !isStreamingThis && !!message.content.trim() && <AnswerExtras answerId={message.id} content={message.content} />}
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       {message.role === 'user' && editing && onCancelEdit && onSaveEdit ? <EditPrompt
@@ -3360,6 +3414,7 @@ function MessageItem({
       {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
         memory={memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : undefined}
         content={message.content}
+        answerId={message.id}
         status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}

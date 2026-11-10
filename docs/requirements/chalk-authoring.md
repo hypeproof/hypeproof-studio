@@ -28,6 +28,7 @@ Chalk console/issuer/board, Service 인증, live-server, module envelope는 재�
 | CH-06 | 기본·확장 과제를 같은 수업에 구성한다. | P1 |
 | CH-07 | 학생 데이터 없이 수업 자료와 구성을 다음 기수에 복제한다. | P1 |
 | CH-08 | 강사가 수업 버전마다 AI가 묻는 방식(승인 프리셋)을 하나 고른다: 기본(학습자 앱 기본값) · 항상 묻기 · 바꾸기 전에 묻기 · 중요한 것만 묻기. 전부 허용은 없다. 고정한 버전의 방식은 읽기 전용으로 보인다 ([수업 버전별 AI가 묻는 방식](#ch-08-approval-preset)). | P0 |
+| CH-09 | 강사가 `/authoring`의 한 화면 ‘수업 AI 설정’에서 AI 이름, 지시문, 모델·처리 수준, 기능·승인 방식을 정하고 미리보기로 학생이 받을 설정을 읽기만 한다. 값은 기존 저장 필드에 그대로 기록된다 ([수업 AI 설정 한 화면](#ch-09-ai-settings)). | P1 |
 | WEB-01 | AI와 홈페이지를 생성·수정하고 기존 프로젝트를 이어간다. | P0 |
 | WEB-02 | 문구·사진·진료시간을 변경하고 자료를 프로젝트에 보존한다. | P0 |
 | WEB-03 | 실행 환경을 준비하고 포트 입력 없이 실제 미리보기를 연다. | P0 |
@@ -218,7 +219,7 @@ G2 첫 구현은 `learning` 블록을 보존만 했고 학생 화면은 "미션�
 
 | 항목 | 계약 |
 |---|---|
-| 위치 | `/authoring` ‘추가 자료 · AI 설정’ 안, 기능 고르기 아래 `fieldset#approval-fields`(legend “AI가 묻는 방식 — 이 수업 버전에 하나”). 선택지는 기본 radio이고 이름 아래 설명 한 줄이 radio의 `aria-describedby`다. 행 높이 44px 이상, 이름 14px 이상, 375px에서 가로 스크롤 없음 |
+| 위치 | `/authoring` ‘수업 AI 설정’(CH-09)의 ‘기능·승인’ 구역, 기능 고르기 아래 `fieldset#approval-fields`(legend “AI가 묻는 방식 — 이 수업 버전에 하나”). 선택지는 기본 radio이고 이름 아래 설명 한 줄이 radio의 `aria-describedby`다. 행 높이 44px 이상, 이름 14px 이상, 375px에서 가로 스크롤 없음 |
 | 선택지 | 맨 위 ‘기본(학습자 앱 기본값)’ = 저장 본문에 `approval_preset` 키를 보내지 않는다. 그 아래는 Service 카탈로그 순서(엄격한 것부터): 항상 묻기(`always_ask`) · 바꾸기 전에 묻기(`before_changes`) · 중요한 것만 묻기(`important_only`). 이름과 설명은 Service가 보낸 글자를 텍스트로만 그린다 |
 | 카탈로그 | 이미 하는 기능 목록 읽기(`GET …/features/:profile`)의 `approval_presets`. ‘수업 기능 목록 불러오기’ 전과 코호트·프로필·수업 ID를 바꾼 뒤에는 닫혀 있다. 닫힌 id 세 개 밖의 항목(예: 전부 허용)은 Service가 보내도 보이지 않는다. `approval_presets`가 없는 Service면 닫힌 채 “이 Service는 아직 승인 방식을 받지 않습니다. 기본으로 둡니다.”를 보인다 |
 | 도움말 | “고르지 않으면 학습자 앱의 기본값을 따릅니다. 미성년자 수업(초등·중·고)의 기본은 ‘중요한 것만 묻기’입니다. 후보로 고정하면 그 버전의 방식은 바뀌지 않고, 바꾸려면 새 버전을 만듭니다.” 기본값은 학습자 앱이 정한다(성인 좌석의 기본값은 Jay 2026-11-04 결정에 따라 Studio에서 따로 바뀌는 중이다). Chalk는 값을 대신 넣지 않는다 |
@@ -228,7 +229,30 @@ G2 첫 구현은 `learning` 블록을 보존만 했고 학생 화면은 "미션�
 
 이 행이 주장하지 않는 것: 학습자 앱이 실제로 묻는 방식(REQ-E1a, Studio), 성인 기본값(Studio의 다른 행), Service 쪽 검증(#323). 카탈로그를 읽기 전에는 Chalk 안의 같은 세 이름으로 보인다.
 
+이름과 설명의 정본은 Service 카탈로그(`lesson-approval-preset.ts`) 하나다(CGP-AGENT-R-019). Chalk 선택지와 Studio 조종석 라벨은 Service가 보낸 글자를 그대로 그린다. 계약 파일은 `chalk/test/fixtures/approval-preset-catalog.json`이고, 같은 파일이 Service 시험 자료(`worker/test/fixtures/`)에 그대로 들어 있어 Service 시험(APR-07)이 카탈로그와 항목별로(id·순서·이름·설명) 비교한다. Studio의 `chalk/test/approval-preset-drift.test.mjs`는 Chalk의 카탈로그 전 이름, 도움말의 기본값 이름, Studio 시험 파일의 사본을 이 파일과 비교한다. CI는 이 파일과 Service 시험에 기댄다. 형제 `hypeproof-service` 체크아웃(또는 `HYPEPROOF_SERVICE_DIR`)이 있으면 Service 원문과도 직접 비교하지만 그것은 보조다.
+
 검증: [T-51](../testing/chalk-authoring.md#t-51-approval-preset).
+
+<a id="ch-09-ai-settings"></a>
+
+### CH-09 수업 AI 설정 한 화면 (CGP-AGENT-R-015, CGP-AGENT-D-013, CGP-KNOW-R-037, CGP-KNOW-D-037) · 2026-11-10
+
+출처: CGP-AGENT-R-015(REQ-CGP-AGENT-27), CGP-AGENT-D-013(DES-CGP-AGENT-27), CGP-KNOW-R-037(REQ-KNOW-70), CGP-KNOW-D-037(DES-KNOW-70). 새 저장소를 만들지 않는다. 화면은 `/authoring` 폼이 저장하던 필드를 한 곳에 모으고, DEC-30(2026-11-10, Jay 확정)으로 Service 수업 계약에 생긴 `assistant.role`, `assistant.tone`, `starters`를 더한다(Service 계약: hypeproof-service#348).
+
+| 항목 | 계약 |
+|---|---|
+| 위치와 순서 | `fieldset#ai-settings`(legend “수업 AI 설정”) 안에 접을 수 있는 구역 여섯 개가 이 순서로 있다: 정체성 → 지시문 → 모델·처리 수준 → 기능·승인 → 시작 문장 → 미리보기. 구역 이동 링크(`#ai-nav`)도 같은 순서이고 1024px 이상에서는 위에 붙어 따라온다. 구역 머리글과 이동 링크는 높이 44px 이상 |
+| 정체성 | `assistant.display_name`(이 수업의 AI 이름, 40자, 한 줄). 비우면 코호트 기본 규칙. DEC-30: `assistant.role`(AI 역할, 한 줄 80자, 글자 수 표시, 비우면 키를 보내지 않음)과 `assistant.tone`(AI 말투, 라디오 44px 행). 말투 선택지·한국어 이름·`minor_safe`는 Service가 기능 읽기에 싣는 `assistant_tones`에서 그대로 가져오고(닫힌 4개), 고르지 않음 = ‘코호트 기본’은 키를 보내지 않는다. `minor_safe`가 거짓인 말투 행에는 미성년자 수업에서 적용되지 않는다는 안내가 붙고, 대상 단계가 초등·중·고(lv1·lv2)이면 선택한 말투 옆에 경고가 나온다(적용 여부 판단은 Service가 한다). 역할·말투는 `assistant` 블록 안에 있으므로 AI 이름 없이는 저장되지 않고 이름 칸으로 안내한다. 도구 권한·모델·AI 고지를 바꾸지 않는다 |
+| 지시문 | 단계별 `steps[].instructions`(안내·실습), 힌트, 완료 기준과 단계 도움 정책. 수업 진행 순서 편집기가 이 구역으로 옮겨 왔다. 수업 전체용 지시문 칸은 Service에 없어 만들지 않는다 |
+| 모델·처리 수준 | `model`(기본·허용 목록)과 `model.effort`. 기존 불러오기·고르기 동작 그대로 |
+| 기능·승인 | `features.allowed`(줄이기만)와 `approval_preset`(CH-08). 기존 동작 그대로 |
+| 시작 문장 | `starters`: 학생 Studio에서 고칠 수 있는 제안(자동으로 보내지지 않음). 한 줄 입력 4개(각 80자, 글자 수 표시), 빈 줄은 저장하지 않고 남은 문장은 순서를 유지한다. 모두 비면 키를 보내지 않는다(`starters: []`는 보내지 않음). 같은 문장(NFKC, 대소문자 무시)은 입력하는 동안 경고하고 저장 전에 막는다. CGP-KNOW-R-037: 학생이 시작 문장·자료로 수업 내용을 끌어낼 수 있다는 안내를 이 구역과 ‘시작 예제·자료’ 칸 옆에 둔다 |
+| 미리보기 | 읽기 전용 목록(`dl`, 조작 칸 0개): AI 이름, AI 역할, AI 말투, 지시문(단계 수·안내를 쓴 단계 수), 모델, 처리 수준, 쓸 수 있는 기능, AI가 묻는 방식, 시작 문장. 저장하는 `content()`에서 만들므로 저장될 값과 같다. 고정된 버전을 ‘버전 확인’·고정으로 열면 “고정된 버전 … — 읽기 전용” 목록(역할·말투·시작 문장 포함)이 따로 생기고, 이후 초안을 고쳐도 바뀌지 않는다. 리허설 후보 읽기(04)에도 고정된 역할·말투와 시작 문장이 나오고, 확정 전 비교(03)는 Service의 `assistant_role`·`assistant_tone`·`starters` 변경을 한 줄씩 말한다. “학생으로 미리보기”는 아래 리허설(04)로 가는 링크다 |
+| 저장 의미 | 초안 저장, 후보 고정, 리허설, 확정, 새 버전 규칙은 바뀌지 않는다. 고정한 버전은 편집 대상이 아니다 |
+| 저장 전 이탈 | 편집한 채 닫으려 하면 브라우저 확인이 뜬다 |
+| 구버전 Service | 기능 읽기에 `assistant_tones`가 없으면(DEC-30 이전 Service) 역할·말투·시작 문장 입력과 이동 링크를 숨기고 저장에도 싣지 않는다. 읽기 전에는 보이며, Service가 새 키를 400(`invalid session-design fields`)으로 거절하면 세 값을 비우라는 한국어 안내를 보인다. 역할·말투·시작 문장 값 오류의 400도 각각 한국어 안내로 바꾼다. 기존 ‘시작 예제·자료’(`starter`)는 학생이 처음 여는 자료이지 시작 문장이 아니다. 구역은 모든 너비에서 접을 수 있다(아코디언 자동 접힘은 하지 않는다) |
+
+검증: [T-52](../testing/chalk-authoring.md#t-52-ai-settings).
 
 ## 첫 구현 경계
 

@@ -2,10 +2,13 @@ import type { ResolvedProfile } from "../protocol";
 import { isAbsolute } from "node:path";
 import type { CoachToolAction, SdkActivity } from "../sdkCoachHelpers.ts";
 import { workspaceTools } from "./tools.ts";
-import { localEmailTools, localTurnBudget } from "./emailTools.ts";
+import { localEmailTools } from "./emailTools.ts";
+import { CoachStallError, createStallWatch, localStallTimeoutMs } from "./stallWatch.ts";
+import { stallNotice } from "../coachIdentity.ts";
 import { answerUnlessTurnEnds, createHumanWait, type HumanWait } from "./humanWait.ts";
 import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
 import { localRememberTools, type MemoryRememberHost } from "../memoryRememberTool.ts";
+import type { PlanFirstGate } from "../planFirst.ts";
 import { CodexLocalClient } from "./codexClient.mjs";
 import { runClaude } from "./claudeClient.mjs";
 import { startToolServer } from "./toolServer.mjs";
@@ -122,9 +125,45 @@ export function mergeBrowserTools(
   };
 }
 
+/**
+ * The lesson as the dev local runtime puts it in the prompt. Mirrors the Service's `coachVisibleLesson` for the DEC-30
+ * fields: `assistant.role`, `assistant.tone` and `starters` are removed, because the raw values are unclamped (a
+ * `playful`/`formal` tone on a minor seat, a hostile role string) and starters are learner chips, not teaching data.
+ * When none of those keys is present the object is returned as is (same reference, same bytes).
+ */
+export function devCoachVisibleLesson<T extends { assistant?: object; starters?: unknown }>(content: T): T {
+  const a = content.assistant as Record<string, unknown> | undefined;
+  const hasA = !!a && ("role" in a || "tone" in a);
+  const hasS = "starters" in content;
+  if (!hasA && !hasS) return content;
+  const { starters: _s, ...rest } = content;
+  const base = (hasS ? rest : content) as T;
+  if (!hasA) return base;
+  const { role: _r, tone: _t, ...keep } = a!;
+  return { ...base, assistant: keep };
+}
+
+/**
+ * The dev-only local rehearsal system prompt (used when the caller passes none). DEC-30 step 4 decision: the dev
+ * runtime OMITS the instructor's role and tone entirely (no style block, `assistant_style` is not read). The Service
+ * builds that block after the cohort safety rules with a minor clamp; re-implementing the clamp and quoting here would
+ * be a second copy to keep in sync for a rehearsal-only path. The safe default is no style, not unclamped style.
+ */
+export function localDevSystemPrompt(profile: ResolvedProfile): string {
+  const lesson = profile.lesson?.content;
+  return "You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
+    JSON.stringify({
+      lesson: lesson ? devCoachVisibleLesson(lesson) : null,
+      welcome: profile.welcome,
+      assets: profile.assets_focus ?? [],
+    });
+}
+
 export async function runLocalCoach(args: {
   config: LocalRuntimeConfig;
   profile: ResolvedProfile;
+  /** The coach's display name for the stall text (SDK: args.coachName). Omitted → the default name. */
+  coachName?: string;
   cwd: string;
   history: Array<{ role: string; content: string }>;
   userText: string;
@@ -147,13 +186,16 @@ export async function runLocalCoach(args: {
   memoryRememberHost?: MemoryRememberHost;
   /** Counts the waits for a person (approval, confirmation). Created here when the caller passes none (#3582). */
   humanWait?: HumanWait;
+  /** CGP-CHAT-R-004 — set on a "먼저 계획 보기" planning turn: no tool is offered and any call is refused on the host. */
+  planGate?: PlanFirstGate;
 }) {
   const lifetime = new AbortController();
   const humanWait = args.humanWait ?? createHumanWait();
   let emailWaiting = () => false;
-  // #3582: time spent waiting for a person does not spend the turn budget.
-  const budget = localTurnBudget(() => humanWait.active() || emailWaiting());
-  const signal = AbortSignal.any([args.signal, lifetime.signal, budget.signal]);
+  // #3601: a fixed turn budget is replaced by the no-progress stall watch (the SDK rule). A person being
+  // asked, or a tool that ran within one budget, pauses it. The setting 0 turns it off.
+  const watch = createStallWatch({ stallMs: localStallTimeoutMs(), isPaused: () => humanWait.active() || emailWaiting(), message: stallNotice(args.coachName) });
+  const signal = AbortSignal.any([args.signal, lifetime.signal, watch.signal]);
   const cancelQuestion = () => args.emailAutomationHost?.cancelPendingQuestion?.();
   signal.addEventListener("abort", cancelQuestion, { once: true });
   // One gate for every approval in this turn. A turn that ends while the person is answering is denied,
@@ -186,14 +228,25 @@ export async function runLocalCoach(args: {
     const approval = await approve({ toolName: name, input });
     return typeof approval === "boolean" ? approval : approval.approved;
   });
-  const tools = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
-  const system = args.systemPrompt ??
-    ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
-    JSON.stringify({
-      lesson: args.profile.lesson?.content ?? null,
-      welcome: args.profile.welcome,
-      assets: args.profile.assets_focus ?? [],
-    }));
+  const toolsBase = mergeBrowserTools(mergeBrowserTools(withBrowser, email), remember.definitions.length ? remember : undefined);
+  const gate = args.planGate;
+  // One gate for every tool call (Claude's tool server and Codex's tool calls both come here): a tool
+  // start and end are progress, and the call counts as paused for one budget (stall watch).
+  // CGP-CHAT-R-004 — on a planning turn no tool is offered and any call is refused on the host.
+  const tools = gate
+    ? { definitions: [] as typeof toolsBase.definitions, call: async (name: string): Promise<string> => gate.refusal(name) }
+    : {
+        definitions: toolsBase.definitions,
+        call: async (name: string, input: unknown): Promise<string> => {
+          watch.toolStarted();
+          try {
+            return await toolsBase.call(name, input);
+          } finally {
+            watch.toolEnded();
+          }
+        },
+      };
+  const system = args.systemPrompt ?? localDevSystemPrompt(args.profile);
   const emailGuide = email.definitions.length ? [
     'Email automation is available through these exact local tool names: ' + email.definitions.map(tool => tool.name).join(', ') + '.',
     'First understand the actual work in natural Korean conversation. Ask one necessary question at a time with email_ask_user (question, choices as JSON array of {id,label}, allowFreeText as "true" or "false"). Do not repeat known answers or impose a fixed form.',
@@ -211,10 +264,10 @@ export async function runLocalCoach(args: {
     ] : []),
     'For Claude these tools appear under the studio MCP server. Never invent an unavailable tool name. Google and recipient details remain on the host; do not request them as tool arguments.',
   ].join('\n') : '';
-  const providerEmailGuide = args.config.provider === 'claude'
+  const providerEmailGuide = gate ? '' : args.config.provider === 'claude'
     ? emailGuide.replace(/\bemail_[a-z_]+\b/g, name => 'mcp__studio__' + name)
     : emailGuide;
-  const rememberGuide = remember.definitions.length
+  const rememberGuide = remember.definitions.length && !gate
     ? 'The `remember` tool saves one short note to the learner\'s personal memory. Use it only for stable preferences or facts the learner stated themselves; never for sensitive personal data or guesses. The learner sees the note under your answer and can undo it.'
     : '';
   const messages = [
@@ -239,7 +292,8 @@ export async function runLocalCoach(args: {
           onDelta: args.onDelta,
           onRefusal: args.onRefusal,
           toolServer: server,
-          timeout: 0, // The shared active-time budget owns cancellation while questions wait.
+          onProgress: () => watch.progress(),
+          timeout: 0, // The stall watch owns cancellation while a person is asked or a tool runs.
         });
       } finally {
         server.close();
@@ -256,14 +310,19 @@ export async function runLocalCoach(args: {
         maxOutputBytes: 200000,
         tools: tools.definitions,
         onToolCall: tools.call,
+        onProgress: () => watch.progress(),
       });
     } finally {
       client.close();
     }
+  } catch (err) {
+    // #3601: a stall ends the turn with the SDK's stall error and text; a user stop keeps its own message.
+    if (watch.stalled()) throw new CoachStallError(stallNotice(args.coachName));
+    throw err;
   } finally {
     if (email.isWaiting()) cancelQuestion();
     signal.removeEventListener("abort", cancelQuestion);
-    budget.dispose();
+    watch.dispose();
     lifetime.abort();
   }
 }

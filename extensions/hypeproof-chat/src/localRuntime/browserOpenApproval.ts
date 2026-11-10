@@ -12,8 +12,10 @@ export const INSTRUCTOR_BROWSER_PERMITTED: readonly string[] = [MCP_BROWSER_OPEN
 
 /** Learner copy for a refusal by the learner, the same sentence the student path returns to the coach. */
 export const USER_DECLINED_OPEN = "사용자가 이 작업을 허용하지 않았어요.";
+/** #3586 — tagged so the learner gets the 시간 초과 card, not the unknown card. */
+export const BROWSER_TIMEOUT_TEXT = "[시간 초과] 확인 창이 시간 안에 선택되지 않아 열지 않았어요. 사용자가 원하면 다시 요청할 수 있어요.";
 
-type Ask = (action: { toolName: string; input: unknown }) => Promise<boolean | { approved: boolean }>;
+type Ask = (action: { toolName: string; input: unknown }) => Promise<boolean | { approved: boolean; denialSource?: string }>;
 
 export function withBrowserOpenApproval(
   base: BrowserToolsForLocal | undefined,
@@ -46,7 +48,8 @@ export function withBrowserOpenApproval(
       if (alreadyOpen) return base.call(name, input);
       const answer = ask ? await ask({ toolName: MCP_BROWSER_OPEN, input }) : false;
       const approved = typeof answer === "boolean" ? answer : answer.approved;
-      if (!approved) throw new Error(USER_DECLINED_OPEN);
+      const denialSource = typeof answer === "boolean" ? undefined : answer.denialSource;
+      if (!approved) throw new Error(denialSource === "timeout" ? BROWSER_TIMEOUT_TEXT : USER_DECLINED_OPEN);
       return base.call(name, input);
     },
   };

@@ -1671,6 +1671,14 @@ Builds DES-KNOW-07 on REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-D-022) and the 
 - Floors: 14px (above the register's 11-13px, the learner floor wins), 4.5:1 in both themes, forced colours; measured in headless Chromium. The state keeps D-022's primary text colour rather than "secondary": it is the learner's privacy statement, and the folder after it stays muted.
 - Default: on wherever the store exists (no switch).
 
+## CGP-KNOW-D-005 follow-up: the temporary task's header phrase (2026-11-08, agent-selected)
+
+Refines the CGP-KNOW-D-005 section above for a "기록 없이 묻기" task (CGP-KNOW-R-029: it reads memory, DEC-02, and writes none).
+- Words: the header keeps "AI 기억: 켜짐 · 이 작업 공간 안에서만" and appends "· 이 작업은 기억에 남기지 않아요" in that task only. Hiding the line would hide that memory is still read; "꺼짐" would be false.
+- Tooltip and screen-reader text add "이 작업은 기억을 읽기만 하고 새로 남기지 않아요."
+- Narrow: the phrase is its own unbreakable element. At 480px and below it takes its own line under the state, the state may use the full band width and the band grows to three lines (tokens only); the verifier measured 3 lines in a 2-line slot at 320px with the phrase inside the scope words, which this replaces. Settings paragraph unchanged.
+- Confirmed by Jay: no
+
 ## CGP-KNOW-D-026: "기억 사용 N" chip in the action row, opening the shelf's 기억 tab (2026-11-01, agent-selected)
 
 Builds DES-KNOW-44 on REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026): no second list, no new host message.
@@ -1750,3 +1758,133 @@ Jay, 2026-11-08: add a coach `remember` tool so the coach can save short notes t
 - Guidance (agent-selected): Studio-side in the tool description. The Service composes the SDK runtime's system prompt, so the same sentence in the served coach prompt is a Service follow-up, not part of this change.
 - #3596 follow-ups (agent-selected): a replaced file above the 16 KiB restore cap is refused before any write (every accepted replacement is undoable); an undone line is rewritten in the stored turn so a reload does not offer 되돌리기 again.
 - Still open: receipts live in the extension host's memory, so 되돌리기 on a line from before a window reload answers the calm "unknown" sentence.
+
+## "먼저 계획 보기" (CGP-CHAT-R-004 / D-004, CGP-AGENT-R-011 / D-010, REQ-STUDIO-PLAN-FIRST) (2026-11-08)
+
+Behavior from the register: a plan, then learner approval, before any tool runs. The choices below were made by the agent while building it.
+- Scope of the mode (agent-selected): per task, a toggle chip on the composer, off by default, available to every seat. The register's "availability follows the cohort profile" needs a Service field, so it is a Service follow-up; today no cohort can switch it off. Open question 7 in chat-core.md (fifth help mode vs learner toggle) is answered as a learner toggle for now.
+- What a planning turn forbids (agent-selected): every tool, including reads. The register says no write, shell or browser; refusing reads too is stricter, simpler to prove on each runtime, and the plan is written from what the learner said. A planning turn also skips app shortcuts, the fenced-HTML preview write and the `agent.md` save, because those write files without a tool call.
+- Where it is enforced (agent-selected): on the host per turn. SDK: no tool advertised or registered, `canUseTool` denies. Local CLI: no tool offered, the tool server refuses. Proxy browser loop: error result before the browser runs. The model-facing prompt line is host guidance only; wording served by the Service is a follow-up.
+- Approval (agent-selected): a one-time token bound to the exact send text the host makes after the press, cleared by any other turn. The approved turn is ordinary, so presets and modals still apply; the mode never relaxes them and minors behave the same.
+- Plan text and actions (agent-selected): the model's answer is the plan (6000 characters at most). Actions are 이대로 진행, 수정, 다시 계획 and 그만두기 (the register lists the first three; 그만두기 is the explicit decline). 다시 계획 sends an edit as direction. A new message while a plan waits supersedes it.
+- Evidence (agent-selected): the approved plan text and revision stay in the task's local record (workspace state, 50 tasks); the spool gets `plan_first_shown`, `plan_first_approved` (revision, edited) and `plan_first_declined`, never the text. AE-35: only approval and learner edits are evidence; the coach's plan alone is not.
+- Not covered: the instructor console has no chip and runs no planning turn; real-app validation is NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above; the mode is off by default).
+
+## "먼저 계획 보기": per-class switch (DEC-10, CGP-CHAT-R-004, REQ-STUDIO-PLAN-FIRST) (2026-11-09)
+
+Jay decided that availability follows the class: a per-class switch is added (the register's "availability follows the cohort profile").
+- Service field (decided): the cohort profile carries an optional `plan_first: { available: boolean }`, absent = available, served on `/v1/profile` only when explicitly `false` so every existing cohort is served byte-identical (hypeproof-service#341).
+- Studio reading (decided): only an explicit `available === false` counts; an older Service, a missing field and a profile not yet loaded all keep today's behavior.
+- With the switch off: the chip, the tools-menu item and the pill are hidden on both seat types, the mode is off for every turn, and the host refuses to turn it on.
+- A learner who had it on (agent-selected): it is turned off visibly (one status line in the chat pane, shown once for that task), and a waiting plan or an unspent approval is dropped so nothing is left pending and nothing runs on a stale approval.
+- Not covered: a lesson-level switch (lesson feature narrowing keeps what `allowed` lists, so adding the key would switch it off for every saved lesson); real-app validation is NOT RUN.
+- Confirmed by Jay: yes (2026-11-09).
+
+## CGP-VOICE-R-024 / CGP-VOICE-D-018: served voice block, class-off state (2026-11-09, policy-backed)
+
+- Policy: `hypeprooflab` `docs/decisions/2026-11-09-studio-voice-policy.md` (active), policy 4 and 6. The only input is the `voice` block on `/v1/profile`; absent means off, so every current seat renders byte-identical markup (`voice-mount.test.tsx` compares the real ChatPanel's markup with and without the wiring, both seats).
+- Fail closed: a `policy_version` this build has no copy for is treated as off. A truthy non-`true` flag is off.
+- Class off (D-018): the Service omits the block when a class turns voice off, so "was served in this window, not now" is the only signal; that state is kept in memory per window and seat, never stored. A Service refusal `voice_off` / `voice_consent_required` has the same effect.
+- Copy: the policy's `이 수업에서는 쓸 수 없어요` (also what the Service answers with). The request named `이 수업에서는 음성을 쓰지 않아요`; the confirmed policy line was used, because the Service sends it verbatim and one line should not exist in two wordings. The follow-up `글로 이야기하면 돼요.` is agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the state and the line; no for `글로 이야기하면 돼요.`.
+
+## CGP-VOICE-R-004 / CGP-VOICE-D-003: disclosure sheet (2026-11-09, policy-backed)
+
+- Sentences are the policy's Appendix B, verbatim, keyed by policy version in `voiceCopy.ts`; one paragraph per served half; the button is `시작하기`. DES-CGPV-04's "at most 3 short sentences at a 2nd-grade level" gives way to the approved copy, which is what the register's own text says ("copy is generated from the active policy").
+- Remembered once per seat and policy version (policy 5: once per account and policy version), in the host's `globalState` as one record keyed by the seat's own scope (activity connection plus profile id) holding version strings only. On a shared class laptop each seat reads the sheet once; a seat switch asks the host again. A different version shows the sheet again. An earlier revision of this change keyed it per install; that did not match the policy and was corrected.
+- The sheet reuses the shared modal surface (focus trap, Escape, focus return). The title `음성 사용 안내` is agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the sentences, the button and the once-per-seat-and-version rule (the policy's own); no for the title and for the seat-key construction.
+
+## CGP-VOICE-R-012 / R-016, REQ-CGPV-17b/17c/18/19: dictation (2026-11-09, policy-backed with agent choices)
+
+- Engine and path: the Service, never the webview (policy 1, D2). The webview's CSP allows no network and is not loosened; the finished clip goes to the host as base64 and the host posts it. Audio is memory only end to end (policy 3, D4); the host keeps no copy after the answer.
+- Format: `audio/webm;codecs=opus` at 32 kbps, `audio/ogg;codecs=opus` as the only fallback, never `audio/mp4` (the Service parses nothing else).
+- The request said "hard stop at 60 s". Studio stops at 58 s: the Service refuses a clip it measures over 60 s from the bytes, and the encoder flushes one more packet after `stop()`, so a stop at exactly 60 s could throw away a whole clip. Agent-chosen margin.
+- No auto-send, ever; no "받아쓰고 보내기" action (REQ-CGPV-17 allows one as a separate action; not built).
+- Retry (R-016): a failed clip is kept in memory for one retry for ten minutes (the policy's own figure), dropped on success, dismiss or unmount; a retried transcript needs `메시지에 넣기`.
+- Hiding the window, `pagehide`, a task or seat switch (the chat remounts) and disposing the panel stop a recording, release the microphone and drop the clip and any kept retry copy: the chat view keeps its webview alive while hidden (`retainContextWhenHidden`), so without this a hidden window would keep recording for up to 58 s. Agent-chosen.
+- A transcript that was inserted but never sent stays in the composer draft and is saved like any typed draft; that is ordinary chat text under DEC-05, not stored audio.
+- Not an outbound-consent dialog: the first-use disclosure carries the statement, and a prompt per clip would be noise a learner learns to click through.
+- Softer line `소리가 잘 들리지 않았어요. 다시 말해 볼까요?` for unreadable or silent clips is from the task brief, agent-written. The cap line is the policy's.
+- Key: Alt+Shift+M start/stop, Escape cancels a recording, in-app only (beside the existing Alt+Shift+J). Agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the engine path, the data rule, the cap line and the ten minutes; no for the 58 s margin, the key, the failure lines and the card copy.
+
+## CGP-VOICE-R-003 / CGP-VOICE-D-002: microphone permission card (2026-11-09, agent-selected)
+
+- A card above the composer (not inside the unmounted VoicePanel): title, one sentence, `마이크 설정 열기` primary, `글로 계속하기` secondary. DES-CGPV-03's labels `설정 열기` / `텍스트로 계속` are made specific.
+- The host picks the OS pane from the platform (macOS, Windows; none elsewhere) and never takes a URL from the webview. No automatic retry.
+- Real-device caveat: on a build without the microphone core patch (DEC-03) `getUserMedia` is refused by Studio itself and a learner sees this card although no OS setting would help. That is exactly what the real-device check must separate.
+- Confirmed by Jay: no.
+
+## CGP-VOICE-R-024 (read-aloud half) / CGP-CHAT-R-009: read-aloud (2026-11-09, policy-backed)
+
+- Engine: the OS voice through `speechSynthesis`, Korean `ko-KR`, no Service call (policy D1). Only an on-device Korean voice is chosen; with none the default voice of the platform speaks (the Electron webview has no streaming voices). Unmeasured: voice quality on macOS and Windows.
+- Per answer: personal seats in the answer action row, classroom seats beside the speaker's name (they have no action row). Plays on a press only; one at a time; the same button stops it; fenced code skipped and announced (`코드는 건너뛰었어요`, REQ-CGPV-24).
+- Label `소리로 듣기` is the register's proposed copy, agent-chosen.
+- Confirmed by Jay: yes (2026-11-09) for the engine; no for the label and placement.
+
+## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
+
+- R-021 asks for four `hypeproof.voice.*` Command Palette commands for realtime voice; this change binds one webview-local key for dictation instead and leaves the commands to the row that owns them. R-001 is the realtime session state set; `VoicePanel` stays unmounted. Both stay open.
+- Confirmed by Jay: no.
+
+## Workspace Trust: Studio-created folders open trusted (2026-11-10)
+
+Problem (v2026.1109.0-rc.1 clean-Mac black-box run): on first open VS Code's Workspace Trust modal blocks the chat until clicked. #3577 removed it only for the review Dev copy, by turning trust off for that copy.
+
+- Jay, 2026-11-10 (security setting): auto-trust only folders Studio itself created (class, free and trial work folders, numbered next folders, activity folders); any other folder the learner opens keeps the normal prompt; Workspace Trust is never disabled globally. Approved the core patch the same day, after the extension API turned out to have no way to trust a folder (`workspace.isTrusted` is read-only, `requestWorkspaceTrust` only prompts, the trust store is internal).
+- Mechanism: `scripts/patches/core/hps-studio-folder-trust.patch` (hand-maintained, applied to the pristine 1.116 `workspaceTrust.ts`) adds a pure decision file and one hook in `doGetUriTrustInfo`. The chat extension records a folder's real path in its `globalState` only when the directory did not exist before Studio prepared it. The key is that record, not a path name; a same-path folder Studio did not create, a child, a parent and a remote folder all prompt.
+- Default off (agent-selected flag): `hypeproofChat.trustStudioFolders`, machine scope, default false. Off, behaviour is unchanged. Turning it on is a later step after the core batch base rebuild and a clean-Mac check.
+- Minor seats: same rule, Studio-created folders only.
+- Ships with the next core batch base rebuild; nothing changes until that base is built and the flag is on.
+- Known limit (closed by the blocker fix below): a learner who deletes a Studio-created folder and recreates the same path by hand stayed trusted while the record existed.
+- Confirmed by Jay: yes (2026-11-10).
+
+### Blocker fix before the flag is turned on (#3658, same scope, same approval)
+
+Verifier findings S1 and S2 on #3657, plus hardening. The flag stays default off.
+
+- S1 fail closed: the core reads `hypeproofChat.trustStudioFolders` itself at trust-decision time (`configurationService.inspect(...).userLocalValue === true`, never a workspace or default value). Turning the flag off applies to the very next session; the extension no longer writes an `enabled` copy. The core also reads the workbench's disabled-extension list, so with the chat extension disabled the record alone grants nothing. The disabled list is read at both the profile and the workspace scope (either disables), failing closed on an unreadable list. The extension is built in, so uninstalling does not apply.
+- S2: an explicit "Don't Trust" on a file folder is stored in the application-scope key `hypeproof.studioFolderTrustDenied` and wins over the record in every later session; an explicit "Trust" removes it.
+- Hardening: Studio creates the leaf folder with a non-recursive `mkdir` and records only when that call succeeded (no check-then-create race). The record stores the real path and the folder's creation time; the core compares it with `fileService.stat().ctime` (cached before the synchronous decision), so delete + recreate at the same path prompts. The record shape is now v2 (`{path, birth}`); the earlier v1 record was never shipped and is ignored.
+- "Don't Trust" is stored even while the flag is off: it can only add prompts, and a refusal should survive the flag being turned on later.
+- The extension creates the leaf folder before `ActivityConnections.prepare` (which makes the folder itself on the class, trial and activity paths); a smoke step runs that real sequence.
+- If creating the leaf throws (parent is a file, dangling link, read-only), the extension ignores it so `ActivityConnections.prepare` still gives the #3213/#3218 guidance. If preparing fails after Studio made the folder (bad activity id), Studio removes it when it is still empty and still the same folder (non-recursive `rmdir`, creation time checked) rather than recording it: a failed open leaves nothing behind and the retry creates and records a fresh folder.
+- Folders Studio creates while the flag is off are still recorded, so turning the flag on trusts them (intended).
+- Not covered: content cloned or downloaded into a Studio-created folder later runs trusted; a UNC or network `workspace_root` is trusted like any other recorded folder; a symlinked `workspace_root` records the real path and prompts (fails closed).
+
+## CGP-AGENT-R-015 / CGP-AGENT-D-013: 수업 AI 설정 one page (2026-11-10, agent-selected layout)
+
+Agent implementation choice; not a human policy decision. Confirmed by Jay: no.
+
+- Layout: one `fieldset#ai-settings` in `/authoring` with five collapsible sections in the D-013 order (정체성, 지시문, 모델·처리 수준, 기능·승인, 미리보기) and an in-page section nav, sticky from 1024px. Section names and the Korean helper copy are the agent's wording.
+- Every field is an existing one: `assistant.display_name`, `steps[].instructions` (the only instruction text the Service lesson contract has), `model` and `model.effort`, `features`, `approval_preset`. Save, freeze, rehearsal, confirm and version semantics are untouched; the draft is edited, a frozen version is shown as read-only text.
+- 지시문 section = the step editor (the Service has no lesson-level instruction field). The curriculum fields (title, audience, objective, starter material, prerequisites, mission) stay in 02.
+- Preview = read-only list built from the same `content()` the save sends, plus a separate read-only summary of a loaded frozen version.
+- "Accordion below 768px" is met as collapsible sections at every width, not an automatic collapse (a collapsed section would hide controls from the 375px checks and from keyboard users who land on a hash link). Unsaved-changes guard: browser leave confirmation while the draft is dirty.
+- NOT built, and not shown: AI role, AI tone, and the 시작 문장 section (up to 4 starter prompts). `hps-session-design/1` has no field for them; DEC-30 (starter field in `hps-authoring-batch/1` plus frozen-version compatibility, Jay + Service owner) is still open, and `starter` is the existing 시작 예제·자료, not conversation starters. Follow-ups once the Service accepts them: a tone/role field, `starters` (max 4, single line) and the 시작 문장 section between 기능·승인 and 미리보기; CGP-KNOW-R-037 and CGP-KNOW-D-037 depend on the same decision.
+- Dependency check: CGP-AGENT-R-016 (diff before confirm) is on main (#2120); R-001 and R-019 are on main (#3519, #3677). DEC-30 is the only open dependency, handled by leaving the starter part out.
+- Default state: on (reorganises existing controls; no new permission, no new data).
+
+## DEC-30 step 2: 시작 문장, AI 역할, AI 말투 in Chalk (CGP-AGENT-R-015 remainder, CGP-AGENT-D-013, CGP-KNOW-R-037, CGP-KNOW-D-037; 2026-11-10)
+
+DEC-30 (starter prompts plus AI role and tone in the lesson contract) is decided by Jay; the Service contract is live (hypeproof-service#348, deployed service-v2026.11.10-1). This records the Chalk part. Confirmed by Jay: yes (2026-11-10).
+
+- Decided by Jay: tone is a closed choice of four (`friendly`, `calm`, `playful`, `formal`), never free text; starters are also shown in rehearsal and in the frozen-version read-only summary.
+- Chalk renders what the Service serves: tone ids, Korean labels and `minor_safe` come from `assistant_tones` on the authoring features read. Chalk keeps only fallback names for a saved or frozen tone before that read; `chalk/test/fixtures/assistant-tone-catalog.json` plus `chalk/test/assistant-tone-drift.test.mjs` pin them (the Service-side test that vendors the same fixture is a follow-up in hypeproof-service).
+- Unset sends no key: 코호트 기본 tone, empty role and no starters leave `assistant.role`, `assistant.tone` and `starters` out, so an old lesson keeps its bytes and digest. Empty starter rows are dropped, duplicates (NFKC, case-insensitive) are warned live and block the save.
+- Role and tone live inside `assistant`, which the Service requires to carry `display_name`; Chalk sends the block only with a name and points at the name field otherwise.
+- Minors: the Service clamps. Chalk only warns (per-row note, and a warning when the lesson's 대상 단계 is lv1 or lv2).
+- Older Service (no `assistant_tones`): the three inputs and the nav link hide after the features read and are not sent; before that read they show, and the Service's 400 gets a Korean hint.
+- Section and copy wording (시작 문장, 역할, 말투, the CGP-KNOW-R-037 disclosure next to the material field) is the agent's wording.
+- Not in this change: Studio chips (step 3) and the coach style block (step 4).
+
+## DEC-30 step 3: starter chips in Studio (CGP-KNOW-R-037 learner side, CGP-KNOW-D-037; 2026-11-10)
+
+Agent implementation choice for the Studio part of DEC-30, which Jay decided; the Service serves the data (hypeproof-service#348, service-v2026.11.10-1) and Chalk authors it (#3685). Confirmed by Jay: no.
+
+- Read path: `starters` is a top-level `/v1/profile` key (not inside `lesson.content`), read with `servedLessonStarters()`, which keeps at most four safe, distinct single lines and skips anything else. Absent means no UI.
+- Behaviour: wrapping compact chips above the composer; a click inserts into the draft and never sends; a manual draft is kept (the personal-starter rule); hidden after the learner's first message in the task; not drawn in the instructor console; a minor seat behaves the same.
+- Layout: 44px targets (`--hp-control-min`), 14px floor (`--hp-font-caption`), tokens only, no icon. Hint line and group label ("이 수업의 시작 문장", "누르면 입력창에 들어가요. 고쳐서 보내세요.") are the agent's wording.
+- Not in this change: the AI role line under the name (optional; the header has no second row today, and `assistant_style` is typed only) and any role/tone in a coach prompt (step 4, after a safety review).

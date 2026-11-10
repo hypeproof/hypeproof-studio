@@ -15,6 +15,8 @@ import "./chatDetails.css";
 import "./tooltips.css";
 import { installTooltips } from "./tooltips";
 import "./koreanProse.css";
+// Last: voice controls sit inside the composer and the answer row, so these rules must follow the shell's own.
+import "./voice.css";
 
 installImeHostBarrier(document);
 const container = document.getElementById("root");

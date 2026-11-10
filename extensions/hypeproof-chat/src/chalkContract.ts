@@ -1,3 +1,4 @@
+import { createContractWaits, type ContractWaits, type HumanWait, type WaitSignalResult } from "./localRuntime/humanWait.ts";
 // Studio side of the Chalk command contract v0 (docs/contract/studio-chalk.md).
 // Kept free of the vscode module: the command bus, the local runner and the studio
 // operations are injected, so the contract is testable with stubs. The extension wires
@@ -63,6 +64,8 @@ export interface RunTurnInput {
   emit(event: TurnEvent): Promise<unknown>;
   /** Asks the instructor through Chalk. Resolves false unless Chalk explicitly approves. */
   askApproval(prompt: ChalkPrompt): Promise<boolean>;
+  /** Waits Chalk announced for this turn (#3601). The stall watch reads it as a pause. */
+  humanWait: HumanWait;
 }
 
 export interface LocalRunner {
@@ -122,11 +125,13 @@ function errorDetail(err: unknown): { requestId?: string; runbookUrl?: string } 
   return Object.keys(detail).length > 0 ? detail : undefined;
 }
 
-interface OpenTurn { controller: AbortController; done: boolean }
+interface OpenTurn { controller: AbortController; done: boolean; waits: ContractWaits }
 
 export class ChalkContractHost {
   private nonce: string | null = null;
   private readonly turns = new Map<string, OpenTurn>();
+  // Turns that closed in this activation: a late humanWait signal for them is refused as turn-ended (#3601).
+  private readonly endedTurns = new Set<string>();
 
   private readonly bus: CommandBus;
   private readonly runner: LocalRunner;
@@ -151,6 +156,7 @@ export class ChalkContractHost {
       this.bus.registerCommand("hypeproof.runtime.inboxOpen", (args) => this.inboxOpen(args)),
       this.bus.registerCommand("hypeproof.runtime.inboxLink", (args) => this.inboxLink(args)),
       this.bus.registerCommand("hypeproof.runtime.reviewPrepare", (args) => this.reviewPrepare(args)),
+      this.bus.registerCommand("hypeproof.runtime.humanWait", (args) => this.humanWait(args)),
     ];
   }
 
@@ -174,13 +180,17 @@ export class ChalkContractHost {
     });
     if (reply?.ok !== true) return { ok: false, reason: reply?.reason };
     this.nonce = sessionNonce;
+    this.endedTurns.clear();
     return { ok: true };
   }
 
   async deactivate(reason: DeactivateReason): Promise<void> {
     if (this.nonce === null) return;
     const sessionNonce = this.nonce;
-    for (const turn of this.turns.values()) turn.controller.abort();
+    for (const turn of this.turns.values()) {
+      turn.waits.endAll();
+      turn.controller.abort();
+    }
     this.turns.clear();
     this.nonce = null;
     await this.bus.executeCommand("hypeproof.chalk.deactivateInstructor", {
@@ -226,7 +236,8 @@ export class ChalkContractHost {
 
     const turnId = a.turnId;
     const controller = new AbortController();
-    this.turns.set(turnId, { controller, done: false });
+    const waits = createContractWaits();
+    this.turns.set(turnId, { controller, done: false, waits });
     const sessionNonce = this.nonce;
     const emit = (event: TurnEvent): Promise<unknown> => Promise.resolve(this.bus.executeCommand("hypeproof.chalk.onTurnEvent", {
       contractVersion: CONTRACT_VERSION,
@@ -258,6 +269,7 @@ export class ChalkContractHost {
       signal: controller.signal,
       emit,
       askApproval,
+      humanWait: waits,
     }).then(
       () => this.closeTurn(turnId, "ok"),
       (err: unknown) => this.closeTurn(turnId, controller.signal.aborted ? "cancelled" : "error",
@@ -279,6 +291,10 @@ export class ChalkContractHost {
     const turn = this.turns.get(turnId);
     if (!turn || turn.done) return;
     turn.done = true;
+    turn.waits.endAll();
+    this.endedTurns.add(turnId);
+    // Bounded: only the most recent 64 closed turns are remembered for turn-ended refusals.
+    if (this.endedTurns.size > 64) this.endedTurns.delete(this.endedTurns.values().next().value as string);
     this.turns.delete(turnId);
     const sessionNonce = this.nonce;
     if (sessionNonce === null) return;
@@ -288,6 +304,22 @@ export class ChalkContractHost {
       turnId,
       event: { kind: "done", status, ...(message ? { message } : {}), ...(detail ?? {}) },
     })).catch(() => undefined);
+  }
+
+  // #3601: Chalk announces a wait for a person (start / keepalive / end). Refusals change nothing.
+  private humanWait(args: unknown): WaitSignalResult | { ok: false; reason: "contractVersion" | "stale" | "turn-ended" | "invalidArgs" } {
+    if (!args || typeof args !== "object") return { ok: false, reason: "invalidArgs" };
+    const a = args as Record<string, unknown>;
+    if (a.contractVersion !== CONTRACT_VERSION) return { ok: false, reason: "contractVersion" };
+    if (this.nonce === null || a.sessionNonce !== this.nonce) return { ok: false, reason: "stale" };
+    if (typeof a.turnId !== "string" || a.turnId.length === 0) return { ok: false, reason: "invalidArgs" };
+    if (typeof a.waitId !== "string" || a.waitId.length === 0) return { ok: false, reason: "invalidArgs" };
+    if (a.state !== "start" && a.state !== "keepalive" && a.state !== "end") return { ok: false, reason: "invalidArgs" };
+    const turn = this.turns.get(a.turnId);
+    if (!turn) return { ok: false, reason: this.endedTurns.has(a.turnId) ? "turn-ended" : "stale" };
+    if (a.state === "start") return turn.waits.start(a.waitId);
+    if (a.state === "keepalive") return turn.waits.keepalive(a.waitId);
+    return turn.waits.end(a.waitId);
   }
 
   private async cancelTurn(args: unknown): Promise<{ cancelled: boolean }> {

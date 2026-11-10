@@ -40,6 +40,7 @@ export async function runClaude({
   onRefusal,
   toolServer,
   timeout,
+  onProgress,
 }) {
   claudeStatus(executable);
   const config = {
@@ -93,6 +94,7 @@ export async function runClaude({
       input: JSON.stringify(messages.filter((m) => m.role !== "system")),
       signal,
       ...(timeout === undefined ? {} : { timeout }),
+      onProgress,
       onEvent: (event) => {
         if ((event.type === "result" && event.stop_reason === "refusal") ||
             (event.type === "system" && event.subtype === "model_refusal_no_fallback")) onRefusal?.();

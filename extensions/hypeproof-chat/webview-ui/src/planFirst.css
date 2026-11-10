@@ -1,0 +1,88 @@
+/* CGP-CHAT-R-004 / CGP-CHAT-D-004 — the "계획 먼저" chip and the plan card. In flow above the composer, never over it. */
+.hps-plan-chip {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hp-space-1);
+  min-block-size: var(--hp-control-md);
+  min-inline-size: var(--hp-control-md);
+  padding-inline: var(--hp-space-3);
+  font: inherit;
+  font-size: var(--hp-font-body);
+  color: var(--hp-text-primary-default);
+  background: transparent;
+  border: var(--ds-c-focus-width) solid var(--hp-border-control-default);
+  border-radius: var(--hp-space-3);
+  cursor: pointer;
+}
+.hps-plan-chip[aria-pressed="true"] {
+  border-color: var(--hp-border-control-selected);
+  font-weight: var(--hp-weight-strong);
+}
+.hps-plan-chip:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-plan-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-plan-chip:disabled { opacity: .6; cursor: default; }
+.hps-plan-chip:focus-visible,
+.hps-plan-card button:focus-visible,
+.hps-plan-edit:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
+.hps-plan-card {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  margin-block-end: var(--hp-space-2);
+  padding: var(--hp-space-3) var(--hp-space-4);
+  color: var(--hp-text-primary-default);
+  background: var(--hp-bg-panel-default);
+  border: var(--ds-c-focus-width) solid var(--hp-border-control-default);
+  border-inline-start: var(--hp-space-1) solid var(--hp-border-accent-default);
+  border-radius: var(--hp-space-3);
+  font-size: var(--hp-font-body);
+  overflow-wrap: anywhere;
+}
+.hps-plan-title { margin: 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); }
+.hps-plan-steps { margin: var(--hp-space-2) 0 0; padding-inline-start: var(--hp-space-6); }
+.hps-plan-steps li + li { margin-block-start: var(--hp-space-1); }
+.hps-plan-edit {
+  display: block;
+  box-sizing: border-box;
+  inline-size: 100%;
+  margin-block-start: var(--hp-space-2);
+  padding: var(--hp-space-2);
+  font: inherit;
+  font-size: var(--hp-font-body);
+  color: var(--vscode-input-foreground, var(--hp-text-primary-default));
+  background: var(--vscode-input-background, var(--hp-bg-app-default));
+  border: var(--ds-c-focus-width) solid var(--hp-border-control-default);
+  border-radius: var(--hp-space-2);
+  resize: vertical;
+}
+.hps-plan-note { margin: var(--hp-space-2) 0 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-body); }
+.hps-plan-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); margin-block-start: var(--hp-space-3); }
+.hps-plan-actions button {
+  min-block-size: var(--hp-control-md);
+  min-inline-size: var(--hp-control-md);
+  padding-inline: var(--hp-space-4);
+  font: inherit;
+  font-size: var(--hp-font-body);
+  border-radius: var(--hp-space-3);
+  cursor: pointer;
+}
+.hps-plan-approve { color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default); border: var(--ds-c-focus-width) solid var(--hp-border-accent-default); font-weight: var(--hp-weight-strong); }
+.hps-plan-secondary { color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-focus-width) solid var(--hp-border-control-default); }
+.hps-plan-secondary:hover { background-color: var(--hp-bg-control-hover); }
+.hps-plan-secondary:active { background-color: var(--hp-bg-control-pressed); }
+.hps-plan-secondary[aria-pressed="true"] { border-color: var(--hp-border-control-selected); }
+.hps-plan-actions button:disabled { opacity: .6; cursor: default; }
+@media (forced-colors: active) {
+  .hps-plan-chip, .hps-plan-card, .hps-plan-edit, .hps-plan-actions button { border-color: ButtonText; }
+}
+.hps-selected-tools { grid-row: 2; grid-column: 2; justify-self: start; display: flex; flex-wrap: wrap; gap: var(--hp-space-2); min-inline-size: 0; max-inline-size: 100%; }
+.hps-selected-tools .hps-selected-tool { grid-row: auto; grid-column: auto; }
+/* Narrow windows: the chip keeps its 44px target and accessible name but draws only its icon, so the composer's button row does not wrap. */
+@media (max-width: 420px) {
+  .hps-plan-chip { padding-inline: 0; justify-content: center; }
+  .hps-plan-chip > span { position: absolute; inline-size: var(--ds-c-studio-chatdetails-size-3); block-size: var(--ds-c-studio-chatdetails-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.hps-plan-switched-off { margin-inline: var(--hp-space-3); }

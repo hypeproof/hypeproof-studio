@@ -52,7 +52,7 @@ async function run() {
       const key = row.getAttribute('data-denial-source');
       assert.equal(row.querySelectorAll('button').length, key === 'timeout' ? 0 : 1, 'timeout has no report button');
       assert.equal(row.querySelector('.hps-denial-source').textContent, DENIAL_SOURCE_LABEL[key]);
-      const bodies = { lesson: classroom ? '수업에서 정한 범위 밖의 동작이라 실행하지 않았어요.' : '지금 활동에서 정한 범위 밖의 동작이라 실행하지 않았어요.', safety: '안전 규칙에 맞지 않아 실행하지 않았어요.', runtime: '지금 앱 환경에서는 이 동작을 할 수 없어요.', access: '지금 고른 이용권에서는 이 동작을 할 수 없어요.', folder: '이 폴더에 허락한 범위 밖의 동작이라 실행하지 않았어요.', unknown: '이 동작을 마치지 못했어요. 이유를 확인하지 못했어요.', timeout: '확인 창을 오래 고르지 않아서 실행하지 않았어요. 다시 보내면 확인 창이 다시 떠요.' };
+      const bodies = { lesson: classroom ? '수업에서 정한 범위 밖의 동작이라 실행하지 않았어요.' : '지금 활동에서 정한 범위 밖의 동작이라 실행하지 않았어요.', safety: '안전 규칙에 맞지 않아 실행하지 않았어요.', runtime: '지금 앱 환경에서는 이 동작을 할 수 없어요.', access: '지금 고른 이용권에서는 이 동작을 할 수 없어요.', folder: '이 폴더에 허락한 범위 밖의 동작이라 실행하지 않았어요.', unknown: '이 동작을 마치지 못했어요. 이유를 확인하지 못했어요.', timeout: '확인 창을 오래 고르지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.' };
       assert.equal(row.querySelector('p').textContent, bodies[key]);
       if (key !== 'timeout') {
         assert.equal(row.querySelector('button').textContent, '문제 신고하기');

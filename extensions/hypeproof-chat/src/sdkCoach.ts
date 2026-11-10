@@ -1,3 +1,4 @@
+import { withoutTools } from './planFirst';
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
 import { approvalModeFor, approvalPresetBlockServed, servedApprovalPreset } from "./approvalPreset";
 import { SdkProcesses } from "./runningProcesses";
@@ -142,6 +143,8 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 export interface SdkCoachArgs {
   /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
   onDiagnostic?: (phase: SdkDiagnosticPhase) => void;
+  /** #3640 — set only by a Dev app (devSdkConfigRoot); the CLI config dir goes under it. */
+  sdkConfigRoot?: string;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -175,6 +178,8 @@ export interface SdkCoachArgs {
   history: { role: string; content: string }[];
   userText: string;
   toolMode?: TurnToolMode;
+  /** CGP-CHAT-R-004 — set on a "먼저 계획 보기" planning turn: no tool is advertised, registered or run. */
+  planGate?: import('./planFirst').PlanFirstGate;
   /** Actual current-turn pixels, including explicit workspace reference re-reads. */
   images?: string[];
   signal: AbortSignal;
@@ -598,7 +603,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = mode === 'auto' && !args.storeRun ? args.orchestrator : undefined;
+  const orchestratorHost = mode === 'auto' && !args.storeRun && !args.planGate ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -608,12 +613,14 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A roster was served and refused here: "configured but inert" must leave a trace.
     console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
   }
-  const opts = toolsForTurn(profileToAgentOptions(
+  const toolsOpts = toolsForTurn(profileToAgentOptions(
     args.profile,
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
   ), mode, profileAudience(args.profile));
+  // CGP-CHAT-R-004 — a planning turn advertises and registers nothing; canUseTool below refuses anything that still arrives.
+  const opts = args.planGate ? withoutTools(toolsOpts) : toolsOpts;
   const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
@@ -673,7 +680,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const orchestratorGrants = opts.permittedMcpTools.filter(name => orchestratorNames.includes(name));
   const registerBrowser = !!args.browserHost && browserGrants.length > 0;
   const registerEmail = !!args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => emailGrants.includes(name));
-  const registerMemory = !!args.memoryRememberHost && mode === 'auto' && !args.storeRun;
+  const registerMemory = !!args.memoryRememberHost && mode === 'auto' && !args.storeRun && !args.planGate;
   if (registerBrowser || registerEmail || registerMemory || (orchestratorTurn && orchestratorGrants.length > 0)) {
     const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
@@ -755,7 +762,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // path is derived purely (sdkConfigDirFor); creating it is the host's job.
   // A failure here is not fatal: the CLI creates it itself, and pointing the
   // env at a not-yet-existing dir still keeps ~/.claude out of the picture.
-  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args));
+  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args), args.sdkConfigRoot);
   try {
     fs.mkdirSync(sdkConfigDir, { recursive: true });
   } catch (err) {
@@ -820,6 +827,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       };
       if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       lastToolCallAt = Date.now();
+      // CGP-CHAT-R-004 — host-side refusal while the plan waits for the learner; nothing below can widen it.
+      if (args.planGate) { decision(false); return { behavior: "deny" as const, message: args.planGate.refusal(name) }; }
       // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
       // a preview, or a delegated task. The existing capability/approval gates still run.
       if (args.browserHost?.generalBrowserRequest &&
