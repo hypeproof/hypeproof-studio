@@ -139,7 +139,7 @@ if (!status.available) {
     rows: [
       row(),
       row({ id: "e2", kind: "external_feedback_received", evidence_type: "intent", actor: "external_user", source_kind: "interview", source_state: "simulated", text: "이름이 크면 좋겠어요", provenance: { who: "옆 반 친구", when: "어제", where: "교실" } }),
-      row({ id: "e3", kind: "decision_revised", evidence_type: "decision", text: "더 빨리 만들 수 있어서" }),
+      row({ id: "e3", kind: "decision_revised", evidence_type: "decision", text: "더 빨리 만들 수 있어서", decision: { from: "직접 짜기", to: "코치 초안 고치기" }, evidence_refs: ["e1"] }),
     ],
     verification: { state: "unconfirmed", source_state: "unverified", line: "아직 같은 조건으로 다시 확인하지 않음" },
     onSubmit: () => {},
@@ -151,8 +151,15 @@ if (!status.available) {
   assert.ok(/<details\b/.test(closed), "서랍이 details 가 아니다 — 접히지 않는다");
   assert.ok(!/<details\b[^>]*\bopen\b/.test(closed), "서랍이 작업 시작 시 열려 있다 (SX-17 부정 조건)");
 
-  const opened = await renderComponent("EvidenceDrawer", { ...props, open: true });
+  assert.ok(!closed.includes("바뀐 선택 남기기"), "선택 기록을 지원하는 수업이 아닌데 폼이 있다");
+  const opened = await renderComponent("EvidenceDrawer", {
+    ...props, open: true, decisionCapture: { scope: "task-abc", submit: () => "request-id", result: null },
+  });
   assert.ok(/<details\b[^>]*\bopen\b/.test(opened), "열라고 했는데 닫혀 있다");
+  assert.ok(opened.includes("바뀐 선택 남기기") && !opened.includes('id="hp-reason"'), "선택과 근거를 고르기 전에는 이유 칸이 없어야 한다");
+  for (const saved of ["더 빨리 만들 수 있어서", "직접 짜기", "코치 초안 고치기", "근거:"]) {
+    assert.ok(opened.includes(saved), `저장된 선택 기록에 '${saved}'가 없다`);
+  }
 
   const text = visibleText(opened);
   // The student's own wording shows verbatim (SX-44).

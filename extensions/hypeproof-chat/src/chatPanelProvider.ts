@@ -941,6 +941,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private nativeLearningPath: {title:string;url:string;reason:string} | null = null;
   private observationAssessment: AbortController | null = null;
   private observationWrites: Promise<void> = Promise.resolve();
+  private learningEventWrites: Promise<void> = Promise.resolve();
   /**
    * Puts the format into the storage key.
    *
@@ -978,7 +979,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   private persistObservation(recorder: NativeObservationRecorder) {
     const value=recorder.snapshot(), key=observationKey(value);
-    this.observationWrites=this.observationWrites.then(async()=>{await this.context.workspaceState.update(key,value);}).catch(()=>{this.nativeObservationError='관찰 기록 저장에 실패했습니다.';});
+    const write=this.observationWrites.then(async()=>{await this.context.workspaceState.update(key,value);});
+    this.observationWrites=write.catch(()=>{this.nativeObservationError='관찰 기록 저장에 실패했습니다.';});
+    return write;
   }
   /** Drawer D is open. A view state, so it is never used in a verdict. */
   private learningDrawerOpen = false;
@@ -1019,6 +1022,66 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private learningStep(profile: ResolvedProfile | null, wanted: string | undefined) {
     const steps = profile?.lesson?.content?.steps ?? [];
     return steps.find(s => s.id === wanted) ?? steps[0];
+  }
+
+  private async saveLearningEvent(msg: Extract<WebviewMessage, { type: 'learningEvent' }>, scope: string, generation: number) {
+    const decision = msg.draft?.kind === 'decision_revised';
+    const current = () => scope === this.turnRequestScope() && generation === this.profileGeneration;
+    const reply = async (error?: string) => {
+      const id = msg.decision?.requestId;
+      if (decision && typeof id === 'string') await this.post({ type: 'learningDecisionResult', requestId: id, error });
+    };
+    try {
+      const recorder = current() ? await this.currentLearningRecorder() : null;
+      if (!recorder || !current()) {
+        await reply('관찰 기록을 연결할 수 없어요. 다시 시도해 주세요.');
+        if (current()) await this.postLearningState();
+        return;
+      }
+      const profile = await this.ensureProfile();
+      const step = this.learningStep(profile, msg.stepId);
+      const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
+      if (!current() || (decision && (this._instructorMode.isInstructor || !profile?.lesson?.sha256 ||
+        !profile.lesson.version || !step || step.id !== msg.stepId || msg.decision?.task !== task))) {
+        await reply('현재 수업이나 과제가 바뀌었어요. 다시 열고 기록해 주세요.');
+        return;
+      }
+      // A running coach turn holds its own observation recorder and writes a whole batch.
+      if (decision && this.hasActiveStream()) {
+        await reply('코치 답변이 끝난 뒤 이유를 다시 저장해 주세요.');
+        return;
+      }
+      const made = learningEventRequest(msg.draft, {
+        week: Number(profile?.lesson?.content?.learning?.week ?? 1),
+        step_id: step?.id ?? '',
+        task,
+        module_version: String(profile?.lesson?.version ?? ''),
+        sender: 'webview-form',
+        stepEvidenceType: step?.evidence as never,
+        decisionEvents: recorder.batch.events,
+      });
+      if (!made.ok) {
+        this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+made.code+'). 다시 한 번 눌러 주세요.';
+        await reply('저장하지 못했어요. 바꾼 선택과 연결할 근거를 다시 확인해 주세요.');
+      } else {
+        // SX-45 — only a webview form creates these learner-authored events.
+        if (decision) {
+          recordChecked(recorder.batch, validateObservation, () => recorder.recordLearningEvent(made.event));
+          await this.persistObservation(recorder);
+        } else {
+          recorder.recordLearningEvent(made.event);
+          this.persistObservation(recorder);
+        }
+        this.nativeObservationError = null;
+        // SX-55 — the student's first learning event starts the task (assigned → working).
+        if (current()) await this.runTaskFlow({ kind: 'work' }, recorder, profile);
+        await reply();
+      }
+    } catch (error) {
+      this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+(error as Error).message+').';
+      await reply('이유를 저장하지 못했어요. 입력한 내용을 확인하고 다시 시도해 주세요.');
+    }
+    if (current()) await this.postLearningState();
   }
 
   /**
@@ -8292,32 +8355,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case 'learningEvent': {
-        // SX-45 rule 2 — the **only** place where a learning event is made. The coach
-        // stream callback (`recordObservation`) does not call this function.
-        const recorder = await this.currentLearningRecorder();
-        if (!recorder) { await this.postLearningState(); return; }
-        const profile = await this.ensureProfile();
-        const step = this.learningStep(profile, msg.stepId);
-        const made = learningEventRequest(msg.draft, {
-          week: Number(profile?.lesson?.content?.learning?.week ?? 1),
-          step_id: step?.id ?? '',
-          task: this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id),
-          module_version: String(profile?.lesson?.version ?? ''),
-          sender: 'webview-form',
-          stepEvidenceType: step?.evidence as never,
-        });
-        // A refusal is not swallowed silently — if what the student wrote disappears,
-        // they will not write it again.
-        if (!made.ok) { this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+made.code+'). 다시 한 번 눌러 주세요.'; }
-        else {
-          try {
-            recorder.recordLearningEvent(made.event); this.persistObservation(recorder); this.nativeObservationError = null;
-            // SX-55 — the student's first learning event starts the task (assigned → working).
-            await this.runTaskFlow({ kind: 'work' }, recorder, profile);
-          }
-          catch (error) { this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+(error as Error).message+').'; }
-        }
-        await this.postLearningState();
+        const scope = this.turnRequestScope(), generation = this.profileGeneration;
+        const work = this.learningEventWrites.then(() => this.saveLearningEvent(msg, scope, generation));
+        this.learningEventWrites = work.catch(() => {});
+        await work;
         return;
       }
       case 'learningDrawer':

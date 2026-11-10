@@ -232,7 +232,8 @@ await hostCheck(
 );
 
 await check("host: the student's learning event and a coach turn that answered both count as work", () => {
-  assert.match(between(provider, "case 'learningEvent': {", "case 'learningDrawer':"), /recordLearningEvent\(made\.event\)[\s\S]*runTaskFlow\(\{ kind: 'work' \}/);
+  assert.match(between(provider, "case 'learningEvent': {", "case 'learningDrawer':"), /this\.saveLearningEvent\(msg, scope, generation\)/);
+  assert.match(between(provider, "private async saveLearningEvent(", "private async postLearningState("), /recordLearningEvent\(made\.event\)[\s\S]*runTaskFlow\(\{ kind: 'work' \}/);
   assert.match(
     provider,
     /observation\?\.batch\.format === 'hps-observation\/2' && finalSpoolStatus === 'ok' && assistantText\.length > 0\) \{\s*void this\.runTaskFlow\(\{ kind: 'work' \}, observation, profile\)/,

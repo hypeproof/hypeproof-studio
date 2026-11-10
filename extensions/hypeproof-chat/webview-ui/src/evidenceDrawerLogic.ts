@@ -36,6 +36,8 @@ export interface EvidenceRowView {
   artifact_before?: string | null;
   artifact_after?: string | null;
   criterion_ref?: string | null;
+  decision?: { from: string; to: string };
+  evidence_refs?: string[];
 }
 
 /**

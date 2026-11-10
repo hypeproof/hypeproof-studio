@@ -52,6 +52,8 @@ export interface EvidenceRow {
   artifact_before: string | null;
   artifact_after: string | null;
   criterion_ref: string | null;
+  decision?: ObservationEvent["decision"];
+  evidence_refs?: ObservationEvent["evidence_refs"];
 }
 
 export interface LearningStatePayload {
@@ -172,6 +174,7 @@ function rowOf(event: ObservationEvent): EvidenceRow {
     artifact_before: typeof event.artifact_before === "string" ? event.artifact_before : null,
     artifact_after: typeof event.artifact_after === "string" ? event.artifact_after : null,
     criterion_ref: typeof event.criterion_ref === "string" ? event.criterion_ref : null,
+    ...(event.kind === "decision_revised" ? { decision: event.decision, evidence_refs: event.evidence_refs } : {}),
   };
 }
 
@@ -259,6 +262,15 @@ export type LearningEventRequestResult =
   | { ok: true; event: LearningEventDraft }
   | { ok: false; code: string };
 
+export const DECISION_TEXT_LIMIT = 200;
+
+export function decisionChange(from: unknown, to: unknown): { from: string; to: string } | null {
+  if (typeof from !== "string" || typeof to !== "string") return null;
+  const previous = from.trim(), next = to.trim();
+  if (!previous || !next || previous === next || previous.length > DECISION_TEXT_LIMIT || next.length > DECISION_TEXT_LIMIT) return null;
+  return { from: previous, to: next };
+}
+
 /** The fields the webview is allowed to send. The host fills or discards the rest. */
 const WEBVIEW_FIELDS = [
   "student_text",
@@ -301,6 +313,7 @@ export function learningEventRequest(
      * evidence, the step decides it.
      */
     stepEvidenceType?: EvidenceType;
+    decisionEvents?: readonly ObservationEvent[];
   },
 ): LearningEventRequestResult {
   if (ctx.sender !== "webview-form") return { ok: false, code: "sender_not_form" };
@@ -323,6 +336,21 @@ export function learningEventRequest(
   draft.evidence_type = evidenceType;
   if (spec.source_state) draft.source_state = spec.source_state;
 
+  if (kind === "decision_revised") {
+    const choices = body.decision as Partial<{ from: unknown; to: unknown }> | undefined;
+    const decision = decisionChange(choices?.from, choices?.to);
+    if (!decision) return { ok: false, code: choices ? "invalid_decision" : "missing_decision" };
+    const reason = body.student_text;
+    if (typeof reason !== "string" || !reason.trim() || reason.length > DECISION_TEXT_LIMIT) return { ok: false, code: "invalid_decision_reason" };
+    const refs: unknown = body.evidence_refs;
+    if (!Array.isArray(refs) || !refs.length) return { ok: false, code: "missing_evidence_refs" };
+    const taskEvidence = new Set(ctx.decisionEvents?.filter(e => e.task === ctx.task && DRAWER_KINDS.has(e.kind)).map(e => e.id));
+    if (refs.length > 8 || new Set(refs).size !== refs.length || refs.some(ref => !taskEvidence.has(ref))) {
+      return { ok: false, code: "invalid_decision_evidence" };
+    }
+    return { ok: true, event: { ...draft, decision, student_text: reason, evidence_refs: refs } };
+  }
+
   for (const field of WEBVIEW_FIELDS) {
     const value = body[field];
     if (value === undefined || value === null) continue;
@@ -339,11 +367,7 @@ export function learningEventRequest(
     (draft as Record<string, unknown>)[field] = value;
   }
 
-  // Look at **every** required field in the kind table. Why this widened from checking only
-  // `student_text`: the `/2` validator requires `decision{from,to}` and a non-empty
-  // `evidence_refs[]` on `decision_revised`. Let it through here and it saves, and then **on the
-  // next read** the whole batch is rejected — one missing field and every record in that spot is
-  // gone. If we are going to block it, block it where it is made.
+  // A required field missing now would make the entire saved batch unreadable on the next load.
   for (const field of spec.required) {
     if (field === "context") continue; // the host just filled it in
     if (draft[field] === undefined) {

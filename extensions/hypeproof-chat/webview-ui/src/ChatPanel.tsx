@@ -619,6 +619,7 @@ export function ChatPanel(props: Props) {
    * screen does nothing when pressed.
    */
   const [learning, setLearning] = useState<LearningStatePayload | null>(null);
+  const [learningDecisionResult, setLearningDecisionResult] = useState<{ requestId: string; error?: string } | null>(null);
   /**
    * SX-01/SX-02 — the step region A shows starts where the task's record stands, then follows the
    * student (`stepViewOnState`). Drawn from the first step, a reopened task offered an earlier
@@ -756,6 +757,7 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     const off = onHostMessage((msg) => {
       if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
+      if (msg.type === "learningDecisionResult") setLearningDecisionResult(msg);
       if (msg.type !== "learningState") return;
       // A malformed state clears the evidence region and is reported once (a listener throw would fail
       // silently). The checks are pure, so running them first changes nothing for a good state.
@@ -1993,6 +1995,15 @@ export function ChatPanel(props: Props) {
             open={drawerOpen}
             rows={learning.evidence}
             verification={learning.verification}
+            decisionCapture={servedLesson && stepOnScreen ? {
+              scope: JSON.stringify([learning.task, stepOnScreen]),
+              result: learningDecisionResult,
+              submit: (draft) => {
+                const requestId = newStageId();
+                postToHost({ type: "learningEvent", draft, stepId: stepOnScreen, decision: { task: learning.task, requestId } });
+                return requestId;
+              },
+            } : undefined}
             // The step id is a **view state**, so it comes from here. The host uses it
             // only after checking it is a step of this lesson — a value the webview
             // sent is never trusted as-is.

@@ -218,7 +218,7 @@ Chalk 쪽 변경은 `chalk/src/ui/authoring.html`의 필드 추가(주차·미�
 | `change_requested` | `user` | `student_text`, `criterion_ref`, `artifact_before`, `turn_ref` | change | `self_reported` | D `coach_request`. 같은 문장이 `user` 이벤트로도 남고 `turn_ref`로 잇는다 |
 | `retest_confirmed` | `user` | `criterion_ref`, `artifact_after`, `outcome` | action | `real`(result_ref 결합 시) / `self_reported` | 재검증 게이트 |
 | `external_feedback_received` | `external_user` | `student_text`(인용), `provenance{who,when,where}`, `source_state`(입력 시 선택, 기본값 없음) | 단계 `evidence`에 따름 | 학생이 고른 값 그대로. `real`을 기본으로 채우지 않는다 | D 폼 |
-| `decision_revised` | `user` | `student_text`(이유), `decision{from,to}`, `evidence_refs[]` | decision | `self_reported` | D `decision_form` |
+| `decision_revised` | `user` | `student_text`(이유), `decision{from,to}`, `evidence_refs[]` | decision | `self_reported` | D `decision_form`. 근거 서랍에서는 학생이 전후 선택을 직접 적고 같은 과제에 저장된 근거를 고른다. 호스트는 전후가 다르고 근거가 현재 과제에 속하는지 확인한 뒤 학생의 관찰 배치에 저장한다. |
 | `reflection_submitted` | `user` | `student_text`(바뀐 생각), `next_experiment` | ownership | `self_reported` | E 카드. 같은 턴에 `Improvement`도 저장 |
 
 `/2`에서 이벤트에 허용되는 추가 키와 기본값:
