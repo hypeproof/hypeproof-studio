@@ -17664,6 +17664,12 @@
         },
         {
           "path": "apps/studio-native/android/app/src/main/res/drawable/studio_icon.xml"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudio-Mac.entitlements"
+        },
+        {
+          "path": "apps/studio-native/ios/App/PrivacyInfo.xcprivacy"
         }
       ]
     },
@@ -17696,6 +17702,9 @@
         },
         {
           "path": "apps/studio-native/scripts/android-verify.sh"
+        },
+        {
+          "path": "apps/studio-native/scripts/macos-verify.sh"
         }
       ]
     }

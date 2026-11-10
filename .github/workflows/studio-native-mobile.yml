@@ -31,6 +31,23 @@ jobs:
             apps/studio-native/evidence/
             apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
           retention-days: 14
+  macos:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build standalone Mac Catalyst app
+        run: bash apps/studio-native/scripts/macos-verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-macos-unsigned-${{ github.sha }}
+          path: apps/studio-native/evidence/macos/
+          retention-days: 14
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

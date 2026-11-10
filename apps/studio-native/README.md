@@ -1,6 +1,6 @@
 # HP Studio native mobile preview
 
-Native SwiftUI iOS and Android View applications for standalone observation, AI questioning, and human-confirmed intent revisions. No WebView, browser entry, or desktop pairing is required. This is the native correction to the web-only prototype in #3650; it does not replace the separate desktop companion work (#3298).
+Native SwiftUI iOS, Mac Catalyst macOS, and Android View applications for standalone observation, AI questioning, and human-confirmed intent revisions. No WebView, browser entry, or desktop pairing is required. This is the native correction to the web-only prototype in #3650; it does not replace the separate desktop companion work (#3298).
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
@@ -46,8 +46,27 @@ physical-phone acceptance, live native AI and Google Play release remain separat
 
 ## iPhone installation gate
 
-Apple Developer membership purchase was confirmed on 2026-11-10; the account still displayed **pending** after checkout. TestFlight upload and physical iPhone installation are **BLOCKED** pending activation/signing. A simulator app or unsigned device app is not an installable iPhone deliverable. Free Personal Team installation is also possible with Xcode, an Apple Account and the connected iPhone, but must be re-provisioned after seven days. The current Mac has no Xcode installation.
+Apple Developer membership purchase was confirmed on 2026-11-10; the account initially displayed **pending** after checkout. App Store Connect access was subsequently confirmed on 2026-11-10. TestFlight upload and physical iPhone installation still require signing and successful upload. A simulator app or unsigned device app is not an installable iPhone deliverable. Free Personal Team installation is also possible with Xcode, an Apple Account and the connected iPhone, but must be re-provisioned after seven days. The current Mac has no Xcode installation.
 
 After membership is ready: select the enrolled team in `ios/HPStudio.xcodeproj`, provision `ai.hypeproof.studio.mobile`, archive the Release scheme, upload via Xcode Organizer, complete App Store Connect processing and invite the test account through TestFlight. Do not commit certificates, provisioning profiles or private keys. App Store icon/privacy/store metadata and a signed archive must be verified before upload.
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
+
+## macOS preview and Apple distribution
+
+The 2026-11-10 scope includes both iOS and macOS under the explicit bundle ID
+`ai.hypeproof.studio.mobile`. The Mac Catalyst build shares the observation,
+questioning, human confirmation and local-record contracts with iOS. It is a
+separate installed macOS binary, with App Sandbox and outbound networking; it
+does not depend on a browser or an existing desktop Studio process.
+
+`bash apps/studio-native/scripts/macos-verify.sh` builds the Mac app with Xcode
+26.3 and records its source, executable architecture and bundle identity. This
+unsigned build check does not establish installed-Mac or TestFlight acceptance.
+The privacy manifest declares only the app's UserDefaults required-reason API
+use, for its stable installation identity. Service data handling and App Store
+privacy answers are separate from that API declaration.
+
+App Store Connect access is active as of 2026-11-10; both platform records,
+signing credentials, archive validation, upload and installed-device verification
+must be observed independently. No private signing key belongs in this repository.
