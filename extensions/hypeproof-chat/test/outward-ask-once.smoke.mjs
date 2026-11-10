@@ -25,6 +25,8 @@ import { fileURLToPath } from "node:url";
 import { webcrypto } from "node:crypto";
 import { build } from "esbuild";
 import { installCommandApproval } from "./lib/command-approval-harness.mjs";
+const CATALOG = JSON.parse(fs.readFileSync(new URL("../../../chalk/test/fixtures/approval-preset-catalog.json", import.meta.url), "utf8")); // CGP-AGENT-R-019: the one catalog copy
+const P = Object.fromEntries(CATALOG.map((p) => [p.id, p]));
 
 const A = await import("../src/taskCommandAllow.ts");
 const FC = await import("../src/folderConsent.ts");
@@ -181,7 +183,7 @@ try {
     const minor = makeWindow(site, { ...adult, minor_cohort: true }); minor.turnSeatMinor = true;
     r = await asked(minor, "git push", undefined);
     assert.deepEqual([r.modals, r.prompt.purpose], [1, "shell"], "minor seat: the ordinary shell confirm, unchanged");
-    const preset = makeWindow(site, { ...adult, approval_preset: { id: "important_only", label: "중요한 것만 묻기", description: "되돌리기 어려운 일만 물어봐요." } });
+    const preset = makeWindow(site, { ...adult, approval_preset: P.important_only });
     r = await asked(preset, "git push", undefined);
     assert.deepEqual([r.modals, r.prompt.purpose], [1, "shell"], "served preset: unchanged");
     // A destructive outward command keeps the strong confirm every time.

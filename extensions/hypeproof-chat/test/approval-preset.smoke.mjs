@@ -9,14 +9,17 @@
 //   negative  absent, unknown (full_access) or malformed blocks are ignored, and then the SDK
 //             verdicts and modal kinds are exactly today's.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const preset = await import("../src/approvalPreset.ts");
 const { evaluateSdkToolUse, permittedToolsFor } = await import("../src/sdkCoachHelpers.ts");
 
-const served = (id, label = "바꾸기 전에 묻기") => ({ approval_preset: { id, label, description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } });
+const CATALOG = JSON.parse(readFileSync(new URL("../../../chalk/test/fixtures/approval-preset-catalog.json", import.meta.url), "utf8")); // CGP-AGENT-R-019: the one catalog copy
+const P = Object.fromEntries(CATALOG.map((p) => [p.id, p]));
+const served = (id, label = P.before_changes.label) => ({ approval_preset: { ...P.before_changes, id, label } });
 
 // ─── reading the served block ────────────────────────────────────────────────
-assert.deepEqual(preset.servedApprovalPreset(served("before_changes")), { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." });
+assert.deepEqual(preset.servedApprovalPreset(served("before_changes")), P.before_changes);
 assert.equal(preset.servedApprovalPreset(null), null, "no profile");
 assert.equal(preset.servedApprovalPreset({}), null, "no preset → today's tiers");
 assert.equal(preset.servedApprovalPreset(served("full_access", "모두 허용")), null, "there is no full-access preset");
@@ -66,7 +69,7 @@ assert.equal(preset.approvalModeFor("important_only", false), "important_only", 
 assert.equal(preset.approvalModeFor("always_ask", true), "always_ask");
 // verify 2026-11-04 M1: a served block this app does not understand keeps today's tiers, never auto.
 assert.equal(preset.approvalModeFor(null, false, true), "important_only", "unknown served block: not auto");
-for (const block of [{ id: "ask_outside", label: "새 방식", description: "x" }, { id: "always_ask", label: "x".repeat(41), description: "x" }, { id: "always_ask", label: "항상 묻기", description: "줄1\n줄2" }]) {
+for (const block of [{ id: "ask_outside", label: "새 방식", description: "x" }, { id: "always_ask", label: "x".repeat(41), description: "x" }, { id: "always_ask", label: P.always_ask.label, description: "줄1\n줄2" }]) {
   assert.equal(preset.servedApprovalPreset({ approval_preset: block }), null);
   assert.equal(preset.approvalPresetBlockServed({ approval_preset: block }), true, `block present: ${block.id}`);
 }

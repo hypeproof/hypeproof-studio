@@ -228,7 +228,7 @@ G2 첫 구현은 `learning` 블록을 보존만 했고 학생 화면은 "미션�
 
 이 행이 주장하지 않는 것: 학습자 앱이 실제로 묻는 방식(REQ-E1a, Studio), 성인 기본값(Studio의 다른 행), Service 쪽 검증(#323). 카탈로그를 읽기 전에는 Chalk 안의 같은 세 이름으로 보인다.
 
-이름과 설명의 정본은 Service 카탈로그(`lesson-approval-preset.ts`) 하나다(CGP-AGENT-R-019). Chalk 선택지와 Studio 조종석 라벨은 Service가 보낸 글자를 그대로 그리고, Studio 안에 남은 사본(Chalk의 카탈로그 전 이름 세 개, 시험용 대역)은 `chalk/test/approval-preset-drift.test.mjs`가 `chalk/test/fixtures/approval-preset-catalog.mjs`와 비교한다. 형제 `hypeproof-service` 체크아웃(또는 `HYPEPROOF_SERVICE_DIR`)이 있으면 그 파일도 Service 원문과 비교한다.
+이름과 설명의 정본은 Service 카탈로그(`lesson-approval-preset.ts`) 하나다(CGP-AGENT-R-019). Chalk 선택지와 Studio 조종석 라벨은 Service가 보낸 글자를 그대로 그린다. 계약 파일은 `chalk/test/fixtures/approval-preset-catalog.json`이고, 같은 파일이 Service 시험 자료(`worker/test/fixtures/`)에 그대로 들어 있어 Service 시험(APR-07)이 카탈로그와 항목별로(id·순서·이름·설명) 비교한다. Studio의 `chalk/test/approval-preset-drift.test.mjs`는 Chalk의 카탈로그 전 이름, 도움말의 기본값 이름, Studio 시험 파일의 사본을 이 파일과 비교한다. CI는 이 파일과 Service 시험에 기댄다. 형제 `hypeproof-service` 체크아웃(또는 `HYPEPROOF_SERVICE_DIR`)이 있으면 Service 원문과도 직접 비교하지만 그것은 보조다.
 
 검증: [T-51](../testing/chalk-authoring.md#t-51-approval-preset).
 

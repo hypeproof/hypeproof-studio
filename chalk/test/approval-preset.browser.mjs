@@ -15,9 +15,10 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-import { SERVICE_APPROVAL_PRESETS } from './fixtures/approval-preset-catalog.mjs';
+import { readFileSync } from 'node:fs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
+const SERVICE_APPROVAL_PRESETS = JSON.parse(readFileSync(new URL('./fixtures/approval-preset-catalog.json', import.meta.url), 'utf8')); // CGP-AGENT-R-019
 const bin = findChromium();
 if (!bin) {
   if (process.env.FOCUS_REQUIRE_BROWSER) { console.error('approval-preset.browser: no headless Chromium and FOCUS_REQUIRE_BROWSER=1'); process.exit(1); }
