@@ -1,6 +1,6 @@
 import XCTest
 final class StudioShellTests: XCTestCase {
-    private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
+    @MainActor private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
         // Resolve after the screen transition. An immediate `.exists` check can
         // choose the wrong SwiftUI accessibility type before either one appears.
         let field = app.textFields[id]
@@ -9,7 +9,26 @@ final class StudioShellTests: XCTestCase {
         XCTAssertTrue(view.waitForExistence(timeout: 5))
         return view
     }
-    func testNativeCaptureConfirmAndRelaunch() {
+    @MainActor private func openReflection(in app: XCUIApplication) {
+        let timeline = app.scrollViews["thoughtTimeline"]
+        let reflection = app.buttons["openReflection"]
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5))
+        XCTAssertTrue(reflection.waitForExistence(timeout: 5))
+        // XCTest can call clipped content behind a safe-area composer hittable.
+        // Bound the target to the visible timeline instead of tapping its hidden AX frame.
+        for _ in 0..<4 {
+            let top = app.navigationBars.firstMatch.frame.maxY
+            let bottom = app.buttons["dictateVoice"].frame.minY
+            if reflection.frame.minY >= top && reflection.frame.maxY < bottom { break }
+            if reflection.frame.minY < top { timeline.swipeDown() }
+            else { timeline.swipeUp() }
+        }
+        XCTAssertLessThan(reflection.frame.maxY, app.buttons["dictateVoice"].frame.minY)
+        XCTAssertGreaterThanOrEqual(reflection.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        reflection.tap()
+        XCTAssertTrue(app.navigationBars["생각 정리"].waitForExistence(timeout: 5))
+    }
+    @MainActor func testNativeCaptureConfirmAndRelaunch() {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launch()
         let start = app.buttons["startProject"]
@@ -22,15 +41,13 @@ final class StudioShellTests: XCTestCase {
         let intent = app.textViews["intentInput"]; XCTAssertTrue(intent.waitForExistence(timeout: 5)); intent.tap(); intent.typeText("Observe one shop today")
         app.buttons["confirmIntent"].tap()
         XCTAssertTrue(app.staticTexts["Observe one shop today"].waitForExistence(timeout: 5))
-        app.swipeDown()
-        let reflection = app.buttons["openReflection"]
-        XCTAssertTrue(reflection.waitForExistence(timeout: 5)); reflection.tap()
+        openReflection(in: app)
         let observation = editable("reflection-observation", in: app)
         XCTAssertTrue(observation.waitForExistence(timeout: 5)); observation.tap(); observation.typeText("Two customers waited outside")
         app.buttons["닫기"].tap()
         app.terminate(); app.launch()
         XCTAssertTrue(app.staticTexts["Observe one shop today"].waitForExistence(timeout: 5))
-        app.buttons["openReflection"].tap()
+        openReflection(in: app)
         let restored = editable("reflection-observation", in: app)
         XCTAssertEqual(restored.value as? String, "Two customers waited outside")
         app.buttons["닫기"].tap()

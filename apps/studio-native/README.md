@@ -86,8 +86,10 @@ must be observed independently. No private signing key belongs in this repositor
 `.github/workflows/studio-apple-testflight.yml` archives iOS and Mac Catalyst on
 separate disposable macOS runners, validates each package with Apple's upload
 tool, then uploads to App Store Connect. Both signing jobs are capped at 25 minutes. A read-only Ubuntu gate first waits at most 25 minutes for the current head's native CI to succeed. Its run/attempt identity artifact must match the release checkout's native Git tree and native-workflow blob. Missing, failed, stale or mismatched evidence blocks access to the signing environment. PR merge-checkout identity is compared by these tracked source hashes, not assumed equal to the branch SHA. The gate rechecks run status before passing; it does not claim physical-device acceptance.
-The initial preview branch triggers uploads only when the deployment workflow or
-script changes; subsequent runs can be dispatched once the workflow is on main.
+The dedicated preview branch submits native source/workflow changes to this gate;
+only a successful matching native CI result unlocks signing. Failed checks need a
+corrected candidate or a full native workflow rerun, including its identity job.
+Subsequent runs can also be dispatched once the workflow is on main.
 This pipeline distributes the native preview, not the existing VSCodium desktop.
 
 The `apple-native-preview` GitHub Environment must restrict deployment branches

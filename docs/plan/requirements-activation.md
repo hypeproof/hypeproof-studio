@@ -102,7 +102,6 @@ claimed/in_review는 다른 작업과 합류·검토, reconcile은 닫힘/오래
 | [Weekly Review Pack and director decisions](#cr-review) | implementation | [#1398](https://github.com/hypeproof/hypeproof-studio/issues/1398) |
 | [HTML IR deck: slide state and evidence-aware patches](#cr-deck) | implementation | [#1399](https://github.com/hypeproof/hypeproof-studio/issues/1399) |
 | [Curriculum Runtime Week 1 to Week 2 end-to-end loop](#cr-e2e) | validation | [#1400](https://github.com/hypeproof/hypeproof-studio/issues/1400) |
-
 | [Native reflection and searchable project library](#mobile-reflection-v1) | implementation | [#3688](https://github.com/hypeproof/hypeproof-studio/issues/3688) |
 | [Native on-device voice with explicit send and stop boundaries](#mobile-voice-v1) | implementation | [#3687](https://github.com/hypeproof/hypeproof-studio/issues/3687) |
 

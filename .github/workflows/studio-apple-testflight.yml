@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['feat/studio-native-mobile-20261110']
-    paths: ['.github/workflows/studio-apple-testflight.yml', 'apps/studio-native/scripts/apple-upload.sh']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-apple-testflight.yml', '.github/workflows/studio-native-mobile.yml']
 permissions:
   contents: read
 concurrency:
