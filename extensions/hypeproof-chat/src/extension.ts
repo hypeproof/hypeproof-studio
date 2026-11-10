@@ -15,7 +15,7 @@ import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
-import { directoryIsAbsent, studioFoldersFlag, syncStudioFolderRecord } from './studioFolderTrust';
+import { createStudioFolder, discardStudioFolder, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -114,7 +114,6 @@ export async function activate(context: vscode.ExtensionContext) {
   context = connections.wrap();
   registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
-  void syncStudioFolderRecord(context.globalState, studioFoldersFlag(() => vscode.workspace.getConfiguration('hypeproofChat')));
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
@@ -1259,14 +1258,18 @@ async function openWorkspaceFolder(
   commit: (directory?: string) => Promise<void>,
   context?: vscode.ExtensionContext,
 ): Promise<boolean> {
-  // REQ-STUDIO-TRUST-OWN-FOLDERS - decided before any mkdir: only a folder Studio makes is recorded.
-  const absentBefore = directoryIsAbsent(dir);
+  // REQ-STUDIO-TRUST-OWN-FOLDERS - only a leaf folder this call makes (non-recursive mkdir) is recorded.
+  let createdFolder: StudioFolder | undefined;
   try {
+    // ActivityConnections.prepare makes the folder itself, so the leaf is created here first.
+    // A failure here (parent is a file, dangling link, read-only) must not hide the guidance prepare gives for it.
+    try { createdFolder = createStudioFolder(dir); } catch { createdFolder = undefined; }
     const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
     // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
+    discardStudioFolder(createdFolder); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
     if(error instanceof ActivityConnectionError)throw error;
     noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
@@ -1275,7 +1278,7 @@ async function openWorkspaceFolder(
   const checkpoint = context && previousRecord && previousRecord.serverId === profile?.activity_id && activityConnections(context)?.matchesService
     ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
-  if (context) await syncStudioFolderRecord(context.globalState, studioFoldersFlag(() => vscode.workspace.getConfiguration('hypeproofChat')), dir, absentBefore);
+  if (context) await syncStudioFolderRecord(context.globalState, createdFolder);
 
   // Binding is committed first; the marker grants no authority and contains no credential.
   const record = context && activityConnections(context)?.current;
