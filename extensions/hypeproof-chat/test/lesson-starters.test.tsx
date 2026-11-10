@@ -27,6 +27,9 @@ const UX = {
   hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } },
   retry_button: { enabled: false, show_counter: false },
 };
+// The tone catalog has one source (the #3685 drift guard): read the label from the fixture, never inline it.
+const TONES = JSON.parse(readFileSync(resolve(process.cwd(), "../../chalk/test/fixtures/assistant-tone-catalog.json"), "utf8")) as { id: string; label: string }[];
+const CALM = TONES.find((x) => x.id === "calm")!;
 const STARTERS = ["오늘 배울 내용을 쉬운 말로 알려 줘", "내가 이해했는지 질문해 줘", "예시를 하나만 보여 줘"];
 const config = (extra: Record<string, unknown> = {}) => ({
   model: "claude-sonnet-5", hasToken: true, proxyUrl: "http://localhost:8787",
@@ -125,7 +128,7 @@ t("absent or empty starters render byte-identical to a lesson that never had the
   ok(!base.includes("hps-lesson-starter"), "markup without starters");
   ok(html(config({ starters: STARTERS })) !== base, "positive control: starters change the markup");
   // Starters are the only thing the new code reads: role and tone alone draw nothing.
-  eq(html(config({ assistant_style: { role: "수학 도우미", tone: { id: "calm", label: "차분하게" } } })) === base, true, "assistant_style alone changed the UI");
+  eq(html(config({ assistant_style: { role: "수학 도우미", tone: { id: CALM.id, label: CALM.label } } })) === base, true, "assistant_style alone changed the UI");
 });
 
 t("a starter that looks like HTML renders as text, never as an element", async () => {
