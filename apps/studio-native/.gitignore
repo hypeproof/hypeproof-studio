@@ -8,4 +8,5 @@ local.properties
 *.p12
 *.mobileprovision
 DerivedData-device/
+DerivedData-macos/
 evidence/

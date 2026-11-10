@@ -17670,6 +17670,36 @@
         },
         {
           "path": "apps/studio-native/ios/App/PrivacyInfo.xcprivacy"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-128@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-128@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-16@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-16@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-256@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-256@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-32@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-32@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-512@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-512@2x.png"
         }
       ]
     },
