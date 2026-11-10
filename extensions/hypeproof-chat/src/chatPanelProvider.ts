@@ -124,6 +124,7 @@ import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestId
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
+  devSdkConfigRoot,
   sdkErrorDisplayText,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -10194,6 +10195,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
+            sdkConfigRoot: devSdkConfigRoot(vscode.env.appName, this.context.globalStorageUri?.fsPath ?? ''),
             turnId: streamId,
             onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
             onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),

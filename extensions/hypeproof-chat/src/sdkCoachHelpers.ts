@@ -1083,8 +1083,16 @@ export function sdkConfigDirFor(
    * updated (and every existing test) behaves as before.
    */
   seatKey?: string,
+  /**
+   * #3640 — a Dev review sets this (devSdkConfigRoot) so the coach's CLI state
+   * lives inside the review's Dev state folder and is removed with it. Omitted →
+   * the home/APPDATA path above, unchanged.
+   */
+  root?: string,
 ): string {
   const seat = seatKey?.trim() ? `/${seatKey.trim()}` : "";
+  const rootDir = root?.trim();
+  if (rootDir) return `${rootDir}${seat}`;
   // Windows: %APPDATA%\HypeProof-Studio\… (beside the seeded SDK binary).
   // macOS/Linux: ~/.hypeproof-studio/… — both sit with the rest of our per-user
   // state, so wiping a student's Studio data removes this with everything else.
@@ -1094,6 +1102,15 @@ export function sdkConfigDirFor(
   if (home) return `${home}/.hypeproof-studio/${SDK_CONFIG_DIR_NAME}${seat}`;
   // No home at all (locked-down CI): a relative dir still beats inheriting ~/.claude.
   return `.hypeproof-studio/${SDK_CONFIG_DIR_NAME}${seat}`;
+}
+
+/**
+ * #3640 — the coach's CLI config root inside an isolated Dev app's global storage.
+ * Only the Dev app (the same name test as testStateCandidates) gets one; a release
+ * or any other app name gets undefined, so its path stays sdkConfigDirFor's home path.
+ */
+export function devSdkConfigRoot(appName: string, globalStoragePath: string): string | undefined {
+  return appName === "HypeProof Studio Dev" && globalStoragePath.trim() ? `${globalStoragePath}/claude-config` : undefined;
 }
 
 /**
