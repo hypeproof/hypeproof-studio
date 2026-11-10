@@ -769,6 +769,15 @@ if [[ -n "$CALL_LINE" && -n "$WT_LINE" && "$CALL_LINE" -lt "$WT_LINE" ]] && grep
 else
   fail "66: cleanup wiring wrong (call=$CALL_LINE worktree=$WT_LINE)"
 fi
+# 66b. The Dev coach's CLI config folder (#3640) inside this review's state folder goes with the state folder.
+CL_CFG_HASH="cfg999888777"
+CL_CFG_STATE="$CL_DEV/$CL_CFG_HASH"
+CL_CFG_DIR="$CL_CFG_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/claude-config"
+mkdir -p "$CL_CFG_DIR/seat-abc" && echo "cli state" > "$CL_CFG_DIR/seat-abc/state.json"
+printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_CFG_STATE/owner.json"
+run_cleanup "$CL_CFG_HASH" "$CL_CFG_STATE"
+if [[ ! -e "$CL_CFG_DIR" && ! -e "$CL_CFG_STATE" ]]; then ok "66b: the Dev claude-config folder under the review state folder is removed with it"; else fail "66b: claude-config folder survived the cleanup"; fi
+
 chmod -R u+w "$CL_TMP" 2>/dev/null || true
 rm -rf "$CL_TMP"
 
