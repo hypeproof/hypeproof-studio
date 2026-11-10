@@ -39,7 +39,7 @@ const MODELS = { default: 'sonnet', choices: [{ alias: 'sonnet', label: 'Sonnet'
 const FEATURES = { choices: [{ key: 'read', label: '읽기' }, { key: 'write', label: '쓰기' }, { key: 'web_search', label: '웹 검색' }], approval_presets: PRESETS };
 const FROZEN = { schema: 'hps-session-design/1', assistant: { display_name: '고정된 이름' }, steps: [{ id: 's1', instructions: 'a' }], model: { default: 'haiku', allowed: ['haiku'] }, features: { allowed: ['read'] }, approval_preset: 'always_ask' };
 // Service stub: models/features reads, a saved draft that PUT writes and GET returns, and a frozen version.
-const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)=>{const p=String(path),m=(init&&init.method)||'GET';
+const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)=>{const p=String(path),m=(init&&init.method)||'GET';if(window.__hold&&m==='GET'&&!p.includes('/models/')&&!p.includes('/features/')&&!p.includes('/versions/'))await window.__hold;
   const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:{'content-type':'application/json'}});
   if(p.includes('/models/'))return json(${JSON.stringify(MODELS)});
   if(p.includes('/features/'))return json(${JSON.stringify(FEATURES)});
@@ -111,7 +111,18 @@ try {
     assert.deepEqual({ a: sent.content.assistant, m: sent.content.model, f: sent.content.features, p: sent.content.approval_preset, i: sent.content.steps[0].instructions }, { a: draft.assistant, m: draft.model, f: draft.features, p: draft.approval_preset, i: '이렇게 도와 주세요' }, `${width}px: the save carries every AI setting under its existing key`);
     assert.deepEqual(Object.keys(sent.content).filter((k) => /tone|role|starter_prompts|conversation/.test(k)), [], `${width}px: no invented contract key`);
     // Re-open: wipe the form, load the saved lesson, and read the controls back.
-    await ev(`render({steps:[]});document.getElementById('load').click();return 0`);
+    await ev(`render({steps:[]});for(const id of ['assistant_name','title'])document.getElementById(id).value='';return 0`);
+    assert.equal(await ev(`return document.getElementById('assistant_name').value`), '', `${width}px: the form is empty before the re-open`);
+    // While a job is in progress (the load request is held open) every AI setting is locked; it unlocks when the job ends.
+    await ev(`window.__hold=new Promise(r=>{window.__release=r});document.getElementById('load').click();return 0`);
+    await until(`return busy===true`, 'the load to be in progress');
+    const locked = await ev(`return {fieldset:document.getElementById('ai-settings').disabled,controls:['assistant_name','model-mode','feature-mode','add','save'].map(id=>document.getElementById(id).matches(':disabled')),step:document.querySelectorAll('#steps :is(input,textarea,select,button)').length>=0&&[...document.querySelectorAll('#steps :is(input,textarea,select,button)')].every(e=>e.matches(':disabled'))}`);
+    assert.equal(locked.fieldset, true, `${width}px: the AI settings fieldset is locked while a job runs`);
+    assert.deepEqual(locked.controls, [true, true, true, true, true], `${width}px: AI controls are disabled while a job runs`);
+    assert.equal(locked.step, true, `${width}px: the step editor is locked too`);
+    await ev(`window.__hold=null;window.__release();return 0`);
+    await until(`return busy===false && !document.getElementById('ai-settings').disabled`, 'the lock to release');
+    checks += 4;
     await until(`return document.getElementById('assistant_name').value==='제작 파트너'`, 'the re-opened lesson');
     await loadCatalogues();
     const back = await ev(`return {name:assistant_name.value,instr:document.querySelector('.step [data-field=instructions]').value,mode:document.getElementById('model-mode').value,def:document.getElementById('model-default').value,
