@@ -13,6 +13,11 @@ export class ActivityConnectionError extends Error {}
 /** Someone else holds this folder (another activity, or another window mid-open): the folder is not ours to remove. */
 export class ActivityFolderInUseError extends ActivityConnectionError { readonly folderInUse = true; }
 /** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
+/** A lock that cannot name an owner is treated as a write in progress for this long, then as stale. */
+export const LOCK_GRACE_MS = 10_000;
+function lockIsOlderThanGrace(lock:string):boolean {
+  try { return Date.now() - fs.statSync(lock).mtimeMs > LOCK_GRACE_MS; } catch { return false; }
+}
 export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
 /**
  * #3213 — the work folder could not be created: its path is taken by a link whose target is gone
@@ -385,6 +390,20 @@ export class ActivityConnections {
     this.claim(root,r.id);
     return this.lock(root);
   }
+  /**
+   * Remove a lock whose content cannot name an owner, only if it is still byte-for-byte what was judged
+   * stale and still older than the grace period (a new owner replacing it in between is never removed).
+   * Serialized with the dead-pid recovery barrier. Deletes the lock file only.
+   */
+  private removeStaleLock(lock:string, recovery:string, raw:string, busy:()=>ActivityFolderInUseError):void {
+    try { fs.mkdirSync(recovery,{mode:0o700}); } catch { throw busy(); }
+    try {
+      let latest: string;
+      try { latest = fs.readFileSync(lock,'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw busy(); }
+      if (latest !== raw || !lockIsOlderThanGrace(lock)) throw busy();
+      fs.unlinkSync(lock);
+    } finally { fs.rmdirSync(recovery); }
+  }
   private lock(root:string):()=>void {
     const lock = this.bindingPath(root) + '.lock';
     const recovery=lock+'.recovery';
@@ -398,9 +417,18 @@ export class ActivityConnections {
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
         // A lock another window is still writing (or one we cannot read) is someone else's: in use, not a generic failure.
-        let owner: { pid?: unknown; nonce?: unknown };
-        try { owner = JSON.parse(fs.readFileSync(lock,'utf8')); } catch { throw busy(); }
-        if (!Number.isInteger(owner.pid) || (owner.pid as number) < 1) throw busy();
+        // Once it is older than the grace period nobody is still writing it: an empty, corrupt or pid-less
+        // lock is stale and is cleaned like a dead-pid lock (only the lock file, never the learner's folder).
+        let raw: string;
+        try { raw = fs.readFileSync(lock,'utf8'); } catch { throw busy(); }
+        let owner: { pid?: unknown; nonce?: unknown } = {};
+        let readable = true;
+        try { const parsed = JSON.parse(raw); if (parsed && typeof parsed === 'object') owner = parsed; else readable = false; } catch { readable = false; }
+        if (!readable || !Number.isInteger(owner.pid) || (owner.pid as number) < 1) {
+          if (!lockIsOlderThanGrace(lock)) throw busy();
+          this.removeStaleLock(lock, recovery, raw, busy);
+          continue;
+        }
         try { process.kill(owner.pid as number,0); }
         catch (error) {
           if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
