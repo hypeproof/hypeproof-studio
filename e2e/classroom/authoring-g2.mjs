@@ -63,7 +63,6 @@ try {
   await step0.locator('[data-field="title"]').fill('확인 기준 정하기'); await step0.locator('[data-field="acceptance"]').fill('저장한 확인 기준 한 줄이 있다');
   for (const m of ['hint', 'independent']) await step0.locator(`[data-help-mode="${m}"]`).check();
   await step0.locator('[data-help-default]').selectOption('hint'); await step0.locator('[data-ui]').selectOption('criterion_form');
-  await page.locator('summary', { hasText: '추가 자료 · AI 설정' }).click();
   await page.locator('#features-load').click(); await page.locator('#features-status').filter({ hasText: '이 코호트가 가진 기능' }).waitFor();
   await page.locator('#feature-mode').selectOption('narrow'); for (const box of await page.locator('#feature-allowed input').all()) { if ((await box.getAttribute('value')) !== 'read') await box.uncheck(); }
   await step0.scrollIntoViewIfNeeded(); await shot('g2-01-authoring-step-help-surface-1280x720.png');

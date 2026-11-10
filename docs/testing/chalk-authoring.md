@@ -175,6 +175,12 @@ B, 기본 수업 복귀 뒤 다시 미션 없음. 완료 조건은 모두 ☐. A
 |---|---|---|---|---|
 | T-51 | CH-08, CGP-AGENT-R-001 | 실제 `/authoring` 페이지(헤드리스 Chromium, 1280·375px). Service는 페이지 안 `fetch` 대역이 기능 목록 읽기에 카탈로그로 답한다. 음성 시료: HTML이 든 이름, 닫힌 집합 밖 `full_access` 항목, `approval_presets`가 없는 응답. `before_changes`가 저장된 초안을 카탈로그 전에 연다 → 페이지 버튼으로 카탈로그 읽기 → 항상 묻기(편집 표시) → 모르는 id `x_unknown` 초안 → Service 400 → 페이지의 ‘버전 확인’ 버튼 → 기본 → 비교 줄·리허설 상자 → 프로필 ID 변경 | 카탈로그 전: 닫힘, 기본만, 저장된 값은 `content()`에 남음. 읽은 뒤: 기본+세 개 순서대로, `full_access` 없음, 이름은 텍스트(주입 요소 0개), 설명이 접근 가능한 설명, 행 44px·이름 14px, 가로 스크롤 없음. 항상 묻기 → `approval_preset:"always_ask"`, 기본 → 키 없음. 비교 줄이 방식 변경을 말하고 고정된 버전은 조작 칸 없이 글자로 보임. 고르면 저장 전 상태가 되어 고정 버튼이 닫힘. 모르는 id는 ‘지금은 고를 수 없는 값(그대로 둠)’으로 남고, 400은 한국어 안내로 바뀜. 프로필 ID를 바꾸면 picker가 닫히고 다시 불러오라고 함. 옛 Service: 닫힘·안내 문구·값 보존. 기반(main)에서는 picker가 없어 실패 | `chalk/test/approval-preset.browser.mjs` (브라우저가 없으면 NOT RUN, `FOCUS_REQUIRE_BROWSER=1`이면 실패); 이름·설명 드리프트: `chalk/test/approval-preset-drift.test.mjs`(CGP-AGENT-R-019 — Chalk의 카탈로그 전 이름과 Studio 라벨 판독이 카탈로그 정본과 같다, 바꾼 이름은 잡힌다) |
 
+### T-52 수업 AI 설정 한 화면 (CH-09, CGP-AGENT-R-015, CGP-AGENT-D-013) · 2026-11-10
+
+| 번호 | 요구 | 절차 | 기대 결과 | 증거 |
+|---|---|---|---|---|
+| T-52 | CH-09, CGP-AGENT-R-015, CGP-AGENT-D-013 | 실제 `/authoring` 페이지(헤드리스 Chromium, 1280·375px). Service는 페이지 안 `fetch` 대역(모델·기능 읽기, 저장 PUT, 저장본 GET, 고정된 버전). 새 강의 → 모델·기능 목록 읽기 → AI 이름·단계 안내·모델·Effort·기능·승인 방식을 페이지 조작으로 고침 → 초안 저장 → 폼을 비우고 저장본 열기 → ‘버전 확인’ → 고정 요약을 둔 채 초안 이름 변경 | 구역 다섯 개가 정체성·지시문·모델·처리 수준·기능·승인·미리보기 순서이고 이동 링크가 같은 순서·같은 대상. 각 조작 칸이 제 구역 안에 있음. 저장 본문이 기존 키(`assistant`, `steps[].instructions`, `model`, `features`, `approval_preset`)로 값을 담고 역할·말투·시작 문장 키는 없음. 저장본을 다시 열면 모든 칸이 같은 값으로 돌아옴. 미리보기는 조작 칸 0개이고 초안을 따라감. 고정된 버전 요약은 조작 칸 0개이고 초안을 고쳐도 그대로. 이동 링크·구역 머리글 44px 이상, 가로 스크롤·구역 겹침·화면 밖 요소 없음, 이동 링크는 1024px 이상에서만 sticky. 기반(main)에서는 `#ai-settings`가 없어 실패 | `chalk/test/ai-settings.browser.mjs` (브라우저가 없으면 NOT RUN, `FOCUS_REQUIRE_BROWSER=1`이면 실패) |
+
 ## 검증 환경과 증거
 
 - 합성 병원 자료와 가상 학생 두 명, 강사 두 명 사용. 운영 데이터·운영 토큰 사용 금지.
