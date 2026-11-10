@@ -103,6 +103,9 @@ claimed/in_review는 다른 작업과 합류·검토, reconcile은 닫힘/오래
 | [HTML IR deck: slide state and evidence-aware patches](#cr-deck) | implementation | [#1399](https://github.com/hypeproof/hypeproof-studio/issues/1399) |
 | [Curriculum Runtime Week 1 to Week 2 end-to-end loop](#cr-e2e) | validation | [#1400](https://github.com/hypeproof/hypeproof-studio/issues/1400) |
 
+| [Native reflection and searchable project library](#mobile-reflection-v1) | implementation | [#3688](https://github.com/hypeproof/hypeproof-studio/issues/3688) |
+| [Native on-device voice with explicit send and stop boundaries](#mobile-voice-v1) | implementation | [#3687](https://github.com/hypeproof/hypeproof-studio/issues/3687) |
+
 <a id="goal"></a>
 
 ### 학생 목표와 수업 기준 보존
@@ -712,3 +715,31 @@ Added 2026-09-29 for epic [#1388](https://github.com/hypeproof/hypeproof-studio/
 
 `completion`은 해당 단위의 모든 조건을 검토했을 때만 추가한다. `reviewed_by`, `report`, `verdict: PASS`, `inputs`를 기록하고 `verification_inputs`에 실제 구현·테스트·fixture 경로를 명시한다. 요구사항/구현/검사 입력 hash가 바뀌면 완료를 재사용하지 않는다. 초기 원장은 모든 완료 attestation을 비워 둔다.
 기존 검증을 버리는 것이 아니라 정확한 행과 실행 범위를 대조하는 것이다. 미실행은 NOT RUN, 필요한 환경이 없으면 BLOCKED. 합성 PASS는 실기 또는 인간 인수가 아니다. 구현 PR을 일부 끝냈으면 남은 조건을 같은 이슈나 별도 실행 단위에 남긴다.
+
+<a id="mobile-reflection-v1"></a>
+
+### Native reflection and searchable project library
+
+- Issue: [#3688](https://github.com/hypeproof/hypeproof-studio/issues/3688) · implementation
+- Requirements: mobile-growth-roadmap: MREF-01, MREF-02, MREF-03, MREF-04, MREF-05
+- Depends on: —
+- Next action: Implement iOS/Android reflection, verify old data and failed-save recovery, run native CI, then promote a verified testing candidate. Source and simulator evidence are partial; physical acceptance remains open.
+- Design change: Five optional local human-owned notes. Library title/search derives from notes without modifying confirmed intent. No new AI policy or runtime.
+- Positive control: A returning user finds a reflection-only thought, adds a learning note, restarts and recovers all saved fields.
+- Negative control: A failed observation save followed by another successful save never drops visible observation text. Notes from this or another project are never silently sent to AI.
+- Implementation paths to check: `apps/studio-native/ios/App/HPStudioApp.swift`, `apps/studio-native/ios/App/StudioModel.swift`, `apps/studio-native/ios/Sources/StudioCore/Intent.swift`, `apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java`, `apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java`
+- Evidence: definitions in `docs/testing/native-mobile-growth.md`; physical acceptance remains open. Lab snapshot refresh follows the merged source and existing Lab PR #1523 ownership.
+
+<a id="mobile-voice-v1"></a>
+
+### Native on-device voice with explicit send and stop boundaries
+
+- Issue: [#3687](https://github.com/hypeproof/hypeproof-studio/issues/3687) · implementation
+- Requirements: mobile-growth-roadmap: MVOICE-01, MVOICE-02, MVOICE-03, MVOICE-04, MVOICE-05
+- Depends on: —
+- Next action: Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.
+- Design change: Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.
+- Positive control: A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.
+- Negative control: Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.
+- Implementation paths to check: `apps/studio-native/ios/App/VoiceController.swift`, `apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift`, `apps/studio-native/ios/App/HPStudioApp.swift`, `apps/studio-native/ios/App/StudioModel.swift`, `apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java`, `apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java`, `apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java`
+- Evidence: definitions in `docs/testing/native-mobile-growth.md`; physical acceptance remains open. Lab snapshot refresh follows the merged source and existing Lab PR #1523 ownership.
