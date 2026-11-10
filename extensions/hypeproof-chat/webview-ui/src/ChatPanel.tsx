@@ -756,8 +756,11 @@ export function ChatPanel(props: Props) {
   // task's events.
   useEffect(() => {
     const off = onHostMessage((msg) => {
+      if (msg.type === "learningDecisionResult") {
+        setLearningDecisionResult(msg);
+        return;
+      }
       if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
-      if (msg.type === "learningDecisionResult") setLearningDecisionResult(msg);
       if (msg.type !== "learningState") return;
       // A malformed state clears the evidence region and is reported once (a listener throw would fail
       // silently). The checks are pure, so running them first changes nothing for a good state.
