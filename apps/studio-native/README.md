@@ -87,6 +87,8 @@ to the preview branch and `main`. It requires variables `APP_STORE_CONNECT_KEY_I
 `APPLE_DISTRIBUTION_PASSWORD`, `APPLE_MAC_INSTALLER_P12`,
 `APPLE_MAC_INSTALLER_PASSWORD`, `APPLE_IOS_PROFILE`, `APPLE_MACOS_PROFILE`.
 P12 and provisioning profile secrets are base64; the API key is PEM text.
+The Mac profile must have API type `MAC_CATALYST_APP_STORE`; `MAC_APP_STORE`
+can archive this target but Apple rejects it during export.
 The runner uses a temporary keychain and deletes its signing material on exit.
 Only packages, public identity metadata and build/upload evidence are retained.
 The app uses operating-system HTTPS, not custom or non-exempt encryption.

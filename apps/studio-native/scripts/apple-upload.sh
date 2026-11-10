@@ -65,6 +65,14 @@ profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$private/profile.plist"
 profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$private/profile.plist")
 profile_team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$private/profile.plist")
 test "$profile_team" = "$APPLE_DEVELOPER_TEAM_ID"
+if [ "$platform" = macos ]; then
+  # A MAC_APP_STORE profile archives but export rejects it for Catalyst.
+  # MAC_CATALYST_APP_STORE carries both iOS and macOS application identifiers.
+  catalyst_app_id=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$private/profile.plist")
+  mac_app_id=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$private/profile.plist")
+  test "$catalyst_app_id" = "$APPLE_DEVELOPER_TEAM_ID.ai.hypeproof.studio.mobile"
+  test "$mac_app_id" = "$catalyst_app_id"
+fi
 # Xcode 16+ uses UserData; retain the legacy location for export tools.
 for profiles in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"; do
   mkdir -p "$profiles"
