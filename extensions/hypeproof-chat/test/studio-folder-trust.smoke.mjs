@@ -133,6 +133,40 @@ try {
       assert.ok(partErr instanceof mod.exports.ActivityFolderInUseError, "partial lock is the in-use error");
       assert.equal(fs.existsSync(part), true, "partial-lock loser keeps the folder");
       fs.rmSync(liveLock); fs.rmSync(conn.bindingPath(part) + ".lock");
+      // #3664: an unreadable or pid-less lock older than the grace period is stale and is cleaned (the lock file only).
+      const age = (file, seconds) => { const t = new Date(Date.now() - seconds * 1000); fs.utimesSync(file, t, t); };
+      for (const [name, content] of [["empty", ""], ["corrupt", "{not json"], ["invalid pid", JSON.stringify({ pid: "abc", nonce: "n" })], ["pid zero", JSON.stringify({ pid: 0, nonce: "n" })], ["json null", "null"]]) {
+        const dirX = path.join(home, "Stale-" + name.replace(" ", "-")); fs.mkdirSync(dirX); fs.writeFileSync(path.join(dirX, "mine.txt"), "keep");
+        const lockX = conn.bindingPath(dirX) + ".lock"; fs.writeFileSync(lockX, content);
+        let freshErr; try { await open(dirX); } catch (e) { freshErr = e; }
+        assert.ok(freshErr instanceof mod.exports.ActivityFolderInUseError, `${name}: within the grace period it is still in use`);
+        assert.equal(fs.existsSync(lockX), true, `${name}: a fresh lock is left alone`);
+        age(lockX, 30);
+        await open(dirX);   // must now succeed
+        assert.equal(fs.existsSync(lockX), false, `${name}: the stale lock is gone`);
+        assert.equal(fs.readFileSync(path.join(dirX, "mine.txt"), "utf8"), "keep", `${name}: learner files untouched`);
+        assert.equal(fs.existsSync(lockX + ".recovery"), false, `${name}: no recovery barrier left behind`);
+      }
+      // An aged lock replaced by a new owner between the check and the cleanup is never removed.
+      const swap = path.join(home, "StaleSwap"); fs.mkdirSync(swap);
+      const swapLock = conn.bindingPath(swap) + ".lock"; fs.writeFileSync(swapLock, ""); age(swapLock, 30);
+      const realMkdir = fs.mkdirSync;
+      fs.mkdirSync = function (p, ...rest) { const r = realMkdir.call(this, p, ...rest); if (String(p).endsWith(".recovery")) { fs.writeFileSync(swapLock, JSON.stringify({ pid: process.ppid, nonce: "new-owner" })); } return r; };
+      let swapErr; try { await open(swap); } catch (e) { swapErr = e; } finally { fs.mkdirSync = realMkdir; }
+      assert.ok(swapErr instanceof mod.exports.ActivityFolderInUseError, "a lock re-created by a live window mid-cleanup is in use");
+      assert.equal(JSON.parse(fs.readFileSync(swapLock, "utf8")).nonce, "new-owner", "the new owner's lock is not removed");
+      fs.rmSync(swapLock);
+      // Dead-pid lock: cleaned. Invalid-pid is covered above. Lock lost twice: another dead lock appears right after the first cleanup.
+      const dead = path.join(home, "DeadPidTwice"); fs.mkdirSync(dead);
+      const deadLock = conn.bindingPath(dead) + ".lock"; const deadContent = JSON.stringify({ pid: 2147483646, nonce: "gone" });
+      fs.writeFileSync(deadLock, deadContent);
+      const realRmdir = fs.rmdirSync; let rmdirs = 0;
+      fs.rmdirSync = function (p, ...rest) { const r = realRmdir.call(this, p, ...rest); if (String(p).endsWith(".recovery") && ++rmdirs === 1) fs.writeFileSync(deadLock, deadContent); return r; };
+      let twiceErr; try { await open(dead); } catch (e) { twiceErr = e; } finally { fs.rmdirSync = realRmdir; }
+      assert.ok(twiceErr instanceof mod.exports.ActivityFolderInUseError, "lock lost twice is the in-use error: " + twiceErr);
+      assert.match(twiceErr.message, /잠금을 얻지 못했습니다/, "lock lost twice says the lock could not be taken, not that another window uses it");
+      assert.equal(fs.existsSync(dead), true, "lock-lost-twice loser keeps the folder");
+      fs.rmSync(deadLock, { force: true });
       // The shared cleanup still removes for any other error.
       const other = path.join(home, "OtherFail"); const madeOther = createStudioFolder(other);
       discardStudioFolderAfterFailure(madeOther, new Error("x")); assert.equal(fs.existsSync(other), false, "other failures still discard");
@@ -164,7 +198,9 @@ try {
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
     && siteBody.indexOf("createdFolder = createStudioFolder(dir);") < siteBody.indexOf("connections.prepare("), "the leaf is created before ActivityConnections.prepare (which mkdirs it)");
   assert.match(siteBody, /try \{ createdFolder = createStudioFolder\(dir\); \} catch \{ createdFolder = undefined; \}/, "a create failure must not replace prepare's guidance");
-  assert.match(siteBody, /catch\(error\) \{\n[^\n]*\n\s+discardStudioFolderAfterFailure\(createdFolder, error\);/, "a failed open goes through the shared cleanup (keeps busy / taken)");
+  // Only a comment may sit between the catch and the shared cleanup (an unconditional discardStudioFolder on that line must not pass).
+  assert.match(siteBody, /catch\(error\) \{\n\s*\/\/[^\n]*\n\s+discardStudioFolderAfterFailure\(createdFolder, error\);/, "a failed open goes through the shared cleanup (keeps busy / taken)");
+  assert.ok(!/discardStudioFolder\(/.test(siteBody), "no direct discardStudioFolder at the call site");
   assert.match(siteBody, /await syncStudioFolderRecord\(context\.globalState, createdFolder\);/, "only createStudioFolder's result is recorded");
   assert.ok(!/absentBefore|directoryIsAbsent/.test(siteBody), "no separate check-then-create");
   assert.equal((ext.match(/syncStudioFolderRecord\(/g) ?? []).length, 1, "one writer of the record");
