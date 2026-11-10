@@ -56,7 +56,7 @@ console.log("ok spaces: a path containing Application Support is passed through 
 // 4. The provider passes the root into runSdkCoach (the release path gets undefined from the same call).
 {
   const provider = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.match(provider, /sdkConfigRoot: devSdkConfigRoot\(vscode\.env\.appName, this\.context\.globalStorageUri\.fsPath\),/, "provider passes devSdkConfigRoot into runSdkCoach");
+  assert.match(provider, /sdkConfigRoot: devSdkConfigRoot\(vscode\.env\.appName, this\.context\.globalStorageUri\?\.fsPath \?\? ''\),/, "provider passes devSdkConfigRoot into runSdkCoach");
   const sdk = readFileSync(new URL("../src/sdkCoach.ts", import.meta.url), "utf8");
   assert.match(sdk, /sdkConfigDirFor\(process\.env, coachSeatKeyFor\(args\), args\.sdkConfigRoot\)/, "runSdkCoach hands its root to sdkConfigDirFor");
 }

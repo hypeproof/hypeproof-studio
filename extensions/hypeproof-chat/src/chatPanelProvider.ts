@@ -10195,7 +10195,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
-            sdkConfigRoot: devSdkConfigRoot(vscode.env.appName, this.context.globalStorageUri.fsPath),
+            sdkConfigRoot: devSdkConfigRoot(vscode.env.appName, this.context.globalStorageUri?.fsPath ?? ''),
             turnId: streamId,
             onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
             onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
