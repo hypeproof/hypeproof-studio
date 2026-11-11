@@ -63,7 +63,7 @@ try {
 
   // ── states before a connection ──
   let page = await open({ width: 1280, height: 720 });
-  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /강사 토큰과 코호트를 입력하세요/);
+  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /Lab 로그인으로 연결한 뒤 코호트를 입력하세요/);
   await connect(page); console.log('PASS states: before a connection the table is absent and the connection form is the page');
   // HPS_G1_WIDEN=0.06 widens every glyph (letter-spacing, em) to rehearse a wider font on a machine that has a narrow one — the CI
   // runner's Korean font measured one to two toolbar lines taller than the Mac's. The default run measures the page as it is.
