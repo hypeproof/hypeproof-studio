@@ -30,3 +30,35 @@ signed artifact processed successfully, and the tester can install that exact
 version. Record actual microphone permission, Korean language asset availability,
 recognition, read-aloud, interruption, text recovery and selected-project behavior.
 Human-confirmed intention must remain a separate explicit action throughout.
+
+
+## Integrated desktop/iPhone acceptance
+
+Use the existing desktop RC and iPhone candidate, not the discontinued Catalyst
+app. Record exact Service/desktop/iOS source, package/version and account roles.
+
+1. Desktop: select one personal task, consent to text sharing. Phone: authorize
+   its own device session on the same account and open that conversation.
+2. Existing desktop history appears with original message IDs. Send once on the
+   phone; observe the same user/assistant messages in both surfaces and one model
+   execution. Desktop next turn appears on phone. No tools/private files leaked.
+3. Disconnect network after request storage; retry uses the same ID. Stop host or
+   switch task: pending remains, draft persists, no background cloud execution.
+   Crash after claim: unknown is explicit and never reexecuted automatically.
+4. Voice: dictate, edit, send; explicit voice conversation; same-request completed
+   reply only. Call interruption, headphone removal and background stop audio.
+   Optional own-voice review stays local and can be erased. Verify Korean on a
+   real iPhone; simulator fixtures do not satisfy ASR/TTS acceptance.
+5. Skip a question, edit personal context, request a next perspective or small
+   experiment. Context is shared only after reviewing/sending the visible draft.
+6. Switch account/revoke phone: no cross-account reads or claims. Revoked pending
+   origin is cancelled by host so later authorized requests can proceed.
+7. Stop sharing/delete server copy preserves original task; local-forget explains
+   server copy remains. Disk save failure preserves visible edits for export.
+8. On computer continue the same intention into the existing MVP execution flow.
+   Record actual artifact outcome separately from conversation-only mobile turns.
+
+Source controls: `npm run test:mobile-conversation --prefix extensions/hypeproof-chat`,
+provider tests and opt-in `test:mobile-conversation-service` against exact Service
+source; Swift ConversationSyncTests; native UI tests. The Service must publish
+account-api@2 before the desktop release dependency gate admits the new RC.

@@ -17582,6 +17582,12 @@
         },
         {
           "path": "apps/studio-native/FOUNDRY.md"
+        },
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/docs/mobile-conversation.md"
         }
       ]
     },
@@ -17712,6 +17718,24 @@
         },
         {
           "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/mobileConversation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/mobileConversationHost.ts"
+        },
+        {
+          "path": "release.json"
         }
       ]
     },
@@ -17762,6 +17786,21 @@
         },
         {
           "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation-service.integration.mjs"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
         }
       ]
     },

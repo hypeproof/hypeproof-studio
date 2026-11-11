@@ -1,6 +1,8 @@
 # HP Studio native mobile preview
 
-Native SwiftUI iOS, Mac Catalyst macOS, and Android View applications for standalone observation, AI questioning, and human-confirmed intent revisions. No WebView, browser entry, or desktop pairing is required. This is the native correction to the web-only prototype in #3650; it does not replace the separate desktop companion work (#3298).
+Native SwiftUI iPhone and Android clients for HP Studio. The desktop product is the existing HypeProof Studio application and its RC pipeline. A separate mobile-derived Mac Catalyst application is no longer built or distributed.
+
+The iPhone 0.2 candidate makes account-linked desktop conversation the primary surface. Existing local notebooks are preserved in the **기기 메모** tab. Linked conversations use the original desktop task store, existing coach and execution gates; they never fall back to a separate mobile model call. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
@@ -12,7 +14,7 @@ Philosophy → Product Intent → behavior: introspection, multiple perspectives
 
 Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
 
-Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. This preview has no account sync, independent speech recognition engine, handwriting, push notifications, Foundry deployment, or financial telemetry.
+Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. The local notebook remains device-local. The linked iPhone surface adds explicit opt-in account sync of selected personal conversation text, with a protected local cache and durable request IDs. Files, tool output, temporary chats and classroom records are excluded. Account data is stored through HypeProof Service over TLS; this is not end-to-end encryption. Handwriting, push notifications, Foundry deployment and financial telemetry remain outside this candidate.
 
 ## Native voice and acceptance
 
@@ -30,7 +32,9 @@ and requires it on the request. Android uses
 [createOnDeviceSpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer#createOnDeviceSpeechRecognizer(android.content.Context))
 where available. Missing Korean assets/engine or denied permission returns to
 text. There is no cloud recognizer fallback, paid speech provider or raw audio
-upload/storage in the app. Read-aloud uses installed OS Korean voices; Android
+upload. The linked iPhone surface optionally keeps up to 30 seconds of protected
+local audio for self-listening. It is off by default and removed on stop, navigation,
+background or next capture; explicit deletion is also available. Read-aloud uses installed OS Korean voices; Android
 rejects network-required voices. Physical offline behavior still needs observation.
 
 Unit tests exercise stale/duplicate turn fences; native UI tests cover record
@@ -56,55 +60,50 @@ requirements and physical acceptance are in the [mobile roadmap](../../docs/requ
 
 Apple enrollment and App Store Connect access were confirmed on 2026-11-10. The signed iOS and Mac Catalyst **0.1.1 (2.1)** packages from `11154686e881033ca49cdced974d4399fb4cbd41` passed Apple processing and became available to internal TestFlight testers in [run 42800520204](https://github.com/hypeproof/hypeproof-studio/actions/runs/42800520204). The user reported successful phone use; the Mac copy was installed and launched with an App Store receipt. This is a bounded baseline observation, not full acceptance of every feature or a public App Store release.
 
-The current Mac has Command Line Tools but no full Xcode installation. Native iOS/Catalyst build and UI validation use the pinned GitHub macOS runner. Signing certificates, provisioning profiles and API keys stay in the Apple release environment; never commit them. The Catalyst preview and existing desktop IDE RC remain different apps. Subsequent source changes require fresh verification and a separately identified testing build.
+The current Mac has Command Line Tools but no full Xcode installation. Native iOS build and UI validation use the pinned GitHub macOS runner. Signing certificates, provisioning profiles and API keys stay in the Apple release environment; never commit them. The historical Catalyst preview was an incorrect product split; its data is preserved, but it is not the desktop delivery path. Subsequent source changes require fresh verification and a separately identified testing build.
 
 The next vertical slice and dependent work are recorded in [mobile growth roadmap](../../docs/requirements/mobile-growth-roadmap.md). Reflection notes stay local and separate from automatically transmitted context and confirmed intentions.
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
 
-## macOS preview and Apple distribution
+## Existing desktop and linked conversation
 
-The 2026-11-10 scope includes both iOS and macOS under the explicit bundle ID
-`ai.hypeproof.studio.mobile`. The Mac Catalyst build shares the observation,
-questioning, human confirmation and local-record contracts with iOS. It is a
-separate installed macOS binary, with App Sandbox and outbound networking; it
-does not depend on a browser or an existing desktop Studio process.
+On the existing desktop, select a personal task and run **iPhone과 이 대화 연결**.
+The disclosure asks before its user/assistant text is uploaded. Sign in to the
+same account on iPhone through the existing device authorization page, then open
+that conversation. Authentication may open the browser; conversation stays native.
 
-`bash apps/studio-native/scripts/macos-verify.sh` builds the Mac app with Xcode
-26.3 and records its source, executable architecture and bundle identity. This
-unsigned build check does not establish installed-Mac or TestFlight acceptance.
-The privacy manifest declares only the app's UserDefaults required-reason API
-use, for its stable installation identity. Service data handling and App Store
-privacy answers are separate from that API declaration.
+Desktop remains the execution host. Its selected task, existing history and coach
+are reused. The phone's durable outbox has one stable request ID. Service claims
+are atomic; a reconnect is a status check, never permission to replay a turn.
+When the computer is asleep or another task is selected, the request waits.
+The phone explains pending/running/completed/unknown states. Unknown outcomes
+require checking the computer; they are not automatically retried as new turns.
 
-App Store Connect access is active as of 2026-11-10; both platform records,
-signing credentials, archive validation, upload and installed-device verification
-must be observed independently. No private signing key belongs in this repository.
+The iPhone offers dictation, explicit voice conversation, read-aloud and editable
+next-question/skip/small-experiment starters. A person can refuse a question;
+there is no background microphone or endless automatic AI questioning.
+Account tokens use this-device-only Keychain storage. Local notebook and shared
+cache are separated by account. Logout/revocation stop access; cached data deletion,
+server sharing deletion and original desktop task deletion remain distinct.
 
-### Signed TestFlight pipeline
+## Signed iPhone delivery
 
-`.github/workflows/studio-apple-testflight.yml` archives iOS and Mac Catalyst on
-separate disposable macOS runners, validates each package with Apple's upload
-tool, then uploads to App Store Connect. Both signing jobs are capped at 25 minutes. A read-only Ubuntu gate first waits at most 25 minutes for the current head's native CI to succeed. Its run/attempt identity artifact must match the release checkout's native Git tree and native-workflow blob. Missing, failed, stale or mismatched evidence blocks access to the signing environment. PR merge-checkout identity is compared by these tracked source hashes, not assumed equal to the branch SHA. The gate rechecks run status before passing; it does not claim physical-device acceptance.
-The dedicated preview branch submits native source/workflow changes to this gate;
-only a successful matching native CI result unlocks signing. Failed checks need a
-corrected candidate or a full native workflow rerun, including its identity job.
-Subsequent runs can also be dispatched once the workflow is on main.
-This pipeline distributes the native preview, not the existing VSCodium desktop.
+`.github/workflows/studio-native-mobile.yml` checks native source and iOS/Android.
+`.github/workflows/studio-apple-testflight.yml` archives **iOS only** after the
+source-matched native CI gate. Its dedicated `release/studio-unified-preview`
+branch is advanced only after the integrated Service/desktop candidate is verified.
+Ordinary feature-branch pushes do not distribute an unready integration.
 
-The `apple-native-preview` GitHub Environment must restrict deployment branches
-to the preview branch and `main`. It requires variables `APP_STORE_CONNECT_KEY_ID`,
-`APP_STORE_CONNECT_ISSUER_ID`, `APPLE_DEVELOPER_TEAM_ID`, and secrets
-`APP_STORE_CONNECT_PRIVATE_KEY`, `APPLE_DISTRIBUTION_P12`,
-`APPLE_DISTRIBUTION_PASSWORD`, `APPLE_MAC_INSTALLER_P12`,
-`APPLE_MAC_INSTALLER_PASSWORD`, `APPLE_IOS_PROFILE`, `APPLE_MACOS_PROFILE`.
-P12 and provisioning profile secrets are base64; the API key is PEM text.
-The Mac profile must have API type `MAC_CATALYST_APP_STORE`; `MAC_APP_STORE`
-can archive this target but Apple rejects it during export.
-The runner uses a temporary keychain and deletes its signing material on exit.
-Only packages, public identity metadata and build/upload evidence are retained.
-The app uses operating-system HTTPS, not custom or non-exempt encryption.
+The `apple-native-preview` environment must allow that release branch and main.
+It uses `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`,
+`APPLE_DEVELOPER_TEAM_ID`, `APP_STORE_CONNECT_PRIVATE_KEY`,
+`APPLE_DISTRIBUTION_P12`, `APPLE_DISTRIBUTION_PASSWORD`, and `APPLE_IOS_PROFILE`.
+Signing material is ephemeral. Only packages, public identities and evidence are
+retained. Existing desktop delivery continues through `build-mac.yml` and the
+managed RC/repack process; mobile signing credentials are not a desktop RC substitute.
 
-An upload success is not tester availability. Verify Apple's processing status,
-attach each valid build to an internal TestFlight group, and observe test account
-access separately. Internal-only builds do not require public App Store release.
+Acceptance requires actual desktop -> iPhone -> desktop round-trip, preserved
+message identities, voice/skip behavior, offline recovery without duplicate model
+execution, account revoke and local draft preservation. Source tests, simulator
+checks and upload success must be reported separately from this observation.

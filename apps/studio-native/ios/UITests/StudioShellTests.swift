@@ -31,6 +31,8 @@ final class StudioShellTests: XCTestCase {
     @MainActor func testNativeCaptureConfirmAndRelaunch() {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["기기 메모"].tap()
         let start = app.buttons["startProject"]
         XCTAssertTrue(start.waitForExistence(timeout: 10)); start.tap()
         let field = editable("thoughtInput", in: app)
@@ -45,7 +47,7 @@ final class StudioShellTests: XCTestCase {
         let observation = editable("reflection-observation", in: app)
         XCTAssertTrue(observation.waitForExistence(timeout: 5)); observation.tap(); observation.typeText("Two customers waited outside")
         app.buttons["닫기"].tap()
-        app.terminate(); app.launch()
+        app.terminate(); app.launch(); app.tabBars.buttons["기기 메모"].tap()
         XCTAssertTrue(app.staticTexts["Observe one shop today"].waitForExistence(timeout: 5))
         openReflection(in: app)
         let restored = editable("reflection-observation", in: app)

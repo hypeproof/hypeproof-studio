@@ -32,7 +32,7 @@ First slice ST-REQ-MOBILE-REFLECTION: persist five optional notes (observation, 
 
 P0: usable daily conversation and trustworthy release foundation. Reuse #3686/#3687 and private Service policy/measurement work; implement reflection/library and data retention; repair agent board access and bounded synchronization; prove CI and signing prerequisites.
 
-P1: selected-work continuity, multimodal intake, real Foundry preview/build flow, transparent budgets and operational feedback, cohort access and peer critique. No duplicate SDK runner or release engine.
+P0: selected-work continuity is required by the 2026-11-11 integrated MVP correction. P1: multimodal intake, real Foundry preview/build flow, transparent budgets and operational feedback, cohort access and peer critique. No duplicate SDK runner or release engine.
 
 P2: financial feedback depth, sustained research/transfer studies, cohort networking and advanced offline inference. Dependencies may promote a narrow P2 item into an earlier vertical slice; labels are not dates or completion claims.
 
@@ -44,7 +44,7 @@ M3 user test: a cohort participant shares deliberately, receives peer feedback, 
 
 ## Delivery boundaries
 
-The existing Mac desktop IDE RC and the Catalyst preview are different applications. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
+The existing Mac desktop is the sole desktop product. The previous Catalyst preview is superseded and no longer built or uploaded; its local data is preserved. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
 
 Foundry's active Ubuntu control plane and registered desktop runner are owned by another session. Do not take over that session, change its pins or relabel its runs as mobile development. Mobile registration/adapter admission is a tracked prerequisite. Signing keys remain in the release environment, outside model workspaces.
 
@@ -116,3 +116,40 @@ and Android five-turn Korean sessions, offline recognition, interruption,
 permission-denial and text recovery are observed. Synthetic transitions and
 emulator UI are reported separately. The current TestFlight baseline does not
 contain this source merely because a branch or PR exists.
+
+
+## Integrated iPhone correction — 2026-11-11
+
+ST-REQ-NATIVE-MOBILE now requires the existing desktop task as the original work,
+with same-account iPhone conversation continuity. New desktop software derived
+from the mobile app is excluded. Voice, durable chat sync and ongoing contextual
+questions are M1 prerequisites, rather than an optional M2 add-on.
+
+The selected personal conversation is explicitly shared as user/assistant text.
+The iPhone sends one durable request ID; only the bound desktop session claims
+and executes it through the existing provider. Tools remain blocked for remote
+conversation turns. Task files stay local and actual making continues in the
+same task on the computer. No classroom or temporary-chat sharing. Pending,
+running, persisted/completed and unknown are different states; restart never
+replays a previously claimed request. Drafts survive save/network failures.
+
+The account-text transport is an explicit opt-in design for this candidate:
+Service stores conversation text over TLS, not E2EE. It is distinct from the
+older encrypted artifact-preview relay. It must not be silently described as
+that relay or satisfy its original retention/encryption requirements. Real data
+is shared only after the product disclosure is accepted. Export, revoke,
+local-cache deletion and server-copy deletion have distinct semantics.
+
+Questions reuse the existing desktop coach. Optional user-authored goal,
+audience, experience and preferred questioning style can be edited, kept local,
+or explicitly sent as a visible draft. No inferred psychological scores. The
+person can skip a question, request another perspective, or choose a small
+experiment. Reflection, purpose and the user's wording remain editable.
+
+Voice offers editable dictation and explicit final-transcript send/read-aloud.
+Optional self-listening is device-local, bounded to30seconds, off by default,
+and deleted on stop/background/navigation/next capture. A completed answer is
+read only after the matching request and original user message are identified.
+
+Shared source tests and CI do not prove physical Korean voice quality, genuine
+growth, installed desktop/iPhone interoperability or deployed Service readiness.

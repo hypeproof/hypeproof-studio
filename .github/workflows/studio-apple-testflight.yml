@@ -2,7 +2,7 @@ name: Studio Apple TestFlight
 on:
   workflow_dispatch:
   push:
-    branches: ['feat/studio-native-mobile-20261110']
+    branches: ['release/studio-unified-preview']
     paths: ['apps/studio-native/**', '.github/workflows/studio-apple-testflight.yml', '.github/workflows/studio-native-mobile.yml']
 permissions:
   contents: read
@@ -40,7 +40,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ios, macos]
+        # Desktop is the existing Studio RC, never a mobile-derived Catalyst app.
+        platform: [ios]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,9 +55,7 @@ jobs:
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           APPLE_DISTRIBUTION_P12: ${{ secrets.APPLE_DISTRIBUTION_P12 }}
           APPLE_DISTRIBUTION_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_PASSWORD }}
-          APPLE_MAC_INSTALLER_P12: ${{ secrets.APPLE_MAC_INSTALLER_P12 }}
-          APPLE_MAC_INSTALLER_PASSWORD: ${{ secrets.APPLE_MAC_INSTALLER_PASSWORD }}
-          APPLE_PROFILE: ${{ matrix.platform == 'ios' && secrets.APPLE_IOS_PROFILE || secrets.APPLE_MACOS_PROFILE }}
+          APPLE_PROFILE: ${{ secrets.APPLE_IOS_PROFILE }}
         run: bash apps/studio-native/scripts/apple-upload.sh '${{ matrix.platform }}'
       - uses: actions/upload-artifact@v4
         if: always()

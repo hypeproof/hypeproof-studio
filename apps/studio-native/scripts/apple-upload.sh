@@ -2,8 +2,11 @@
 # CI-only signed native previews. Signing material never enters artifacts or source.
 set -euo pipefail
 test "${GITHUB_ACTIONS:-}" = true || { echo 'Run through the Apple deployment workflow' >&2; exit 2; }
-platform=${1:?Expected ios or macos}
-case "$platform" in ios|macos) ;; *) exit 2 ;; esac
+platform=${1:?Expected ios}
+case "$platform" in
+  ios) ;;
+  *) echo 'Mobile delivery supports iOS only. Desktop uses the existing Studio RC pipeline.' >&2; exit 2 ;;
+esac
 cd "$(dirname "$0")/../ios"
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"

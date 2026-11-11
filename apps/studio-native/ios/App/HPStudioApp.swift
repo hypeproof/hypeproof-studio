@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 
 @main struct HPStudioApp: App {
-    var body: some Scene { WindowGroup { StudioHome() } }
+    var body: some Scene { WindowGroup { StudioRoot() } }
 }
 struct StudioHome: View {
     @StateObject private var model = StudioModel()

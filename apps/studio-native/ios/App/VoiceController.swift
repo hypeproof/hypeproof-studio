@@ -3,9 +3,36 @@ import UIKit
 @preconcurrency import Speech
 @preconcurrency import AVFoundation
 
+/// Optional, bounded, device-local review recording. Never sent to Service.
+private final class VoiceReviewCapture: @unchecked Sendable {
+    let url: URL
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+    private var failed = false
+    init(format: AVAudioFormat) throws {
+        url = FileManager.default.temporaryDirectory.appendingPathComponent("hp-voice-review-\(UUID().uuidString).caf")
+        file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+    func append(_ buffer: AVAudioPCMBuffer) {
+        lock.lock(); defer { lock.unlock() }
+        do { try file?.write(from: buffer) } catch { failed = true }
+    }
+    func finish() -> URL? {
+        lock.lock(); defer { lock.unlock() }; file = nil
+        return failed ? nil : url
+    }
+    deinit { try? FileManager.default.removeItem(at: url) }
+}
+
 @MainActor final class VoiceController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published private(set) var turn = VoiceTurn()
     @Published private(set) var status = ""
+    @Published private(set) var canReplayOwnVoice = false
+    private var reviewEnabled = false
+    private var reviewCapture: VoiceReviewCapture?
+    private var reviewURL: URL?
+    private var reviewPlayer: AVAudioPlayer?
     private let engine = AVAudioEngine()
     private let speaker = AVSpeechSynthesizer()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -20,10 +47,10 @@ import UIKit
     var isActive: Bool { ![.idle, .ready].contains(turn.phase) }
     override init() { super.init(); speaker.delegate = self }
 
-    func start(projectID: String, mode: VoiceTurn.Mode,
+    func start(projectID: String, mode: VoiceTurn.Mode, reviewRecording: Bool = false,
                transcript: @escaping (String) -> Void,
                final: @escaping (String, VoiceTurn.Mode) -> Bool) {
-        stop(); self.transcript = transcript; self.final = final
+        stop(); self.transcript = transcript; self.final = final; reviewEnabled = reviewRecording
         let token = turn.start(projectID: projectID, mode: mode)
         status = "마이크와 음성 인식 권한을 확인하고 있어요."
         SFSpeechRecognizer.requestAuthorization { [weak self] authorization in
@@ -68,7 +95,9 @@ import UIKit
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
             self.request = request
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer) }
+            let review = reviewEnabled ? try VoiceReviewCapture(format: format) : nil
+            reviewCapture = review
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer); review?.append(buffer) }
             tapInstalled = true
             recognition = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 let text = result?.bestTranscription.formattedString
@@ -106,7 +135,9 @@ import UIKit
         let mode = turn.mode
         guard turn.advance(token, from: [.listening, .finalizing], to: mode == .conversation ? .waiting : .ready) else { return }
         timeout?.cancel(); stopInput(); request?.endAudio(); recognition?.cancel()
-        recognition = nil; request = nil; deactivateAudio()
+        recognition = nil; request = nil
+        reviewURL = reviewCapture?.finish(); canReplayOwnVoice = reviewURL != nil
+        deactivateAudio()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { fail("인식된 말이 없어요. 다시 말하거나 글로 적어 주세요."); return }
         if mode == .dictation { status = "입력창에 담았어요. 확인하고 직접 기록하거나 보내 주세요." }
         else { status = "답변을 기다리고 있어요." }
@@ -131,7 +162,18 @@ import UIKit
         turn.stop(); timeout?.cancel(); timeout = nil; authorizedToken = nil
         utteranceID = nil; speaker.stopSpeaking(at: .immediate)
         stopInput(); request?.endAudio(); recognition?.cancel(); request = nil; recognition = nil
+        reviewPlayer?.stop(); reviewPlayer = nil; reviewURL = nil; reviewCapture = nil; canReplayOwnVoice = false; reviewEnabled = false
         transcript = { _ in }; final = { _, _ in false }; deactivateAudio(); status = ""
+    }
+    func replayOwnVoice() {
+        guard !isCapturing, turn.phase != .waiting, turn.phase != .speaking, let reviewURL else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try AVAudioSession.sharedInstance().setActive(true)
+            let player = try AVAudioPlayer(contentsOf: reviewURL); reviewPlayer = player
+            guard player.play() else { throw StudioError.message("녹음을 재생하지 못했어요.") }
+            status = "내 목소리를 다시 듣고 있어요. 다른 화면으로 이동하거나 다음 녹음을 시작하면 원음을 지워요."
+        } catch { status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요." }
     }
     func fail(_ message: String) { stop(); status = message }
     private func stopInput() {
