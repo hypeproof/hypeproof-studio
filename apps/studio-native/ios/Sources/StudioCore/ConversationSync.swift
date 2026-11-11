@@ -45,6 +45,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     public var status: String
     public var created_at: Double
     public var updated_at: Double
+    public var expectedRevision: Int?
     public static func pending(_ text: String) throws -> SharedRequest {
         let checked = try checkedText(text)
         let now = Date().timeIntervalSince1970 * 1000
@@ -130,9 +131,26 @@ public struct ConversationCache: Codable, Sendable {
         let acknowledged = request.map { pending in value.acknowledged_id == pending.id || state.messages.contains(where: { $0.id == pending.id && $0.role == "user" && $0.content == pending.text }) } ?? false
         if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
     }
-    public mutating func enqueue() throws {
+    public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
-        request = try .pending(draft); draft = ""
+        request = try .pending(draft)
+        if reflection { request?.expectedRevision = cursor }
+        draft = ""
+    }
+}
+/// A voice turn follows its own request, never a newer turn from another device.
+public enum ConversationVoiceReply: Equatable {
+    case waiting, speak(String), finished, needsAttention
+    public static func resolve(id: String, request: SharedRequest?, messages: [SharedMessage], sending: Bool, readAloud: Bool) -> Self {
+        guard let request, request.id == id else { return .needsAttention }
+        if request.status == "completed" {
+            if !readAloud { return .finished }
+            guard let index = messages.firstIndex(where: { $0.id == id && $0.role == "user" }),
+                  let answer = messages.dropFirst(index + 1).prefix(while: { $0.role != "user" }).last(where: { $0.role == "assistant" }) else { return .needsAttention }
+            return .speak(answer.content)
+        }
+        if ["pending", "running"].contains(request.status) || (request.status == "local" && sending) { return .waiting }
+        return .needsAttention
     }
 }
 public struct DeviceSignIn: Decodable, Sendable {
@@ -221,7 +239,8 @@ public final class ConversationService: @unchecked Sendable {
         let (data, _) = try await request("/v1/me/reflection", token: token)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
-    public func reflect(_ value: SharedRequest, revision: Int, token: String) async throws -> PersonalReflection {
+    public func reflect(_ value: SharedRequest, token: String) async throws -> PersonalReflection {
+        guard let revision = value.expectedRevision, revision >= 0 else { throw SyncFailure.http(409, "reflection_changed") }
         let (data, _) = try await request("/v1/me/reflection/turns", method: "POST", body: ["id": value.id, "text": value.text, "revision": revision], token: token)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }

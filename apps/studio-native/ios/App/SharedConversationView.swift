@@ -74,12 +74,12 @@ struct SharedConversationView: View {
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
         }
         .onChange(of: model.selected) { _, _ in voice.stop(); voiceConsentAccepted = false; voiceConsentID = nil; voiceConsent = false }
-        .onChange(of: model.cache.request?.status) { _, status in
-            if ["failed", "unknown", "cancelled"].contains(status ?? ""), voice.turn.phase == .waiting { voice.fail("음성 답변을 기다리는 것을 멈췄어요. 대화의 요청 상태를 확인해 주세요.") }
-            if status == "completed" { speakCompletedReply() }
-        }
-        .onChange(of: model.cache.messages.last) { _, _ in
-            if model.cache.request?.status == "completed" { speakCompletedReply() }
+        .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
+        .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
+        .onChange(of: model.cache.messages.last) { _, _ in reconcileVoiceReply() }
+        .onChange(of: speakAnswers) { _, enabled in
+            if !enabled && voice.turn.phase == .speaking { voice.stop(); voiceRequestID = nil }
+            else { reconcileVoiceReply() }
         }
         .onChange(of: reviewRecording) { _, enabled in if !enabled { voice.stop() } }
     }
@@ -290,12 +290,14 @@ struct SharedConversationView: View {
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
         })
     }
-    private func speakCompletedReply() {
-        guard let requestID = voiceRequestID, model.cache.request?.id == requestID,
-              let id = model.selected, speakAnswers,
-              let userIndex = model.cache.messages.firstIndex(where: { $0.id == requestID && $0.role == "user" }) else { return }
-        let following = model.cache.messages.dropFirst(userIndex + 1).prefix(while: { $0.role != "user" })
-        guard let answer = following.last(where: { $0.role == "assistant" }) else { return }
-        voiceRequestID = nil; voice.reply(answer.content, projectID: id)
+    private func reconcileVoiceReply() {
+        guard voice.turn.phase == .waiting, let requestID = voiceRequestID, let id = model.selected else { return }
+        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers) {
+        case .waiting: break
+        case .speak(let text): voiceRequestID = nil; voice.reply(text, projectID: id)
+        case .finished: voiceRequestID = nil; voice.stop()
+        case .needsAttention:
+            voiceRequestID = nil; voice.fail("음성 답변 기다리기를 멈췄어요. 보낸 말과 전송 상태를 대화에서 확인해 주세요.")
+        }
     }
 }

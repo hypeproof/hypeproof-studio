@@ -2,6 +2,32 @@ import XCTest
 @testable import StudioCore
 
 final class ConversationSyncTests: XCTestCase {
+    func testReflectionOutboxKeepsOriginalRevisionAcrossRestartAndOtherDeviceUpdates() throws {
+        var cache = ConversationCache(); cache.cursor = 4; cache.draft = "내가 처음 보낸 생각"
+        try cache.enqueue(reflection: true)
+        let originalID = cache.request?.id
+        cache = try JSONDecoder().decode(ConversationCache.self, from: JSONEncoder().encode(cache))
+        let newer = try JSONDecoder().decode(PersonalReflection.self, from: Data(#"{"state":{"id":"personal-reflection","revision":8,"messages":[],"has_earlier":false,"turn":null},"opening":"Question?","hint":"Optional"}"#.utf8))
+        try cache.applyReflection(newer)
+        XCTAssertEqual(cache.cursor, 8)
+        XCTAssertEqual(cache.request?.id, originalID)
+        XCTAssertEqual(cache.request?.expectedRevision, 4)
+        let legacy = try JSONDecoder().decode(SharedRequest.self, from: Data(#"{"id":"old","text":"Preserved","status":"local","created_at":1,"updated_at":1}"#.utf8))
+        XCTAssertNil(legacy.expectedRevision)
+    }
+    func testVoiceWaitingEndsForRejectedReplacedAndSilentCompletedRequests() throws {
+        var request = try SharedRequest.pending("내 이야기")
+        let id = request.id
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: true, readAloud: true), .waiting)
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: false, readAloud: true), .needsAttention)
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: nil, messages: [], sending: false, readAloud: true), .needsAttention)
+        request.id = "other-device"; request.status = "running"
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: false, readAloud: true), .needsAttention)
+        request.id = id; request.status = "completed"
+        let messages = [SharedMessage(id: id, role: "user", content: request.text, created_at: 1), SharedMessage(id: id + "-answer", role: "assistant", content: "어떤 순간이었나요?", created_at: 2), SharedMessage(id: "next", role: "user", content: "다른 이야기", created_at: 3), SharedMessage(id: "next-answer", role: "assistant", content: "다른 답변", created_at: 4)]
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: messages, sending: false, readAloud: true), .speak("어떤 순간이었나요?"))
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: messages, sending: false, readAloud: false), .finished)
+    }
     func testReflectionReconcilesAcrossDevicesWithoutDiscardingDraftOrUnknownOutbox() throws {
         var cache = ConversationCache(); cache.draft = "다음 생각"; try cache.enqueue()
         let pendingID = cache.request?.id

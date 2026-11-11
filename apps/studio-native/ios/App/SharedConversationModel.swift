@@ -276,7 +276,7 @@ private struct SharedCacheFile: Codable {
     }
     func send() {
         guard canSend, !syncing, let id = selected else { return }
-        do { try edit(id) { try $0.enqueue() } } catch { self.error = error.localizedDescription; return }
+        do { try edit(id) { try $0.enqueue(reflection: id == Self.personalID) } } catch { self.error = error.localizedDescription; return }
         retry()
     }
     func retry() {
@@ -286,7 +286,7 @@ private struct SharedCacheFile: Codable {
             do {
                 let credential = try await token()
                 if id == Self.personalID {
-                    let result = try await service.reflect(request, revision: entries[id]?.cursor ?? 0, token: credential)
+                    let result = try await service.reflect(request, token: credential)
                     guard epoch == attempt else { return }
                     try applyReflection(result)
                 } else {
