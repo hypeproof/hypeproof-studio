@@ -34,7 +34,7 @@ struct StudioHome: View {
                     VStack(alignment: .leading, spacing: 24) {
                         Text("생각을 실천으로").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         if let project = model.project {
-                            Text(project.messages.isEmpty ? "마음에 남은 장면이\n있나요?" : project.title).font(.largeTitle.bold()).accessibilityIdentifier("projectTitle")
+                            Text(project.messages.isEmpty ? "요즘 어떤 일에\n시간을 많이 쓰세요?" : project.title).font(.largeTitle.bold()).accessibilityIdentifier("projectTitle")
                             if let revision = project.revisions.last {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("내가 확인한 의도 · \(revision.revision)").font(.caption.bold())
@@ -71,9 +71,9 @@ struct StudioHome: View {
                                 Button { leaveComposer(); showIntent = true } label: { Label("지금의 의도 정리하기", systemImage: "square.and.pencil") }.buttonStyle(.bordered).accessibilityIdentifier("openIntent")
                             }
                         } else {
-                            Text("질문에서 시작하는\n나의 다음 한 걸음").font(.largeTitle.bold())
+                            Text("요즘 어떤 일에\n시간을 많이 쓰세요?").font(.largeTitle.bold())
                             introduction
-                            Button("첫 생각 기록하기") { model.newProject() }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground)).controlSize(.large).accessibilityIdentifier("startProject").disabled(model.readOnly)
+                            Button("내 이야기 시작하기") { model.newProject(); composerFocused = true }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground)).controlSize(.large).accessibilityIdentifier("startProject").disabled(model.readOnly)
                             if let error = model.error { Text(error).foregroundStyle(.red) }
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -270,7 +270,7 @@ struct StudioHome: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("주변 사람의 작은 불편, 바꾸고 싶은 일, 아직 이름 붙이지 못한 생각부터 시작해요.").font(.body).foregroundStyle(.secondary)
             Text("관찰 → 다른 관점 → 작은 실천 → 성찰").font(.callout.weight(.medium))
-            Text("동양철학의 성찰과 배움에서 출발합니다. 답을 정하는 사람은 나예요.").font(.footnote).foregroundStyle(.secondary)
+            Text("내 경험을 돌아보고, 다음 선택을 조금 더 분명하게 만들어 봐요. 답을 정하는 사람은 나예요.").font(.footnote).foregroundStyle(.secondary)
         }
     }
     private var intentSheet: some View {

@@ -292,6 +292,17 @@ export async function activate(context: vscode.ExtensionContext) {
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
   mobileConversations = registerMobileConversation(context, provider, accounts);
+  provider.setReflectionAccount(accounts);
+  const reflectionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,66);
+  reflectionStatus.text = '$(comment-discussion) 나의 질문';
+  reflectionStatus.tooltip = '같은 계정의 휴대전화와 나를 알아가는 대화';
+  reflectionStatus.command = 'hypeproof-chat.personalReflection';
+  if(accounts)reflectionStatus.show();
+  const reflectionTimer=setInterval(()=>{void provider.refreshPersonalReflection().catch(()=>{});},6000);
+  context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
+    try { await provider.openPersonalReflection(); }
+    catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
+  }));
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
   const showStoreQuest = async (skill: { title: string; steps: import("./skillStoreProtocol").StoreStepView[]; connections?: import("./skillStoreProtocol").StoreLocalConnections }) => {
     const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);

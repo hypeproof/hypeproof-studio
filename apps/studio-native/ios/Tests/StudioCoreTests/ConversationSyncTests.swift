@@ -2,6 +2,21 @@ import XCTest
 @testable import StudioCore
 
 final class ConversationSyncTests: XCTestCase {
+    func testReflectionReconcilesAcrossDevicesWithoutDiscardingDraftOrUnknownOutbox() throws {
+        var cache = ConversationCache(); cache.draft = "다음 생각"; try cache.enqueue()
+        let pendingID = cache.request?.id
+        func snapshot(_ role: String = "assistant", revision: Int = 2) throws -> PersonalReflection {
+            let json = "{\"state\":{\"id\":\"personal-reflection\",\"revision\":\(revision),\"messages\":[{\"id\":\"other-device\",\"role\":\"\(role)\",\"content\":\"최근 마음에 남은 순간은?\",\"created_at\":1}],\"has_earlier\":false,\"turn\":null},\"opening\":\"요즘 어떤 일에 시간을 많이 쓰세요?\",\"hint\":\"정리되지 않아도 괜찮아요.\"}"
+            return try JSONDecoder().decode(PersonalReflection.self, from: Data(json.utf8))
+        }
+        try cache.applyReflection(snapshot())
+        XCTAssertEqual(cache.request?.id, pendingID)
+        cache.draft = "아직 보내지 않은 말"
+        XCTAssertThrowsError(try cache.applyReflection(snapshot("tool", revision: 3)))
+        XCTAssertThrowsError(try cache.applyReflection(snapshot(revision: 1)))
+        XCTAssertEqual(cache.messages.count, 1); XCTAssertEqual(cache.cursor, 2)
+        XCTAssertEqual(cache.draft, "아직 보내지 않은 말")
+    }
     func testExportIncludesNeverSavedConversationAfterNavigation() throws {
         let saved = ConversationCache()
         let result = ConversationCache.exportSnapshot(entries: ["b": saved], edits: ["a": ["draft": "저장 실패한 말", "goal": "내가 바라는 변화"], "b": ["draft": "다른 대화"]])

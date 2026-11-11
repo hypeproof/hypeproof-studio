@@ -23,7 +23,8 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : id === 'node:fs/promises' && beforeReadDir ? { ...require(id), readdir: async (...args) => { await beforeReadDir(...args); return require(id).readdir(...args); } } : require(id), console, Buffer, structuredClone, process, setTimeout, clearTimeout, setInterval, clearInterval, AbortController, AbortSignal, URL, fetch, TextEncoder, TextDecoder, crypto: webcrypto });
   const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore } = module.exports;
   const activity = { id: 'synthetic-personal-a', workspace: root, kind: 'personal', name: '내 작업' };
-  const raw = { globalStorageUri: { fsPath: root }, workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => undefined, keys: async () => [] } };
+  const global = new Map();
+  const raw = { globalState: { get: (key, fallback) => global.get(key) ?? fallback, update: async (key,value) => {global.set(key,value);} }, globalStorageUri: { fsPath: root }, workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => undefined, keys: async () => [] } };
   const connections = new ActivityConnections(raw, () => 'http://127.0.0.1/v1', () => root, async () => ({}));
   connections.active = activity;
   const context = connections.wrap();

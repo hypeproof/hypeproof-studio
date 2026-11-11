@@ -1,4 +1,6 @@
 import { sharedTexts, type MobileScope } from "./mobileConversation";
+import type { AccountSession } from './accountSession';
+import { readReflection, reflectionFailure, REFLECTION_BINDING_KEY, type ReflectionBinding, type ReflectionSnapshot } from './personalReflection';
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
@@ -631,11 +633,108 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
 
   private mobileTurn?: { id: string; failed: boolean };
+  private reflectionAccounts?: AccountSession;
+  private reflectionRefreshing = false;
+  setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
+  private reflectionStreams = new Map<string,{binding:ReflectionBinding;id:string}>();
+  private reflectionBindings(): ReflectionBinding[] { return this.context.globalState.get<ReflectionBinding[]>(REFLECTION_BINDING_KEY,[]); }
+  private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
+    await this.context.globalState.update(REFLECTION_BINDING_KEY,[...this.reflectionBindings().filter(v=>v.task!==b.task||v.activity!==b.activity||v.workspace!==b.workspace),b]);
+  }
+  private reflectionBinding(): ReflectionBinding | undefined {
+    const scope=this.mobileConversationScope(true);
+    return scope ? this.reflectionBindings().find(b=>b.activity===scope.activity&&b.workspace===scope.workspace&&b.task===scope.task) : undefined;
+  }
+  private async applyReflectionSnapshot(b: ReflectionBinding, value: ReflectionSnapshot): Promise<void> {
+    if (this.reflectionBinding()?.task !== b.task || await this.reflectionAccounts?.conversationSession() !== b.session) throw Error('계정이나 열린 대화가 바뀌었어요.');
+    const held=this.reflectionBinding()!;
+    if (value.state.revision < held.revision) throw Error('이전 대화 응답을 적용하지 않았어요.');
+    const existing = new Set(this.getHistory().map(m => m.id));
+    const incoming: ChatMessage[] = value.state.messages.filter(m => !existing.has(m.id)).map(m => ({id:m.id,role:m.role,content:m.content,createdAt:m.created_at}));
+    if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
+    if (incoming.length) await this.appendHistory(incoming);
+    const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
+    await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    await this.post({type:'history',messages:this.getHistory()});
+  }
+  async openPersonalReflection(): Promise<void> {
+    const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
+    if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
+    if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
+    const scope=this.mobileConversationScope(true);
+    if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
+    let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
+    if(!b){
+      const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
+      if(accepted!=='내 이야기 시작하기')return;
+    }
+    const value=readReflection(await accounts.reflectionRequest(session));
+    if(!b){
+      await this.handleTaskMessage({type:'taskCreate',taskId:scope.task} as WebviewMessage);
+      const next=this.mobileConversationScope(true);
+      if(!next||next.task===scope.task||next.activity!==scope.activity)throw Error('질문 대화를 열지 못했어요. 기존 작업은 보존했어요.');
+      b={session,activity:next.activity,workspace:next.workspace,task:next.task,revision:0};
+      await this.saveReflectionBinding(b);
+      await this.currentTaskStore()?.rename(next.task,'나를 알아가는 대화').then(view=>this.post({type:'taskWorkspaceState',view}));
+    } else if(b.task!==scope.task) {
+      await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
+    }
+    await this.applyReflectionSnapshot(b,value);
+  }
+  async refreshPersonalReflection(): Promise<void> {
+    const b=this.reflectionBinding();
+    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)?.ready)return;
+    this.reflectionRefreshing=true;
+    try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
+    finally { this.reflectionRefreshing=false; }
+  }
+  private async stopPersonalReflection(streamId:string):Promise<boolean> {
+    const held=this.reflectionStreams.get(streamId);if(!held)return false;
+    try {
+      const value=readReflection(await this.reflectionAccounts!.reflectionRequest(held.binding.session,'/turns/'+held.id+'/cancel',{}));
+      if(value.state.turn?.id!==held.id||!['cancelled','completed','failed','unknown'].includes(value.state.turn.status))throw Error('not acknowledged');
+      this.activeStreams.get(streamId)?.abort();
+      await this.post({type:'streamStopped',streamId});
+      await this.applyReflectionSnapshot(held.binding,value);
+      void vscode.window.showInformationMessage('답변 받기를 멈췄어요. 이미 처리 중이던 AI 사용 비용은 발생할 수 있어요.');
+    } catch { void vscode.window.showWarningMessage('중단 여부를 확인하지 못했어요. 답변 상태를 확인하고 있어요.'); }
+    return true;
+  }
+  private async sendPersonalReflection(msg: Extract<WebviewMessage,{type:'sendMessage'}>): Promise<boolean> {
+    const b=this.reflectionBinding();if(!b)return false;
+    const accounts=this.reflectionAccounts;
+    if(!accounts||this.hasActiveStream()||this.reflectionRefreshing||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:this.reflectionRefreshing?'대화를 확인 중이에요. 잠시 뒤 다시 보내 주세요.':'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
+    }
+    if(b.pending&&b.pending.text!==msg.text){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
+    }
+    const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
+    await this.saveReflectionBinding({...b,pending});
+    const id=pending.id,streamId=randomId(),controller=new AbortController();
+    this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
+    await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});
+    try {
+      const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
+      if(!controller.signal.aborted)await this.post({type:'streamEnd',streamId});
+      await this.applyReflectionSnapshot(b,value);
+      if(value.state.turn?.status==='failed')void vscode.window.showWarningMessage('보낸 이야기는 저장됐지만 답변을 받지 못했어요. 자동으로 다시 요청하지 않았어요.');
+    } catch(error) {
+      if(!controller.signal.aborted){
+        await this.post({type:'streamError',streamId,error:reflectionFailure(error)});
+        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
+        try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
+        if(!this.getHistory().some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
+      }
+    } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);}
+    return true;
+  }
   /** Existing personal store only; no classroom, temporary task or path leaves this boundary. */
-  mobileConversationScope(): MobileScope | undefined {
+  mobileConversationScope(includeReflection = false): MobileScope | undefined {
     const activity=activityConnections(this.context)?.current, store=this.currentTaskStore();
     const view=store?.getView();const task=view?.activeTaskId?store?.getTask(view.activeTaskId):undefined;
     if(!activity||activity.kind!=='personal'||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
+    if(!includeReflection&&this.reflectionBindings().some(b=>b.activity===activity.id&&b.workspace===store.scope&&b.task===task.id))return;
     return {activity:activity.id,workspace:store.scope,task:task.id,title:task.title,
       ready:!this.hasActiveStream()&&!this.taskChanging&&!this.connectionChanging&&!this.turnRestoreBusy&&!this.clearingHistory&&!this.verifySession?.running&&!this.opsHold&&!this.interruptedHistory
         &&!task.draft.text.trim()&&!task.draft.images?.length&&!task.draft.queued&&!task.draft.inlineEdit&&!task.draft.recovered?.length&&!task.draft.imports?.length&&!this.annotationBatch.size&&!this.draftSources?.size&&!this.queuedSources?.size,
@@ -8607,6 +8706,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
+        if (await this.sendPersonalReflection(msg)) return;
         // REQ-STUDIO-PROBLEM-REPORT level 3 — a frustrated message offers the report form; it sends nothing.
         if (typeof msg.text === "string" && this.problemTracker?.frustration(msg.text)) void this.post({ type: "problemReportOffer", offer: { reason: "frustration" } });
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
@@ -8626,6 +8726,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.imageStaging?.discard(msg.stageId);
         return;
       case "selectAnswerAttempt": {
+        if(this.reflectionBinding())return;
         if (this.hasActiveStream() || this.pendingSends || this._instructorMode.isInstructor ||
             msg.activityId !== activityConnections(this.context)?.current?.id ||
             msg.taskId !== (this.currentTaskStore?.()?.getView().activeTaskId ?? undefined)) return;
@@ -8647,6 +8748,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "retryMessage":
+        if(this.reflectionBinding()){await this.refreshPersonalReflection();await this.post({type:'inputRejected',text:msg.prompt,images:msg.images,notice:'최신 대화를 확인했어요. 질문 입력란에서 보낼 내용을 확인해 주세요.'});return;}
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
         // 아직 못 받았어요").
@@ -8681,6 +8783,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "stopDelegations": {
+        if(await this.stopPersonalReflection(msg.streamId))return;
         const control=this.delegationControls.get(msg.streamId);
         if(!this.activeStreams.has(msg.streamId))return;
         if(control?.scope===JSON.stringify([this.turnRequestScope(),this.profileGeneration]))control.stop();
@@ -8693,6 +8796,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
+        if(await this.stopPersonalReflection(msg.streamId))return;
         this.activeStreams.get(msg.streamId)?.abort();
         this.automationConversation?.cancel();
         // #497 — abort() alone tells the webview NOTHING. handleSend and

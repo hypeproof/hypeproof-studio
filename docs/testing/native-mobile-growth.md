@@ -62,3 +62,17 @@ Source controls: `npm run test:mobile-conversation --prefix extensions/hypeproof
 provider tests and opt-in `test:mobile-conversation-service` against exact Service
 source; Swift ConversationSyncTests; native UI tests. The Service must publish
 account-api@2 before the desktop release dependency gate admits the new RC.
+
+
+## Account-owned reflection acceptance (Studio #3725)
+
+Use the existing Studio desktop RC plus the native iPhone candidate and deployed Service reflection-api@1 / migration 0073. The older selected-build-task checks above remain separate.
+
+1. Sign into the same account with an active entitlement. iPhone offers an everyday question; no age/job form or manual computer pairing step appears. Consent discloses server storage and AI processing.
+2. With the desktop closed, send a personal experience by text; confirm one Service answer. Open the existing desktop, select “나의 질문”, and observe the same original message IDs in its normal task store.
+3. Switch to a build task and back using “나의 질문”. No duplicate reflection task and no SDK tool execution for the personal conversation. A concrete making request is directed to a normal new task.
+4. Disconnect after send, then retry/reconnect: words remain, the same ID is reconciled and no extra AI call is made. Modify the account during a pending response: old output is never imported.
+5. Stop an active response: late output is fenced; submitted words remain. Explain that already-dispatched processing can cost money. Actual microphone/voice checks remain physical-device gates.
+6. Read a stale or malformed snapshot, including duplicate IDs: retain original history and draft. Export/erasure includes server-stored personal reflection.
+
+Source checks: `test:personal-reflection`, `test:mobile-conversation`, Swift `ConversationSyncTests`, `StudioShellTests`, Service `test:conversation-sync`. Type/build/fixture success is not a judgment of question quality or installed-device acceptance. Local iOS verification on 2026-11-11 is BLOCKED by missing Xcode; use the repository's native macOS CI and retain that run's exact source identity.
