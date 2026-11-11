@@ -103,7 +103,8 @@ recording never continues behind another screen. A failed or cancelled service
 reply preserves the already saved human message; it is not automatically replayed.
 
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
-No raw audio is stored or uploaded by the app. Recognized text is a local draft,
+No raw audio is written to files or uploaded by the app. Optional self-listening
+retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,
 then follows existing project-scoped AI consent/admission when explicitly sent or
 when a consented conversation finalizes. On-device speech may be unavailable
 because of OS/language assets; the text path is always the recovery route.
@@ -147,7 +148,7 @@ person can skip a question, request another perspective, or choose a small
 experiment. Reflection, purpose and the user's wording remain editable.
 
 Voice offers editable dictation and explicit final-transcript send/read-aloud.
-Optional self-listening is memory-only, bounded to30seconds, off by default,
+Optional self-listening is memory-only, bounded to 30 seconds, off by default,
 and deleted on stop/background/navigation/next capture. A completed answer is
 read only after the matching request and original user message are identified.
 

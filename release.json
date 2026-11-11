@@ -9,7 +9,8 @@
       "surface": "studio-api"
     },
     "account-api": {
-      "line": "2"
+      "line": "2",
+      "surface": "account-api"
     }
   }
 }

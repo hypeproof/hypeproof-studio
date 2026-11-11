@@ -916,7 +916,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "745bfdc53933618197846aa31d3e4a228fa713b28c1cea0bbca61a50d940284c",
+      "sha256": "b195365d17a0f83abcd0e5a1ab927717688534a15d9382b72ebc65cc236a29de",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
