@@ -18161,6 +18161,160 @@
           "path": "docs/testing/native-mobile-growth.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-LESSON-SETTINGS-CHANGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-SETTINGS-CHANGE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-SETTINGS-CHANGE",
+        "ST-IMP-CAPABILITY-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonSettingsChange.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonSettingsChange.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/lessonSettingsChange.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-SETTINGS-CHANGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-SETTINGS-CHANGE",
+        "ST-IMP-LESSON-SETTINGS-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change.test.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-LAB-CONNECT",
+      "stage": "requirement",
+      "label": "Chalk instructor access through the Lab login, never a pasted issuer",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-BOA-DISTRIBUTION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/README.md",
+          "section": "## Lab login connection"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-LAB-CONNECT",
+      "stage": "implementation",
+      "label": "Chalk connect routes, sealed session and token-free instructor pages",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LAB-CONNECT"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/connect.ts"
+        },
+        {
+          "path": "chalk/src/lib/connect-panel.ts"
+        },
+        {
+          "path": "chalk/src/routes/connect.ts"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/routes/lab-tokens.ts"
+        },
+        {
+          "path": "chalk/src/lib/service-read.ts"
+        },
+        {
+          "path": "chalk/src/env.ts"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "chalk/wrangler.toml"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/board.html"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/budgets.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-LAB-CONNECT",
+      "stage": "test",
+      "label": "Connect flow, session-only Bearer and no issuer in URLs, bodies or logs",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LAB-CONNECT",
+        "ST-IMP-CHALK-LAB-CONNECT"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/connect.test.mjs"
+        },
+        {
+          "path": "chalk/test/harness/connect.mjs"
+        },
+        {
+          "path": "chalk/test/issuer-forget.browser.mjs"
+        }
+      ]
     }
   ]
 }

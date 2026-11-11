@@ -1474,6 +1474,22 @@ collection contract.
 
 **NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).
 
+<a id="adm-11-settings-change-run"></a>
+
+## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)
+
+요구: [수업 설정 변경 알림](../requirements/classroom-admin.md#adm-11-settings-change). Service 변경 없음.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `extensions/hypeproof-chat/test/lesson-settings-change-host.smoke.mjs` (`npm test`의 smoke 묶음) | 실제 `ChatPanelProvider`를 esbuild로 묶어 가짜 vscode 위에서 돌린다: 실제 `postConfig`·`handleMessage`·U3 사전 확인 채택(`adoptPreflightProfile`), 창 여러 개가 같은 globalState를 쓴다. 첫 로드는 줄 없음·기준선 저장(토큰·activity id·시작 문장 글 없음) · 승인 방식+계획 먼저 변경은 한 줄 `선생님이 도움 방식을 바꿨어요: 승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기 · 계획 먼저 켜짐 → 꺼짐`, 마지막 저장 메시지 뒤 · 같은 프로필 재전송은 같은 줄(같은 id) · 보기 전 다시 열기는 다시 보임 · 접힌 패널에서 그려진 것은 본 것이 아님(다시 열면 다시 보임), 패널이 보이면 본 것으로 셈 · 본 뒤 다시 열기는 반복 없음 · 시작 문장 변경은 `시작 문장 바뀜`, 글은 config 어디에도 없음 · 보기 전 원래대로 돌아가면 줄 없음 · 질문 실행 중 변경은 줄 없음·기다림, 실행 중인 질문의 승인 방식 그대로, 끝나면 줄 · U3 사전 확인 채택은 실행 중이어도 바로 줄, 시작하는 질문 앞 · 런타임 설정만 바뀌면 줄 없음 · 같은 기기의 다른 수업 좌석은 자기 기준선 · 한 세션의 agent-sdk→proxy 전환은 줄을 만들지도, 다음 세션의 능력 변경을 가리지도 않음 · 실제 `editImage`가 찾은 변경은 그 작업이 끝날 때 줄 · 화면 보임 hook 두 곳과 질문·이미지 편집 끝의 다시 보내기 배선 · 숨은 동안 좌석이 바뀌면 앞 좌석의 줄은 그대로 남음 · 실행 중으로 보였지만 끝난 뒤에 끝난 설정 보내기가 줄을 스스로 다시 보냄 · 개인 좌석은 줄 없음 | 아래 실행 기록 |
+| `extensions/hypeproof-chat/test/lesson-settings-change.test.tsx` (`scripts/run-tsx-tests.mjs`) | 실제 `ChatPanel`을 mini-dom에 올린다: 줄 하나, 순서 `u1, a1, 줄, u2`(다음 질문 앞) · 줄 자체는 live region이 아님 · 패널에 늘 있는 `response-announcer`(`role=status`)가 그 글을 한 번 가짐, 다시 그려도 그대로 · 메시지 말풍선·이름·아바타·버튼·dialog 없음 · 보이는 동안 `lessonSettingsChangeSeen` 한 번, 다시 그려도 한 번 · 본 줄은 그려지지만 알림 영역에 나오지 않고 보고 없음 · 숨겨진 문서에서는 보고 안 함, 보이면 한 번 · 빈 대화에서도 그려짐 · 강사 화면에는 없음 · CSS: Panel 배경 토큰, 14px 캡션 단계, 토큰만 | 아래 실행 기록 |
+| `extensions/hypeproof-chat/test/lesson-settings-change.test.mjs` (`npm run test:lesson-settings-change`) | 순수 규칙: 좌석 판정(수업·lesson·binding / 강사·로컬·개인·알 수 없음 제외) · 순서와 문구(`기본`, `해요`/`물어봐요`/`안 해요`, `켜짐`/`꺼짐`, `바뀜`; 묻는지만 바뀐 것은 줄 없음) · 학생 입력이 다르면 능력 비교 안 함 · 같은 변경 같은 id, 추가 변경은 옛 기준선에서 한 줄, 되돌리면 지움 · 실행 중 지연 · seen 한 번만, 모르는 id 무시 · 깨진 기록은 조용히 기준선 재설정 · 좌석 32개 상한 · 배치(메시지 뒤 / 같은 작업의 빈 대화는 맨 위 / 자리를 잃은 안 본 줄은 맨 아래, 본 줄은 안 그림) | 아래 실행 기록 |
+
+실행 기록(호스트·SHA·명령·exit)은 PR 본문에 있다. base(`caacedfb5`)의 제품 코드에 이 시험들을 돌리면 host 시험은 `baseline persisted in globalState`에서, 화면 시험은 `one line, got 0`에서 실패한다(순수 규칙 시험은 모듈이 없어 불러오지 못한다).
+
+**NOT RUN**: 설치된 Studio 창에서 강사가 Chalk로 설정을 바꾼 뒤 학생 화면 확인, 실제 U3 운영(회차 flag `ops_distribute` 기본 OFF), 실제 화면 읽기 프로그램의 낭독, Windows. VS Code가 접힌 사이드바 webview에 `visibilityState`를 어떻게 알리는지는 재지 않았다: 그래서 ‘본 것’은 호스트의 `view.visible`·편집기 패널 `visible`로 판정하고, 숨은 동안 그려진 줄은 패널이 보일 때 센다.
+
 <a id="adm-05-help-notice-run"></a>
 
 ## 새 도움 요청 알림과 주의 목록 행 · 2026-11-11 (ADM-05 · CGP-AGENT-R-024 · CGP-AGENT-D-011)

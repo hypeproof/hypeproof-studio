@@ -344,6 +344,8 @@ function makeHost(context, profile, provider = proto) {
     draftWrites: Promise.resolve(),
     loadAccess: async () => {},
     applyPendingFundingSelection: proto.applyPendingFundingSelection,
+    // CGP-SHELL-R-024 — postConfig asks the classroom settings-change line (no globalState here, so it draws none).
+    observeLessonSettings: proto.observeLessonSettings,
     ensureProfile: async () => profile,
     lastProfileFailure: null,
     refreshCrDirectorContext: async () => {},

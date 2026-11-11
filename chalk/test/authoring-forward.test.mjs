@@ -1,7 +1,8 @@
 // Chalk must remain a forwarding surface for authoring, including reads.
 import assert from 'node:assert/strict';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-const { default: chalk } = await import('../src/index.ts');
+import { withBearerAsConnection } from './harness/connect.mjs';
+const chalk = withBearerAsConnection((await import('../src/index.ts')).default);
 const path='/admin/cohorts/test-cohort/authoring/course-1';
 const env={HPS_SIGNING_SECRET:'test-secret-0123456789abcdef',ENVIRONMENT:'dev',HPS_SERVICE_ORIGIN:'https://service.test'};
 const original=globalThis.fetch;

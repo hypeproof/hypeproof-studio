@@ -6,6 +6,8 @@ import { createServer } from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// The page holds no token: its requests carry a Lab-connected session (harness/connect.mjs).
+import { TEST_CONNECT_SECRET, sessionCookie } from './harness/connect.mjs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
 const guidance = '저장 결과를 확인하지 못했습니다. 입력한 내용은 이 화면에 남아 있습니다. 내용을 바꾸지 말고 ‘초안 저장’을 다시 눌러 주세요.';
@@ -35,7 +37,7 @@ export async function runAuthoringSaveRecoveryBrowser() {
   const server = createServer(async (req, res) => {
     try {
       if (req.method === 'GET' && !req.url.startsWith('/admin/')) {
-        const r = await app.fetch(new Request('http://127.0.0.1' + req.url), { ENVIRONMENT: 'test' });
+        const r = await app.fetch(new Request('http://127.0.0.1' + req.url, { headers: { cookie: await sessionCookie('synthetic-issuer') } }), { ENVIRONMENT: 'test', HPS_CHALK_CONNECT_SECRET: TEST_CONNECT_SECRET });
         res.writeHead(r.status, Object.fromEntries(r.headers));
         res.end(Buffer.from(await r.arrayBuffer()));
         return;
@@ -105,8 +107,8 @@ export async function runAuthoringSaveRecoveryBrowser() {
       await browser.send('Page.handleJavaScriptDialog', { accept: true });
     }) : Promise.resolve();
     await bounded(Promise.all([dialog, browser.send('Page.navigate', { url: origin + '/authoring' + query })]), 'independent case navigation');
-    await until(`location.search===${JSON.stringify(query)}&&document.readyState==='complete'&&!!document.getElementById('new')`, 'page ready');
-    await browser.evaluate(`if(!document.getElementById('first-run').hidden)document.getElementById('fr-later').click();for(const [id,value] of [['token','synthetic-issuer'],['cohort','fixture-cohort'],['profile','fixture-profile']]){const e=document.getElementById(id);e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));}window.confirm=()=>true;window.saveClicks=[];document.getElementById('save').addEventListener('click',e=>window.saveClicks.push({trusted:e.isTrusted}));0`);
+    await until(`location.search===${JSON.stringify(query)}&&document.readyState==='complete'&&!!document.getElementById('new')&&!!window.chalkConnection?.current?.connected`, 'page ready');
+    await browser.evaluate(`if(!document.getElementById('first-run').hidden)document.getElementById('fr-later').click();for(const [id,value] of [['cohort','fixture-cohort'],['profile','fixture-profile']]){const e=document.getElementById(id);e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));}window.confirm=()=>true;window.saveClicks=[];document.getElementById('save').addEventListener('click',e=>window.saveClicks.push({trusted:e.isTrusted}));0`);
     await click('new');
     await until(`!document.getElementById('save').disabled`, 'new draft');
     await browser.evaluate(`const title=document.getElementById('title');title.value='보존할 수업 제목';title.dispatchEvent(new Event('input',{bubbles:true}));0`);

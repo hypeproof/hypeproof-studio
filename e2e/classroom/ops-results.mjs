@@ -25,10 +25,11 @@ import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 const { FOLLOWUP_CAPABILITY } = await import('@hypeproof/service-testkit/src/lib/classroom-recovery.ts');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = process.env.HPS_AT41_OUT || path.join(repo, 'e2e/test-results/classroom-ops-results'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const chalkServer = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 chalkServer.listen(0, '127.0.0.1'); await once(chalkServer, 'listening');
@@ -55,7 +56,7 @@ try {
   const commandsNow = () => local.db.prepare('SELECT id,action FROM ops_commands ORDER BY created_at,rowid').all();
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + chalkServer.address().port, page = await browser.newPage({ viewport: { width: 1440, height: 1200 } }); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  const connect = async () => { await page.goto(origin + '/manage'); await page.locator('#token').fill(X); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A6"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
+  const connect = async () => { await page.goto(origin + '/manage'); await signInChalk(page, X); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A6"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
   const box = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`).getByLabel('선택'), none = () => page.locator('#ops-select-none').click();
   const pick = async (list) => { await none(); for (const id of list) await box(id).check(); };
   const checked = async () => { const v = []; for (const s of seats) if (await box(s.seat_id).isChecked()) v.push(s.seat_id); return v; };
@@ -117,7 +118,8 @@ try {
   // ── K1: selected collection. Upload report ≠ server verified; server verified ≠ the whole lesson. ──
   const line2 = (o) => JSON.stringify({ schema_version: 1, ts: new Date().toISOString(), ...o }), record = [line2({ seq: 1, type: 'prompt', turn_id: 't1', text: 'synthetic' }), line2({ seq: 2, type: 'turn_end', turn_id: 't1', status: 'ok' })].join('\n') + '\n';
   const batches = () => local.db.prepare("SELECT b.id FROM classroom_collect_batches b JOIN classroom_collect_scopes s ON s.batch_id=b.id WHERE b.dry_run=0 ORDER BY b.created_at,b.rowid").all().map((r) => r.id);
-  const collect = async (list) => { await pick(list); await page.locator('#ops-pick-collect').click(); await page.locator('#ops-pick-confirm').waitFor(); await page.locator('#ops-pick-kind-record').check(); await page.locator('#ops-pick-go').click(); await page.locator('#ops-last-what').filter({ hasText: '요청 접수' }).waitFor(); return batches().at(-1); };
+  // Wait for the new batch row itself: '요청 접수' can still be on screen from the previous collection.
+  const collect = async (list) => { const before = batches().length; await pick(list); await page.locator('#ops-pick-collect').click(); await page.locator('#ops-pick-confirm').waitFor(); await page.locator('#ops-pick-kind-record').check(); await page.locator('#ops-pick-go').click(); await until('collection recorded', async () => batches().length > before); await page.locator('#ops-last-what').filter({ hasText: '요청 접수' }).waitFor(); return batches().at(-1); };
   const k1 = await collect(['A1', 'A2', 'A4', 'A5']), K1 = 'collect:' + k1; await card(K1).waitFor();
   assert.deepEqual((await lines(K1)).map((l) => l.split(' — ')[0]), ['A1 · student-a', 'A2 · student-b', 'A4 · student-d', 'A5 · student-e'], 'only the selected; A3 and A6 are not recipients');
   assert.match(await line(K1, 'A4'), /\[미전달·만료·대상 변경\] 제외 · 동의 없음 · 회수하지 않음/); assert.match(await line(K1, 'A5'), /\[미전달·만료·대상 변경\] 기기에 전달되지 않음 · 기기 연결 없음/);

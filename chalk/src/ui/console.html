@@ -134,11 +134,9 @@ label small{color:var(--hp-mute)}
   <div class="sub">강사 연결 후 담당 수업을 선택하세요.</div>
 
   <fieldset>
-    <legend>강사 연결 코드</legend>
-    <textarea id="issuer" rows="3" placeholder="eyJjIgi… (Jay에게 받은 강사 토큰)"></textarea>
-    <button id="load">담당 수업 불러오기</button>
-    <button class="ghost" id="forget" type="button">토큰 지우기</button>
-    <div class="help">운영자에게 받은 강사 코드를 입력하세요.</div>
+    <legend>강사 연결</legend>
+    <!--@chalk-connect-->
+    <button id="load" type="button">담당 수업 불러오기</button>
   </fieldset>
 
   <div id="tokenBanner"></div>
@@ -152,20 +150,6 @@ label small{color:var(--hp-mute)}
 const rosterCsv = rosterCsvKit;
 const $ = (id) => document.getElementById(id);
 
-// --- shared with /issuer (issue #65): paste normalization -------------------
-const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-function sanitizeToken(raw) {
-  if (typeof raw !== "string") return "";
-  let s = raw.replace(/\s+/g, "");
-  s = s.replace(/[​-‍﻿⁠]/g, "");
-  for (let i = 0; i < 8; i++) {
-    const before = s;
-    s = s.replace(/^["'`,\[\]\{\}\s]+/, "").replace(/["'`,\[\]\{\}\s]+$/, "");
-    if (s === before) break;
-  }
-  return s;
-}
-
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -174,54 +158,31 @@ function esc(s) {
 
 function mapServerError(raw) {
   const e = String(raw || "").toLowerCase();
-  if (e.includes("expired")) return "issuer 토큰이 만료됐어요. Jay에게 재발급 요청해주세요.";
-  if (e.includes("revoked")) return "이 토큰은 무효화됐어요. Jay에게 새 토큰 요청해주세요.";
-  if (e.includes("not an issuer")) return "학생 토큰을 붙여넣으신 듯해요. Jay에게 받은 강사(issuer) 토큰이 필요해요.";
-  if (e.includes("can_start_session")) return "이 토큰에는 세션 시작 권한이 없어요. 구버전 토큰일 수 있어요 — Jay에게 재발급 요청해주세요. (오늘 겪은 그 403이 이거예요)";
-  if (e.includes("not scoped")) return "이 토큰의 권한 범위 밖 cohort예요. Jay에게 스코프 추가를 요청해주세요.";
-  if (e.includes("invalid signature") || e.includes("malformed")) return "토큰이 손상되었거나 잘못 복사됐어요. 따옴표·콤마·공백 없이 다시 붙여넣어 주세요.";
+  // Chalk's own connection refusals are already Korean and actionable.
+  if (/연결/.test(e)) return String(raw);
+  if (e.includes("expired")) return "강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.";
+  if (e.includes("revoked")) return "이 강사 연결은 무효화됐어요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("not an issuer")) return "강사 권한이 아닌 연결이에요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("can_start_session")) return "이 연결에는 세션 시작 권한이 없어요. 운영진에게 알려주세요.";
+  if (e.includes("not scoped")) return "연결할 때 이 수업을 고르지 않았어요. ‘다시 연결’에서 이 수업을 골라주세요.";
+  if (e.includes("invalid signature") || e.includes("malformed")) return "강사 연결 정보를 확인하지 못했어요. ‘다시 연결’을 눌러주세요.";
   if (e.includes("exceeds") && e.includes("max")) return "본인 권한의 최대 시간을 초과했어요. 시간을 줄여주세요.";
   return "오류: " + raw;
 }
 
-// Decode the payload half of a v2 token (base64url JSON). Display-only — the
-// server re-verifies everything; this never gates an action.
-function decodePayload(tok) {
-  try {
-    const b64 = tok.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64 + "===".slice((b64.length + 3) % 4);
-    return JSON.parse(decodeURIComponent(escape(atob(pad))));
-  } catch { return null; }
-}
-
-// Token via URL fragment (#t=…) → prefill once, then scrub the URL so the
-// token doesn't linger in the address bar / browser history UI.
-(function () {
-  const m = /[#&]t=([^&]+)/.exec(location.hash || "");
-  if (m) {
-    $("issuer").value = sanitizeToken(decodeURIComponent(m[1]));
-    history.replaceState(null, "", location.pathname);
-  }
-})();
-
-// Persist in sessionStorage only (tab-scoped), same policy as /issuer.
-const KEY = "hps_issuer_token";
-if (!$("issuer").value && sessionStorage.getItem(KEY)) $("issuer").value = sessionStorage.getItem(KEY);
-
-$("forget").onclick = () => {
-  sessionStorage.removeItem(KEY);
-  $("issuer").value = "";
-  $("tokenBanner").innerHTML = $("cohorts").innerHTML = $("minter").innerHTML = "";
-};
+// Clearing the Lab connection clears what was loaded with it.
+globalThis.chalkConnection?.onChange((c) => {
+  if (!c.connected) $("tokenBanner").innerHTML = $("cohorts").innerHTML = $("minter").innerHTML = "";
+});
 
 let countdownTimer = null;
 let distributionTargets = [];
 
+// No Authorization header: Chalk takes the issuer from the Lab login session.
 async function api(path, opts) {
-  const issuer = sanitizeToken($("issuer").value);
   const res = await fetch(path, {
     ...opts,
-    headers: { "Authorization": "Bearer " + issuer, "content-type": "application/json", ...(opts && opts.headers) },
+    headers: { "content-type": "application/json", ...(opts && opts.headers) },
   });
   const body = await res.json().catch(() => ({}));
   // Chalk's own upstream errors are objects ({type, message}); show the message, not [object Object].
@@ -232,33 +193,27 @@ async function api(path, opts) {
 
 $("load").onclick = load;
 async function load() {
-  const issuer = sanitizeToken($("issuer").value);
-  $("issuer").value = issuer;
   const banner = $("tokenBanner");
   banner.innerHTML = ""; $("cohorts").innerHTML = ""; $("minter").innerHTML = "";
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 
-  if (!issuer) return (banner.innerHTML = '<div class="banner err">issuer 토큰을 입력해주세요.</div>');
-  if (!TOKEN_SHAPE.test(issuer)) {
-    return (banner.innerHTML = '<div class="banner err">토큰 형식이 잘못됐어요. eyJj… 로 시작하고 점(.)이 1개인 한 줄이어야 해요.</div>');
+  // The connection status carries what the page used to decode from a pasted token:
+  // the handle, the expiry and the scope list. The Service still checks every call.
+  const conn = await (globalThis.chalkConnection?.refresh() ?? { connected: false });
+  if (!conn.connected) {
+    return (banner.innerHTML = '<div class="banner err">' + (conn.expired
+      ? '강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.'
+      : '위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.') + '</div>');
   }
-  const payload = decodePayload(issuer);
-  if (!payload || payload.role !== "issuer") {
-    return (banner.innerHTML = '<div class="banner err">강사(issuer) 토큰이 아니에요. 학생 토큰을 붙여넣으신 듯해요.</div>');
-  }
-  sessionStorage.setItem(KEY, issuer);
+  const payload = { u: conn.member && conn.member.name, exp: Math.floor(Date.parse(conn.expires_at) / 1000), scopes: conn.scopes };
 
-  // Expiry banner — surfaces the "stale token" failure the moment the page
+  // Expiry banner — surfaces the "stale connection" failure the moment the page
   // opens, not as a 403 mid-lecture.
   const expMs = (payload.exp || 0) * 1000;
-  const daysLeft = Math.floor((expMs - Date.now()) / 86400000);
-  if (expMs && expMs < Date.now()) {
-    banner.innerHTML = '<div class="banner err">이 토큰은 <b>만료</b>됐어요 (' + esc(new Date(expMs).toLocaleDateString()) + '). Jay에게 재발급 요청해주세요.</div>';
-    return;
-  }
-  banner.innerHTML = '<div class="banner ' + (daysLeft <= 7 ? "warn" : "ok") + '">' +
-    esc(payload.u || "강사") + ' · 토큰 유효: ' + esc(new Date(expMs).toLocaleDateString()) + '까지' +
-    (daysLeft <= 7 ? ' — <b>만료 ' + daysLeft + '일 전!</b> 미리 Jay에게 재발급 요청해두세요.' : '') + '</div>';
+  const soon = expMs - Date.now() < 2 * 3600000;
+  banner.innerHTML = '<div class="banner ' + (soon ? "warn" : "ok") + '">' +
+    esc(payload.u || "강사") + ' · 연결 유효: ' + esc(new Date(expMs).toLocaleString()) + '까지' +
+    (soon ? ' — <b>곧 만료됩니다.</b> 수업 전에 ‘다시 연결’을 눌러두세요.' : '') + '</div>';
 
   distributionTargets = [];
   try {
@@ -292,7 +247,7 @@ async function renderCohort(scope) {
   const maxH = state.scope ? state.scope.max_session_hours : 4;
   let html = '<legend>② 세션 — ' + esc(scope.cohort) + '</legend>';
   if (state.paused) html += '<div class="banner warn">⚠ 이 cohort는 일시정지(pause) 상태예요 — 세션을 열어도 학생 채팅이 차단됩니다. Jay 확인 필요.</div>';
-  if (!canStart) html += '<div class="banner warn">이 토큰엔 세션 시작 권한이 없어요 (조회·토큰 발급만 가능). 구버전 토큰이면 Jay에게 재발급 요청.</div>';
+  if (!canStart) html += '<div class="banner warn">이 강사 연결엔 세션 시작 권한이 없어요 (조회·토큰 발급만 가능). 운영진에게 알려주세요.</div>';
 
   const live = state.session && Date.parse(state.session.ends_at) > Date.now();
   for (const p of state.profiles) {
@@ -559,7 +514,7 @@ function renderRosterImport(scope) {
     try {
       const res = await fetch("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
         method: "POST",
-        headers: { "Authorization": "Bearer " + sanitizeToken($("issuer").value), "content-type": "application/json" },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(rosterCsv.requestBody(handles)),
       });
       answer = { status: res.status, body: await res.json().catch(() => null) };
@@ -625,13 +580,8 @@ function renderLabTokens(scope) {
   };
 }
 
-// Auto-load when a token is already present (fragment link or sessionStorage).
-if ($("issuer").value) load();
-
-// Expose pure helpers for the Node test harness (window undefined there).
-if (typeof window === "undefined") {
-  (globalThis).__consolePageHelpers = { sanitizeToken, mapServerError, decodePayload, TOKEN_SHAPE };
-}
+// Auto-load when the Lab connection is already there.
+globalThis.chalkConnection?.ready.then((c) => { if (c.connected) load(); });
 </script>
 <style>
 html:root,body{background:var(--ds-c-chalk-console-surface-87)!important;color:var(--ds-c-chalk-console-ink-66);min-height:100vh}body{margin:0!important}body>.wrap,body>header,body>main{width:min(100%,var(--ds-c-chalk-console-size-97));margin-inline:auto;padding:var(--ds-c-chalk-console-space-5)}

@@ -71,6 +71,7 @@ const OVERRIDES = {
   "memory-write-line": { banner: BANNER_POSTED },
   "voice-ui": { banner: BANNER_POSTED_STATE },
   "voice-mount": { banner: BANNER_POSTED },
+  "lesson-settings-change": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

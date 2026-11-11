@@ -6,7 +6,8 @@ import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
-const local = await localOps(); const { default: chalk } = await import('../../chalk/src/index.ts');
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
+const local = await localOps(); const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const realFetch = globalThis.fetch;
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, body: body.length ? body : undefined }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch { res.writeHead(500).end(); } });
@@ -15,7 +16,7 @@ try {
   server.listen(0, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + server.address().port;
   browser = await chromium.launch(); const page = await browser.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   const expand=async selector=>{const d=page.locator(selector);if(!(await d.evaluate(e=>e.open)))await d.locator('> summary').click();};
-  await page.goto(origin + '/manage'); await page.locator('#token').fill(local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
+  await page.goto(origin + '/manage'); await signInChalk(page, local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
   await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   // No run yet: the panel says so and opens the roster form instead of showing an empty "all fine" board.
   await page.locator('#refresh').click(); await page.locator('#ops-state').filter({ hasText: '운영 명단이 아직 없습니다' }).waitFor(); assert.equal(await page.locator('#ops-setup').getAttribute('open') !== null, true);

@@ -15,6 +15,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// The page holds no token: every request carries a Lab-connected session (harness/connect.mjs).
+import { TEST_CONNECT_SECRET, sessionCookie } from './harness/connect.mjs';
 import { readFileSync } from 'node:fs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
@@ -27,7 +29,7 @@ if (!bin) {
 }
 const { default: app } = await import('../src/index.ts');
 const server = createServer(async (req, res) => {
-  const r = await app.fetch(new Request('http://127.0.0.1' + req.url), { ENVIRONMENT: 'test' });
+  const r = await app.fetch(new Request('http://127.0.0.1' + req.url, { headers: { cookie: await sessionCookie('t') } }), { ENVIRONMENT: 'test', HPS_CHALK_CONNECT_SECRET: TEST_CONNECT_SECRET });
   res.writeHead(r.status, Object.fromEntries(r.headers));
   res.end(Buffer.from(await r.arrayBuffer()));
 });
@@ -56,7 +58,7 @@ const stub = (withPresets) => `window.__calls=[];window.fetch=async(path)=>{wind
   const body=p.includes('/features/')?{choices:[{key:'read',label:'읽기'}],${withPresets ? `approval_presets:${JSON.stringify(CATALOG)}` : ''}}
     :p.includes('/versions/')?{module:{content:{approval_preset:'always_ask'}},source_revision:3,rehearsal:'passed',activated:false}:{};
   return new Response(JSON.stringify(body),{status:200,headers:{'content-type':'application/json'}});};
-  for(const [k,v] of [['token','t'],['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;
+  for(const [k,v] of [['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;
   document.querySelector('#editor details').open=true;return 0`;
 const radios = `return [...document.querySelectorAll('#approval-choices input[type=radio]')].map(i=>({value:i.value,checked:i.checked,name:i.closest('label').querySelector('span').textContent,desc:i.getAttribute('aria-describedby')?document.getElementById(i.getAttribute('aria-describedby'))?.textContent:null}))`;
 let checks = 0;
@@ -64,7 +66,7 @@ try {
   for (const width of [1280, 375]) {
     await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     await b.send('Page.navigate', { url: origin + '/authoring' });
-    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('approval-choices')`, '/authoring with the approval picker');
+    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('approval-choices') && !!window.chalkConnection?.current?.connected`, '/authoring with the approval picker');
     await ev(stub(true));
 
     // 1. Before the catalog read: closed, the unset choice is there, help text names the minors' default.
@@ -149,7 +151,7 @@ try {
 
     // 4. An older Service: no approval_presets on the features read.
     await b.send('Page.navigate', { url: origin + '/authoring' });
-    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('approval-choices')`, '/authoring reload');
+    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('approval-choices') && !!window.chalkConnection?.current?.connected`, '/authoring reload');
     await ev(stub(false));
     await ev(`render(${JSON.stringify(DRAFT)}); return 0`);
     await ev(`document.getElementById('features-load').click(); return 0`);

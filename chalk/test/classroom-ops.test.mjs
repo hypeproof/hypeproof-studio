@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script, runInNewContext } from 'node:vm';
 import { localOps } from '@hypeproof/service-testkit/test/harness/classroom-ops.mjs';
-const f = await localOps(); const { default: chalk } = await import('../src/index.ts'); const savedFetch = globalThis.fetch; const calls = [];
+import { withBearerAsConnection } from './harness/connect.mjs';
+const f = await localOps(); const chalk = withBearerAsConnection((await import('../src/index.ts')).default); const savedFetch = globalThis.fetch; const calls = [];
 const env = { ...f.env, HPS_SERVICE_ORIGIN: 'https://service.test' };
 globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return f.app.fetch(new Request(url, init), f.env, { waitUntil() {} }); };
 async function request(path, method = 'GET', body, token = f.teacherToken) { const r = await chalk.fetch(new Request('https://chalk.test' + path, { method, headers: { ...(token ? { authorization: 'Bearer ' + token } : {}), 'content-type': 'application/json', 'cf-access-authenticated-user-email': 'forged@example.test' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, { waitUntil() {} }); const raw = await r.text(); let json; try { json = JSON.parse(raw); } catch {} return { status: r.status, raw, json, headers: r.headers }; }
