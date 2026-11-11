@@ -46,7 +46,7 @@ private struct SharedCacheFile: Codable {
     @Published var selected: String?
     @Published var error: String?
     @Published var notice = ""
-    @Published private var editing: [String: [String: String]] = [:]
+    @Published private var editing: [String: [String: [String: String]]] = [:]
     private var account: StoredAccount?
     private var operation: Task<Void, Never>?
     private var polling: Task<Void, Never>?
@@ -91,25 +91,19 @@ private struct SharedCacheFile: Codable {
     private func edit(_ id: String, _ change: (inout ConversationCache) throws -> Void) throws {
         var next = entries; var value = overlay(next[id] ?? ConversationCache(), id: id); try change(&value); next[id] = value
         try persist(entries: next)
-        if let account { editing[account.accountID] = (editing[account.accountID] ?? [:]).filter { !$0.key.hasPrefix(id + ":") } }
+        if let account { editing[account.accountID]?[id] = nil }
     }
     private func overlay(_ original: ConversationCache, id: String) -> ConversationCache {
-        var value = original
-        let edits = editing[account?.accountID ?? ""] ?? [:]
-        if let draft = edits[id + ":draft"] { value.draft = draft }
-        for key in ["goal", "audience", "experience", "style"] {
-            if let text = edits[id + ":context:" + key] { if value.context == nil { value.context = [:] }; value.context?[key] = text }
-        }
-        return value
+        original.applyingEdits(editing[account?.accountID ?? ""]?[id] ?? [:])
     }
     func editDraft(_ value: String) {
         guard let selected, let account else { return }
-        editing[account.accountID, default: [:]][selected + ":draft"] = value
+        editing[account.accountID, default: [:]][selected, default: [:]]["draft"] = value
         do { try edit(selected) { $0.draft = value } } catch { self.error = error.localizedDescription }
     }
     func editContext(_ key: String, value: String) {
         guard let selected, let account else { return }
-        editing[account.accountID, default: [:]][selected + ":context:" + key] = value
+        editing[account.accountID, default: [:]][selected, default: [:]][key] = value
         do { try edit(selected) { if $0.context == nil { $0.context = [:] }; $0.context?[key] = value } }
         catch { self.error = error.localizedDescription }
     }
@@ -272,10 +266,9 @@ private struct SharedCacheFile: Codable {
     func exportCache() -> URL? {
         guard let account else { return nil }
         do {
-            let output = FileManager.default.temporaryDirectory.appendingPathComponent("HP-Studio-shared-records.json")
-            var snapshot = entries
-            for id in Set(entries.keys).union(selected.map { [$0] } ?? []) { snapshot[id] = overlay(snapshot[id] ?? ConversationCache(), id: id) }
-            let bytes = try JSONEncoder().encode(SharedCacheFile(accountID: account.accountID, conversations: conversations, entries: snapshot))
+            let output = FileManager.default.temporaryDirectory.appendingPathComponent(cacheReadable ? "HP-Studio-shared-records.json" : "HP-Studio-shared-recovery-original.json")
+            let snapshot = ConversationCache.exportSnapshot(entries: entries, edits: editing[account.accountID] ?? [:])
+            let bytes = try cacheReadable ? JSONEncoder().encode(SharedCacheFile(accountID: account.accountID, conversations: conversations, entries: snapshot)) : Data(contentsOf: file(account.accountID))
             try bytes.write(to: output, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]); return output
         } catch { self.error = error.localizedDescription; return nil }
     }

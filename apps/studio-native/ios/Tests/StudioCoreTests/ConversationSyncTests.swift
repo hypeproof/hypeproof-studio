@@ -2,6 +2,14 @@ import XCTest
 @testable import StudioCore
 
 final class ConversationSyncTests: XCTestCase {
+    func testExportIncludesNeverSavedConversationAfterNavigation() throws {
+        let saved = ConversationCache()
+        let result = ConversationCache.exportSnapshot(entries: ["b": saved], edits: ["a": ["draft": "저장 실패한 말", "goal": "내가 바라는 변화"], "b": ["draft": "다른 대화"]])
+        XCTAssertEqual(result["a"]?.draft, "저장 실패한 말")
+        XCTAssertEqual(result["a"]?.context?["goal"], "내가 바라는 변화")
+        XCTAssertEqual(result["b"]?.draft, "다른 대화")
+        XCTAssertEqual(saved.draft, "")
+    }
     func testServerLengthAndNulValidationPreservesDraft() throws {
         var cache = ConversationCache()
         for invalid in [String(repeating: "😀", count: 2001), "before\0after"] {

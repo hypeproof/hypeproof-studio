@@ -63,6 +63,19 @@ public struct ConversationCache: Codable, Sendable {
     public var request: SharedRequest?
     public var context: [String: String]?
     public init() {}
+    public func applyingEdits(_ edits: [String: String]) -> ConversationCache {
+        var value = self
+        if let draft = edits["draft"] { value.draft = draft }
+        for key in ["goal", "audience", "experience", "style"] {
+            if let text = edits[key] { if value.context == nil { value.context = [:] }; value.context?[key] = text }
+        }
+        return value
+    }
+    public static func exportSnapshot(entries: [String: ConversationCache], edits: [String: [String: String]]) -> [String: ConversationCache] {
+        var snapshot = entries
+        for id in Set(entries.keys).union(edits.keys) { snapshot[id] = (entries[id] ?? ConversationCache()).applyingEdits(edits[id] ?? [:]) }
+        return snapshot
+    }
     public mutating func apply(_ page: ConversationPage) throws {
         guard page.cursor >= cursor, page.events.count <= 100 else { throw SyncFailure.invalidResponse }
         var next = messages

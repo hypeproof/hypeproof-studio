@@ -5,14 +5,26 @@ import UIKit
 
 /// Optional, bounded, device-local review recording. Never sent to Service.
 private final class VoiceReviewCapture: @unchecked Sendable {
+    // Initialized once per app process, before any review recording is created.
+    // Only this feature's files in its private temporary directory are removed.
+    static let directory: URL = {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("hp-voice-review", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for file in (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isRegularFileKey])) ?? [] {
+            if file.pathExtension == "caf", file.lastPathComponent.hasPrefix("capture-"), (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { try? FileManager.default.removeItem(at: file) }
+        }
+        return root
+    }()
     let url: URL
     private let lock = NSLock()
     private var file: AVAudioFile?
     private var failed = false
     init(format: AVAudioFormat) throws {
-        url = FileManager.default.temporaryDirectory.appendingPathComponent("hp-voice-review-\(UUID().uuidString).caf")
-        file = try AVAudioFile(forWriting: url, settings: format.settings)
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], ofItemAtPath: url.path)
+        url = Self.directory.appendingPathComponent("capture-\(UUID().uuidString).caf")
+        do {
+            file = try AVAudioFile(forWriting: url, settings: format.settings)
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], ofItemAtPath: url.path)
+        } catch { file = nil; try? FileManager.default.removeItem(at: url); throw error }
     }
     func append(_ buffer: AVAudioPCMBuffer) {
         lock.lock(); defer { lock.unlock() }
@@ -25,7 +37,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     deinit { try? FileManager.default.removeItem(at: url) }
 }
 
-@MainActor final class VoiceController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+@MainActor final class VoiceController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     @Published private(set) var turn = VoiceTurn()
     @Published private(set) var status = ""
     @Published private(set) var canReplayOwnVoice = false
@@ -45,7 +57,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     private var final: (String, VoiceTurn.Mode) -> Bool = { _, _ in false }
     var isCapturing: Bool { [.authorizing, .listening, .finalizing].contains(turn.phase) }
     var isActive: Bool { ![.idle, .ready].contains(turn.phase) }
-    override init() { super.init(); speaker.delegate = self }
+    override init() { super.init(); speaker.delegate = self; _ = VoiceReviewCapture.directory }
 
     func start(projectID: String, mode: VoiceTurn.Mode, reviewRecording: Bool = false,
                transcript: @escaping (String) -> Void,
@@ -170,10 +182,18 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
-            let player = try AVAudioPlayer(contentsOf: reviewURL); reviewPlayer = player
+            let player = try AVAudioPlayer(contentsOf: reviewURL); player.delegate = self; reviewPlayer = player
             guard player.play() else { throw StudioError.message("녹음을 재생하지 못했어요.") }
             status = "내 목소리를 다시 듣고 있어요. 다른 화면으로 이동하거나 다음 녹음을 시작하면 원음을 지워요."
         } catch { status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요." }
+    }
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let id = ObjectIdentifier(player)
+        Task { @MainActor [weak self] in
+            guard let self, let current = self.reviewPlayer, ObjectIdentifier(current) == id else { return }
+            self.reviewPlayer = nil; self.deactivateAudio()
+            self.status = flag ? "내 말을 들었어요. 고치고 싶은 생각을 글로 이어가도 좋아요." : "재생을 마치지 못했어요. 인식한 글을 확인해 주세요."
+        }
     }
     func fail(_ message: String) { stop(); status = message }
     private func stopInput() {
