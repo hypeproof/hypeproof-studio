@@ -5388,13 +5388,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.servedWorkspaceRoot = null;
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
-    // CGP-SHELL-R-024 — lines drawn while hidden belong to the seat that drew them; another seat must not count them.
-    this.lessonLinesDrawnHidden?.clear();
     void this.downloadWatcher?.reapply(); // CGP-KNOW-R-021 — no profile: downloads are denied until one loads
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
     // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
     this.endTaskCommandAllows();
+    // CGP-SHELL-R-024 — lines drawn while hidden belong to the seat that drew them; another seat must not count them.
+    this.lessonLinesDrawnHidden?.clear();
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
     // The profile is gone, and with it the publish button (token gate).
