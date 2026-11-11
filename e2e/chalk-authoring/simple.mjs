@@ -15,11 +15,11 @@ globalThis.fetch=(url,options)=>String(url).startsWith(local.origin)?local.fetch
 const preview=process.argv.includes('--preview');
 const server=createServer(async(req,res)=>{try{
  const chunks=[];for await(const c of req)chunks.push(c);const body=Buffer.concat(chunks);
- const r=await chalk.fetch(new Request('http://localhost'+req.url,{method:req.method,headers:req.headers,body:body.length?body:undefined}),env,{});
+ const r=await chalk.fetch(new Request('http://localhost'+req.url,{method:req.method,headers:preview?{...req.headers,'x-test-chalk-issuer':local.token}:req.headers,body:body.length?body:undefined}),env,{});
  res.writeHead(r.status,Object.fromEntries(r.headers));
  if(preview&&req.url==='/authoring'){
  let html=await r.text();html=html.replace('<nav>',`<aside style="padding:12px;background:#f4e8cb;border-radius:8px">로컬 체험판 · 실제 운영 서버와 연결되지 않습니다. 종료하면 테스트 강의는 사라집니다. <button id="trial-connect">테스트 강사로 연결</button></aside><nav>`);
- html=html.replace('</html>',`<script>document.getElementById('trial-connect').onclick=()=>{document.getElementById('token').value=${JSON.stringify(local.token)};document.getElementById('connect').click();};</script></html>`);res.end(html);
+ html=html.replace('</html>',`<script>document.getElementById('trial-connect').onclick=()=>{document.getElementById('connect').click();};</script></html>`);res.end(html);
  }else res.end(Buffer.from(await r.arrayBuffer()));
  }catch(e){res.writeHead(500);res.end('Local preview failure');console.error(e.message);}});
 server.listen(preview?8896:0,'127.0.0.1');await once(server,'listening');
