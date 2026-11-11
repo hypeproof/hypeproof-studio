@@ -132,7 +132,12 @@ test("status names the member, expiry and scopes, never the issuer", async () =>
   assert.equal((await (await call("/connect/status", { headers: { cookie: old } })).json()).expired, true);
   const foreign = await sessionCookie(ISSUER, { secret: "another-secret-0123456789abcdef-0123" });
   assert.equal((await (await call("/connect/status", { headers: { cookie: foreign } })).json()).connected, false);
-  const tampered = (await sessionCookie(ISSUER)).replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
+  // Tamper inside the ciphertext, not its last character: the last base64url character can carry unused
+  // low bits, so changing only those leaves the decoded bytes (and the GCM tag) intact about 1 run in 4.
+  const good = await sessionCookie(ISSUER);
+  const at = good.lastIndexOf(".") + 5;
+  const tampered = good.slice(0, at) + (good[at] === "A" ? "B" : "A") + good.slice(at + 1);
+  assert.notEqual(tampered, good);
   assert.equal((await (await call("/connect/status", { headers: { cookie: tampered } })).json()).connected, false);
 });
 
