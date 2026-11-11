@@ -18,8 +18,12 @@ python3 /trusted/pinned/foundry-native-acceptance.py \
   --expected-script-sha256 ANDROID_VERIFY_SCRIPT_SHA256
 ```
 
-Placeholders must be replaced with verified values. Platforms are exactly `ios`,
-`android`, and `macos`; no arbitrary command or artifact path is accepted. The
+Placeholders must be replaced with verified values. Active product targets are `ios` and `android`. The recipe retains its historical
+`macos` identifier for old receipt compatibility, but that identifier described
+the retired Mac Catalyst preview and must not be admitted for new work. The
+current Xcode project disables Catalyst. Existing desktop Studio uses its own
+extension checks and RC pipeline, not this mobile recipe. No arbitrary command
+or artifact path is accepted. The
 recipe invokes only the corresponding existing `scripts/*-verify.sh`. The caller
 owns the required `hype-resource local_heavy` slot; the recipe never nests one.
 Android requires an explicitly selected disposable emulator. iOS requires full
@@ -45,10 +49,9 @@ manifest's hash alone. External/physical-device, human, upload, deployment and
 tester-availability evidence remain NOT_RUN. macOS PASS means an unsigned build;
 iOS/Android simulator/emulator checks never establish physical-device acceptance.
 
-The existing macOS script requires a committed clean checkout. Consequently a
-staged reviewed-patch candidate fails that script honestly. Use an approved
-committed candidate with an empty patch for Mac, or separately review a change
-to the existing script; this recipe never creates commits or bypasses the gate.
+Historical `macos` receipts are build-only evidence for the discontinued preview;
+they never establish acceptance of the existing desktop Studio. Do not use that
+recipe to deliver or replace the desktop product.
 
 ## Registration with the existing runtime
 
