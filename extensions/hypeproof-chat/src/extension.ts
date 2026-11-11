@@ -456,6 +456,9 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();
     // CGP-AGENT-D-002: the card must follow the policy used by the next action.
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
+    // CGP-SHELL-R-024: the learner's runtime choice is observed on its own post, so an instructor capability change read
+    // later is compared under the same inputs and told, not absorbed into the same observation.
+    if (event.affectsConfiguration("hypeproofChat.coachRuntime")) void provider.refreshConfig();
     // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
     if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
     // #3578: the instructor runtime switch takes effect without a reload. The Chalk session ends first, so a

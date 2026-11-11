@@ -88,6 +88,9 @@ await h.handleMessage({type:'dismissClassWindow',id:'stale'});assert.equal(windo
 failWrite=true;await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.ok((await publish()).classWindow);failWrite=false;
 await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.equal((await publish()).classWindow,null);
 assert.equal(windowReceipts().length,1);assert.ok(windowReceipts().every(([,v])=>v===true),'only a receipt, no learner data');
+// Nothing else is written: the one other key is the CGP-SHELL-R-024 settings baseline, and it holds no token or learner id.
+assert.deepEqual([...receipts.keys()].filter(k=>!k.startsWith('hps.classWindowDismissed.')),['hps.lessonSettings.baseline'],'no other key');
+assert.ok(![token,'learner','cohort'].some(x=>JSON.stringify(receipts.get('hps.lessonSettings.baseline')).includes(x)),'the baseline holds no token or learner data');
 delete h.currentClassNoticeId;assert.equal((await publish()).classWindow,null,'fresh publication reads durable receipt');
 connection.run.ends_at+=60000;let revised=(await publish()).classWindow;assert.ok(revised);assert.notEqual(revised.noticeId,first.noticeId);
 await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.ok((await publish()).classWindow,'stale old schedule cannot dismiss revised window');

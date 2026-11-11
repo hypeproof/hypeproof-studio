@@ -229,6 +229,28 @@ assert.ok(!((await openWindow().publish()).lessonSettingsChanges ?? []).some(l =
   assert.equal(r.h.lessonChangeDeferred, false);
 }
 
+// 10h. The learner's runtime setting is posted at once (extension.ts listener), so it is observed on its own and an
+// instructor capability change read later is compared under the same inputs: told, not absorbed. Real listener body.
+{
+  const ext = readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8');
+  const listener = ext.match(/onDidChangeConfiguration\(event => \{([\s\S]*?)\n  \}\)\);/)[1];
+  const refreshesFor = (changed) => {
+    let n = 0;
+    vm.runInNewContext(listener, { event: { affectsConfiguration: name => name === changed }, provider: { refreshConfig: () => { n++; } }, vscode: { workspace: { getConfiguration: () => ({ get: () => undefined }) } }, applyInstructorRuntimeSetting: async () => {} });
+    return n;
+  };
+  assert.equal(refreshesFor('hypeproofChat.coachRuntime'), 1, 'a runtime setting change posts the config at once');
+  assert.equal(refreshesFor('unrelated.setting'), 0, 'control: an unrelated setting posts nothing');
+  profile = classroom({ activity_id: '5'.repeat(64) });
+  const x = openWindow(); await x.publish();
+  settings.coachRuntime = 'proxy';
+  await x.publish(); // what refreshConfig does when the listener fires
+  settings.coachRuntime = 'agent-sdk';
+  await x.publish();
+  profile = classroom({ activity_id: '5'.repeat(64), sdk_tools: { read: true } });
+  assert.equal((await x.publish()).lessonSettingsChanges?.[0]?.text, '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 해요 → 안 해요', 'a later instructor change is told');
+}
+
 // 11. A personal seat never gets the instructor line (it has no instructor; REQ-STUDIO-CAPABILITY-CHANGE covers it).
 // The instructor surface and local mode are covered in lesson-settings-change.test.mjs and the panel render test.
 const personal = openWindow();
