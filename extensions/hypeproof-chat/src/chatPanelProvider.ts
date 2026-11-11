@@ -11471,14 +11471,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seat = createHash("sha256").update(JSON.stringify(["lesson-settings", o.proxyUrl, activity])).digest("hex");
     let lastMessageId: string | null = null;
     try { lastMessageId = this.getHistory().at(-1)?.id ?? null; } catch { lastMessageId = null; }
-    const result = await (this.lessonChanges ??= new LessonSettingsChangeTracker(store)).observe({
-      seat, profile: o.profile, instructor: o.instructor, local: o.local,
-      caps: { inputs: JSON.stringify([o.seatInputs.choice?.id ?? null, o.seatInputs.settingRuntime, o.seatInputs.fallback]), on: seatCapabilityKeys(o.profile, o.seatInputs) },
-      turnRunning: this.lessonPreflightAdopting !== true && this.hasActiveStream(),
-      lastMessageId, task: this.planTaskKey(),
-    });
-    this.lessonChangeDeferred = result.deferred;
-    return result.notices;
+    try {
+      const result = await (this.lessonChanges ??= new LessonSettingsChangeTracker(store)).observe({
+        seat, profile: o.profile, instructor: o.instructor, local: o.local,
+        caps: { inputs: JSON.stringify([o.seatInputs.choice?.id ?? null, o.seatInputs.settingRuntime, o.seatInputs.fallback]), on: seatCapabilityKeys(o.profile, o.seatInputs) },
+        turnRunning: this.lessonPreflightAdopting !== true && this.lessonTurnRunning(),
+        lastMessageId, task: this.planTaskKey(),
+      });
+      this.lessonChangeDeferred = result.deferred;
+      return result.notices;
+    } catch (err) {
+      // A storage failure must never stop the config post; the line is simply not drawn this time.
+      console.warn("[lesson-settings-change] observation failed:", err);
+      return [];
+    }
   }
 
   /**
@@ -11486,15 +11492,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * while a chat surface is visible: the sidebar webview keeps rendering while collapsed, and its document does not
    * always say so. A line drawn while hidden is counted when a chat surface is shown.
    */
+  /** hasActiveStream, tolerant of the partial providers some host fixtures build (no activeStreams map): unknown = not running. */
+  private lessonTurnRunning(): boolean {
+    try { return this.hasActiveStream(); } catch { return false; }
+  }
   private async lessonSettingsLineShown(id: string): Promise<void> {
-    if (chatVisible({ view: () => this.view, editor: () => this.editorChat })) { await this.lessonChanges?.seen(id); return; }
+    if (chatVisible({ view: () => this.view, editor: () => this.editorChat })) { await this.lessonChanges?.seen(id).catch(() => false); return; }
     (this.lessonLinesDrawnHidden ??= new Set()).add(id);
   }
   private async flushLessonLinesShown(): Promise<void> {
     const ids = [...(this.lessonLinesDrawnHidden ?? [])];
     if (!ids.length || !chatVisible({ view: () => this.view, editor: () => this.editorChat })) return;
     this.lessonLinesDrawnHidden?.clear();
-    for (const id of ids) await this.lessonChanges?.seen(id);
+    for (const id of ids) await this.lessonChanges?.seen(id).catch(() => false);
   }
 
   private async postConfig(): Promise<void> {
