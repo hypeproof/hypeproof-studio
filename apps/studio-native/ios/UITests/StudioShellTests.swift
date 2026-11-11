@@ -1,8 +1,11 @@
 import XCTest
 final class StudioShellTests: XCTestCase {
     @MainActor func testLinkedHomeRequiresExplicitStorageDisclosure() {
-        let app = XCUIApplication(); app.launch()
+        let app = XCUIApplication(); app.launchArguments = ["--verify-account-storage"]; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["accountStorageVerified"].exists, "The app must create, read, update and delete an isolated Keychain item before account readiness passes.")
+        XCTAssertFalse(app.staticTexts["sharedError"].exists, "A storage failure must not pass as a ready sign-in screen.")
+        XCTAssertTrue(app.buttons["linkDesktop"].isEnabled)
         app.buttons["linkDesktop"].tap()
         XCTAssertTrue(app.navigationBars["데스크톱과 연결"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["같은 계정으로 연결"].isEnabled)

@@ -94,7 +94,7 @@ struct SharedConversationView: View {
                     }
                     Section {
                         Toggle("대화 글의 서버 저장과 연결 방식을 이해했어요", isOn: $storageOK)
-                        Button("같은 계정으로 연결") { consent = false; model.login() }.disabled(!storageOK)
+                        Button("같은 계정으로 연결") { consent = false; model.login() }.disabled(!storageOK || !model.accountStorageReady)
                     }
                 }.navigationTitle("데스크톱과 연결").toolbar { Button("닫기") { consent = false } }
             }
@@ -137,7 +137,14 @@ struct SharedConversationView: View {
                         Button("연결 취소") { model.cancelLogin() }
                     }.padding().background(.background, in: RoundedRectangle(cornerRadius: 18))
                 } else {
-                    Button("데스크톱 대화 연결하기") { consent = true }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.busy).accessibilityIdentifier("linkDesktop")
+                    Button("데스크톱 대화 연결하기") { consent = true }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.busy || !model.accountStorageReady).accessibilityIdentifier("linkDesktop")
+                    if !model.accountStorageReady {
+                        Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage")
+                        Text("iPhone 잠금을 해제한 뒤 다시 확인해 주세요. 기기의 메모는 계속 사용할 수 있어요.").font(.footnote)
+                    }
+#if DEBUG
+                    if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
+#endif
                 }
                 Text("기존 HP Studio 데스크톱에서 같은 계정으로 로그인한 뒤 연결할 대화를 선택해 주세요. 컴퓨터가 켜져 있고 그 대화가 열려 있어야 답변을 만들 수 있어요.").font(.footnote).foregroundStyle(.secondary)
                 if model.busy { ProgressView("연결 확인 중") }

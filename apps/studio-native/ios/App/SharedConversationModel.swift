@@ -8,27 +8,52 @@ private struct StoredAccount: Codable {
 }
 private enum AccountKeychain {
     static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ai.hypeproof.studio.mobile.account", kSecAttrAccount as String: "device-session"]
-    static func read() throws -> StoredAccount? {
+    private static func failure(_ operation: String, _ status: OSStatus, _ message: String) -> StudioError {
+        // Never log a query, account identifier, credential or stored bytes.
+        NSLog("HP Studio account storage %@ failed (%d)", operation, status)
+        return .message(message)
+    }
+    private static func readData(_ query: [String: Any]) throws -> Data? {
         var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let bytes = result as? Data else { throw StudioError.message("안전한 계정 저장소를 읽지 못했어요.") }
-        return try JSONDecoder().decode(StoredAccount.self, from: bytes)
+        guard status == errSecSuccess, let bytes = result as? Data else { throw failure("read", status, "안전한 계정 저장소를 읽지 못했어요.") }
+        return bytes
     }
-    static func save(_ value: StoredAccount) throws {
-        let data = try JSONEncoder().encode(value)
+    private static func saveData(_ data: Data, query: [String: Any]) throws {
         let update = [kSecValueData as String: data]
         let result = SecItemUpdate(query as CFDictionary, update as CFDictionary)
         if result == errSecItemNotFound {
             var q = query; q[kSecValueData as String] = data; q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            guard SecItemAdd(q as CFDictionary, nil) == errSecSuccess else { throw StudioError.message("로그인을 안전하게 저장하지 못했어요.") }
-        } else if result != errSecSuccess { throw StudioError.message("로그인을 안전하게 저장하지 못했어요.") }
+            let added = SecItemAdd(q as CFDictionary, nil)
+            guard added == errSecSuccess else { throw failure("add", added, "로그인을 안전하게 저장하지 못했어요.") }
+        } else if result != errSecSuccess { throw failure("update", result, "로그인을 안전하게 저장하지 못했어요.") }
     }
-    static func remove() throws {
+    private static func removeData(_ query: [String: Any]) throws {
         let result = SecItemDelete(query as CFDictionary)
-        guard result == errSecSuccess || result == errSecItemNotFound else { throw StudioError.message("이 기기의 로그인을 지우지 못했어요.") }
+        guard result == errSecSuccess || result == errSecItemNotFound else { throw failure("delete", result, "이 기기의 로그인을 지우지 못했어요.") }
     }
+    static func read() throws -> StoredAccount? {
+        guard let bytes = try readData(query) else { return nil }
+        return try JSONDecoder().decode(StoredAccount.self, from: bytes)
+    }
+    static func save(_ value: StoredAccount) throws { try saveData(JSONEncoder().encode(value), query: query) }
+    static func remove() throws { try removeData(query) }
+#if DEBUG
+    static func verifyNativeStorage() throws {
+        // Exercise this app's actual Keychain entitlement with an isolated synthetic item.
+        var probe = query; probe[kSecAttrService as String] = "ai.hypeproof.studio.mobile.verification." + UUID().uuidString
+        defer { try? removeData(probe) }
+        let first = Data(UUID().uuidString.utf8), second = Data(UUID().uuidString.utf8)
+        try saveData(first, query: probe)
+        guard try readData(probe) == first else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
+        try saveData(second, query: probe)
+        guard try readData(probe) == second else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
+        try removeData(probe)
+        guard try readData(probe) == nil else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
+    }
+#endif
 }
 private struct SharedCacheFile: Codable {
     let accountID: String
@@ -43,6 +68,10 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var signIn: DeviceSignIn?
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
+    @Published private(set) var accountStorageReady = false
+#if DEBUG
+    @Published private(set) var accountStorageVerified = false
+#endif
     @Published var selected: String?
     @Published var error: String?
     @Published var notice = ""
@@ -60,9 +89,23 @@ private struct SharedCacheFile: Codable {
     var canSend: Bool { signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
     init() {
         directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("shared-conversations", isDirectory: true)
+        restoreAccount()
+    }
+    func restoreAccount() {
+        guard !busy, !syncing, !signedIn else { return }
+        error = nil; accountStorageReady = false
+#if DEBUG
+        accountStorageVerified = false
+#endif
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            account = try AccountKeychain.read(); signedIn = account != nil
+            account = try AccountKeychain.read()
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--verify-account-storage") {
+                try AccountKeychain.verifyNativeStorage(); accountStorageVerified = true
+            }
+#endif
+            accountStorageReady = true; signedIn = account != nil
             if let account { try load(account.accountID) }
         } catch { self.error = error.localizedDescription }
     }
@@ -135,6 +178,7 @@ private struct SharedCacheFile: Codable {
     }
     func login() {
         guard !busy, !syncing else { return }
+        guard accountStorageReady else { error = "계정 저장소를 먼저 다시 확인해 주세요. 로그인 요청은 보내지 않았어요."; return }
         busy = true; error = nil; let attempt = epoch
         operation = Task {
             do {
@@ -148,7 +192,9 @@ private struct SharedCacheFile: Codable {
                         let id = try await service.accountID(tokens.access_token)
                         guard epoch == attempt else { try? await service.logout(tokens.access_token); return }
                         let value = StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
-                        try AccountKeychain.save(value); account = value; signedIn = true; signIn = nil
+                        do { try AccountKeychain.save(value) }
+                        catch { accountStorageReady = false; try? await service.logout(tokens.access_token); throw error }
+                        account = value; signedIn = true; signIn = nil
                         try load(id); break
                     }
                 }
