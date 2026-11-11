@@ -1,5 +1,15 @@
 import XCTest
 final class StudioShellTests: XCTestCase {
+    @MainActor func testLinkedHomeRequiresExplicitStorageDisclosure() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
+        app.buttons["linkDesktop"].tap()
+        XCTAssertTrue(app.navigationBars["데스크톱과 연결"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["같은 계정으로 연결"].isEnabled)
+        app.buttons["닫기"].tap()
+        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.webViews.count, 0)
+    }
     @MainActor private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
         // Resolve after the screen transition. An immediate `.exists` check can
         // choose the wrong SwiftUI accessibility type before either one appears.

@@ -140,7 +140,7 @@ public final class ConversationService: @unchecked Sendable {
         if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
         let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, data.count <= 4_000_000 else { throw SyncFailure.invalidResponse }
+        guard let http = response as? HTTPURLResponse, data.count <= 5_000_000 else { throw SyncFailure.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let code = object?["error"] as? String ?? (object?["error"] as? [String: Any])?["code"] as? String ?? "unknown"
