@@ -43,6 +43,8 @@ export async function runAuthoringSaveRecoveryBrowser() {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       const text = Buffer.concat(chunks).toString();
+      // CGP-AGENT-R-014: the page's assistant availability probe (empty POST) is not an application write; this Service has the flag off.
+      if (req.method === 'POST' && /\/authoring\/[\w-]+\/proposal$/.test(req.url)) { res.writeHead(404, { 'content-type': 'application/json' }); res.end('{}'); return; }
       const row = { method: req.method, path: req.url, body: text ? JSON.parse(text) : null, mode };
       report.requests.push(row);
       if (req.method !== 'PUT' || !/^\/admin\/cohorts\/fixture-cohort\/authoring\/course-[\w-]+$/.test(req.url)) {

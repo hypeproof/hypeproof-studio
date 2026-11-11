@@ -13,9 +13,9 @@
       "sha256": "a43c6c62fdbc212df3f14f6ed3be33a522c091d80697062ee87e3ba298b0bed6"
     },
     {
-      "asset": "hypeproof-service-contracts-0.1.1.tgz",
-      "tag": "service-contracts-v0.1.1",
-      "sha256": "d1ba4928e81401f8d716193f6dd381378f076cca82196cab14bfb66720b4dadc"
+      "asset": "hypeproof-service-contracts-0.1.2.tgz",
+      "tag": "service-contracts-v0.1.2",
+      "sha256": "8def94877cac6acbdbbaf92c123ba35ee569b195873d7ab34010a95f0db473b9"
     },
     {
       "asset": "hypeproof-measurement-0.3.5.tgz",
