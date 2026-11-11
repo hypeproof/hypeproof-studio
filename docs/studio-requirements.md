@@ -8932,3 +8932,22 @@ Not covered, by design: real-device behaviour. This row set is synthetic and hea
 `getUserMedia` inside the packaged Electron webview, the OS Korean voices on macOS and Windows class laptops, and
 the OS settings handoff are the real-device check (policy 6 step 4). Not built here: CGP-VOICE-R-001 (realtime
 session states), CGP-VOICE-R-021 (the four `hypeproof.voice.*` Command Palette commands).
+
+
+## Native mobile and existing desktop — revised 2026-11-11
+
+`ST-REQ-NATIVE-MOBILE` follows `ST-INT-NATIVE`: native iOS and Android capture,
+project-local context, consented Service questioning and human-confirmed intent
+revisions. Drafts survive restart; export/deletion are explicit. The iPhone now continues an explicitly shared personal task in the existing
+desktop. Original local notebooks are preserved; no second desktop product is built. Implementation and native build
+commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
+0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
+voice changes need their own package/device evidence.
+
+`ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
+extend expression with project-bound editable dictation and consented final-text
+auto-send/read-aloud. System on-device recognition is required with no cloud
+recognizer fallback. Next-turn recording requires a visible tap; stop, background,
+permission denial and expired access preserve text and fence late callbacks.
+The shared Service owns policy/admission. Core/native fixtures do not establish
+physical Korean ASR, five-turn acceptance or a human growth outcome.

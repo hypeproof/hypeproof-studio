@@ -1,0 +1,196 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+public struct SharedConversation: Codable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let host_session_id: String
+    public let revision: Int
+    public let updated_at: Double
+}
+public struct SharedMessage: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let role: String
+    public let content: String
+    public let created_at: Double
+}
+public struct ConversationEvent: Codable, Sendable {
+    public let seq: Int
+    public let client_event_id: String
+    public let message: SharedMessage
+}
+public struct ConversationPage: Decodable, Sendable {
+    public let events: [ConversationEvent]
+    public let cursor: Int
+    public let has_more: Bool
+}
+public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var text: String
+    public var status: String
+    public var created_at: Double
+    public var updated_at: Double
+    public static func pending(_ text: String) throws -> SharedRequest {
+        let checked = try checkedText(text)
+        let now = Date().timeIntervalSince1970 * 1000
+        return SharedRequest(id: UUID().uuidString.lowercased(), text: checked, status: "local", created_at: now, updated_at: now)
+    }
+    public static func checkedText(_ text: String) throws -> String {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.utf16.count <= 4000, !value.contains("\0") else { throw StudioError.message("4,000자 이내로 적어 주세요. 이모지는 길이에 따라 여러 글자로 셀 수 있어요.") }
+        return value
+    }
+    public var outstanding: Bool { ["local", "pending", "running"].contains(status) }
+    public var statusLabel: String {
+        switch status {
+        case "local": return "이 iPhone에 저장됨 · 전송 대기"
+        case "pending": return "전송됨 · 데스크톱에서 이 대화를 열어 주세요"
+        case "running": return "데스크톱에서 답변 중 · 필요한 승인은 컴퓨터에서 확인해 주세요"
+        case "completed": return "양쪽 대화에 저장됨"
+        case "cancelled": return "전송 취소됨"
+        case "unknown": return "완료 여부를 확인하지 못했어요. 컴퓨터에서 확인해 주세요. 자동으로 다시 실행하지 않아요."
+        default: return "실행하지 못했어요. 컴퓨터에서 상태를 확인해 주세요."
+        }
+    }
+}
+/// Only a cache of the original desktop conversation. No model execution or local task ownership.
+public struct ConversationCache: Codable, Sendable {
+    public var messages: [SharedMessage] = []
+    public var cursor = 0
+    public var draft = ""
+    public var request: SharedRequest?
+    public var context: [String: String]?
+    public init() {}
+    public func applyingEdits(_ edits: [String: String]) -> ConversationCache {
+        var value = self
+        if let draft = edits["draft"] { value.draft = draft }
+        for key in ["goal", "audience", "experience", "style"] {
+            if let text = edits[key] { if value.context == nil { value.context = [:] }; value.context?[key] = text }
+        }
+        return value
+    }
+    public static func exportSnapshot(entries: [String: ConversationCache], edits: [String: [String: String]]) -> [String: ConversationCache] {
+        var snapshot = entries
+        for id in Set(entries.keys).union(edits.keys) { snapshot[id] = (entries[id] ?? ConversationCache()).applyingEdits(edits[id] ?? [:]) }
+        return snapshot
+    }
+    public mutating func apply(_ page: ConversationPage) throws {
+        guard page.cursor >= cursor, page.events.count <= 100 else { throw SyncFailure.invalidResponse }
+        var next = messages
+        var last = cursor
+        for event in page.events {
+            guard event.seq > last, event.seq <= page.cursor,
+                  ["user", "assistant"].contains(event.message.role),
+                  !event.message.id.isEmpty, event.message.content.utf16.count <= 32000 else { throw SyncFailure.invalidResponse }
+            if let index = next.firstIndex(where: { $0.id == event.message.id }) { next[index] = event.message }
+            else { next.append(event.message) }
+            last = event.seq
+        }
+        guard page.cursor == last else { throw SyncFailure.invalidResponse }
+        messages = next; cursor = page.cursor
+    }
+    public mutating func enqueue() throws {
+        guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
+        request = try .pending(draft); draft = ""
+    }
+}
+public struct DeviceSignIn: Decodable, Sendable {
+    public let device_code: String
+    public let user_code: String
+    public let verification_uri_complete: URL
+    public let expires_in: Double
+    public let interval: Double
+}
+public struct AccountTokens: Codable, Sendable {
+    public let access_token: String
+    public let refresh_token: String
+    public let expires_in: Double
+    public let session_id: String
+}
+public enum SyncFailure: Error, LocalizedError {
+    case http(Int, String), invalidResponse
+    public var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "연동 응답을 확인하지 못했어요. 저장된 기록은 유지해요."
+        case .http(let status, let code):
+            if status == 401 || status == 403 { return "이 기기의 연결 권한을 확인해 주세요. 다시 로그인하면 이어갈 수 있어요." }
+            if status == 404 { return "이 대화의 연결이 해제됐거나 서버 연동이 아직 준비되지 않았어요." }
+            if code == "slow_down" { return "연결 확인 중이에요. 잠시 기다려 주세요." }
+            if status == 409 { return "앞선 요청이나 컴퓨터의 상태를 확인해 주세요. 작성한 글은 보존했어요." }
+            if status == 429 { return "연동 요청이 많아요. 잠시 뒤 다시 확인해 주세요." }
+            return "연결하지 못했어요. 컴퓨터와 인터넷 상태를 확인해 주세요. 작성한 글은 남아 있어요."
+        }
+    }
+}
+public final class ConversationService: @unchecked Sendable {
+    private let session: URLSession
+    private let base: URL
+    public init(session: URLSession = .shared, base: URL = URL(string: "https://api.hypeproof-ai.xyz")!) { self.session = session; self.base = base }
+    private func path(_ id: String) throws -> String {
+        guard !id.isEmpty, id.count <= 128, id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
+        return "/v1/me/conversations/" + id
+    }
+    private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil) async throws -> (Data, Int) {
+        guard let url = URL(string: path, relativeTo: base)?.absoluteURL, url.host == base.host else { throw SyncFailure.invalidResponse }
+        var req = URLRequest(url: url, timeoutInterval: 25)
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+        if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, data.count <= 5_000_000 else { throw SyncFailure.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let code = object?["error"] as? String ?? (object?["error"] as? [String: Any])?["code"] as? String ?? "unknown"
+            throw SyncFailure.http(http.statusCode, code)
+        }
+        return (data, http.statusCode)
+    }
+    public func startSignIn() async throws -> DeviceSignIn {
+        let (data, _) = try await request("/v1/auth/device/start", method: "POST", body: ["label": "HP Studio iPhone"])
+        let value = try JSONDecoder().decode(DeviceSignIn.self, from: data)
+        guard value.verification_uri_complete.scheme == "https", value.verification_uri_complete.host == "hypeproof-ai.xyz" else { throw SyncFailure.invalidResponse }
+        return value
+    }
+    public func pollSignIn(_ device: String) async throws -> AccountTokens? {
+        let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])
+        return status == 202 ? nil : try JSONDecoder().decode(AccountTokens.self, from: data)
+    }
+    public func accountID(_ token: String) async throws -> String {
+        let (data, _) = try await request("/v1/me", token: token)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let account = object["account"] as? [String: Any], let id = account["id"] as? String, !id.isEmpty else { throw SyncFailure.invalidResponse }
+        return id
+    }
+    public func refresh(_ refreshToken: String) async throws -> AccountTokens {
+        let (data, _) = try await request("/v1/auth/refresh", method: "POST", body: ["refresh_token": refreshToken])
+        return try JSONDecoder().decode(AccountTokens.self, from: data)
+    }
+    public func logout(_ token: String) async throws { _ = try await request("/v1/auth/logout", method: "POST", body: [:], token: token) }
+    public func list(_ token: String) async throws -> [SharedConversation] {
+        struct List: Decodable { let conversations: [SharedConversation] }
+        let (data, _) = try await request("/v1/me/conversations", token: token)
+        return try JSONDecoder().decode(List.self, from: data).conversations
+    }
+    public func events(_ id: String, after: Int, token: String) async throws -> ConversationPage {
+        let (data, _) = try await request(try path(id) + "/events?after=\(after)", token: token)
+        return try JSONDecoder().decode(ConversationPage.self, from: data)
+    }
+    public func requests(_ id: String, token: String) async throws -> [SharedRequest] {
+        struct List: Decodable { let requests: [SharedRequest] }
+        let (data, _) = try await request(try path(id) + "/requests", token: token)
+        return try JSONDecoder().decode(List.self, from: data).requests
+    }
+    public func submit(_ id: String, request value: SharedRequest, token: String) async throws -> SharedRequest {
+        struct Result: Decodable { let request: SharedRequest }
+        let (data, _) = try await request(try path(id) + "/requests", method: "POST", body: ["id": value.id, "text": value.text], token: token)
+        return try JSONDecoder().decode(Result.self, from: data).request
+    }
+    public func cancel(_ id: String, requestID: String, token: String) async throws -> SharedRequest {
+        _ = try path(requestID)
+        struct Result: Decodable { let request: SharedRequest }
+        let (data, _) = try await request(try path(id) + "/requests/" + requestID + "/cancel", method: "POST", body: [:], token: token)
+        return try JSONDecoder().decode(Result.self, from: data).request
+    }
+}

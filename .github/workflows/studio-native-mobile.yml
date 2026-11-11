@@ -1,0 +1,89 @@
+name: Studio native mobile
+on:
+  push:
+    branches: ['main']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
+  pull_request:
+    paths: ['apps/studio-native/**', '.github/workflows/studio-native-mobile.yml', '.github/workflows/studio-apple-testflight.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Bind native CI to the actual checked-out source
+        env:
+          NATIVE_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 apps/studio-native/scripts/verify-native-candidate.py identity --output "$RUNNER_TEMP/native-candidate.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-native-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-candidate.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Verify trusted native acceptance recipe controls
+        run: python3 -m unittest discover -s apps/studio-native/tests -p 'test_*.py' -v
+  ios:
+    needs: contract
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build device binary and test native simulator
+        run: bash apps/studio-native/scripts/ios-verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-ios-unsigned-${{ github.sha }}
+          path: |
+            apps/studio-native/evidence/
+            apps/studio-native/ios/DerivedData-device/Build/Products/Release-iphoneos/*.app
+          retention-days: 14
+  android:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable emulator acceleration on the disposable runner
+        run: sudo chmod a+rw /dev/kvm
+      - name: Native Android record and speech handoff journeys
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: ANDROID_SERIAL=emulator-5554 bash apps/studio-native/scripts/android-verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-android-preview-${{ github.sha }}
+          path: |
+            apps/studio-native/android/app/build/outputs/apk/debug/*.apk
+            apps/studio-native/android/app/build/reports/
+            apps/studio-native/android/app/build/outputs/androidTest-results/
+            apps/studio-native/evidence/android/
+          retention-days: 14
