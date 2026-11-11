@@ -636,6 +636,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private mobileTurn?: { id: string; failed: boolean };
   private reflectionAccounts?: AccountSession;
   private reflectionRefreshing = false;
+  private reflectionMaking = false;
+  isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
   private reflectionStreams = new Map<string,{binding:ReflectionBinding;id:string}>();
   private reflectionBindings(): ReflectionBinding[] {
@@ -648,8 +650,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.context.globalState.update(key,b);
   }
   private reflectionBinding(): ReflectionBinding | undefined {
-    const scope=this.mobileConversationScope(true);
-    return scope ? this.reflectionBindings().find(b=>b.activity===scope.activity&&b.workspace===scope.workspace&&b.task===scope.task) : undefined;
+    const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
+    const task=store?.getView().activeTaskId;
+    if(!store||!task||!activity||activity.kind!=='personal'||this._instructorMode?.isInstructor)return;
+    // Ordinary tasks do not need reflection capability checks or an asynchronous preflight.
+    return this.context.globalState.get<ReflectionBinding>(REFLECTION_BINDING_KEY+':'+JSON.stringify([activity.id,store.scope,task]));
   }
   private async applyReflectionSnapshot(b: ReflectionBinding, value: ReflectionSnapshot): Promise<void> {
     const accounts=this.reflectionAccounts,store=this.currentTaskStore();
@@ -712,6 +717,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.reflectionRefreshing=true;
     try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
     finally { this.reflectionRefreshing=false; }
+  }
+  /** Copy only the person's reviewed words into an ordinary, unsent desktop task. */
+  async beginPersonalMaking(): Promise<void> {
+    if (this.reflectionMaking) return;
+    const b=this.reflectionBinding(),accounts=this.reflectionAccounts,store=this.currentTaskStore();
+    if(!b||!accounts||!store||b.pending||!this.mobileConversationScope(true)?.ready)throw Error('나의 질문에서 작성 중인 글과 전송 상태를 먼저 확인해 주세요.');
+    const current=()=>this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&this.reflectionBinding()?.task===b.task&&this.reflectionBinding()?.session===b.session;
+    this.reflectionMaking=true;
+    try {
+      if(await accounts.conversationSession()!==b.session||!current())throw Error('계정이나 열린 대화가 바뀌었어요.');
+      let text=[...store.getHistory(b.task)].reverse().find(m=>m.role==='user')?.content??'';
+      while(current()) {
+        const chosen=await vscode.window.showInputBox({title:'만들어 볼 의도 확인',prompt:'새 제작 작업에 이 글만 초안으로 옮겨요. 대화 전체는 복사하지 않고 AI에 보내지도 않아요.',value:text.slice(0,4000),ignoreFocusOut:true,
+          validateInput:value=>!value.trim()?'만들어 보고 싶은 것을 한 문장으로 적어 주세요.':value.length>4000?'4,000자 이내로 적어 주세요.':undefined});
+        if(chosen===undefined)return;
+        text=chosen.trim();if(!text||text.length>4000)continue;
+        if(await accounts.conversationSession()!==b.session||!current()||!this.mobileConversationScope(true)?.ready)throw Error('계정이나 열린 대화가 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');
+        const created=await this.handleTaskMessage({type:'taskCreate',taskId:b.task} as WebviewMessage,undefined,{
+          draft:{...emptyActivityDraft(),text},
+          allowed:async()=>await accounts.conversationSession()===b.session&&current()&&!this.reflectionBinding()?.pending,
+        });
+        if(created)return;
+        if(!current())return;
+        // A disk failure leaves the original task intact. Reopen the same words for recovery.
+        await vscode.window.showWarningMessage('제작 초안을 저장하지 못했어요. 입력한 글을 다시 열었어요.');
+      }
+    } finally {this.reflectionMaking=false;}
   }
   private async stopPersonalReflection(streamId:string):Promise<boolean> {
     const held=this.reflectionStreams.get(streamId);if(!held)return false;
@@ -893,7 +925,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: false });
   }
 
-  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview, initial?: {draft:ActivityDraft;allowed:()=>Promise<boolean>}): Promise<string|void> {
     const store = this.currentTaskStore?.();
     if (!store) {
       if (msg.type === 'taskMove') await this.refuseTaskMove(msg, '작업 목록을 열지 못해 옮기지 않았어요.');
@@ -907,6 +939,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     let renameUndoId: string | undefined, renameUndone = false;
+    let createdTaskId: string | undefined;
     let moved: { title: string; destination: string } | undefined;
     const knownSource = (value: string) => {
       try {
@@ -980,7 +1013,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
-          if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          if (msg.type === 'taskCreate') {
+            if(initial&&(!await initial.allowed()||this.currentTaskStore()!==store||store.getView().activeTaskId!==msg.taskId))throw Error('계정이나 열린 작업이 바뀌어 초안을 옮기지 않았어요.');
+            createdTaskId=(await store.create('새 작업',expected,initial?.draft)).activeTaskId??undefined;
+          }
           // CGP-KNOW-R-029 — checked again here, on the seat as it is now; refused with the same reason the control shows.
           else if (msg.type === 'taskCreateTemporary') {
             if (!this.temporaryTaskAllowed()) throw new Error(TEMPORARY_TASK_UNAVAILABLE);
@@ -1030,6 +1066,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: renameUndone });
       if (msg.type === 'taskAppearance') await this.post({ type: 'taskAppearanceResult', requestId: msg.requestId, taskId: msg.taskId, saved: true });
       if (msg.type === 'taskMove' && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: !!moved, ...(moved ? { title: moved.title, destination: moved.destination } : {}) });
+      return createdTaskId;
     } catch (error) {
       let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
       if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
@@ -8758,7 +8795,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
-        if (await this.sendPersonalReflection(msg)) return;
+        if (this.reflectionBinding()) { await this.sendPersonalReflection(msg); return; }
         // REQ-STUDIO-PROBLEM-REPORT level 3 — a frustrated message offers the report form; it sends nothing.
         if (typeof msg.text === "string" && this.problemTracker?.frustration(msg.text)) void this.post({ type: "problemReportOffer", offer: { reason: "frustration" } });
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
@@ -8835,7 +8872,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "stopDelegations": {
-        if(await this.stopPersonalReflection(msg.streamId))return;
+        if(this.reflectionStreams?.has(msg.streamId)){await this.stopPersonalReflection(msg.streamId);return;}
         const control=this.delegationControls.get(msg.streamId);
         if(!this.activeStreams.has(msg.streamId))return;
         if(control?.scope===JSON.stringify([this.turnRequestScope(),this.profileGeneration]))control.stop();
@@ -8848,7 +8885,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
-        if(await this.stopPersonalReflection(msg.streamId))return;
+        if(this.reflectionStreams?.has(msg.streamId)){await this.stopPersonalReflection(msg.streamId);return;}
         this.activeStreams.get(msg.streamId)?.abort();
         this.automationConversation?.cancel();
         // #497 — abort() alone tells the webview NOTHING. handleSend and

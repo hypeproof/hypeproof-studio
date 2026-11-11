@@ -298,9 +298,15 @@ export async function activate(context: vscode.ExtensionContext) {
   reflectionStatus.tooltip = '같은 계정의 휴대전화와 나를 알아가는 대화';
   reflectionStatus.command = 'hypeproof-chat.personalReflection';
   if(accounts)reflectionStatus.show();
-  const reflectionTimer=setInterval(()=>{void provider.refreshPersonalReflection().catch(()=>{});},6000);
+  const makingStatus=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,65);
+  makingStatus.text='$(add) 만들기로 이어가기';makingStatus.tooltip='확인한 의도를 기존 제작 작업의 초안으로 옮기기';makingStatus.command='hypeproof-chat.reflectionMaking';
+  const showMaking=()=>{if(provider.isPersonalReflection())makingStatus.show();else makingStatus.hide();};
+  const reflectionTimer=setInterval(()=>{showMaking();void provider.refreshPersonalReflection().catch(()=>{});},6000);
+  context.subscriptions.push(makingStatus,vscode.commands.registerCommand('hypeproof-chat.reflectionMaking',async()=>{
+    try{await provider.beginPersonalMaking();}catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'제작 초안을 열지 못했어요.');}finally{showMaking();}
+  }));
   context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
-    try { await provider.openPersonalReflection(); }
+    try { await provider.openPersonalReflection(); showMaking(); }
     catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
   }));
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.

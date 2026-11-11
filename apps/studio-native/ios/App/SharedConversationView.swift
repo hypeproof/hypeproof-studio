@@ -262,7 +262,7 @@ struct SharedConversationView: View {
                 contextField("style", title: "예시, 짧은 질문, 천천히 설명 중 무엇이 편한가요?")
                 Section {
                     Button("대화에 공유할 글 만들기") { if model.shareContextDraft() { showContext = false; focused = true } }
-                    Text("만들 준비가 되면 같은 대화를 컴퓨터에서 열어 작은 MVP로 이어가세요. 파일 변경이나 배포에 필요한 확인은 컴퓨터에서 해요.").font(.footnote).foregroundStyle(.secondary)
+                    Text("만들 준비가 되면 컴퓨터의 기존 HP Studio에서 ‘나의 질문’을 열고 ‘만들기로 이어가기’를 선택하세요. 확인한 의도만 새 제작 작업의 초안으로 옮겨요. 보내기와 파일 변경·배포 확인은 컴퓨터에서 해요.").font(.footnote).foregroundStyle(.secondary)
                 }
                 status
             }.navigationTitle("내 상황과 의도").navigationBarTitleDisplayMode(.inline).toolbar { Button("닫기") { showContext = false } }

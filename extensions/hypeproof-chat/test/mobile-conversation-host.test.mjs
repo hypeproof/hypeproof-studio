@@ -45,6 +45,37 @@ test('uncertain reflection send preserves an idempotent pending request and rest
 }));
 
 const privateSnapshot={state:{id:'personal-reflection',revision:2,messages:[{id:'private-user',role:'user',content:'Private account A reflection',created_at:1},{id:'private-answer',role:'assistant',content:'One question?',created_at:2}],has_earlier:false,turn:null},opening:'First question?',hint:'Optional'};
+async function makingHost(f) {
+ const s=f.h.mobileConversationScope(true),b={session:'account-a',activity:s.activity,workspace:s.workspace,task:s.task,revision:2};
+ await f.h.saveReflectionBinding(b);await f.store.append(s.task,privateSnapshot.state.messages.map(m=>({id:m.id,role:m.role,content:m.content,createdAt:m.created_at})));
+ f.h.setReflectionAccount({conversationSession:async()=> 'account-a',reflectionRequest:async()=>{throw Error('Making must not call Service');}});
+ f.vscode.window.showWarningMessage=async()=>undefined;
+ return b;
+}
+test('making copies only human-reviewed words into a durable unsent existing desktop task',async()=>host(async f=>{
+ const b=await makingHost(f);let prompts=0;
+ f.vscode.window.showInputBox=async options=>{prompts++;assert.equal(options.value,'Private account A reflection');return 'Make a one-page appointment preview';};
+ await f.h.beginPersonalMaking();const made=f.store.getView().activeTaskId;
+ assert.notEqual(made,b.task);assert.equal(prompts,1);assert.equal(f.store.getDraft(made).text,'Make a one-page appointment preview');assert.equal(f.store.getHistory(made).length,0);
+ assert.equal(f.store.getHistory(b.task).length,2);assert.equal(f.store.getDraft(b.task).text,'');assert.equal(f.h.isPersonalReflection(),false);
+ const reopened=new f.internals.TaskWorkspaceStore(f.store.root??f.activity.workspace,f.activity.id);await reopened.initialize();
+ assert.equal(reopened.getDraft(made).text,'Make a one-page appointment preview');
+ assert.equal(f.posts.some(p=>p.type==='streamStart'),false);
+}));
+test('making cancellation, duplicate clicks and an account change cannot create or leak a draft',async()=>host(async f=>{
+ const b=await makingHost(f);f.vscode.window.showInputBox=async()=>undefined;await f.h.beginPersonalMaking();assert.equal(f.store.getView().tasks.length,1);
+ let finish,entered;const started=new Promise(r=>entered=r),input=new Promise(r=>finish=r);let count=0;
+ f.vscode.window.showInputBox=async()=>{count++;entered();return input;};
+ const making=f.h.beginPersonalMaking();await started;await f.h.beginPersonalMaking();assert.equal(count,1);
+ f.h.setReflectionAccount({conversationSession:async()=> 'account-b'});finish('Private new intention');await assert.rejects(making,/계정이나 열린 대화/);
+ assert.equal(f.store.getView().activeTaskId,b.task);assert.equal(f.store.getView().tasks.length,1);assert.equal(f.store.getDraft(b.task).text,'');
+}));
+test('failed making persistence reopens the exact reviewed text and preserves the source',async()=>host(async f=>{
+ const b=await makingHost(f);let count=0;
+ f.vscode.window.showInputBox=async options=>{count++;if(count===1)return 'The words I must keep';assert.equal(options.value,'The words I must keep');return undefined;};
+ f.store.create=async()=>{throw Error('Synthetic disk unavailable');};await f.h.beginPersonalMaking();
+ assert.equal(count,2);assert.equal(f.store.getView().activeTaskId,b.task);assert.equal(f.store.getView().tasks.length,1);assert.equal(f.store.getHistory(b.task).length,2);
+}));
 test('navigation during reflection opening cannot rename or import into an unrelated task',async()=>host(async f=>{
  f.vscode.window.showInformationMessage=async()=> '내 이야기 시작하기';
  const a=f.store.getView().activeTaskId;let finish,started;
