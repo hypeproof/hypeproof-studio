@@ -9,8 +9,9 @@ if [[ "${GITHUB_ACTIONS:-}" != "true" || "$(uname -s)" != "Linux" ]]; then
 fi
 
 # The Azure mirror repeatedly failed DNS before browser tests could start.
+# Hosted runners may reference the mirror through mirror+file, not a deb URL.
 # Keep Ubuntu suites, components and signature verification unchanged.
-for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
   [[ -f "$source" ]] || continue
   if grep -q 'azure\.archive\.ubuntu\.com' "$source"; then
     sudo sed -i 's|http[s]*://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
