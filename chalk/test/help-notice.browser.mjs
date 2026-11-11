@@ -3,8 +3,9 @@
 // headless Chromium (page-level only: no OS input, no visible window).
 // Notice: (a) the first read of a class is the baseline and says nothing; (b) a new request of THIS class raises a notice and
 // a 새 항목 mark; another class's request raises nothing; (c) neither the notice nor the OS notification carries request
-// content; (d) the browser Notification is off until the instructor opts in, is silent, and fires only while the tab is hidden;
-// (e) opening a request clears its mark and the notice; (f) a new class is a new baseline.
+// content; (d) there is no OS/browser Notification (the page does not refresh in a hidden tab, and minors' IDs must not reach
+// lock screens); (e) opening a request clears its mark and the notice; (f) a new class is a new baseline; (g) the same
+// through the page's REAL refresh() against a mocked Service, including a class switch and another class's rows.
 // Rows: bold title, muted summary, relative time, one 44px action, 14px text, >= 56px, no overflow at 375 and 1280.
 // Without a browser this prints NOT RUN; with FOCUS_REQUIRE_BROWSER=1 (CI) a missing browser fails.
 import assert from 'node:assert/strict';
@@ -28,14 +29,14 @@ const check = (cond, msg) => { assert.ok(cond, msg); checks++; };
 const settle = () => new Promise((r) => setTimeout(r, 120));
 
 // Fixture: class S1 with two seats, two open requests as the baseline. Request rows carry content-like fields that must never
-// reach a notice. A stub Notification records every construction; permission starts as "default".
+// reach a notice. A spy Notification records any construction or permission request (there must be none).
 const SETUP = `(() => {
   const now = Math.floor(Date.now() / 1000);
   window.mk = (id, n, sid = 'S1', student = 'student-' + id) => ({ id, kind: 'help', session_id: sid, student_id: student, status: 'received', revision: 1, created_at: now - n, expires_at: now + 3600, question: 'SECRET-QUESTION-' + id, feedback: 'SECRET-FEEDBACK-' + id, next_action: '' });
   window.__calls = []; window.__notes = []; window.__perm = 'default'; window.__permCalls = 0;
   window.fetch = async (url, opts = {}) => { __calls.push({ url: String(url), method: opts.method || 'GET' }); return { ok: true, status: 200, json: async () => ({ id: 'x', student_id: 'student-a', session_id: 'S1', expires_at: now + 3600, revision: 1, status: 'received', content: {} }) }; };
   window.Notification = class { constructor(title, opts) { __notes.push({ title, ...opts }); } static get permission() { return __perm; } static requestPermission() { __permCalls++; __perm = window.__answer || 'granted'; return Promise.resolve(__perm); } };
-  refresh = () => {}; renderSummary = () => {}; renderSelection = () => {};
+  window.__realRefresh = refresh; refresh = () => {}; renderSummary = () => {}; renderSelection = () => {};
   token = 't'; cohort = 'c1';
   board = { session: { session_id: 'S1' }, seats: [] };
   opsData = { seats: [{ seat_id: 'S01', student_id: 'student-a', step: { step_id: 'step-2' } }, { seat_id: 'S02', student_id: 'student-b' }] };
@@ -73,7 +74,7 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
     check(row.title.includes('S01') && row.title.includes('student-a') && row.tip === row.title, 'title names the seat and student, with a tooltip for truncation: ' + row.title);
     check(row.overflow <= 0, 'no horizontal overflow at 1280');
 
-    // (b) A new request of this class: notice, mark, no OS notification (opt-in is off).
+    // (b) A new request of this class: notice, mark, no OS notification.
     await b.evaluate(HIDDEN(true));
     await b.evaluate(ADD(`[mk('c', 2, 'S1', 'student-a')]`)); await settle();
     n = await b.evaluate(NOTICE);
@@ -93,23 +94,11 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
     check(n.text.includes('1건') && !n.text.includes('student-other'), 'another class request raises no notice: ' + n.text);
     check((await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id="z"]').length`)) === 0, 'another class request is not listed');
 
-    // (d) Opt-in gating.
-    const os = await b.evaluate(`(() => { const e = document.getElementById('ops-help-os'); return e ? { text: e.textContent, pressed: e.getAttribute('aria-pressed'), h: e.getBoundingClientRect().height, f: getComputedStyle(e).fontSize } : null; })()`);
-    check(os && os.pressed === 'false' && os.h >= 44 && os.f === '14px', 'the opt-in is a 44px off-by-default toggle: ' + JSON.stringify(os));
-    check((await b.evaluate(`__permCalls`)) === 0, 'permission is not asked before the instructor presses the toggle');
-    await b.evaluate(`document.getElementById('ops-help-os').click()`); await settle();
-    check((await b.evaluate(`__permCalls`)) === 1 && (await b.evaluate(`document.getElementById('ops-help-os').getAttribute('aria-pressed')`)) === 'true', 'pressing the toggle asks once and turns it on');
-    await b.evaluate(ADD(`[mk('d', 1, 'S1', 'student-b')]`)); await settle();
-    const notes = await b.evaluate(`__notes`);
-    check(notes.length === 1 && notes[0].silent === true && !/SECRET/.test(JSON.stringify(notes[0])) && notes[0].body.includes('student-b'), 'opted in and tab hidden: one silent notification with names only: ' + JSON.stringify(notes));
-    await b.evaluate(HIDDEN(false));
-    await b.evaluate(ADD(`[mk('e', 1, 'S1', 'student-a')]`)); await settle();
-    check((await b.evaluate(`__notes.length`)) === 1, 'a visible tab shows only the in-console notice, no OS notification');
-    await b.evaluate(HIDDEN(true));
-    await b.evaluate(`document.getElementById('ops-help-os').click()`); await settle();
-    await b.evaluate(ADD(`[mk('f', 1, 'S1', 'student-a')]`)); await settle();
-    check((await b.evaluate(`__notes.length`)) === 1 && (await b.evaluate(`document.getElementById('ops-help-os').getAttribute('aria-pressed')`)) === 'false', 'turning the toggle off stops OS notifications');
-    check((await b.evaluate(NOTICE)).hidden === false, 'the in-console notice does not depend on the OS opt-in');
+    // (d) No OS/browser notification at all: no control, no permission request, no construction, tab hidden or not.
+    check((await b.evaluate(`document.getElementById('ops-help-os') === null && !/알림 받기|알림 끄기/.test(document.body.textContent)`)), 'no OS notification control or copy on the page');
+    for (const id of ['d', 'e', 'f']) { await b.evaluate(HIDDEN(id !== 'e')); await b.evaluate(ADD(`[mk('${id}', 1, 'S1', 'student-b')]`)); await settle(); }
+    check((await b.evaluate(`__notes.length + __permCalls`)) === 0, 'new requests never construct a Notification or ask permission');
+    check((await b.evaluate(NOTICE)).hidden === false, 'the in-console notice is the only channel');
 
     // (e) Opening clears the mark; the notice button opens the oldest new request; keyboard reaches both buttons.
     const before = await b.evaluate(`document.querySelectorAll('#ops-help-list .help-new').length`);
@@ -142,6 +131,49 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
     // Disconnect clears everything.
     await b.evaluate(`reset()`);
     check((await b.evaluate(NOTICE)).hidden === true, 'reset hides the notice');
+
+    // (g) The real refresh cycle: the page's own refresh() reads /board and the shares (general and kind=help) from a mocked Service.
+    await b.evaluate(`reset()`);
+    await b.evaluate(`(() => {
+      const now = Math.floor(Date.now() / 1000);
+      window.__srv = { S1: [mk('s1a', 300, 'S1', 'student-a')], S2: [mk('s2a', 5, 'S2', 'student-c'), mk('s2b', 4, 'S2', 'student-d')] };
+      window.__cur = 'S1'; window.__leak = null;
+      window.fetch = async (url) => {
+        const u = new URL(String(url), 'https://chalk.test'), q = u.searchParams;
+        let body = {};
+        if (u.pathname.endsWith('/board')) body = { session: { session_id: __cur }, seats: [] };
+        else if (u.pathname.endsWith('/classroom/shares')) {
+          const rows = q.get('kind') === 'help' ? [...__srv[q.get('session_id')] || [], ...(__leak ? [__leak] : [])] : [];
+          body = { shares: rows, complete: true, limit: 50, next: null, has_more: false, counts: { open: rows.length, answered: 0 } };
+        }
+        return { ok: true, status: 200, json: async () => body };
+      };
+      refresh = __realRefresh; renderBoard = (d) => { board = d; };
+      opsRefresh = () => {};
+      cohort = 'c1'; token = 't';
+    })()`);
+    await b.evaluate(`refresh()`); await settle();
+    check((await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id]').length`)) === 1 && (await b.evaluate(NOTICE)).hidden === true, 'refresh: the first read through the real cycle is a silent baseline');
+    await b.evaluate(`__srv.S1.push(mk('s1b', 1, 'S1', 'student-b'))`);
+    await b.evaluate(`refresh()`); await settle();
+    n = await b.evaluate(NOTICE);
+    check(n.hidden === false && n.text.includes('student-b') && !/SECRET/.test(n.text), 'refresh: a request received between two refreshes raises the notice: ' + n.text);
+    // Another class's row returned by a (misbehaving) read is never noticed or listed.
+    await b.evaluate(`__leak = mk('leak', 0, 'S2', 'student-leak')`);
+    await b.evaluate(`refresh()`); await settle();
+    n = await b.evaluate(NOTICE);
+    check(!n.text.includes('student-leak') && (await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id="leak"]').length`)) === 0, 'refresh: another class row raises no notice and is not listed');
+    await b.evaluate(`__leak = null`);
+    // Class switch: S2's requests are NEWER than anything in S1's baseline, yet the first read of S2 is a fresh silent baseline.
+    await b.evaluate(`__cur = 'S2'`);
+    await b.evaluate(`refresh()`); await settle();
+    check((await b.evaluate(`[...document.querySelectorAll('#ops-help-list li[data-help-id]')].map((l) => l.dataset.helpId).join()`)) === 's2a,s2b' || (await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id]').length`)) === 2, 'refresh: the new class lists its own requests');
+    check((await b.evaluate(NOTICE)).hidden === true && (await b.evaluate(`document.querySelectorAll('#ops-help-list .help-new').length`)) === 0, 'refresh: a class switch re-baselines silently even when its requests are newer than the old baseline');
+    await b.evaluate(`__srv.S2.push(mk('s2c', 1, 'S2', 'student-e'))`);
+    await b.evaluate(`refresh()`); await settle();
+    n = await b.evaluate(NOTICE);
+    check(n.hidden === false && n.text.includes('student-e') && !n.text.includes('student-b'), 'refresh: after the switch a new request of the new class notices: ' + n.text);
+    check((await b.evaluate(`__notes.length + __permCalls`)) === 0, 'refresh: still no Notification');
   } finally { await b.close(); }
 }
 
@@ -163,4 +195,4 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
   } finally { await b.close(); }
 }
 
-console.log(`help-notice.browser: baseline silent, own-class notice with 새 항목, no content, opt-in silent OS notification, open clears, re-baseline, row layout 375/1280 (${checks} checks) PASS`);
+console.log(`help-notice.browser: baseline silent, own-class notice with 새 항목, no content, no OS notification, open clears, re-baseline, row layout 375/1280 (${checks} checks) PASS`);

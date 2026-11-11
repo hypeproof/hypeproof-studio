@@ -395,8 +395,8 @@ body:not(.has-selection) #ops-help.group{margin-top:var(--ds-c-chalk-manage-spac
 .help-notice{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-c-chalk-manage-space-2);margin-block:var(--ds-c-chalk-manage-space-2);padding:var(--ds-c-chalk-manage-space-15) var(--ds-c-chalk-manage-space-7);border:var(--ds-c-chalk-manage-size-3) solid var(--ink-accent);border-radius:var(--ds-c-chalk-manage-radius-9);font-size:var(--ds-c-chalk-manage-type-28)}
 .help-notice[hidden]{display:none}
 .help-notice>span{flex:1 1 0;min-inline-size:0;overflow-wrap:anywhere}
-.help-notice button,#ops-help-os{min-block-size:var(--ds-c-chalk-manage-size-8);padding-inline:var(--ds-c-chalk-manage-space-1);font-size:var(--ds-c-chalk-manage-type-28)}
-#ops-help-os-state{font-size:var(--ds-c-chalk-manage-type-28)}
+
+.help-notice button{min-block-size:var(--ds-c-chalk-manage-size-8);padding-inline:var(--ds-c-chalk-manage-space-1);font-size:var(--ds-c-chalk-manage-type-28)}
 #ops-help-list{list-style:none;margin:0;padding:0}
 #ops-help-list li.help-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:var(--ds-c-chalk-manage-space-1);row-gap:var(--ds-c-chalk-manage-space-14);padding-block:var(--ds-c-chalk-manage-space-15);border-block-end:var(--ds-c-chalk-manage-size-3) solid var(--ink-line);font-size:var(--ds-c-chalk-manage-type-28)}
 .help-row .help-line{display:flex;align-items:center;gap:var(--ds-c-chalk-manage-space-2);min-inline-size:0}
@@ -412,7 +412,7 @@ body:not(.has-selection) #ops-help.group{margin-top:var(--ds-c-chalk-manage-spac
 :is(#ops-table,#ops-summary,#ops-shown,#ops-state,#class-state,#nav-help,#ops-help-list,#ops-help-state,#seats),:is(#ops-table,#ops-summary,#ops-help-list,#seats) *{font-variant-numeric:tabular-nums}
 </style></head><body>
 <div class="shell">
-<aside id="side" class="side" aria-label="강사 메뉴"><div class="side-head"><div class="brand"><small>HypeProof · Chalk</small><strong>수업 운영</strong></div><button type="button" id="side-close" class="side-close">메뉴 닫기</button></div><nav class="flow" aria-label="강사 도구"><a href="/authoring">강의 작성</a><a href="/issuer">학생 초대·토큰</a><a href="/budgets">AI 예산</a><a href="/console">수업 열기·종료</a><a href="#ops-title" aria-current="page" class="here">운영 보드</a><a href="#ops-help-title" id="nav-help-link">도움 요청 응대<span id="nav-help" class="nav-badge"></span></a><details class="flow-more"><summary>더보기</summary><a href="/authoring#rehearsal">리허설·확정</a><a href="#shares-title">결과물·공유 기록</a><a href="#ops-wrap-title">마무리 단계</a><a href="#ops-finish-title">기록 회수·보고서</a></details></nav><div class="side-foot"><section class="side-notify" aria-label="도움 요청 알림"><button id="ops-help-os" type="button" aria-pressed="false" hidden>브라우저 알림 받기</button><p id="ops-help-os-state" class="muted" role="status" aria-live="polite"></p></section><section class="side-class" aria-label="수업 전체 제어"><div id="ops-control" hidden><details><summary>기기 적용 현황</summary><p id="ops-control-state" class="muted" role="status" aria-live="polite"></p></details><button id="ops-pause" type="button"></button></div></section><p id="conn-where" class="muted" hidden></p></div></aside><button id="side-backdrop" type="button" aria-label="메뉴 닫기" hidden></button>
+<aside id="side" class="side" aria-label="강사 메뉴"><div class="side-head"><div class="brand"><small>HypeProof · Chalk</small><strong>수업 운영</strong></div><button type="button" id="side-close" class="side-close">메뉴 닫기</button></div><nav class="flow" aria-label="강사 도구"><a href="/authoring">강의 작성</a><a href="/issuer">학생 초대·토큰</a><a href="/budgets">AI 예산</a><a href="/console">수업 열기·종료</a><a href="#ops-title" aria-current="page" class="here">운영 보드</a><a href="#ops-help-title" id="nav-help-link">도움 요청 응대<span id="nav-help" class="nav-badge"></span></a><details class="flow-more"><summary>더보기</summary><a href="/authoring#rehearsal">리허설·확정</a><a href="#shares-title">결과물·공유 기록</a><a href="#ops-wrap-title">마무리 단계</a><a href="#ops-finish-title">기록 회수·보고서</a></details></nav><div class="side-foot"><section class="side-class" aria-label="수업 전체 제어"><div id="ops-control" hidden><details><summary>기기 적용 현황</summary><p id="ops-control-state" class="muted" role="status" aria-live="polite"></p></details><button id="ops-pause" type="button"></button></div></section><p id="conn-where" class="muted" hidden></p></div></aside><button id="side-backdrop" type="button" aria-label="메뉴 닫기" hidden></button>
 <div id="work" class="work">
 <header class="topbar"><button type="button" id="side-open" class="side-open" aria-controls="side" aria-expanded="false">메뉴</button><div class="title"><h1>수업 운영 보드</h1><details class="class-status"><summary>수업 정보</summary><p id="ops-state" class="status" role="status" aria-live="polite">연결하면 이번 수업의 명단과 학생별 연결 상태를 자동으로 불러옵니다.</p></details><button type="button" id="join-copy" class="join-copy" hidden>참여 링크 복사</button><span id="join-copied" class="status join-copied" role="status" aria-live="polite"></span></div><section id="conn" class="conn" aria-label="수업 연결"><p id="status" class="status" role="status" aria-live="polite">강사 토큰과 코호트를 입력하세요.</p><span class="conn-tools"><button type="button" id="refresh">지금 갱신</button><button type="button" id="conn-edit" aria-controls="connect" aria-expanded="false" hidden>접속 설정</button><button type="button" id="disconnect">연결 해제</button></span></section></header>
 <form id="connect" class="setup"><label>강사 토큰<input id="token" type="password" autocomplete="off" required></label><label>코호트 ID<input id="cohort" required pattern="[a-zA-Z0-9_-]{1,128}"></label><label>이번 수업 학생 접두어<input id="prefix" placeholder="발급한 학생 ID의 공통 앞부분"></label><button id="connect-go" class="primary">연결</button></form>
@@ -500,14 +500,14 @@ const helpFor=id=>helpOpen().filter(r=>r.student_id===id);
 // #751 U1b — the help list folds into one summary line (count, people, longest wait, expiring soon) so the roster and the
 // selection tools stay on the first screen; the instructor opens it with one button or the "도움 요청 응대" link. States that
 // are not "none" (unknown, failed, partial) always stay in the summary line — folding never hides them.
-let helpExpanded=false,helpSeen=null,helpOs=false;const helpFresh=new Set();
+let helpExpanded=false,helpSeen=null;const helpFresh=new Set();
 
 function helpFold(n){document.body.classList.toggle('help-known',helpKnown());const t=$('ops-help-toggle'),body=$('ops-help-body'),can=n>0;t.hidden=!can;$('ops-help-keys-toggle').hidden=!can;if(!can)helpKeysShow(false);body.hidden=!can||!helpExpanded;t.setAttribute('aria-expanded',String(can&&helpExpanded));t.textContent=helpExpanded?'요청 목록 접기':'요청 목록 펼치기 ('+n+'건)';}
 // CGP-AGENT-R-024 (REQ-CGP-AGENT-47b): the instructor is told in the console when a student sends a help request.
 // The first read of a class is the baseline (what is already queued is in the list and the sidebar count, not "new"). A request
 // of THIS class (helpNow filters by session) that was not in an earlier read, and is not older than the newest one then, is new.
 // The notice names the seat and student the list already shows, plus the step the board already shows for a single request:
-// never request content. Nothing is logged. The browser Notification is opt-in, silent, and only while this tab is hidden.
+// never request content. Nothing is logged. There is deliberately no OS/browser notification: the page does not refresh while the tab is hidden, and seat/student IDs of minors must not reach lock screens or projectors.
 function helpWho(r){const seat=opsData?.seats.find(x=>x.student_id===r.student_id);return seat?seat.seat_id+' · '+r.student_id:(opsData?'이번 명단 밖 · ':'')+r.student_id;}
 function helpNoticeText(rows){const n=rows.length;let t='새 도움 요청 '+n+'건 · '+rows.slice(0,3).map(r=>helpWho(r)).join(', ')+(n>3?' 외 '+(n-3)+'명':'');if(n===1){const st=opsData?.seats.find(x=>x.student_id===rows[0].student_id)?.step?.step_id;if(st)t+=' · '+st;}return t;}
 function helpNotify(open){const sid=board.session.session_id,newest=open.reduce((m,r)=>Math.max(m,r.created_at),0);
@@ -515,7 +515,7 @@ function helpNotify(open){const sid=board.session.session_id,newest=open.reduce(
  const fresh=open.filter(r=>!helpSeen.ids.has(r.id)&&r.created_at>=helpSeen.after);
  for(const r of open)helpSeen.ids.add(r.id);helpSeen.after=Math.max(helpSeen.after,newest);
  for(const id of [...helpFresh])if(!open.some(r=>r.id===id))helpFresh.delete(id);
- if(!fresh.length)return;for(const r of fresh)helpFresh.add(r.id);helpOsNotify(fresh);}
+ if(!fresh.length)return;for(const r of fresh)helpFresh.add(r.id);}
 function helpFreshRows(){return helpOpen().filter(r=>helpFresh.has(r.id)).sort((a,b)=>a.created_at-b.created_at);}
 let helpDismissed='';
 function helpNoticeRender(){const rows=helpFreshRows(),n=$('ops-help-notice');n.hidden=!rows.length||rows.map(r=>r.id).join()===helpDismissed;if(rows.length)text('ops-help-notice-text',helpNoticeText(rows));}
@@ -529,15 +529,6 @@ function helpRow(r){const li=document.createElement('li');li.className='help-row
  const tm=document.createElement('time');tm.className='help-time';tm.dateTime=new Date(r.created_at*1000).toISOString();tm.textContent=helpAgo(r.created_at*1000);tm.title='요청 '+new Date(r.created_at*1000).toLocaleTimeString()+' · 열람 만료 '+new Date(r.expires_at*1000).toLocaleTimeString();
  const b=element('button','요청 열기','help-open');b.type='button';b.onclick=()=>openShare(r.id);
  li.append(line,tm,s,b);return li;}
-const helpOsSupported=()=>typeof Notification==='function';
-const helpOsEnabled=()=>helpOs&&helpOsSupported()&&Notification.permission==='granted';
-function helpOsNotify(rows){if(!helpOsEnabled()||!document.hidden)return;try{new Notification('새 도움 요청',{body:helpNoticeText(rows),tag:'chalk-help',silent:true});}catch(e){}}
-function helpOsRender(msg){const b=$('ops-help-os');b.hidden=!helpOsSupported();const on=helpOsEnabled();b.setAttribute('aria-pressed',String(on));b.textContent=on?'브라우저 알림 끄기':'브라우저 알림 받기';text('ops-help-os-state',msg!==undefined?msg:on?'탭이 가려져 있을 때 새 도움 요청을 알려요 · 소리는 없고 학생 글은 담지 않아요':'');}
-async function helpOsToggle(){if(!helpOsSupported()){helpOsRender('이 브라우저는 알림을 지원하지 않아요');return;}
- if(helpOsEnabled()){helpOs=false;helpOsRender();return;}
- let p=Notification.permission;if(p==='default'){try{p=await Notification.requestPermission();}catch(e){p='denied';}}
- if(p==='granted'){helpOs=true;helpOsRender();}else{helpOs=false;helpOsRender(p==='denied'?'브라우저에서 알림이 막혀 있어요. 사이트 설정에서 허용해 주세요':'알림을 허용하지 않았어요');}}
-$('ops-help-os').onclick=helpOsToggle;helpOsRender();
 $('ops-help-notice-open').onclick=()=>{const r=helpFreshRows()[0];if(r)openShare(r.id);};
 $('ops-help-notice-close').onclick=()=>{helpDismissed=helpFreshRows().map(r=>r.id).join();$('ops-help-notice').hidden=true;};
 function helpUrgency(open){if(!open.length)return '';const now=Date.now(),oldest=Math.min(...open.map(r=>r.created_at*1000)),wait=Math.max(0,Math.round((now-oldest)/60000)),soon=open.filter(r=>r.expires_at*1000-now<15*60000).length;return ' · 가장 오래 기다린 요청 '+(wait<1?'1분 미만':wait+'분')+(soon?' · 열람 만료 15분 이내 '+soon+'건':'');}
@@ -564,7 +555,7 @@ function renderHelpList(){const list=$('ops-help-list');list.replaceChildren();t
 function helpRowsShown(){return [...$('ops-help-list').querySelectorAll('li[data-help-id]')];}
 function helpKeysShow(on){$('ops-help-keys').hidden=!on;$('ops-help-keys-toggle').setAttribute('aria-expanded',String(on));}
 function helpKeySay(msg){text('ops-help-key-status',msg);}
-function helpKeep(){const a=document.activeElement,li=a?.closest?.('#ops-help-list li[data-help-id]');return li?{id:li.dataset.helpId,cls:a.classList?.contains('help-seat')?'.help-seat':'.help-open',at:helpRowsShown().indexOf(li)}:null;}
+function helpKeep(){const a=document.activeElement,li=a?.closest?.('#ops-help-list li[data-help-id]');return li?{id:li.dataset.helpId,cls:'.help-open',at:helpRowsShown().indexOf(li)}:null;}
 function helpRestore(keep){if(!keep)return;const rows=helpRowsShown(),same=rows.find(li=>li.dataset.helpId===keep.id),li=same||rows[Math.min(keep.at,rows.length-1)];
  const target=li&&!$('ops-help-body').hidden?(same&&same.querySelector(keep.cls))||li.querySelector('.help-open'):$('ops-help-title');target.focus();}
 function helpEditable(t){return !!t&&(t.isContentEditable===true||!!t.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])'));}
