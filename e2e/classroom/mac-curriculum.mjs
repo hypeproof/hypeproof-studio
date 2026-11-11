@@ -172,7 +172,7 @@ async function authoringPage() {
   const waitStatus = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source, { timeout: 60000 });
   await page.goto('http://127.0.0.1:' + boardPort + '/authoring'); await page.locator('#token').fill(teacherToken); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
   await page.locator('summary', { hasText: '저장한 강의 열기' }).click(); await page.locator('#course').fill(course); await page.locator('#load').click(); await waitStatus(/저장본을 열었습니다/);
-  await page.locator('summary', { hasText: '추가 자료 · AI 설정' }).click(); await page.locator('#features-load').click(); await page.locator('#features-status').filter({ hasText: '이 코호트가 가진 기능' }).waitFor();
+  await page.locator('#features-load').click(); await page.locator('#features-status').filter({ hasText: '이 코호트가 가진 기능' }).waitFor();
   return { page, waitStatus };
 }
 /** Edit the saved draft into a curriculum with the ordinary controls: text, step-1 help and surface, allowed features. */

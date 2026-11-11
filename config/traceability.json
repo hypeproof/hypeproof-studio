@@ -15041,6 +15041,9 @@
           "path": "chalk/test/approval-preset.browser.mjs"
         },
         {
+          "path": "chalk/test/approval-preset-drift.test.mjs"
+        },
+        {
           "path": "docs/testing/chalk-authoring.md",
           "section": "### T-51 수업 버전별 AI가 묻는 방식 (CH-08, CGP-AGENT-R-001) · 2026-11-04"
         }
@@ -17961,6 +17964,112 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LESSON-STARTERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-STARTERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonStarters.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonStarters.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-STARTERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS",
+        "ST-IMP-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-starters.test.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TRUST-OWN-FOLDERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## A. Lifecycle & autoOnboard"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TRUST-OWN-FOLDERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studioFolderTrust.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "scripts/patches/core/hps-studio-folder-trust.patch"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TRUST-OWN-FOLDERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS",
+        "ST-IMP-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/studio-folder-trust.smoke.mjs"
         }
       ]
     }

@@ -2,6 +2,8 @@
 // icon, left of the send button, never a control. Bundled with esbuild and run with plain Node.
 
 import React from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { presetAtTurnBoundary } from "../webview-ui/src/ApprovalPresetLabel";
@@ -25,8 +27,9 @@ const UX = {
   hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } },
   retry_button: { enabled: false, show_counter: false },
 };
-const BEFORE = { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." };
-const ALWAYS = { id: "always_ask", label: "항상 묻기", description: "파일을 고치거나 명령을 실행하기 전에 매번 묻고, 한 번 허락한 일도 다시 물어봐요." };
+const CATALOG = JSON.parse(readFileSync(resolve(process.cwd(), "../../chalk/test/fixtures/approval-preset-catalog.json"), "utf8")) as { id: string; label: string; description: string }[]; // CGP-AGENT-R-019: the one catalog copy
+const BEFORE = CATALOG.find((p) => p.id === "before_changes")!;
+const ALWAYS = CATALOG.find((p) => p.id === "always_ask")!;
 const config = (approval_preset?: unknown) => ({
   model: "claude-sonnet-5", hasToken: true, proxyUrl: "http://localhost:8787",
   coach: { name: "HypeProof", personality: "", configured: true },
@@ -42,9 +45,9 @@ t("the served preset is drawn as text + lock icon", () => {
   if (!el) throw new Error("label missing");
   if (!el.includes('data-approval-preset="before_changes"')) throw new Error("id");
   if (!el.includes('data-icon="lock"')) throw new Error("lock icon missing");
-  if (!el.includes('<span class="hps-approval-preset-text">바꾸기 전에 묻기</span>')) throw new Error("label text");
-  if (!el.includes('aria-label="승인 방식: 바꾸기 전에 묻기. 선생님이 정한 방식이에요. 파일을 고치거나 명령을 실행하기 전에 물어봐요."')) throw new Error("accessible name");
-  if (!el.includes('data-hp-tooltip="바꾸기 전에 묻기 — 선생님이 정한 방식이에요.')) throw new Error("focus tooltip");
+  if (!el.includes(`<span class="hps-approval-preset-text">${BEFORE.label}</span>`)) throw new Error("label text");
+  if (!el.includes(`aria-label="승인 방식: ${BEFORE.label}. 선생님이 정한 방식이에요. ${BEFORE.description}"`)) throw new Error("accessible name");
+  if (!el.includes(`data-hp-tooltip="${BEFORE.label} — 선생님이 정한 방식이에요.`)) throw new Error("focus tooltip");
   if (!el.includes('tabindex="0"')) throw new Error("not focusable for its tooltip");
 });
 t("read-only: not a button, select, or menu; the learner has no control that changes it", () => {

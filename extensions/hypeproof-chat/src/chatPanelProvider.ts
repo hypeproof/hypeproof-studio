@@ -125,6 +125,7 @@ import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestId
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
+  devSdkConfigRoot,
   sdkErrorDisplayText,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -1221,6 +1222,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'browserApprovalPrompt',prompt});
     },
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   private readonly commandApprovalRequest = new CommandApprovalRequest({
     scope:()=>JSON.stringify([this.taskCommandAllowState(),this.taskCommandAllows.generation]),
@@ -1229,13 +1231,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'commandApprovalPrompt',prompt});
     },
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   /** #3586 — write approval ids whose 180 s window ran out; read once by the write branch of resolveActionApproval. */
   private readonly timedOutApprovals=new Set<string>();
+  /** #3594 — approval ids the learner refused (respond path only); read once by the resolver, cleared at turn end. */
+  private readonly declinedApprovals=new Set<string>();
   private readonly writeApprovalRequest = new WriteApprovalRequest({
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   /** CGP-KNOW-D-006 — every R-006 manifest opens as the in-panel dialog while a chat panel is visible. */
   private readonly outboundApproval = new OutboundApproval({
@@ -9737,6 +9743,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
       const stepLines = new StepLines();
       const deniedCalls = new Map<string, DenialNotice>();
+      // #3594 — one denial card for an approval that timed out or that the learner refused (one per tool call).
+      const approvalDenialCard = (a: { id: string; denialSource?: unknown; denialDetail?: unknown }) => {
+        const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
+        deniedCalls.set(a.id, denial);
+        tracker.settle(a.id);
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+      };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
       delegations = tracker;
@@ -9914,12 +9927,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // the approve/deny modal ("승인 기다리는 중") is never counted as running time.
             if (!a.allowed) {
               stepLines.end(a.id);
-              if (a.actor === 'policy') {
-                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
-                deniedCalls.set(a.id, denial);
-                tracker.settle(a.id);
-                this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
-              }
+              if (a.actor === 'policy' || a.denialSource === 'declined') approvalDenialCard(a);
               break;
             }
             const startedAt = Date.now();
@@ -10219,6 +10227,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
+            sdkConfigRoot: devSdkConfigRoot(vscode.env.appName, this.context.globalStorageUri?.fsPath ?? ''),
             turnId: streamId,
             onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
             onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
@@ -11112,7 +11121,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       id: outwardPromptId, purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
       outward: { destinations: known ? destinations : [], remembers: known && scope !== null },
     });
-    if (pick !== "allow") { if (this.timedOutApprovals?.delete(outwardPromptId)) onDenied?.("timeout"); return false; }
+    if (pick !== "allow") { if (this.timedOutApprovals?.delete(outwardPromptId)) onDenied?.("timeout"); else if (this.declinedApprovals?.delete(outwardPromptId)) onDenied?.("declined"); return false; }
     if (known) await memory.remember(scope, keys);
     return true;
   }
@@ -11172,7 +11181,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         id: commandPromptId, purpose: commandApprovalPurposeFor(req.payload, destructive),
         command: describeCommandForApproval(command), destructive, rememberAllowed: Boolean(exact),
       });
-      if (pick === 'deny' && this.timedOutApprovals?.delete(commandPromptId)) onDenied?.('timeout');
+      if (pick === 'deny') { if (this.timedOutApprovals?.delete(commandPromptId)) onDenied?.('timeout'); else if (this.declinedApprovals?.delete(commandPromptId)) onDenied?.('declined'); }
       if (pick === 'remember' && exact) {
         if (this.taskCommandAllows.generation === allowGeneration && this.taskCommandAllowState().key === scope.key) this.taskCommandAllows.remember(scope.key, exact.key);
         return true;
@@ -11202,7 +11211,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           id:browserPromptId, title:cleanName(browserApprovalTitle(this.coachDisplayName())), ...prompt,
         }); },
       }).then(opened => {
-        if (!opened && browserPromptId !== undefined && this.timedOutApprovals?.delete(browserPromptId)) onDenied?.('timeout');
+        if (!opened && browserPromptId !== undefined) { if (this.timedOutApprovals?.delete(browserPromptId)) onDenied?.('timeout'); else if (this.declinedApprovals?.delete(browserPromptId)) onDenied?.('declined'); }
         return opened;
       });
     }
@@ -11217,7 +11226,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const publisher = this.sitePublisher();
       if (!publisher.allowed()) { if (onDenied) onDenied("unknown"); else await this.postDenialNotice("unknown"); return false; }
       const repo = publisher.repoNameFor({ repo_name: payload.repo_name || undefined });
-      return publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+      // #3594 — the publish modal answered no: the learner refused a coach tool window.
+      const published = await publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+      if (!published) onDenied?.("declined");
+      return published;
     }
 
     // Tier 2 — file access must target the active workspace (write and read).
@@ -11324,6 +11336,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const copy = consultApprovalCopy(coachName, orchestratorRosterFor(this.cachedProfile), req.payload);
       onPrompted?.();
       const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, copy.verb);
+      // #3594 — a dismissed or other answer is the learner's refusal of a coach tool window.
+      if (pick !== copy.verb) onDenied?.('declined');
       return pick === copy.verb;
     }
     const { title, verb } = approvalCopyFor(coachName)[req.kind] ?? {
@@ -11337,6 +11351,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const approvalId=randomId();
       const approved=await this.confirmWriteFiles(approvalId,title,verb,writeEntries,req.payload);
       if(!approved && this.timedOutApprovals?.delete(approvalId)) onDenied?.('timeout');
+      else if(!approved && this.declinedApprovals?.delete(approvalId)) onDenied?.('declined');
       return approved;
     }
     onPrompted?.();
@@ -11954,7 +11969,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if(msg.type!=='commandApprovalPrompt')this.commandApprovalRequest?.invalidate();
     if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
-      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();}
+      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel(); this.declinedApprovals?.clear(); this.timedOutApprovals?.clear();}
       else this.writeApprovalRequest?.invalidate();
     }
     if (msg.type === 'streamStart') this.lastActivityStatus = undefined;

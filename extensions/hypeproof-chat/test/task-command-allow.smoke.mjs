@@ -22,6 +22,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { webcrypto } from "node:crypto";
 import { build } from "esbuild";
+const CATALOG = JSON.parse(fs.readFileSync(new URL("../../../chalk/test/fixtures/approval-preset-catalog.json", import.meta.url), "utf8")); // CGP-AGENT-R-019: the one catalog copy
+const P = Object.fromEntries(CATALOG.map((p) => [p.id, p]));
 
 const A = await import("../src/taskCommandAllow.ts");
 const FC = await import("../src/folderConsent.ts");
@@ -325,10 +327,10 @@ try {
       assert.equal(grant.approved, true);
       assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "control: remembered with no preset");
       const saved = win.cachedProfile;
-      win.cachedProfile = { ...saved, approval_preset: { id: "always_ask", label: "항상 묻기", description: "파일을 고치거나 명령을 실행하기 전에 매번 묻고, 한 번 허락한 일도 다시 물어봐요." } };
+      win.cachedProfile = { ...saved, approval_preset: P.always_ask };
       const again = await asked(win, "cat preset.md", undefined);
       assert.deepEqual([again.approved, again.modals, [...again.modal.buttons]], [false, 1, ["허락", "거절"]], "always_ask: asked again, no remember button");
-      win.cachedProfile = { ...saved, approval_preset: { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } };
+      win.cachedProfile = { ...saved, approval_preset: P.before_changes };
       assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "before_changes keeps the task-scoped allow");
       // A refresh mid-turn (cachedProfile null while it refetches) keeps the turn's preset.
       win.turnApprovalPreset = "always_ask"; win.cachedProfile = null;
@@ -365,7 +367,7 @@ try {
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a turn that started on a minor seat: still asks");
       win.turnSeatMinor = false; win.cachedProfile = null;
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "no live profile: auto never applies on a guess");
-      win.cachedProfile = { ...adult, approval_preset: { id: "before_changes", label: "바꾸기 전에 묻기", description: "파일을 고치거나 명령을 실행하기 전에 물어봐요." } };
+      win.cachedProfile = { ...adult, approval_preset: P.before_changes };
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served preset wins over auto");
       win.cachedProfile = { ...adult, approval_preset: { id: "ask_outside", label: "새 방식", description: "x" } };
       assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served block the app does not understand: not auto");

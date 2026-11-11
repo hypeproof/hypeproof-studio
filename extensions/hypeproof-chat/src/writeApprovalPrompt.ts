@@ -91,9 +91,9 @@ export class WriteApprovalRequest {
   generation=0;
   private observedScope?:string;
   private pending?: {id:string;scope:string;finish:(approved:boolean)=>void};
-  private readonly ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void};
+  private readonly ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void;refused?(id:string):void};
   private readonly timeoutMs:number;
-  constructor(ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void}, timeoutMs=180_000) {this.ports=ports;this.timeoutMs=timeoutMs;}
+  constructor(ports:{scope():string;present(prompt:WriteApprovalPrompt|null):Promise<boolean|void>;expired?(id:string):void;refused?(id:string):void}, timeoutMs=180_000) {this.ports=ports;this.timeoutMs=timeoutMs;}
   confirm(prompt:WriteApprovalPrompt):Promise<boolean> {
     this.invalidate();
     if(this.pending || !prompt.id || !prompt.files.length) return Promise.resolve(false);
@@ -106,7 +106,10 @@ export class WriteApprovalRequest {
   }
   respond(id:unknown,approved:unknown):void {
     if(!this.pending || id!==this.pending.id)return;
-    this.pending.finish(approved===true && this.pending.scope===this.ports.scope());
+    const sameScope=this.pending.scope===this.ports.scope();
+    // #3594 — a learner's refusal (an answer other than approve) is recorded once; a cancel never reaches here.
+    if(approved!==true && sameScope) this.ports.refused?.(this.pending.id);
+    this.pending.finish(approved===true && sameScope);
   }
   invalidate():void {
     const scope=this.ports.scope();

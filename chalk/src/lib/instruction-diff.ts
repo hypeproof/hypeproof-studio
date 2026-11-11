@@ -158,14 +158,14 @@ export function instructionDiffKit() {
   }
   function groupedChanges(before: any, after: any) {
     const groups = [
-      { label: "이름·소개", keys: ["title", "audience", "objective", "duration_minutes", "assistant", "audience_tier"] },
+      { label: "이름·소개", keys: ["title", "audience", "objective", "duration_minutes", "assistant", "starters", "audience_tier"] },
       { label: "모델·기능", keys: ["model", "features"] },
       { label: "지시문", keys: ["steps"] },
       { label: "자료", keys: ["starter", "prerequisites", "plan_ref"] },
       { label: "승인 방식", keys: ["approval", "approval_preset"] },
       { label: "수업 기준", keys: ["learning"] },
     ];
-    const names: Record<string,string> = {title:"제목",audience:"대상",objective:"목표",duration_minutes:"수업 시간",assistant:"AI 이름·소개",audience_tier:"대상 단계",model:"모델·처리 수준",features:"사용 기능",steps:"단계 안내",starter:"시작 자료",prerequisites:"선수 조건",plan_ref:"강의안 자료",approval:"승인 방식",approval_preset:"승인 프리셋",learning:"미션·완료 조건"};
+    const names: Record<string,string> = {title:"제목",audience:"대상",objective:"목표",duration_minutes:"수업 시간",assistant:"AI 이름·역할·말투",starters:"시작 문장",audience_tier:"대상 단계",model:"모델·처리 수준",features:"사용 기능",steps:"단계 안내",starter:"시작 자료",prerequisites:"선수 조건",plan_ref:"강의안 자료",approval:"승인 방식",approval_preset:"승인 프리셋",learning:"미션·완료 조건"};
     const known = new Set(groups.flatMap(g => g.keys));
     groups.push({label:"기타 설정",keys:[...new Set([...Object.keys(before ?? {}),...Object.keys(after ?? {})])].filter(key => !known.has(key)).sort()});
     return groups.map(g => ({label:g.label,fields:g.keys.filter(key => JSON.stringify(canonical(before?.[key])) !== JSON.stringify(canonical(after?.[key]))).map(key => ({key,label:Object.hasOwn(names,key) ? names[key] : key,before:before?.[key],after:after?.[key]}))})).filter(g => g.fields.length);

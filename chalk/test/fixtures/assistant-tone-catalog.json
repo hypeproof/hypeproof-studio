@@ -1,0 +1,6 @@
+[
+  { "id": "friendly", "label": "친근하게", "minor_safe": true },
+  { "id": "calm", "label": "차분하게", "minor_safe": true },
+  { "id": "playful", "label": "장난스럽게", "minor_safe": false },
+  { "id": "formal", "label": "격식 있게", "minor_safe": false }
+]

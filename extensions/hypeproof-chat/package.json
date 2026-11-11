@@ -549,6 +549,10 @@
           "type": "number", "default": 500, "minimum": 0, "maximum": 1048576, "scope": "machine",
           "description": "작업 폴더가 있는 디스크의 남은 공간이 이 값(MB)보다 적으면 입력창 위에 안내를 띄웁니다. 0이면 끕니다. 보내기와 파일 열기는 막지 않습니다."
         },
+        "hypeproofChat.trustStudioFolders": {
+          "type": "boolean", "default": false, "scope": "machine",
+          "description": "스튜디오가 직접 만든 작업 폴더만 '이 폴더의 작성자를 신뢰합니까?' 확인 없이 엽니다. 직접 연 다른 폴더는 그대로 확인을 묻습니다. 기본은 꺼짐입니다."
+        },
         "hypeproofChat.osTaskNotices": {
           "type": "boolean", "default": false,
           "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."

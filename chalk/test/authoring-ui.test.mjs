@@ -11,7 +11,8 @@ const page = async (path) => { const r = await chalk.fetch(new Request('https://
 const authoring = await page('/authoring');
 assert.match(authoring, /<input id="assistant_name" maxlength="40"/, 'authoring form exposes the AI name field, bounded like the Service');
 assert.match(authoring, /const name=\$\('assistant_name'\)\.value\.replace\(\/\[\\u200B-\\u200D\\uFEFF\]\/g,''\)\.trim\(\);/, 'content() strips pasted zero-width characters and trims the name');
-assert.match(authoring, /\.\.\.\(name\?\{assistant:\{display_name:name\}\}:\{\}\)/, 'content() omits the block when blank instead of sending an empty name');
+assert.match(authoring, /\.\.\.assistantValue\(name\)/, 'content() builds the assistant block through assistantValue');
+assert.match(authoring, /\.\.\.\(name\?\{display_name:name\}:\{\}\),[^\n]*Object\.keys\(a\)\.length\?\{assistant:a\}:\{\}/, 'assistantValue omits the block when blank instead of sending an empty name');
 assert.match(authoring, /\$\('assistant_name'\)\.value=c\.assistant\?\.display_name\?\?''/, 'render() restores the saved name and clears it for old-schema drafts');
 assert.match(authoring, /도구 권한·모델·AI 고지를 바꾸지 않습니다/, 'instructor copy states the name grants nothing');
 assert.match(authoring, /학생이 지은 이름 대신 이 이름이 고정됩니다/, 'instructor copy states a lesson name replaces student self-naming');
@@ -53,7 +54,7 @@ assert.doesNotMatch(authoring, /feature-allowed'\)\.innerHTML/, 'the feature lis
 // are carried inside learning exactly as loaded (carriedLearning), the same preservation rule one level down.
 assert.match(
   authoring,
-  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','model','features','approval_preset','learning'\];/,
+  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','starters','model','features','approval_preset','learning'\];/,
   'the form declares which top-level keys it owns, so everything else is an unknown key to preserve',
 );
 assert.match(authoring, /carriedLearning=l\?Object\.fromEntries\(Object\.entries\(l\)\.filter\(\(\[k\]\)=>!\['week','mission','completion'\]\.includes\(k\)\)\):\{\};/,

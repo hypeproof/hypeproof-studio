@@ -1828,3 +1828,63 @@ Jay decided that availability follows the class: a per-class switch is added (th
 
 - R-021 asks for four `hypeproof.voice.*` Command Palette commands for realtime voice; this change binds one webview-local key for dictation instead and leaves the commands to the row that owns them. R-001 is the realtime session state set; `VoicePanel` stays unmounted. Both stay open.
 - Confirmed by Jay: no.
+
+## Workspace Trust: Studio-created folders open trusted (2026-11-10)
+
+Problem (v2026.1109.0-rc.1 clean-Mac black-box run): on first open VS Code's Workspace Trust modal blocks the chat until clicked. #3577 removed it only for the review Dev copy, by turning trust off for that copy.
+
+- Jay, 2026-11-10 (security setting): auto-trust only folders Studio itself created (class, free and trial work folders, numbered next folders, activity folders); any other folder the learner opens keeps the normal prompt; Workspace Trust is never disabled globally. Approved the core patch the same day, after the extension API turned out to have no way to trust a folder (`workspace.isTrusted` is read-only, `requestWorkspaceTrust` only prompts, the trust store is internal).
+- Mechanism: `scripts/patches/core/hps-studio-folder-trust.patch` (hand-maintained, applied to the pristine 1.116 `workspaceTrust.ts`) adds a pure decision file and one hook in `doGetUriTrustInfo`. The chat extension records a folder's real path in its `globalState` only when the directory did not exist before Studio prepared it. The key is that record, not a path name; a same-path folder Studio did not create, a child, a parent and a remote folder all prompt.
+- Default off (agent-selected flag): `hypeproofChat.trustStudioFolders`, machine scope, default false. Off, behaviour is unchanged. Turning it on is a later step after the core batch base rebuild and a clean-Mac check.
+- Minor seats: same rule, Studio-created folders only.
+- Ships with the next core batch base rebuild; nothing changes until that base is built and the flag is on.
+- Known limit (closed by the blocker fix below): a learner who deletes a Studio-created folder and recreates the same path by hand stayed trusted while the record existed.
+- Confirmed by Jay: yes (2026-11-10).
+
+### Blocker fix before the flag is turned on (#3658, same scope, same approval)
+
+Verifier findings S1 and S2 on #3657, plus hardening. The flag stays default off.
+
+- S1 fail closed: the core reads `hypeproofChat.trustStudioFolders` itself at trust-decision time (`configurationService.inspect(...).userLocalValue === true`, never a workspace or default value). Turning the flag off applies to the very next session; the extension no longer writes an `enabled` copy. The core also reads the workbench's disabled-extension list, so with the chat extension disabled the record alone grants nothing. The disabled list is read at both the profile and the workspace scope (either disables), failing closed on an unreadable list. The extension is built in, so uninstalling does not apply.
+- S2: an explicit "Don't Trust" on a file folder is stored in the application-scope key `hypeproof.studioFolderTrustDenied` and wins over the record in every later session; an explicit "Trust" removes it.
+- Hardening: Studio creates the leaf folder with a non-recursive `mkdir` and records only when that call succeeded (no check-then-create race). The record stores the real path and the folder's creation time; the core compares it with `fileService.stat().ctime` (cached before the synchronous decision), so delete + recreate at the same path prompts. The record shape is now v2 (`{path, birth}`); the earlier v1 record was never shipped and is ignored.
+- "Don't Trust" is stored even while the flag is off: it can only add prompts, and a refusal should survive the flag being turned on later.
+- The extension creates the leaf folder before `ActivityConnections.prepare` (which makes the folder itself on the class, trial and activity paths); a smoke step runs that real sequence.
+- If creating the leaf throws (parent is a file, dangling link, read-only), the extension ignores it so `ActivityConnections.prepare` still gives the #3213/#3218 guidance. If preparing fails after Studio made the folder (bad activity id), Studio removes it when it is still empty and still the same folder (non-recursive `rmdir`, creation time checked) rather than recording it: a failed open leaves nothing behind and the retry creates and records a fresh folder.
+- Folders Studio creates while the flag is off are still recorded, so turning the flag on trusts them (intended).
+- Not covered: content cloned or downloaded into a Studio-created folder later runs trusted; a UNC or network `workspace_root` is trusted like any other recorded folder; a symlinked `workspace_root` records the real path and prompts (fails closed).
+
+## CGP-AGENT-R-015 / CGP-AGENT-D-013: 수업 AI 설정 one page (2026-11-10, agent-selected layout)
+
+Agent implementation choice; not a human policy decision. Confirmed by Jay: no.
+
+- Layout: one `fieldset#ai-settings` in `/authoring` with five collapsible sections in the D-013 order (정체성, 지시문, 모델·처리 수준, 기능·승인, 미리보기) and an in-page section nav, sticky from 1024px. Section names and the Korean helper copy are the agent's wording.
+- Every field is an existing one: `assistant.display_name`, `steps[].instructions` (the only instruction text the Service lesson contract has), `model` and `model.effort`, `features`, `approval_preset`. Save, freeze, rehearsal, confirm and version semantics are untouched; the draft is edited, a frozen version is shown as read-only text.
+- 지시문 section = the step editor (the Service has no lesson-level instruction field). The curriculum fields (title, audience, objective, starter material, prerequisites, mission) stay in 02.
+- Preview = read-only list built from the same `content()` the save sends, plus a separate read-only summary of a loaded frozen version.
+- "Accordion below 768px" is met as collapsible sections at every width, not an automatic collapse (a collapsed section would hide controls from the 375px checks and from keyboard users who land on a hash link). Unsaved-changes guard: browser leave confirmation while the draft is dirty.
+- NOT built, and not shown: AI role, AI tone, and the 시작 문장 section (up to 4 starter prompts). `hps-session-design/1` has no field for them; DEC-30 (starter field in `hps-authoring-batch/1` plus frozen-version compatibility, Jay + Service owner) is still open, and `starter` is the existing 시작 예제·자료, not conversation starters. Follow-ups once the Service accepts them: a tone/role field, `starters` (max 4, single line) and the 시작 문장 section between 기능·승인 and 미리보기; CGP-KNOW-R-037 and CGP-KNOW-D-037 depend on the same decision.
+- Dependency check: CGP-AGENT-R-016 (diff before confirm) is on main (#2120); R-001 and R-019 are on main (#3519, #3677). DEC-30 is the only open dependency, handled by leaving the starter part out.
+- Default state: on (reorganises existing controls; no new permission, no new data).
+
+## DEC-30 step 2: 시작 문장, AI 역할, AI 말투 in Chalk (CGP-AGENT-R-015 remainder, CGP-AGENT-D-013, CGP-KNOW-R-037, CGP-KNOW-D-037; 2026-11-10)
+
+DEC-30 (starter prompts plus AI role and tone in the lesson contract) is decided by Jay; the Service contract is live (hypeproof-service#348, deployed service-v2026.11.10-1). This records the Chalk part. Confirmed by Jay: yes (2026-11-10).
+
+- Decided by Jay: tone is a closed choice of four (`friendly`, `calm`, `playful`, `formal`), never free text; starters are also shown in rehearsal and in the frozen-version read-only summary.
+- Chalk renders what the Service serves: tone ids, Korean labels and `minor_safe` come from `assistant_tones` on the authoring features read. Chalk keeps only fallback names for a saved or frozen tone before that read; `chalk/test/fixtures/assistant-tone-catalog.json` plus `chalk/test/assistant-tone-drift.test.mjs` pin them (the Service-side test that vendors the same fixture is a follow-up in hypeproof-service).
+- Unset sends no key: 코호트 기본 tone, empty role and no starters leave `assistant.role`, `assistant.tone` and `starters` out, so an old lesson keeps its bytes and digest. Empty starter rows are dropped, duplicates (NFKC, case-insensitive) are warned live and block the save.
+- Role and tone live inside `assistant`, which the Service requires to carry `display_name`; Chalk sends the block only with a name and points at the name field otherwise.
+- Minors: the Service clamps. Chalk only warns (per-row note, and a warning when the lesson's 대상 단계 is lv1 or lv2).
+- Older Service (no `assistant_tones`): the three inputs and the nav link hide after the features read and are not sent; before that read they show, and the Service's 400 gets a Korean hint.
+- Section and copy wording (시작 문장, 역할, 말투, the CGP-KNOW-R-037 disclosure next to the material field) is the agent's wording.
+- Not in this change: Studio chips (step 3) and the coach style block (step 4).
+
+## DEC-30 step 3: starter chips in Studio (CGP-KNOW-R-037 learner side, CGP-KNOW-D-037; 2026-11-10)
+
+Agent implementation choice for the Studio part of DEC-30, which Jay decided; the Service serves the data (hypeproof-service#348, service-v2026.11.10-1) and Chalk authors it (#3685). Confirmed by Jay: no.
+
+- Read path: `starters` is a top-level `/v1/profile` key (not inside `lesson.content`), read with `servedLessonStarters()`, which keeps at most four safe, distinct single lines and skips anything else. Absent means no UI.
+- Behaviour: wrapping compact chips above the composer; a click inserts into the draft and never sends; a manual draft is kept (the personal-starter rule); hidden after the learner's first message in the task; not drawn in the instructor console; a minor seat behaves the same.
+- Layout: 44px targets (`--hp-control-min`), 14px floor (`--hp-font-caption`), tokens only, no icon. Hint line and group label ("이 수업의 시작 문장", "누르면 입력창에 들어가요. 고쳐서 보내세요.") are the agent's wording.
+- Not in this change: the AI role line under the name (optional; the header has no second row today, and `assistant_style` is typed only) and any role/tone in a coach prompt (step 4, after a safety review).

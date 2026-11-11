@@ -26,6 +26,16 @@
       "asset": "hypeproof-service-testkit-0.1.2.tgz",
       "tag": "service-testkit-v0.1.2-private.1",
       "sha256": "15bd637cdfc438ca6b63dd56434fd01ea0e26ec3ef88f4284ca8ea8e13f95d93"
+    },
+    {
+      "asset": "hypeproof-measurement-core-0.1.1.tgz",
+      "tag": "measurement-core-v0.1.1",
+      "sha256": "dbf7cfa5f504a37b8f82be1b56a9cff8d97bbfbd142f202674a0164033f93a74"
+    },
+    {
+      "asset": "hypeproof-service-testkit-0.1.4.tgz",
+      "tag": "service-testkit-v0.1.4-private.1",
+      "sha256": "765bf2b6034587b06631f4e62df14a020826a77e9d59637ad827e44119dfe96e"
     }
   ]
 }

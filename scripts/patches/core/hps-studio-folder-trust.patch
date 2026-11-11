@@ -1,0 +1,250 @@
+Studio REQ-STUDIO-TRUST-OWN-FOLDERS: folders Studio itself created open trusted, with no Workspace Trust modal.
+Off unless the user-local setting hypeproofChat.trustStudioFolders is true; the core reads it itself at decision time (inspect().userLocalValue), so turning it off applies to the very next session.
+Core trusts a local folder only when ALL hold: flag on, chat extension not disabled, learner never chose "Don't Trust" for it, its real path is in the extension record (written only when Studio created the leaf folder) and its creation time matches the recorded one. Every other folder prompts as upstream. Workspace trust stays enabled globally.
+Hand-maintained: edit by applying to scripts/patches/core/upstream, then write git diff back under this header.
+
+diff --git a/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
+new file mode 100644
+index 0000000..5c00b79
+--- /dev/null
++++ b/src/vs/workbench/services/workspaces/common/hpsStudioFolderTrust.ts
+@@ -0,0 +1,127 @@
++/*---------------------------------------------------------------------------------------------
++ *  HypeProof Studio (REQ-STUDIO-TRUST-OWN-FOLDERS) - folders Studio itself created are trusted.
++ *  Pure decision, no imports: `workspaceTrust.ts` reads the raw inputs (the user-local setting, the
++ *  extension-disabled list, the chat extension's globalState record, the learner's "Don't Trust"
++ *  list, the folder's creation time) and hands them here. Every unreadable input means "prompt".
++ *--------------------------------------------------------------------------------------------*/
++
++/** Key inside the extension's globalState blob (`hypeproof.hypeproof-chat`). */
++export const HPS_STUDIO_FOLDERS_KEY = 'hypeproofChat.studioCreatedFolders';
++/** Machine-scope, default-off setting. The core reads the user-local value itself. */
++export const HPS_STUDIO_FLAG = 'hypeproofChat.trustStudioFolders';
++export const HPS_STUDIO_EXTENSION_ID = 'hypeproof.hypeproof-chat';
++/** Storage key (PROFILE and WORKSPACE scope) where the workbench keeps the disabled extension identifiers. */
++export const HPS_DISABLED_EXTENSIONS_KEY = 'extensionsIdentifiers/disabled';
++/** Application-scope list of folders the learner explicitly refused ("Don't Trust"). */
++export const HPS_STUDIO_DENIED_KEY = 'hypeproof.studioFolderTrustDenied';
++
++export interface IHpsStudioFolder {
++	/** Real path of the folder Studio created. */
++	readonly path: string;
++	/** Creation time (ms) of that folder when Studio made it; a delete + recreate changes it. */
++	readonly birth: number;
++}
++
++/** The creation record from the extension's stored globalState JSON; anything malformed is "no record". */
++export function hpsStudioFolderRecordOf(raw: string | undefined): readonly IHpsStudioFolder[] | undefined {
++	if (!raw) {
++		return undefined;
++	}
++	let record: { v?: unknown; folders?: unknown } | undefined;
++	try {
++		record = JSON.parse(raw)?.[HPS_STUDIO_FOLDERS_KEY];
++	} catch {
++		return undefined;
++	}
++	if (!record || record.v !== 2 || !Array.isArray(record.folders)) {
++		return undefined;
++	}
++	const folders: IHpsStudioFolder[] = [];
++	for (const entry of record.folders as { path?: unknown; birth?: unknown }[]) {
++		if (entry && typeof entry.path === 'string' && entry.path.length > 0 && typeof entry.birth === 'number' && Number.isFinite(entry.birth) && entry.birth > 0) {
++			folders.push({ path: entry.path, birth: entry.birth });
++		}
++	}
++	return folders;
++}
++
++/** True when the chat extension is disabled. An unreadable list counts as disabled (fail closed). */
++export function hpsExtensionDisabled(raw: string | undefined): boolean {
++	if (!raw) {
++		return false;
++	}
++	try {
++		const list = JSON.parse(raw);
++		return !Array.isArray(list) || list.some(e => typeof e?.id === 'string' && e.id.toLowerCase() === HPS_STUDIO_EXTENSION_ID);
++	} catch {
++		return true;
++	}
++}
++
++/** Paths the learner refused. undefined = unreadable (then nothing is trusted). */
++export function hpsDeniedOf(raw: string | undefined): readonly string[] | undefined {
++	if (!raw) {
++		return [];
++	}
++	try {
++		const list = JSON.parse(raw);
++		return Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string' && p.length > 0) : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++const HPS_MAX_DENIED = 500;
++
++/** The denied list with `fsPath` added (an explicit "Don't Trust"). */
++export function hpsDeniedWith(raw: string | undefined, fsPath: string, isSamePath: (a: string, b: string) => boolean): string {
++	const list = [...(hpsDeniedOf(raw) ?? [])].filter(p => !isSamePath(p, fsPath));
++	list.push(fsPath);
++	return JSON.stringify(list.slice(-HPS_MAX_DENIED));
++}
++
++/** The denied list without `fsPath` (an explicit "Trust"). */
++export function hpsDeniedWithout(raw: string | undefined, fsPath: string, isSamePath: (a: string, b: string) => boolean): string {
++	return JSON.stringify((hpsDeniedOf(raw) ?? []).filter(p => !isSamePath(p, fsPath)));
++}
++
++export interface IHpsStudioTrustInput {
++	/** `inspect(HPS_STUDIO_FLAG).userLocalValue === true`, never a workspace or default value. */
++	readonly flagOn: boolean;
++	/** Raw `extensionsIdentifiers/disabled` from the PROFILE and the WORKSPACE scope; either disables the extension. */
++	readonly disabledExtensionsRaws: readonly (string | undefined)[];
++	/** Raw extension globalState blobs, in lookup order (PROFILE, APPLICATION). The first present record decides. */
++	readonly recordRaws: readonly (string | undefined)[];
++	/** Raw `HPS_STUDIO_DENIED_KEY` value. */
++	readonly deniedRaw: string | undefined;
++	readonly uri: { readonly scheme: string; readonly fsPath: string };
++	/** Current creation time of the folder (`fileService.stat().ctime`), undefined when not read. */
++	readonly birth: number | undefined;
++	/** Exact path equality (no parent, no child). */
++	readonly isSamePath: (a: string, b: string) => boolean;
++}
++
++/**
++ * True only for a local folder that Studio created: the user-local flag is on, the chat extension is
++ * not disabled, the learner never refused the folder, the folder is in the record exactly, and its
++ * creation time still matches the one recorded. Everything else keeps the normal trust prompt.
++ */
++export function hpsIsStudioCreatedFolder(input: IHpsStudioTrustInput): boolean {
++	if (!input.flagOn || input.uri.scheme !== 'file' || input.birth === undefined) {
++		return false;
++	}
++	if (input.disabledExtensionsRaws.some(hpsExtensionDisabled)) {
++		return false;
++	}
++	const denied = hpsDeniedOf(input.deniedRaw);
++	if (!denied || denied.some(p => input.isSamePath(p, input.uri.fsPath))) {
++		return false;
++	}
++	for (const raw of input.recordRaws) {
++		const folders = hpsStudioFolderRecordOf(raw);
++		if (folders) {
++			return folders.some(folder => input.isSamePath(folder.path, input.uri.fsPath) && folder.birth === input.birth);
++		}
++	}
++	return false;
++}
+diff --git a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
+index e349da9..43a0904 100644
+--- a/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
++++ b/src/vs/workbench/services/workspaces/common/workspaceTrust.ts
+@@ -25,6 +25,7 @@ import { isWeb } from '../../../../base/common/platform.js';
+ import { IFileService } from '../../../../platform/files/common/files.js';
+ import { promiseWithResolvers } from '../../../../base/common/async.js';
+ import { ResourceMap } from '../../../../base/common/map.js';
++import { HPS_DISABLED_EXTENSIONS_KEY, HPS_STUDIO_DENIED_KEY, HPS_STUDIO_EXTENSION_ID, HPS_STUDIO_FLAG, hpsDeniedWith, hpsDeniedWithout, hpsIsStudioCreatedFolder } from './hpsStudioFolderTrust.js';
+ 
+ export const WORKSPACE_TRUST_ENABLED = 'security.workspace.trust.enabled';
+ export const WORKSPACE_TRUST_STARTUP_PROMPT = 'security.workspace.trust.startupPrompt';
+@@ -106,6 +107,7 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 	private _canonicalStartupFiles: URI[] = [];
+ 	private _canonicalWorkspace: IWorkspace;
+ 	private _canonicalUrisResolved: boolean;
++	private readonly _hpsStudioBirths = new Map<string, number>();
+ 
+ 	private _isTrusted: boolean;
+ 	private _trustStateInfo: IWorkspaceTrustInfo;
+@@ -246,6 +248,7 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 		}
+ 
+ 		this._canonicalWorkspace = new CanonicalWorkspace(this.workspaceService.getWorkspace(), canonicalWorkspaceFolders, canonicalWorkspaceConfiguration);
++		await this.refreshHpsStudioBirths(canonicalWorkspaceFolders);
+ 	}
+ 
+ 	private loadTrustInfo(): IWorkspaceTrustInfo {
+@@ -381,6 +384,13 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 			return { trusted: true, uri };
+ 		}
+ 
++		// Studio (REQ-STUDIO-TRUST-OWN-FOLDERS) - a folder the chat extension recorded as created by Studio is
++		// trusted while the user-local flag is on, the extension is enabled, the learner did not refuse the folder
++		// and its creation time still matches. Trust stays enabled; any other folder prompts as upstream.
++		if (this.isHpsStudioCreatedFolder(uri)) {
++			return { trusted: true, uri };
++		}
++
+ 		let resultState = false;
+ 		let maxLength = -1;
+ 
+@@ -400,10 +410,58 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 		return { trusted: resultState, uri: resultUri };
+ 	}
+ 
++	private isHpsStudioCreatedFolder(uri: URI): boolean {
++		let flagOn = false;
++		try {
++			flagOn = this.configurationService.inspect<boolean>(HPS_STUDIO_FLAG).userLocalValue === true;
++		} catch { }
++		return hpsIsStudioCreatedFolder({
++			flagOn,
++			disabledExtensionsRaws: [StorageScope.PROFILE, StorageScope.WORKSPACE].map(scope => this.storageService.get(HPS_DISABLED_EXTENSIONS_KEY, scope)),
++			recordRaws: [StorageScope.PROFILE, StorageScope.APPLICATION].map(scope => this.storageService.get(HPS_STUDIO_EXTENSION_ID, scope)),
++			deniedRaw: this.storageService.get(HPS_STUDIO_DENIED_KEY, StorageScope.APPLICATION),
++			uri,
++			birth: this._hpsStudioBirths.get(uri.fsPath),
++			isSamePath: (a, b) => this.uriIdentityService.extUri.isEqual(URI.file(a), URI.file(b))
++		});
++	}
++
++	private async refreshHpsStudioBirths(uris: readonly URI[]): Promise<void> {
++		for (const uri of uris) {
++			if (uri.scheme !== Schemas.file) {
++				continue;
++			}
++			try {
++				this._hpsStudioBirths.set(uri.fsPath, (await this.fileService.stat(uri)).ctime);
++			} catch {
++				this._hpsStudioBirths.delete(uri.fsPath);
++			}
++		}
++	}
++
++	private rememberHpsStudioChoice(uri: URI, trusted: boolean): boolean {
++		const isSamePath = (a: string, b: string) => this.uriIdentityService.extUri.isEqual(URI.file(a), URI.file(b));
++		const previous = this.storageService.get(HPS_STUDIO_DENIED_KEY, StorageScope.APPLICATION);
++		if (trusted) {
++			this.storageService.store(HPS_STUDIO_DENIED_KEY, hpsDeniedWithout(previous, uri.fsPath, isSamePath), StorageScope.APPLICATION, StorageTarget.MACHINE);
++			return false;
++		}
++		if (uri.scheme !== Schemas.file) {
++			return false;
++		}
++		// An explicit "Don't Trust" wins over the Studio record and is remembered (fail closed). It is stored even while
++		// the flag is off: it can only add prompts, and a refusal should survive the flag being turned on later.
++		this.storageService.store(HPS_STUDIO_DENIED_KEY, hpsDeniedWith(previous, uri.fsPath, isSamePath), StorageScope.APPLICATION, StorageTarget.MACHINE);
++		return true;
++	}
++
+ 	private async doSetUrisTrust(uris: URI[], trusted: boolean): Promise<void> {
+ 		let changed = false;
+ 
+ 		for (const uri of uris) {
++			if (this.rememberHpsStudioChoice(uri, trusted)) {
++				changed = true;
++			}
+ 			if (trusted) {
+ 				if (this.isTrustedVirtualResource(uri)) {
+ 					continue;
+@@ -616,7 +674,9 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
+ 			return { trusted: true, uri };
+ 		}
+ 
+-		return this.doGetUriTrustInfo(await this.getCanonicalUri(uri));
++		const canonicalUri = await this.getCanonicalUri(uri);
++		await this.refreshHpsStudioBirths([canonicalUri]);
++		return this.doGetUriTrustInfo(canonicalUri);
+ 	}
+ 
+ 	async setUrisTrust(uris: URI[], trusted: boolean): Promise<void> {
