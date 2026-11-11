@@ -246,17 +246,19 @@ private struct SharedCacheFile: Codable {
             try persist(entries: entries, conversations: list)
             if selectPersonalOnLoad { selected = Self.personalID; selectPersonalOnLoad = false }
             if let id = current, id != Self.personalID, list.contains(where: { $0.id == id }) {
+                // Read completion before events: an observed completion must include its final answer.
+                let requests = try await service.requests(id, token: credential)
+                guard epoch == attempt else { return }
+                var caughtUp = false
                 // Page repeatedly with a bound; the next polling cycle continues if more remain.
                 for _ in 0..<10 {
                     let page = try await service.events(id, after: entries[id]?.cursor ?? 0, token: credential)
                     guard epoch == attempt else { return }
                     try edit(id) { try $0.apply(page) }
-                    if !page.has_more { break }
+                    if !page.has_more { caughtUp = true; break }
                 }
-                let requests = try await service.requests(id, token: credential)
-                guard epoch == attempt else { return }
                 if let own = entries[id]?.request, let found = requests.first(where: { $0.id == own.id }) {
-                    try edit(id) { $0.request = found }
+                    if found.status != "completed" || caughtUp { try edit(id) { $0.request = found } }
                 } else if entries[id]?.request?.outstanding != true, let active = requests.first(where: { $0.outstanding }) {
                     try edit(id) { $0.request = active }
                 }
