@@ -1,8 +1,9 @@
 // CGP-SHELL-R-024 / CGP-SHELL-D-023 (ADM-11) — the instructor changed this classroom seat's lesson settings. A system
 // line in the chat stream (Panel background, no avatar), never a modal or a toast, and never a control: the composer
-// stays as it is. It is announced once by role="status" while unseen; once the panel reported it on screen, the same
-// line is drawn without a live region so a remount does not read it out again.
-import { useEffect } from "react";
+// stays as it is. It is announced once through the panel's always-mounted role="status" region (a live region inserted
+// together with its text is not reliably read out), and only while unseen: a seen line, or one already announced by
+// this panel, is not read out again on a re-render or remount.
+import { useEffect, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { postToHost } from "./vscode";
 import { LESSON_SETTINGS_CHANGE_COPY, type LessonSettingsNotice } from "../../src/lessonSettingsChange";
@@ -24,11 +25,26 @@ function useReportSeen(id: string, seen: boolean): void {
   }, [id, seen]);
 }
 
+/**
+ * The text for the panel's live region: the newest unseen line, once per id for this panel. A seen line is never
+ * announced, so a remount after the host counted it says nothing.
+ */
+export function useLessonSettingsAnnouncement(lines: readonly LessonSettingsNotice[] | undefined): string {
+  const announced = useRef(new Set<string>());
+  const [text, setText] = useState("");
+  const newest = lines?.filter((l) => !l.seen).at(-1);
+  useEffect(() => {
+    if (!newest || announced.current.has(newest.id)) return;
+    announced.current.add(newest.id);
+    setText(newest.text);
+  }, [newest?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- once per line id
+  return text;
+}
+
 export function LessonSettingsChangeLine({ notice }: { notice: LessonSettingsNotice }) {
   useReportSeen(notice.id, notice.seen);
   const C = LESSON_SETTINGS_CHANGE_COPY;
-  return <div className="hps-lesson-change" data-testid="lesson-settings-change" data-lesson-change={notice.id}
-    {...(notice.seen ? {} : { role: "status", "aria-live": "polite" as const })}>
+  return <div className="hps-lesson-change" data-testid="lesson-settings-change" data-lesson-change={notice.id} data-seen={notice.seen ? "true" : "false"}>
     <span className="hps-lesson-change-icon" aria-hidden="true"><ChatIcon kind="info" size={16} /></span>
     <p className="hps-lesson-change-text">{C.title}: {notice.items.map((item, i) => <span key={item.key} data-change-item={item.key}>
       {i > 0 && C.separator}{item.before !== undefined && item.after !== undefined ? `${item.label} ${item.before} → ${item.after}` : `${item.label} ${C.changed}`}

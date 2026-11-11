@@ -35,6 +35,16 @@ test('diff: fixed order, served labels, 기본 for no preset, capability words o
   assert.ok(!JSON.stringify(b).includes('둘'), 'the snapshot holds a fingerprint, not the starter text');
 });
 
+test('diff: capability words are the card\'s (해요 / 물어봐요 / 안 해요); asking alone is not a row', () => {
+  const asks = lessonSettingsSnapshot(seatProfile(), { inputs: 'in', on: ['read', 'write', 'shell'], asks: ['write', 'shell'] });
+  const off = lessonSettingsSnapshot(seatProfile(), { inputs: 'in', on: ['read'], asks: [] });
+  assert.equal(lessonSettingsChangeText(diffLessonSettings(asks, off)), '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 물어봐요 → 안 해요 · 명령 실행하기 물어봐요 → 안 해요');
+  assert.equal(lessonSettingsChangeText(diffLessonSettings(off, asks)), '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 안 해요 → 물어봐요 · 명령 실행하기 안 해요 → 물어봐요');
+  const noAsk = lessonSettingsSnapshot(seatProfile(), { inputs: 'in', on: ['read', 'write', 'shell'], asks: [] });
+  assert.deepEqual(diffLessonSettings(asks, noAsk), [], 'only the asking changed: the preset item tells it, not a row');
+  assert.deepEqual(lessonSettingsSnapshot(seatProfile(), { inputs: 'in', on: ['read'], asks: ['write'] }).caps.asks, [], 'asks only for capabilities that are on');
+});
+
 test('diff: capability rows are compared only under the same learner inputs', () => {
   const a = lessonSettingsSnapshot(seatProfile(), caps(['read', 'write'], 'sdk'));
   const b = lessonSettingsSnapshot(seatProfile(), caps([], 'proxy'));

@@ -68,7 +68,7 @@ import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
 import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
-import { LessonSettingsChangeLine } from './LessonSettingsChange';
+import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
@@ -994,7 +994,9 @@ export function ChatPanel(props: Props) {
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
+  // CGP-SHELL-R-024 / D-023 — an instructor's settings change is read out once through this same region.
+  const lessonAnnouncement = useLessonSettingsAnnouncement(props.instructor ? undefined : config?.lessonSettingsChanges);
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement, lessonAnnouncement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
   // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.

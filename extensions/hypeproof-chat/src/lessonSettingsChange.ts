@@ -40,10 +40,11 @@ const MAX_LINES_PER_SEAT = 3;
 export interface LessonSettingsSnapshot {
   v: 1;
   /**
-   * REQ-M47 keys that are on, and the learner's own inputs they were evaluated under (access choice, runtime setting,
-   * fallback). A change of those inputs alone is not the instructor's change, so it never makes a line.
+   * REQ-M47 keys that are on (and of those, the ones that ask first), and the learner's lasting inputs they were evaluated
+   * under (access choice, runtime setting; never the per-session fallback). A change of those inputs alone is not the
+   * instructor's change, so it never makes a line.
    */
-  caps: { inputs: string; on: AiCapabilityKey[] };
+  caps: { inputs: string; on: AiCapabilityKey[]; asks?: AiCapabilityKey[] };
   /** The served approval preset with the label it was served with; null = no preset (the app default). */
   preset: { id: string; label: string } | null;
   /** The class lets the learner use "계획 먼저" (DEC-10: only an explicit `available: false` turns it off). */
@@ -90,13 +91,13 @@ function fingerprint(values: readonly string[]): string {
 }
 
 /** The learner-relevant lesson settings of a served profile, with the REQ-M47 keys the host evaluated for it. */
-export function lessonSettingsSnapshot(profile: SnapshotProfile, caps: { inputs: string; on: readonly AiCapabilityKey[] }): LessonSettingsSnapshot {
+export function lessonSettingsSnapshot(profile: SnapshotProfile, caps: { inputs: string; on: readonly AiCapabilityKey[]; asks?: readonly AiCapabilityKey[] }): LessonSettingsSnapshot {
   const preset = servedApprovalPreset(profile);
   const voice = readServedVoice(profile);
   const order = Object.keys(AI_CAPABILITY_LABELS) as AiCapabilityKey[];
   return {
     v: 1,
-    caps: { inputs: caps.inputs, on: order.filter((k) => caps.on.includes(k)) },
+    caps: { inputs: caps.inputs, on: order.filter((k) => caps.on.includes(k)), asks: order.filter((k) => caps.on.includes(k) && (caps.asks ?? []).includes(k)) },
     preset: preset ? { id: preset.id, label: preset.label } : null,
     planFirst: planFirstAvailable(profile),
     dictation: voice?.dictation === true,
@@ -107,7 +108,11 @@ export function lessonSettingsSnapshot(profile: SnapshotProfile, caps: { inputs:
 
 const C = LESSON_SETTINGS_CHANGE_COPY;
 const onOff = (v: boolean): string => (v ? C.on : C.off);
-const capWord = (key: AiCapabilityKey, on: boolean): string => aiCapabilityState({ key, label: AI_CAPABILITY_LABELS[key], on });
+/** The REQ-M47 card's own word for a row: 해요, 물어봐요 or 안 해요. */
+const capWord = (caps: LessonSettingsSnapshot["caps"], key: AiCapabilityKey): string => {
+  const on = caps.on.includes(key);
+  return aiCapabilityState({ key, label: AI_CAPABILITY_LABELS[key], on, ...(on && (caps.asks ?? []).includes(key) ? { asks: true } : {}) });
+};
 
 /** What changed from `before` to `after`, in a fixed order. Capabilities only when both sides share the learner's inputs. */
 export function diffLessonSettings(before: LessonSettingsSnapshot, after: LessonSettingsSnapshot): LessonSettingsChangeItem[] {
@@ -119,7 +124,8 @@ export function diffLessonSettings(before: LessonSettingsSnapshot, after: Lesson
   if (before.caps.inputs === after.caps.inputs) {
     for (const key of Object.keys(AI_CAPABILITY_LABELS) as AiCapabilityKey[]) {
       const b = before.caps.on.includes(key), a = after.caps.on.includes(key);
-      if (b !== a) items.push({ key: `cap:${key}`, label: AI_CAPABILITY_LABELS[key], before: capWord(key, b), after: capWord(key, a) });
+      // A row is listed when the capability turns on or off; asking alone follows the approval preset, which has its own item.
+      if (b !== a) items.push({ key: `cap:${key}`, label: AI_CAPABILITY_LABELS[key], before: capWord(before.caps, key), after: capWord(after.caps, key) });
     }
   }
   if (before.dictation !== after.dictation) items.push({ key: "dictation", label: DICTATE_LABEL, before: onOff(before.dictation), after: onOff(after.dictation) });
@@ -141,6 +147,7 @@ function validSnapshot(raw: unknown): raw is LessonSettingsSnapshot {
   const s = raw as Partial<LessonSettingsSnapshot>;
   const keys = Object.keys(AI_CAPABILITY_LABELS);
   return s.v === 1 && typeof s.caps === "object" && s.caps !== null && typeof s.caps.inputs === "string" && Array.isArray(s.caps.on) && s.caps.on.every((k) => keys.includes(k))
+    && (s.caps.asks === undefined || (Array.isArray(s.caps.asks) && s.caps.asks.every((k) => keys.includes(k))))
     && (s.preset === null || (typeof s.preset === "object" && typeof s.preset?.id === "string" && typeof s.preset?.label === "string"))
     && typeof s.planFirst === "boolean" && typeof s.dictation === "boolean" && typeof s.readAloud === "boolean" && typeof s.starters === "string";
 }
@@ -153,8 +160,8 @@ export interface LessonSettingsObservation {
   seat: string | null;
   /** The served profile; null while it is not resolved. */
   profile: (SnapshotProfile & Parameters<typeof lessonSettingsChangeApplies>[0]) | null;
-  /** REQ-M47 keys that are on for this profile under the learner's current inputs, and a fingerprint of those inputs. */
-  caps: { inputs: string; on: readonly AiCapabilityKey[] };
+  /** REQ-M47 keys that are on (and asking) for this profile under the learner's lasting inputs, and a fingerprint of those inputs. */
+  caps: { inputs: string; on: readonly AiCapabilityKey[]; asks?: readonly AiCapabilityKey[] };
   instructor?: boolean;
   local?: boolean;
   /** A turn is running. A change it sees waits for the turn to end; the running turn keeps the settings it started with. */

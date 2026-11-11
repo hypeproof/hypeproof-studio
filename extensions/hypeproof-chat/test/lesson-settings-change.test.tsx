@@ -1,6 +1,7 @@
 // CGP-SHELL-R-024 / CGP-SHELL-D-023 — the real ChatPanel draws the instructor's settings change as a system line in the
-// chat stream: placed among the messages before the next turn, Panel background and no speaker, announced once by
-// role="status" while unseen, never a dialog, and it reports itself seen only while the panel is visible.
+// chat stream: placed among the messages before the next turn, Panel background and no speaker, never a dialog. It is
+// announced once through the panel's always-mounted role="status" region while unseen (the line itself holds no live
+// region), and it reports itself seen only while the panel is visible.
 // Bundled with esbuild and run with plain Node on fixtures/mini-dom.mjs (scripts/run-tsx-tests.mjs, BANNER_POSTED).
 // It reads only the panel's markup and posted messages, so it fails on a build that does not draw the line.
 import { mountPoint, document as doc } from "./fixtures/mini-dom.mjs";
@@ -60,8 +61,10 @@ async function main() {
   ok(found.length === 1, `one line, got ${found.length}`);
   const el = found[0];
   ok(el.textContent === TEXT, `text: ${el.textContent}`);
-  ok(el.getAttribute("role") === "status", "announced by role=status");
-  const statuses = host.findAll((e) => e.getAttribute("role") === "status" && e.textContent.includes("도움 방식을 바꿨어요"));
+  ok(el.getAttribute("role") === null && el.getAttribute("aria-live") === null, "the line itself is not a live region");
+  const announcer = () => host.findAll((e) => e.getAttribute("data-testid") === "response-announcer")[0];
+  ok(announcer()?.getAttribute("role") === "status" && announcer().textContent === TEXT, `announced by the always-mounted status region: ${announcer()?.textContent}`);
+  const statuses = host.findAll((e) => (e.getAttribute("role") === "status" || e.getAttribute("aria-live") !== null) && e.textContent.includes("도움 방식을 바꿨어요"));
   ok(statuses.length === 1, `announced once (one live region holds it), got ${statuses.length}`);
   const order = host.findAll((e) => e.getAttribute("data-testid") === "lesson-settings-change" || e.getAttribute("data-message-id") !== null)
     .map((e) => e.getAttribute("data-message-id") ?? "LINE");
@@ -74,6 +77,7 @@ async function main() {
   ok(seenPosts().length === 1 && seenPosts()[0].id === "lsc-1", `reports seen once while visible: ${JSON.stringify(seenPosts())}`);
   await act(async () => root.render(<ChatPanel {...PROPS} config={config([line(false)])} instructor={false} messages={messages} />));
   ok(seenPosts().length === 1, "a re-render does not report again");
+  ok(announcer().textContent === TEXT, "a re-render keeps the same announcement (no second one)");
   await act(async () => root.unmount());
 
   // 2. Seen: the same line is drawn without a live region (a remount does not read it out again) and reports nothing.
@@ -81,6 +85,8 @@ async function main() {
   host = mountPoint() as unknown as El; root = createRoot(host as unknown as HTMLElement);
   await act(async () => root.render(<ChatPanel {...PROPS} config={config([line(true)])} instructor={false} messages={messages} />));
   ok(lines(host).length === 1 && lines(host)[0].getAttribute("role") === null, "seen: drawn, no role=status");
+  const quiet = host.findAll((e) => e.getAttribute("data-testid") === "response-announcer")[0];
+  ok(quiet && !quiet.textContent.includes("도움 방식을 바꿨어요"), "seen: a remount does not read it out again");
   ok(seenPosts().length === 0, "seen: no report");
   await act(async () => root.unmount());
 

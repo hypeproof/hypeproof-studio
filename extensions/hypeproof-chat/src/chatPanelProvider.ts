@@ -274,7 +274,7 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
-import { CapabilityChangeTracker, seatAiCapabilities, seatCapabilityKeys, type SeatInputs } from "./capabilityChange";
+import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
@@ -5388,6 +5388,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.servedWorkspaceRoot = null;
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
+    // CGP-SHELL-R-024 — lines drawn while hidden belong to the seat that drew them; another seat must not count them.
+    this.lessonLinesDrawnHidden?.clear();
     void this.downloadWatcher?.reapply(); // CGP-KNOW-R-021 — no profile: downloads are denied until one loads
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
@@ -8150,7 +8152,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch {
       void vscode.window.showWarningMessage("활동 연결을 확인하지 못해 이미지 편집을 시작하지 않았어요. 원본은 보존됩니다.");
     } finally {
-      try { releaseActivity?.(); } finally { this.pendingSends--; }
+      try { releaseActivity?.(); } finally { this.pendingSends--; this.releaseDeferredLessonLine(); }
     }
   }
 
@@ -10619,7 +10621,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.pendingSends--; settle.settled();
         if (this.turnSettling === settle.promise) this.turnSettling = undefined;
         // CGP-SHELL-R-024 — a settings change that arrived during this turn is told now; the next turn uses it.
-        if (this.lessonChangeDeferred) { this.lessonChangeDeferred = false; void this.postConfig().catch(() => {}); }
+        this.releaseDeferredLessonLine();
         if (this.pendingFundingSelection) { this.applyPendingFundingSelection(); void this.postConfig().catch(() => {}); }
       }
       if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
@@ -11474,11 +11476,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       const result = await (this.lessonChanges ??= new LessonSettingsChangeTracker(store)).observe({
         seat, profile: o.profile, instructor: o.instructor, local: o.local,
-        caps: { inputs: JSON.stringify([o.seatInputs.choice?.id ?? null, o.seatInputs.settingRuntime, o.seatInputs.fallback]), on: seatCapabilityKeys(o.profile, o.seatInputs) },
+        caps: lessonCapabilityRows(o.profile!, o.seatInputs),
         turnRunning: this.lessonPreflightAdopting !== true && this.lessonTurnRunning(),
         lastMessageId, task: this.planTaskKey(),
       });
       this.lessonChangeDeferred = result.deferred;
+      // The turn may have ended while this post was being built (its end found no deferred line yet): post once more.
+      if (result.deferred && !this.lessonTurnRunning()) void Promise.resolve().then(() => this.releaseDeferredLessonLine());
       return result.notices;
     } catch (err) {
       // A storage failure must never stop the config post; the line is simply not drawn this time.
@@ -11492,6 +11496,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * while a chat surface is visible: the sidebar webview keeps rendering while collapsed, and its document does not
    * always say so. A line drawn while hidden is counted when a chat surface is shown.
    */
+  /** A work slot (a turn, an image edit) ended: a settings change it held back is told now, before the next turn. */
+  private releaseDeferredLessonLine(): void {
+    if (!this.lessonChangeDeferred) return;
+    this.lessonChangeDeferred = false;
+    void this.postConfig().catch(() => {});
+  }
   /** hasActiveStream, tolerant of the partial providers some host fixtures build (no activeStreams map): unknown = not running. */
   private lessonTurnRunning(): boolean {
     try { return this.hasActiveStream(); } catch { return false; }

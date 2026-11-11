@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const built = await build({ stdin: { contents: "export { ChatPanelProvider } from './src/chatPanelProvider';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 const settings = { coachRuntime: 'agent-sdk', requireApprovalFor: [] };
-const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} } };
+const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} }, window: { showWarningMessage: async () => undefined } };
 const module = { exports: {} };
 vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, setTimeout, clearTimeout });
 
@@ -30,7 +30,8 @@ function openWindow() {
   Object.assign(h, {
     preview: { setAskAboutFileEnabled() {} },
     context: { secrets: { get: async k => (k === 'hypeproofChat.workshopToken' ? TOKEN : undefined) }, workspaceState: { get: (key, fallback) => (key.startsWith('hps.history') || key.startsWith('hypeproofChat.history') ? history : fallback) }, globalState },
-    loadAccess: async () => {}, ensureProfile: async () => profile, refreshCrDirectorContext: async () => {},
+    // As in production, the profile postConfig reads is also the cached one (approval asks follow its preset).
+    loadAccess: async () => {}, ensureProfile: async () => (h.cachedProfile = profile), refreshCrDirectorContext: async () => {},
     _instructorMode: { checkInstructorMode: async () => false, reset() {} },
     prepareTaskWorkspace: async () => {}, currentTaskStore: () => null, getHistory: () => history,
     getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }),
@@ -123,13 +124,16 @@ assert.equal(c.lessonSettingsChanges, undefined, 'undone before seen: nothing to
 w = openWindow();
 profile = classroom({ approval_preset: preset('always_ask'), plan_first: { available: false } });
 w.h.pendingSends = 1;
-w.h.turnApprovalPreset = 'before_changes'; // what handleSend captured when this turn started
 c = await w.publish();
 assert.equal(c.lessonSettingsChanges, undefined, 'no line while the turn runs');
 assert.equal(w.h.lessonChangeDeferred, true, 'the line waits for the turn to end');
-assert.equal(w.h.turnApprovalPreset, 'before_changes', 'the running turn keeps the preset it started with');
+// The turn ends: the same release handleSend's finally calls (wiring checked in 10e) posts the config by itself.
 w.h.pendingSends = 0;
-c = await w.publish();
+const before8 = w.posts.length;
+w.h.releaseDeferredLessonLine();
+await new Promise(r => setTimeout(r, 20));
+assert.ok(w.posts.length > before8, 'the turn end posted the config itself');
+c = w.posts.filter(p => p.type === 'config').at(-1).config;
 assert.equal(c.lessonSettingsChanges?.[0]?.text, `선생님이 도움 방식을 바꿨어요: 승인 방식 ${L.before_changes} → ${L.always_ask}`, 'shown after the turn');
 await w.h.handleMessage({ type: 'lessonSettingsChangeSeen', id: c.lessonSettingsChanges[0].id });
 
@@ -140,10 +144,11 @@ w.h.pendingSends = 1;
 w.h.rememberLinkSafety = async () => {};
 w.h.syncPlanFirstWithProfile = () => {};
 // The fixture's ensureProfile returns `profile`, so it is set to what the preflight adopts (the real one returns cachedProfile).
+// The baseline had write on under 항상 묻기, so the card's word for it was 물어봐요.
 profile = classroom({ approval_preset: preset('always_ask'), plan_first: { available: false }, lesson_binding: { key: 'b'.repeat(32), seq: 2, source: 'setting', object_id: 'o', revision: 1, enforced: true }, sdk_tools: { read: true } });
 await w.h.adoptPreflightProfile(profile, TOKEN);
 c = w.posts.filter(p => p.type === 'config').at(-1).config;
-assert.equal(c.lessonSettingsChanges?.at(-1)?.text, '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 해요 → 안 해요', 'U3 switch: told before the starting turn');
+assert.equal(c.lessonSettingsChanges?.at(-1)?.text, '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 물어봐요 → 안 해요', 'U3 switch: told before the starting turn, in the card\'s words');
 assert.equal(c.lessonSettingsChanges.at(-1).afterMessageId, 'a2');
 assert.equal(w.h.lessonChangeDeferred, false);
 w.h.pendingSends = 0;
@@ -156,6 +161,73 @@ assert.ok(!(c.lessonSettingsChanges ?? []).some(l => !l.seen), 'a runtime settin
 settings.coachRuntime = 'agent-sdk';
 c = await w.publish();
 assert.ok(!(c.lessonSettingsChanges ?? []).some(l => !l.seen), 'and back: still nothing');
+
+// 10b. Another classroom seat on this machine (another activity) keeps its own baseline.
+const seat1 = profile;
+profile = classroom({ activity_id: 'e'.repeat(64) });
+assert.equal((await openWindow().publish()).lessonSettingsChanges, undefined, 'another classroom seat: its own silent first load');
+profile = seat1;
+assert.ok(!((await openWindow().publish()).lessonSettingsChanges ?? []).some(l => !l.seen), 'seat 1 is not changed by seat 2');
+
+// 10c. A fallback in one session neither makes a line nor swallows the instructor's next capability change.
+{
+  profile = classroom({ activity_id: 'f'.repeat(64) });
+  const s1 = openWindow(); await s1.publish();
+  s1.h.fallbackNoticeShown = true;
+  assert.ok(!((await s1.publish()).lessonSettingsChanges ?? []).some(l => !l.seen), 'a fallback alone makes no line');
+  profile = classroom({ activity_id: 'f'.repeat(64), sdk_tools: { read: true } });
+  const s2 = openWindow();
+  assert.equal((await s2.publish()).lessonSettingsChanges?.[0]?.text, '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 해요 → 안 해요', 'capability change after a fallback session');
+}
+
+// 10d. A change found by the 이미지 편집 refresh (real editImage) is told when that action ends, before the next turn.
+{
+  profile = classroom({ activity_id: '9'.repeat(64) });
+  const e = openWindow(); await e.publish();
+  profile = classroom({ activity_id: '9'.repeat(64), approval_preset: preset('always_ask') });
+  await e.h.editImage();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(e.h.pendingSends, 0);
+  assert.equal(e.posts.filter(p => p.type === 'config').at(-1).config.lessonSettingsChanges?.[0]?.text, `선생님이 도움 방식을 바꿨어요: 승인 방식 ${L.important_only} → ${L.always_ask}`, 'told when image edit ends');
+}
+
+// 10e. Wiring the fixture cannot drive: both chat surfaces count hidden-drawn lines when shown; a turn's end releases a held line.
+{
+  const src = readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
+  assert.equal((src.match(/else void this\.flushLessonLinesShown\(\)/g) ?? []).length, 2, 'sidebar and editor visibility hooks flush');
+  assert.match(src, /this\.pendingSends--; settle\.settled\(\);[\s\S]{0,400}this\.releaseDeferredLessonLine\(\);/, 'turn end releases a held line');
+  assert.match(src, /finally \{ this\.pendingSends--; this\.releaseDeferredLessonLine\(\); \}/, 'image edit end releases a held line');
+}
+
+// 10f. A seat switch while the chat is hidden: seat A's hidden-drawn line is not counted for seat A by the next seat.
+{
+  profile = classroom({ activity_id: '7'.repeat(64) });
+  const a = openWindow(); await a.publish();
+  profile = classroom({ activity_id: '7'.repeat(64), plan_first: { available: false } });
+  const lineA = (await a.publish()).lessonSettingsChanges[0];
+  a.h.view.visible = false;
+  await a.h.handleMessage({ type: 'lessonSettingsChangeSeen', id: lineA.id });
+  Object.assign(a.h, { endTaskCommandAllows() {}, refreshCrBytesContext: async () => {}, refreshSitePublishContext() {}, reconcileSavedLinkSafety: async () => {} });
+  a.h.invalidateProfile();
+  a.h.view.visible = true;
+  await a.h.flushLessonLinesShown();
+  assert.equal((await openWindow().publish()).lessonSettingsChanges?.[0]?.text, '선생님이 도움 방식을 바꿨어요: 계획 먼저 켜짐 → 꺼짐', "seat A's unseen line is still told to seat A");
+}
+
+// 10g. The narrow race: a post saw the turn running, but the turn had ended (and found nothing to release) before the
+// post finished. The post itself releases the line once more instead of leaving it held until some later post.
+{
+  profile = classroom({ activity_id: '6'.repeat(64) });
+  const r = openWindow(); await r.publish();
+  profile = classroom({ activity_id: '6'.repeat(64), plan_first: { available: false } });
+  let calls = 0;
+  r.h.lessonTurnRunning = () => (calls++ === 0); // running when the post looked, ended right after
+  const c1 = await r.publish();
+  assert.equal(c1.lessonSettingsChanges, undefined, 'held while the turn looked running');
+  await new Promise(res => setTimeout(res, 20));
+  assert.equal(r.posts.filter(p => p.type === 'config').at(-1).config.lessonSettingsChanges?.[0]?.text, '선생님이 도움 방식을 바꿨어요: 계획 먼저 켜짐 → 꺼짐', 'released by the post itself');
+  assert.equal(r.h.lessonChangeDeferred, false);
+}
 
 // 11. A personal seat never gets the instructor line (it has no instructor; REQ-STUDIO-CAPABILITY-CHANGE covers it).
 // The instructor surface and local mode are covered in lesson-settings-change.test.mjs and the panel render test.
