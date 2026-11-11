@@ -211,12 +211,18 @@ private struct SharedCacheFile: Codable {
             let tokens = try await service.refresh(old.tokens.refresh_token)
             guard account?.tokens.session_id == old.tokens.session_id else { try? await service.logout(tokens.access_token); throw CancellationError() }
             let next = StoredAccount(accountID: old.accountID, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
-            try AccountKeychain.save(next); account = next; return tokens.access_token
+            do { try AccountKeychain.save(next) }
+            catch { accountStorageReady = false; try? await service.logout(tokens.access_token); throw error }
+            account = next; return tokens.access_token
         } catch {
             // Refresh tokens rotate once. An uncertain response requires fresh login, never reuse.
-            if account?.tokens.session_id == old.tokens.session_id { try? AccountKeychain.remove(); account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil }
+            if account?.tokens.session_id == old.tokens.session_id { clearAccount() }
             throw error
         }
+    }
+    private func clearAccount() {
+        do { try AccountKeychain.remove() } catch { accountStorageReady = false }
+        account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
     }
     func refresh() { Task { await synchronize() } }
     private func synchronize() async {
@@ -250,7 +256,7 @@ private struct SharedCacheFile: Codable {
     private func failure(_ error: Error) {
         self.error = error.localizedDescription
         if case SyncFailure.http(let status, let code) = error, status == 401 || ["session_revoked", "account_inactive", "refresh_reuse"].contains(code) {
-            try? AccountKeychain.remove(); account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
+            clearAccount()
         }
     }
     func send() {
