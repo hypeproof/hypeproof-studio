@@ -922,7 +922,7 @@
         "MPER-05"
       ],
       "inline_prefixes": [],
-      "sha256": "d9c6e20b824f4c22b7c7edb7cc4ea8ff90ed98d00df33f2a1ea8e5d30ffdc146",
+      "sha256": "d30d0f6c947efae33f06e3e72d428c71b734ad0a7d5c9ab1d49f79d5b01a7e3d",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4560,7 +4560,8 @@
         "extensions/hypeproof-chat/src/extension.ts",
         "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
         "apps/studio-native/ios/App/SharedConversationModel.swift",
-        "apps/studio-native/ios/App/SharedConversationView.swift"
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/personal-reflection.test.mjs",
