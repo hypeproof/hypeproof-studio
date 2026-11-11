@@ -637,45 +637,60 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionRefreshing = false;
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
   private reflectionStreams = new Map<string,{binding:ReflectionBinding;id:string}>();
-  private reflectionBindings(): ReflectionBinding[] { return this.context.globalState.get<ReflectionBinding[]>(REFLECTION_BINDING_KEY,[]); }
+  private reflectionBindings(): ReflectionBinding[] {
+    return this.context.globalState.keys().filter(k=>k.startsWith(REFLECTION_BINDING_KEY+':')).map(k=>this.context.globalState.get<ReflectionBinding>(k)).filter((b):b is ReflectionBinding=>!!b);
+  }
   private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
-    await this.context.globalState.update(REFLECTION_BINDING_KEY,[...this.reflectionBindings().filter(v=>v.task!==b.task||v.activity!==b.activity||v.workspace!==b.workspace),b]);
+    const key=REFLECTION_BINDING_KEY+':'+JSON.stringify([b.activity,b.workspace,b.task]);
+    const held=this.context.globalState.get<ReflectionBinding>(key);
+    if(held&&held.revision>b.revision)return;
+    await this.context.globalState.update(key,b);
   }
   private reflectionBinding(): ReflectionBinding | undefined {
     const scope=this.mobileConversationScope(true);
     return scope ? this.reflectionBindings().find(b=>b.activity===scope.activity&&b.workspace===scope.workspace&&b.task===scope.task) : undefined;
   }
   private async applyReflectionSnapshot(b: ReflectionBinding, value: ReflectionSnapshot): Promise<void> {
-    if (this.reflectionBinding()?.task !== b.task || await this.reflectionAccounts?.conversationSession() !== b.session) throw Error('계정이나 열린 대화가 바뀌었어요.');
+    const accounts=this.reflectionAccounts,store=this.currentTaskStore();
+    const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
+    if(!store||!stillHere()||await accounts?.conversationSession()!==b.session||!stillHere())throw Error('계정이나 열린 대화가 바뀌었어요.');
     const held=this.reflectionBinding()!;
     if (value.state.revision < held.revision) throw Error('이전 대화 응답을 적용하지 않았어요.');
-    const existing = new Set(this.getHistory().map(m => m.id));
+    const existing = new Set(store.getHistory(b.task).map(m => m.id));
     const incoming: ChatMessage[] = value.state.messages.filter(m => !existing.has(m.id)).map(m => ({id:m.id,role:m.role,content:m.content,createdAt:m.created_at}));
     if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
-    if (incoming.length) await this.appendHistory(incoming);
+    // Write to the captured task. Navigation while disk IO runs cannot redirect these words.
+    if (incoming.length) await store.append(b.task,incoming);
     const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
     await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
-    await this.post({type:'history',messages:this.getHistory()});
+    if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
   }
+
   async openPersonalReflection(): Promise<void> {
     const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
     if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
     if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
     const scope=this.mobileConversationScope(true);
     if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
+    const store=this.currentTaskStore()!;
+    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
     let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
     if(!b){
       const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
       if(accepted!=='내 이야기 시작하기')return;
     }
+    assertOpeningScope();
     const value=readReflection(await accounts.reflectionRequest(session));
+    assertOpeningScope();
     if(!b){
+      const oldTasks=new Set([...store.getView().tasks,...(store.getView().archived??[])].map(t=>t.id));
       await this.handleTaskMessage({type:'taskCreate',taskId:scope.task} as WebviewMessage);
       const next=this.mobileConversationScope(true);
-      if(!next||next.task===scope.task||next.activity!==scope.activity)throw Error('질문 대화를 열지 못했어요. 기존 작업은 보존했어요.');
+      if(this.currentTaskStore()!==store||!next||oldTasks.has(next.task)||next.activity!==scope.activity||next.workspace!==scope.workspace)throw Error('질문 대화를 열지 못했어요. 기존 작업은 보존했어요.');
       b={session,activity:next.activity,workspace:next.workspace,task:next.task,revision:0};
       await this.saveReflectionBinding(b);
-      await this.currentTaskStore()?.rename(next.task,'나를 알아가는 대화').then(view=>this.post({type:'taskWorkspaceState',view}));
+      const view=await store.rename(next.task,'나를 알아가는 대화');
+      if(this.currentTaskStore()===store&&this.reflectionBinding()?.task===b.task)await this.post({type:'taskWorkspaceState',view});
     } else if(b.task!==scope.task) {
       await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
     }
@@ -8809,6 +8824,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamStopped", streamId: msg.streamId });
         return;
       case "requestAction":
+        if(this.reflectionBinding()){void vscode.window.showInformationMessage('만들거나 실행할 작업은 새 작업에서 시작해 주세요. 이곳에서는 내 이야기를 이어가요.');return;}
         await this.handleActionRequest(msg.action);
         return;
       case "setTextSize":

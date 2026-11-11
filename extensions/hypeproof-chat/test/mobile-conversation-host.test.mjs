@@ -43,3 +43,26 @@ test('uncertain reflection send preserves an idempotent pending request and rest
  await f.h.sendPersonalReflection(msg);assert.equal(f.h.reflectionBinding().pending.id,'original-turn');assert.ok(f.posts.some(p=>p.type==='inputRejected'&&p.text===msg.text));
  await f.h.sendPersonalReflection({...msg,userMessageId:'a-new-ui-id'});assert.equal(calls.length,2);assert.equal(calls[1].id,'original-turn');
 }));
+
+const privateSnapshot={state:{id:'personal-reflection',revision:2,messages:[{id:'private-user',role:'user',content:'Private account A reflection',created_at:1},{id:'private-answer',role:'assistant',content:'One question?',created_at:2}],has_earlier:false,turn:null},opening:'First question?',hint:'Optional'};
+test('navigation during reflection opening cannot rename or import into an unrelated task',async()=>host(async f=>{
+ f.vscode.window.showInformationMessage=async()=> '내 이야기 시작하기';
+ const a=f.store.getView().activeTaskId;let finish,started;
+ const waiting=new Promise(r=>started=r),response=new Promise(r=>finish=r);
+ f.h.setReflectionAccount({conversationSession:async()=> 'account-a',reflectionRequest:async()=>{started();return response;}});
+ const opening=f.h.openPersonalReflection();await waiting;
+ await f.h.handleTaskMessage({type:'taskCreate',taskId:a});const b=f.store.getView().activeTaskId;
+ await f.store.rename(b,'Important existing project');await f.store.append(b,[{id:'original',role:'user',content:'Build my website',createdAt:1}]);
+ finish(privateSnapshot);await assert.rejects(opening,/열린 작업/);
+ assert.equal(f.store.getTask(b).title,'Important existing project');assert.equal(f.store.getHistory().map(m=>m.id).join(','),'original');assert.equal(f.h.reflectionBinding(),undefined);
+}));
+test('navigation during asynchronous account verification cannot import private output into another binding',async()=>host(async f=>{
+ const a=f.h.mobileConversationScope(true),ba={session:'account-a',activity:a.activity,workspace:a.workspace,task:a.task,revision:0};await f.h.saveReflectionBinding(ba);
+ await f.h.handleTaskMessage({type:'taskCreate',taskId:a.task});const b=f.h.mobileConversationScope(true),bb={session:'account-b',activity:b.activity,workspace:b.workspace,task:b.task,revision:0};await f.h.saveReflectionBinding(bb);
+ await f.h.handleTaskMessage({type:'taskSelect',taskId:b.task,id:a.task});
+ let finish,started;const waiting=new Promise(r=>started=r),response=new Promise(r=>finish=r);
+ f.h.setReflectionAccount({conversationSession:async()=>{started();return response;}});
+ const applying=f.h.applyReflectionSnapshot(ba,privateSnapshot);await waiting;
+ await f.h.handleTaskMessage({type:'taskSelect',taskId:a.task,id:b.task});finish('account-a');await assert.rejects(applying,/계정이나 열린 대화/);
+ assert.equal(f.h.reflectionBinding().session,'account-b');assert.equal(f.h.reflectionBinding().revision,0);assert.equal(f.store.getHistory().length,0);assert.equal(f.store.getHistory(a.task).length,0);
+}));

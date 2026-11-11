@@ -24,7 +24,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore } = module.exports;
   const activity = { id: 'synthetic-personal-a', workspace: root, kind: 'personal', name: '내 작업' };
   const global = new Map();
-  const raw = { globalState: { get: (key, fallback) => global.get(key) ?? fallback, update: async (key,value) => {global.set(key,value);} }, globalStorageUri: { fsPath: root }, workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => undefined, keys: async () => [] } };
+  const raw = { globalState: { keys: () => [...global.keys()], get: (key, fallback) => global.get(key) ?? fallback, update: async (key,value) => {global.set(key,value);} }, globalStorageUri: { fsPath: root }, workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => undefined, keys: async () => [] } };
   const connections = new ActivityConnections(raw, () => 'http://127.0.0.1/v1', () => root, async () => ({}));
   connections.active = activity;
   const context = connections.wrap();
