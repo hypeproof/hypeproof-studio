@@ -67,6 +67,8 @@ import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerO
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
+import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
+import { LessonSettingsChangeLine } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
@@ -1697,6 +1699,8 @@ export function ChatPanel(props: Props) {
   // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
   const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
   const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  // CGP-SHELL-R-024 / D-023 — the instructor's settings changes, as system lines among the messages (classroom seats only).
+  const lessonLines = placeLessonSettingsLines(props.instructor ? undefined : config?.lessonSettingsChanges, shown.items.map(m => m.id), config?.taskWorkspace?.activeTaskId ?? null);
   const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
   // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
   const questionList = myQuestions(shown.items);
@@ -2062,6 +2066,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
+          {i === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
@@ -2146,7 +2151,10 @@ export function ChatPanel(props: Props) {
                 disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
+          {lessonLines.after.get(m.id)?.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           </Fragment>}</TurnBoundary>)}
+        {shown.items.length === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
+        {lessonLines.bottom.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
         </CodeBlockScope>
 
         {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}

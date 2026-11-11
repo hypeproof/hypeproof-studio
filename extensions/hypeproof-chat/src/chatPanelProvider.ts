@@ -274,7 +274,8 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
-import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
+import { CapabilityChangeTracker, seatAiCapabilities, seatCapabilityKeys, type SeatInputs } from "./capabilityChange";
+import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
@@ -1189,6 +1190,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // CGP-SHELL-R-024 — what the learner was last told the AI can do, per token and activity (memory only).
   // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
   private capChanges?: CapabilityChangeTracker;
+  // CGP-SHELL-R-024 / D-023 (ADM-11) — classroom seats: what the instructor changed, told once, persisted per seat.
+  private lessonChanges?: LessonSettingsChangeTracker;
+  /** A change seen while a turn ran waits for the turn's end; then the config is posted once more. */
+  private lessonChangeDeferred = false;
+  /** #751 U3 — the turn-start preflight is adopting a switched setting: that change belongs before this very turn. */
+  private lessonPreflightAdopting = false;
   private activeStreams = new Map<string, AbortController>();
   private delegationControls = new Map<string, {scope:string;stop:()=>void}>();
   private reportDelegationStop(streamId:string,scope:string,ctrl:AbortController,state:import("./delegationStop").DelegationStopState):void {
@@ -5301,7 +5308,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const token = await this.context.secrets.get(TOKEN_KEY), base = tokenLessonSha(token); if (!token || !base) return;
     if (shouldRecheckEnforcement(current.lesson_binding, (await ops.holdsLessonSetting?.()) === true)) {
       const fresh = await this.fetchCandidateProfile(token);
-      if (fresh?.lesson_binding?.enforced) { await this.adoptProfile(fresh, token); current = fresh; }
+      if (fresh?.lesson_binding?.enforced) { await this.adoptPreflightProfile(fresh, token); current = fresh; }
     }
     if (!current.lesson_binding?.enforced) return;
     const sw = await ops.switchPendingSetting(base);
@@ -5315,7 +5322,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     const from = current.lesson_binding!, fromVersion = current.lesson?.version;
-    await this.adoptProfile(candidate!, token);
+    await this.adoptPreflightProfile(candidate!, token);
     if (sw.state === "switched") await ops.confirmSettingBound?.(sw);
     this.spool?.recordLessonBinding({ from: { key: from.key, version: fromVersion }, to: { key: candidate!.lesson_binding!.key, version: candidate!.lesson?.version, source: candidate!.lesson_binding!.source, object_id: candidate!.lesson_binding!.object_id, revision: candidate!.lesson_binding!.revision } });
   }
@@ -5338,6 +5345,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (await this.context.secrets.get(TOKEN_KEY) !== token || this.cachedProfile !== current) return;
     this.cachedProfile = { ...current, trial: r.profile.trial };
     await this.postConfig();
+  }
+  /**
+   * CGP-SHELL-R-024 — U3 switches a setting at the start of the learner's next turn, before that turn takes its profile.
+   * The change line is posted now, placed before this turn's messages, instead of waiting for the turn to end.
+   */
+  private async adoptPreflightProfile(p: ResolvedProfile, token: string): Promise<void> {
+    this.lessonPreflightAdopting = true;
+    try { await this.adoptProfile(p, token); } finally { this.lessonPreflightAdopting = false; }
   }
   /** Same token, same activity: only what the lesson version decides changes (steps, AI name, model list, tool policy). */
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
@@ -8815,6 +8830,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();
         return;
       }
+      case "lessonSettingsChangeSeen":
+        if (typeof msg.id === "string" && msg.id.length <= 64) await this.lessonChanges?.seen(msg.id);
+        return;
       case "dismissCapabilityChange":
         (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
         void this.postConfig();
@@ -10598,6 +10616,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       try { releaseActivity?.(); } finally {
         this.pendingSends--; settle.settled();
         if (this.turnSettling === settle.promise) this.turnSettling = undefined;
+        // CGP-SHELL-R-024 — a settings change that arrived during this turn is told now; the next turn uses it.
+        if (this.lessonChangeDeferred) { this.lessonChangeDeferred = false; void this.postConfig().catch(() => {}); }
         if (this.pendingFundingSelection) { this.applyPendingFundingSelection(); void this.postConfig().catch(() => {}); }
       }
       if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
@@ -11435,6 +11455,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand(CHALK_INSTRUCTOR_TAB_COMMAND);
   }
 
+  /**
+   * CGP-SHELL-R-024 / D-023 (ADM-11) — compare this classroom seat's served lesson settings with the ones the learner was
+   * last told about (persisted per seat) and return the change lines to draw. The seat key is a hash of the Service and the
+   * activity id (the token when there is none), so no credential is stored. While a turn runs, nothing new is shown and the
+   * baseline stays: the running turn keeps the settings it started with, and the line is posted when it ends. A U3 switch
+   * adopted by the turn-start preflight is the exception: it applies to the turn that is starting, so it is told before it.
+   */
+  private async observeLessonSettings(o: { profile: ResolvedProfile | null; token: string | undefined; proxyUrl: string; seatInputs: SeatInputs; instructor: boolean; local: boolean }): Promise<LessonSettingsNotice[]> {
+    const store = this.context.globalState;
+    if (!store || !o.token || !lessonSettingsChangeApplies(o.profile, o.instructor, o.local)) return [];
+    const activity = /^[a-f0-9]{64}$/.test(o.profile?.activity_id ?? "") ? ["activity", o.profile!.activity_id] : ["credential", o.token];
+    const seat = createHash("sha256").update(JSON.stringify(["lesson-settings", o.proxyUrl, activity])).digest("hex");
+    let lastMessageId: string | null = null;
+    try { lastMessageId = this.getHistory().at(-1)?.id ?? null; } catch { lastMessageId = null; }
+    const result = await (this.lessonChanges ??= new LessonSettingsChangeTracker(store)).observe({
+      seat, profile: o.profile, instructor: o.instructor, local: o.local,
+      caps: { inputs: JSON.stringify([o.seatInputs.choice?.id ?? null, o.seatInputs.settingRuntime, o.seatInputs.fallback]), on: seatCapabilityKeys(o.profile, o.seatInputs) },
+      turnRunning: this.lessonPreflightAdopting !== true && this.hasActiveStream(),
+      lastMessageId, task: this.planTaskKey(),
+    });
+    this.lessonChangeDeferred = result.deferred;
+    return result.notices;
+  }
+
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
     // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
@@ -11528,6 +11572,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", []), servedApprovalPreset(this.cachedProfile)?.id) };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
     const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
+    // CGP-SHELL-R-024 / D-023 (ADM-11) — a classroom seat is told what the instructor changed, once, before its next turn.
+    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: isInstructor, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
@@ -11554,6 +11600,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
+        ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,

@@ -165,6 +165,8 @@ export interface ChatConfig {
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
   /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
   capabilityChange?: import('./aiCapabilities').CapabilityChange;
+  /** CGP-SHELL-R-024 / D-023 (ADM-11): the instructor changed this classroom seat's lesson settings; system lines in the chat. */
+  lessonSettingsChanges?: import('./lessonSettingsChange').LessonSettingsNotice[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
@@ -805,6 +807,8 @@ export type WebviewMessage = (
   | { type: "acknowledgeLessonCapabilities"; id: string }
   | { type: "dismissClassWindow"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
+  /** CGP-SHELL-R-024 — a settings-change line was on screen; the host moves the seat's persisted baseline. */
+  | { type: "lessonSettingsChangeSeen"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
   | { type: "saveCoach"; name: string; personality: string }
