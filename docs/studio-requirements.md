@@ -296,16 +296,18 @@ were each removed once and a test failed.
 lesson binding, sees one system line in the chat before its next turn when the instructor changed
 its lesson settings: "선생님이 도움 방식을 바꿨어요: <항목> <전> → <후>", several changes joined
 with " · " in one line. Compared: the approval preset (served label, `기본` when none),
-`plan_first.available`, the six REQ-M47 capabilities (same evaluation and words as the card),
+`plan_first.available`, the six REQ-M47 capabilities (same evaluation and words as the card:
+해요 / 물어봐요 / 안 해요; the per-session agent-sdk → proxy fallback is left out of the comparison),
 voice dictation and read-aloud, and the starter sentences (named only, never quoted). Not
 compared: model and effort, step content, AI role and tone (not drawn and not in a coach prompt
 yet, DEC-30 step 4). The baseline is persisted per seat in globalState (hashed seat key, no
 credential, starters as a fingerprint); the first profile is a silent baseline, learner-side inputs
 alone never make a line, and the baseline moves only when the panel reports the line drawn
 while a chat surface is visible (host `view.visible` / editor panel `visible`), so a reload does not repeat it and a change made while Studio was closed is told at
-the next panel open. A change observed during a running turn waits for the turn to end (the turn
-keeps its start-of-turn profile); a U3 switch adopted by the turn-start preflight is told at once,
-placed before the starting turn. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
+the next panel open. A change observed during a running turn or image edit waits for that work to
+end, then the config is posted again (the turn keeps its start-of-turn profile); a U3 switch adopted by
+the turn-start preflight is told at once, placed before the starting turn. The line holds no live
+region; its text is announced once through the panel's always-mounted `role="status"` region. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
 agent choices: decisions.md "CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line".
 Code: `src/lessonSettingsChange.ts` (pure), `observeLessonSettings` in `chatPanelProvider.ts`,
 `webview-ui/src/LessonSettingsChange.tsx`. Tests: `test/lesson-settings-change-host.smoke.mjs`
