@@ -32,7 +32,7 @@ and requires it on the request. Android uses
 [createOnDeviceSpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer#createOnDeviceSpeechRecognizer(android.content.Context))
 where available. Missing Korean assets/engine or denied permission returns to
 text. There is no cloud recognizer fallback, paid speech provider or raw audio
-upload. The linked iPhone surface optionally keeps up to 30 seconds of protected
+upload. The linked iPhone surface optionally keeps up to 30 seconds of in-memory
 local audio for self-listening. It is off by default and removed on stop, navigation,
 background or next capture; explicit deletion is also available. Read-aloud uses installed OS Korean voices; Android
 rejects network-required voices. Physical offline behavior still needs observation.

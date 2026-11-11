@@ -147,7 +147,7 @@ person can skip a question, request another perspective, or choose a small
 experiment. Reflection, purpose and the user's wording remain editable.
 
 Voice offers editable dictation and explicit final-transcript send/read-aloud.
-Optional self-listening is device-local, bounded to30seconds, off by default,
+Optional self-listening is memory-only, bounded to30seconds, off by default,
 and deleted on stop/background/navigation/next capture. A completed answer is
 read only after the matching request and original user message are identified.
 

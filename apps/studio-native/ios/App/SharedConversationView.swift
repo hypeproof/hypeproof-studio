@@ -219,7 +219,7 @@ struct SharedConversationView: View {
                 }
             }.buttonStyle(.bordered).disabled(model.busy && !voice.isActive)
             if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
-            if reviewRecording { Text("원음은 최대 30초만 이 기기에 임시 저장해요. 서버로 보내지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
+            if reviewRecording { Text("원음은 최대 30초만 메모리에 담아요. 파일이나 서버에 저장하지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
             if voice.canReplayOwnVoice {
                 HStack {
                     Button("내 목소리 다시 듣기") { voice.replayOwnVoice() }.disabled(voice.isActive)

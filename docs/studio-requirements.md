@@ -8934,12 +8934,12 @@ the OS settings handoff are the real-device check (policy 6 step 4). Not built h
 session states), CGP-VOICE-R-021 (the four `hypeproof.voice.*` Command Palette commands).
 
 
-## Standalone native mobile preview — 2026-11-10
+## Native mobile and existing desktop — revised 2026-11-11
 
 `ST-REQ-NATIVE-MOBILE` follows `ST-INT-NATIVE`: native iOS and Android capture,
 project-local context, consented Service questioning and human-confirmed intent
-revisions. Drafts survive restart; export/deletion are explicit. This is separate
-from the desktop companion and the web-only MVP. Implementation and native build
+revisions. Drafts survive restart; export/deletion are explicit. The iPhone now continues an explicitly shared personal task in the existing
+desktop. Original local notebooks are preserved; no second desktop product is built. Implementation and native build
 commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
 0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
 voice changes need their own package/device evidence.

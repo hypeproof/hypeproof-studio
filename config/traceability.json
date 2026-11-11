@@ -17938,6 +17938,9 @@
         },
         {
           "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/VoiceReviewPCM.swift"
         }
       ]
     },
@@ -17964,6 +17967,9 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceReviewPCMTests.swift"
         }
       ]
     },

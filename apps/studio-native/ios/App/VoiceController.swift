@@ -3,38 +3,27 @@ import UIKit
 @preconcurrency import Speech
 @preconcurrency import AVFoundation
 
-/// Optional, bounded, device-local review recording. Never sent to Service.
+/// Optional, bounded review audio stays in memory and is never sent to Service.
 private final class VoiceReviewCapture: @unchecked Sendable {
-    // Initialized once per app process, before any review recording is created.
-    // Only this feature's files in its private temporary directory are removed.
-    static let directory: URL = {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("hp-voice-review", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        for file in (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isRegularFileKey])) ?? [] {
-            if file.pathExtension == "caf", file.lastPathComponent.hasPrefix("capture-"), (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { try? FileManager.default.removeItem(at: file) }
-        }
-        return root
-    }()
-    let url: URL
     private let lock = NSLock()
-    private var file: AVAudioFile?
-    private var failed = false
-    init(format: AVAudioFormat) throws {
-        url = Self.directory.appendingPathComponent("capture-\(UUID().uuidString).caf")
-        do {
-            file = try AVAudioFile(forWriting: url, settings: format.settings)
-            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], ofItemAtPath: url.path)
-        } catch { file = nil; try? FileManager.default.removeItem(at: url); throw error }
+    private var clip: VoiceReviewPCM
+    init?(format: AVAudioFormat) {
+        guard let clip = VoiceReviewPCM(sampleRate: Int(format.sampleRate), channels: Int(format.channelCount)) else { return nil }
+        self.clip = clip
     }
     func append(_ buffer: AVAudioPCMBuffer) {
-        lock.lock(); defer { lock.unlock() }
-        do { try file?.write(from: buffer) } catch { failed = true }
+        guard let channels = buffer.floatChannelData else { return }
+        let count = Int(buffer.frameLength), width = Int(buffer.format.channelCount)
+        var samples = [Int16](); samples.reserveCapacity(count * width)
+        for frame in 0..<count {
+            for channel in 0..<width {
+                let value = buffer.format.isInterleaved ? channels[0][frame * width + channel] : channels[channel][frame]
+                samples.append(value.isFinite ? Int16(max(-32768, min(32767, value * 32767))) : 0)
+            }
+        }
+        lock.lock(); clip.append(samples); lock.unlock()
     }
-    func finish() -> URL? {
-        lock.lock(); defer { lock.unlock() }; file = nil
-        return failed ? nil : url
-    }
-    deinit { try? FileManager.default.removeItem(at: url) }
+    func finish() -> Data? { lock.lock(); defer { lock.unlock() }; return clip.wav }
 }
 
 @MainActor final class VoiceController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
@@ -43,7 +32,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     @Published private(set) var canReplayOwnVoice = false
     private var reviewEnabled = false
     private var reviewCapture: VoiceReviewCapture?
-    private var reviewURL: URL?
+    private var reviewData: Data?
     private var reviewPlayer: AVAudioPlayer?
     private let engine = AVAudioEngine()
     private let speaker = AVSpeechSynthesizer()
@@ -57,7 +46,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
     private var final: (String, VoiceTurn.Mode) -> Bool = { _, _ in false }
     var isCapturing: Bool { [.authorizing, .listening, .finalizing].contains(turn.phase) }
     var isActive: Bool { ![.idle, .ready].contains(turn.phase) }
-    override init() { super.init(); speaker.delegate = self; _ = VoiceReviewCapture.directory }
+    override init() { super.init(); speaker.delegate = self }
 
     func start(projectID: String, mode: VoiceTurn.Mode, reviewRecording: Bool = false,
                transcript: @escaping (String) -> Void,
@@ -107,7 +96,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
             self.request = request
-            let review = reviewEnabled ? try VoiceReviewCapture(format: format) : nil
+            let review = reviewEnabled ? VoiceReviewCapture(format: format) : nil
             reviewCapture = review
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer); review?.append(buffer) }
             tapInstalled = true
@@ -148,7 +137,7 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         guard turn.advance(token, from: [.listening, .finalizing], to: mode == .conversation ? .waiting : .ready) else { return }
         timeout?.cancel(); stopInput(); request?.endAudio(); recognition?.cancel()
         recognition = nil; request = nil
-        reviewURL = reviewCapture?.finish(); canReplayOwnVoice = reviewURL != nil
+        reviewData = reviewCapture?.finish(); canReplayOwnVoice = reviewData != nil
         deactivateAudio()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { fail("인식된 말이 없어요. 다시 말하거나 글로 적어 주세요."); return }
         if mode == .dictation { status = "입력창에 담았어요. 확인하고 직접 기록하거나 보내 주세요." }
@@ -174,15 +163,15 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         turn.stop(); timeout?.cancel(); timeout = nil; authorizedToken = nil
         utteranceID = nil; speaker.stopSpeaking(at: .immediate)
         stopInput(); request?.endAudio(); recognition?.cancel(); request = nil; recognition = nil
-        reviewPlayer?.stop(); reviewPlayer = nil; reviewURL = nil; reviewCapture = nil; canReplayOwnVoice = false; reviewEnabled = false
+        reviewPlayer?.stop(); reviewPlayer = nil; reviewData = nil; reviewCapture = nil; canReplayOwnVoice = false; reviewEnabled = false
         transcript = { _ in }; final = { _, _ in false }; deactivateAudio(); status = ""
     }
     func replayOwnVoice() {
-        guard !isCapturing, turn.phase != .waiting, turn.phase != .speaking, let reviewURL else { return }
+        guard !isCapturing, turn.phase != .waiting, turn.phase != .speaking, let reviewData else { return }
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
-            let player = try AVAudioPlayer(contentsOf: reviewURL); player.delegate = self; reviewPlayer = player
+            let player = try AVAudioPlayer(data: reviewData); player.delegate = self; reviewPlayer = player
             guard player.play() else { throw StudioError.message("녹음을 재생하지 못했어요.") }
             status = "내 목소리를 다시 듣고 있어요. 다른 화면으로 이동하거나 다음 녹음을 시작하면 원음을 지워요."
         } catch { status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요." }
