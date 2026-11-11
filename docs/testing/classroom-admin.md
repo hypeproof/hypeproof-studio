@@ -1474,6 +1474,19 @@ collection contract.
 
 **NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).
 
+<a id="adm-05-help-notice-run"></a>
+
+## 새 도움 요청 알림과 주의 목록 행 · 2026-11-11 (ADM-05 · CGP-AGENT-R-024 · CGP-AGENT-D-011)
+
+요구: [새 도움 요청 알림과 주의 목록 행](../requirements/classroom-admin.md#adm-05-help-notice). Service 변경 없음.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/help-notice.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고(페이지 안에서만, OS 입력·보이는 창 없음): 첫 조회는 알림 0 · 이번 수업의 새 요청은 알림과 ‘새 항목’ · 다른 수업 요청은 알림도 목록도 없음 · 알림·OS 알림 어디에도 본문(질문·피드백) 문자열이 없음 · 브라우저 알림은 켜기 전 권한을 묻지 않고, 켠 뒤에도 탭이 가려졌을 때만 `silent`로 한 번, 끄면 0 · 열기(Enter)가 가장 먼저 온 새 요청을 열고 표시를 지움 · 닫기는 알림만 숨김 · 다른 수업은 기준선 재설정, 늦게 불러온 오래된 요청은 알림 아님. 행: 굵은 14px 제목·흐린 14px 요약(40자 이하)·상대 시간·44px 단일 행동·행 56px 이상, 1280과 375에서 가로 넘침 0, 긴 학생 ID는 말줄임+툴팁 | snts(Ubuntu, headless Chromium)에서 40개 확인 PASS. 같은 시험을 base(`f2eba10e1`)의 `manage.html`로 돌리면 실패(알림 영역 없음) |
+| `chalk/test/help-triage.browser.mjs` | 키보드 분류(J/K·Enter·E)가 새 행 구조에서도 그대로 | 아래 실행 기록 |
+
+**NOT RUN**: 실제 브라우저에서 OS 알림 권한 창과 알림 표시(스텁으로 구성자 호출만 확인), 실제 학생 기기의 도움 요청 전송, 운영 배포. 알림은 10초 갱신 주기라 접수 후 최대 약 10초 뒤에 뜬다.
+
 <a id="adm-01-roster-csv-run"></a>
 
 ## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
