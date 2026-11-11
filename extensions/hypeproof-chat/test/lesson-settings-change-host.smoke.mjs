@@ -33,7 +33,7 @@ function openWindow() {
     _instructorMode: { checkInstructorMode: async () => false, reset() {} },
     prepareTaskWorkspace: async () => {}, currentTaskStore: () => null, getHistory: () => history,
     getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }),
-    activeStreams: new Map(), pendingSends: 0,
+    activeStreams: new Map(), pendingSends: 0, view: { visible: true },
     post: async m => posts.push(JSON.parse(JSON.stringify(m))),
   });
   const publish = async () => { await h.postConfig(); return posts.filter(p => p.type === 'config').at(-1).config; };
@@ -84,8 +84,14 @@ assert.equal(c.lessonSettingsChanges?.length, 1, 'unseen line survives a reload'
 assert.match(c.lessonSettingsChanges[0].text, /승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기/);
 line = c.lessonSettingsChanges[0];
 
-// 4. The panel reports it on screen (real handleMessage): the baseline moves; this window keeps drawing it as seen.
+// 4a. Drawn while the sidebar is collapsed (the webview still renders): not seen yet; a reload still tells it.
+w.h.view.visible = false;
 await w.h.handleMessage({ type: 'lessonSettingsChangeSeen', id: line.id });
+assert.equal((await w.publish()).lessonSettingsChanges[0].seen, false, 'drawn while hidden: not seen');
+assert.equal((await openWindow().publish()).lessonSettingsChanges?.length, 1, 'drawn while hidden: a reload tells it again');
+// 4b. The chat is shown (what the view's visibility hook calls): now it counts; this window keeps drawing it as seen.
+w.h.view.visible = true;
+await w.h.flushLessonLinesShown();
 c = await w.publish();
 assert.equal(c.lessonSettingsChanges?.length, 1, 'the seen line stays in this window');
 assert.equal(c.lessonSettingsChanges[0].seen, true, 'drawn as seen (no live region)');

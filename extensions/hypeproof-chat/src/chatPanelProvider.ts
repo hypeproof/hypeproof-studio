@@ -1196,6 +1196,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private lessonChangeDeferred = false;
   /** #751 U3 — the turn-start preflight is adopting a switched setting: that change belongs before this very turn. */
   private lessonPreflightAdopting = false;
+  /** Lines a webview drew while no chat surface was visible (a collapsed sidebar still renders): counted when one is shown. */
+  private lessonLinesDrawnHidden?: Set<string>;
   private activeStreams = new Map<string, AbortController>();
   private delegationControls = new Map<string, {scope:string;stop:()=>void}>();
   private reportDelegationStop(streamId:string,scope:string,ctrl:AbortController,state:import("./delegationStop").DelegationStopState):void {
@@ -4892,7 +4894,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sidebarWebview=view.webview;
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
     watchChatSurface(view, this.finishNotifier);
-    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
+    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } else void this.flushLessonLinesShown(); });
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
       this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
@@ -4917,7 +4919,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const dist = vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist');
       entry.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, entry.webview));
       watchChatSurface(entry, this.finishNotifier);
-      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
+      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } else void this.flushLessonLinesShown(); });
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
@@ -8831,7 +8833,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "lessonSettingsChangeSeen":
-        if (typeof msg.id === "string" && msg.id.length <= 64) await this.lessonChanges?.seen(msg.id);
+        if (typeof msg.id === "string" && msg.id.length <= 64) await this.lessonSettingsLineShown(msg.id);
         return;
       case "dismissCapabilityChange":
         (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
@@ -11477,6 +11479,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
     this.lessonChangeDeferred = result.deferred;
     return result.notices;
+  }
+
+  /**
+   * CGP-SHELL-R-024 — the panel drew settings-change line `id`. It counts as seen (and the seat's baseline moves) only
+   * while a chat surface is visible: the sidebar webview keeps rendering while collapsed, and its document does not
+   * always say so. A line drawn while hidden is counted when a chat surface is shown.
+   */
+  private async lessonSettingsLineShown(id: string): Promise<void> {
+    if (chatVisible({ view: () => this.view, editor: () => this.editorChat })) { await this.lessonChanges?.seen(id); return; }
+    (this.lessonLinesDrawnHidden ??= new Set()).add(id);
+  }
+  private async flushLessonLinesShown(): Promise<void> {
+    const ids = [...(this.lessonLinesDrawnHidden ?? [])];
+    if (!ids.length || !chatVisible({ view: () => this.view, editor: () => this.editorChat })) return;
+    this.lessonLinesDrawnHidden?.clear();
+    for (const id of ids) await this.lessonChanges?.seen(id);
   }
 
   private async postConfig(): Promise<void> {
