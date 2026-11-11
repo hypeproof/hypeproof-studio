@@ -1,3 +1,4 @@
+import { sharedTexts, type MobileScope } from "./mobileConversation";
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
@@ -8,7 +9,7 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
-import { PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
+import { PLANNING_GATE, PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
 import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -628,6 +629,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private taskSourceBrowser?: { tab: vscode.BrowserTab; taskId: string; activityId: string; url: string; requestId?: string; source?: vscode.Webview };
 
 
+  private mobileTurn?: { id: string; failed: boolean };
+  /** Existing personal store only; no classroom, temporary task or path leaves this boundary. */
+  mobileConversationScope(): MobileScope | undefined {
+    const activity=activityConnections(this.context)?.current, store=this.currentTaskStore();
+    const view=store?.getView();const task=view?.activeTaskId?store?.getTask(view.activeTaskId):undefined;
+    if(!activity||activity.kind!=='personal'||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
+    return {activity:activity.id,workspace:store.scope,task:task.id,title:task.title,
+      ready:!this.hasActiveStream()&&!this.taskChanging&&!this.connectionChanging&&!this.turnRestoreBusy&&!this.clearingHistory&&!this.verifySession?.running&&!this.opsHold&&!this.interruptedHistory
+        &&!task.draft.text.trim()&&!task.draft.images?.length&&!task.draft.queued&&!task.draft.inlineEdit&&!task.draft.recovered?.length&&!task.draft.imports?.length&&!this.annotationBatch.size&&!this.draftSources?.size&&!this.queuedSources?.size,
+      messages:sharedTexts(store.getHistory())};
+  }
+  async submitMobileConversation(scope: MobileScope, request: {id:string;text:string}): Promise<boolean> {
+    const current=this.mobileConversationScope();
+    if(!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task) return false;
+    const before=new Set(current.messages.map(m=>m.id));const turn={id:request.id,failed:false};this.mobileTurn=turn;
+    try {
+      // The normal typed-input entry retains activity/task/profile/cost/restore checks.
+      await this.handleMessage({type:'sendMessage',activityId:scope.activity,taskId:scope.task,text:request.text,history:this.getHistory(),userMessageId:request.id});
+      const after=this.mobileConversationScope();
+      return !turn.failed&&!this.interruptedHistory&&after?.activity===scope.activity&&after.workspace===scope.workspace&&after.task===scope.task
+        &&after.messages.some(m=>m.id===request.id&&m.role==='user')&&after.messages.some(m=>m.role==='assistant'&&!before.has(m.id));
+    } finally {if(this.mobileTurn===turn)this.mobileTurn=undefined;}
+  }
   private currentTaskStore(): TaskWorkspaceStore | undefined {
     return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
   }
@@ -8583,7 +8607,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // pass without an await, so their send still reaches its first await exactly as before.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, !(this.mobileTurn && this.mobileTurn.id === msg.userMessageId), !!this.mobileTurn && this.mobileTurn.id === msg.userMessageId); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       case "prepareAttachments": {
         const result = this.prepareAttachments(msg.files, msg.sketch === true);
@@ -9086,6 +9110,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     editOf?: string,
     /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
     carryFile = false,
+    conversationOnly = false,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -9097,7 +9122,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingSends++;
     // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
     // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
-    const plan = this.beginPlanTurn(text);
+    const plan = conversationOnly ? {planning:true,gate:PLANNING_GATE,ready:(_answer:string):PlanFirstView|null=>null} : this.beginPlanTurn(text);
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
     const lowDiskCheck = this.refreshLowDisk();
@@ -9513,7 +9538,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) void this.post({ type:"attachedImagesSaved",note:attachedNote });
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
-    if (plan.planning) userTextForModel = planFirstTurnText(userTextForModel);
+    if (plan.planning && !conversationOnly) userTextForModel = planFirstTurnText(userTextForModel);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -11922,6 +11947,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
     if(msg.type!=='browserApprovalPrompt')this.browserApprovalRequest?.invalidate();

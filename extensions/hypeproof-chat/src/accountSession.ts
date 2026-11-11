@@ -107,10 +107,10 @@ export class AccountSession {
     if (!record(body) || typeof body.access_token !== 'string' || typeof body.refresh_token !== 'string' || typeof body.session_id !== 'string' || !Number.isFinite(body.expires_in) || body.expires_in <= 0) throw new AccountError('invalid_response', friendly('invalid_response'));
     return { service: this.options.service, accessToken: body.access_token, refreshToken: body.refresh_token, sessionId: body.session_id, expiresAt: this.now() + body.expires_in * 1000 };
   }
-  private async call(path: string, body?: unknown, token?: string, freeCredential?: string): Promise<{ status: number; body: any }> {
+  private async call(path: string, body?: unknown, token?: string, freeCredential?: string, method?: 'GET'|'POST'|'DELETE'): Promise<{ status: number; body: any }> {
     try {
       const r = await this.request(this.options.service.replace(/\/+$/, '') + path, {
-        method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
+        method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(12_000),
       });
       const value: any = await r.json();
@@ -143,6 +143,25 @@ export class AccountSession {
       try { const response = await this.call('/auth/refresh', { refresh_token: b.refreshToken }); const next = this.parseBundle(response.body); await this.save(next, b); return next.accessToken; }
       catch (e) { if (e instanceof AccountError && /^(invalid_refresh|refresh_reuse|session_revoked|invalid_token|authentication_required)$/.test(e.code)) await this.forget(b, e.message); throw e; }
     });
+  }
+  /** Account-session-bound conversation transport; credentials remain in host SecretStorage. */
+  async conversationSession(): Promise<string | undefined> {
+    await this.accessToken(); return (await this.read())?.sessionId;
+  }
+  async conversationRequest(sessionId: string, suffix: string, body?: unknown, method: 'GET'|'POST'|'DELETE' = body === undefined ? 'GET' : 'POST'): Promise<any> {
+    if (!/^\/(?:[A-Za-z0-9_-]{1,128})(?:\/(?:events|requests)(?:\/[A-Za-z0-9_-]{1,128}\/(?:claim|finish))?)?$/.test(suffix) && suffix !== '') throw new Error('Invalid conversation route');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+    try {
+      const response = await this.call('/me/conversations' + suffix, body, token, undefined, method);
+      if ((await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+      return response.body;
+    } catch (error) {
+      if (error instanceof AccountError && /^(http_401|account_(suspended|deleted|session_revoked)|session_revoked|invalid_token|unauthorized|authentication_required)$/.test(error.code)) {
+        await this.exclusive(async () => { const b=await this.read();if(b?.sessionId===sessionId)await this.forget(b,error.message); });
+      }
+      throw error;
+    }
   }
   private async authenticated(path: string, body?: unknown): Promise<any> {
     const token = await this.accessToken(); if (!token) throw new AccountError('unauthorized', friendly('unauthorized'));

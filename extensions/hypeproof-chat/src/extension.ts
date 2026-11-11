@@ -1,3 +1,5 @@
+import { registerMobileConversation } from "./mobileConversationHost";
+import type { MobileConversation } from "./mobileConversation";
 import { registerAutomationHost } from "./automationHost";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
@@ -270,6 +272,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
   const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
     || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', ACCOUNTS_ENABLED_DEFAULT), accountService, accountSite);
+  let mobileConversations: MobileConversation | undefined;
   const accounts = accountEnabled ? new AccountSession({
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
@@ -281,11 +284,13 @@ export async function activate(context: vscode.ExtensionContext) {
     lock: accountLock(context.globalStorageUri.fsPath),
     freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),
     invalidated: async sessionId => {
+      mobileConversations?.invalidate();
       if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
       if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
     },
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
+  mobileConversations = registerMobileConversation(context, provider, accounts);
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
   const showStoreQuest = async (skill: { title: string; steps: import("./skillStoreProtocol").StoreStepView[]; connections?: import("./skillStoreProtocol").StoreLocalConnections }) => {
     const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
