@@ -15,7 +15,7 @@ on:
       - '.github/workflows/start-page.yml'
       - 'scripts/check-artifact-budget.py'
       - 'scripts/test-artifact-budget.py'
-      - 'scripts/install-playwright-ci.sh'
+      - 'scripts/run-playwright-ci.sh'
 permissions:
   contents: read
 
@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -46,22 +48,22 @@ jobs:
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm ci
         working-directory: e2e
-      - run: bash ../scripts/install-playwright-ci.sh
+      - run: bash ../scripts/run-playwright-ci.sh prepare
         working-directory: e2e
-      - run: npm run test:start-page
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:start-page
         working-directory: e2e
-      - run: npm run test:trial-ux
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:trial-ux
         working-directory: e2e
-      - run: npm run test:voice:popup
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:voice:popup
         working-directory: e2e
       # AE-01 (#554): the learner's goal over time in the built webview (late lesson, answers, typed text).
-      - run: npm run test:goal:browser
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:goal:browser
         working-directory: e2e
       - name: Workshop element selection at desktop and mobile widths
-        run: npm run test:workshop-element
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:workshop-element
         working-directory: e2e
       - name: Photo-only Send and Enter with host staging gates
-        run: npm run test:photo-only-send
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:photo-only-send
         working-directory: e2e
       - name: Bound evidence upload (128 MiB, 14 days)
         id: evidence-budget
