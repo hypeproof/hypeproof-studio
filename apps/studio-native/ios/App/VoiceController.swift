@@ -174,7 +174,10 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             let player = try AVAudioPlayer(data: reviewData); player.delegate = self; reviewPlayer = player
             guard player.play() else { throw StudioError.message("녹음을 재생하지 못했어요.") }
             status = "내 목소리를 다시 듣고 있어요. 다른 화면으로 이동하거나 다음 녹음을 시작하면 원음을 지워요."
-        } catch { status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요." }
+        } catch {
+            reviewPlayer?.stop(); reviewPlayer = nil; deactivateAudio()
+            status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요."
+        }
     }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         let id = ObjectIdentifier(player)
@@ -182,6 +185,14 @@ private final class VoiceReviewCapture: @unchecked Sendable {
             guard let self, let current = self.reviewPlayer, ObjectIdentifier(current) == id else { return }
             self.reviewPlayer = nil; self.deactivateAudio()
             self.status = flag ? "내 말을 들었어요. 고치고 싶은 생각을 글로 이어가도 좋아요." : "재생을 마치지 못했어요. 인식한 글을 확인해 주세요."
+        }
+    }
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        let id = ObjectIdentifier(player)
+        Task { @MainActor [weak self] in
+            guard let self, let current = self.reviewPlayer, ObjectIdentifier(current) == id else { return }
+            current.stop(); self.reviewPlayer = nil; self.deactivateAudio()
+            self.status = "녹음을 재생하지 못했어요. 인식한 글은 그대로 남아 있어요."
         }
     }
     func fail(_ message: String) { stop(); status = message }
