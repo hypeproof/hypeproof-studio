@@ -149,7 +149,7 @@ export class AccountSession {
     await this.accessToken(); return (await this.read())?.sessionId;
   }
   async conversationRequest(sessionId: string, suffix: string, body?: unknown, method: 'GET'|'POST'|'DELETE' = body === undefined ? 'GET' : 'POST'): Promise<any> {
-    if (!/^\/(?:[A-Za-z0-9_-]{1,128})(?:\/(?:events|requests)(?:\/[A-Za-z0-9_-]{1,128}\/(?:claim|finish))?)?$/.test(suffix) && suffix !== '') throw new Error('Invalid conversation route');
+    if (!/^\/(?:[A-Za-z0-9_-]{1,128})(?:\/(?:events|requests)(?:\/[A-Za-z0-9_-]{1,128}\/(?:claim|finish|cancel))?)?$/.test(suffix) && suffix !== '') throw new Error('Invalid conversation route');
     const token = await this.accessToken();
     if (!token || (await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
     try {

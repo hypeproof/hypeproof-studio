@@ -52,6 +52,15 @@ export class MobileConversation {
   }
   invalidate():void{this.epoch++;if(this.executing)this.ports.stop();}
   dispose():void{this.disposed=true;this.invalidate();}
+  async forgetLocal():Promise<void>{
+    // Forget is not a stop command: keep the accepted request binding until a live turn settles.
+    if(this.executing)throw Error('응답이 진행 중이에요. 먼저 연결 중지로 멈춘 뒤 다시 시도해 주세요.');
+    await this.ports.exclusive(async()=>{
+      if(this.executing)throw Error('응답이 진행 중이라 연결 정보를 지우지 않았어요.');
+      this.invalidate();await this.ports.save(undefined);
+      this.ports.changed('이 컴퓨터의 연결 정보만 지웠어요. 서버 사본과 컴퓨터 원본은 남아 있어요.');
+    });
+  }
   async disconnect(remove:boolean):Promise<void>{
     this.invalidate();
     await this.ports.exclusive(async()=>{
@@ -101,7 +110,15 @@ export class MobileConversation {
           if(b.accepted===request.id){delete b.accepted;await this.ports.save(b);}continue;
         }
         if(request.status!=='pending'||!this.ports.scope()?.ready)continue;
-        const claim=await this.ports.request(b.session,`/${b.id}/requests/${request.id}/claim`,{},'POST');
+        let claim;
+        try{claim=await this.ports.request(b.session,`/${b.id}/requests/${request.id}/claim`,{},'POST');}
+        catch(error){
+          if((error as {code?:string})?.code!=='conversation_request_origin_revoked')throw error;
+          if(!await this.check(b,epoch))return;
+          // Only this exact terminal origin failure can release the pending slot; other failures preserve it.
+          await this.ports.request(b.session,`/${b.id}/requests/${request.id}/cancel`,{},'POST');
+          continue;
+        }
         if(claim.claimed!==true)continue;
         if(!await this.check(b,epoch))return;
         b.accepted=request.id;await this.ports.save(b);
