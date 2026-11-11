@@ -311,7 +311,7 @@ region; its text is announced once through the panel's always-mounted `role="sta
 rows already evaluated under the learner's inputs, so an instructor capability change that the current
 inputs hide and the learner's next runtime or access change reveals is not told; the follow-up is to
 persist the served capability fields (classroom-admin.md, 기준선 row). A runtime-setting change posts
-the config at once, so the coincident case is told. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
+the config at once, so the coincident case is told outside a running turn. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
 agent choices: decisions.md "CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line".
 Code: `src/lessonSettingsChange.ts` (pure), `observeLessonSettings` in `chatPanelProvider.ts`,
 `webview-ui/src/LessonSettingsChange.tsx`. Tests: `test/lesson-settings-change-host.smoke.mjs`
