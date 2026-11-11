@@ -82,3 +82,17 @@ test('a restart before reflection dispatch restores the durable outbox into an e
  await f.h.applyReflectionSnapshot(b,{...privateSnapshot,state:{...privateSnapshot.state,revision:0,messages:[]}});
  assert.equal(f.store.getDraft(scope.task).text,b.pending.text);assert.equal(f.h.reflectionBinding().pending.id,'before-crash');
 }));
+
+test('local storage failure after a server answer ends the stream once and preserves recovery',async()=>host(async f=>{
+ const scope=f.h.mobileConversationScope(true),b={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};await f.h.saveReflectionBinding(b);
+ const response={...privateSnapshot,acknowledged_id:'accepted',state:{...privateSnapshot.state,messages:[{id:'accepted',role:'user',content:'Keep these words',created_at:1},{id:'accepted-answer',role:'assistant',content:'Question?',created_at:2}],turn:{id:'accepted',text:'Keep these words',status:'completed',updated_at:2}}};
+ const warnings=[];f.vscode.window.showWarningMessage=async message=>{warnings.push(message);};
+ f.h.setReflectionAccount({conversationSession:async()=>b.session,reflectionRequest:async()=>response});
+ const append=f.store.append.bind(f.store);f.store.append=async()=>{throw Error('synthetic disk full');};
+ await f.h.sendPersonalReflection({type:'sendMessage',text:'Keep these words',history:[],userMessageId:'accepted'});
+ const terminals=f.posts.filter(p=>['streamEnd','streamError','streamStopped'].includes(p.type));
+ assert.deepEqual(terminals.map(p=>p.type),['streamEnd']);assert.equal(warnings.length,1);
+ assert.equal(f.h.reflectionBinding().pending.id,'accepted');assert.ok(f.posts.some(p=>p.type==='inputRejected'&&p.text==='Keep these words'));
+ f.store.append=append;await f.h.refreshPersonalReflection();
+ assert.deepEqual(Array.from(f.store.getHistory(),m=>m.id),['accepted','accepted-answer']);assert.equal(f.h.reflectionBinding().pending,undefined);
+}));

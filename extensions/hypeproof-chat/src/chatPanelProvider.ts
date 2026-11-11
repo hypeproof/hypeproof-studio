@@ -750,7 +750,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if(value.state.turn?.status==='failed')void vscode.window.showWarningMessage('보낸 이야기는 저장됐지만 답변을 받지 못했어요. 자동으로 다시 요청하지 않았어요.');
     } catch(error) {
       if(!controller.signal.aborted&&stillHere()&&await accounts.conversationSession()===b.session&&stillHere()){
-        await this.post({type:'streamError',streamId,error:reflectionFailure(error)});terminal=true;
+        if(!terminal){
+          await this.post({type:'streamError',streamId,error:reflectionFailure(error)});terminal=true;
+        } else {
+          void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
+        }
         if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
         try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
         if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
