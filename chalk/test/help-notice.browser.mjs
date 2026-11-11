@@ -22,6 +22,7 @@ const { default: app } = await import('../src/index.ts');
 const SHIM = '<script>if (!crypto.randomUUID) crypto.randomUUID = () => "00000000-0000-4000-8000-" + String(Math.random()).slice(2, 14).padEnd(12, "0");</script>';
 const served = await (await app.fetch(new Request('https://chalk.test/manage'), { ENVIRONMENT: 'test' })).text();
 assert.ok(served.includes('<head>'), 'served /manage has a <head>');
+assert.ok(!/requestPermission|new Notification|showNotification/.test(served), 'served /manage never constructs a Notification or asks permission, at load or later');
 const html = served.replace('<head>', '<head>' + SHIM);
 
 let checks = 0;
@@ -154,7 +155,7 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
     })()`);
     await b.evaluate(`refresh()`); await settle();
     check((await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id]').length`)) === 1 && (await b.evaluate(NOTICE)).hidden === true, 'refresh: the first read through the real cycle is a silent baseline');
-    await b.evaluate(`__srv.S1.push(mk('s1b', 1, 'S1', 'student-b'))`);
+    await b.evaluate(`__srv.S1.push(mk('s1b', 200, 'S1', 'student-b'))`);
     await b.evaluate(`refresh()`); await settle();
     n = await b.evaluate(NOTICE);
     check(n.hidden === false && n.text.includes('student-b') && !/SECRET/.test(n.text), 'refresh: a request received between two refreshes raises the notice: ' + n.text);
