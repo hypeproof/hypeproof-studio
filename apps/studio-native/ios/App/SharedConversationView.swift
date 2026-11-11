@@ -26,7 +26,7 @@ struct SharedConversationView: View {
     @State private var reviewRecording = false
     @State private var exportURL: URL?
     @State private var clearCache = false
-    var body: some View {
+    private var navigationContent: some View {
         NavigationStack {
             Group {
                 if !model.signedIn { welcome }
@@ -57,6 +57,9 @@ struct SharedConversationView: View {
                 }
             }
         }
+    }
+    private var lifecycleContent: some View {
+        navigationContent
         .onAppear { model.setVisible(phase == .active) }
         .onDisappear { voice.stop(); model.setVisible(false) }
         .onChange(of: phase) { _, value in
@@ -79,6 +82,9 @@ struct SharedConversationView: View {
             if model.cache.request?.status == "completed" { speakCompletedReply() }
         }
         .onChange(of: reviewRecording) { _, enabled in if !enabled { voice.stop() } }
+    }
+    var body: some View {
+        lifecycleContent
         .sheet(isPresented: $consent) {
             NavigationStack {
                 Form {
