@@ -31,10 +31,18 @@ export async function sessionCookie(token, { name = "합성 강사", handle, exp
     .join("; ");
 }
 
+// One sealed session per issuer for the life of the test process (an hour is plenty):
+// a browser keeps its cookie too, and re-sealing on every request only adds async work.
+const sealed = new Map();
+function cachedSessionCookie(issuer) {
+  if (!sealed.has(issuer)) sealed.set(issuer, sessionCookie(issuer));
+  return sealed.get(issuer);
+}
+
 async function connectedRequest(request, issuer) {
   const headers = new Headers(request.headers);
   headers.delete("authorization");
-  headers.set("cookie", [headers.get("cookie"), await sessionCookie(issuer)].filter(Boolean).join("; "));
+  headers.set("cookie", [headers.get("cookie"), await cachedSessionCookie(issuer)].filter(Boolean).join("; "));
   // A Chalk page's own fetch: same origin.
   if (!/^(GET|HEAD)$/i.test(request.method) && !headers.has("origin")) headers.set("origin", new URL(request.url).origin);
   const body = /^(GET|HEAD)$/i.test(request.method) ? undefined : await request.arrayBuffer();
@@ -75,7 +83,7 @@ export function withHeaderConnection(app, secret = TEST_CONNECT_SECRET) {
       if (issuer !== null) {
         const headers = new Headers(request.headers);
         headers.delete("x-test-chalk-issuer");
-        if (issuer) headers.set("cookie", [headers.get("cookie"), await sessionCookie(issuer)].filter(Boolean).join("; "));
+        if (issuer) headers.set("cookie", [headers.get("cookie"), await cachedSessionCookie(issuer)].filter(Boolean).join("; "));
         const url = new URL(request.url);
         const host = headers.get("host");
         const target = host ? `${url.protocol}//${host}${url.pathname}${url.search}` : request.url;

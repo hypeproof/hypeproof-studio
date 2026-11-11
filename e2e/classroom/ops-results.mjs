@@ -118,7 +118,8 @@ try {
   // ── K1: selected collection. Upload report ≠ server verified; server verified ≠ the whole lesson. ──
   const line2 = (o) => JSON.stringify({ schema_version: 1, ts: new Date().toISOString(), ...o }), record = [line2({ seq: 1, type: 'prompt', turn_id: 't1', text: 'synthetic' }), line2({ seq: 2, type: 'turn_end', turn_id: 't1', status: 'ok' })].join('\n') + '\n';
   const batches = () => local.db.prepare("SELECT b.id FROM classroom_collect_batches b JOIN classroom_collect_scopes s ON s.batch_id=b.id WHERE b.dry_run=0 ORDER BY b.created_at,b.rowid").all().map((r) => r.id);
-  const collect = async (list) => { await pick(list); await page.locator('#ops-pick-collect').click(); await page.locator('#ops-pick-confirm').waitFor(); await page.locator('#ops-pick-kind-record').check(); await page.locator('#ops-pick-go').click(); await page.locator('#ops-last-what').filter({ hasText: '요청 접수' }).waitFor(); return batches().at(-1); };
+  // Wait for the new batch row itself: '요청 접수' can still be on screen from the previous collection.
+  const collect = async (list) => { const before = batches().length; await pick(list); await page.locator('#ops-pick-collect').click(); await page.locator('#ops-pick-confirm').waitFor(); await page.locator('#ops-pick-kind-record').check(); await page.locator('#ops-pick-go').click(); await until('collection recorded', async () => batches().length > before); await page.locator('#ops-last-what').filter({ hasText: '요청 접수' }).waitFor(); return batches().at(-1); };
   const k1 = await collect(['A1', 'A2', 'A4', 'A5']), K1 = 'collect:' + k1; await card(K1).waitFor();
   assert.deepEqual((await lines(K1)).map((l) => l.split(' — ')[0]), ['A1 · student-a', 'A2 · student-b', 'A4 · student-d', 'A5 · student-e'], 'only the selected; A3 and A6 are not recipients');
   assert.match(await line(K1, 'A4'), /\[미전달·만료·대상 변경\] 제외 · 동의 없음 · 회수하지 않음/); assert.match(await line(K1, 'A5'), /\[미전달·만료·대상 변경\] 기기에 전달되지 않음 · 기기 연결 없음/);
