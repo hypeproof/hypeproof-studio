@@ -48,6 +48,26 @@ non_product_directories:
   - releases           # release notes written by release-cut (releases/<version>.md)
 
 entries:
+  - name: studio-mobile-web
+    layer: w
+    tag_prefix: mobile-w
+    directory: apps/studio-mobile
+    deploys_to: vercel://hp-studio-mobile-mvp
+    contract:
+      format: "HTTP JSON — Service POST /v1/free/claim and POST /v1/messages through a fixed-origin text transport"
+    drift_lock: apps/studio-mobile/test/service.test.mjs
+    drift_lock_extra:
+      - apps/studio-mobile/test/model.test.mjs
+    exit_plan: apps/studio-mobile/README.md
+    owner: jay
+    notes: >-
+      Web-delivered participant code: no native filesystem, shell or desktop
+      host access, so it follows the fast Service train rather than a Studio
+      binary release. Browser-local records remain client-owned. This isolated
+      PWA and its same-origin transport do not own AI policy, grants or billing;
+      HypeProof Service retains those contracts. It is not native companion
+      acceptance or a new Studio-wide runtime.
+
   - name: measurement-host-package
     layer: v
     tag_prefix: measurement-v
