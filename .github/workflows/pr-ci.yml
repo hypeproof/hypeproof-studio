@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
+      - 'scripts/install-playwright-ci.sh'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
       - 'scripts/email-test-participant-auth.mjs'
       - 'scripts/tests/email-test-participant-auth.test.mjs'
@@ -462,7 +463,7 @@ jobs:
         run: npm ci
       - name: Install Chromium
         working-directory: e2e
-        run: npx playwright install --with-deps chromium
+        run: bash ../scripts/install-playwright-ci.sh
       - name: Run the published runtime in real Chromium
         working-directory: e2e
         run: npm run test:cr-publish

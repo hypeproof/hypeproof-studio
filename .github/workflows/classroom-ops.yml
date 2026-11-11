@@ -14,6 +14,7 @@ on:
       - '.github/workflows/classroom-ops.yml'
       - 'scripts/check-artifact-budget.py'
       - 'scripts/test-artifact-budget.py'
+      - 'scripts/install-playwright-ci.sh'
 permissions:
   contents: read
 
@@ -49,7 +50,7 @@ jobs:
       - run: npm ci
         working-directory: e2e
       - run: node --test e2e/classroom/mac-devhost.test.mjs
-      - run: npx playwright install --with-deps chromium
+      - run: bash ../scripts/install-playwright-ci.sh
         working-directory: e2e
       - name: Conversational automation approval and layout
         run: node --experimental-strip-types test/automation-conversation-ui.browser.mjs

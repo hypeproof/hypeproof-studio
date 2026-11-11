@@ -15,6 +15,7 @@ on:
       - '.github/workflows/start-page.yml'
       - 'scripts/check-artifact-budget.py'
       - 'scripts/test-artifact-budget.py'
+      - 'scripts/install-playwright-ci.sh'
 permissions:
   contents: read
 
@@ -45,7 +46,7 @@ jobs:
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm ci
         working-directory: e2e
-      - run: npx playwright install --with-deps chromium
+      - run: bash ../scripts/install-playwright-ci.sh
         working-directory: e2e
       - run: npm run test:start-page
         working-directory: e2e
