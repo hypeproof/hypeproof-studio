@@ -13,6 +13,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// The page holds no token: every request carries a Lab-connected session (harness/connect.mjs).
+import { TEST_CONNECT_SECRET, sessionCookie } from './harness/connect.mjs';
 import { readFileSync } from 'node:fs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
@@ -26,7 +28,7 @@ if (!bin) {
 }
 const { default: app } = await import('../src/index.ts');
 const server = createServer(async (req, res) => {
-  const r = await app.fetch(new Request('http://127.0.0.1' + req.url), { ENVIRONMENT: 'test' });
+  const r = await app.fetch(new Request('http://127.0.0.1' + req.url, { headers: { cookie: await sessionCookie('t') } }), { ENVIRONMENT: 'test', HPS_CHALK_CONNECT_SECRET: TEST_CONNECT_SECRET });
   res.writeHead(r.status, Object.fromEntries(r.headers));
   res.end(Buffer.from(await r.arrayBuffer()));
 });
@@ -69,7 +71,7 @@ const stub = `window.__puts=[];window.__posts=[];window.__rev=3;window.__flag='o
   if(m==='GET')return json({profile_id:'p1',revision:window.__rev,content:window.__saved||${JSON.stringify(SAVED)}});
   return json({});};
   window.__saved=${JSON.stringify(SAVED)};
-  for(const [k,v] of [['token','t'],['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;return 0`;
+  for(const [k,v] of [['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;return 0`;
 const $ = (id) => `document.getElementById('${id}')`;
 const geometry = `const q=s=>[...document.querySelectorAll(s)];const card=document.getElementById('assist').getBoundingClientRect();
   return {overflow:document.scrollingElement.scrollWidth-innerWidth,
@@ -90,7 +92,7 @@ try {
   for (const width of [1280, 375]) {
     await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     await b.send('Page.navigate', { url: origin + '/authoring' });
-    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('assist')`, '/authoring with the assistant box');
+    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('assist') && !!window.chalkConnection?.current?.connected`, '/authoring with the assistant box');
     await ev(stub);
 
     // 1. The box is hidden until a draft is open and the Service answers (flag off → 404 → still hidden).

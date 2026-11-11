@@ -25,10 +25,11 @@ import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 const { FOLLOWUP_CAPABILITY } = await import('@hypeproof/service-testkit/src/lib/classroom-recovery.ts');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = process.env.HPS_AT41_OUT || path.join(repo, 'e2e/test-results/classroom-ops-results'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const chalkServer = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 chalkServer.listen(0, '127.0.0.1'); await once(chalkServer, 'listening');
@@ -55,7 +56,7 @@ try {
   const commandsNow = () => local.db.prepare('SELECT id,action FROM ops_commands ORDER BY created_at,rowid').all();
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + chalkServer.address().port, page = await browser.newPage({ viewport: { width: 1440, height: 1200 } }); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  const connect = async () => { await page.goto(origin + '/manage'); await page.locator('#token').fill(X); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A6"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
+  const connect = async () => { await page.goto(origin + '/manage'); await signInChalk(page, X); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A6"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
   const box = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`).getByLabel('선택'), none = () => page.locator('#ops-select-none').click();
   const pick = async (list) => { await none(); for (const id of list) await box(id).check(); };
   const checked = async () => { const v = []; for (const s of seats) if (await box(s.seat_id).isChecked()) v.push(s.seat_id); return v; };

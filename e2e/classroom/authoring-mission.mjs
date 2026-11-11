@@ -18,10 +18,11 @@ import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { makeCtx, withMockUpstream, anthropicJsonBody, TEST_SECRET } from '@hypeproof/service-testkit/test/harness/index.mjs';
 import { rehearsalReport, turnLesson, acceptFocus } from '../../extensions/hypeproof-chat/src/lessonFocus.ts';
 import { permittedToolsFor } from '../../extensions/hypeproof-chat/src/sdkCoachHelpers.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-authoring-mission'); mkdirSync(out, { recursive: true });
 const dist = path.join(repo, 'extensions/hypeproof-chat/webview-ui/dist'); assert.ok(existsSync(path.join(dist, 'index.html')), 'build the webview first: npm --prefix extensions/hypeproof-chat/webview-ui run build');
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_LESSON_BINDINGS = 'enforce'; local.env.ANTHROPIC_API_KEY = 'test-anthropic-key'; local.env.HPS_LESSON_CONFIRMATION = 'require';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, makeCtx());
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);
@@ -50,7 +51,7 @@ try {
   const readinessShows = (re) => page.waitForFunction((src) => { const t = document.getElementById('readiness').innerText; return !document.getElementById('readiness-load').disabled && new RegExp(src).test(t) && t; }, re.source, { timeout: 8000 })
     .then((h) => h.jsonValue(), async (e) => { throw Error('readiness: expected ' + re + ((await page.locator('#readiness-load').isDisabled()) ? ' (an action is still running)' : '') + ', the panel shows: ' + await page.locator('#readiness').innerText() + ' | ' + e.message); });
   const statusText = () => page.locator('#status').innerText();
-  await page.goto(origin + '/authoring'); await page.locator('#token').fill(teacher); await page.locator('#connect').click();
+  await page.goto(origin + '/authoring'); await signInChalk(page, teacher); await page.locator('#connect').click();
   await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
   await page.locator('summary', { hasText: '저장한 강의 열기' }).click(); await page.locator('#course').fill(course); await page.locator('#load').click(); await waitStatus(/저장본을 열었습니다/);
   await page.locator('#versions-load').click(); await waitStatus(/버전 1개를 불러왔습니다/);
@@ -166,7 +167,7 @@ try {
   const rb = await readinessShows(/후보 m2026\.09\.22-52 · 리허설 전/); assert.match(rb, new RegExp('이 후보의 학생 미션: 2주차 ‘' + EDITED + '’')); assert.equal(await page.locator('#confirm-go').isDisabled(), true);
   await page.locator('#rehearsal').scrollIntoViewIfNeeded(); await shot('m-07-edited-mission-new-candidate-1280x720.png');
   const manage = await browser.newPage({ viewport: { width: 1280, height: 720 } }); manage.on('pageerror', (e) => errors.push(e.message));
-  await manage.goto(origin + '/manage'); await manage.locator('#token').fill(teacher); await manage.locator('#cohort').fill(local.cohort); await manage.locator('#prefix').fill('student-');
+  await manage.goto(origin + '/manage'); await signInChalk(manage, teacher); await manage.locator('#cohort').fill(local.cohort); await manage.locator('#prefix').fill('student-');
   await manage.locator('#connect button').first().click(); await manage.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   await manage.locator('#ops-tools > summary').click();
   if (!(await manage.locator('#ops-dist').evaluate((d) => d.open))) await manage.locator('#ops-dist-summary').click();
