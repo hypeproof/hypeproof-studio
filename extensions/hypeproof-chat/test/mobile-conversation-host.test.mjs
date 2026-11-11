@@ -66,3 +66,19 @@ test('navigation during asynchronous account verification cannot import private 
  await f.h.handleTaskMessage({type:'taskSelect',taskId:a.task,id:b.task});finish('account-a');await assert.rejects(applying,/계정이나 열린 대화/);
  assert.equal(f.h.reflectionBinding().session,'account-b');assert.equal(f.h.reflectionBinding().revision,0);assert.equal(f.store.getHistory().length,0);assert.equal(f.store.getHistory(a.task).length,0);
 }));
+
+test('a reflection send holds task navigation before waiting for the durable outbox',async()=>host(async f=>{
+ const scope=f.h.mobileConversationScope(true),b={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};await f.h.saveReflectionBinding(b);
+ const save=f.h.saveReflectionBinding.bind(f.h);let finish,started;const waiting=new Promise(r=>started=r),delay=new Promise(r=>finish=r);
+ f.h.saveReflectionBinding=async value=>{await save(value);if(value.pending){started();await delay;}};
+ let calls=0;f.h.setReflectionAccount({conversationSession:async()=> 'account-a',reflectionRequest:async()=>{calls++;throw Error('synthetic offline');}});
+ const sending=f.h.sendPersonalReflection({type:'sendMessage',text:'내 개인 이야기',history:[],userMessageId:'private-send'});await waiting;
+ await f.h.handleTaskMessage({type:'taskCreate',taskId:scope.task});assert.equal(f.store.getView().activeTaskId,scope.task);
+ finish();await sending;assert.equal(calls,2);assert.equal(f.h.reflectionBinding().pending.id,'private-send');assert.equal(f.store.getView().tasks.length,1);
+}));
+test('a restart before reflection dispatch restores the durable outbox into an empty draft',async()=>host(async f=>{
+ const scope=f.h.mobileConversationScope(true),b={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0,pending:{id:'before-crash',text:'아직 전송하지 못한 이야기',revision:0}};await f.h.saveReflectionBinding(b);
+ f.h.setReflectionAccount({conversationSession:async()=> 'account-a'});
+ await f.h.applyReflectionSnapshot(b,{...privateSnapshot,state:{...privateSnapshot.state,revision:0,messages:[]}});
+ assert.equal(f.store.getDraft(scope.task).text,b.pending.text);assert.equal(f.h.reflectionBinding().pending.id,'before-crash');
+}));

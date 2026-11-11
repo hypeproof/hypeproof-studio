@@ -663,6 +663,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (incoming.length) await store.append(b.task,incoming);
     const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
     await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    // An app exit between saving the outbox and dispatch must leave recoverable input.
+    const pending=this.reflectionBinding()?.pending;
+    if(stillHere()&&pending&&!this.hasActiveStream()){
+      const draft=store.getDraft(b.task);
+      if(!draft.text.trim()){
+        await store.saveDraft(b.task,{...draft,text:pending.text});
+        if(stillHere())await this.postConfig();
+      }
+    }
     if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
   }
 
@@ -724,24 +733,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if(b.pending&&b.pending.text!==msg.text){
       await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
     }
+    const store=this.currentTaskStore();
+    const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
     const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
-    await this.saveReflectionBinding({...b,pending});
     const id=pending.id,streamId=randomId(),controller=new AbortController();
+    let streamStarted=false,terminal=false;
+    // Hold task navigation before the first asynchronous outbox write.
     this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
-    await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});
     try {
+      await this.saveReflectionBinding({...b,pending});
+      if(!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});streamStarted=true;
       const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
-      if(!controller.signal.aborted)await this.post({type:'streamEnd',streamId});
+      if(!controller.signal.aborted&&stillHere()){await this.post({type:'streamEnd',streamId});terminal=true;}
       await this.applyReflectionSnapshot(b,value);
       if(value.state.turn?.status==='failed')void vscode.window.showWarningMessage('보낸 이야기는 저장됐지만 답변을 받지 못했어요. 자동으로 다시 요청하지 않았어요.');
     } catch(error) {
-      if(!controller.signal.aborted){
-        await this.post({type:'streamError',streamId,error:reflectionFailure(error)});
+      if(!controller.signal.aborted&&stillHere()&&await accounts.conversationSession()===b.session&&stillHere()){
+        await this.post({type:'streamError',streamId,error:reflectionFailure(error)});terminal=true;
         if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
         try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
-        if(!this.getHistory().some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
+        if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
       }
-    } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);}
+    } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);if(streamStarted&&!terminal&&!controller.signal.aborted)await this.post({type:'streamStopped',streamId});}
     return true;
   }
   /** Existing personal store only; no classroom, temporary task or path leaves this boundary. */
