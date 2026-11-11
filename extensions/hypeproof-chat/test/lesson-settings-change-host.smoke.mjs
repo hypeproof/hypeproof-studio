@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
@@ -40,11 +41,14 @@ function openWindow() {
   return { h, posts, publish };
 }
 
-const preset = (id, label) => ({ id, label, description: `${label} 설명` });
+// CGP-AGENT-R-019: preset labels come from the one catalog copy, never an inline string.
+const CATALOG = JSON.parse(readFileSync(new URL('../../../chalk/test/fixtures/approval-preset-catalog.json', import.meta.url), 'utf8'));
+const L = Object.fromEntries(CATALOG.map(p => [p.id, p.label]));
+const preset = (id) => ({ ...CATALOG.find(p => p.id === id) });
 const classroom = (over = {}) => ({
   profile_id: 'kids-class', activity_kind: 'classroom', activity_id: ACTIVITY,
   sdk_tools: { read: true, write: true },
-  approval_preset: preset('important_only', '중요한 것만 묻기'),
+  approval_preset: preset('important_only'),
   voice: { dictation: true, read_aloud: true, policy_version: 'hps-voice-policy/1' },
   starters: ['그림을 그려 줘', '게임을 만들고 싶어'],
   ...over,
@@ -64,11 +68,11 @@ assert.equal(c.lessonSettingsChanges, undefined, 'same profile again: still noth
 
 // 2. The instructor changes the preset and switches 계획 먼저 off: ONE line lists both, before → after, served labels.
 history = [{ id: 'u1', role: 'user', content: '안녕', createdAt: 1 }, { id: 'a1', role: 'assistant', content: '안녕하세요', createdAt: 2 }];
-profile = classroom({ approval_preset: preset('before_changes', '바꾸기 전에 묻기'), plan_first: { available: false } });
+profile = classroom({ approval_preset: preset('before_changes'), plan_first: { available: false } });
 c = await w.publish();
 assert.equal(c.lessonSettingsChanges?.length, 1, 'one line for one change set');
 let line = c.lessonSettingsChanges[0];
-assert.equal(line.text, '선생님이 도움 방식을 바꿨어요: 승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기 · 계획 먼저 켜짐 → 꺼짐');
+assert.equal(line.text, `선생님이 도움 방식을 바꿨어요: 승인 방식 ${L.important_only} → ${L.before_changes} · 계획 먼저 켜짐 → 꺼짐`);
 assert.deepEqual(line.items.map(i => i.key), ['approval_preset', 'plan_first']);
 assert.equal(line.afterMessageId, 'a1', 'placed after the last saved message, i.e. before the next turn');
 assert.equal(line.seen, false);
@@ -81,7 +85,7 @@ assert.equal(c.lessonSettingsChanges[0].id, firstId, 'same line, same id (not an
 w = openWindow();
 c = await w.publish();
 assert.equal(c.lessonSettingsChanges?.length, 1, 'unseen line survives a reload');
-assert.match(c.lessonSettingsChanges[0].text, /승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기/);
+assert.ok(c.lessonSettingsChanges[0].text.includes(`승인 방식 ${L.important_only} → ${L.before_changes}`));
 line = c.lessonSettingsChanges[0];
 
 // 4a. Drawn while the sidebar is collapsed (the webview still renders): not seen yet; a reload still tells it.
@@ -103,7 +107,7 @@ c = await w.publish();
 assert.equal(c.lessonSettingsChanges, undefined, 'reload after seen: no repeat');
 
 // 6. Free text: a starter change is named, never quoted. Voice off reads with the voice labels.
-profile = classroom({ approval_preset: preset('before_changes', '바꾸기 전에 묻기'), plan_first: { available: false }, starters: ['새 비밀 문장이에요'], voice: { read_aloud: true, policy_version: 'hps-voice-policy/1' } });
+profile = classroom({ approval_preset: preset('before_changes'), plan_first: { available: false }, starters: ['새 비밀 문장이에요'], voice: { read_aloud: true, policy_version: 'hps-voice-policy/1' } });
 c = await w.publish();
 line = c.lessonSettingsChanges[0];
 assert.equal(line.text, '선생님이 도움 방식을 바꿨어요: 받아쓰기 켜짐 → 꺼짐 · 시작 문장 바뀜');
@@ -111,13 +115,13 @@ assert.ok(!JSON.stringify(c.lessonSettingsChanges).includes('새 비밀 문장�
 assert.deepEqual(line.items.find(i => i.key === 'starters'), { key: 'starters', label: '시작 문장' }, 'free text has no before/after');
 
 // 7. A change undone before it was seen clears the line.
-profile = classroom({ approval_preset: preset('before_changes', '바꾸기 전에 묻기'), plan_first: { available: false } });
+profile = classroom({ approval_preset: preset('before_changes'), plan_first: { available: false } });
 c = await w.publish();
 assert.equal(c.lessonSettingsChanges, undefined, 'undone before seen: nothing to tell');
 
 // 8. Mid-turn: a change seen while a turn runs is not shown and does not move the baseline; it appears when the turn ends.
 w = openWindow();
-profile = classroom({ approval_preset: preset('always_ask', '항상 묻기'), plan_first: { available: false } });
+profile = classroom({ approval_preset: preset('always_ask'), plan_first: { available: false } });
 w.h.pendingSends = 1;
 w.h.turnApprovalPreset = 'before_changes'; // what handleSend captured when this turn started
 c = await w.publish();
@@ -126,7 +130,7 @@ assert.equal(w.h.lessonChangeDeferred, true, 'the line waits for the turn to end
 assert.equal(w.h.turnApprovalPreset, 'before_changes', 'the running turn keeps the preset it started with');
 w.h.pendingSends = 0;
 c = await w.publish();
-assert.equal(c.lessonSettingsChanges?.[0]?.text, '선생님이 도움 방식을 바꿨어요: 승인 방식 바꾸기 전에 묻기 → 항상 묻기', 'shown after the turn');
+assert.equal(c.lessonSettingsChanges?.[0]?.text, `선생님이 도움 방식을 바꿨어요: 승인 방식 ${L.before_changes} → ${L.always_ask}`, 'shown after the turn');
 await w.h.handleMessage({ type: 'lessonSettingsChangeSeen', id: c.lessonSettingsChanges[0].id });
 
 // 9. #751 U3: the turn-start preflight adopts a switched setting while that turn is starting. That change applies to
@@ -136,7 +140,7 @@ w.h.pendingSends = 1;
 w.h.rememberLinkSafety = async () => {};
 w.h.syncPlanFirstWithProfile = () => {};
 // The fixture's ensureProfile returns `profile`, so it is set to what the preflight adopts (the real one returns cachedProfile).
-profile = classroom({ approval_preset: preset('always_ask', '항상 묻기'), plan_first: { available: false }, lesson_binding: { key: 'b'.repeat(32), seq: 2, source: 'setting', object_id: 'o', revision: 1, enforced: true }, sdk_tools: { read: true } });
+profile = classroom({ approval_preset: preset('always_ask'), plan_first: { available: false }, lesson_binding: { key: 'b'.repeat(32), seq: 2, source: 'setting', object_id: 'o', revision: 1, enforced: true }, sdk_tools: { read: true } });
 await w.h.adoptPreflightProfile(profile, TOKEN);
 c = w.posts.filter(p => p.type === 'config').at(-1).config;
 assert.equal(c.lessonSettingsChanges?.at(-1)?.text, '선생님이 도움 방식을 바꿨어요: 작업 폴더의 파일 고치기 해요 → 안 해요', 'U3 switch: told before the starting turn');
@@ -156,8 +160,8 @@ assert.ok(!(c.lessonSettingsChanges ?? []).some(l => !l.seen), 'and back: still 
 // 11. A personal seat never gets the instructor line (it has no instructor; REQ-STUDIO-CAPABILITY-CHANGE covers it).
 // The instructor surface and local mode are covered in lesson-settings-change.test.mjs and the panel render test.
 const personal = openWindow();
-profile = { profile_id: 'solo', activity_kind: 'personal', activity_id: 'c'.repeat(64), approval_preset: preset('important_only', '중요한 것만 묻기') };
+profile = { profile_id: 'solo', activity_kind: 'personal', activity_id: 'c'.repeat(64), approval_preset: preset('important_only') };
 await personal.publish();
-profile = { ...profile, approval_preset: preset('always_ask', '항상 묻기') };
+profile = { ...profile, approval_preset: preset('always_ask') };
 assert.equal((await personal.publish()).lessonSettingsChanges, undefined, 'personal seat: no instructor line');
 console.log('lesson-settings-change-host OK');

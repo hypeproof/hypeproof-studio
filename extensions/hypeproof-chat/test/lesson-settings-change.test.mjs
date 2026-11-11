@@ -1,11 +1,15 @@
 // CGP-SHELL-R-024 / CGP-SHELL-D-023 — the pure rules of the classroom settings-change line (src/lessonSettingsChange.ts).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   LESSON_SETTINGS_BASELINE_KEY, LessonSettingsChangeTracker, diffLessonSettings, lessonSettingsChangeApplies,
   lessonSettingsChangeText, lessonSettingsSnapshot, placeLessonSettingsLines,
 } from '../src/lessonSettingsChange.ts';
 
+// CGP-AGENT-R-019: preset labels come from the one catalog copy, never an inline string.
+const CATALOG = JSON.parse(readFileSync(new URL('../../../chalk/test/fixtures/approval-preset-catalog.json', import.meta.url), 'utf8'));
+const ALWAYS = CATALOG.find(p => p.id === 'always_ask');
 const caps = (on = ['read'], inputs = 'in') => ({ inputs, on });
 const store = () => { const m = new Map(); return { m, get: k => m.get(k), update: async (k, v) => { m.set(k, JSON.parse(JSON.stringify(v))); } }; };
 const seatProfile = (over = {}) => ({ activity_kind: 'classroom', ...over });
@@ -24,10 +28,10 @@ test('seats: classroom, served lesson or enforced binding; never instructor, loc
 
 test('diff: fixed order, served labels, 기본 for no preset, capability words of the REQ-M47 card, free text named only', () => {
   const a = lessonSettingsSnapshot(seatProfile({ starters: ['하나'] }), caps(['read', 'write']));
-  const b = lessonSettingsSnapshot(seatProfile({ approval_preset: { id: 'always_ask', label: '항상 묻기', description: '설명' }, plan_first: { available: false }, starters: ['둘'], voice: { dictation: true, policy_version: 'hps-voice-policy/1' } }), caps(['read']));
+  const b = lessonSettingsSnapshot(seatProfile({ approval_preset: { ...ALWAYS }, plan_first: { available: false }, starters: ['둘'], voice: { dictation: true, policy_version: 'hps-voice-policy/1' } }), caps(['read']));
   const items = diffLessonSettings(a, b);
   assert.deepEqual(items.map(i => i.key), ['approval_preset', 'plan_first', 'cap:write', 'dictation', 'starters']);
-  assert.equal(lessonSettingsChangeText(items), '선생님이 도움 방식을 바꿨어요: 승인 방식 기본 → 항상 묻기 · 계획 먼저 켜짐 → 꺼짐 · 작업 폴더의 파일 고치기 해요 → 안 해요 · 받아쓰기 꺼짐 → 켜짐 · 시작 문장 바뀜');
+  assert.equal(lessonSettingsChangeText(items), `선생님이 도움 방식을 바꿨어요: 승인 방식 기본 → ${ALWAYS.label} · 계획 먼저 켜짐 → 꺼짐 · 작업 폴더의 파일 고치기 해요 → 안 해요 · 받아쓰기 꺼짐 → 켜짐 · 시작 문장 바뀜`);
   assert.ok(!JSON.stringify(b).includes('둘'), 'the snapshot holds a fingerprint, not the starter text');
 });
 

@@ -7,6 +7,7 @@ import { mountPoint, document as doc } from "./fixtures/mini-dom.mjs";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
@@ -26,10 +27,13 @@ const UX = {
   hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } },
   retry_button: { enabled: false, show_counter: false },
 };
-const TEXT = "선생님이 도움 방식을 바꿨어요: 승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기 · 시작 문장 바뀜";
+// CGP-AGENT-R-019: preset labels come from the one catalog copy, never an inline string.
+const CATALOG = JSON.parse(readFileSync(resolve(process.cwd(), "../../chalk/test/fixtures/approval-preset-catalog.json"), "utf8")) as { id: string; label: string }[];
+const label = (id: string) => CATALOG.find((p) => p.id === id)!.label;
+const TEXT = `선생님이 도움 방식을 바꿨어요: 승인 방식 ${label("important_only")} → ${label("before_changes")} · 시작 문장 바뀜`;
 const line = (seen: boolean, afterMessageId: string | null = "a1") => ({
   id: "lsc-1", text: TEXT, afterMessageId, task: null, seen,
-  items: [{ key: "approval_preset", label: "승인 방식", before: "중요한 것만 묻기", after: "바꾸기 전에 묻기" }, { key: "starters", label: "시작 문장" }],
+  items: [{ key: "approval_preset", label: "승인 방식", before: label("important_only"), after: label("before_changes") }, { key: "starters", label: "시작 문장" }],
 });
 const config = (lines: unknown[]) => ({
   model: "claude-sonnet-5", hasToken: true, proxyUrl: "http://localhost:8787",
