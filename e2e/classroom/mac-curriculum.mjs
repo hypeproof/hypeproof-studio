@@ -30,6 +30,7 @@ import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-g2'));
 const servicePort = 18991, boardPort = 18992, debugPort = 9591, HOURS = 12, prefix = 'g2-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -105,7 +106,7 @@ const server = createServer(async (req, res) => { try { const parts = []; for aw
   if (/^\/v1\/(messages|profile|classroom\/rehearsal|classroom\/ops\/lesson-binding)/.test(url)) wire.push({ at: Date.now(), method: req.method, path: url, status: r.status, step: req.headers['x-hps-lesson-step'] ?? null, help: req.headers['x-hps-help-mode'] ?? null, binding: req.headers['x-hps-lesson-binding'] ?? null });
   res.writeHead(r.status, Object.fromEntries(r.headers)); if (r.body) for await (const chunk of r.body) res.write(chunk); res.end(); } catch { if (!res.headersSent) res.writeHead(500); res.end(); } });
 server.listen(servicePort, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + servicePort;
-const { default: chalk } = await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const board = createServer(async (req, res) => { try { const parts = []; for await (const b of req) parts.push(b); const body = Buffer.concat(parts);
   const rr = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(rr.status, Object.fromEntries(rr.headers)); res.end(Buffer.from(await rr.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 board.listen(boardPort, '127.0.0.1'); await once(board, 'listening');
@@ -170,7 +171,7 @@ async function authoringPage() {
   browser = browser ?? await chromium.launch({ headless: process.env.HPS_BOARD_HEADLESS === '1' });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } }); page.on('dialog', (d) => d.accept());
   const waitStatus = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source, { timeout: 60000 });
-  await page.goto('http://127.0.0.1:' + boardPort + '/authoring'); await page.locator('#token').fill(teacherToken); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
+  await page.goto('http://127.0.0.1:' + boardPort + '/authoring'); await signInChalk(page, teacherToken); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
   await page.locator('summary', { hasText: '저장한 강의 열기' }).click(); await page.locator('#course').fill(course); await page.locator('#load').click(); await waitStatus(/저장본을 열었습니다/);
   await page.locator('#features-load').click(); await page.locator('#features-status').filter({ hasText: '이 코호트가 가진 기능' }).waitFor();
   return { page, waitStatus };
@@ -267,7 +268,7 @@ try {
   await shot(win, 'g2-mac-08-learner-V1.png');
 
   const manage = await browser.newPage({ viewport: { width: 1280, height: 720 } }); const T = (id) => manage.locator('#' + id).innerText();
-  await manage.goto('http://127.0.0.1:' + boardPort + '/manage'); await manage.locator('#token').fill(teacherToken); await manage.locator('#cohort').fill(local.cohort); await manage.locator('#prefix').fill(prefix); await manage.locator('#connect button').first().click(); await manage.locator('#status').filter({ hasText: '연결됨' }).waitFor();
+  await manage.goto('http://127.0.0.1:' + boardPort + '/manage'); await signInChalk(manage, teacherToken); await manage.locator('#cohort').fill(local.cohort); await manage.locator('#prefix').fill(prefix); await manage.locator('#connect button').first().click(); await manage.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   const row = (id) => manage.locator(`#ops-seats .ops-seat[data-seat="${id}"]`); await row('A2').waitFor();
   const compose = async () => { if (!(await manage.locator('#ops-dist').evaluate((d) => d.open))) await manage.locator('#ops-dist-summary').click(); await manage.locator('#ops-dist-title').waitFor(); };
   const saveForm = async () => { await manage.locator('#ops-dist-save').click(); await manage.locator('#ops-dist-saved').filter({ hasText: '저장했습니다' }).waitFor(); };

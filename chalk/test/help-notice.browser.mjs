@@ -38,7 +38,7 @@ const SETUP = `(() => {
   window.fetch = async (url, opts = {}) => { __calls.push({ url: String(url), method: opts.method || 'GET' }); return { ok: true, status: 200, json: async () => ({ id: 'x', student_id: 'student-a', session_id: 'S1', expires_at: now + 3600, revision: 1, status: 'received', content: {} }) }; };
   window.Notification = class { constructor(title, opts) { __notes.push({ title, ...opts }); } static get permission() { return __perm; } static requestPermission() { __permCalls++; __perm = window.__answer || 'granted'; return Promise.resolve(__perm); } };
   window.__realRefresh = refresh; refresh = () => {}; renderSummary = () => {}; renderSelection = () => {};
-  token = 't'; cohort = 'c1';
+  connected = true; cohort = 'c1';
   board = { session: { session_id: 'S1' }, seats: [] };
   opsData = { seats: [{ seat_id: 'S01', student_id: 'student-a', step: { step_id: 'step-2' } }, { seat_id: 'S02', student_id: 'student-b' }] };
   helpRows = [mk('a', 120, 'S1', 'student-a'), mk('b', 60, 'S1', 'student-b')]; helpState = 'ok'; helpCounts = { open: 2, answered: 0 }; helpExpanded = true;
@@ -151,7 +151,7 @@ const HIDDEN = (v) => `Object.defineProperty(document, 'hidden', { configurable:
       };
       refresh = __realRefresh; renderBoard = (d) => { board = d; };
       opsRefresh = () => {};
-      cohort = 'c1'; token = 't';
+      cohort = 'c1'; connected = true;
     })()`);
     await b.evaluate(`refresh()`); await settle();
     check((await b.evaluate(`document.querySelectorAll('#ops-help-list li[data-help-id]').length`)) === 1 && (await b.evaluate(NOTICE)).hidden === true, 'refresh: the first read through the real cycle is a silent baseline');

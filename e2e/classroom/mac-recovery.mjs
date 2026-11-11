@@ -32,6 +32,7 @@ import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { CommandRunner } from '../../extensions/hypeproof-chat/src/classroomOpsCommands.ts';
 import { draftAfterStop } from '../../extensions/hypeproof-chat/webview-ui/src/sendQueue.ts';
 import { macWindow } from './mac-window.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u4'));
 const servicePort = Number(process.env.HPS_U4_SERVICE_PORT || 18841), boardPort = Number(process.env.HPS_U4_BOARD_PORT || 18842), debugPort = Number(process.env.HPS_U4_DEBUG_PORT || 9441), prefix = 'u4-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-', HOURS = 12;
@@ -103,7 +104,7 @@ const server = createServer(async (req, res) => { try { const parts = []; for aw
   if (/^\/v1\/(messages|chat|profile|health)/.test(url)) wire.push({ at: Date.now(), path: url, status: r.status });
   res.writeHead(r.status, Object.fromEntries(r.headers)); if (r.body) for await (const chunk of r.body) res.write(chunk); res.end(); } catch { if (!res.headersSent) res.writeHead(500); res.end(); } });
 server.listen(servicePort, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + server.address().port;
-const { default: chalk } = await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const board = createServer(async (req, res) => { try { const parts = []; for await (const b of req) parts.push(b); const body = Buffer.concat(parts);
   const rr = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(rr.status, Object.fromEntries(rr.headers)); res.end(Buffer.from(await rr.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 board.listen(boardPort, '127.0.0.1'); await once(board, 'listening');
@@ -152,7 +153,7 @@ writeFileSync(path.join(home, 'recovery-session.json'), JSON.stringify(session, 
 let browser = null; const cleanup = () => { clearInterval(timer); try { app?.kill(); } catch {} try { void browser?.close(); } catch {} server.close(); board.close(); tool.close(); local.close(); process.exit(0); }; process.on('SIGTERM', cleanup); process.on('SIGINT', cleanup);
 
 async function instructor() { browser = await chromium.launch({ headless: process.env.HPS_BOARD_HEADLESS === '1' }); const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
-  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await page.locator('#token').fill(teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#ops-check').click();
+  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await signInChalk(page, teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#ops-check').click();
   const row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`), T = (id) => page.locator('#' + id).innerText(); await row('A4').waitFor();
   const refresh = async () => { await page.locator('#ops-check').click(); await page.waitForTimeout(700); };
   const open = async (id) => { await refresh(); await row(id).getByRole('button', { name: '근거·조치' }).click(); await page.locator('#ops-detail-title').filter({ hasText: id }).waitFor(); };
@@ -196,7 +197,7 @@ try {
   const keptSameOwner = await page.locator('#ops-checkpoint-note').inputValue(); assert.equal(keptSameOwner, '[합성] 강사 A의 보내지 않은 메모');
   await I.shot('board-01-a1-detail-connected.png');
   const otherTeacher = (await issueIssuer({ issuer: 'teacher-b', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: [...OPS_ALL] }] }, 1, TEST_SECRET)).token;
-  const reconnect = async (t) => { await page.locator('#disconnect').click(); await page.locator('#conn-edit').isVisible() && await page.locator('#conn-edit').click(); await page.locator('#token').fill(t); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect-go').click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await I.row('A1').waitFor(); };
+  const reconnect = async (t) => { await page.locator('#disconnect').click(); await page.locator('#conn-edit').isVisible() && await page.locator('#conn-edit').click(); await signInChalk(page, t); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect-go').click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await I.row('A1').waitFor(); };
   await reconnect(otherTeacher); await I.open('A1'); const otherSees = [await page.locator('#ops-checkpoint-note').inputValue(), await page.locator('#ops-question').inputValue()]; assert.deepEqual(otherSees, ['', '']);
   await reconnect(teacherToken); await I.open('A1');
   const statusLine = (await I.T('status')).trim(), a1Row = (await I.row('A1').innerText()).replace(/\s+/g, ' '), helpLine = (await I.T('ops-help-state')).replace(/\s+/g, ' ');
@@ -386,13 +387,13 @@ try {
   // What the instructor does on that page: token → open "연결 정보 직접 입력" → open the saved draft → the frozen version →
   // open "학생 초대 · 참여 코드 발급" → student + hours → issue. Every field is filled only after its section is opened by a click.
   const section = async (summary) => { const d = issuing.locator('details', { has: issuing.locator('summary', { hasText: summary }) }); if (!(await d.getAttribute('open') !== null)) await d.locator('summary').click(); };
-  await issuing.locator('#token').fill(teacherToken); await section('연결 정보 직접 입력'); await issuing.locator('#cohort').fill(local.cohort); await issuing.locator('#profile').fill(local.profile);
+  await signInChalk(issuing, teacherToken); await section('연결 정보 직접 입력'); await issuing.locator('#cohort').fill(local.cohort); await issuing.locator('#profile').fill(local.profile);
   await section('저장한 강의 열기'); await issuing.locator('#course').fill(course); await issuing.locator('#load').click(); await issuing.locator('#status').filter({ hasNotText: '초안을 선택하세요' }).waitFor({ timeout: 30000 });
   await section('버전 정보'); await issuing.locator('#version').fill(V1);
   await section('학생 초대'); await issuing.locator('#student').fill(seats[0].student_id); await issuing.locator('#hours').fill(String(HOURS));
   await issuing.locator('#deliver').click(); await issuing.locator('#delivery-status').filter({ hasText: V1 }).waitFor({ timeout: 30000 });
   const reissued = await issuing.locator('#student-token').inputValue(); assert.ok(reissued.length > 20 && reissued !== token, 'a new code is on the issuing page');
-  await issuing.screenshot({ path: path.join(out, 'r7-issuing-page.png'), mask: [issuing.locator('#token'), issuing.locator('#student-token')] });
+  await issuing.screenshot({ path: path.join(out, 'r7-issuing-page.png'), mask: [issuing.locator('#student-token')] });
   await wait(async () => (await seatNow('A1')).token?.app_verified === 'other_token', 'the board shows the app is on another issue'); assert.equal((await seatNow('A1')).recommended.action, 'refresh_connection');
   await I.open('A1'); const link = page.locator('#ops-evidence a', { hasText: '재발급' }); assert.equal(await link.getAttribute('href'), '/authoring', 'a lesson class is sent to the lesson code page, not to the plain token issuer'); assert.match(await link.innerText(), new RegExp('강의 ' + V1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' 유지'));
   const oldLine = (await I.act('A1', '연결 다시 확인', /문제 남음 1/)).replace(/\s+/g, ' '); assert.match(oldLine, /→ 문제 남음 — 원인: 새로 발급한 토큰이 학생 앱에 없음 · 학생 앱이 확인한 것은 이전 발급분.*다음: 새 토큰을 학생에게 전달/); await I.shot('r7-issued-not-yet-entered.png');

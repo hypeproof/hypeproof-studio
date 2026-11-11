@@ -2,7 +2,8 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
 import {budgetHarness} from '@hypeproof/service-testkit/test/harness/budgets.mjs';
 import {TEST_SECRET} from '@hypeproof/service-testkit/test/harness/index.mjs';
-const {default:chalk}=await import('../src/index.ts');
+import { withBearerAsConnection } from './harness/connect.mjs';
+const chalk=withBearerAsConnection((await import('../src/index.ts')).default);
 const h=await budgetHarness(),original=globalThis.fetch,seen=[];
 try{
  globalThis.fetch=async(url,init)=>{assert(String(url).startsWith('https://service.synthetic/'));seen.push(new Headers(init.headers));const body=init.body?JSON.parse(Buffer.from(init.body).toString()):undefined;const r=await h.request(new URL(url).pathname,{method:init.method,body,auth:seen.at(-1).get('authorization')});return Response.json(r.json,{status:r.status});};

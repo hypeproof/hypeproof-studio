@@ -4,6 +4,7 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Real Mac window and HTTP; synthetic people, recorder model and delivery adapter.
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 export async function journey(x) {
   const {local,course,VA,seats,teacherToken,browser,boardPort,prefix,launch,attach,enterWork,palette,toasts,wait,ask,idle,quit,ws,shot,out,press,setValue,step,workFiles,A,waitHeader}=x;
   const rowRevision=local.db.prepare('SELECT roster_revision FROM class_run_ops WHERE class_run_id=?').get(local.run).roster_revision;
@@ -19,7 +20,7 @@ export async function journey(x) {
   await quit();launch('g4',issued.json.token,ws);win=await attach();chat=await enterWork();await pair(win);
   await ask(chat,'Q-G42 다시 열어 같은 기준으로 확인했습니다','Q-G42');await idle(chat);await waitHeader(chat,A.mission,'G4 restart');step('G4 authored lesson used across restart');
   const page=await browser.newPage({viewport:{width:1280,height:720}});
-  await page.goto('http://127.0.0.1:'+boardPort+'/manage');await page.locator('#token').fill(teacherToken);await page.locator('#cohort').fill(local.cohort);await page.locator('#prefix').fill(prefix);await page.locator('#connect button').first().click();await page.locator('#status').filter({hasText:'연결됨'}).waitFor();
+  await page.goto('http://127.0.0.1:'+boardPort+'/manage');await signInChalk(page, teacherToken);await page.locator('#cohort').fill(local.cohort);await page.locator('#prefix').fill(prefix);await page.locator('#connect button').first().click();await page.locator('#status').filter({hasText:'연결됨'}).waitFor();
   const row=id=>page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`);await row('A1').waitFor();
   // Help is voluntary and goes to the assigned teacher; the teacher responds in the same board.
   await press(chat,'.hp-help summary','help entry');await wait(()=>chat.evaluate("!!document.querySelector('[data-help-question]')"),'help form');
