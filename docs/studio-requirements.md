@@ -273,10 +273,9 @@ lesson binding, or an unknown seat, where the baseline moves silently. Decision:
 change lessons live, so a card mid-class can be noise; REQ-M47 says nothing about change
 notices, so this follows the stricter existing quiet rule (REQ-STUDIO-FINISH-NOTICE #2072,
 CGP-SHELL-R-001 `classUpdateHold` #1890). In class the closed REQ-M47 card still follows the
-new profile. Limits: the register row's classroom case ("선생님이 도움 방식을 바꿨어요: <before>
-→ <after>" after a U3 settings change) is therefore not met for classroom seats and stays
-open for a separate decision; the card is not persisted, so a change made while Studio was
-closed is not reported. Pure diff, seats and once-only state: `src/capabilityChange.ts`; one
+new profile. The register row's classroom case ("선생님이 도움 방식을 바꿨어요: <before>
+→ <after>") is REQ-STUDIO-LESSON-SETTINGS-CHANGE below (2026-11-11). Limits: this card is not
+persisted, so a change made while Studio was closed is not reported on a personal seat. Pure diff, seats and once-only state: `src/capabilityChange.ts`; one
 observation in `postConfig` with the served profile, the card in the panel config
 (`capabilityChange`), dismiss message `dismissCapabilityChange`. Tests:
 `test/capability-change.smoke.mjs` — the shared evaluation equals the card's former formula
@@ -291,6 +290,27 @@ copy, only non-empty lines, no capability-score labels, composer not disabled) w
 and instructor negative controls. The first-load, folder, seat, dismiss, same-card,
 access-choice, fallback, current-inputs-baseline and both re-read guards and the card render
 were each removed once and a test failed.
+
+`REQ-STUDIO-LESSON-SETTINGS-CHANGE` (CGP-SHELL-R-024 / CGP-SHELL-D-023, P1, ADM-11,
+2026-11-11): the classroom case. A classroom seat, or one with a served lesson or an enforced
+lesson binding, sees one system line in the chat before its next turn when the instructor changed
+its lesson settings: "선생님이 도움 방식을 바꿨어요: <항목> <전> → <후>", several changes joined
+with " · " in one line. Compared: the approval preset (served label, `기본` when none),
+`plan_first.available`, the six REQ-M47 capabilities (same evaluation and words as the card),
+voice dictation and read-aloud, and the starter sentences (named only, never quoted). Not
+compared: model and effort, step content, AI role and tone (not drawn and not in a coach prompt
+yet, DEC-30 step 4). The baseline is persisted per seat in globalState (hashed seat key, no
+credential, starters as a fingerprint); the first profile is a silent baseline, learner-side inputs
+alone never make a line, and the baseline moves only when the panel reports the line drawn
+while a chat surface is visible (host `view.visible` / editor panel `visible`), so a reload does not repeat it and a change made while Studio was closed is told at
+the next panel open. A change observed during a running turn waits for the turn to end (the turn
+keeps its start-of-turn profile); a U3 switch adopted by the turn-start preflight is told at once,
+placed before the starting turn. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
+agent choices: decisions.md "CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line".
+Code: `src/lessonSettingsChange.ts` (pure), `observeLessonSettings` in `chatPanelProvider.ts`,
+`webview-ui/src/LessonSettingsChange.tsx`. Tests: `test/lesson-settings-change-host.smoke.mjs`
+(real `postConfig`, `handleMessage` and preflight adoption), `test/lesson-settings-change.test.tsx`
+(real ChatPanel), `test/lesson-settings-change.test.mjs` (pure rules).
 
 `REQ-STUDIO-DELEGATION-ROW` (CGP-AGENT-R-009 / REQ-CGP-AGENT-12, design CGP-AGENT-D-008,
 P1, 2026-10-20): when the coach delegates to a helper (an agent SDK `Task`/`Agent` tool call
