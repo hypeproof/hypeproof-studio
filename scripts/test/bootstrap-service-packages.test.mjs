@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { bootstrapServicePackages } from '../bootstrap-service-packages.mjs';
-const names = ['measurement-core-0.1.0', 'service-contracts-0.1.0', 'service-contracts-0.1.1', 'measurement-0.3.5', 'service-testkit-0.1.2', 'measurement-core-0.1.1', 'service-testkit-0.1.4'];
+const names = ['measurement-core-0.1.0', 'service-contracts-0.1.0', 'service-contracts-0.1.2', 'measurement-0.3.5', 'service-testkit-0.1.5', 'measurement-core-0.1.1', 'service-testkit-0.1.4'];
 const bytes = asset => Buffer.from('synthetic fixture ' + asset);
 const digest = b => createHash('sha256').update(b).digest('hex');
 const pins = () => ({ version: 1, repository: 'hypeproof/hypeproof-service', packages: names.map(name => {
