@@ -141,12 +141,12 @@ public struct ConversationCache: Codable, Sendable {
 /// A voice turn follows its own request, never a newer turn from another device.
 public enum ConversationVoiceReply: Equatable {
     case waiting, speak(String), finished, needsAttention
-    public static func resolve(id: String, request: SharedRequest?, messages: [SharedMessage], sending: Bool, readAloud: Bool) -> Self {
+    public static func resolve(id: String, request: SharedRequest?, messages: [SharedMessage], sending: Bool, readAloud: Bool, completedWaitExpired: Bool = false) -> Self {
         guard let request, request.id == id else { return .needsAttention }
         if request.status == "completed" {
             if !readAloud { return .finished }
             guard let index = messages.firstIndex(where: { $0.id == id && $0.role == "user" }),
-                  let answer = messages.dropFirst(index + 1).prefix(while: { $0.role != "user" }).last(where: { $0.role == "assistant" }) else { return .needsAttention }
+                  let answer = messages.dropFirst(index + 1).prefix(while: { $0.role != "user" }).last(where: { $0.role == "assistant" }) else { return completedWaitExpired ? .needsAttention : .waiting }
             return .speak(answer.content)
         }
         if ["pending", "running"].contains(request.status) || (request.status == "local" && sending) { return .waiting }

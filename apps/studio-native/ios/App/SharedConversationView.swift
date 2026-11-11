@@ -22,6 +22,7 @@ struct SharedConversationView: View {
     @State private var voiceConsentID: String?
     @State private var showContext = false
     @State private var voiceRequestID: String?
+    @State private var voiceCompletionWaitStarted: Date?
     @State private var speakAnswers = true
     @State private var reviewRecording = false
     @State private var exportURL: URL?
@@ -76,6 +77,7 @@ struct SharedConversationView: View {
         .onChange(of: model.selected) { _, _ in voice.stop(); voiceConsentAccepted = false; voiceConsentID = nil; voiceConsent = false }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
+        .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
         .onChange(of: model.cache.messages.last) { _, _ in reconcileVoiceReply() }
         .onChange(of: speakAnswers) { _, enabled in
             if !enabled && voice.turn.phase == .speaking { voice.stop(); voiceRequestID = nil }
@@ -279,7 +281,7 @@ struct SharedConversationView: View {
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.cache.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
         guard let id = model.selected, model.canSend, !model.syncing else { return }
-        focused = false; voiceRequestID = nil; let prefix = model.cache.draft
+        focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.cache.draft
         voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, transcript: { text in
             guard model.selected == id else { return }
             model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
@@ -292,8 +294,11 @@ struct SharedConversationView: View {
     }
     private func reconcileVoiceReply() {
         guard voice.turn.phase == .waiting, let requestID = voiceRequestID, let id = model.selected else { return }
-        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers) {
-        case .waiting: break
+        let completedWaitExpired = voiceCompletionWaitStarted.map { Date().timeIntervalSince($0) >= 30 } ?? false
+        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
+        case .waiting:
+            // Desktop event and request reads are separate. Allow the next poll to deliver its answer.
+            if model.cache.request?.status == "completed" && voiceCompletionWaitStarted == nil { voiceCompletionWaitStarted = Date() }
         case .speak(let text): voiceRequestID = nil; voice.reply(text, projectID: id)
         case .finished: voiceRequestID = nil; voice.stop()
         case .needsAttention:

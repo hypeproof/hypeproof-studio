@@ -24,6 +24,8 @@ final class ConversationSyncTests: XCTestCase {
         request.id = "other-device"; request.status = "running"
         XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: false, readAloud: true), .needsAttention)
         request.id = id; request.status = "completed"
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: false, readAloud: true), .waiting)
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: [], sending: false, readAloud: true, completedWaitExpired: true), .needsAttention)
         let messages = [SharedMessage(id: id, role: "user", content: request.text, created_at: 1), SharedMessage(id: id + "-answer", role: "assistant", content: "어떤 순간이었나요?", created_at: 2), SharedMessage(id: "next", role: "user", content: "다른 이야기", created_at: 3), SharedMessage(id: "next-answer", role: "assistant", content: "다른 답변", created_at: 4)]
         XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: messages, sending: false, readAloud: true), .speak("어떤 순간이었나요?"))
         XCTAssertEqual(ConversationVoiceReply.resolve(id: id, request: request, messages: messages, sending: false, readAloud: false), .finished)
