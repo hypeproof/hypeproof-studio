@@ -18,11 +18,12 @@ inferred from UI use or passing these tests.
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
 
-MVOICE-T02/T03 use the current MFR interaction target. Older Android and legacy
-notebook tests that expect a confirmation sheet or manual next-turn tap prove
-only the previous behavior and cannot satisfy these revised cases. Keep those
-platform gaps open under #3687; the iPhone account-conversation journeys below
-are the first implementation slice. No native or physical pass is recorded here.
+MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
+a confirmation sheet or manual next-turn tap prove only the previous behavior
+and cannot satisfy these revised cases. Android alignment remains open under
+#3687. The iPhone legacy notebook uses shared automatic controls but needs its
+own revised journey verification; the account-conversation journeys below do
+not establish that acceptance. No native or physical pass is recorded here.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and

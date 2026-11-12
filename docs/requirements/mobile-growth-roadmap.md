@@ -91,9 +91,10 @@ The interaction target below incorporates the 2026-11-12 correction in MFR-03:
 one deliberate start, automatic turn boundaries and an always-available stop.
 Earlier requirements for a separate voice confirmation sheet, manual end-speech
 or a next-turn tap are superseded. The current iPhone account-conversation source
-implements that target; Android and legacy notebook voice still require separate
-alignment and verification under #3687. Neither platform is accepted from this
-document or source presence alone.
+implements that target. The iPhone legacy notebook also uses the shared automatic
+voice controls but still needs verification against these revised cases. Android
+retains manual controls and needs alignment under #3687. Neither platform is
+accepted from this document or source presence alone.
 
 | ID | Requirement | Verification boundary |
 |---|---|---|

@@ -30,10 +30,11 @@ Stop, background, account/conversation change and audio interruption end the
 interaction and fence stale callbacks. Returning to the app does not restart
 capture. Recognition failures preserve partial draft text.
 
-Android and legacy notebook voice still contain the older manual controls.
-Their alignment to this interaction remains open under #3687; their existing
-tests do not establish acceptance of continuous conversation. The revised shared
-requirements and first iPhone journeys are in the mobile roadmap and
+Android voice still contains the older manual controls; alignment remains open
+under #3687. The iPhone legacy notebook uses the shared automatic voice controls
+but still requires its own revised journey and physical verification. Existing
+source and tests do not establish acceptance of continuous conversation. The
+revised shared requirements and first iPhone journeys are in the mobile roadmap and
 `docs/testing/native-mobile-growth.md` (MVOICE-02/03 and MFR-03/04).
 
 Only platform on-device recognition is used. iOS checks both

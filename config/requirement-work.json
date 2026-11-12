@@ -929,7 +929,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "7c3447c86f8ab2e5afd751ab5cc4eb4f1bc4755c8a85f06a37494d8ded61f5b2",
+      "sha256": "e76568017167c1963f795119a427d4a3f07ac8f7dddde8a8a06809ca91c177f3",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4515,11 +4515,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align remaining Android and legacy notebook voice with MVOICE-02/03, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
       "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
       "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
       "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
-      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android and legacy notebook alignment remain unaccepted.",
+      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android alignment and iPhone legacy notebook journey acceptance remain open.",
       "implementation_paths": [
         "apps/studio-native/ios/App/VoiceController.swift",
         "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
