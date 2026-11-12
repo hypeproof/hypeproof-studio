@@ -243,6 +243,24 @@ async function main() {
   assert.equal(onFile.includes('계좌번호'), false, 'no form until the seller asks to change it');
 }
 
+// Seller identity (#3770): an unverified seller gets the phone verification button; while it runs the panel waits.
+{
+  const none = { ...SELLER, tier: 'none' as const, cap_krw: 0 };
+  const { host, root, sent } = await mounted(base({ tab: 'sell', seller: none }));
+  assert.ok(host.textContent.includes('유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 한 번만 하면 돼요.'));
+  await act(() => click(buttons(host, '휴대폰 본인인증')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeVerifyIdentity' });
+  await act(() => root.render(<SkillStoreView state={base({ tab: 'sell', seller: none, identity: { sessionId: 'idv_' + 'a'.repeat(32), sandbox: true } })} send={m => sent.push(m)} />));
+  assert.ok(host.textContent.includes('브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.'));
+  assert.ok(host.textContent.includes('지금은 테스트 본인인증이에요.'));
+  assert.equal(buttons(host, '휴대폰 본인인증').length, 0, 'no second start while one runs');
+  await act(() => click(buttons(host, '기다리지 않기')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeCancelIdentity' });
+  await act(() => root.unmount());
+  assert.ok(html(base({ tab: 'sell', seller: { ...SELLER, tier: 'minor' } })).includes('만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고'));
+  assert.equal(html(base({ tab: 'sell', seller: SELLER })).includes('휴대폰 본인인증'), false, 'a verified seller is not asked again');
+}
+
 // The age question appears before buying or selling when the Service does not know the age.
 assert.ok(html(base({ tab: 'mine', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'));
 assert.ok(html(base({ tab: 'browse', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'), 'asked where the buy button is');

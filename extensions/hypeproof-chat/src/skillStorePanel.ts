@@ -45,6 +45,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   let state: StoreState = { access: "ready", tab: "browse", items: [], ageGroup: "unknown", installs: [], testPayments: true };
   let poll: ReturnType<typeof setTimeout> | undefined;
   let checkoutOrder: { id: string; startedAt: number } | undefined;
+  let identityPoll: ReturnType<typeof setTimeout> | undefined;
   /** The finished quest this window already published, so 「내 스토어」 does not offer it twice. */
   let publishedDraft: string | undefined;
   const client = () =>
@@ -136,6 +137,25 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     if (state.seller) state = { ...state, seller: { ...state.seller, attribution: view } };
   };
 
+  /** Polls the verification the seller opened in the browser until the Service reports its outcome. */
+  const watchIdentity = (sessionId: string, startedAt: number) => {
+    if (identityPoll) clearTimeout(identityPoll);
+    identityPoll = setTimeout(async () => {
+      if (state.identity?.sessionId !== sessionId) return;
+      let r: { state: string; failure?: string };
+      try { r = await client().identityState(sessionId); } catch { r = { state: "pending" }; }
+      if (r.state === "verified") {
+        await load("sell", { identity: undefined });
+        return void (await push({ notice: STORE_COPY.identityDone(state.seller?.cap_krw ?? 0) }));
+      }
+      if (r.state === "failed" || r.state === "expired" || Date.now() - startedAt > CHECKOUT_LIMIT_MS) {
+        const code = r.state === "failed" ? (r.failure === "under_minimum_age" ? "under_minimum_age_identity" : r.failure ?? "identity_failed") : "identity_expired";
+        return void (await push({ identity: undefined, busy: false, error: storeErrorMessage(new StoreClientError(code)) }));
+      }
+      watchIdentity(sessionId, startedAt);
+    }, POLL_MS);
+  };
+
   const handle = async (msg: StoreRequest) => {
     if (!msg || typeof msg.type !== "string") return;
     const c = client();
@@ -201,6 +221,16 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           const names = await c.resolveCodes(msg.partnerCode, msg.instructorCode);
           await push({ busy: false, attributionPreview: { partnerCode: msg.partnerCode, instructorCode: msg.instructorCode, partner: names.partner, instructor: names.instructor } });
         });
+      case "storeVerifyIdentity":
+        return run(async () => {
+          const started = await c.startIdentity();
+          await push({ busy: false, identity: { sessionId: started.session_id, sandbox: started.sandbox }, notice: STORE_COPY.identityWaiting });
+          await vscode.env.openExternal(vscode.Uri.parse(started.verify_url));
+          watchIdentity(started.session_id, Date.now());
+        });
+      case "storeCancelIdentity":
+        if (identityPoll) clearTimeout(identityPoll);
+        return push({ identity: undefined, notice: undefined });
       case "storeSavePayoutAccount":
         // The number goes straight to the Service and is not kept in the panel state or logged here.
         return run(async () => {
@@ -290,6 +320,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     panel.onDidDispose(() => {
       panel = undefined;
       stopPoll();
+      if (identityPoll) clearTimeout(identityPoll);
       checkoutOrder = undefined;
     });
   };

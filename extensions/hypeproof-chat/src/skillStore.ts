@@ -103,6 +103,18 @@ export class StoreClient {
   savePayoutAccount(input: { bank_code: string; account_number: string; holder_name: string }) {
     return this.call<Omit<Extract<StorePayoutAccountView, { state: "on_file" }>, "state" | "prompt_at_krw">>("/seller/payout-account", { method: "PUT", body: input });
   }
+  /** Starts a mobile identity verification; only the Service's own verification page is ever opened. */
+  async startIdentity(): Promise<{ session_id: string; verify_url: string; sandbox: boolean }> {
+    const r = await this.call<{ session_id: string; verify_url: string; sandbox: boolean }>("/identity/start", { method: "POST", body: {} });
+    const expected = new URL(this.base() + "/identity/verify");
+    let got: URL | null = null;
+    try { got = new URL(r?.verify_url); } catch { /* malformed */ }
+    if (!got || got.origin !== expected.origin || got.pathname !== expected.pathname || !/^idv_[0-9a-f]{32}$/.test(r?.session_id ?? "") || got.searchParams.get("session") !== r.session_id) throw new StoreClientError("invalid_response");
+    return r;
+  }
+  identityState(sessionId: string) {
+    return this.call<{ state: "pending" | "verified" | "failed" | "expired"; failure?: string }>(`/identity/${encodeURIComponent(sessionId)}`);
+  }
   declareAge(birthYear: number) {
     return this.call<{ age_group: "adult" | "minor" }>("/me/age", { body: { birth_year: birthYear } });
   }
@@ -196,6 +208,13 @@ export const STORE_COPY = {
   codesConsent: "정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 업체·강사에게 제공되는 것에 동의해요.",
   codesConsentNeeded: "코드를 쓰려면 제공 동의가 필요해요. 동의하지 않으면 「코드 없이 진행」을 눌러 주세요. 그러면 코드 없이 올라가요.",
   codesSkip: "코드 없이 진행",
+  identityNeeded: "유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 한 번만 하면 돼요.",
+  identityButton: "휴대폰 본인인증",
+  identityWaiting: "브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.",
+  identitySandbox: "지금은 테스트 본인인증이에요. 실제 인증 기관에 연결되지 않아요.",
+  identityCancel: "기다리지 않기",
+  identityDone: (cap: number) => `본인인증을 마쳤어요. 이제 한 개당 최대 ${won(cap)}까지 올릴 수 있어요.`,
+  identityMinor: "만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고, 운영팀이 검토한 뒤 올라가요.",
   pgFeeEstimate: "결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.",
   codesFixed: "바꾸려면 운영팀에 문의해 주세요.",
   codesEmpty: "등록한 파트너·강사 코드가 없어요.",
@@ -263,6 +282,11 @@ const ERRORS: Record<string, string> = {
   payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
   invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
   holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
+  identity_failed: "본인인증을 하지 못했어요. 정보를 확인한 뒤 다시 시도해 주세요.",
+  identity_expired: "본인인증 시간이 지났어요. 다시 시작해 주세요.",
+  identity_in_use: "이미 다른 계정에서 판매자 인증을 한 정보예요. 한 사람은 한 계정에서만 판매할 수 있어요.",
+  under_minimum_age_identity: "만 14세 미만은 스킬 스토어에서 판매할 수 없어요.",
+  identity_already_verified: "이미 본인인증을 마쳤어요.",
   referral_consent_required: "코드를 쓰려면 판매 실적 제공에 동의해 주세요. 동의하지 않으면 코드 없이 올릴 수 있어요.",
   referral_consent_missing: "판매 실적 제공에 동의하지 않은 판매자예요. 운영팀에 문의해 주세요.",
 };

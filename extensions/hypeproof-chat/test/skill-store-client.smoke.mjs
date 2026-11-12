@@ -117,3 +117,18 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
     assert.ok(s.storeErrorMessage(new s.StoreClientError(code)).includes(text), code);
   console.log('PASS attribution and payout-account calls');
 }
+
+// #3770: identity verification opens only the Service's own verification page for that session.
+{
+  const ID = 'idv_' + 'b'.repeat(32);
+  const good = { session_id: ID, verify_url: `https://service.test/v1/store/identity/verify?session=${ID}`, sandbox: true };
+  const { c, calls } = client(() => [201, good]);
+  assert.equal((await c.startIdentity()).session_id, ID);
+  assert.deepEqual([calls[0].url, calls[0].method], ['https://service.test/v1/store/identity/start', 'POST']);
+  for (const verify_url of ['https://evil.test/v1/store/identity/verify?session=' + ID, 'https://service.test/v1/store/checkout?session=' + ID, `https://service.test/v1/store/identity/verify?session=idv_${'c'.repeat(32)}`, 'nope']) {
+    const bad = client(() => [201, { ...good, verify_url }]);
+    await assert.rejects(bad.c.startIdentity(), (e) => e.code === 'invalid_response', verify_url);
+  }
+  assert.ok(s.storeErrorMessage(new s.StoreClientError('identity_in_use')).includes('한 사람은 한 계정에서만'));
+  console.log('PASS identity start opens only the Service verification page');
+}
