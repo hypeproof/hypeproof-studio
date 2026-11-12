@@ -12,9 +12,10 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
+import { withBearerAsConnection } from './harness/connect.mjs';
 
 const { completionChecklistKit, completionProblems, COMPLETION_CHECKLIST_SCRIPT } = await import('../src/lib/completion-checklist.ts');
-const { default: chalk } = await import('../src/index.ts');
+const chalk = withBearerAsConnection((await import('../src/index.ts')).default);
 const kit = completionChecklistKit();
 let n = 0;
 const ok = (name) => { n++; console.log('PASS ' + name); };

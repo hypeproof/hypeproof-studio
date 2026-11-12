@@ -45,10 +45,12 @@ const THEME_RUNS = [
 const SURFACES = {
   composer: ['top', 'control'], catchup: ['top', 'control'], tools: ['top', 'overlay'], prefs: ['top', 'overlay'],
   myq: ['top', 'overlay'], chatmenu: ['top', 'overlay'], sources: ['left', 'overlay'], connect: ['top', 'forest'],
+  // CGP-CHAT-D-007: the 인용하기 popover over a selection; in high contrast its edge is the 1px contrastBorder.
+  quote: ['top', 'overlay'],
 };
 // CGP-DS-D-009: the named level each elevated surface must compute to (geometry as Chromium serialises it).
 const LEVEL = { raised: '0px 1px 2px 0px', overlay: '0px 4px 8px -2px' };
-const LEVEL_OF = { composer: 'raised', catchup: 'raised', connect: 'raised', tools: 'overlay', prefs: 'overlay', myq: 'overlay', chatmenu: 'overlay', sources: 'overlay' };
+const LEVEL_OF = { composer: 'raised', catchup: 'raised', connect: 'raised', tools: 'overlay', prefs: 'overlay', myq: 'overlay', chatmenu: 'overlay', sources: 'overlay', quote: 'overlay' };
 // Inline content sits in the flow and casts no shadow ("none (inline)").
 const INLINE = ['userbubble', 'answer'];
 const fixture = (vars, body) => `<!doctype html><html style="${vars}"><head><style>${css}</style></head><body class="${body}">
@@ -56,7 +58,7 @@ const fixture = (vars, body) => `<!doctype html><html style="${vars}"><head><sty
   <div class="hps-shell" data-chat-detail="personal">
     <header class="hps-header"><div class="hps-myq"><button class="hps-myq-toggle" type="button">내 질문</button><div class="hps-myq-panel" id="myq" role="dialog" aria-label="내 질문"><ol class="hps-myq-list"><li><button class="hps-myq-item" type="button">첫 질문</button></li></ol></div></div>
       <div style="position:relative;margin-left:auto"><div class="tw-chat-menu-panel" id="chatmenu" role="menu" aria-label="대화 메뉴"><button role="menuitem" type="button">기록</button></div></div></header>
-    <div class="hps-messages"><div class="hps-msg hps-msg-user"><div class="hps-msg-body" id="userbubble">질문입니다</div></div><div class="hps-msg hps-msg-assistant"><div class="hps-msg-body" id="answer"><p>답입니다</p></div></div></div>
+    <div class="hps-messages"><div class="hps-msg hps-msg-user"><div class="hps-msg-body" id="userbubble">질문입니다</div></div><div class="hps-msg hps-msg-assistant" data-quote-row="a1"><div class="hps-msg-body" id="answer" data-quote-answer="a1"><p>답입니다</p></div><div class="hps-quote-row" id="quote" style="top:0;inset-inline-start:0"><button class="hps-quote-action" type="button">인용하기</button></div></div></div>
     <div class="hps-catchup"><button id="catchup" type="button">새 답 보기</button></div>
     <div class="hps-input-area" style="margin-top:260px"><div class="hps-input" id="composer"><div style="position:relative"><div class="hps-tools-menu" id="tools" role="menu"><button role="menuitem" type="button">파일 첨부</button></div></div><textarea aria-label="메시지"></textarea></div></div>
   </div>

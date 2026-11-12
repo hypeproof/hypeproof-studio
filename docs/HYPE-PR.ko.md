@@ -264,7 +264,7 @@ Smoke: yes|no — <이유>
 Smoke check: <smoke_check_prefix 아래 파일 경로, 또는 #후속-이슈>
 ```
 
-- `How to verify`는 절의 첫 줄이다. 릴리스 매니저 체크리스트가 그 줄을 읽는다. `→`(또는 `->`)로 나눈 세 부분이 모두 채워져야 한다.
+- `How to verify`는 절의 첫 줄이다. 단 `manager_check: true`인 repo에서는 첫 줄이 `Release manager check:`이고, `How to verify`는 그다음 줄이다(아래 참조). 릴리스 매니저 체크리스트는 줄 위치가 아니라 `How to verify:` 줄을 읽는다(studio #3571부터). `→`(또는 `->`)로 나눈 세 부분이 모두 채워져야 한다.
 - `Smoke`는 yes 또는 no이고, 이유는 10자 이상이다. 다른 저장소나 서버에 기대는 기능을 추가하면 yes다.
 - `Smoke: yes`이면 `Smoke check`가 PR 트리에 있는 smoke 파일이거나 같은 repo의 열린 이슈 `#N`이어야 한다.
 - 연결된 이슈 form의 "Smoke needed?" 답이 yes인데 PR이 no이면 `Smoke differs from issue: <이유>` 줄을 더 요구한다. 이슈에 답이 없으면 비교하지 않는다. 이슈 본문 자체는 검사하지 않는다.
@@ -275,6 +275,9 @@ Smoke check: <smoke_check_prefix 아래 파일 경로, 또는 #후속-이슈>
   - `Smoke`는 어느 쪽이든 요구한다. hotfix 경로는 이 줄을 보지 않는다.
   - 이 키가 없는 repo는 지금과 같다(`How to verify`가 첫 줄이고 항상 요구된다).
 - 판정 코드는 `scripts/hype-pr/body_contract.py`다. 의존성이 없어 consumer CI에서도 그대로 실행할 수 있다.
+- PR 이벤트마다 `body_contract.py`를 실행하는 CI 진입점은 지금 studio가 소유한다. 파일은 studio `scripts/release/release-check-gate.py`이고, job 이름은 `process / release-check`다.
+  - 다른 consumer가 계약을 켜면 진입점을 복사하지 않는다. 먼저 harness `scripts/hype-pr/`로 옮긴다.
+  - 옮긴 파일은 `sync.sh`로 vendor한다. 각 consumer의 workflow는 vendor된 사본을 실행하게 바꾼다.
 
 ### hotfix 경로 (repo 계약에 `hotfix`가 있는 경우만)
 

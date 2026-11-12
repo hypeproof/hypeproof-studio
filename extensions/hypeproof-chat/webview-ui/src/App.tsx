@@ -1,5 +1,6 @@
 import { FolderConsentDialog } from './FolderConsentDialog';
-import { ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import { DoctorNoticeLine, ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import type { DoctorNotice } from '../../src/studioDoctor';
 import type { OfferReason, ProblemReportFormView } from '../../src/problemReport';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import {BrowserApprovalDialog} from './BrowserApprovalDialog';
@@ -35,12 +36,16 @@ import {
 } from "../../src/chatTimeline";
 import { onHostMessage, postToHost } from "./vscode";
 import { runVoiceCapabilityProbe } from "./voiceProbe";
+import { UserQuestionCard } from "./UserQuestionCard";
+import type { AutomationQuestion } from "../../src/automationProtocol";
 import { ChatPanel } from "./ChatPanel";
 import { TaskWorkspaceFrame } from './TaskWorkspace';
 import { askAboutFileAllowed } from './askAboutFile';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
+import { VoiceProvider, useVoiceController } from "./VoiceProvider";
+import { dictationAddonFor } from "./dictationAddon";
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { PanelBoundary } from "./PanelBoundary";
 import { VerifyPanel } from "./VerifyPanel";
@@ -63,6 +68,7 @@ import { verifyPressAction, verifyNote } from "./verifyOffline";
 import { activityLabel } from "./activityLabel";
 import { activityTitleText } from "./activityHome";
 import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
+import { acceptMemoryUseMarks } from "./MemoryUseChip";
 
 interface State {
   config: ChatConfig | null;
@@ -393,6 +399,9 @@ function homeTitle(activity: ChatConfig["activity"]): string | undefined {
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Private setup and previews never enter the message timeline or composer.
+  const [automationQuestion, setAutomationQuestion] = useState<AutomationQuestion | null>(null);
+  const automationEnabled = useRef(false);
   const [runningProcesses, setRunningProcesses] = useState<import("../../src/runningProcesses").RunningProcess[]>([]);
   const [refusal, setRefusal] = useState(false);
   const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
@@ -418,6 +427,8 @@ export function App() {
   const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
   // CGP-CHAT-R-023 — served lesson step per user message id (host-owned), for the transcript's step dividers.
   const [stepMarks, setStepMarks] = useState<LessonStepMarks>(() => acceptStepMarks(null));
+  // CGP-KNOW-R-026 — answer id → number of memory items its request carried (the open task, from the host).
+  const [memoryUse, setMemoryUse] = useState<Record<string, number>>(() => acceptMemoryUseMarks(null));
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
   const ownVerdictRequests = useRef(new Set<string>());
@@ -435,6 +446,7 @@ export function App() {
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [problemForm,setProblemForm]=useState<ProblemReportFormView|null>(null);
   const [problemOffer,setProblemOffer]=useState<OfferReason|null>(null);
+  const [doctorNotice,setDoctorNotice]=useState<DoctorNotice|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
@@ -452,10 +464,13 @@ export function App() {
       if (msg.type === "config") {
         setWorkspace(msg.config.taskWorkspace);
         setWorkspaceError(null);
+        automationEnabled.current = msg.config.profile?.automations?.enabled === true;
+        if (!automationEnabled.current) setAutomationQuestion(null);
         if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
           setDraftSaveError(null);
           setHistorySaveError(null);
           setIncomingImage(null);
+          setAutomationQuestion(null);
           verifyRequests.current.clear();
           pendingVerdicts.current.clear();
           latestVerdictRequests.current.clear();
@@ -494,6 +509,7 @@ export function App() {
         setApprovalPending(false); setWriteApproval(null);
       }
       switch (msg.type) {
+        case "automationQuestion": if (automationEnabled.current || msg.question === null) setAutomationQuestion(msg.question); break;
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
@@ -503,6 +519,7 @@ export function App() {
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'problemReportForm': setProblemForm(msg.form); if (msg.form) setProblemOffer(null); return;
         case 'problemReportOffer': setProblemOffer(msg.offer?.reason ?? null); return;
+        case 'doctorNotice': setDoctorNotice(msg.notice ?? null); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
         case 'taskWorkspaceError':
@@ -549,6 +566,7 @@ export function App() {
           if (msg.userMessageId && validStepMark(msg.lessonStep)) { const id = msg.userMessageId, mark = msg.lessonStep; setStepMarks(prev => rememberStepMark(prev, id, mark)); }
           break;
         case "lessonStepMarks": { const post = { marks: msg.marks, forget: msg.forget }; setStepMarks(prev => nextStepMarks(prev, post)); break; }
+        case "memoryUseMarks": setMemoryUse(acceptMemoryUseMarks(msg.marks)); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
@@ -608,7 +626,7 @@ export function App() {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
     const hasAttachments = !!attachments && attachments.length > 0;
-    if ((!trimmed && !hasImages && !hasAttachments) || !beginRequest()) return false;
+    if ((!trimmed && !hasImages && !hasAttachments) || automationQuestion || !beginRequest()) return false;
     // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
@@ -801,15 +819,23 @@ export function App() {
     lastOutcome: state.lastOutcome,
   });
 
-  return (
-    <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
-      <CrashIfFlagged crash={shouldCrash} />
+  // Studio voice (voiceServed.ts): `none` unless the served profile carries a `voice` block. Nothing below draws then.
+  const voice = useVoiceController(state.config?.profile, `${state.config?.activity?.id ?? ''}:${state.config?.profile?.profile_id ?? ''}`, !state.config?.isInstructor);
+
+  return (<VoiceProvider controller={voice}>
+    {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up
+        (the card's 문제 신고하기 opens them), so they render beside the boundary, behind a panel boundary of their own. */}
+    <PanelBoundary panel="report">
       {problemForm && <ProblemReportDialog key={problemForm.id} form={problemForm} textSize={state.config?.textSize} onAnswer={(id,answer)=>{postToHost({type:'problemReportAnswer',id,answer});setProblemForm(null);}} onAutoReport={enabled=>postToHost({type:'problemReportAutoSetting',enabled})}/>}
-      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
-      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
         ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
         : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
+    </PanelBoundary>
+    <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
+      <CrashIfFlagged crash={shouldCrash} />
+      {doctorNotice && !problemForm && <DoctorNoticeLine notice={doctorNotice} onAnswer={fix=>{postToHost({type:'doctorNoticeAnswer',id:doctorNotice.id,fix});setDoctorNotice(null);}}/>}
+      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
@@ -868,6 +894,7 @@ export function App() {
         />
       ) : (
       <ChatPanel
+        composerAddon={dictationAddonFor(voice.value.availability)}
         delegationStops={delegationStops}
         onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
         key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
@@ -890,7 +917,9 @@ export function App() {
           postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
         }}
         verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
-        sendLocked={!!state.verify?.running || !!workspace?.error}
+        questionId={automationQuestion?.id}
+        questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
+        sendLocked={!!state.verify?.running || !!workspace?.error || !!automationQuestion}
         annotationsEnabled={state.annotationsEnabled}
         annotations={state.annotations}
         onAnnotationAction={(action, number, comment) => postToHost({type:'annotationAction', action, number, comment})}
@@ -942,6 +971,7 @@ export function App() {
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}
         stepMarks={stepMarks}
+        memoryUse={memoryUse}
         onVerdict={judgeAnswer}
         onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}
@@ -955,13 +985,14 @@ export function App() {
           postToHost({ type: "saveCoach", name, personality })
         }
         onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
       />
       )}
       </TaskWorkspaceFrame>
     </ChatErrorBoundary>
-  );
+  </VoiceProvider>);
 }
 
 /**

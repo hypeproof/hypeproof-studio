@@ -96,6 +96,11 @@ rendered by `scripts/release/install-kit.mjs` in `verify-unified-release.yml` fr
 keep reusing `scripts/seed-sdk-binary.sh` for the SDK seed; never inline seeding. Details:
 `docs/dev/fast-mac-release.md` "Per-release Mac installer and Test Kit".
 
+Windows releases also carry `update-windows.cmd` (template `update-windows.cmd`, pinned to the
+tag and the accepted `HypeProof.StudioUserSetup-x64-*.exe` SHA-256). Notes carry both commands
+between `hps-install-mac:v1` / `hps-install-windows:v1` markers; the publish step runs
+`install-kit.mjs check` and refuses a release whose platforms lack them.
+
 ## Restarting a stuck/failed build
 
 ```bash

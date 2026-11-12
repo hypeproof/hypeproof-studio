@@ -6,7 +6,8 @@ import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
-const local = await localOps(); const { default: chalk } = await import('../../chalk/src/index.ts');
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
+const local = await localOps(); const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const realFetch = globalThis.fetch;
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, body: body.length ? body : undefined }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch { res.writeHead(500).end(); } });
@@ -15,7 +16,7 @@ try {
   server.listen(0, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + server.address().port;
   browser = await chromium.launch(); const page = await browser.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   const expand=async selector=>{const d=page.locator(selector);if(!(await d.evaluate(e=>e.open)))await d.locator('> summary').click();};
-  await page.goto(origin + '/manage'); await page.locator('#token').fill(local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
+  await page.goto(origin + '/manage'); await signInChalk(page, local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
   await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   // No run yet: the panel says so and opens the roster form instead of showing an empty "all fine" board.
   await page.locator('#refresh').click(); await page.locator('#ops-state').filter({ hasText: '운영 명단이 아직 없습니다' }).waitFor(); assert.equal(await page.locator('#ops-setup').getAttribute('open') !== null, true);
@@ -75,9 +76,29 @@ try {
     await page.locator('#ops-seats .ops-seat').nth(0).getByRole('button', { name: '근거·조치' }).click();
     assert.match(await page.locator('#ops-evidence').innerText(), /아직 충분히 보지 못함 — 점수나 미달이 아니라/); assert.doesNotMatch((await page.locator('#ops').innerText()).replaceAll('점수나 미달이 아니라', ''), /점수|순위|의존도|상위|하위|역량 부족/, 'no evaluative wording on the operations board (saying that missing evidence is NOT a score is the one allowed mention)');
     assert.match(await page.locator('#ops-state').innerText(), /운영 집계\(학생 평가 아님\)/);
+    // An unavailable board temporarily disables actions. A successful refresh clears only
+    // that obsolete warning and preserves the teacher's unsent question.
+    await page.locator('#ops-seats .ops-seat').nth(1).getByRole('button', { name: '근거·조치' }).click();
+    const unsentQuestion = '자료가 모두 모였는지 먼저 확인해 볼까요?';
+    await page.locator('#ops-question').fill(unsentQuestion);
+    const statusRoute = '**/classroom/runs/*/status';
+    await page.route(statusRoute, route => route.fulfill({ status: 503, json: { reason: 'fixture_unavailable' } }));
+    await page.locator('#refresh').click();
+    await page.locator('#ops-detail-status').filter({ hasText: '조치를 잠시 막았습니다' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '질문 보내기' }).isDisabled(), true);
+    assert.equal(await page.locator('#ops-question').inputValue(), unsentQuestion);
+    await page.unroute(statusRoute);
+    await page.locator('#refresh').click();
+    await page.locator('#ops-seats .ops-seat').nth(1).waitFor();
+    assert.equal(await page.locator('#ops-detail-status').innerText(), '', 'recovered board must not keep claiming actions are blocked');
+    assert.equal(await page.getByRole('button', { name: '질문 보내기' }).isEnabled(), true);
+    assert.equal(await page.locator('#ops-question').inputValue(), unsentQuestion);
+    assert.deepEqual(shownToStudent, [], 'refresh must not submit the preserved draft');
     // Coaching: a question reaches the learner's device as text to show; code is refused and the typed text is kept.
     await page.locator('#ops-seats .ops-seat').nth(1).getByRole('button', { name: '근거·조치' }).click(); await page.locator('#ops-question').fill('```js\nfix()\n```'); await page.getByRole('button', { name: '질문 보내기' }).click();
     await page.locator('#ops-detail-status').filter({ hasText: '코드·마크업·정답은 보낼 수 없습니다' }).waitFor(); assert.match(await page.locator('#ops-question').inputValue(), /fix\(\)/); assert.deepEqual(shownToStudent, []);
+    await page.locator('#refresh').click();
+    assert.match(await page.locator('#ops-detail-status').innerText(), /코드·마크업·정답은 보낼 수 없습니다/, 'a routine refresh preserves a different action result');
     await page.locator('#ops-question').fill('테스트 전에 어떤 결과를 기대했나요?'); await page.getByRole('button', { name: '질문 보내기' }).click(); await page.locator('#ops-detail-status').filter({ hasText: /학생 화면에 표시됨 · 읽음·수행 여부는 알 수 없음/ }).waitFor();
     assert.deepEqual(shownToStudent, ['테스트 전에 어떤 결과를 기대했나요?']); assert.deepEqual([studentWork.history, studentWork.draft, studentWork.files], [['q1', 'a1'], '쓰던 글', ['index.html']], 'coaching changed nothing on the learner side');
     // Provenance: simulated / unverified evidence is marked in the caution colour, never counted as real; review is not approval.

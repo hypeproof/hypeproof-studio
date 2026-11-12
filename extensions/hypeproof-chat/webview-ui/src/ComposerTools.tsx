@@ -5,13 +5,16 @@ import { ChatIcon } from './ChatDetails';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
 import { useMenuTypeahead } from './menuTypeahead';
+import { postToHost } from './vscode';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
-export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, onSketch, webSearchItem = true }: {
+export function ComposerTools({ mode, onMode, webSearch, locked, planFirst, onAttach, onAttachFile, onSketch, webSearchItem = true }: {
   mode: TurnToolMode;
   onMode: (mode: TurnToolMode) => void;
   webSearch?: { available: boolean; reason?: string };
   locked: boolean;
+  /** CGP-CHAT-R-004 — "계획 먼저" lives in this menu on a personal seat, so the composer gains no row. */
+  planFirst?: { on: boolean; locked: boolean };
   onAttach?: () => void;
   /** CGP-CHAT-R-011 — attach a work-folder text file to the next message. */
   onAttachFile?: () => void;
@@ -44,6 +47,10 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
       {onAttach && <button type="button" role="menuitem" onClick={() => { close(); onAttach(); }}><ChatIcon kind="image" /><span>이미지 첨부<small>이 메시지에 사진이나 화면 추가</small></span></button>}
       {onSketch && <button type="button" role="menuitem" onClick={() => { close(); onSketch(); }}><ChatIcon kind="image" /><span>그려서 보여주기<small>그림을 그려 이 메시지에 붙여요</small></span></button>}
       {onAttachFile && <button type="button" role="menuitem" onClick={() => { close(); onAttachFile(); }}><ChatIcon kind="file" /><span>작업 폴더 파일 붙이기<small>글로 된 파일 내용을 다음 메시지에 함께 보내요</small></span></button>}
+      {planFirst && <button type="button" role="menuitemcheckbox" aria-checked={planFirst.on} aria-disabled={planFirst.locked} onClick={() => {
+        if (planFirst.locked) return;
+        postToHost({ type: 'planFirstSet', on: !planFirst.on }); close(); root.current?.closest('.hps-input')?.querySelector('textarea')?.focus({ preventScroll: true });
+      }}><ChatIcon kind="check-square" /><span>계획 먼저<small>{planFirst.locked ? '답변이 끝난 뒤에 바꿀 수 있어요' : '실행하기 전에 계획을 먼저 보여 줘요'}</small></span>{planFirst.on && <ChatIcon kind="check" />}</button>}
       {webSearchItem && <button type="button" role="menuitemcheckbox" aria-checked={mode === 'web-search'} aria-disabled={locked || !webSearch?.available} onClick={() => {
         if (locked || !webSearch?.available) return;
         onMode(mode === 'web-search' ? 'auto' : 'web-search'); close(); root.current?.closest('.hps-input')?.querySelector('textarea')?.focus({ preventScroll: true });

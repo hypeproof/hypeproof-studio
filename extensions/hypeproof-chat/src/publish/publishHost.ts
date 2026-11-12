@@ -282,9 +282,11 @@ export class SitePublisher {
           }
           return this.confirmRegistration(login, repo);
         },
+        // Jay 2026-11-04 — a destination allowed before from this folder publishes without asking again.
+        rememberedDestination: (login, repo, stage) => this.registry.remembersFor(login, repo, workspace, (a, b) => this.host.sameFolder(a, b), stage),
         lastPushedSha: (login, repo) => this.registry.get(login, repo)?.lastPushedSha,
-        onPushed: async (login, repo, sha) => {
-          await this.registry.recordPush(login, repo, sha, workspace);
+        onPushed: async (login, repo, sha, stage) => {
+          await this.registry.recordPush(login, repo, sha, workspace, stage);
         },
         onStep: (step, at) => {
           this.host.log(`[publish] ${new Date(at).toISOString()} ${step.id} ${step.status} ${step.detail_ko}`);

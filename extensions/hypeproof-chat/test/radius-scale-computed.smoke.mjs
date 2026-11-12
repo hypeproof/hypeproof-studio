@@ -150,6 +150,7 @@ const DIALOGS = [
   ['hps-write-approval hp-modal', 'WriteApprovalDialog.tsx'],
   ['hp-modal tw-appearance', 'TaskAppearance.tsx'],
   ['tw-trash-dialog hp-modal', 'ActivityTrashPanel.tsx'],
+  ['hps-memory-settings-confirm hp-modal', 'MemorySettingsList.tsx'],
   ['hps-preferences hp-modal', 'ChatPreferences.tsx'],
 ];
 {

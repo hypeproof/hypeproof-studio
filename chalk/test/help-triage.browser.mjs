@@ -39,7 +39,7 @@ const SETUP = `(() => {
     return { ok: true, status: 200, json: async () => ({ ...row, content: { question: '질문 ' + id } }) };
   };
   refresh = () => { __refreshes++; };
-  token = 't'; cohort = 'c1'; board = { session: { session_id: 'S1' }, seats: [] };
+  connected = true; cohort = 'c1'; board = { session: { session_id: 'S1' }, seats: [] };
   helpRows = Object.values(__shares).map((r) => ({ ...r })); helpState = 'ok'; helpCounts = { open: 3, answered: 0 }; helpExpanded = true;
   renderHelp(); return document.querySelectorAll('#ops-help-list li[data-help-id]').length;
 })()`;

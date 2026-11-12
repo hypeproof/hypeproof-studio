@@ -18,9 +18,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-selection'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const chalkServer = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 chalkServer.listen(0, '127.0.0.1'); await once(chalkServer, 'listening');
@@ -39,7 +40,7 @@ try {
   const held = []; let holdNext = 0;
   await page.route('**/report-batches', async (route) => { if (route.request().method() !== 'POST' || holdNext <= 0) return route.continue(); holdNext--; const response = await route.fetch(); let release; const gate = new Promise((r) => { release = r; }); held.push({ body: JSON.parse(route.request().postData()), release }); await gate; await route.fulfill({ response }); });
   const heldAnswer = async (k) => { for (let i = 0; i < 100 && held.length <= k; i++) await page.waitForTimeout(50); assert.ok(held[k], 'request ' + k + ' was not intercepted'); return held[k]; };
-  await page.goto(origin + '/manage'); await page.locator('#token').fill(local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click();
+  await page.goto(origin + '/manage'); await signInChalk(page, local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click();
   await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); const row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`); await row('A8').waitFor();
   await page.locator('#ops-tools > summary').click();
   const box = (id) => row(id).getByLabel('선택'), selection = () => page.locator('#ops-selection').innerText(), state = () => page.locator('#ops-pick-state').innerText(), note = () => page.locator('#ops-pick-note').innerText(), refresh = async () => { await page.locator('#refresh').click(); await page.waitForTimeout(700); };

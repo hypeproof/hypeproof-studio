@@ -31,9 +31,13 @@ fi
 APP="$(cd "$APP" && pwd)"
 
 PASS=0; FAIL=0
+# Every failed item, repeated in the final summary line, so the reason a build
+# stopped is the last thing in the log (#3553: earlier step output misled the
+# rc.2 diagnosis toward signing).
+FAILED_ITEMS=()
 
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; PASS=$((PASS+1)); }
-bad()  { printf "  \033[31m✗\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
+bad()  { printf "  \033[31m✗\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); FAILED_ITEMS+=("$1"); }
 warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 
 echo "Verifying $APP"
@@ -76,61 +80,19 @@ fi
 # 5. Residual strings (excluding license/attribution)
 #
 # Scope: USER-VISIBLE branding surfaces only (nls bundles, HTML, product.json,
-# icons…). Excluded paths hold internal strings that legitimately contain
-# "codium" and cannot/need not be rebranded (#355; all present in shipped
-# v0.1.16 too):
-#   - node_modules/        third-party internals: axios minified JS has a
-#                          coincidental match; @vscode/fs-copyfile is a native
-#                          binary with embedded strings
-#   - dist/vendor/         vendored Agent SDK JS (editor-detection strings)
-#   - policies/            upstream-generated MDM policy templates
-#   - Resources/app/package.json   upstream `author: "VSCodium"` metadata
-# Proper rebranding of the last two is tracked in #355 (follow-up, non-UI).
+# icons…). The rule (grep, path exclusions, benign-context triage, #356 toast
+# warn) lives in scripts/check-residual-branding.sh so studio-pr-ci runs the
+# SAME rule on the shipped extension files of every PR (#3553). The upstream
+# `author: "VSCodium"` in Resources/app/package.json is excluded here (#355).
 echo
 echo "Scanning Resources/ for residual 'codium'/'VSCodium' (excluding licenses)..."
-# -I skips binaries (tunnel executable, .node addons — embedded linker strings).
-CANDIDATES=$(grep -rIli "codium" "$APP/Contents/Resources" 2>/dev/null \
-  | grep -viE "license|notice|attribution|third.?party|credits" \
-  | grep -vE "/node_modules/|/dist/vendor/|/policies/" \
-  | grep -vxF "$APP/Contents/Resources/app/package.json" || true)
-# Context-level triage (token/context-wise, not line-wise — minified bundles
-# are single-line). Benign, never-rendered categories (#355):
-#   - `github.com/VSCodium/sourcemaps/…` sourceMappingURL comments
-#   - `@vscodium/…` npm package ids embedded in bundles
-#   - `"author":{"name":"VSCodium"}` package.json metadata inlined by esbuild
-#   - `i("VSCodium",this.productName…` policy-watcher registration key
-# Known REAL leak, warn-not-fail: the extension-install reload toast says
-# "Please reload VSCodium…" (upstream hardcode; needs a fork patch — tracked
-# in #356, ships in v0.1.16 already, non-blocking for worker/extension work).
-# Anything else is a NEW leak → hard fail.
-KNOWN_TOAST="reload VSCodium to enable"
-HITS=""
-KNOWN_HITS=""
-while IFS= read -r f; do
-  [[ -z "$f" ]] && continue
-  CTX=$(grep -oi ".\{0,50\}codium.\{0,50\}" "$f" 2>/dev/null \
-    | grep -vi "sourcemaps" \
-    | grep -vi "@vscodium/" \
-    | grep -viF '"author":{"name":"VSCodium"}' \
-    | grep -viF 'VSCodium",this.productName' || true)
-  [[ -z "$CTX" ]] && continue
-  if printf '%s' "$CTX" | grep -qviF "$KNOWN_TOAST"; then
-    HITS+="$f"$'\n'
-  else
-    KNOWN_HITS+="$f"$'\n'
-  fi
-done <<< "$CANDIDATES"
-HITS="${HITS%$'\n'}"
-if [[ -n "$KNOWN_HITS" ]]; then
-  warn "Known reload-toast leak ('Please ${KNOWN_TOAST}…', #356) in:"
-  printf '%s' "$KNOWN_HITS" | sed 's/^/      /'
-fi
-if [[ -z "$HITS" ]]; then
-  ok "No residual branding in Resources/"
-else
-  bad "Residual 'codium' found in:"
-  echo "$HITS" | sed 's/^/      /'
-fi
+bash "$(dirname "${BASH_SOURCE[0]}")/check-residual-branding.sh" \
+  --exclude-file "$APP/Contents/Resources/app/package.json" "$APP/Contents/Resources"
+case $? in
+  0) ok "No residual branding in Resources/" ;;
+  1) bad "Residual 'codium' found (files and context listed above)" ;;
+  *) bad "Residual branding scan could not run (check-residual-branding.sh usage error)" ;;
+esac
 
 # 6. product.json baked into the app
 PJSON=$(find "$APP/Contents/Resources" -name "product.json" 2>/dev/null | head -1)
@@ -357,4 +319,13 @@ fi
 
 echo
 echo "Result: $PASS passed, $FAIL failed"
+if (( FAIL > 0 )); then
+  echo "verify-branding FAILED items:"
+  for item in "${FAILED_ITEMS[@]}"; do echo "  - $item"; done
+  # One annotation on the run summary page naming what failed (not the step before it).
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    SUMMARY="$(printf '%s; ' "${FAILED_ITEMS[@]}")"
+    echo "::error title=verify-branding.sh failed ($FAIL item(s))::${SUMMARY%; }"
+  fi
+fi
 exit $(( FAIL > 0 ? 1 : 0 ))

@@ -1,0 +1,24 @@
+/* CGP-SHELL-D-023 — the settings-change notice is a system line in the chat stream: Panel background, no avatar,
+   no border accent of a message, never over the composer. Icon + text, so the meaning never rests on colour. */
+.hps-lesson-change {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hp-space-2);
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  margin-block: var(--hp-space-2);
+  padding-block: var(--hp-space-2);
+  padding-inline: var(--hp-space-3);
+  border-radius: var(--hp-space-2);
+  background: var(--hp-bg-panel-default);
+  color: var(--hp-text-primary-default);
+  font-size: var(--hp-font-caption);
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.hps-lesson-change-icon { flex: none; display: inline-flex; color: var(--hp-text-muted-default); }
+.hps-lesson-change-text { margin: 0; min-inline-size: 0; }
+@media (forced-colors: active) {
+  .hps-lesson-change { color: CanvasText; background: Canvas; border: var(--ds-c-focus-width) solid CanvasText; }
+  .hps-lesson-change-icon { color: CanvasText; }
+}

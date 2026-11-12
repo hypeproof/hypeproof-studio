@@ -4,6 +4,10 @@ import { buildPreviewShellCsp, PREVIEW_IFRAME_ALLOW, PREVIEW_IFRAME_SANDBOX } fr
 import { sanitizeArtifactEntry, ARTIFACT_FILES, applyPlaceholderDefaults } from "./previewArtifacts";
 import { injectBaseHref, injectInnerCsp } from "./previewHtml";
 import { noteHostWrite } from "./artifactProvenance";
+import type { PreviewReviewBar } from "./turnReviewView";
+
+/** CGP-ART-D-002 — a press on the preview's review bar, for the chat host's turn review. */
+export interface PreviewReviewAction { action: "revert" | "keep" | "show"; turnId: string }
 
 /**
  * HTML preview for AI-generated webapps + user-opened .html files.
@@ -78,7 +82,66 @@ export class PreviewProvider {
   private readonly resultEmitter = new vscode.EventEmitter<Record<string, unknown>>();
   readonly onResult = this.resultEmitter.event;
 
-  constructor(private readonly _context: vscode.ExtensionContext) {}
+  // CGP-ART-D-002 / DES-ART-02 — the review bar pinned at the bottom of the preview. The chat host
+  // owns the turn review (turnRestore.ts); this panel only mirrors it and forwards presses, so the
+  // preview and the chat offer one undo, never two.
+  private reviewBar: PreviewReviewBar | null = null;
+  private toastedTurn: string | null = null;
+  private reviewSeq = 0;
+  private readonly reviewActionEmitter = new vscode.EventEmitter<PreviewReviewAction>();
+  readonly onReviewAction = this.reviewActionEmitter.event;
+
+  /** Mirror the chat's turn review (null hides the bar). A revert result is shown once, as a toast. */
+  setReviewBar(bar: PreviewReviewBar | null): void {
+    const seq = ++this.reviewSeq;
+    if (bar?.state === "restored") {
+      if (this.toastedTurn === bar.turnId) bar = null;
+      else {
+        // The toast says whether the page shown is the reverted one: only a watched file that was
+        // read again and shown is; a generated page, a removed file or a failed read is not.
+        this.toastedTurn = bar.turnId;
+        this.reviewBar = null;
+        const restored = bar;
+        void (this.watchedFile ? this.reloadWatched() : Promise.resolve(false)).then((reloaded) => {
+          // A newer bar sent while the page was re-read wins; the late toast is dropped.
+          if (seq === this.reviewSeq && this.ready) void this.panel?.webview.postMessage({ type: "previewReviewState", bar: { ...restored, stale: !reloaded } });
+        });
+        return;
+      }
+    }
+    this.reviewBar = bar;
+    this.postReviewState();
+  }
+
+  private postReviewState(): void {
+    if (this.ready) void this.panel?.webview.postMessage({ type: "previewReviewState", bar: this.reviewBar });
+  }
+
+  /** Re-read the watched file and show it again (after a revert put its earlier bytes back). */
+  private async reloadWatched(): Promise<boolean> {
+    if (!this.panel || !this.watchedFile) return false;
+    const revision = this.previewRevision;
+    const file = this.watchedFile;
+    const base = this.watchedBase;
+    const ask = this.askAboutFile;
+    try {
+      const html = this.watchedRead ? await this.watchedRead() : Buffer.from(await vscode.workspace.fs.readFile(file)).toString("utf8");
+      if (html === null || revision !== this.previewRevision) return false;
+      await this.show(html, base, ask, true);
+      return true;
+    } catch { return false; /* file may have been deleted */ }
+  }
+
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly releaseAutomationEntry?: () => vscode.ViewColumn | undefined,
+  ) {}
+
+  /** Use the existing work canvas beside the chat, not a third editor group. */
+  async showAutomation(html: string): Promise<void> {
+    const column = this.releaseAutomationEntry?.() ?? this.panel?.viewColumn ?? vscode.ViewColumn.One;
+    await this.show(html, undefined, undefined, false, column);
+  }
   /** REQ-STUDIO-FOLDER-CONSENT — the chat host's write question; null = may write. */
   private writeRefusal: (target: string) => string | null = () => null;
   setWriteGuard(guard: (target: string) => string | null): void { this.writeRefusal = guard; }
@@ -97,14 +160,7 @@ export class PreviewProvider {
     this.saveSubscription = vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (!this.watchedFile) return;
       if (doc.uri.fsPath !== this.watchedFile.fsPath) return;
-      const revision = this.previewRevision;
-      const base = this.watchedBase;
-      const ask = this.askAboutFile;
-      try {
-        const html = this.watchedRead ? await this.watchedRead() : Buffer.from(await vscode.workspace.fs.readFile(this.watchedFile)).toString("utf8");
-        if (html === null || revision !== this.previewRevision) return;
-        await this.show(html, base, ask, true);
-      } catch { /* file may have been deleted; ignore */ }
+      await this.reloadWatched();
     });
   }
 
@@ -113,6 +169,7 @@ export class PreviewProvider {
    * Call this whenever the resolved profile changes (e.g. after token set).
    */
   setLabels(labels: { title: string; placeholder: string; emoji: string }): void {
+    if (labels.title === this.labels.title && labels.placeholder === this.labels.placeholder && labels.emoji === this.labels.emoji) return;
     this.labels = labels;
     if (this.panel) {
       this.panel.title = labels.title;
@@ -135,7 +192,7 @@ export class PreviewProvider {
    * back to `about:srcdoc` and relative paths remain dead (matches old
    * behavior, just doesn't crash).
    */
-  async show(html: string, basePath?: vscode.Uri, askAboutFile?: () => Promise<void>, reload = false): Promise<void> {
+  async show(html: string, basePath?: vscode.Uri, askAboutFile?: () => Promise<void>, reload = false, viewColumn?: vscode.ViewColumn): Promise<void> {
     this.previewRevision++;
     this.askAboutFile = askAboutFile;
     // An unrelated/generated preview must not retain the previous file's save watcher.
@@ -159,7 +216,7 @@ export class PreviewProvider {
       this.panel = vscode.window.createWebviewPanel(
         "hypeproofPreview",
         this.labels.title,
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        { viewColumn: viewColumn ?? vscode.ViewColumn.Beside, preserveFocus: true },
         {
           enableScripts: true,
           retainContextWhenHidden: true,
@@ -172,6 +229,7 @@ export class PreviewProvider {
         if (msg?.type === "previewReady") {
           this.ready = true;
           this.postAskState();
+          this.postReviewState();
           if (this.pendingHtml !== null) {
             this.panel?.webview.postMessage({ type: "renderPreview", revision: this.previewRevision, html: this.pendingHtml });
             this.pendingHtml = null;
@@ -186,6 +244,12 @@ export class PreviewProvider {
           });
         } else if (msg?.type === "preview_request_action") {
           void this.handlePreviewRequestAction(msg);
+        } else if (msg?.type === "preview_review_action") {
+          const bar = this.reviewBar;
+          const action = msg.action;
+          if (!bar || msg.turnId !== bar.turnId || (action !== "revert" && action !== "keep" && action !== "show")) return;
+          if (action !== "show" && bar.state !== "open") return;
+          this.reviewActionEmitter.fire({ action, turnId: bar.turnId });
         } else if (msg?.type === "preview_result") {
           this.resultEmitter.fire(sanitizeQuestResult(msg.result));
         }
@@ -204,7 +268,7 @@ export class PreviewProvider {
       });
     } else {
       // Bring the existing panel forward without stealing focus from chat.
-      this.panel.reveal(vscode.ViewColumn.Beside, true);
+      this.panel.reveal(viewColumn ?? this.panel.viewColumn, true);
     }
 
     // Inject `<base href="...">` so relative paths (./pic.png, style.css,
@@ -328,9 +392,40 @@ export class PreviewProvider {
     #ask-file:focus-visible { outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
     @media (forced-colors: active) { #ask-file { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
     #placeholder { display:flex; flex-direction:column; align-items:center;
-                   justify-content:center; height:100%; opacity:0.7; gap:8px; }
+                   justify-content:center; flex:1; min-height:0; opacity:0.7; gap:8px; }
     #placeholder .big { font-size: 40px; }
     iframe { width: 100%; flex: 1; min-height: 0; border: 0; background: #fff; display: block; }
+    /* CGP-ART-D-002 — a strip below the page, never over it: the page's last pixels stay visible. */
+    #review-strip[hidden] { display: none; }
+    #review-strip { flex: none; display: flex; justify-content: center; box-sizing: border-box;
+      min-height: 48px; padding: 1px 8px; background: var(--vscode-editor-background, #1b1b2a);
+      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35)); overflow: hidden; }
+    #review-bar[hidden], #review-toast:empty { display: none; }
+    #review-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
+      max-width: 100%; color: var(--vscode-foreground, #ddd); }
+    #review-bar.entering { animation: hp-review-in 120ms ease-out; }
+    @keyframes hp-review-in { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { #review-bar.entering { animation: none; } }
+    #review-text { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
+    #review-title, #review-notice { margin: 0; font-size: 14px; line-height: 20px; }
+    #review-notice[hidden] { display: none; }
+    #review-notice { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32em; opacity: .85; }
+    #review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    #review-actions button[hidden] { display: none; }
+    #review-actions button { min-height: 44px; min-width: 44px; padding: 0 10px; font: inherit; font-size: 14px;
+      border-radius: 4px; cursor: pointer; border: 1px solid var(--vscode-button-border, transparent); }
+    #review-actions button.primary { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+    #review-actions button.secondary { color: var(--vscode-button-secondaryForeground, #fff);
+      background: var(--vscode-button-secondaryBackground, #3a3d41); border-color: var(--vscode-contrastBorder, rgba(128,128,128,.6)); }
+    #review-actions button:disabled { opacity: .6; cursor: default; }
+    #review-actions button:focus-visible { outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
+    #review-toast { align-self: center; margin: 0; font-size: 14px; color: var(--vscode-foreground, #ddd); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    @media (forced-colors: active) {
+      #review-strip { border-top-color: CanvasText; }
+      #review-actions button { color: ButtonText; background: ButtonFace; border-color: ButtonText; forced-color-adjust: none; }
+      #review-actions button.primary { color: HighlightText; background: Highlight; }
+    }
   </style>
 </head>
 <body>
@@ -340,6 +435,19 @@ export class PreviewProvider {
     <div>${this.labels.placeholder}</div>
   </div>
   <iframe id="frame" style="display:none" sandbox="${PREVIEW_IFRAME_SANDBOX}" allow="${PREVIEW_IFRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>
+  <div id="review-strip" hidden>
+    <section id="review-bar" hidden aria-label="AI가 바꾼 곳" aria-describedby="review-move-hint">
+      <div id="review-text"><p id="review-title"></p><p id="review-notice" aria-live="polite" hidden></p></div>
+      <div id="review-actions">
+        <button id="review-show" type="button" class="secondary">바뀐 곳 보기</button>
+        <button id="review-revert" type="button" class="secondary">되돌리기</button>
+        <button id="review-keep" type="button" class="primary">이대로 둘게요</button>
+      </div>
+      <span id="review-move-hint" class="sr-only">왼쪽·오른쪽 화살표 키로 이 막대를 옮기고, Home 키로 제자리에 놓아요.</span>
+    </section>
+    <p id="review-toast" aria-hidden="true"></p>
+  </div>
+  <p id="review-live" class="sr-only" role="status" aria-live="polite"></p>
   <script>
   (() => {
     const vscode = acquireVsCodeApi();
@@ -360,14 +468,108 @@ export class PreviewProvider {
       vscode.postMessage({ type: "preview_ask_file", revision });
     });
 
-    // Only the outer VS Code webview frame may drive the shell: it delivers host
-    // messages with contentWindow.postMessage, so ev.source === window.parent.
-    // Everything else (the preview page, frames nested in it, detached frames whose
-    // parent is null, a null source) is untrusted.
+    // Only this shell's own host frame may drive it. VS Code's webview preamble sets
+    // window.parent = window (and window.top) in this document before this script runs, so
+    // ev.source cannot be compared with window.parent (#3476: every host message was dropped).
+    // The real parent is the window whose frames contain this shell; cross-origin frames
+    // access reads the real frame tree. The preview page, frames nested in it, detached frames,
+    // other webviews in the window (siblings), the shell itself and a null source are untrusted.
+    const fromHost = (source) => {
+      if (!source || source === window || source === frame.contentWindow) return false;
+      try {
+        for (let i = 0; i < source.length; i++) if (source[i] === window) return true;
+      } catch (_) { /* unreadable: untrusted */ }
+      return false;
+    };
+    // CGP-ART-D-002 / DES-ART-02 — the review bar mirrors the chat's turn review; presses go to the host,
+    // which runs the chat's own revert or keep (one undo). It never auto-dismisses while open.
+    const strip = document.getElementById("review-strip");
+    const reviewBar = document.getElementById("review-bar");
+    const reviewTitle = document.getElementById("review-title");
+    const reviewShow = document.getElementById("review-show");
+    const reviewRevert = document.getElementById("review-revert");
+    const reviewKeep = document.getElementById("review-keep");
+    const toast = document.getElementById("review-toast");
+    const reviewNotice = document.getElementById("review-notice");
+    // The live region stays in the document (never inside a hidden strip), so the toast is announced.
+    const live = document.getElementById("review-live");
+    let review = null;
+    let toastTimer = null;
+    let offset = 0;
+    const placeBar = () => {
+      const room = Math.max(0, (strip.clientWidth - 16 - reviewBar.offsetWidth) / 2);
+      offset = Math.max(-room, Math.min(room, offset));
+      reviewBar.style.transform = offset ? "translateX(" + offset + "px)" : "";
+    };
+    const syncStrip = () => { strip.hidden = reviewBar.hidden && !toast.textContent; };
+    const showToast = (text) => {
+      if (toastTimer) clearTimeout(toastTimer);
+      toast.textContent = text;
+      live.textContent = text;
+      syncStrip();
+      toastTimer = setTimeout(() => { toastTimer = null; toast.textContent = ""; live.textContent = ""; syncStrip(); }, 4000);
+    };
+    const renderReview = (bar) => {
+      const valid = bar && typeof bar === "object" && typeof bar.turnId === "string" && Number.isInteger(bar.count) && bar.count >= 0
+        && ["open", "restoring", "restored", "failed"].includes(bar.state);
+      const wasHidden = reviewBar.hidden;
+      review = null;
+      if (valid && bar.state === "restored") {
+        reviewBar.hidden = true;
+        showToast(bar.stale === true ? "되돌렸어요. 미리보기를 다시 열면 되돌린 내용이 보여요." : "되돌렸어요");
+        return;
+      }
+      if (!valid) { reviewBar.hidden = true; syncStrip(); return; }
+      review = { turnId: bar.turnId, state: bar.state };
+      if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+      toast.textContent = "";
+      live.textContent = "";
+      // The count always stays; the chat bar's notice is a second line, one line long (full text in title).
+      const notice = bar.state === "open" && typeof bar.notice === "string" ? bar.notice : "";
+      reviewTitle.textContent = bar.state === "failed" ? "되돌리지 못했어요. 채팅에서 확인해 주세요."
+        : bar.state === "restoring" ? "되돌리는 중…" : "AI가 " + bar.count + "곳을 바꿨어요";
+      reviewNotice.textContent = notice;
+      reviewNotice.title = notice;
+      reviewNotice.hidden = !notice;
+      reviewShow.textContent = bar.state === "failed" ? "채팅에서 보기" : "바뀐 곳 보기";
+      reviewRevert.hidden = reviewKeep.hidden = bar.state === "failed";
+      reviewRevert.disabled = reviewKeep.disabled = bar.state !== "open";
+      reviewShow.disabled = false;
+      reviewBar.hidden = false;
+      syncStrip();
+      if (wasHidden) {
+        reviewBar.classList.remove("entering");
+        void reviewBar.offsetWidth;
+        reviewBar.classList.add("entering");
+      }
+      placeBar();
+    };
+    const press = (action, button) => {
+      if (!review || button.disabled || button.hidden) return;
+      if (action !== "show") { if (review.state !== "open") return; reviewRevert.disabled = reviewKeep.disabled = true; }
+      vscode.postMessage({ type: "preview_review_action", action, turnId: review.turnId });
+    };
+    reviewShow.addEventListener("click", () => press("show", reviewShow));
+    reviewRevert.addEventListener("click", () => press("revert", reviewRevert));
+    reviewKeep.addEventListener("click", () => press("keep", reviewKeep));
+    reviewBar.addEventListener("keydown", (ev) => {
+      if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") offset += ev.key === "ArrowLeft" ? -24 : 24;
+      else if (ev.key === "Home") offset = 0;
+      else return;
+      ev.preventDefault();
+      placeBar();
+    });
+    window.addEventListener("resize", () => { if (!reviewBar.hidden) placeBar(); });
+
     // host → shell → inner iframe
     window.addEventListener("message", (ev) => {
       const m = ev.data || {};
-      const trusted = ev.source === window.parent && ev.source !== window;
+      const trusted = fromHost(ev.source);
+      if (trusted && m.type === "previewReviewState") {
+        renderReview(m.bar);
+        return;
+      }
       if (trusted && m.type === "previewAskState") {
         revision = m.revision;
         enabled = m.enabled === true;

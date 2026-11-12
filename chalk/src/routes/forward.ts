@@ -11,15 +11,19 @@
 // Allowlist = the Service's own isIssuerAllowedEndpoint (shared.ts): exactly
 // the set an instructor Bearer may reach over there. Not a second list.
 //
-// Forwarded headers are a whitelist: Authorization (Bearer only — Basic is
-// refused here, Chalk is never a path to the admin password) and
-// Content-Type. In particular `cf-access-authenticated-user-email`, which
-// the Service's admin middleware trusts, is NEVER forwarded.
+// Forwarded headers are a whitelist: Authorization and Content-Type. For an
+// instructor call the Authorization is the issuer from the Lab login connection
+// (src/lib/connect.ts), never a header the request brought: a request carrying
+// its own Authorization is refused, so a pasted issuer has no way in. Student
+// share/profile routes keep forwarding the student's own Bearer. Basic is never
+// forwarded (Chalk is never a path to the admin password), and neither is
+// `cf-access-authenticated-user-email`, which the Service's admin middleware trusts.
 
 import type { Context } from "hono";
 import { resolveChalkVersion, resolveLabOrigin, resolveServiceOrigin, type ChalkEnv } from "../env.ts";
 import { isIssuerAllowedEndpoint } from "../shared.ts";
 import { completionProblems } from "../lib/completion-checklist.ts";
+import { CONNECT_SECRET_HEADER, connectSecret, instructorAuthorization } from "../lib/connect.ts";
 
 type Ctx = Context<{ Bindings: ChalkEnv; Variables: { requestId: string } }>;
 
@@ -40,18 +44,31 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
       404,
     );
   }
-  const auth = c.req.header("authorization") ?? "";
-  if (!/^Bearer\s+\S/i.test(auth.trim())) {
-    return c.json(
-      { error: { type: "auth", message: "instructor issuer token required (Authorization: Bearer …)", request_id: rid } },
-      401,
-    );
+  // Public routing metadata needs no instructor credential at the Lab origin.
+  const metadata = distribution && method === 'GET';
+  let auth = "";
+  if (studentShare || studentProfile) {
+    auth = (c.req.header("authorization") ?? "").trim();
+    if (!/^Bearer\s+\S/i.test(auth)) {
+      return c.json({ error: { type: "auth", message: "student token required (Authorization: Bearer …)", request_id: rid } }, 401);
+    }
+  } else if (!metadata) {
+    const instructor = await instructorAuthorization(c);
+    if (!instructor.ok) {
+      return c.json({ error: { type: "auth", reason: instructor.reason, message: instructor.message, request_id: rid } }, instructor.status);
+    }
+    auth = instructor.authorization;
+  }
+  // The Lab takes a Bearer only from this server, proven by the shared secret.
+  const labSecret = distribution && !metadata ? connectSecret(c.env) : null;
+  if (distribution && !metadata && !labSecret) {
+    return c.json({ error: { type: "config", message: "Lab 연결이 설정되지 않았습니다. 운영진에게 알려주세요.", request_id: rid } }, 503);
   }
 
   const origin = distribution ? resolveLabOrigin(c.env) : resolveServiceOrigin(c.env);
   const target = distribution ? `${origin}/api/workshop/boa-tokens` : `${origin}${url.pathname}${url.search}`;
-  // Public routing metadata needs no instructor credential at the Lab origin.
-  const headers = new Headers(distribution && method === 'GET' ? {} : { authorization: auth.trim() });
+  const headers = new Headers(metadata ? {} : { authorization: auth });
+  if (labSecret) headers.set(CONNECT_SECRET_HEADER, labSecret);
   const ct = c.req.header("content-type");
   if (ct) headers.set("content-type", ct);
   headers.set("x-hps-forwarded-by", `chalk/${resolveChalkVersion(c.env)}`);

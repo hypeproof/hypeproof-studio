@@ -80,6 +80,25 @@ test('howToCheck: the Release check first line drops its label; the unfilled tem
   assert.equal(howToCheck(TEMPLATE), null);
 });
 
+// #3538: with manager_check the section starts with "Release manager check:", so the first line is
+// not the check. The How to verify field is read wherever it sits in the section.
+test('howToCheck: reads the How to verify field after a Release manager check line (#3538 shape)', () => {
+  const body3538 = `## Release check
+
+Release manager check: yes — a user sees the new banner in the rc App
+How to verify: Open a task → click the banner → the banner text appears
+Smoke: no — UI copy only
+
+## Checklist
+- [ ] x`;
+  assert.equal(howToCheck(body3538), 'Open a task → click the banner → the banner text appears');
+  // negative control: the manager line alone is not the check, and a placeholder field is not read as one
+  const placeholder = body3538.replace('Open a task → click the banner → the banner text appears', '<where> → <what> → <result>');
+  assert.equal(howToCheck(placeholder), null);
+  // a "no" answer without How to verify returns nothing from the manager line either
+  assert.equal(howToCheck('## Release check\n\nRelease manager check: no — CI only\nSmoke: no — no dependency\n'), null);
+});
+
 test('smokeOf: reads the answer, reason and check; null for the unfilled template', () => {
   assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Service API for the plan',
     check: 'scripts/release/smoke/checks/s1-service-health.mjs'});
