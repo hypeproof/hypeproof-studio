@@ -2,8 +2,8 @@
 // caps, age, refund window, fraud block) is the Service's; this screen shows the state and the
 // Service's own reason. Styles reuse the local-review surface so no new tokens are needed.
 import { useEffect, useState } from "react";
-import type { StoreHostMessage, StoreInstallView, StoreItemView, StoreLocalConnections, StoreOverlaySpec, StoreOverlayView, StorePublishDraft, StoreQuestDraft, StoreRequest, StoreState, StoreStepView, StoreTab } from "../../src/skillStoreProtocol";
-import { STORE_COPY, won } from "../../src/skillStore";
+import type { StoreAttributionInput, StoreHostMessage, StoreInstallView, StoreItemView, StoreLocalConnections, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreQuestDraft, StoreRequest, StoreSellerView, StoreState, StoreStepView, StoreTab } from "../../src/skillStoreProtocol";
+import { PAYOUT_BANKS, STORE_COPY, won } from "../../src/skillStore";
 import "./localReview.css";
 import { postSkillStore } from "./vscode";
 
@@ -12,7 +12,7 @@ const TOOL_LABELS: Record<string, string> = { read: "파일 읽기", write: "파
 const SELL_TOOLS = ["read", "write"] as const;
 const CONNECTION_LABELS: Record<string, string> = { "google.gmail.send": "Gmail 보내기", "google.sheets.read": "구글 시트 읽기", "roster.read": "명단" };
 const TIER_LABELS: Record<string, string> = { none: "본인인증 전", new: "신규", standard: "일반", verified: "인증", minor: "청소년" };
-const SALE_STATUS: Record<string, string> = { refunded: "환불됨", refund_window: "환불 가능 기간", payout_hold: "지급 보류", payable: "정산 대상" };
+const SALE_STATUS: Record<string, string> = { refunded: "환불됨", refunding: "환불 처리 중", refund_window: "환불 가능 기간", payout_hold: "지급 보류", payable: "정산 대상" };
 const TONES: NonNullable<StoreOverlaySpec["tone"]>[] = ["짧게", "친근하게", "격식 있게"];
 const WIDENED: Record<string, string> = { connection: "새 연결", tool: "새 도구", output: "새 결과물" };
 const day = (ms: number) => new Date(ms).toLocaleDateString("ko-KR");
@@ -185,8 +185,90 @@ function OverlayEditor({ overlay, busy, send }: { overlay: StoreOverlayView; bus
   </section>;
 }
 
+/**
+ * The first-publication choice (policy v2 `attribution.*`): partner and instructor codes, both optional. Typed codes
+ * must be checked first so the seller sees whose they are; no code at all registers "none". `ready` gates every
+ * publish button; `input` is what the host registers once before that publish.
+ */
+interface AttributionGate { ready: boolean; input?: StoreAttributionInput }
+function useAttribution(state: StoreState) {
+  const [partnerCode, setPartnerCode] = useState("");
+  const [instructorCode, setInstructorCode] = useState("");
+  // A seller view the panel has not loaded yet is left to the Service, which refuses an undecided first publish.
+  const decided = state.seller?.attribution?.decided !== false;
+  const empty = !partnerCode.trim() && !instructorCode.trim();
+  const preview = state.attributionPreview;
+  const confirmed = Boolean(preview && preview.partnerCode === partnerCode && preview.instructorCode === instructorCode);
+  const input: StoreAttributionInput | undefined = decided ? undefined : empty ? { none: true }
+    : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}) };
+  const gate: AttributionGate = { ready: decided || empty || confirmed, input };
+  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, gate };
+}
+
+function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAttribution>; state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
+  const p = a.confirmed ? state.attributionPreview : undefined;
+  return <section className="record-omitted" aria-label="파트너·강사 코드">
+    <h2>{STORE_COPY.codesTitle}</h2>
+    <p>{STORE_COPY.codesHelp}</p>
+    <label>파트너 코드<input value={a.partnerCode} maxLength={20} autoComplete="off" placeholder="예: P-ABCDE-FGHJK" onChange={e => a.setPartnerCode(e.target.value)} /></label>
+    <label>강사 코드<input value={a.instructorCode} maxLength={20} autoComplete="off" placeholder="예: I-ABCDE-FGHJK" onChange={e => a.setInstructorCode(e.target.value)} /></label>
+    <button disabled={busy || (!a.partnerCode.trim() && !a.instructorCode.trim())} onClick={() => send({ type: "storeResolveCodes", partnerCode: a.partnerCode, instructorCode: a.instructorCode })}>코드 확인</button>
+    {p ? <p role="status">확인했어요. {p.partner ? `파트너: ${p.partner.name}${!a.partnerCode.trim() ? " (강사 소속으로 함께 등록돼요)" : ""}` : ""}{p.partner && p.instructor ? " · " : ""}{p.instructor ? `강사: ${p.instructor.name}` : ""}. 올리면 이대로 한 번만 등록돼요.</p>
+      : a.gate.ready ? <p>{STORE_COPY.codesNone}</p> : <p>{STORE_COPY.codesCheck}</p>}
+  </section>;
+}
+
+/** Earnings first: every amount the Service reports, then the payout account only once it is due. */
+function PayoutAccount({ account, busy, send }: { account: StorePayoutAccountView; busy: boolean; send: (m: StoreRequest) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [bank, setBank] = useState("");
+  const [number, setNumber] = useState("");
+  const [holder, setHolder] = useState("");
+  if (account.state === "not_due") return <p>{STORE_COPY.payoutNotDue(account.prompt_at_krw)}</p>;
+  const minor = account.holder === "linked_adult";
+  const digits = number.replace(/[\s-]/g, "");
+  const valid = Boolean(bank) && /^\d{10,16}$/.test(digits) && holder.trim().length > 0;
+  const onFile = account.state === "on_file" ? account : undefined;
+  return <section aria-label="지급 계좌">
+    {onFile && <>
+      <p>{minor ? "보호자 계좌" : "지급 계좌"}: {onFile.masked}</p>
+      <p>{onFile.holder_check === "sandbox_matched" ? STORE_COPY.payoutHolderSandbox : STORE_COPY.payoutHolderNotRun}</p>
+      {!editing && <button disabled={busy} onClick={() => setEditing(true)}>계좌 바꾸기</button>}
+    </>}
+    {account.linked_adult_required && <p>{STORE_COPY.payoutLinkedAdultPending}</p>}
+    {(!onFile || editing) && <form onSubmit={e => { e.preventDefault(); if (!valid) return; send({ type: "storeSavePayoutAccount", bankCode: bank, accountNumber: digits, holderName: holder.trim() }); setNumber(""); setEditing(false); }}>
+      <h3>{minor ? "보호자 계좌" : "정산금 받을 계좌"}</h3>
+      {!onFile && <p>{minor ? STORE_COPY.payoutDueMinor : STORE_COPY.payoutDue}</p>}
+      <label>은행<select value={bank} onChange={e => setBank(e.target.value)}><option value="">은행 고르기</option>{PAYOUT_BANKS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label>
+      <label>계좌번호<input inputMode="numeric" autoComplete="off" value={number} maxLength={20} onChange={e => setNumber(e.target.value.replace(/[^\d-]/g, ""))} /></label>
+      <label>{minor ? "보호자 이름 (예금주)" : "예금주"}<input autoComplete="off" value={holder} maxLength={30} onChange={e => setHolder(e.target.value)} /></label>
+      <p>{STORE_COPY.payoutSealed}</p>
+      <button type="submit" disabled={busy || !valid}>계좌 저장</button>
+    </form>}
+  </section>;
+}
+
+function Settlement({ s, busy, send }: { s: StoreSellerView; busy: boolean; send: (m: StoreRequest) => void }) {
+  const t = s.totals;
+  return <section aria-label="정산 내역">
+    <h2>정산 내역</h2>
+    <ul aria-label="정산 금액">
+      <li>환불 가능 기간 {won(t.refund_window)}</li>
+      <li>지급 보류 {won(t.payout_hold)}</li>
+      <li>정산 대상 {won(t.payable)}{t.rolls_over && t.payable > 0 ? ` (${won(t.payout_min_krw)} 미만은 다음 달로 넘어가요)` : ""}</li>
+      {t.refunded > 0 && <li>환불됨 {won(t.refunded)}</li>}
+    </ul>
+    <p>{s.payout === "linked_adult_required" ? STORE_COPY.payoutLinkedAdult : STORE_COPY.payoutNotStarted}</p>
+    {s.payout_account && <PayoutAccount account={s.payout_account} busy={busy} send={send} />}
+    {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
+      <tbody>{s.sales.map(x => <tr key={x.order_id}><td>{x.title}</td><td>{won(x.gross)}</td><td>{won(x.pg_fee)}</td><td>{won(x.seller)}</td><td>{won(x.commission)}</td><td>{won(x.partner)}</td><td>{won(x.instructor)}</td><td>{SALE_STATUS[x.status] ?? x.status}</td><td>{x.policy_version}</td></tr>)}</tbody></table>
+      : <p>아직 판매가 없어요.</p>}
+    {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
+  </section>;
+}
+
 /** Scene 1: the finished quest, name and description prefilled; the seller sets a price within the tier cap. */
-function QuestPublish({ draft, cap, busy, send }: { draft: StoreQuestDraft; cap?: number; busy: boolean; send: (m: StoreRequest) => void }) {
+function QuestPublish({ draft, cap, busy, send, gate }: { draft: StoreQuestDraft; cap?: number; busy: boolean; send: (m: StoreRequest) => void; gate: AttributionGate }) {
   const [title, setTitle] = useState(draft.title);
   const [summary, setSummary] = useState(draft.summary);
   const [price, setPrice] = useState(0);
@@ -199,7 +281,7 @@ function QuestPublish({ draft, cap, busy, send }: { draft: StoreQuestDraft; cap?
     <label>가격 (원, 부가세 포함, 0이면 무료)<input inputMode="numeric" value={String(price)} onChange={e => setPrice(Number(e.target.value.replace(/\D/g, "").slice(0, 7) || 0))} /></label>
     {cap !== undefined && <p>{over ? `판매자 등급의 가격 한도(${won(cap)})를 넘었어요.` : `한 개당 최대 ${won(cap)}까지 정할 수 있어요.`}</p>}
     <p>{STORE_COPY.questPrivate}</p>
-    <button disabled={busy || over || !title.trim() || !summary.trim()} onClick={() => send({ type: "storePublishQuest", title, summary, price_krw: price })}>스토어에 등록</button>
+    <button disabled={busy || over || !gate.ready || !title.trim() || !summary.trim()} onClick={() => send({ type: "storePublishQuest", title, summary, price_krw: price, ...(gate.input ? { attribution: gate.input } : {}) })}>스토어에 등록</button>
   </section>;
 }
 
@@ -209,12 +291,17 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
   const s = state.seller;
   const set = (patch: Partial<StorePublishDraft>) => setDraft(d => ({ ...d, ...patch }));
   const ready = draft.title.trim() && draft.summary.trim() && draft.body.trim();
+  const a = useAttribution(state);
+  const bound = s?.attribution;
   return <>
-    {state.questDraft && <QuestPublish draft={state.questDraft} cap={s?.cap_krw} busy={busy} send={send} />}
+    {!a.decided && <AttributionStep a={a} state={state} busy={busy} send={send} />}
+    {state.questDraft && <QuestPublish draft={state.questDraft} cap={s?.cap_krw} busy={busy} send={send} gate={a.gate} />}
     {s && <section className="record-policy" aria-label="판매자 정보">
       <p>판매자 등급: {TIER_LABELS[s.tier] ?? s.tier} · 한 개당 최대 {won(s.cap_krw)}</p>
       {s.tier === "none" && <p>유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 지금은 무료 스킬만 올릴 수 있어요.</p>}
-      <p>{s.origin ? "처음 들은 강의의 강사와 교육 파트너에게 HypeProof 수수료의 일부가 계속 나눠져요." : "처음 들은 강의 기록이 없어요."}</p>
+      {bound?.decided && <p>{bound.partner || bound.instructor
+        ? `등록한 코드: ${[bound.partner ? `파트너 ${bound.partner.name}` : "", bound.instructor ? `강사 ${bound.instructor.name}` : ""].filter(Boolean).join(" · ")}. `
+        : `${STORE_COPY.codesEmpty} `}{bound.seller_editable ? "" : STORE_COPY.codesFixed}</p>}
     </section>}
     <section aria-label="스킬 올리기">
       <h2>스킬 올리기</h2>
@@ -225,16 +312,8 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
       <fieldset><legend>쓰는 도구</legend>{SELL_TOOLS.map(k => [k, TOOL_LABELS[k]] as const).map(([k, label]) => <label key={k}><input type="checkbox" checked={draft.tools.includes(k)} onChange={e => set({ tools: e.target.checked ? [...draft.tools, k] : draft.tools.filter(t => t !== k) })} />{label}</label>)}</fieldset>
       <label>가격 (원, 부가세 포함, 0이면 무료)<input inputMode="numeric" value={String(draft.price_krw)} onChange={e => set({ price_krw: Number(e.target.value.replace(/\D/g, "").slice(0, 7) || 0) })} /></label>
       <p>키, 토큰, 비밀번호, 이메일 주소, 전화번호, 외부 MCP 설정은 넣을 수 없어요. 올리면 자동으로 검사해요.</p>
-      <button disabled={busy || !ready} onClick={() => send({ type: "storePublish", draft })}>스토어에 올리기</button>
+      <button disabled={busy || !ready || !a.gate.ready} onClick={() => send({ type: "storePublish", draft, ...(a.gate.input ? { attribution: a.gate.input } : {}) })}>스토어에 올리기</button>
     </section>
-    {s && <section aria-label="정산 내역">
-      <h2>정산 내역</h2>
-      <p>{s.payout === "linked_adult_required" ? STORE_COPY.payoutLinkedAdult : STORE_COPY.payoutNotStarted}</p>
-      <p>정산 대상 {won(s.totals.payable)} · 대기 {won(s.totals.pending)}{s.totals.rolls_over ? ` · ${won(s.totals.payout_min_krw)} 미만은 다음 달로 넘어가요.` : ""}</p>
-      {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
-        <tbody>{s.sales.map(x => <tr key={x.order_id}><td>{x.title}</td><td>{won(x.gross)}</td><td>{won(x.pg_fee)}</td><td>{won(x.seller)}</td><td>{won(x.commission)}</td><td>{won(x.partner)}</td><td>{won(x.instructor)}</td><td>{SALE_STATUS[x.status] ?? x.status}</td><td>{x.policy_version}</td></tr>)}</tbody></table>
-        : <p>아직 판매가 없어요.</p>}
-      {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
-    </section>}
+    {s && <Settlement s={s} busy={busy} send={send} />}
   </>;
 }

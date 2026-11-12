@@ -21,7 +21,7 @@ async function authenticatedDownload(spec, destination) {
 
 export async function bootstrapServicePackages({ root = repositoryRoot, manifest, download = authenticatedDownload } = {}) {
   const pins = manifest ?? JSON.parse(await readFile(join(root, 'config/service-packages.json'), 'utf8'));
-  if (pins.version !== 1 || pins.repository !== repo || !Array.isArray(pins.packages) || pins.packages.length !== 5) throw new Error('Invalid private Service package manifest');
+  if (pins.version !== 1 || pins.repository !== repo || !Array.isArray(pins.packages) || pins.packages.length !== 7) throw new Error('Invalid private Service package manifest');
   const assets = new Set();
   for (const spec of pins.packages) {
     if (!spec || !safeAsset.test(spec.asset) || !/^[a-f0-9]{64}$/.test(spec.sha256) || typeof spec.tag !== 'string' || !/^[a-z0-9][a-z0-9.-]{0,100}$/.test(spec.tag) || assets.has(spec.asset)) throw new Error('Invalid private Service package pin');

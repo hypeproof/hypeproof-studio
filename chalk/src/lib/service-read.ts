@@ -2,6 +2,7 @@
 // remain authoritative; an unavailable Service never becomes an empty board.
 import type { ChalkCtx } from "../middleware.ts";
 import { resolveServiceOrigin } from "../env.ts";
+import { instructorAuthorization } from "./connect.ts";
 
 export async function forwardServiceRead(
   c: ChalkCtx,
@@ -10,9 +11,13 @@ export async function forwardServiceRead(
 ): Promise<Response> {
   const rid = c.get("requestId") ?? "no-request-id";
   c.header("cache-control", "no-store");
-  const auth = c.req.header("authorization")?.trim() ?? "";
   const headers = new Headers({ "x-request-id": rid });
-  if (/^Bearer\s+\S/i.test(auth)) headers.set("authorization", auth);
+  // The instructor Bearer is the Lab-connected issuer, never a request header.
+  const instructor = await instructorAuthorization(c);
+  if (instructor.ok) headers.set("authorization", instructor.authorization);
+  else if (instructor.reason === "issuer_header_refused") {
+    return c.json({ error: instructor.message, reason: instructor.reason }, 401);
+  }
   if (options.operator) {
     const operatorSecret = c.req.header("x-hps-operator-secret");
     if (operatorSecret) headers.set("x-hps-operator-secret", operatorSecret);
@@ -25,7 +30,7 @@ export async function forwardServiceRead(
   }
   if (!options.retrieval && !headers.has("authorization") &&
       !headers.has("x-hps-operator-secret") && !headers.has("x-hps-chalk-operator-identity")) {
-    return c.json({ error: "instructor issuer token required (Authorization: Bearer …)" }, 401);
+    return c.json({ error: instructor.ok ? "instructor connection required" : instructor.message, reason: instructor.ok ? "not_connected" : instructor.reason }, 401);
   }
   const search = new URL(c.req.url).search;
   const cohortId = c.req.param("id");

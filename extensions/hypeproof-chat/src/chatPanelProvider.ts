@@ -1,3 +1,6 @@
+import { sharedTexts, type MobileScope } from "./mobileConversation";
+import type { AccountSession } from './accountSession';
+import { readReflection, reflectionFailure, REFLECTION_BINDING_KEY, type ReflectionBinding, type ReflectionSnapshot } from './personalReflection';
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
@@ -8,7 +11,7 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
-import { PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
+import { PLANNING_GATE, PlanFirstSession, planFirstAvailable, planFirstToolResult, planFirstTurnText, type PlanFirstGate, type PlanFirstView } from "./planFirst";
 import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -124,6 +127,7 @@ import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestId
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
+  devSdkConfigRoot,
   sdkErrorDisplayText,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -272,7 +276,8 @@ import { BROWSER_SETTINGS_LOCK_KEY, browserSettingsLockFrom, browserSettingsLock
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
-import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
+import { CapabilityChangeTracker, lessonCapabilityRows, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
+import { LessonSettingsChangeTracker, lessonSettingsChangeApplies, type LessonSettingsNotice } from "./lessonSettingsChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
@@ -628,6 +633,191 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private taskSourceBrowser?: { tab: vscode.BrowserTab; taskId: string; activityId: string; url: string; requestId?: string; source?: vscode.Webview };
 
 
+  private mobileTurn?: { id: string; failed: boolean };
+  private reflectionAccounts?: AccountSession;
+  private reflectionRefreshing = false;
+  private reflectionMaking = false;
+  isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
+  setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
+  private reflectionStreams = new Map<string,{binding:ReflectionBinding;id:string}>();
+  private reflectionBindings(): ReflectionBinding[] {
+    return this.context.globalState.keys().filter(k=>k.startsWith(REFLECTION_BINDING_KEY+':')).map(k=>this.context.globalState.get<ReflectionBinding>(k)).filter((b):b is ReflectionBinding=>!!b);
+  }
+  private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
+    const key=REFLECTION_BINDING_KEY+':'+JSON.stringify([b.activity,b.workspace,b.task]);
+    const held=this.context.globalState.get<ReflectionBinding>(key);
+    if(held&&held.revision>b.revision)return;
+    await this.context.globalState.update(key,b);
+  }
+  private reflectionBinding(): ReflectionBinding | undefined {
+    const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
+    const task=store?.getView().activeTaskId;
+    if(!store||!task||!activity||activity.kind!=='personal'||this._instructorMode?.isInstructor)return;
+    // Ordinary tasks do not need reflection capability checks or an asynchronous preflight.
+    return this.context.globalState.get<ReflectionBinding>(REFLECTION_BINDING_KEY+':'+JSON.stringify([activity.id,store.scope,task]));
+  }
+  private async applyReflectionSnapshot(b: ReflectionBinding, value: ReflectionSnapshot): Promise<void> {
+    const accounts=this.reflectionAccounts,store=this.currentTaskStore();
+    const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
+    if(!store||!stillHere()||await accounts?.conversationSession()!==b.session||!stillHere())throw Error('계정이나 열린 대화가 바뀌었어요.');
+    const held=this.reflectionBinding()!;
+    if (value.state.revision < held.revision) throw Error('이전 대화 응답을 적용하지 않았어요.');
+    const existing = new Set(store.getHistory(b.task).map(m => m.id));
+    const incoming: ChatMessage[] = value.state.messages.filter(m => !existing.has(m.id)).map(m => ({id:m.id,role:m.role,content:m.content,createdAt:m.created_at}));
+    if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
+    // Write to the captured task. Navigation while disk IO runs cannot redirect these words.
+    if (incoming.length) await store.append(b.task,incoming);
+    const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
+    await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    // An app exit between saving the outbox and dispatch must leave recoverable input.
+    const pending=this.reflectionBinding()?.pending;
+    if(stillHere()&&pending&&!this.hasActiveStream()){
+      const draft=store.getDraft(b.task);
+      if(!draft.text.trim()){
+        await store.saveDraft(b.task,{...draft,text:pending.text});
+        if(stillHere())await this.postConfig();
+      }
+    }
+    if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
+  }
+
+  async openPersonalReflection(): Promise<void> {
+    const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
+    if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
+    if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
+    const scope=this.mobileConversationScope(true);
+    if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
+    const store=this.currentTaskStore()!;
+    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
+    let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
+    if(!b){
+      const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
+      if(accepted!=='내 이야기 시작하기')return;
+    }
+    assertOpeningScope();
+    const value=readReflection(await accounts.reflectionRequest(session));
+    assertOpeningScope();
+    if(!b){
+      const oldTasks=new Set([...store.getView().tasks,...(store.getView().archived??[])].map(t=>t.id));
+      await this.handleTaskMessage({type:'taskCreate',taskId:scope.task} as WebviewMessage);
+      const next=this.mobileConversationScope(true);
+      if(this.currentTaskStore()!==store||!next||oldTasks.has(next.task)||next.activity!==scope.activity||next.workspace!==scope.workspace)throw Error('질문 대화를 열지 못했어요. 기존 작업은 보존했어요.');
+      b={session,activity:next.activity,workspace:next.workspace,task:next.task,revision:0};
+      await this.saveReflectionBinding(b);
+      const view=await store.rename(next.task,'나를 알아가는 대화');
+      if(this.currentTaskStore()===store&&this.reflectionBinding()?.task===b.task)await this.post({type:'taskWorkspaceState',view});
+    } else if(b.task!==scope.task) {
+      await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
+    }
+    await this.applyReflectionSnapshot(b,value);
+  }
+  async refreshPersonalReflection(): Promise<void> {
+    const b=this.reflectionBinding();
+    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)?.ready)return;
+    this.reflectionRefreshing=true;
+    try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
+    finally { this.reflectionRefreshing=false; }
+  }
+  /** Copy only the person's reviewed words into an ordinary, unsent desktop task. */
+  async beginPersonalMaking(): Promise<void> {
+    if (this.reflectionMaking) return;
+    const b=this.reflectionBinding(),accounts=this.reflectionAccounts,store=this.currentTaskStore();
+    if(!b||!accounts||!store||b.pending||!this.mobileConversationScope(true)?.ready)throw Error('나의 질문에서 작성 중인 글과 전송 상태를 먼저 확인해 주세요.');
+    const current=()=>this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&this.reflectionBinding()?.task===b.task&&this.reflectionBinding()?.session===b.session;
+    this.reflectionMaking=true;
+    try {
+      if(await accounts.conversationSession()!==b.session||!current())throw Error('계정이나 열린 대화가 바뀌었어요.');
+      let text=[...store.getHistory(b.task)].reverse().find(m=>m.role==='user')?.content??'';
+      while(current()) {
+        const chosen=await vscode.window.showInputBox({title:'만들어 볼 의도 확인',prompt:'새 제작 작업에 이 글만 초안으로 옮겨요. 대화 전체는 복사하지 않고 AI에 보내지도 않아요.',value:text.slice(0,4000),ignoreFocusOut:true,
+          validateInput:value=>!value.trim()?'만들어 보고 싶은 것을 한 문장으로 적어 주세요.':value.length>4000?'4,000자 이내로 적어 주세요.':undefined});
+        if(chosen===undefined)return;
+        text=chosen.trim();if(!text||text.length>4000)continue;
+        if(await accounts.conversationSession()!==b.session||!current()||!this.mobileConversationScope(true)?.ready)throw Error('계정이나 열린 대화가 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');
+        const created=await this.handleTaskMessage({type:'taskCreate',taskId:b.task} as WebviewMessage,undefined,{
+          draft:{...emptyActivityDraft(),text},
+          allowed:async()=>await accounts.conversationSession()===b.session&&current()&&!this.reflectionBinding()?.pending,
+        });
+        if(created)return;
+        if(!current())return;
+        // A disk failure leaves the original task intact. Reopen the same words for recovery.
+        await vscode.window.showWarningMessage('제작 초안을 저장하지 못했어요. 입력한 글을 다시 열었어요.');
+      }
+    } finally {this.reflectionMaking=false;}
+  }
+  private async stopPersonalReflection(streamId:string):Promise<boolean> {
+    const held=this.reflectionStreams.get(streamId);if(!held)return false;
+    try {
+      const value=readReflection(await this.reflectionAccounts!.reflectionRequest(held.binding.session,'/turns/'+held.id+'/cancel',{}));
+      if(value.state.turn?.id!==held.id||!['cancelled','completed','failed','unknown'].includes(value.state.turn.status))throw Error('not acknowledged');
+      this.activeStreams.get(streamId)?.abort();
+      await this.post({type:'streamStopped',streamId});
+      await this.applyReflectionSnapshot(held.binding,value);
+      void vscode.window.showInformationMessage('답변 받기를 멈췄어요. 이미 처리 중이던 AI 사용 비용은 발생할 수 있어요.');
+    } catch { void vscode.window.showWarningMessage('중단 여부를 확인하지 못했어요. 답변 상태를 확인하고 있어요.'); }
+    return true;
+  }
+  private async sendPersonalReflection(msg: Extract<WebviewMessage,{type:'sendMessage'}>): Promise<boolean> {
+    const b=this.reflectionBinding();if(!b)return false;
+    const accounts=this.reflectionAccounts;
+    if(!accounts||this.hasActiveStream()||this.reflectionRefreshing||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:this.reflectionRefreshing?'대화를 확인 중이에요. 잠시 뒤 다시 보내 주세요.':'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
+    }
+    if(b.pending&&b.pending.text!==msg.text){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
+    }
+    const store=this.currentTaskStore();
+    const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
+    const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
+    const id=pending.id,streamId=randomId(),controller=new AbortController();
+    let streamStarted=false,terminal=false;
+    // Hold task navigation before the first asynchronous outbox write.
+    this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
+    try {
+      await this.saveReflectionBinding({...b,pending});
+      if(!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});streamStarted=true;
+      const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
+      if(!controller.signal.aborted&&stillHere()){await this.post({type:'streamEnd',streamId});terminal=true;}
+      await this.applyReflectionSnapshot(b,value);
+      if(value.state.turn?.status==='failed')void vscode.window.showWarningMessage('보낸 이야기는 저장됐지만 답변을 받지 못했어요. 자동으로 다시 요청하지 않았어요.');
+    } catch(error) {
+      if(!controller.signal.aborted&&stillHere()&&await accounts.conversationSession()===b.session&&stillHere()){
+        if(!terminal){
+          await this.post({type:'streamError',streamId,error:reflectionFailure(error)});terminal=true;
+        } else {
+          void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
+        }
+        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
+        try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
+        if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
+      }
+    } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);if(streamStarted&&!terminal&&!controller.signal.aborted)await this.post({type:'streamStopped',streamId});}
+    return true;
+  }
+  /** Existing personal store only; no classroom, temporary task or path leaves this boundary. */
+  mobileConversationScope(includeReflection = false): MobileScope | undefined {
+    const activity=activityConnections(this.context)?.current, store=this.currentTaskStore();
+    const view=store?.getView();const task=view?.activeTaskId?store?.getTask(view.activeTaskId):undefined;
+    if(!activity||activity.kind!=='personal'||this._instructorMode.isInstructor||!store||!task||view?.error||store.isTemporary(task.id))return;
+    if(!includeReflection&&this.reflectionBindings().some(b=>b.activity===activity.id&&b.workspace===store.scope&&b.task===task.id))return;
+    return {activity:activity.id,workspace:store.scope,task:task.id,title:task.title,
+      ready:!this.hasActiveStream()&&!this.taskChanging&&!this.connectionChanging&&!this.turnRestoreBusy&&!this.clearingHistory&&!this.verifySession?.running&&!this.opsHold&&!this.interruptedHistory
+        &&!task.draft.text.trim()&&!task.draft.images?.length&&!task.draft.queued&&!task.draft.inlineEdit&&!task.draft.recovered?.length&&!task.draft.imports?.length&&!this.annotationBatch.size&&!this.draftSources?.size&&!this.queuedSources?.size,
+      messages:sharedTexts(store.getHistory())};
+  }
+  async submitMobileConversation(scope: MobileScope, request: {id:string;text:string}): Promise<boolean> {
+    const current=this.mobileConversationScope();
+    if(!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task) return false;
+    const before=new Set(current.messages.map(m=>m.id));const turn={id:request.id,failed:false};this.mobileTurn=turn;
+    try {
+      // The normal typed-input entry retains activity/task/profile/cost/restore checks.
+      await this.handleMessage({type:'sendMessage',activityId:scope.activity,taskId:scope.task,text:request.text,history:this.getHistory(),userMessageId:request.id});
+      const after=this.mobileConversationScope();
+      return !turn.failed&&!this.interruptedHistory&&after?.activity===scope.activity&&after.workspace===scope.workspace&&after.task===scope.task
+        &&after.messages.some(m=>m.id===request.id&&m.role==='user')&&after.messages.some(m=>m.role==='assistant'&&!before.has(m.id));
+    } finally {if(this.mobileTurn===turn)this.mobileTurn=undefined;}
+  }
   private currentTaskStore(): TaskWorkspaceStore | undefined {
     return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
   }
@@ -735,7 +925,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: false });
   }
 
-  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview, initial?: {draft:ActivityDraft;allowed:()=>Promise<boolean>}): Promise<string|void> {
     const store = this.currentTaskStore?.();
     if (!store) {
       if (msg.type === 'taskMove') await this.refuseTaskMove(msg, '작업 목록을 열지 못해 옮기지 않았어요.');
@@ -749,6 +939,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     let renameUndoId: string | undefined, renameUndone = false;
+    let createdTaskId: string | undefined;
     let moved: { title: string; destination: string } | undefined;
     const knownSource = (value: string) => {
       try {
@@ -822,7 +1013,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
-          if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          if (msg.type === 'taskCreate') {
+            if(initial&&(!await initial.allowed()||this.currentTaskStore()!==store||store.getView().activeTaskId!==msg.taskId))throw Error('계정이나 열린 작업이 바뀌어 초안을 옮기지 않았어요.');
+            createdTaskId=(await store.create('새 작업',expected,initial?.draft)).activeTaskId??undefined;
+          }
           // CGP-KNOW-R-029 — checked again here, on the seat as it is now; refused with the same reason the control shows.
           else if (msg.type === 'taskCreateTemporary') {
             if (!this.temporaryTaskAllowed()) throw new Error(TEMPORARY_TASK_UNAVAILABLE);
@@ -872,6 +1066,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: renameUndone });
       if (msg.type === 'taskAppearance') await this.post({ type: 'taskAppearanceResult', requestId: msg.requestId, taskId: msg.taskId, saved: true });
       if (msg.type === 'taskMove' && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: !!moved, ...(moved ? { title: moved.title, destination: moved.destination } : {}) });
+      return createdTaskId;
     } catch (error) {
       let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
       if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
@@ -1164,6 +1359,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // CGP-SHELL-R-024 — what the learner was last told the AI can do, per token and activity (memory only).
   // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
   private capChanges?: CapabilityChangeTracker;
+  // CGP-SHELL-R-024 / D-023 (ADM-11) — classroom seats: what the instructor changed, told once, persisted per seat.
+  private lessonChanges?: LessonSettingsChangeTracker;
+  /** A change seen while a turn ran waits for the turn's end; then the config is posted once more. */
+  private lessonChangeDeferred = false;
+  /** #751 U3 — the turn-start preflight is adopting a switched setting: that change belongs before this very turn. */
+  private lessonPreflightAdopting = false;
+  /** Lines a webview drew while no chat surface was visible (a collapsed sidebar still renders): counted when one is shown. */
+  private lessonLinesDrawnHidden?: Set<string>;
   private activeStreams = new Map<string, AbortController>();
   private delegationControls = new Map<string, {scope:string;stop:()=>void}>();
   private reportDelegationStop(streamId:string,scope:string,ctrl:AbortController,state:import("./delegationStop").DelegationStopState):void {
@@ -1197,6 +1400,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'browserApprovalPrompt',prompt});
     },
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   private readonly commandApprovalRequest = new CommandApprovalRequest({
     scope:()=>JSON.stringify([this.taskCommandAllowState(),this.taskCommandAllows.generation]),
@@ -1205,13 +1409,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'commandApprovalPrompt',prompt});
     },
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   /** #3586 — write approval ids whose 180 s window ran out; read once by the write branch of resolveActionApproval. */
   private readonly timedOutApprovals=new Set<string>();
+  /** #3594 — approval ids the learner refused (respond path only); read once by the resolver, cleared at turn end. */
+  private readonly declinedApprovals=new Set<string>();
   private readonly writeApprovalRequest = new WriteApprovalRequest({
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
     expired:id=>{this.timedOutApprovals.add(id);},
+    refused:id=>{this.declinedApprovals.add(id);},
   });
   /** CGP-KNOW-D-006 — every R-006 manifest opens as the in-panel dialog while a chat panel is visible. */
   private readonly outboundApproval = new OutboundApproval({
@@ -4855,7 +5063,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sidebarWebview=view.webview;
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
     watchChatSurface(view, this.finishNotifier);
-    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
+    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } else void this.flushLessonLinesShown(); });
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
       this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
@@ -4880,7 +5088,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const dist = vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist');
       entry.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, entry.webview));
       watchChatSurface(entry, this.finishNotifier);
-      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
+      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } else void this.flushLessonLinesShown(); });
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
@@ -5271,7 +5479,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const token = await this.context.secrets.get(TOKEN_KEY), base = tokenLessonSha(token); if (!token || !base) return;
     if (shouldRecheckEnforcement(current.lesson_binding, (await ops.holdsLessonSetting?.()) === true)) {
       const fresh = await this.fetchCandidateProfile(token);
-      if (fresh?.lesson_binding?.enforced) { await this.adoptProfile(fresh, token); current = fresh; }
+      if (fresh?.lesson_binding?.enforced) { await this.adoptPreflightProfile(fresh, token); current = fresh; }
     }
     if (!current.lesson_binding?.enforced) return;
     const sw = await ops.switchPendingSetting(base);
@@ -5285,7 +5493,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     const from = current.lesson_binding!, fromVersion = current.lesson?.version;
-    await this.adoptProfile(candidate!, token);
+    await this.adoptPreflightProfile(candidate!, token);
     if (sw.state === "switched") await ops.confirmSettingBound?.(sw);
     this.spool?.recordLessonBinding({ from: { key: from.key, version: fromVersion }, to: { key: candidate!.lesson_binding!.key, version: candidate!.lesson?.version, source: candidate!.lesson_binding!.source, object_id: candidate!.lesson_binding!.object_id, revision: candidate!.lesson_binding!.revision } });
   }
@@ -5308,6 +5516,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (await this.context.secrets.get(TOKEN_KEY) !== token || this.cachedProfile !== current) return;
     this.cachedProfile = { ...current, trial: r.profile.trial };
     await this.postConfig();
+  }
+  /**
+   * CGP-SHELL-R-024 — U3 switches a setting at the start of the learner's next turn, before that turn takes its profile.
+   * The change line is posted now, placed before this turn's messages, instead of waiting for the turn to end.
+   */
+  private async adoptPreflightProfile(p: ResolvedProfile, token: string): Promise<void> {
+    this.lessonPreflightAdopting = true;
+    try { await this.adoptProfile(p, token); } finally { this.lessonPreflightAdopting = false; }
   }
   /** Same token, same activity: only what the lesson version decides changes (steps, AI name, model list, tool policy). */
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
@@ -5346,6 +5562,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeHistoryScope = null;
     // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
     this.endTaskCommandAllows();
+    // CGP-SHELL-R-024 — lines drawn while hidden belong to the seat that drew them; another seat must not count them.
+    this.lessonLinesDrawnHidden?.clear();
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
     // The profile is gone, and with it the publish button (token gate).
@@ -8103,7 +8321,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch {
       void vscode.window.showWarningMessage("활동 연결을 확인하지 못해 이미지 편집을 시작하지 않았어요. 원본은 보존됩니다.");
     } finally {
-      try { releaseActivity?.(); } finally { this.pendingSends--; }
+      try { releaseActivity?.(); } finally { this.pendingSends--; this.releaseDeferredLessonLine(); }
     }
   }
 
@@ -8586,13 +8804,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
+        if (this.reflectionBinding()) { await this.sendPersonalReflection(msg); return; }
         // REQ-STUDIO-PROBLEM-REPORT level 3 — a frustrated message offers the report form; it sends nothing.
         if (typeof msg.text === "string" && this.problemTracker?.frustration(msg.text)) void this.post({ type: "problemReportOffer", offer: { reason: "frustration" } });
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
         // pass without an await, so their send still reaches its first await exactly as before.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, !(this.mobileTurn && this.mobileTurn.id === msg.userMessageId), !!this.mobileTurn && this.mobileTurn.id === msg.userMessageId); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       case "prepareAttachments": {
         const result = this.prepareAttachments(msg.files, msg.sketch === true);
@@ -8605,6 +8824,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.imageStaging?.discard(msg.stageId);
         return;
       case "selectAnswerAttempt": {
+        if(this.reflectionBinding())return;
         if (this.hasActiveStream() || this.pendingSends || this._instructorMode.isInstructor ||
             msg.activityId !== activityConnections(this.context)?.current?.id ||
             msg.taskId !== (this.currentTaskStore?.()?.getView().activeTaskId ?? undefined)) return;
@@ -8626,6 +8846,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "retryMessage":
+        if(this.reflectionBinding()){await this.refreshPersonalReflection();await this.post({type:'inputRejected',text:msg.prompt,images:msg.images,notice:'최신 대화를 확인했어요. 질문 입력란에서 보낼 내용을 확인해 주세요.'});return;}
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
         // 아직 못 받았어요").
@@ -8660,6 +8881,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "stopDelegations": {
+        if(this.reflectionStreams?.has(msg.streamId)){await this.stopPersonalReflection(msg.streamId);return;}
         const control=this.delegationControls.get(msg.streamId);
         if(!this.activeStreams.has(msg.streamId))return;
         if(control?.scope===JSON.stringify([this.turnRequestScope(),this.profileGeneration]))control.stop();
@@ -8672,6 +8894,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
+        if(this.reflectionStreams?.has(msg.streamId)){await this.stopPersonalReflection(msg.streamId);return;}
         this.activeStreams.get(msg.streamId)?.abort();
         this.automationConversation?.cancel();
         // #497 — abort() alone tells the webview NOTHING. handleSend and
@@ -8684,6 +8907,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamStopped", streamId: msg.streamId });
         return;
       case "requestAction":
+        if(this.reflectionBinding()){void vscode.window.showInformationMessage('만들거나 실행할 작업은 새 작업에서 시작해 주세요. 이곳에서는 내 이야기를 이어가요.');return;}
         await this.handleActionRequest(msg.action);
         return;
       case "setTextSize":
@@ -8794,6 +9018,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();
         return;
       }
+      case "lessonSettingsChangeSeen":
+        if (typeof msg.id === "string" && msg.id.length <= 64) await this.lessonSettingsLineShown(msg.id);
+        return;
       case "dismissCapabilityChange":
         (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
         void this.postConfig();
@@ -9095,6 +9322,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     editOf?: string,
     /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
     carryFile = false,
+    conversationOnly = false,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -9106,7 +9334,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingSends++;
     // CGP-CHAT-R-004 — decided before the first await so an approval binds to exactly this send. A planning turn
     // runs no tool, no app shortcut and no file write on any runtime; an approved turn is an ordinary turn.
-    const plan = this.beginPlanTurn(text);
+    const plan = conversationOnly ? {planning:true,gate:PLANNING_GATE,ready:(_answer:string):PlanFirstView|null=>null} : this.beginPlanTurn(text);
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
     const lowDiskCheck = this.refreshLowDisk();
@@ -9522,7 +9750,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) void this.post({ type:"attachedImagesSaved",note:attachedNote });
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
-    if (plan.planning) userTextForModel = planFirstTurnText(userTextForModel);
+    if (plan.planning && !conversationOnly) userTextForModel = planFirstTurnText(userTextForModel);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -9721,6 +9949,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
       const stepLines = new StepLines();
       const deniedCalls = new Map<string, DenialNotice>();
+      // #3594 — one denial card for an approval that timed out or that the learner refused (one per tool call).
+      const approvalDenialCard = (a: { id: string; denialSource?: unknown; denialDetail?: unknown }) => {
+        const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
+        deniedCalls.set(a.id, denial);
+        tracker.settle(a.id);
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+      };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
       delegations = tracker;
@@ -9898,12 +10133,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // the approve/deny modal ("승인 기다리는 중") is never counted as running time.
             if (!a.allowed) {
               stepLines.end(a.id);
-              if (a.actor === 'policy') {
-                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
-                deniedCalls.set(a.id, denial);
-                tracker.settle(a.id);
-                this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
-              }
+              if (a.actor === 'policy' || a.denialSource === 'declined') approvalDenialCard(a);
               break;
             }
             const startedAt = Date.now();
@@ -10203,6 +10433,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
+            sdkConfigRoot: devSdkConfigRoot(vscode.env.appName, this.context.globalStorageUri?.fsPath ?? ''),
             turnId: streamId,
             onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
             onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
@@ -10573,6 +10804,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       try { releaseActivity?.(); } finally {
         this.pendingSends--; settle.settled();
         if (this.turnSettling === settle.promise) this.turnSettling = undefined;
+        // CGP-SHELL-R-024 — a settings change that arrived during this turn is told now; the next turn uses it.
+        this.releaseDeferredLessonLine();
         if (this.pendingFundingSelection) { this.applyPendingFundingSelection(); void this.postConfig().catch(() => {}); }
       }
       if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
@@ -11096,7 +11329,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       id: outwardPromptId, purpose: "outward", command: describeCommandForApproval(command), destructive, rememberAllowed: false,
       outward: { destinations: known ? destinations : [], remembers: known && scope !== null },
     });
-    if (pick !== "allow") { if (this.timedOutApprovals?.delete(outwardPromptId)) onDenied?.("timeout"); return false; }
+    if (pick !== "allow") { if (this.timedOutApprovals?.delete(outwardPromptId)) onDenied?.("timeout"); else if (this.declinedApprovals?.delete(outwardPromptId)) onDenied?.("declined"); return false; }
     if (known) await memory.remember(scope, keys);
     return true;
   }
@@ -11156,7 +11389,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         id: commandPromptId, purpose: commandApprovalPurposeFor(req.payload, destructive),
         command: describeCommandForApproval(command), destructive, rememberAllowed: Boolean(exact),
       });
-      if (pick === 'deny' && this.timedOutApprovals?.delete(commandPromptId)) onDenied?.('timeout');
+      if (pick === 'deny') { if (this.timedOutApprovals?.delete(commandPromptId)) onDenied?.('timeout'); else if (this.declinedApprovals?.delete(commandPromptId)) onDenied?.('declined'); }
       if (pick === 'remember' && exact) {
         if (this.taskCommandAllows.generation === allowGeneration && this.taskCommandAllowState().key === scope.key) this.taskCommandAllows.remember(scope.key, exact.key);
         return true;
@@ -11186,7 +11419,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           id:browserPromptId, title:cleanName(browserApprovalTitle(this.coachDisplayName())), ...prompt,
         }); },
       }).then(opened => {
-        if (!opened && browserPromptId !== undefined && this.timedOutApprovals?.delete(browserPromptId)) onDenied?.('timeout');
+        if (!opened && browserPromptId !== undefined) { if (this.timedOutApprovals?.delete(browserPromptId)) onDenied?.('timeout'); else if (this.declinedApprovals?.delete(browserPromptId)) onDenied?.('declined'); }
         return opened;
       });
     }
@@ -11201,7 +11434,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const publisher = this.sitePublisher();
       if (!publisher.allowed()) { if (onDenied) onDenied("unknown"); else await this.postDenialNotice("unknown"); return false; }
       const repo = publisher.repoNameFor({ repo_name: payload.repo_name || undefined });
-      return publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+      // #3594 — the publish modal answered no: the learner refused a coach tool window.
+      const published = await publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+      if (!published) onDenied?.("declined");
+      return published;
     }
 
     // Tier 2 — file access must target the active workspace (write and read).
@@ -11308,6 +11544,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const copy = consultApprovalCopy(coachName, orchestratorRosterFor(this.cachedProfile), req.payload);
       onPrompted?.();
       const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, copy.verb);
+      // #3594 — a dismissed or other answer is the learner's refusal of a coach tool window.
+      if (pick !== copy.verb) onDenied?.('declined');
       return pick === copy.verb;
     }
     const { title, verb } = approvalCopyFor(coachName)[req.kind] ?? {
@@ -11321,6 +11559,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const approvalId=randomId();
       const approved=await this.confirmWriteFiles(approvalId,title,verb,writeEntries,req.payload);
       if(!approved && this.timedOutApprovals?.delete(approvalId)) onDenied?.('timeout');
+      else if(!approved && this.declinedApprovals?.delete(approvalId)) onDenied?.('declined');
       return approved;
     }
     onPrompted?.();
@@ -11402,6 +11641,64 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     await vscode.commands.executeCommand(CHALK_INSTRUCTOR_TAB_COMMAND);
+  }
+
+  /**
+   * CGP-SHELL-R-024 / D-023 (ADM-11) — compare this classroom seat's served lesson settings with the ones the learner was
+   * last told about (persisted per seat) and return the change lines to draw. The seat key is a hash of the Service and the
+   * activity id (the token when there is none), so no credential is stored. While a turn runs, nothing new is shown and the
+   * baseline stays: the running turn keeps the settings it started with, and the line is posted when it ends. A U3 switch
+   * adopted by the turn-start preflight is the exception: it applies to the turn that is starting, so it is told before it.
+   */
+  private async observeLessonSettings(o: { profile: ResolvedProfile | null; token: string | undefined; proxyUrl: string; seatInputs: SeatInputs; instructor: boolean; local: boolean }): Promise<LessonSettingsNotice[]> {
+    const store = this.context.globalState;
+    if (!store || !o.token || !lessonSettingsChangeApplies(o.profile, o.instructor, o.local)) return [];
+    const activity = /^[a-f0-9]{64}$/.test(o.profile?.activity_id ?? "") ? ["activity", o.profile!.activity_id] : ["credential", o.token];
+    const seat = createHash("sha256").update(JSON.stringify(["lesson-settings", o.proxyUrl, activity])).digest("hex");
+    let lastMessageId: string | null = null;
+    try { lastMessageId = this.getHistory().at(-1)?.id ?? null; } catch { lastMessageId = null; }
+    try {
+      const result = await (this.lessonChanges ??= new LessonSettingsChangeTracker(store)).observe({
+        seat, profile: o.profile, instructor: o.instructor, local: o.local,
+        caps: lessonCapabilityRows(o.profile!, o.seatInputs),
+        turnRunning: this.lessonPreflightAdopting !== true && this.lessonTurnRunning(),
+        lastMessageId, task: this.planTaskKey(),
+      });
+      this.lessonChangeDeferred = result.deferred;
+      // The turn may have ended while this post was being built (its end found no deferred line yet): post once more.
+      if (result.deferred && !this.lessonTurnRunning()) void Promise.resolve().then(() => this.releaseDeferredLessonLine());
+      return result.notices;
+    } catch (err) {
+      // A storage failure must never stop the config post; the line is simply not drawn this time.
+      console.warn("[lesson-settings-change] observation failed:", err);
+      return [];
+    }
+  }
+
+  /**
+   * CGP-SHELL-R-024 — the panel drew settings-change line `id`. It counts as seen (and the seat's baseline moves) only
+   * while a chat surface is visible: the sidebar webview keeps rendering while collapsed, and its document does not
+   * always say so. A line drawn while hidden is counted when a chat surface is shown.
+   */
+  /** A work slot (a turn, an image edit) ended: a settings change it held back is told now, before the next turn. */
+  private releaseDeferredLessonLine(): void {
+    if (!this.lessonChangeDeferred) return;
+    this.lessonChangeDeferred = false;
+    void this.postConfig().catch(() => {});
+  }
+  /** hasActiveStream, tolerant of the partial providers some host fixtures build (no activeStreams map): unknown = not running. */
+  private lessonTurnRunning(): boolean {
+    try { return this.hasActiveStream(); } catch { return false; }
+  }
+  private async lessonSettingsLineShown(id: string): Promise<void> {
+    if (chatVisible({ view: () => this.view, editor: () => this.editorChat })) { await this.lessonChanges?.seen(id).catch(() => false); return; }
+    (this.lessonLinesDrawnHidden ??= new Set()).add(id);
+  }
+  private async flushLessonLinesShown(): Promise<void> {
+    const ids = [...(this.lessonLinesDrawnHidden ?? [])];
+    if (!ids.length || !chatVisible({ view: () => this.view, editor: () => this.editorChat })) return;
+    this.lessonLinesDrawnHidden?.clear();
+    for (const id of ids) await this.lessonChanges?.seen(id).catch(() => false);
   }
 
   private async postConfig(): Promise<void> {
@@ -11497,6 +11794,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown, requiredApprovals: presetRequiredKinds(cfg.get<string[]>("requireApprovalFor", []), servedApprovalPreset(this.cachedProfile)?.id) };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
     const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
+    // CGP-SHELL-R-024 / D-023 (ADM-11) — a classroom seat is told what the instructor changed, once, before its next turn.
+    const lessonSettingsChanges = await this.observeLessonSettings({ profile, token, proxyUrl, seatInputs, instructor: isInstructor, local: !!local });
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
@@ -11523,6 +11822,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
+        ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
@@ -11931,13 +12231,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
     if(msg.type!=='browserApprovalPrompt')this.browserApprovalRequest?.invalidate();
     if(msg.type!=='commandApprovalPrompt')this.commandApprovalRequest?.invalidate();
     if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
-      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();}
+      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel(); this.declinedApprovals?.clear(); this.timedOutApprovals?.clear();}
       else this.writeApprovalRequest?.invalidate();
     }
     if (msg.type === 'streamStart') this.lastActivityStatus = undefined;

@@ -28,9 +28,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-g1'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -53,7 +54,7 @@ try {
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + server.address().port, errors = [];
   const open = async (viewport) => { const p = await browser.newPage({ viewport }); p.on('pageerror', (e) => errors.push(e.message)); await p.goto(origin + '/manage'); return p; };
-  const connect = async (p) => { await p.locator('#token').fill(teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(23).waitFor(); await p.locator('#ops-help-toggle').filter({ hasText: '1건' }).waitFor(); };
+  const connect = async (p) => { await signInChalk(p, teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(23).waitFor(); await p.locator('#ops-help-toggle').filter({ hasText: '1건' }).waitFor(); };
   // A row is complete when all of it is inside the viewport AND inside the list's own scrolling box (a clipped row does not count).
   const measure = (p) => p.evaluate(() => { const list = document.getElementById('ops-seats').getBoundingClientRect(), bottom = Math.min(innerHeight, list.bottom), rows = [...document.querySelectorAll('#ops-seats .ops-seat')].filter((r) => !r.hidden).map((r) => r.getBoundingClientRect());
     const texts = [...document.querySelectorAll('#ops-seats td *, #ops-seats th')].filter((e) => [...e.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && e.checkVisibility());
@@ -62,7 +63,7 @@ try {
 
   // ── states before a connection ──
   let page = await open({ width: 1280, height: 720 });
-  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /강사 토큰과 코호트를 입력하세요/);
+  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /Lab 로그인으로 연결한 뒤 코호트를 입력하세요/);
   await connect(page); console.log('PASS states: before a connection the table is absent and the connection form is the page');
   // HPS_G1_WIDEN=0.06 widens every glyph (letter-spacing, em) to rehearse a wider font on a machine that has a narrow one — the CI
   // runner's Korean font measured one to two toolbar lines taller than the Mac's. The default run measures the page as it is.

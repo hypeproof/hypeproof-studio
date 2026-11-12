@@ -14,6 +14,9 @@
 //   always_ask      before_changes, and nothing allowed earlier is remembered or offered to
 //                   remember ("이번 작업 동안 이 명령 허용", "이 사이트 계속 허용")
 
+/** The learner-side name of the setting (the composer label's accessible name and the CGP-SHELL-R-024 change line). */
+export const APPROVAL_PRESET_NAME = "승인 방식";
+
 export const APPROVAL_PRESET_IDS = ["always_ask", "before_changes", "important_only"] as const;
 export type ApprovalPresetId = (typeof APPROVAL_PRESET_IDS)[number];
 

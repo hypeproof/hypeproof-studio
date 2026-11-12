@@ -28,13 +28,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import "@hypeproof/service-testkit/test/harness/loader.mjs";
+import { withBearerAsConnection } from './harness/connect.mjs';
 
 const SECRET = "test-secret-" + "x".repeat(20);
 const OPERATOR_SECRET = "operator-secret-" + "y".repeat(20);
 
 const { default: localChalk } = await import("../src/index.ts");
 const { bridgeStateToService } = await import("./harness/service-state.mjs");
-const chalk = bridgeStateToService(localChalk);
+const chalk = bridgeStateToService(withBearerAsConnection(localChalk));
 const {
   logObjectKey,
   logsPrefix,

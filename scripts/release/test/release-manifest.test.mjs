@@ -41,9 +41,17 @@ for (const {file, product} of MANIFESTS) {
     assert.ok(Object.keys(m.requires ?? {}).length > 0, 'a product with no requirements is never checked');
   });
 
-  test(`${file}: every requirement names its Service surface (hypeproof-service#148)`, () => {
+  test(`${file}: requirements use the canonical explicit-line or package-surface form`, () => {
     for (const [contract, entry] of Object.entries(readJson(file).requires)) {
-      assert.equal(entry.surface, contract, `${contract}: surface must equal the contract name`);
+      if ('line' in entry) {
+        // Harness resolve_entry accepts {line}, not {line,surface}; the key names the contract.
+        assert.deepEqual(Object.keys(entry), ['line'], `${contract}: explicit line has no package surface`);
+        assert.match(entry.line, /^\d+(?:\.\d+)?$/, `${contract}: explicit compatibility line`);
+      } else {
+        assert.equal(entry.surface, contract, `${contract}: package surface must equal the contract name`);
+        assert.equal(typeof entry.package, 'string');
+        assert.equal(typeof entry.manifest, 'string');
+      }
     }
   });
 

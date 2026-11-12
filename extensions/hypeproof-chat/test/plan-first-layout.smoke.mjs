@@ -3,6 +3,8 @@
 // posting the learner's decision), the send button reading "계획 승인 기다리는 중" and disabled while the plan waits,
 // the card hidden while a turn runs; computed geometry for personal and classroom seats, dark and light, at 320,
 // 480 and 800 px: no horizontal scroll, no overlapping controls, 44px targets, >= 14px text, card above the composer.
+// CGP-CHAT-D-004: the primary action (이대로 진행) is visually distinct (its own fill and weight) but the same size
+// (the same height and font size as every secondary action, >= 44px), in both themes.
 // Not run without Chromium (FOCUS_REQUIRE_BROWSER=1 makes that a failure).
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -36,7 +38,7 @@ const geometry=()=>b.evaluate(`(()=>{
   const controls=[...document.querySelectorAll('.hps-plan-card button,.hps-plan-card textarea,.hps-selected-plan,.hps-plan-chip,.hps-input button,.hps-input textarea')].filter(vis).map(e=>({name:(e.getAttribute('aria-label')||e.textContent||e.className).trim().slice(0,24),...rect(e)}));
   const texts=[...card.querySelectorAll('h2,li,p,button,textarea')].filter(vis).map(e=>({t:e.textContent.slice(0,20),px:parseFloat(getComputedStyle(e).fontSize)}));
   return {scrollW:document.documentElement.scrollWidth,innerW:innerWidth,card:rect(card),input:rect(input),controls,texts,
-    buttons:[...card.querySelectorAll('button')].filter(vis).map(e=>({name:e.textContent,...rect(e)})),
+    buttons:[...card.querySelectorAll('button')].filter(vis).map(e=>{const c=getComputedStyle(e);return {name:e.textContent,...rect(e),px:parseFloat(c.fontSize),bg:c.backgroundColor,weight:Number(c.fontWeight),color:c.color};}),
     chip:(()=>{const c=document.querySelector('.hps-plan-chip');return c&&{...rect(c),px:parseFloat(getComputedStyle(c).fontSize)};})()}})()`);
 const overlap=(a,c)=>a.left<c.right-.5&&c.left<a.right-.5&&a.top<c.bottom-.5&&c.top<a.bottom-.5;
 let cases=0;
@@ -73,6 +75,15 @@ try{
   assert.ok(g.card.bottom<=g.input.top+.5,`${label}: the card sits above the composer, not over it`);
   for(const x of g.buttons)assert.ok(x.h>=44-.5&&x.w>=44-.5,`${label}: ${x.name} is a 44px target (${x.w}x${x.h})`);
   assert.deepEqual(g.buttons.map(x=>x.name),['이대로 진행','수정','다시 계획','그만두기']);
+  // D-004: distinct but the same size. Same height for every action; the primary has its own fill and a heavier weight.
+  const [primary,...secondary]=g.buttons;
+  for(const x of secondary){
+   assert.ok(Math.abs(x.h-primary.h)<=.5,`${label}: ${x.name} is ${x.h}px tall, ${primary.name} ${primary.h}px (same size)`);
+   assert.equal(x.px,primary.px,`${label}: ${x.name} ${x.px}px vs ${primary.name} ${primary.px}px (same size)`);
+   assert.notEqual(x.bg,primary.bg,`${label}: ${x.name} has the primary's fill ${primary.bg} (not distinct)`);
+   assert.ok(primary.weight>x.weight,`${label}: ${primary.name} weight ${primary.weight} is not heavier than ${x.name} ${x.weight}`);
+  }
+  assert.ok(!/rgba\(0, 0, 0, 0\)|transparent/.test(primary.bg),`${label}: the primary has no fill (${primary.bg})`);
   for(let i=0;i<g.controls.length;i++)for(let j=i+1;j<g.controls.length;j++)assert.ok(!overlap(g.controls[i],g.controls[j]),`${label}: ${g.controls[i].name} overlaps ${g.controls[j].name}`);
   for(const x of g.texts)assert.ok(x.px>=14,`${label}: "${x.t}" is ${x.px}px`);
   const sw=await b.evaluate(`(()=>{const e=document.querySelector('.hps-plan-chip')||document.querySelector('.hps-selected-plan');const r=e.getBoundingClientRect();return {h:r.height,w:r.width,px:parseFloat(getComputedStyle(e).fontSize)}})()`);

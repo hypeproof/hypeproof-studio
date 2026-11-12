@@ -61,12 +61,14 @@ import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions,
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
-import { QuoteAction, useAnswerQuote } from './QuoteAction';
-import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
+import { QuoteAction, QuoteChip, useAnswerQuote } from './QuoteAction';
+import { QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, withQuote, type AnswerQuote } from './quoteReply';
 import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerOffered, steerPress, STEER_LABEL, STEER_OFFLINE_NOTE, STEER_SENDING_MARK, STEER_STOP_FAILED_NOTE, STEER_STOP_TIMEOUT_MS, STEER_STOPPED_MARK, STEER_STOPPING_LABEL, type SteerMark } from './steerNow';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
+import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
+import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
@@ -140,6 +142,8 @@ import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type Se
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { servedApprovalPreset } from "../../src/approvalPreset";
 import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
+import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
+import { LessonStarters } from "./LessonStarters";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
@@ -917,11 +921,12 @@ export function ChatPanel(props: Props) {
   const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
+  // CGP-CHAT-D-007 — it joins as the quote chip (the draft's first part); what the learner typed stays as it is.
   const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
   const quoteAnswer = (quote: AnswerQuote) => {
     if (unavailable || composing) return;
     lastReplyChoice.current = null;
-    setDraft(current => mergeQuoteIntoDraft(current, quote.block));
+    setDraftParts(previous => withQuote(previous, quote.block, ++pasteId.current));
     dropAnswerQuote();
     document.getSelection?.()?.removeAllRanges?.();
     requestAnimationFrame(() => {
@@ -990,7 +995,10 @@ export function ChatPanel(props: Props) {
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
+  // CGP-SHELL-R-024 / D-023 — an instructor's settings change is read out once through this same region; the reconnect line
+  // stays last, so it still wins when both change in one render.
+  const lessonAnnouncement = useLessonSettingsAnnouncement(props.instructor ? undefined : config?.lessonSettingsChanges);
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, lessonAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
   // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.
@@ -1068,7 +1076,8 @@ export function ChatPanel(props: Props) {
   const addon = !props.instructor ? props.composerAddon ?? null : null;
   const AddonScope = addon?.Scope ?? PassThrough;
   const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const quotePart = draftParts.find(part => part.quote);
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || !!quotePart || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
   const approvalPreset = useTurnBoundaryPreset(servedApprovalPreset(config?.profile), streaming);
@@ -1560,6 +1569,8 @@ export function ChatPanel(props: Props) {
       stillValid: () => !undoSubject.current.page || undoSubject.current.page === page,
     });
   };
+  // CGP-CHAT-D-007 — × on the quote chip; the typed draft and its caret stay (the learner can quote again, so no undo).
+  const removeQuote = (id: number) => { recoverToComposer(() => setDraftParts(previous => changePaste(previous, id, null))); };
   const removePaste = (id: number) => {
     const before = draftParts, after = changePaste(before, id, null);
     setDraftParts(after);
@@ -1655,6 +1666,8 @@ export function ChatPanel(props: Props) {
     worlds.length > 0
       ? ux.suggestions.initial.filter((c) => !stripChips.has(c.text))
       : ux.suggestions.initial;
+  // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
+  const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -1693,6 +1706,8 @@ export function ChatPanel(props: Props) {
   // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
   const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
   const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  // CGP-SHELL-R-024 / D-023 — the instructor's settings changes, as system lines among the messages (classroom seats only).
+  const lessonLines = placeLessonSettingsLines(props.instructor ? undefined : config?.lessonSettingsChanges, shown.items.map(m => m.id), config?.taskWorkspace?.activeTaskId ?? null);
   const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
   // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
   const questionList = myQuestions(shown.items);
@@ -2058,6 +2073,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
+          {i === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
@@ -2115,7 +2131,7 @@ export function ChatPanel(props: Props) {
               wikiScope={JSON.stringify([activityId, taskId])}
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
-              quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
+              quoteAction={answerQuote?.messageId === m.id && m.role === 'assistant' && !(streaming && m.id === streamingId) ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
               elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
               memoryUse={!props.instructor && m.role === "assistant" && !(streaming && m.id === streamingId) ? props.memoryUse?.[m.id] : undefined}
             />
@@ -2142,7 +2158,10 @@ export function ChatPanel(props: Props) {
                 disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
+          {lessonLines.after.get(m.id)?.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           </Fragment>}</TurnBoundary>)}
+        {shown.items.length === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
+        {lessonLines.bottom.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
         </CodeBlockScope>
 
         {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}
@@ -2318,6 +2337,8 @@ export function ChatPanel(props: Props) {
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
+        {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
+        {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2473,8 +2494,8 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
-        {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
-          {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
+        {draftParts.some(part => part.id !== undefined && !part.quote) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
+          {draftParts.filter(part => part.id !== undefined && !part.quote).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
             onChange={text => {
               if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
               setDraftParts(previous => changePaste(previous, part.id!, text));
@@ -2500,7 +2521,7 @@ export function ChatPanel(props: Props) {
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
-          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
+          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) ? "true" : undefined}
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
           data-activity-status={statusScreen ? "true" : undefined}
@@ -2511,7 +2532,8 @@ export function ChatPanel(props: Props) {
           {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}
           {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
               CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
-          {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+          {!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) && <div className="hps-file-context-stack">
+            {quotePart && <QuoteChip part={quotePart} disabled={unavailable} onRemove={() => removeQuote(quotePart.id!)} />}
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}

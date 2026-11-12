@@ -91,7 +91,11 @@ t("the steer stops through the existing Stop path (App.cancel â†’ cancelStream â
   const app = readFileSync("webview-ui/src/App.tsx", "utf8");
   const host = readFileSync("src/chatPanelProvider.ts", "utf8");
   ok(/postToHost\(\{ type: "cancelStream", streamId: state\.streamId \}\)/.test(app), "App.cancel posts cancelStream");
-  ok(/case "cancelStream":\s*this\.activeStreams\.get\(msg\.streamId\)\?\.abort\(\);/.test(host), "host aborts the stream");
+  // Reflection has a server cancellation handshake; ordinary desktop streams
+  // still abort synchronously. Executable pending-send/steer-settle controls
+  // exercise the actual handler, rather than requiring one exact first line.
+  const cancel = host.slice(host.indexOf('case "cancelStream":'), host.indexOf('case "cancelStream":') + 400);
+  ok(cancel.includes('this.activeStreams.get(msg.streamId)?.abort();'), "host aborts the ordinary stream");
   ok(/const finalSpoolStatus = ctrl\.signal\.aborted \? "aborted" : spoolStatus;\s*this\.finishNotifier\.turnEnded\(\{[^}]*?\bstatus: finalSpoolStatus/.test(host), "finish notice reads the abort");
   const panel = readFileSync("webview-ui/src/ChatPanel.tsx", "utf8");
   ok(/steerPress\(/.test(panel) && /props\.onCancel\(\)/.test(panel.slice(panel.indexOf("steerPress("), panel.indexOf("steerPress(") + 900)), "the steer press calls the panel's onCancel");
