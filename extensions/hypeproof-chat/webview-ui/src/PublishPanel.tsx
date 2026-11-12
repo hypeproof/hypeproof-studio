@@ -7,6 +7,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useDialogFocus } from "./dialogFocus";
+import { imeComposing } from "./imeGuard";
 import type { PublishForm, PublishView } from "../../src/publishView";
 import { EXPIRY_CHOICES, METHOD_CHOICES, SHARING_UNKNOWN } from "../../src/publishView";
 
@@ -48,7 +49,7 @@ export function PublishNoticeSheet(props: { onAcknowledge(): void; onCancel(): v
   useEffect(() => { ack.current?.focus(); }, []);
   return (
     <div className="hps-publish-notice" role="group" aria-labelledby={titleId} data-testid="publish-notice"
-      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); props.onCancel(); } }}>
+      onKeyDown={(e) => { if (e.key === "Escape" && !imeComposing(e)) { e.stopPropagation(); props.onCancel(); } }}>
       <strong id={titleId}>{PUBLISH_NOTICE_TITLE}</strong>
       <ul>
         {PUBLISH_NOTICE_LINES.map((line) => <li key={line} data-testid="publish-notice-line">{line}</li>)}

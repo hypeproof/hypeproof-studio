@@ -54,8 +54,10 @@ const fill = async () => {
   assert.deepEqual(submits, []);
   assert.ok(document.activeElement === q('publish-submit'), 'focus returns to the opener');
 
-  // Escape is 취소.
+  // Escape is 취소, but not while a Korean IME is composing.
   await fire(q('publish-submit'), 'click');
+  await fire(q('publish-notice-ack'), 'keydown', { key: 'Escape', isComposing: true, keyCode: 229 });
+  assert.ok(q('publish-notice'), 'Escape during composition keeps the sheet');
   await fire(q('publish-notice-ack'), 'keydown', { key: 'Escape' });
   assert.equal(q('publish-notice'), null, 'Escape closes');
   assert.deepEqual(submits, []);
