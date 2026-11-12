@@ -32,3 +32,10 @@ export function trashResultNotice(result: ActivityTrashResult): string {
     ? `같은 이름의 파일이 있어 “${result.path ?? ""}” 이름으로 복원했어요.`
     : `“${result.path ?? ""}” 파일을 복원했어요.`;
 }
+
+/** Bad historical clocks must not hide recoverable files or invent a deletion time. */
+export function trashDeletedTime(at: number): { iso: string; label: string } | null {
+  if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+  const date = new Date(at);
+  return Number.isFinite(date.getTime()) ? { iso: date.toISOString(), label: date.toLocaleString('ko-KR') } : null;
+}
