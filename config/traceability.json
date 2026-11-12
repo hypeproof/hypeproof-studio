@@ -17804,6 +17804,12 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-environment.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_android_environment.py"
         }
       ]
     },
