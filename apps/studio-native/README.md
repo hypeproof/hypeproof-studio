@@ -2,7 +2,7 @@
 
 Native SwiftUI iPhone and Android clients for HP Studio. The desktop product is the existing HypeProof Studio application and its RC pipeline. A separate mobile-derived Mac Catalyst application is no longer built or distributed.
 
-The iPhone 0.2 candidate makes account-linked desktop conversation the primary surface. Existing local notebooks are preserved in the **기기 메모** tab. Linked conversations use the original desktop task store, existing coach and execution gates; they never fall back to a separate mobile model call. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
+The current iPhone candidate starts an account-owned personal reflection conversation, including when the desktop is closed. The existing desktop opens the same personal conversation in its task UI. Host-owned build tasks retain their desktop execution boundary. Existing local notebooks remain in **기기 메모**. Service owns questioning and model admission; no separate mobile prompt or provider bypass is introduced. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
@@ -12,19 +12,29 @@ Philosophy → Product Intent → behavior: introspection, multiple perspectives
 
 ## Boundary and costs
 
-Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
+Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The primary personal conversation uses account-scoped `/v1/me/reflection` and `/v1/me/reflection/turns`, protected account credentials and durable request IDs. It does not use a legacy notebook grant as an account-access fallback.
+
+The legacy notebook client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Its installation ID remains stable when records are deleted; its bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
 
 Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. The local notebook remains device-local. The linked iPhone surface adds explicit opt-in account sync of selected personal conversation text, with a protected local cache and durable request IDs. Files, tool output, temporary chats and classroom records are excluded. Account data is stored through HypeProof Service over TLS; this is not end-to-end encryption. Handwriting, push notifications, Foundry deployment and financial telemetry remain outside this candidate.
 
 ## Native voice and acceptance
 
-The next candidate adds two explicit modes on iOS and Android. **말로 적기**
-appends recognized Korean to an editable project draft without sending. **음성
-대화** discloses final-transcript auto-send and read-aloud before starting. It
-requires current AI consent/access and no unsent draft. After a reply is read,
-**다시 말하기** starts the next turn; the microphone never reopens automatically.
-Stop, background, project switch and audio interruption end the local turn and
-fence stale callbacks. Recognition failures preserve partial draft text.
+**말로 적기** appends recognized Korean to an editable draft without sending;
+explicit Send requests an answer. The iPhone account-conversation candidate starts
+voice through one deliberate microphone action after required OS permissions and
+existing AI/storage consent. Stable speech and silence finalize once; its own
+reply is read before listening resumes in the active foreground conversation.
+No recurring confirmation sheet, end-speech or next-turn tap is required.
+Stop, background, account/conversation change and audio interruption end the
+interaction and fence stale callbacks. Returning to the app does not restart
+capture. Recognition failures preserve partial draft text.
+
+Android and legacy notebook voice still contain the older manual controls.
+Their alignment to this interaction remains open under #3687; their existing
+tests do not establish acceptance of continuous conversation. The revised shared
+requirements and first iPhone journeys are in the mobile roadmap and
+`docs/testing/native-mobile-growth.md` (MVOICE-02/03 and MFR-03/04).
 
 Only platform on-device recognition is used. iOS checks both
 [supportsOnDeviceRecognition](https://developer.apple.com/documentation/Speech/SFSpeechRecognizer/supportsOnDeviceRecognition)

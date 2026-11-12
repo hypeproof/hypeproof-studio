@@ -4492,7 +4492,7 @@
     },
     {
       "id": "mobile-voice-v1",
-      "title": "Native on-device voice with explicit send and stop boundaries",
+      "title": "Native on-device voice with continuous conversation and stop boundaries",
       "issue": 3687,
       "kind": "implementation",
       "feature_ids": [],
@@ -4509,14 +4509,16 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
-      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
-      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
-      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
-      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align remaining Android and legacy notebook voice with MVOICE-02/03, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
+      "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
+      "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
+      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android and legacy notebook alignment remain unaccepted.",
       "implementation_paths": [
         "apps/studio-native/ios/App/VoiceController.swift",
         "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
         "apps/studio-native/ios/App/HPStudioApp.swift",
         "apps/studio-native/ios/App/StudioModel.swift",
         "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
@@ -4525,6 +4527,7 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"

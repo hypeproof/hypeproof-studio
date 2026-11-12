@@ -13,10 +13,16 @@ inferred from UI use or passing these tests.
 | MREF-T04 | MREF-04 | Locate a reflection-only project by its own display title/search; export round-trips unsaved visible text. |
 | MREF-T05 | MREF-05 | Native keyboard, large text, screen reader and light/dark controls remain operable on each physical platform; successful CI alone is insufficient. |
 | MVOICE-T01 | MVOICE-01 | Dictation preserves pre-existing draft prefix, persists partial/final words, and creates no AI request or intent confirmation. Native transcript fixtures prove storage only. |
-| MVOICE-T02 | MVOICE-02 | Decline voice auto-send consent; change project or expire access before completion; preserve unsent text and send no request. |
-| MVOICE-T03 | MVOICE-03 | Duplicate final and stale callback produce at most one send; read-aloud finishes with microphone off. Then observe five actual Korean spoken turns on each phone. |
+| MVOICE-T02 | MVOICE-02 | Start through the conversation microphone without a recurring app confirmation sheet. Deny OS permission, change account/conversation or expire access before completion; preserve unsent text and send no request. Existing AI/storage consent remains required. |
+| MVOICE-T03 | MVOICE-03 | Speech followed by silence sends once; duplicate finals and stale callbacks cannot submit twice. Only the matching reply may resume capture in the still-active foreground conversation. Stop, background or identity change prevents reopening. Observe five actual Korean turns on each phone without manual end/next-turn taps. |
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
+
+MVOICE-T02/T03 use the current MFR interaction target. Older Android and legacy
+notebook tests that expect a confirmation sheet or manual next-turn tap prove
+only the previous behavior and cannot satisfy these revised cases. Keep those
+platform gaps open under #3687; the iPhone account-conversation journeys below
+are the first implementation slice. No native or physical pass is recorded here.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and
