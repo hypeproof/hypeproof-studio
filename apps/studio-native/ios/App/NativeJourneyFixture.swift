@@ -8,6 +8,10 @@ import CryptoKit
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String { JourneyTransport.store.trace() }
+    static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
+        guard enabled else { return }
+        JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
+    }
     static var service: ConversationService? {
         guard enabled else { return nil }
         let configuration = URLSessionConfiguration.ephemeral
@@ -120,6 +124,7 @@ private struct JourneySnapshot: Codable {
     var challenge = ""
     var callbacks = 0
     var speechCaptures = 0
+    var voiceStartAttempts: [String] = []
     var desktopRequests = 0
     var retryFailures = 0
     var historyReads = 0
@@ -149,6 +154,7 @@ private final class JourneyStore: @unchecked Sendable {
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
             "accepted_turns": value.accepted.count, "browser_callbacks": value.callbacks,
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
+            "voice_start_attempts": value.voiceStartAttempts,
             "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
             "speech_ended_during_history": value.speechEndedDuringHistory,
             "history_barrier_timeouts": historyBarrierTimeouts,
@@ -201,6 +207,14 @@ private final class JourneyStore: @unchecked Sendable {
     func nextSpeech() -> Int {
         lock.lock(); defer { save(); lock.unlock() }
         value.speechCaptures += 1; return value.speechCaptures
+    }
+    func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
+        lock.lock(); defer { save(); lock.unlock() }
+        // Only synthetic journey state, never account IDs or dictated words.
+        // Keep this bounded even when a future UI test repeatedly starts voice.
+        if value.voiceStartAttempts.count < 12 {
+            value.voiceStartAttempts.append("mode=\(mode);selected=\(hasSelection);can_send=\(canSend);draft_empty=\(draftEmpty)")
+        }
     }
     private func requestBody(_ request: URLRequest) throws -> [String: Any] {
         var data = request.httpBody ?? Data()
