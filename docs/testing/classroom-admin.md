@@ -1533,8 +1533,9 @@ collection contract.
 
 | 시험 | 무엇을 | 결과 · 증거 |
 |---|---|---|
-| Service `worker/test/update-freeze.test.mjs` | 한국 날짜 범위 규칙(마지막 날 자정까지, 지난·거꾸로·60일 초과·없는 날짜 거절) · `can_start_session` 없는 연결·다른 수업·학생 토큰은 쓰기 403 · 저장·풀기 · Chalk 상태 읽기의 `update_freeze` · `/v1/profile`은 그 수업 좌석에만, 강사 이름 없이, 나머지 응답은 그대로 · 지난 범위·깨진 키는 고정 아님 | Service head `bac4d36`: 3/3 통과. base에 lib만 넣으면 경로·profile 시험 2개 실패(빨강) |
+| Service `worker/test/update-freeze.test.mjs` | 한국 날짜 범위 규칙(마지막 날 자정까지, 지난·거꾸로·60일 초과·없는 날짜 거절) · `can_start_session` 없는 연결·다른 수업·학생 토큰은 쓰기 403 · 저장·풀기 · Chalk 상태 읽기의 `update_freeze` · `/v1/profile`은 그 수업 좌석에만, 강사 이름 없이, 나머지 응답은 그대로 · 지난 범위·깨진 키는 고정 아님 · 좌석 제한: 실제 체험 좌석과 실제 이용권 좌석을 `/v1/profile`로 읽고(200), 그 좌석의 수업 id에 고정을 심어도 `update_freeze`가 없음 · 계정(개인) 좌석은 접근 계약 저장소 없이는 `/v1/profile`을 읽을 수 없어 경로가 부르는 판정 함수 `servesUpdateFreeze`로만 확인 | 처음 head `bac4d36`의 계정 좌석 확인은 401을 받아 건너뛰어졌고 체험·이용권 좌석은 없었다(검증자 지적, 좌석 돌연변이 3개 생존). 고친 head에서 5/5 통과, 좌석 돌연변이 3개(`!account` 제거, `!native_trial` 제거, 조건 `true`) 모두 실패로 잡힘 |
 | `extensions/hypeproof-chat/test/cohort-update-freeze.test.tsx` | `updateFreeze`(수업 좌석 + 범위 안만; 개인·체험·이용권·지남·시작 전·깨짐은 아님) · 보안 표시 줄은 단독 줄만, 노트에서 지움 · 고정은 보안 출시를 막지 않음 · 문구 · 설정 창 한 줄(자물쇠 + 글, 버튼 없음) · 고정 중 배너 없음, 보안 출시는 `보안 업데이트 v…` 수업 줄 · 확인·설치 명령, 백그라운드 내려받기, 시작 화면 연결 | head 통과. base에서 빌드 실패(내보내기 없음, 빨강) |
+| `cohort-update-freeze.test.tsx` 추가분 | 보안 출시의 전체 배너(수업 밖)도 `보안 업데이트 v… 나왔어요`와 설치 버튼 · `chatUpdateOffer`: 고정 중 보안 출시도 수업 좌석이면 `heldForClass: true` | 돌연변이 2개(전체 배너 문구 되돌리기, 보안 출시에서 수업 보류 빼기) 모두 실패로 잡힘 |
 | `extensions/hypeproof-chat/test/start-update-notice.smoke.mjs` | 고정 중 시작 화면 알림 없음, 보안 출시는 수업 줄로 다시 보임 | head PASS, base `frozen: no notice` 실패(빨강) |
 | `chalk/test/update-freeze-forward.test.mjs` | `PUT`/`DELETE …/update-freeze`만 강사 연결 issuer로 Service에 감, 다른 메서드·경로는 404로 Service에 안 감, Service 판정 유지 | head 통과, base 실패(빨강) |
 | `chalk/test/latest-release.test.mjs` | `security_critical`: 정식 출시의 노트 표시 줄만, rc·실패·모르는 출시는 false, 캐시와 함께 재사용, 시험용 `HPS_STUDIO_LATEST_RELEASE_SECURITY` | head 7/7 통과 |

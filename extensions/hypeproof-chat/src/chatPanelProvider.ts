@@ -284,7 +284,7 @@ import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
 import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
-import { classUpdateHold, freezeHoldsUpdate, updateFreeze } from "./updateCheckerHelpers";
+import { chatUpdateOffer, classUpdateHold, freezeHoldsUpdate, updateFreeze } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
 import { DELEGATION_ICON, DelegationTracker, delegationHeader, delegationResultLabel, NO_ANSWER_REASON, TURN_FAILED_REASON } from "./delegationRow";
@@ -11870,7 +11870,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
-        update: local || freezeHoldsUpdate(updateFreeze(profile), this.availableUpdate) ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
+        update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),

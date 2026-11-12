@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { ChatPanel, UpdateFreezeLine } from "../webview-ui/src/ChatPanel";
 import {
-  SECURITY_CRITICAL_MARKER, freezeHoldsUpdate, isSecurityCriticalRelease, parseLatestRelease,
+  SECURITY_CRITICAL_MARKER, chatUpdateOffer, freezeHoldsUpdate, isSecurityCriticalRelease, parseLatestRelease,
   updateFreeze, updateFreezeCopy, UPDATE_FREEZE_COPY,
 } from "../src/updateCheckerHelpers";
 import type { ChatConfig } from "../src/protocol";
@@ -100,6 +100,23 @@ t("security-critical inside the freeze: the class seat's held line, labelled 보
   const html = render(config({ version: "9.9.9", notes: "", releaseUrl: "https://example.org/r", sizeBytes: 0, heldForClass: true, securityCritical: true }));
   ok(html.includes("보안 업데이트 v9.9.9") && html.includes("수업이 끝나면 설치할 수 있어요."), html.slice(0, 400));
 });
+t("security-critical outside class: the full banner is labelled 보안 업데이트 and keeps its install", () => {
+  const html = render(config({ version: "9.9.9", notes: "", releaseUrl: "https://example.org/r", sizeBytes: 0, heldForClass: false, securityCritical: true }));
+  ok(html.includes("보안 업데이트 v9.9.9 나왔어요"), "full banner not labelled");
+  ok(html.includes("hps-update-banner-install"), "install button missing");
+});
+t("the chat offer: hidden inside the freeze, back for a security release with the class hold still on", () => {
+  const offer = { version: "9.9.9", notes: "", releaseUrl: "https://example.org/r", sizeBytes: 0 };
+  const cls = classroom(RANGE);
+  ok(chatUpdateOffer(offer, cls, null, NOW) === undefined, "frozen offer was sent");
+  const sec = chatUpdateOffer({ ...offer, securityCritical: true }, cls, null, NOW);
+  ok(sec?.securityCritical === true && sec.heldForClass === true, "security release on a class seat must stay held for class: " + JSON.stringify(sec));
+  const after = chatUpdateOffer(offer, cls, null, Date.parse("2026-11-01T00:00:00Z"));
+  ok(after?.heldForClass === true, "after the range: the ordinary class hold");
+  const personal = chatUpdateOffer({ ...offer, securityCritical: true }, { activity_kind: "personal", update_freeze: RANGE }, null, NOW);
+  ok(personal?.heldForClass === false, "personal seat: not held");
+  ok(chatUpdateOffer(null, cls, null, NOW) === undefined, "no offer");
+});
 t("positive control: an ordinary offer outside a freeze keeps its wording", () => {
   const html = render(config({ version: "9.9.9", notes: "", releaseUrl: "https://example.org/r", sizeBytes: 0, heldForClass: false }));
   ok(html.includes("새 버전 v9.9.9 나왔어요") && !html.includes("보안 업데이트"), "banner wording changed");
@@ -110,7 +127,7 @@ const provider = readFileSync("src/chatPanelProvider.ts", "utf8") /* npm runs th
 const ext = readFileSync("src/extension.ts", "utf8");
 const start = readFileSync("src/startPage.ts", "utf8");
 t("the chat config drops the offer inside the freeze unless security-critical, and sends the freeze for the settings line", () => {
-  ok(/update: local \|\| freezeHoldsUpdate\(updateFreeze\(profile\), this\.availableUpdate\) \? undefined/.test(provider), "config gate missing");
+  ok(provider.includes("update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),"), "config gate missing");
   ok(/updateFreeze: updateFreeze\(profile\)!/.test(provider), "freeze not sent");
 });
 t("the manual check and the install command say who decided; staging is held too", () => {

@@ -546,6 +546,20 @@ export function updateFreeze(
 export function freezeHoldsUpdate(freeze: { until: string } | null, info: { securityCritical?: boolean } | null | undefined): boolean {
   return freeze !== null && info?.securityCritical !== true;
 }
+/**
+ * The update offer the chat config sends: none inside a cohort freeze (unless security-critical), otherwise the
+ * offer with the class hold (CGP-SHELL-R-001) computed as always. A security release overrides the freeze only:
+ * it is still held for class and still needs the learner's restart approval.
+ */
+export function chatUpdateOffer<T extends { securityCritical?: boolean }>(
+  offer: T | null | undefined,
+  profile: Parameters<typeof updateFreeze>[0],
+  activity?: { kind?: string | null; pass?: unknown } | null,
+  now: number = Date.now(),
+): (T & { heldForClass: boolean }) | undefined {
+  if (!offer || freezeHoldsUpdate(updateFreeze(profile, now), offer)) return undefined;
+  return { ...offer, heldForClass: classUpdateHold(profile, activity) };
+}
 export const UPDATE_FREEZE_COPY = "선생님이 업데이트 시점을 정했어요.";
 /** "선생님이 업데이트 시점을 정했어요. 10월 31일까지 지금 버전을 써요." */
 export function updateFreezeCopy(freeze: { until: string }): string {
