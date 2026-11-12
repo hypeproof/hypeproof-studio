@@ -70,7 +70,8 @@ async function harness(config: ChatConfig, messages: ChatMessage[] = []) {
   const toggle = () => card()[0]?.findAll((e) => e.localName === "button" && e.getAttribute("data-block-toggle") !== null)[0];
   const body = () => card()[0]?.findAll((e) => (e.getAttribute("class") ?? "").split(/\s+/).includes("hp-block-card-body"))[0];
   const press = async () => { const b = toggle(); ok(b, "no 열어 보기 button on the card"); await act(async () => { click(b as unknown as Parameters<typeof click>[0]); }); };
-  return { host, blocks, shown, pick, card, toggle, body, press };
+  const update = async (config: ChatConfig) => { props.config = config; await act(async () => { root.render(<ChatPanel {...(props as React.ComponentProps<typeof ChatPanel>)} />); }); };
+  return { host, blocks, shown, pick, card, toggle, body, press, update };
 }
 const within = (el: El, anc: El) => { for (let n: El | null = el; n; n = n.parentNode) if (n === anc) return true; return false; };
 const isOpen = (h: Awaited<ReturnType<typeof harness>>) => h.body()!.getAttribute("hidden") === null;
@@ -131,6 +132,15 @@ t("no card where the lesson attaches nothing (no ui, refused values, no lesson)"
   }
 });
 
+t("live version replacement resets open card with same step identifier", async () => {
+ const h=await harness(seat(WITH));await h.press();ok(isOpen(h),"first version opened");
+ await h.update(seat(lessonOf("m2026.10.31-new", WITH.content.steps)));
+ ok(!isOpen(h),"new version starts closed");
+ eq(h.blocks()[0].getAttribute("data-hps-material-version"),"m2026.10.31-new","identity updates");
+ await h.press();ok(isOpen(h),"new version opens");
+ await h.update(seat(WITHOUT));eq(h.card().length,0,"removed block disappears");
+ await h.update(seat(WITH));ok(isOpen(h),"returning to the original version restores its own open state");
+});
 (async () => {
   for (const [label, fn] of tests) {
     try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${(e as Error).message}`); fail++; }

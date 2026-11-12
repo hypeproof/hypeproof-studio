@@ -117,3 +117,38 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
     assert.ok(s.storeErrorMessage(new s.StoreClientError(code)).includes(text), code);
   console.log('PASS attribution and payout-account calls');
 }
+
+// #3770: identity verification opens only the Service's own verification page for that session.
+{
+  const ID = 'idv_' + 'b'.repeat(32);
+  const good = { session_id: ID, verify_url: `https://service.test/v1/store/identity/verify?session=${ID}`, sandbox: true };
+  const { c, calls } = client(() => [201, good]);
+  assert.equal((await c.startIdentity()).session_id, ID);
+  assert.deepEqual([calls[0].url, calls[0].method], ['https://service.test/v1/store/identity/start', 'POST']);
+  // Extra parameters or a fragment never reach the browser: the opened URL is rebuilt from the session.
+  const extra = client(() => [201, { ...good, verify_url: good.verify_url + '&next=https://evil.test/#x' }]);
+  assert.equal((await extra.c.startIdentity()).verify_url, `https://service.test/v1/store/identity/verify?session=${ID}`);
+  for (const verify_url of ['https://evil.test/v1/store/identity/verify?session=' + ID, 'https://service.test/v1/store/checkout?session=' + ID, `https://service.test/v1/store/identity/verify?session=idv_${'c'.repeat(32)}`, 'nope']) {
+    const bad = client(() => [201, { ...good, verify_url }]);
+    await assert.rejects(bad.c.startIdentity(), (e) => e.code === 'invalid_response', verify_url);
+  }
+  assert.ok(s.storeErrorMessage(new s.StoreClientError('identity_in_use')).includes('한 사람은 한 계정에서만'));
+  console.log('PASS identity start opens only the Service verification page');
+}
+
+// #3790 note: with no fresh seller view the verified notice names no amount (never "최대 0원").
+assert.equal(s.STORE_COPY.identityDone(undefined), '본인인증을 마쳤어요. 판매 한도는 「내 스토어」를 다시 열면 보여요.');
+assert.equal(s.STORE_COPY.identityDone(100000), '본인인증을 마쳤어요. 이제 한 개당 최대 100,000원까지 올릴 수 있어요.');
+console.log('PASS identity notice without a fresh seller view names no amount');
+// #3774: only an https gateway receipt page is ever opened.
+{
+  const ID = 'sto_' + 'a'.repeat(32);
+  const { c, calls } = client(() => [200, { receipt_url: 'https://dashboard.tosspayments.com/receipt/redirection?transactionId=x' }]);
+  assert.equal(await c.receipt(ID), 'https://dashboard.tosspayments.com/receipt/redirection?transactionId=x');
+  assert.equal(calls[0].url, `https://service.test/v1/store/orders/${ID}/receipt`);
+  for (const receipt_url of ['http://dashboard.tosspayments.com/r', 'javascript:alert(1)', 'https://u:p@x.test/r', undefined]) {
+    const bad = client(() => [200, { receipt_url }]);
+    await assert.rejects(bad.c.receipt(ID), (e) => e.code === 'receipt_unavailable', String(receipt_url));
+  }
+  console.log('PASS receipt opens only an https gateway page');
+}

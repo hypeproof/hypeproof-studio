@@ -13,6 +13,7 @@ import budgetsHtml from './ui/budgets.html';
 //   GET /board                       — instructor live board page (#674)
 //   GET /connect/start|callback|status, POST /connect/disconnect
 //                                    — Lab login connection (no pasted issuer)  src/routes/connect.ts
+//   GET /studio/latest-release       — latest formal Studio release (public, DEC-24)  src/routes/studio-release.ts
 //   GET /admin/cohorts/:id/state     — read-only cohort state (issuer Bearer)   src/routes/state.ts
 //   GET /admin/cohorts/:id/board     — live board JSON (issuer Bearer)          src/routes/board.ts
 //   GET /admin/cohorts/:id/logs      — studio-logs arrival + roster diff (issuer)  src/routes/logs-admin.ts
@@ -36,6 +37,7 @@ import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
 import { makeErrorBody, requestId } from "./middleware.ts";
 import { state } from "./routes/state.ts";
 import { board } from "./routes/board.ts";
+import { studioRelease } from "./routes/studio-release.ts";
 import { labTokens } from './routes/lab-tokens.ts';
 import { logsAdmin } from "./routes/logs-admin.ts";
 import { forwardInstructorWrite } from "./routes/forward.ts";
@@ -94,6 +96,8 @@ const authoringPage = (authoringHtml as unknown as string).replace("/*@instructi
 app.get("/authoring", () => page(authoringPage));
 app.get("/manage", () => page(renderSafetySignal(renderBoardStatusPage(manageHtml))));
 app.get("/budgets", () => page(budgetsHtml));
+// The latest formal Studio release for /manage's 업데이트 필요 mark (DEC-24); public, cached, never a credential.
+app.route("/", studioRelease);
 app.get("/sharing", () => page(sharingHtml));
 app.get('/learn', () => page(learnHtml));
 app.get('/v1/profile', forwardInstructorWrite);

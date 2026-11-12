@@ -15,6 +15,7 @@ export interface ActivitySummary {
 export interface StartState {
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
+  personalReflectionPending?: boolean;
   /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
   skillStore?: boolean;
   activities?: ActivitySummary[];
@@ -25,6 +26,11 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
+  /**
+   * DES-SHELL-04 — `error` is the refusal of the code the learner just submitted, so the start page
+   * draws it under the code field. Absent: any other error, drawn in the card's error area.
+   */
+  errorAt?: "code";
   profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string;
     /** Free start (SPEC iteration 4 §2.4) — the free allowance seat: labels say 무료 사용, never 체험. */
     free?: boolean };
@@ -99,6 +105,9 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  /** MPER-02/04: explicit personal-question intent, never an AI turn. */
+  | { type: "openPersonalReflection" }
+  | { type: "cancelPersonalReflection" }
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }
   | { type: "startUpdateDismiss"; version: string }

@@ -71,8 +71,9 @@ export const RECOVERED_COPIED = "복사했어요";
 export const RETRY_TEXT_LABEL = "받아쓴 글";
 
 // ---- Read-aloud ----
-export const READ_ALOUD_LABEL = "소리로 듣기";
-export const READ_ALOUD_STOP = "읽기 멈추기";
+// The control's two labels are the design row's own copy (CGP-CHAT-D67, decisions.md CGP-CHAT-D-009).
+export const READ_ALOUD_LABEL = "읽어 주기";
+export const READ_ALOUD_STOP = "그만 읽기";
 export const READ_ALOUD_PLAYING = "읽는 중이에요";
 export const READ_ALOUD_CODE_SKIPPED = "코드는 건너뛰었어요";
 export const READ_ALOUD_UNAVAILABLE = "이 컴퓨터에서는 소리로 읽을 수 없어요";

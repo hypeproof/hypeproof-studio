@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { outboundDetails, type OutboundManifest } from "./outboundConsent.ts";
+import { isGroupedAssessment, outboundDetails, type OutboundManifest } from "./outboundConsent.ts";
 
 /**
  * CGP-KNOW-D-006: the chat panel's in-panel dialog. `null` means it could not be shown (no visible panel), and only then
@@ -31,6 +31,10 @@ export async function confirmOutbound(manifest: OutboundManifest): Promise<boole
     if (shown === null) {
       // Panel hidden: a cohort-only send may still use the native modal; a public one is refused, not asked.
       if (frozen.public) { void vscode.window.showInformationMessage(PUBLIC_NEEDS_PANEL); return false; }
+      if (isGroupedAssessment(frozen)) {
+        void vscode.window.showInformationMessage("채팅 창을 열고 보낼 작업 기록을 확인해 주세요.");
+        return false;
+      }
       return await vscode.window.showWarningMessage("보내기 전에 확인해 주세요", { modal: true, detail }, "확인하고 보내기") === "확인하고 보내기";
     }
     if (shown !== true) return false;

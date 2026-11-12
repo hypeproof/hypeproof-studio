@@ -69,7 +69,7 @@ function fixture(name) {
   put(root, 'notes/leak.txt', 'my token is ' + TOKEN);
   put(root, 'notes/activity.txt', 'activity ' + ACTIVITY_TOKEN);
   put(root, 'config.js', "const api_key = 'sk-live-xyzw1234';");
-  put(root, 'evil\u202etxt.html', 'bidi-name');
+  put(root, 'evil\u202etxt.txt', 'bidi-name');
   put(base, 'outside/secret.txt', 'outside-the-folder');
   fs.symlinkSync(path.join(base, 'outside/secret.txt'), path.join(root, 'link.txt'));
   fs.symlinkSync(path.join(base, 'outside'), path.join(root, 'linkdir'));
@@ -87,6 +87,26 @@ const TASKS = [
 ];
 
 try {
+  // Malformed historical timestamps must not prevent taking work and conversations out.
+  {
+    const root = path.join(base, 'invalid-time-source'), destination = path.join(base, 'invalid-time-export');
+    put(root, 'note.txt', 'My work stays available'); fs.mkdirSync(destination);
+    const dates = [Number.MAX_SAFE_INTEGER, -Number.MAX_SAFE_INTEGER, NaN, Infinity, 0, Date.UTC(2026, 9, 26)];
+    const result = await exportWork({root, destination, secrets:[TOKEN], tasks:[{title:'Saved conversation',
+      messages:dates.map((createdAt, i)=>({role:i % 2 ? 'assistant' : 'user', content:`Message ${i}: ${TOKEN}`, createdAt}))}]});
+    const entries = readZip(result.file);
+    assert.equal(entries.get('작업 폴더/note.txt').toString(), 'My work stays available');
+    const messages = JSON.parse(entries.get('대화/transcript.json').toString()).tasks[0].messages;
+    assert.equal(messages.length, dates.length, 'invalid dates must not discard messages');
+    for (let i = 0; i < messages.length; i++) {
+      assert.equal(messages[i].content, `Message ${i}: [가림]`);
+      if (i < 4) assert.equal(Object.hasOwn(messages[i], 'createdAt'), false, 'unrepresentable timestamps are omitted');
+    }
+    assert.equal(messages[4].createdAt, '1970-01-01T00:00:00.000Z');
+    assert.equal(messages[5].createdAt, '2026-10-26T00:00:00.000Z');
+    assert.ok(!entries.get('대화/transcript.md').toString().includes('Invalid Date'));
+    assert.equal(fs.readFileSync(path.join(root, 'note.txt'), 'utf8'), 'My work stays available');
+  }
   // --- core -------------------------------------------------------------------------------------
   const root = fixture('source');
   const dest = path.join(base, 'dest'); fs.mkdirSync(dest);
@@ -330,7 +350,7 @@ try {
   let pick = async () => [{ scheme: 'file', fsPath: dest }], answer = '폴더 열기';
   const vscode = { Uri: { file: fsPath => ({ fsPath, scheme: 'file' }) }, ProgressLocation: { Notification: 15 },
     commands: { executeCommand: async (...args) => { shown.commands.push(args); } },
-    window: { showOpenDialog: (...a) => pick(...a), showWarningMessage: async m => { shown.warn.push(m); }, showInformationMessage: async (m, ...items) => { shown.info.push([m, items]); return answer; },
+    window: { showOpenDialog: (...a) => pick(...a), showWarningMessage: async (m, ...items) => { shown.warn.push(m); return items.length ? answer : undefined; }, showInformationMessage: async (m, ...items) => { shown.info.push([m, items]); return answer; },
       withProgress: async (options, task) => { shown.progress++; assert.equal(options.location, 15); assert.equal(options.title, '내 작업을 내보내는 중이에요'); return task({ report() {} }); } } };
   const mod = { exports: {} };
   vm.runInNewContext(built.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), Buffer, setTimeout, clearTimeout });
@@ -341,7 +361,7 @@ try {
   await new Promise(r => setTimeout(r, 0));
   assert.equal(shown.progress, 1, 'progress shown');
   assert.match(shown.info[0][0], new RegExp('^저장했어요: ' + dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' · 내-작업-source-'));
-  assert.match(shown.info[0][0], /작업 파일 5개 · 대화 2개 · 넣지 않은 파일 \d+개는 zip 안 내보내기-안내.txt에 적었어요/);
+  assert.match(shown.info[0][0], /작업 파일 5개 · 대화 2개 · HTML 파일 1개 포함 · 넣지 않은 파일 \d+개는 zip 안 내보내기-안내.txt에 적었어요/);
   assert.deepEqual(shown.info[0][1], ['폴더 열기']);
   assert.deepEqual(shown.commands[0][0], 'revealFileInOS', '폴더 열기 reveals the zip');
   assert.equal(shown.commands[0][1].fsPath, written);
@@ -353,6 +373,47 @@ try {
   pick = async () => [{ scheme: 'file', fsPath: dest }]; await mod.exports.runWorkExport({ ...source, current: () => false }); assert.match(shown.warn.at(-1), /작업이 바뀌어서 멈췄어요/);
   let calls = 0; await mod.exports.runWorkExport({ ...source, current: () => ++calls < 2 }); assert.match(shown.warn.at(-1), /작업이 바뀌어서 멈췄어요/, 'turn started during collection');
   assert.equal(fs.readdirSync(dest).length, count0, 'refusals write nothing');
+
+  // #3676: a safe root page must not hide the omission of the nested page the learner plans to share.
+  {
+    const work = path.join(base, 'html-rehearsal');
+    const report = 'prototype/reservations.HTM';
+    const unsafeName = 'private\u202e-file.html';
+    const before = '<!doctype html><script>const KEY = "reservations-v1";</script>';
+    put(work, 'index.html', '<!doctype html><p>Home</p>');
+    put(work, report, before);
+    put(work, unsafeName, '<!doctype html><p>Hidden name</p>');
+    put(work, 'credentials.txt', 'credential ' + TOKEN);
+    const info0 = shown.info.length;
+    const cmd0 = shown.commands.length;
+    const previewSource = { root: work, secrets: [TOKEN], tasks: [], current: () => true };
+    const incomplete = await mod.exports.runWorkExport(previewSource);
+    assert.equal(shown.info.length, info0, 'an incomplete HTML export shows a warning instead of a success message');
+    const warning = shown.warn.at(-1);
+    assert.match(warning, /ZIP은 저장했지만 HTML 파일 2개가 빠졌어요/);
+    assert.match(warning, /공유하기 전에 .*내보내기-안내\.txt.*다시 내보낼/);
+    assert.ok(!warning.includes(report) && !warning.includes(unsafeName) && !warning.includes(TOKEN));
+    assert.equal(shown.commands[cmd0][1].fsPath, incomplete, 'the warning still offers to reveal the archive');
+    const entries = readZip(incomplete);
+    assert.ok(entries.has('작업 폴더/index.html') && !entries.has('작업 폴더/' + report));
+    assert.equal(fs.readFileSync(path.join(work, report), 'utf8'), before, 'the warning does not alter the original');
+
+    fs.unlinkSync(path.join(work, unsafeName));
+    const after = before.replace('const KEY', 'const storageSlot');
+    put(work, report, after);
+    const privateDest = path.join(dest, TOKEN);
+    fs.mkdirSync(privateDest);
+    pick = async () => [{ scheme: 'file', fsPath: privateDest }];
+    const warn0 = shown.warn.length;
+    const complete = await mod.exports.runWorkExport(previewSource);
+    assert.equal(shown.warn.length, warn0, 'unrelated credential exclusions do not produce an HTML warning');
+    const success = shown.info.at(-1)[0];
+    assert.match(success, /HTML 파일 2개 포함/);
+    assert.ok(!success.includes(TOKEN), 'the destination display also redacts held credentials');
+    const reexported = readZip(complete);
+    assert.deepEqual(reexported.get('작업 폴더/' + report), Buffer.from(after));
+    assert.ok(!reexported.has('작업 폴더/credentials.txt'), 'the credential filter still excludes the real secret');
+  }
 
   // --- DES-SHELL-27 (CGP-SHELL-D-027): progress while it runs, and a result line that shows the real
   // folder without letting a hostile folder name become a link, reorder the line or push the counts out.

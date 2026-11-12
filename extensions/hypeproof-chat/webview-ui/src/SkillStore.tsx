@@ -110,7 +110,20 @@ function Browse({ state, busy, send }: { state: StoreState; busy: boolean; send:
   </section>;
 }
 
+/** The buyer's purchases with the gateway's receipt; a refund removes the install but not this row (#3774). */
+function Orders({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
+  if (!state.orders?.length) return null;
+  const label = { paid: "결제 완료", refunding: "환불 처리 중", refunded: "환불됨" } as const;
+  return <section aria-label="구매 내역"><h2>구매 내역</h2><ul>{state.orders.map(o => <li key={o.order_id}>
+    {o.title} · {won(o.amount)} · {label[o.state]} · {day(o.refunded_at ?? o.paid_at)}{" "}
+    <button disabled={busy} onClick={() => send({ type: "storeReceipt", orderId: o.order_id })}>영수증 보기</button>
+  </li>)}</ul></section>;
+}
+
 function Mine({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
+  return <><MineInstalls state={state} busy={busy} send={send} /><Orders state={state} busy={busy} send={send} /></>;
+}
+function MineInstalls({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
   const [reporting, setReporting] = useState<string | undefined>();
   const [reason, setReason] = useState("");
   if (!state.installs.length) return <p>아직 설치한 스킬이 없어요.</p>;
@@ -194,15 +207,22 @@ interface AttributionGate { ready: boolean; input?: StoreAttributionInput }
 function useAttribution(state: StoreState) {
   const [partnerCode, setPartnerCode] = useState("");
   const [instructorCode, setInstructorCode] = useState("");
+  const [consent, setConsent] = useState(false);
   // A seller view the panel has not loaded yet is left to the Service, which refuses an undecided first publish.
   const decided = state.seller?.attribution?.decided !== false;
+  const consentVersion = state.seller?.attribution?.consent_version ?? "";
   const empty = !partnerCode.trim() && !instructorCode.trim();
   const preview = state.attributionPreview;
   const confirmed = Boolean(preview && preview.partnerCode === partnerCode && preview.instructorCode === instructorCode);
+  // A code shares the seller's display name and sale amounts with that partner/instructor: it needs the consent.
   const input: StoreAttributionInput | undefined = decided ? undefined : empty ? { none: true }
-    : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}) };
-  const gate: AttributionGate = { ready: decided || empty || confirmed, input };
-  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, gate };
+    : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}), consent: { version: consentVersion, granted: true } };
+  const gate: AttributionGate = { ready: decided || empty || (confirmed && consent && Boolean(consentVersion)), input };
+  const skip = () => { setPartnerCode(""); setInstructorCode(""); setConsent(false); };
+  // The consent is to the partner/instructor these codes name: a changed code asks for it again.
+  const changePartner = (v: string) => { setPartnerCode(v); setConsent(false); };
+  const changeInstructor = (v: string) => { setInstructorCode(v); setConsent(false); };
+  return { decided, partnerCode, instructorCode, setPartnerCode: changePartner, setInstructorCode: changeInstructor, confirmed, consent, setConsent, skip, empty, gate };
 }
 
 function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAttribution>; state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
@@ -214,7 +234,12 @@ function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAtt
     <label>강사 코드<input value={a.instructorCode} maxLength={20} autoComplete="off" placeholder="예: I-ABCDE-FGHJK" onChange={e => a.setInstructorCode(e.target.value)} /></label>
     <button disabled={busy || (!a.partnerCode.trim() && !a.instructorCode.trim())} onClick={() => send({ type: "storeResolveCodes", partnerCode: a.partnerCode, instructorCode: a.instructorCode })}>코드 확인</button>
     {p ? <p role="status">확인했어요. {p.partner ? `파트너: ${p.partner.name}${!a.partnerCode.trim() ? " (강사 소속으로 함께 등록돼요)" : ""}` : ""}{p.partner && p.instructor ? " · " : ""}{p.instructor ? `강사: ${p.instructor.name}` : ""}. 올리면 이대로 한 번만 등록돼요.</p>
-      : a.gate.ready ? <p>{STORE_COPY.codesNone}</p> : <p>{STORE_COPY.codesCheck}</p>}
+      : a.empty ? <p>{STORE_COPY.codesNone}</p> : <p>{STORE_COPY.codesCheck}</p>}
+    {!a.empty && <>
+      <label><input type="checkbox" checked={a.consent} onChange={e => a.setConsent(e.target.checked)} />{STORE_COPY.codesConsent}</label>
+      {!a.consent && <p>{STORE_COPY.codesConsentNeeded}</p>}
+      <button disabled={busy} onClick={a.skip}>{STORE_COPY.codesSkip}</button>
+    </>}
   </section>;
 }
 
@@ -259,11 +284,12 @@ function Settlement({ s, busy, send }: { s: StoreSellerView; busy: boolean; send
       {t.refunded > 0 && <li>환불됨 {won(t.refunded)}</li>}
     </ul>
     <p>{s.payout === "linked_adult_required" ? STORE_COPY.payoutLinkedAdult : STORE_COPY.payoutNotStarted}</p>
+    <p>{STORE_COPY.pgFeeEstimate}</p>
     {s.payout_account && <PayoutAccount account={s.payout_account} busy={busy} send={send} />}
-    {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
+    {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료(예상)</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
       <tbody>{s.sales.map(x => <tr key={x.order_id}><td>{x.title}</td><td>{won(x.gross)}</td><td>{won(x.pg_fee)}</td><td>{won(x.seller)}</td><td>{won(x.commission)}</td><td>{won(x.partner)}</td><td>{won(x.instructor)}</td><td>{SALE_STATUS[x.status] ?? x.status}</td><td>{x.policy_version}</td></tr>)}</tbody></table>
       : <p>아직 판매가 없어요.</p>}
-    {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
+    {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {s.course_blocked ? STORE_COPY.courseBlockedItem : i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
   </section>;
 }
 
@@ -293,12 +319,20 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
   const ready = draft.title.trim() && draft.summary.trim() && draft.body.trim();
   const a = useAttribution(state);
   const bound = s?.attribution;
+  // A course that does not sell: no code step, no listing forms; the settlement history stays visible.
+  if (s?.course_blocked) return <>
+    <section className="record-policy" aria-label="판매할 수 없음"><p>{STORE_COPY.courseBlocked}</p></section>
+    {s && <Settlement s={s} busy={busy} send={send} />}
+  </>;
   return <>
     {!a.decided && <AttributionStep a={a} state={state} busy={busy} send={send} />}
     {state.questDraft && <QuestPublish draft={state.questDraft} cap={s?.cap_krw} busy={busy} send={send} gate={a.gate} />}
     {s && <section className="record-policy" aria-label="판매자 정보">
       <p>판매자 등급: {TIER_LABELS[s.tier] ?? s.tier} · 한 개당 최대 {won(s.cap_krw)}</p>
-      {s.tier === "none" && <p>유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 지금은 무료 스킬만 올릴 수 있어요.</p>}
+      {s.tier === "none" && (state.identity
+        ? <section aria-label="본인인증 진행 중"><p>{STORE_COPY.identityWaiting}</p>{state.identity.sandbox && <p>{STORE_COPY.identitySandbox}</p>}<button disabled={busy} onClick={() => send({ type: "storeCancelIdentity" })}>{STORE_COPY.identityCancel}</button></section>
+        : <><p>{STORE_COPY.identityNeeded} 지금은 무료 스킬만 올릴 수 있어요.</p><button disabled={busy} onClick={() => send({ type: "storeVerifyIdentity" })}>{STORE_COPY.identityButton}</button></>)}
+      {s.tier === "minor" && <p>{STORE_COPY.identityMinor}</p>}
       {bound?.decided && <p>{bound.partner || bound.instructor
         ? `등록한 코드: ${[bound.partner ? `파트너 ${bound.partner.name}` : "", bound.instructor ? `강사 ${bound.instructor.name}` : ""].filter(Boolean).join(" · ")}. `
         : `${STORE_COPY.codesEmpty} `}{bound.seller_editable ? "" : STORE_COPY.codesFixed}</p>}

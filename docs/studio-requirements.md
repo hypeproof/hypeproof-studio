@@ -1,5 +1,20 @@
 # Studio behavioral requirements
 
+## Personal question entry (#3798)
+
+MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
+screen and existing personal task navigation, including shipped layouts with the
+status/activity bars hidden. The explicit intent uses existing account sign-in,
+personal admission and activity/workspace preparation before opening the existing
+reflection task. Normal pass selection retains that intent; it never starts checkout
+or grants AI access. A validated, consumed-once activity-resume marker carries the
+account/session binding through a required folder reload. Cancel, logout, a changed
+account/task/activity, active work or failed persistence preserves the original work
+and cannot trigger a late question redirect. Classroom entry remains explicit.
+
+See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
+and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
+
 ## Personal task workspace (#1756)
 
 `REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and
@@ -2239,6 +2254,22 @@ explicit entry).
 - **Same class**: a link for the class already stored only says "이미 이 수업에 참여하고 있어요."
 - **Join form**: "참여 링크로 연 수업 <id>" and "링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은
   코드를 직접 입력해 주세요." above the empty code field (type password, focused; 14px+ text).
+  DES-SHELL-04 (CGP-SHELL-D-004, 2026-11-12), on every start-page code form (link, 수업, 체험,
+  무료 code): the field is one 44px learner control (`--hp-control-min`, no block padding, so the
+  height does not follow font metrics) with 14px text. The Korean IME stays out of the code because
+  the field is `type="password"`: Chromium (Electron and the VS Code webview) limits a focused
+  password field to ASCII-capable input sources on macOS and turns the IME off on Windows and
+  Linux. No other attribute does this on a desktop: `inputmode` has no `latin` value and only steers
+  on-screen keyboards, and `lang` and `autocapitalize` do not switch an IME; `autocomplete="off"`
+  and `spellcheck=false` stay. If a composition is open anyway (an IME that ignores the field
+  type), Enter belongs to it (CGP-DS-R-027, the shared `imeComposing` guard) and never submits the
+  half-typed code. Paste is never cancelled (neither the paste event nor Ctrl/Cmd+V).
+  A refused code is said directly under the field, before the help line and 코드 확인하기, in the
+  flow (`role="alert"`, 14px, never a toast), and the field takes `aria-invalid="true"`: the host
+  marks every refusal of a submitted code (`errorAt: "code"`: empty, 강사용 code, another class's
+  code on the link form, a Service refusal, an unreadable profile, a connection failure, a turn in
+  progress). Any other error, and a refusal after the learner has left the form, stays in the
+  card's error area, so the page still shows one error line. The code is never echoed in an error.
   A later refresh of the start page does not close the form; 링크 닫기 drops the link. Each press
   of a link refocuses the form. Leaving the form by any path (시작 방법 다시 선택, 기존 활동으로
   돌아가기, choosing a saved activity, a code submitted from any other form) drops the link, so it
@@ -2260,8 +2291,8 @@ REQ-SHELL-05 says a token-looking link is "rejected"; here the link is opened fo
 token-looking parameters are ignored and logged by name, which keeps one rule (only `class` is
 read) and loses nothing a learner sees. Not built: the class *name* (no credential-free class
 lookup exists, so the id is shown); "unknown class → neutral start screen" (Studio cannot tell an
-unknown class from a real one without a code); IME-off for the code field; the code error is
-shown in the card's error area, not directly under the field. Tests:
+unknown class from a real one without a code). The code field's height, IME, paste and error
+placement are built by DES-SHELL-04 (above). Tests:
 `extensions/hypeproof-chat/test/join-link.smoke.mjs` (parse with code=/token=/password=/identity
 ignored and neither values nor names leaving the parser or the log, 13 malformed links, decision,
 the URI host with ask/decline, ten links in a row giving one dialog, the real StartPage: class preselected, no fetch, no write, no entry, another
@@ -2269,7 +2300,17 @@ class's code refused before any Service call, a code from a form without the lin
 the stale link dropped, wiring) and `e2e/start-page/join-link.mjs` (built
 start page in Chromium at 390 and 1280: class named, code field empty and focused, refresh-stable,
 링크 닫기, re-press, 시작 방법 다시 선택 and 기존 활동으로 돌아가기 dropping the link, a trial code
-carrying no class). Chalk side: REQ-CHALK-JOIN-LINK in
+carrying no class). DES-SHELL-04: `extensions/hypeproof-chat/test/join-code-field-computed.smoke.mjs`
+(the real webview bundle in headless Chromium at 320 and 1280 px, dark and light host themes and
+forced colours: the class line above the empty, focused field; 44px and 14px; a password field
+without autocomplete or spellcheck; paste and Ctrl/Cmd+V not cancelled and pasted text submitted;
+Enter during a composition forced open through CDP not submitting, and submitting once it is gone;
+the refusal under the field, before the help line and the button, in the flow, 14px, the field
+`aria-invalid`, the code not in the page; another error and a refusal after leaving the form in the
+card's error area; the 체험 form measured the same way) and the host half of `join-link.smoke.mjs`
+(eight code refusals marked `errorAt: "code"` with no toast; the running-turn guard for another
+action and any later error unmarked). A headless run cannot show the OS IME itself; the field
+type is the contract it checks. Chalk side: REQ-CHALK-JOIN-LINK in
 [classroom-admin.md](requirements/classroom-admin.md#join-link-20261020).
 
 ## Sign-in link copy (CGP-SHELL-R-022)
@@ -2483,6 +2524,17 @@ Adult instructor practice (`homepage-practice-s1`, #737) uses a separate `homepa
 | REQ-D5 | 게임 저장 (workspace `index.html`) | preview 오픈 시 자동으로 workspaceFolder/index.html 에 write (GitHub Pages 준비). **2026-10-14 메모 (v0.1.56 의 덮어쓰기 경로와 Service 쪽 가드)**: 모든 reveal 경로가 `saveGameToWorkspace` 한 곳에서 `<root>/index.html` 을 쓰고(v0.1.56 `chatPanelProvider.ts:819-831`, 호출 `:1322`) 이전 파일은 아동 world 코호트만 보관한다(`:1317-1319`). 그래서 성인 코호트에서는 채팅의 ```html·```js 펜스(조각이라도)나 doctype 문서(`extractRenderableHtml`, `:3095-3113`)와, 코치가 저장한 다른 `.html` 파일(`revealWrittenHtml`, `:1240-1252`)이 `index.html` 을 덮어쓴다. 앱을 바꾸지 않고 Service main `399109c`(#74)가 프롬프트로 막는다: 세미나(디렉터)와 canary 는 채팅에 html·js 코드 블록을 넣지 않고 `index.html` 하나에 섹션·앵커 링크로 쌓는다(`prompts/dental-copyclone-2026-s1.md:69-76`, `contract_variant: "director"` `lib/translate.ts:31-69`, `:507-527`, design-craft 의 one-page 변형 `skills/index.ts:75-87`); 홈페이지 연습·이용권은 홈페이지 계약(`prompts/_preview-env-contract-homepage.md`)으로 같은 규칙을 받는다. 미성년 코호트는 계약 변형을 받지 않는다. 0% rc2 에서 canary 는 예시 코드 요청에 코드 펜스 없이 답했고 16,384 상한 안에서 20,748자 단일 페이지를 완성했다(hypeproof/hypeproof-service#74 본문). 성인 코호트의 덮어쓰기 전 보관은 Studio main `4304c25f`(#1629)에 모듈(`adultArchive.ts`, `diffGuard.ts`)로 들어왔지만 아직 reveal 경로에 연결되지 않았고(#1618 A4) v0.1.56 에는 없다 | E |
 | REQ-D6 | previewReady handshake | host → webview 사이 `previewReady` 메시지 전에 보낸 HTML 은 pending 큐 → ready 시점에 flush | U + E |
 | REQ-D7 | 생성물 구조 가드 (#359) | reveal 직전 `validateAndRepairHtml`: 미종료 HTML 주석의 오타 close(`*/`)를 `-->` 로 자동복구(정상 CSS/JS `*/` 는 불간섭); 복구 후에도 주석/`<script>` 불균형이면 reveal **차단**(직전 빌드 유지)+경고. 순수 구조 검사 — 법·의료광고 관련 검사 없음(#384로 제거). 경고 표면 = 스트림 중 `toolLog` 한 줄, 스트림 밖(▶ Run) 경고 토스트 | U (`test/html-structure`) |
+
+### Named HTML auto-preview (REQ-D5)
+
+When a successful coach Write or Edit triggers an
+automatic preview of a named HTML file, Studio opens the existing file at its own path. A nested
+page resolves assets from its own directory. Previewing it leaves the home page and the named
+file's bytes intact and records the named path in the preview snapshot. The default home page used
+by the existing class approval and publishing flows remains the explicit root `index.html`.
+The home-page build and structural checks still apply to a direct root `index.html` edit and
+generated chat builds. Host regressions in `test/turn-tools.test.mjs` and
+`test/preview-recovery-provider.test.mjs` cover the write event, sandbox base, live URL, and home page.
 
 ## E. Manual-approve modal
 
@@ -4541,6 +4593,13 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   the latest recorded event, or `바뀐 때 기록 없음` when there is none. List by default;
   `목록`/`격자` (aria-pressed, weight plus underline) switches to a grid; a window of 360px
   or less shows the list only and offers no switch. Opening asks the host for a fresh list.
+- **Find a listed file (#3290).** A labelled search field filters the current inventory by
+  literal filename or folder path, ignoring case and Unicode composition. Matching preserves
+  original order, provenance and file identity. The count says “현재 목록에서” and the existing
+  omitted/unconfirmed inventory notices stay visible, including when no item matches; this is
+  not a whole-workspace scan. Clear restores the list and returns focus to the field. A new
+  task/activity starts with an empty query. Matching sends no inventory-scan or model request;
+  existing bounded lazy-thumbnail requests still run for newly visible rows after filtering.
 - **Keyboard and focus.** A native modal dialog on the rail's side, full height, at most
   360px wide: focus moves in on open, Tab stays inside (the page behind is inert), Escape
   or `내 작품 닫기` closes it, and focus returns to the opener, else the rail toggle. A task
@@ -5462,6 +5521,16 @@ Evidence: `answer-attempts.smoke.mjs`, `answer-attempts.test.tsx`,
 `answer-attempts-style.smoke.mjs`, and `answer-attempts-computed.smoke.mjs` (headless
 Chromium: 44px targets, 14px text, focus ring, both seats, dark and light, 1420/800/320,
 measured against clientWidth) in `extensions/hypeproof-chat/test/`.
+
+## Work assessment grouped confirmation (CGP-KNOW-R-006)
+
+Before “내 작업 돌아보기” sends records for assessment, the learner sees the exact
+destination and one unchecked box per kind of record. An independent disclosure
+opens the records in that group, with their text where available and byte counts.
+Send requires every group and the host checks the original full set of item IDs.
+The current activity, connection and exact batch must still match before sending.
+Cancel, timeout, a stale batch or an unavailable chat panel authorizes no send.
+Public publication retains its separate content and audience decisions.
 
 ## Public publication second confirmation (CGP-KNOW-R-007)
 
@@ -6899,7 +6968,9 @@ covers CGP-AGENT-R-025 / REQ-CGP-AGENT-48). Cmd+F on macOS, Ctrl+F elsewhere, an
 the chat webview opens a find bar at the top of the open transcript, right-aligned in the
 chat column, and focuses its input (대화에서 찾기). The physical F key counts too, so a
 Korean input source opens it. Pressing it again refocuses and selects the query; a query
-kept from an earlier search is repainted on reopening without scrolling. It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
+kept from an earlier search in the same conversation is repainted on reopening without scrolling.
+Changing task or activity closes the bar and clears its query; typing the same text in the new
+conversation performs a fresh search and reveals its current match (#2974). It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
 owns the keyboard, nor during IME composition. Every seat that draws the transcript gets it
 (personal, classroom, lesson, trial, pass and the instructor's nested panel); it reads only
 the local DOM and sends nothing to the host or the network.
@@ -8188,10 +8259,14 @@ command (kept out of the palette, like the other learner commands). It writes on
    A second press while one runs does nothing.
 7. Progress shows as a notification ("내 작업을 내보내는 중이에요"); the result is one line
    "저장했어요: <폴더> · <파일 이름> · 작업 파일 n개 · 대화 m개" with "폴더 열기", which reveals the zip.
+   The result includes the count of HTML files in the ZIP when present. If any encountered `.html` or
+   `.htm` file is left out, including in a subfolder, a warning says how many HTML files are missing,
+   points to `내보내기-안내.txt` and asks the learner to review the original and export again before sharing.
+   This warning reveals no omitted names or contents and still offers "폴더 열기".
    The entry is a 44px target with ≥14px text, a focus ring and a forced-colours border (DES-SHELL-27).
    The progress notification opens as soon as the export starts and counts files read every 50
    ("파일 50개 담는 중"). The folder in the result line is a display copy (DES-SHELL-27, CGP-SHELL-D-027):
-   VS Code runs `[text](command:…)` in a notification as a link and draws control and bidi characters, so
+   Credential values are redacted. VS Code runs `[text](command:…)` in a notification as a link and draws control and bidi characters, so
    C0/C1 controls, U+2028/2029, bidi marks and embeddings, zero-width space and BOM show as `�`; when `](`
    appears, `[`/`]` show as `［`/`］`; a path over 120 characters keeps its first 40 and last 79 around
    `…`, so the file name and counts are never cut by the 1000-character notification limit. "폴더 열기"
@@ -8337,7 +8412,7 @@ block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING
 line under it (one line, ellipsis; once open the whole sentence moves under the work surface, REQ-STUDIO-LEARNING-BLOCK-CAPTION), and a 44px "열어 보기" button (`aria-expanded`,
 `aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
 nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
-open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
+open/closed choice is keyed to the course, lesson version, content hash and step, so even a new version with identical content starts closed; returning to a previously opened version restores only its own choice. Opening one step's card never opens another's (it is not
 stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
 named by the title in its head and described by the controls help. The live state line is never in the hidden body, so
 a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
@@ -8978,9 +9053,12 @@ Custody follows the Epic's design v1 (comment on #3418): the seller's private la
 | REQ-STORE-MAIL | A store skill that declares `mail_draft` runs from the buyer's own roster, never as a chat turn and never with its template on the buyer's device (design v1 D10, F7). 「실행」 reads the sheet set up in the buyer's automation, maps columns by the skill's public parameter labels, sends only the rows (address + parameter cells, at most the activity's recipient cap) to the Service's render route, and refuses the result unless it has one message per row with exactly that row's address. The preview is built only from addresses in the recipient column of the sheet as last read on this device under the same Google connection (no duplicates, no header injection; an address in another column is not a recipient; a newer preview clears the older one), shown in full (every recipient, subject and body) and sent through the buyer's own Gmail connection only after the buyer approves that exact preview; every send is approved, so the first send of an installed or updated version always is. No model takes part, so none can choose or add a recipient; the Service refuses minors and age-unknown buyers (F14) and ends the refund right at the first render (F1). The run never reaches the Apps Script project generator or the shared runner, so no store recipe is embedded in or sent to either. | `storeMail.ts`, `automationHost.ts` `runStoreMail`, `googleAutomation.ts` `previewRendered`, `skillStore.ts` `render`, `skillStorePanel.ts` · `store-mail-custody.smoke.mjs` · Service `store.test.mjs` render tests |
 | REQ-STORE-LOCAL-SEAL | The creator's automation draft in `globalState` (`hps.automation.recipe.<namespace>`) is stored as AES-256-GCM ciphertext under a per-device key kept in SecretStorage (design v1 D7); the AAD binds it to its namespace, so a copied value opens neither in another activity's slot nor with another device's key. A plaintext draft written before this is sealed in place when the automation next opens. The key is created only when a draft is first written. | `automationDraftSeal.ts`, `automationHost.ts` · `store-mail-custody.smoke.mjs`, `automation-conversation-host.smoke.mjs` |
 | REQ-STORE-REFUND | Within `refund.window_days` of payment and before the first run, a refund cancels the whole payment at the gateway, removes the install and reverses every ledger line under the sale's own `policy_version` (`refund.after_split`, unsettled case). After the first run or past the window the refund button is absent and the reason is shown. A gateway cancel failure leaves the sale, install and ledger unchanged. | W `skill-store.test.tsx` · Service `store.test.mjs` refund tests |
-| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the partner and instructor the seller registered, `attribution.*`), policy version and status (refund window, refund in progress, payout hold by `tier.*` hold days, payable, refunded). Totals for refund window, payout hold, payable and refunded are shown before any payout account exists. Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale, no-code and earnings tests |
-| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. The choice is registered once (`attribution.seller_editable`); afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
+| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first, labelled 예상 while `pg.fee_rate_bps` is a placeholder), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the partner and instructor the seller registered, `attribution.*`), policy version and status (refund window, refund in progress, payout hold by `tier.*` hold days, payable, refunded). Totals for refund window, payout hold, payable and refunded are shown before any payout account exists. Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale, no-code and earnings tests |
+| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. Entering a code shows the consent to provide the seller's display name and sale amounts to that partner/instructor for settlement; publishing with a code needs it checked, and 「코드 없이 진행」 clears the codes so the publication registers none. The choice is registered once (`attribution.seller_editable`); afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
 | REQ-STORE-PAYOUT-ACCOUNT | The payout account is asked for only once the payable balance reaches `payout.account_prompt_krw`; before that the view says when it will be asked. The form takes bank, account number and holder; a minor seller is asked for a linked adult's account and sees that payout waits for the adult's verification (`linked_adult.verification`). After saving, only the bank and last four digits are shown; the panel keeps no copy of the number. Holder verification is a sandbox check until the payout agency contract (#3419). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · Service `store.test.mjs` payout-account and minor tests |
+| REQ-STORE-IDENTITY | An unverified seller (`tier.none`, cap `tier.none.cap_krw`) sees 「휴대폰 본인인증」 in 「내 스토어」. It opens only the Service's own verification page for that session in the browser, and the panel waits until the Service reports the outcome: verified (the seller's tier and cap follow), failed, expired or 「기다리지 않기」. The verified birth date replaces the self-declared year, so a 14–18 seller lands in `tier.minor` and under `age.minor_min` is refused. One person verifies one store account. Only the outcome is stored (no name, phone or birth date). Until the provider contract (#3419) the provider is a sandbox and the page says so. | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` identity tests |
+| REQ-STORE-COURSE-BLOCK | A course whose profile does not sell (every minor cohort; any profile with `store.sell: false`) keeps everyone on its seats, and every account marked as coming from it, from listing or selling store skills. 「내 스토어」 then shows 「이 과정에서는 스킬을 팔 수 없어요…」 with no code step and no listing forms; the settlement history stays. Their listed skills are not shown or sold, and buyers who hold one keep running it. Marks come from the account's own seat token or an operator (audited). | W `skill-store.test.tsx` · Service `store.test.mjs` course block test |
+| REQ-STORE-RECEIPT | 「내 스킬」 lists the buyer's purchases (paid and refunded) with amount, state and date, each with 「영수증 보기」. The receipt is the gateway's own page for that payment: the Service reads it from the gateway's record of that order and amount, and the App opens it only when it is an https page. A refund removes the install but keeps its row and receipt. | W `skill-store.test.tsx` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` receipts test |
 | REQ-STORE-MINOR | A self-declared 14–18 account may install free items only (`minor.buy`), may sell within `tier.minor`, sees its own ledger, and its payout is marked linked adult required (`minor.sell`). The age question appears before the first purchase or sale. | W `skill-store.test.tsx` · Service `store.test.mjs` minors test |
 | REQ-STORE-FRAUD | An order is refused when buyer and seller share a recorded device or network address, and a payment made with a card the seller used is cancelled and never recorded as a sale (`fraud.shared_signal`). A seller's monthly paid total cannot exceed `fraud.seller_monthly_cap_krw`. Reports from `reports.auto_unlist` distinct buyers unlist an item. | Service `store.test.mjs` fraud and report tests |
 
@@ -8995,15 +9073,15 @@ is out of scope and stays unmounted.
 | ID | Requirement and acceptance | Evidence |
 |---|---|---|
 | REQ-CGPV-33 | Class feature keys `dictation` and `read_aloud` (CGP-VOICE-R-024; DEC-06, DEC-07; policy 4 and 6). The only input is the served `voice` block: a seat with no block, a block with both halves off, or a block naming a policy version this build has no copy for renders no voice element anywhere and its markup is byte-identical to a build without voice. Each half is its own switch. A seat that was served voice earlier in this window and is served none now (the Service omits the block when a class turns voice off, or a minor class loses consent) shows the disabled state (CGP-VOICE-D-018): the mic button and each answer's read-aloud button are disabled, named with the reason `이 수업에서는 쓸 수 없어요`, and the reason is also visible text above the composer; the text flow is unchanged. A Service refusal `voice_off` or `voice_consent_required` switches the seat to the same state. A class that never enabled voice shows nothing | `test/voice-served.smoke.mjs`, `test/voice-mount.test.tsx` (classroom and personal seats, SSR markup compared byte for byte), `test/voice-ui.test.tsx`, `test/voice-browser.smoke.mjs` (real App bundle, 320/480/800) |
-| REQ-CGPV-04 | Disclosure before first use (CGP-VOICE-R-004, CGP-VOICE-D-003; VO-25; policy 5). One modal sheet with the approved Appendix B sentence for each served half (dictation: minor wording unless the tier is a professional workshop tier, then the adult wording; read-aloud: one wording), one primary button `시작하기`, Escape or the close button cancels. Nothing starts and nothing is recorded as read on cancel. The first press of the mic button or of `소리로 듣기` opens it; the microphone is not opened before `시작하기`. Remembered once per seat and policy version in the host's `globalState` (one record keyed by the seat's scope, version strings only), so on a shared laptop each seat sees it once. The sentences are keyed by policy version in `voiceCopy.ts`; an unknown version shows no sheet and no voice. The sheet fits a 320x480 viewport without scrolling | `voice-served.smoke.mjs` (copy equals the record), `voice-ui.test.tsx` (gating, Escape, acknowledgement once), `voice-browser.smoke.mjs` (sheet geometry) |
+| REQ-CGPV-04 | Disclosure before first use (CGP-VOICE-R-004, CGP-VOICE-D-003; VO-25; policy 5). One modal sheet with the approved Appendix B sentence for each served half (dictation: minor wording unless the tier is a professional workshop tier, then the adult wording; read-aloud: one wording), one primary button `시작하기`, Escape or the close button cancels. Nothing starts and nothing is recorded as read on cancel. The first press of the mic button or of `읽어 주기` opens it; the microphone is not opened before `시작하기`. Remembered once per seat and policy version in the host's `globalState` (one record keyed by the seat's scope, version strings only), so on a shared laptop each seat sees it once. The sentences are keyed by policy version in `voiceCopy.ts`; an unknown version shows no sheet and no voice. The sheet fits a 320x480 viewport without scrolling | `voice-served.smoke.mjs` (copy equals the record), `voice-ui.test.tsx` (gating, Escape, acknowledgement once), `voice-browser.smoke.mjs` (sheet geometry) |
 | REQ-CGPV-17, 17b, 17c | Dictation (CGP-VOICE-R-012; policy 1). A `받아쓰기` mic button (stroke icon, 44px) sits in the composer's button row. Press to start, press again to stop; one clip at a time. The webview records with `MediaRecorder` as `audio/webm;codecs=opus` (`audio/ogg;codecs=opus` as the only fallback; never `audio/mp4`) at 32 kbps and stops itself at 58 s (the Service refuses a clip it measures over 60 s, and the encoder flushes a last packet after `stop()`); a clip over 2 MiB is not sent. The host alone sends it to `POST /v1/voice/transcribe` with the seat token, the container type and the declared whole seconds. The transcript is inserted into the composer draft at the caret (replacing a selection, one space of separation), the caret after it, focus in the composer; it is never sent. While a Korean IME composition is open the insert waits for `compositionend`. The control is a separate control with its own name from voice chat. The in-app key Alt+Shift+M starts and stops it and Escape cancels a recording; both are bound only while this webview has focus (never a global shortcut) and are listed in the keyboard sheet only where the mic button is drawn | `voice-dictation.smoke.mjs` (format, 32 kbps, hard stop, 2 MiB, one at a time, microphone released), `voice-host.smoke.mjs`, `voice-ui.test.tsx`, `voice-mount.test.tsx` (insert at the caret in the real composer, nothing sent), `voice-browser.smoke.mjs` (a real MediaRecorder clip arrives as WebM) |
 | REQ-CGPV-18 | Failures are said by cause, calmly, with a way on. Service refusals are shown as the Service wrote them (cap `오늘 쓸 수 있는 음성 받아쓰기를 다 썼어요. 글로는 계속 이야기할 수 있어요.` with no retry and no red; busy; too long; minors or kill switch). A clip the Service cannot read, or that held no words, gets `소리가 잘 들리지 않았어요. 다시 말해 볼까요?`. Too short, no microphone, microphone busy, no webm/ogg opus support, network and a provider outage have their own lines. Text typed before dictation is never touched by any failure | `voice-host.smoke.mjs`, `voice-dictation.smoke.mjs`, `voice-ui.test.tsx` |
 | REQ-CGPV-03 | Microphone permission denied (CGP-VOICE-R-003, CGP-VOICE-D-002). A card above the composer says the microphone is not allowed and offers `마이크 설정 열기` (macOS `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`, Windows `ms-settings:privacy-microphone`, chosen by the host from the platform; the webview names no URL) and `글로 계속하기`. Pressing it does not try the microphone again and returning to Studio does not retry. A failed handoff says so. Device absence and a busy device are not permission denial | `voice-ui.test.tsx`, `voice-host.smoke.mjs` (`micSettingsUri`), `voice-browser.smoke.mjs` |
 | REQ-CGPV-19 | A clip is audio only in memory (CGP-VOICE-R-016; hiding the window, `pagehide`, a task or seat switch and disposing the panel stop a recording, release the microphone and drop the clip, including a clip still being transcribed (its late answer is ignored, so no retry copy is kept); policy 3; DEC-05). It is never written to a file, a Blob URL, web storage, `globalState` or a log line, by the webview or the host, and Studio emits no telemetry of content. A clip whose transcription failed in a way worth retrying is kept in memory for one retry, dropped on success, dismiss, window close or after ten minutes; a retried transcript is shown with `메시지에 넣기` and `복사` and needs an explicit insert. Not covered here: the Service's own handling (migration 0070 holds metadata only) | `voice-dictation.smoke.mjs` (source scan with planted controls), `voice-host.smoke.mjs` (no log line), `voice-ui.test.tsx` (retry resends the kept clip, recovered text needs a press) |
-| REQ-CGPV-24 | Read-aloud (CGP-VOICE-R-024 half, CGP-CHAT-R-009; policy 1, D1). Each completed assistant answer has `소리로 듣기` (personal seats: in the answer's action row; classroom seats: beside the speaker's name). It plays only on a press, in Korean (`ko-KR`) on the device's own voice (only an on-device Korean voice is picked; a streaming voice never is), one answer at a time, and the same button stops it. Fenced code is not read and `코드는 건너뛰었어요` is announced. No Service call and no network request is made by read-aloud. Without `speechSynthesis` the button is disabled with its reason. Unless read-aloud is served nothing speech-related is looked up or called (no `speechSynthesis.cancel()`). Whether read-aloud is useful needs a real Korean voice check (below) | `voice-read-aloud.smoke.mjs` (network tripwires), `voice-ui.test.tsx`, `voice-mount.test.tsx`, `voice-browser.smoke.mjs` |
+| REQ-CGPV-24 | Read-aloud (CGP-VOICE-R-024 half, CGP-CHAT-R-009; policy 1, D1). Each completed assistant answer has `읽어 주기` with the speaker glyph (personal seats: in the answer's action row; classroom seats: beside the speaker's name). It plays only on a press, in Korean (`ko-KR`) on the device's own voice (only an on-device Korean voice is picked; a streaming voice never is), one answer at a time, and the same button stops it. While its answer is read the button is pressed (CGP-CHAT-D-009, CGP-CHAT-D67): `aria-pressed="true"`, `그만 읽기`, a level glyph instead of the speaker and a fill; nothing on it animates in any motion mode; starting another answer releases the first, so at most one button is pressed; forced colours show the pressed state with the system selection pair. Fenced code is not read and `코드는 건너뛰었어요` is announced. No Service call and no network request is made by read-aloud. Without `speechSynthesis` the button is disabled with its reason. Unless read-aloud is served nothing speech-related is looked up or called (no `speechSynthesis.cancel()`). Whether read-aloud is useful needs a real Korean voice check (below) | `voice-read-aloud.smoke.mjs` (network tripwires), `voice-ui.test.tsx`, `voice-mount.test.tsx` (two answers in the real ChatPanel: labels, glyph, `aria-pressed`, one pressed at a time), `voice-browser.smoke.mjs` (real App bundle at 320px, both seats and themes: fill, 44px, 14px, the glyph still under no-preference, OS reduced motion and `data-reduced-motion`, forced colours) |
 
 Design tokens only (`voice.css`, `test/design-tokens.smoke.mjs`), stroke icons through the icon set
-(`mic`, `speaker`; `test/stroke-icons.smoke.mjs`), text at the 14px floor, 44px targets, no overlap and no
+(`mic`, `speaker`, `level`; `test/stroke-icons.smoke.mjs`), text at the 14px floor, 44px targets, no overlap and no
 sideways scroll at 320 and 480 px in both seats and both themes. The webview reaches the seam through
 `composerAddon.ts` and `answerExtras.tsx`; `ChatPanel.tsx` names no voice symbol (`pre-voice-text-flow.smoke.mjs`).
 

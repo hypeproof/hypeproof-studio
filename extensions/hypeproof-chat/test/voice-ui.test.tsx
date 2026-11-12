@@ -99,16 +99,16 @@ t("a seat with no voice block draws nothing and asks the host nothing", async ()
 t("voice on: the mic button and the read-aloud button draw, and the host is asked what was read", async () => {
   await mount(profileOn());
   ok(byLabel("받아쓰기"), "mic button named 받아쓰기");
-  ok(byLabel("소리로 듣기"), "read-aloud button named 소리로 듣기");
+  ok(byLabel("읽어 주기"), "read-aloud button named 읽어 주기");
   eq(posted("voiceDisclosureRead").length, 1, "one disclosure read");
   eq(byLabel("받아쓰기").getAttribute("aria-keyshortcuts"), "Alt+Shift+M", "the in-app key is declared");
 });
 
 t("each half is its own switch", async () => {
   await mount(profileOn({ read_aloud: false }));
-  ok(byLabel("받아쓰기") && !byLabel("소리로 듣기"), "dictation only");
+  ok(byLabel("받아쓰기") && !byLabel("읽어 주기"), "dictation only");
   await mount(profileOn({ dictation: false }));
-  ok(!byLabel("받아쓰기") && byLabel("소리로 듣기"), "read-aloud only");
+  ok(!byLabel("받아쓰기") && byLabel("읽어 주기"), "read-aloud only");
 });
 
 t("disclosure gates the first use: sheet, then 시작하기 remembers and starts; Escape does not start", async () => {
@@ -135,13 +135,13 @@ t("disclosure gates the first use: sheet, then 시작하기 remembers and starts
 
 t("an acknowledged version skips the sheet; read-aloud is gated too until then", async () => {
   await mount(profileOn());
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   ok(all((e) => e.tagName === "DIALOG")[0], "read-aloud opens the sheet first");
   eq(rig.spoken.length, 0, "nothing is spoken before 시작하기");
   await act(() => click(byText("시작하기") as never));
   ok(rig.spoken.length > 0, "speaks after 시작하기");
   await mount(profileOn(), { acked: true });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   eq(all((e) => e.tagName === "DIALOG").length, 0, "no sheet once this version was read");
   ok(rig.spoken.length > 0, "speaks at once");
 });
@@ -237,7 +237,7 @@ t("a class that turned voice off mid-session shows the disabled state with its r
   ok(mic && mic.hasAttribute("disabled"), "the mic button is disabled");
   ok(mic.getAttribute("aria-label")!.includes("이 수업에서는 쓸 수 없어요"), "its name carries the reason");
   ok(all((e) => e.textContent.includes("이 수업에서는 쓸 수 없어요")).length > 0, "the reason is also text, not only a grey button");
-  const listen = all((e) => e.tagName === "BUTTON" && (e.getAttribute("aria-label") ?? "").startsWith("소리로 듣기"))[0];
+  const listen = all((e) => e.tagName === "BUTTON" && (e.getAttribute("aria-label") ?? "").startsWith("읽어 주기"))[0];
   ok(listen && listen.hasAttribute("disabled"), "read-aloud is disabled too");
   await act(() => click(mic as never));
   eq(rig.mediaCalls, 0, "a disabled control starts nothing");
@@ -280,14 +280,16 @@ t("the in-app key Alt+Shift+M starts and ends dictation; it is not a global shor
 
 t("read-aloud: speaks the answer in Korean on the device, skips code and says so, one press stops it, no fetch", async () => {
   await mount(profileOn(), { acked: true });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   ok(rig.spoken.length > 0 && rig.spoken.every((u) => u.lang === "ko-KR"), "ko-KR utterances");
   ok(rig.spoken.every((u) => !u.text.includes("code()")), "code is not read");
   ok(all((e) => e.textContent.includes("코드는 건너뛰었어요")).length > 0, "the skipped code is announced");
-  ok(byLabel("읽기 멈추기"), "the same button now stops it");
-  await act(() => click(byLabel("읽기 멈추기") as never));
+  ok(byLabel("그만 읽기"), "the same button now stops it");
+  eq(byLabel("그만 읽기").getAttribute("aria-pressed"), "true", "pressed while it reads (CGP-CHAT-D-009)");
+  await act(() => click(byLabel("그만 읽기") as never));
   ok(rig.cancels >= 1, "stop cancels the synthesizer");
-  ok(byLabel("소리로 듣기"), "and offers it again");
+  ok(byLabel("읽어 주기"), "and offers it again");
+  eq(byLabel("읽어 주기").getAttribute("aria-pressed"), "false", "released once stopped");
   eq(tripwire, [], "no network");
 });
 
@@ -299,7 +301,7 @@ t("read-aloud without a synthesizer is a disabled button with a reason, not a si
 
 t("a profile that stops serving voice stops a reading in progress", async () => {
   await mount(profileOn(), { acked: true, scope: "k" });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   const before = rig.cancels;
   await act(() => root.render(createElement(Harness, { profile: { profile_id: "p" }, scope: "other" })));
   ok(rig.cancels > before, "cancelled");

@@ -5,7 +5,7 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // plain-language stage, and a row-open button ("근거·조치"). The full breakdown that used to live in seven per-row cells is
 // rendered in #ops-detail by openSeat(); tests here therefore check the compact row contract AND the drawer contract.
 //
-//   the table      one row per learner, the same four columns, 24 synthetic seats; the default board shows at least 8 complete rows at
+//   the table      one row per learner, the same five columns (버전 since CGP-SHELL-R-034), 24 synthetic seats; the default board shows at least 8 complete rows at
 //                  1280×720 and 4 at 1024×640 with 14px+ text and no horizontal overflow (row boxes measured, not CSS read);
 //   filter/search  the summary chips and the search box change only what is SHOWN — a hidden seat stays selected and is still a target;
 //   selection      choosing seats sends nothing; the one primary button follows the context and opens a confirmation, never a request;
@@ -70,9 +70,9 @@ try {
   if (process.env.HPS_G1_WIDEN) await page.addStyleTag({ content: `*{letter-spacing:${Number(process.env.HPS_G1_WIDEN)}em!important}` });
 
   // ── 1. the table at 1280×720 and 1024×640 ──
-  // #1363 progressive disclosure: the row is one line — 선택, 좌석·학생, 지금 상태, 근거·조치. Cause/token/step/signal/upload live in #ops-detail.
-  const heads = await page.locator('#ops-table thead th').allInnerTexts(); assert.deepEqual(heads, ['선택', '좌석 · 학생', '지금 상태', '근거·조치']);
-  for (const id of ['A1', 'C4', 'D6']) assert.equal(await row(page, id).locator('> td').count(), 4, id + ': every row is one compact line');
+  // #1363 progressive disclosure: the row is one line — 선택, 좌석·학생, 지금 상태, 버전 (CGP-SHELL-R-034), 근거·조치. Cause/token/step/signal/upload live in #ops-detail.
+  const heads = await page.locator('#ops-table thead th').allInnerTexts(); assert.deepEqual(heads, ['선택', '좌석 · 학생', '지금 상태', '버전', '근거·조치']);
+  for (const id of ['A1', 'C4', 'D6']) assert.equal(await row(page, id).locator('> td').count(), 5, id + ': every row is one compact line');
   assert.equal(await page.locator('#ops-dist-preview').isVisible(), false, 'distribution action lives in the bulk row and is hidden until a selection exists');
   const wide = await measure(page); results.default_1280x720 = wide; await page.screenshot({ path: path.join(out, 'g1-default-1280x720.png') });
   assert.ok(wide.complete >= 8, '1280×720: at least 8 complete rows before page scrolling: ' + JSON.stringify(wide)); assert.ok(wide.min_font_px >= 14 && wide.body_font_px >= 14 && !wide.overflow && wide.zoom === 1, JSON.stringify(wide));
@@ -91,7 +91,7 @@ try {
     // the detail is a drawer too; Escape returns focus to the row that opened it
     await row(p, 'A1').getByRole('button', { name: '근거·조치' }).click(); const d = await p.evaluate(() => getComputedStyle(document.getElementById('ops-detail')).position); assert.equal(d, 'fixed'); await p.screenshot({ path: path.join(out, 'g1-detail-drawer-1024x640.png') });
     await p.keyboard.press('Escape'); assert.equal(await p.locator('#ops-detail').isHidden(), true); assert.equal(await p.evaluate(() => document.activeElement?.closest('.ops-seat')?.dataset.seat), 'A1'); await p.close(); }
-  console.log('PASS table: four compact columns; 1280×720 ' + wide.complete + ' complete rows, 1024×640 ' + results.default_1024x640.complete + ' (row boxes measured, 14px+, no overflow); fault ≠ help ≠ stale ≠ approval wait; long id stays accessible; drawers at 1024 with inert page, Escape and focus return');
+  console.log('PASS table: five compact columns; 1280×720 ' + wide.complete + ' complete rows, 1024×640 ' + results.default_1024x640.complete + ' (row boxes measured, 14px+, no overflow); fault ≠ help ≠ stale ≠ approval wait; long id stays accessible; drawers at 1024 with inert page, Escape and focus return');
 
   const beforeMobileCommands=commands();
   // Progressive disclosure remains usable on a phone: no clipped filters or unavailable selection tools.

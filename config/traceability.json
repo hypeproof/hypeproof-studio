@@ -6715,6 +6715,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## N. Native browser + agentic control (#278)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Named HTML auto-preview (REQ-D5)"
         }
       ]
     },
@@ -7199,6 +7203,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/live-preview-url.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-recovery-provider.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
         }
       ]
     },
@@ -8725,6 +8735,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
           "path": "chalk/src/ui/manage.html"
         }
       ]
@@ -8740,6 +8753,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/join-link.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/join-code-field-computed.smoke.mjs"
         },
         {
           "path": "chalk/test/join-link.test.mjs"
@@ -9999,6 +10015,10 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-design.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Work assessment grouped confirmation (CGP-KNOW-R-006)"
         }
       ]
     },
@@ -18113,6 +18133,10 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Personal question entry (#3798)"
         }
       ]
     },
@@ -18163,6 +18187,27 @@
         },
         {
           "path": "apps/studio-native/ios/App/NativeBrowserSignIn.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
         }
       ]
     },
@@ -18201,6 +18246,12 @@
         },
         {
           "path": "apps/studio-native/tests/test_native_journey_evidence.py"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-entry-harness.mjs"
         }
       ]
     },
@@ -18473,6 +18524,71 @@
         {
           "path": "docs/testing/native-mobile-growth.md",
           "section": "## TestFlight request and receipt — MTF-T01"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-SEAT-VERSION",
+      "stage": "requirement",
+      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-SEAT-VERSION",
+      "stage": "implementation",
+      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-SEAT-VERSION",
+      "stage": "test",
+      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-IMP-CHALK-SEAT-VERSION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/seat-version.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
         }
       ]
     }
