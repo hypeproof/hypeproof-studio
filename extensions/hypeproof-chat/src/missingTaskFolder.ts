@@ -24,6 +24,8 @@ export const MISSING_TASK_FOLDER_PICK_TITLE = "작업 폴더 다시 고르기";
 /** One extra line under the notice when the pick did not move the task. */
 export const MISSING_TASK_FOLDER_NOT_A_FOLDER = "고른 곳을 열 수 없어요. 다른 폴더를 골라 주세요.";
 export const MISSING_TASK_FOLDER_UNDECIDED = "이 폴더에서 AI가 할 수 있는 일을 고르면 이 작업을 옮겨요. 입력은 그대로 두었어요.";
+/** #3586 — the folder window ran out of time (only then; a close keeps MISSING_TASK_FOLDER_UNDECIDED). */
+export const FOLDER_CONSENT_TIMED_OUT = "폴더 확인 창을 정해진 시간 안에 고르지 않아서 작업을 옮기지 않았어요. 입력은 그대로 두었어요. 다시 고르면 확인 창이 다시 떠요.";
 export const MISSING_TASK_FOLDER_FAILED = "이 폴더로 옮기지 못했어요. 다른 폴더를 골라 주세요. 입력은 그대로 두었어요.";
 /** The consent answer was "AI 안 씀": the task does not move into a folder where it could not continue. */
 export const MISSING_TASK_FOLDER_NO_AI = "이 폴더에서는 AI를 쓰지 않기로 골라서 작업을 옮기지 않았어요. 다른 폴더를 골라 주세요.";

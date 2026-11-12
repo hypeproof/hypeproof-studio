@@ -58,7 +58,8 @@ try {
   }
   for (const id of ['press', 'confirm', 'content', 'enter', 'move', 'action']) assert.equal(m[id]['transition-timing-function'], EASE, `${id} uses the one UI curve`);
   assert.equal(m.exit['transition-timing-function'], EXIT, 'the exit token resolves to the accelerating exit curve');
-  assert.ok(near(sec(m.row['animation-duration'])[0], 0.16), `quote row confirm is 160ms, got ${m.row['animation-duration']}`);
+  // CGP-CHAT-D-007: the quote popover is drawn at once (no fade), so it is there within 150ms of the selection.
+  assert.ok(sec(m.row['animation-duration']).every((x) => x === 0), `quote popover has no entry animation, got ${m.row['animation-duration']}`);
   assert.ok(near(sec(m.modal['animation-duration'])[0], 0.12), `dialog exit is 120ms, got ${m.modal['animation-duration']}`);
   assert.equal(m.modal['animation-timing-function'], EXIT, 'the real dialog exit rule uses the exit curve, not ease-in');
   // No spring or bounce: every resolved timing function on the page keeps y in [0, 1].

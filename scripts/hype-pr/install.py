@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # the other is left half-installed (#210).
 CONSUMER_REMOTE = re.compile(
     r"(?:https://github\.com/|git@github\.com:)(?:jayleekr|hypeproof)/"
-    r"(?:hypeprooflab|hypeproof-studio|sediment)(?:\.git)?"
+    r"(?:hypeprooflab|hypeproof-studio|sediment|hypeproof-chalk)(?:\.git)?"
 )
 START, END = "<!-- hype-pr-skill:start -->", "<!-- hype-pr-skill:end -->"
 BLOCK = f"""{START}

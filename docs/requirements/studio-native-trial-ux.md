@@ -120,3 +120,9 @@
 체험판과 일반판의 인증·오류·시작 안내는 나이에 관계없이 같은 용어를 사용한다. 자격 증명은 사용자에게 ‘참여 코드’, 발급·재발급 연락 대상은 ‘코드 발급 담당자’, 장애 문의는 ‘운영 담당자’로 표시한다. 강의 진행자 역할만 ‘강사’로 부른다. 공통 UI에 ‘선생님’이나 ‘새 토큰’을 사용하지 않는다. TUX-COPY-01은 만료·누락·권한·연결 실패의 공통 메시지와 시작 화면에 적용한다.
 
 셸 노출 조건 정정(2026-09-08): `resolveActionApproval`만 보면 일반 셸 확인이 존재하지만, 체험의 `evaluateSdkToolUse`는 비파괴 Bash를 그 전에 자동 허용한다. 정상 체험에서 일반 ‘항상 허용’ 창을 기다리는 것은 잘못된 판정이다. 이 정정은 제품 권한이나 승인 정책을 바꾸지 않는다.
+
+## Account entry correction — 2026-11-02 (#3385)
+
+The earlier purchase-only login rule is superseded for account-capable builds. First open exposes Google login as the primary action and clearly labels the anonymous path as `로그인 없이 무료로 시작하기`. Existing grants can be selected without checkout; saved activities also expose account navigation. TUX-SP-14 retains anonymous age checking and automatic workspace preparation, while TUX-SP-17 now verifies both first-open login and authenticated checkout. The footer explains that granted passes require Google login, rather than saying login is only for payment. Active payments preserve recovery; hidden orders must not trap navigation.
+
+Explicit Google approval with an active operator unlimited grant proceeds directly into personal work, preserving a current free workspace and its files. It does not require a second pass-selection or activity-start click. Background account refresh never switches activities, and active purchases or non-free activities keep their current flow. A changed navigation intent while activation is pending cancels automatic continuation. Entitled users opening the purchase entry see their grant instead of price cards; a real outstanding order retains its recovery UI.

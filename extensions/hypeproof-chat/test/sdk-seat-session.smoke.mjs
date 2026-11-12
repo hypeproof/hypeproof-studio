@@ -287,7 +287,7 @@ const seatOf = (token, profileId, lessonVersion) =>
   assert.ok(proxyElseAt > lockAt, "proxy 분기도 잠금 안에 있다");
   assert.match(
     coach,
-    /sdkConfigDirFor\(process\.env,\s*coachSeatKeyFor\(args\)\)/,
+    /sdkConfigDirFor\(process\.env,\s*coachSeatKeyFor\(args\),\s*args\.sdkConfigRoot\)/,
     "the CLI config dir is scoped to the seat",
   );
   assert.doesNotMatch(

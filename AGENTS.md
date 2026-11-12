@@ -60,6 +60,46 @@
 | ID | 제안·선택지 | 인간의 최종 결정 | 확정 근거 |
 |---|---|---|---|
 | DEC-DMC-20261027 | 모바일 수업·업무의 원본 위치와 실행 방식 | 컴퓨터에서 로컬 작업 공간을 먼저 준비하고 모바일을 연결한다. 로컬 자원을 실행하고 서비스는 중계한다. 아이들 웹 작품 제작을 우선하며 성인 실무 자동화에도 재사용한다. 모바일 범위를 넘는 작업은 컴퓨터에서 이어가도록 하네스가 안내한다. | 사용자가 “컴퓨터를 먼저 시작하고 그다음에 모바일로 연동”, “워크스페이스가 클라우드에 있는게 아니라 로컬”, “성인 실무 자동화에서도 유리”라고 명시하고 “좋아 이런걸 계획에 담자… REA하고나서” 구현 우선화를 요청했다. 구현·운영 완료나 네이티브 프레임워크·보존기간 확정을 뜻하지 않는다. |
+### Confirmed Google automation decision — 2026-10-14
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-026 | Managed shared Google executor versus learner-owned Apps Script | Default to the shared executor; defer personal Apps Script export. First verify two distinct Google users without company Cloud IAM and isolate their data. Real mail requires separate explicit approval. | TJ: “공통 실행기를 기본으로 가자. 개인 Apps Script 내보내기는 나중에 추가하고 ... 회사 관리 권한 없이 서로 다른 구글 계정으로 실행되고 데이터가 분리되는지부터 직접 검증해.” |
+
+Recorded as DEC-023 on the automation branch; renumbered DEC-026 when merged because main's DEC-023 already records the Service visibility decision.
+This changes the intended commercial execution contract. It does not claim the
+shared runner is integrated, accepted, or released. Existing owner-script MVP
+evidence remains historical evidence of that implementation only.
+
+### Confirmed learner-experience design direction — 2026-10-15
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-024 | Extend the email-only journey into reusable workplace automation | Update the design to cover conversational problem definition; proactive structure negotiation with two choices per decision; one final-outcome image inside the template; a visual quest roadmap; and iterative improvement. Prefer automatic Google integration and learner-owned Apps Script web-app deployment as the destination. Incorporate the supplied curriculum's ten needs, six assets and personal-account background processing. | TJ's explicit five-part design-update request and the curriculum response supplied in the same message on 2026-10-15. |
+
+DEC-024 supersedes DEC-026's personal-script/scheduling deferral **for the expanded
+design destination**. DEC-026 still describes the existing shared email runner.
+This does not authorize unattended customer mail, claim new scope consent, or
+mark the expanded runtime implemented. The four-template taxonomy and detailed
+UX are design proposals under this direction, not separately confirmed human
+choices. Canonical design: [workplace automation journey](docs/requirements/workplace-automation-journey.md).
+
+### Confirmed cross-platform store verification — 2026-10-15
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-025 | Verify store reuse after feature implementation and investigate secure distribution | Extend the goal and acceptance criteria to three existing test accounts, including a Mac-authored automation published through the Studio-connected store and downloaded/configured/executed by another person in Windows Studio. Research storage format, security, distribution and efficient open-source/community practices using existing Supabase, Cloudflare, Google and GitHub options; use a low-reasoning subagent for research and update the documents. | TJ explicitly requested these outcomes and low-reasoning research on 2026-10-15. |
+
+Canonical contract: [cross-platform skill store](docs/plan/skill-store-cross-platform.md).
+This approves research and acceptance planning, not a chosen storage vendor,
+public audience, new paid subscription, executable-package trust grant or new
+mail send. Three Google logins alone do not establish three Studio principals.
+
+### 확정 기록 — 2026-11-03 Chalk 분리
+
+| ID | 제안·선택지 | 인간의 최종 결정 | 확정 근거 |
+|---|---|---|---|
+| DEC-027 | Chalk 분리 중 Studio 옛 강사 코드의 변경 범위. A: 버그·보안 수정만 허용. B: 완전 동결 | A. `extensions/hypeproof-chat/src/chalk/` 와 웹 `chalk/` 는 버그·보안 수정만 받는다. 새 기능과 리팩터링은 `hypeproof/hypeproof-chalk` 에서만 한다. 이 경로를 바꾸는 PR 은 What & why 에 `Chalk follow-up: needed (hypeproof/hypeproof-chalk#N)` 또는 `Chalk follow-up: not needed — <이유>` 한 줄을 적는다. 동결은 Studio 에서 옛 강사 코드를 지울 때(S-4, studio#2558) 끝난다. | 제품 리드(JY)가 2026-11-03 Chalk 분리 계획 4판의 결정 D2 를 권장안 A 로 확정했다. 기록자는 Chalk PO 의 전언으로 받았다. 기록자가 직접 받은 발언이 아니다. |
 
 ## 이번 레포 정리의 목표와 필수 원칙 — 2026-10-10
 
@@ -164,7 +204,7 @@ which Git ignores and which does not exist in a new clone or worktree.
 2. Run `gh auth login` once with an account that can read
    `hypeproof/hypeproof-service`.
 3. Run `npm run bootstrap:service` at the repository root. It prints
-   `Verified 5 pinned private Service packages in ignored local cache.`
+   `Verified 7 pinned private Service packages in ignored local cache.`
 4. Only then run `npm ci`, at the root or in the package you work on.
 
 If step 3 is skipped, `npm ci` ends in `npm error code ENOENT` on a

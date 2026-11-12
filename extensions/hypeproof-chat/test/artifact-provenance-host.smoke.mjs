@@ -127,7 +127,7 @@ await t("wiring lock: the send path calls recordLearnerUploads after both commit
   const src = fs.readFileSync(path.join(here, "src/chatPanelProvider.ts"), "utf8");
   const commit = src.indexOf("const attachedNote = attachedImagesNote(preparedAttachments.relPaths);");
   const record = src.indexOf("this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);");
-  const restore = src.indexOf("const turnRestorePoint = await this.beginTurnRestore(streamId);");
+  const restore = src.indexOf("const turnRestorePoint = temporaryTurn ? null : await this.beginTurnRestore(streamId);");
   if (commit < 0 || record < commit || restore < record) throw new Error("uploads are not recorded between the commit and the restore point");
 });
 

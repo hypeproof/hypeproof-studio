@@ -1,3 +1,4 @@
+import { FEEDBACK_ENTRY_LABEL } from '../../src/problemReport';
 import { useMenuTypeahead } from './menuTypeahead';
 import { citationKindLabel } from './citationKind';
 import { elapsedWorkLabel } from '../../src/turnElapsed';
@@ -10,6 +11,7 @@ import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
 import { ChatFindBar } from './ChatFindBar';
 import { registerClosedText } from './chatFind';
 import { ClassWindowNotice } from "./ClassWindowNotice";
+import { MemoryNotice } from "./MemoryNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -24,6 +26,8 @@ import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
 import { downloadLineView } from "../../src/browserDownloadNotice";
 import { DownloadLine } from "./DownloadLine";
+import { MemoryWriteLine } from "./MemoryWriteLine";
+import { isMemoryWriteId, memoryWriteLineView } from "../../src/memoryWriteLine";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { useAttachmentSendPreparation } from "./AttachmentSendPreparation";
@@ -43,6 +47,8 @@ import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
+import { insertAtCaret, PassThrough } from './composerAddon';
+import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
 import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
@@ -55,17 +61,20 @@ import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions,
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
-import { QuoteAction, useAnswerQuote } from './QuoteAction';
-import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
+import { QuoteAction, QuoteChip, useAnswerQuote } from './QuoteAction';
+import { QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, withQuote, type AnswerQuote } from './quoteReply';
 import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerOffered, steerPress, STEER_LABEL, STEER_OFFLINE_NOTE, STEER_SENDING_MARK, STEER_STOP_FAILED_NOTE, STEER_STOP_TIMEOUT_MS, STEER_STOPPED_MARK, STEER_STOPPING_LABEL, type SteerMark } from './steerNow';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
-import { AccessControl } from './AccessControl';
+import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
+import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
+import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { MemorySettingsList } from './MemorySettingsList';
 import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
 import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
@@ -90,12 +99,14 @@ import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
 import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
+import { ExternalLinkBlocked, blockedLinkHelpText } from './ExternalLinkBlocked';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
+import { ChalkInstructorNotice } from "./ChalkInstructorNotice";
 import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
@@ -116,6 +127,7 @@ import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
 import { ProjectIdeas } from "./ProjectIdeas";
 import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
@@ -128,8 +140,15 @@ import { currentDividerId, stepDividerLabel, stepDividers, type LessonStepMarks 
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
+import { servedApprovalPreset } from "../../src/approvalPreset";
+import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
+import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
+import { LessonStarters } from "./LessonStarters";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
+import { MemoryUseChip } from "./MemoryUseChip";
+import { TEMPORARY_TASK_COPY, TEMPORARY_TASK_UNAVAILABLE } from "../../src/temporaryTask";
+import { MEMORY_SCOPE_HEADER, MEMORY_SCOPE_SENTENCE, MEMORY_STATE_LABEL, MEMORY_TEMPORARY_NOTE, MEMORY_TEMPORARY_SENTENCE } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -172,8 +191,13 @@ interface Props {
   onAttachFile?: () => void;
   /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed file under it for 되돌리기. */
   onRemoveFileAttachment?: (undoId?: string) => void;
+  /** A control that is not part of the text flow (composerAddon.ts). Absent → the composer draws exactly what it always did. */
+  composerAddon?: import("./composerAddon").ComposerAddon;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
+  /** A transient private question, outside normal chat messages. */
+  questionPanel?: import("react").ReactNode;
+  questionId?: string;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
   sendLocked?: boolean;
   aiNotice: string | null;             // #320 — AI disclosure at session start
@@ -229,6 +253,8 @@ interface Props {
   trimBoundaryId?: string | null;
   /** CGP-CHAT-R-023 — the host's served-step mark per user message id. Absent: no step dividers. */
   stepMarks?: LessonStepMarks;
+  /** CGP-KNOW-R-026 — answer id → memory items its request carried. Absent: no 기억 사용 chips. */
+  memoryUse?: Record<string, number>;
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
   delegationStops?: Record<string, import("../../src/delegationStop").DelegationStopState>;
@@ -251,6 +277,8 @@ interface Props {
   onNamingRitual: () => void;
   onSaveCoach: (name: string, personality: string) => void;
   onReportProblem: (source?: "error") => void;          // #64; "error" = the error card (REQ-STUDIO-PROBLEM-REPORT)
+  /** REQ-STUDIO-DOCTOR — the error card's 「진단하기」 (the host shows the full check list). */
+  onDiagnose?: () => void;
   onInstallUpdate: () => void;                          // #72
   onDismissUpdate: (version: string) => void;           // #72
   // #1298 — when true, student-only surfaces (MissionHeader, HelpRequest, artifact approval) are hidden.
@@ -270,6 +298,43 @@ function extractRenderableHtml(text: string): string | null {
   return null;
 }
 
+function ConversationActions({ compact, children }: { compact: boolean; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!compact) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (menu.current && event.target instanceof Node && !menu.current.contains(event.target)) menu.current.open = false;
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    const cleanup = () => document.removeEventListener("pointerdown", closeOutside);
+    return cleanup;
+  }, [compact]);
+  return compact ? <details ref={menu} className="hps-conversation-actions" onKeyDown={event => {
+    if (event.key === "Escape" && !imeComposing(event) && menu.current?.open) {
+      event.preventDefault(); event.stopPropagation(); menu.current.open = false;
+      menu.current.querySelector<HTMLElement>("summary")?.focus();
+    }
+  }}>
+    <summary aria-label="대화 메뉴">메뉴</summary><div onClick={event => {
+      const button = event.target instanceof Element ? event.target.closest("button") : null;
+      if (button && !button.disabled && menu.current) menu.current.open = false;
+    }}>{children}<p className="hps-layout-hint">대화와 결과 사이 경계를 좌우로 드래그해 너비를 조절할 수 있어요.</p></div>
+  </details> : <div className="hps-actions">{children}</div>;
+}
+
+// Optional classroom controls must not compete with a working automation conversation.
+function ConversationSupport({ compact, children }: { compact: boolean; children: ReactNode }) {
+  return compact ? <details className="hps-conversation-support"><summary>수업 안내 · 도움</summary>{children}</details> : <>{children}</>;
+}
+
+function ConversationSettings({ compact, required, questionId, children }: { compact: boolean; required: boolean; questionId?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(required);
+  useEffect(() => { setOpen(required); }, [required]);
+  useEffect(() => { if (questionId && !required) setOpen(false); }, [questionId, required]);
+  return compact ? <details className="hps-conversation-settings" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{required ? "이용권을 선택해 주세요" : "대화 설정 · 이용권"}</summary>{children}
+  </details> : <>{children}</>;
+}
 /** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
 const LOW_DISK_POLL_MS = 60_000;
 
@@ -419,6 +484,7 @@ export function ChatPanel(props: Props) {
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
   const [draftParts, setDraftParts] = useState<DraftPart[]>(() => [{ text: separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null) }]);
   const draft = fullDraft(draftParts), composerText = visibleDraft(draftParts);
+  const draftPartsRef = useRef(draftParts); draftPartsRef.current = draftParts;
   const pasteId = useRef(0);
   // External replacements/imports operate on the complete draft and restore it inline.
   const setDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => {
@@ -437,6 +503,7 @@ export function ChatPanel(props: Props) {
   const [editingId, setEditingId] = useState<string | null>(saved?.inlineEdit?.messageId ?? null);
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false); composingRef.current = composing;
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
@@ -496,6 +563,7 @@ export function ChatPanel(props: Props) {
   const [queued, setQueued] = useState<string | null>(separateQueue ? saved?.queued ?? null : null);
   const [frozen, setFrozen] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
@@ -591,6 +659,9 @@ export function ChatPanel(props: Props) {
   composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
+  // CGP-CHAT-R-004 — "먼저 계획 보기": the host's per-task mode and the plan waiting for the learner.
+  const planFirst = usePlanFirst(JSON.stringify([activityId, taskId]), props.instructor === true);
+  const planAwaiting = planFirst.plan !== null;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
   const composerFailures = [...attachmentSend.failures, ...attachmentFailures.items, ...stagedPhotos.filter(p=>p.error).map(p=>({id:p.id,name:p.name,reason:p.error!}))];
@@ -626,6 +697,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage(msg => {
       if (msg.activityId !== activityId || (msg.taskId && msg.taskId !== taskId)) return;
       if (msg.type === "inputRejected") {
+        if (msg.notice) setSubmissionNotice(msg.notice);
         if(msg.photos?.length) setStagedPhotos(old=>[...old,...msg.photos!.filter(p=>!old.some(own=>own.id===p.id)).map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:true}))]);
         setSteerMarks(steerMarksRefuse);
         setSteerDelivery(null);
@@ -729,6 +801,10 @@ export function ChatPanel(props: Props) {
   }), []);
   useEffect(() => { setLiveActivity([]); }, [activityId, taskId]);
   const [reviewFocus, setReviewFocus] = useState<{ path: string; seq: number; turnId: string } | null>(null);
+  // CGP-ART-D-002 — 바뀐 곳 보기 on the preview's review bar opens this review at the turn's first file.
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "turnReviewShow" && msg.path) { const path = msg.path; setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: msg.turnId })); }
+  }), []);
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
@@ -782,6 +858,10 @@ export function ChatPanel(props: Props) {
   }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
+  // CGP-ART-D-008 — the last safe-session link that did not open, and the host line "선생님께 알리기" puts in the help draft.
+  const [linkBlocked, setLinkBlocked] = useState<{ host: string; at: number } | null>(null);
+  const [helpPrefill, setHelpPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  useEffect(() => onHostMessage((msg) => { if (msg.type === "externalLinkBlocked" && typeof msg.host === "string") setLinkBlocked({ host: msg.host, at: msg.at }); }), []);
   useEffect(() => {
     // The host numbers its draws; one that arrives after a newer draw (an older learner's, or an older read) is not shown.
     const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => guardHostPayload("help", () => acceptHelp(prev, msg.help), null)); });
@@ -836,14 +916,17 @@ export function ChatPanel(props: Props) {
   const statusAudience = config?.activity?.kind === "classroom" || config?.profile?.activity_kind === "classroom" ? "classroom" : config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const selectedAccess = config?.access?.view?.choices.find(c => c.id === config.access?.selected);
   const activityStatus = props.activityUnavailable ?? config?.activityUnavailable ?? accessFailure(selectedAccess?.state, statusAudience);
+  // CGP-KNOW-D-036: a safety notice keeps the message-area slot; otherwise the status screen replaces the composer.
+  const statusScreen = activityStatus && !(error && props.safetyNotice) ? activityStatus : null;
   const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
+  // CGP-CHAT-D-007 — it joins as the quote chip (the draft's first part); what the learner typed stays as it is.
   const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
   const quoteAnswer = (quote: AnswerQuote) => {
     if (unavailable || composing) return;
     lastReplyChoice.current = null;
-    setDraft(current => mergeQuoteIntoDraft(current, quote.block));
+    setDraftParts(previous => withQuote(previous, quote.block, ++pasteId.current));
     dropAnswerQuote();
     document.getSelection?.()?.removeAllRanges?.();
     requestAnimationFrame(() => {
@@ -894,6 +977,10 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // CGP-KNOW-D-005 / R-029: a "기록 없이 묻기" task reads memory and writes none; its header says so after the scope.
+  const inTemporaryTask = !!config?.taskWorkspace?.temporaryTaskId && config.taskWorkspace.temporaryTaskId === config.taskWorkspace.activeTaskId;
+  // Optional classroom controls must not compete with a working automation conversation.
+  const automationCompact = config?.profile?.automations?.enabled === true;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
   // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
@@ -908,7 +995,10 @@ export function ChatPanel(props: Props) {
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
+  // CGP-SHELL-R-024 / D-023 — an instructor's settings change is read out once through this same region; the reconnect line
+  // stays last, so it still wins when both change in one render.
+  const lessonAnnouncement = useLessonSettingsAnnouncement(props.instructor ? undefined : config?.lessonSettingsChanges);
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, lessonAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
   // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.
@@ -962,9 +1052,40 @@ export function ChatPanel(props: Props) {
   // CGP-KNOW-R-002: inside a task workspace whose rail has the 자료 view, the list lives there, not here.
   const { materialsHome } = useContext(ActivityHomeContext);
   const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
+  // composerAddon.insert: text at the caret, caret after it, focus in the composer. An open IME
+  // composition keeps the keyboard until compositionend, so a Korean syllable is never split.
+  const pendingAddonInsert = useRef<string[]>([]);
+  const insertAtCaretNow = (text: string): boolean => {
+    const editor = textareaRef.current;
+    const value = visibleDraft(draftPartsRef.current);
+    const start = editor?.selectionStart ?? value.length, end = editor?.selectionEnd ?? start;
+    const result = insertAtCaret(value, start, end, text, 200000 - (fullDraft(draftPartsRef.current).length - value.length));
+    if (!result) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.'); return false; }
+    const next = result.value;
+    draftPartsRef.current = editVisible(draftPartsRef.current, next);
+    setDraftParts(draftPartsRef.current);
+    lastReplyChoice.current = null;
+    requestAnimationFrame(() => { const el = textareaRef.current; if (!el) return; el.focus({ preventScroll: true }); el.setSelectionRange(result.caret, result.caret); });
+    return true;
+  };
+  const insertFromAddon = (text: string): boolean => {
+    if (composingRef.current) { pendingAddonInsert.current.push(text); return true; }
+    return insertAtCaretNow(text);
+  };
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const addon = !props.instructor ? props.composerAddon ?? null : null;
+  const AddonScope = addon?.Scope ?? PassThrough;
+  const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
+  const quotePart = draftParts.find(part => part.quote);
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || !!quotePart || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
+  // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
+  const approvalPreset = useTurnBoundaryPreset(servedApprovalPreset(config?.profile), streaming);
+  // CGP-ART-D-008 — "선생님께 알리기" only while this learner's class help channel can take a new request.
+  const canAskTeacher = !props.instructor && classroomPanels.help && help?.availability.state === "ready" && !!help.draft_key && !help.envelope;
+  const linkBlockedBanner = linkBlocked && <ExternalLinkBlocked key={linkBlocked.at} host={linkBlocked.host} canAskTeacher={canAskTeacher}
+    onAskTeacher={() => { setHelpPrefill({ text: blockedLinkHelpText(linkBlocked.host), nonce: linkBlocked.at }); setLinkBlocked(null); }}
+    onDismiss={() => setLinkBlocked(null)} />;
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
   const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
@@ -1029,9 +1150,26 @@ export function ChatPanel(props: Props) {
     config.profile.ux.coach.naming_mode === "user_names_it" &&
     !config.coach?.configured;
 
+  const questionRef = useRef<HTMLDivElement>(null);
+  const [questionVisible, setQuestionVisible] = useState(true);
   useEffect(() => {
-    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: scrollBehavior() });
-  }, [messages.length, streaming, personalWorkspace]);
+    const heading = questionRef.current?.querySelector("h3");
+    const scroller = scrollRef.current;
+    if (!heading || !scroller) { setQuestionVisible(true); return; }
+    const observer = new IntersectionObserver(([entry]) => setQuestionVisible(entry.isIntersecting), { root: scroller });
+    observer.observe(heading);
+    const disconnect = () => observer.disconnect();
+    return disconnect;
+  }, [props.questionId, !!props.questionPanel]);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (props.questionPanel && questionRef.current) {
+      // Keep a new question's beginning visible instead of jumping to its last button.
+      const top = questionRef.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top, behavior: "instant" });
+    } else if (!personalWorkspace) scroller.scrollTo({ top: scroller.scrollHeight, behavior: scrollBehavior() });
+  }, [messages.length, streaming, personalWorkspace, props.questionId, !!props.questionPanel]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
@@ -1046,6 +1184,7 @@ export function ChatPanel(props: Props) {
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
+    if (planAwaiting) return false; // CGP-CHAT-D-004 — the plan card owns the next step
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
@@ -1064,6 +1203,7 @@ export function ChatPanel(props: Props) {
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
+    setSubmissionNotice(null);
     const sendPrepared = () => {
     if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
@@ -1316,6 +1456,8 @@ export function ChatPanel(props: Props) {
   ) : null;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
+  // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
+  if (config?.chalkInstructorTab) return <>{updateBanner}<ChalkInstructorNotice /></>;
   if (!config) return <>{updateBanner}<DisconnectedChat open={props.onSetToken} /></>;
   if (!config.profile && !config.activity && !props.instructor) return <>{updateBanner}<DisconnectedChat open={props.onSetToken} /></>;
   if ((needsNaming || forceNaming) && config?.profile) {
@@ -1326,6 +1468,7 @@ export function ChatPanel(props: Props) {
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
+      {linkBlockedBanner}
       {updateBanner}
       <NamingCard
         namingPromptMd={config.profile.ux.coach.naming_prompt_md}
@@ -1426,6 +1569,8 @@ export function ChatPanel(props: Props) {
       stillValid: () => !undoSubject.current.page || undoSubject.current.page === page,
     });
   };
+  // CGP-CHAT-D-007 — × on the quote chip; the typed draft and its caret stay (the learner can quote again, so no undo).
+  const removeQuote = (id: number) => { recoverToComposer(() => setDraftParts(previous => changePaste(previous, id, null))); };
   const removePaste = (id: number) => {
     const before = draftParts, after = changePaste(before, id, null);
     setDraftParts(after);
@@ -1521,6 +1666,8 @@ export function ChatPanel(props: Props) {
     worlds.length > 0
       ? ux.suggestions.initial.filter((c) => !stripChips.has(c.text))
       : ux.suggestions.initial;
+  // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
+  const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -1559,6 +1706,8 @@ export function ChatPanel(props: Props) {
   // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
   const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
   const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  // CGP-SHELL-R-024 / D-023 — the instructor's settings changes, as system lines among the messages (classroom seats only).
+  const lessonLines = placeLessonSettingsLines(props.instructor ? undefined : config?.lessonSettingsChanges, shown.items.map(m => m.id), config?.taskWorkspace?.activeTaskId ?? null);
   const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
   // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
   const questionList = myQuestions(shown.items);
@@ -1619,7 +1768,7 @@ export function ChatPanel(props: Props) {
 
   return (
     <CopyFeedbackRegion><div
-      className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
+      className={`hps-shell${automationCompact ? " hps-shell-automation" : ""}${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
       onDragOver={handleDragOver}
@@ -1650,6 +1799,9 @@ export function ChatPanel(props: Props) {
             <span className="hps-activity-kind">{kind}</span><span className="hps-activity-name"> · {config.activity.name}</span>
           </span>;
         })()}
+        {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
+            switch; it names its scope (CGP-KNOW-D-005); the folder yields first on a narrow header (the tooltip names it). */}
+        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" temporary={inTemporaryTask} />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
@@ -1657,8 +1809,9 @@ export function ChatPanel(props: Props) {
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
-        <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
-        <HeaderActions personal={personalWorkspace} taskId={taskId}>
+        {/* An automation conversation shows usage inside its settings disclosure; a second header row would squeeze the chat. */}
+        {!automationCompact && <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />}
+        <HeaderActions personal={personalWorkspace} automation={automationCompact} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
               own size makes the header row grow taller because of this one button.
@@ -1707,12 +1860,22 @@ export function ChatPanel(props: Props) {
           </button>
           {personalWorkspace && !props.instructor && taskAppearance.open && <button type="button" className="tw-task-appearance" onClick={taskAppearance.open} data-hp-tooltip="목록에서 이 작업을 찾기 쉽게 표시를 붙여요">{TASK_APPEARANCE_LABEL}</button>}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
+          {/* CGP-KNOW-R-029 — "기록 없이 묻기": opens a chat-only task this computer keeps in memory only. Every other learner
+              seat (class, lesson, minor, unknown) sees it unavailable, with the reason on focus and hover (fail closed). */}
+          {!props.instructor && config?.temporaryTask && <button type="button" className="tw-temporary-open" aria-disabled={!config.temporaryTask.allowed || props.streaming || undefined}
+            aria-describedby={config.temporaryTask.allowed ? undefined : 'tw-temporary-reason'} data-hp-tooltip={config.temporaryTask.allowed ? TEMPORARY_TASK_COPY.device : TEMPORARY_TASK_UNAVAILABLE}
+            onClick={() => { if (config.temporaryTask?.allowed && !props.streaming) postToHost({ type: 'taskCreateTemporary' }); }}>
+            {TEMPORARY_TASK_COPY.create}{!config.temporaryTask.allowed && <span id="tw-temporary-reason" className="tw-temporary-reason">{TEMPORARY_TASK_UNAVAILABLE}</span>}
+          </button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-archive-task" onClick={() => postToHost({ type: 'taskArchive' })} disabled={props.streaming} data-hp-tooltip="목록에서 숨기고 대화는 그대로 둬요">보관하기</button>}
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
           {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} data-hp-tooltip="이용권과 사용량 확인">이용권 · 사용량</button>}
+          {/* REQ-STUDIO-FEEDBACK-ENTRY (#3413) — a visible way to send a complaint or a problem: the same in-panel form
+              (and the same automatic attachments) as the error card's 문제 보내기, opened as a learner's own report. */}
+          {personalWorkspace && <button type="button" className="tw-feedback-open" onClick={() => props.onReportProblem()} data-hp-tooltip="불편한 점이나 안 되는 것을 운영팀에 알려요">{FEEDBACK_ENTRY_LABEL}</button>}
           <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;
@@ -1767,8 +1930,10 @@ export function ChatPanel(props: Props) {
         } : null}
       />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
+      {linkBlockedBanner}
       {updateBanner}
 
+      <ConversationSupport compact={automationCompact}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
           Student-only, like region A (#1298). */}
@@ -1821,11 +1986,11 @@ export function ChatPanel(props: Props) {
       {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
-      {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} /></PanelBoundary>}
+      {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} prefill={helpPrefill} onPrefillUsed={() => setHelpPrefill(null)} /></PanelBoundary>}
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
-      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
+      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson hps-artifact-approval" data-artifact-approval="">
         <summary>수업 결과물 승인</summary>
         <p className="hp-rail-lesson-note">작업 폴더의 index.html 지금 판을 수업 결과물로 승인하거나 승인을 취소합니다. 누르면 그 판의 지문을 먼저 보여 주고 고르게 합니다. 승인한 판만 ‘학생이 승인한 결과물’ 회수에 들어가며, 이 버튼은 아무것도 보내지 않습니다. 고치면 새 판은 다시 승인해야 합니다.</p>
         <button type="button" className="hp-cta-quiet" data-artifact-approve="" onClick={() => postToHost({ type: "artifactApprove" })}>지금 결과물 확인하고 승인·취소</button>
@@ -1865,6 +2030,8 @@ export function ChatPanel(props: Props) {
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
       {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
+
+      </ConversationSupport>
 
       {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
@@ -1906,6 +2073,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
+          {i === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
@@ -1963,8 +2131,9 @@ export function ChatPanel(props: Props) {
               wikiScope={JSON.stringify([activityId, taskId])}
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
-              quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
+              quoteAction={answerQuote?.messageId === m.id && m.role === 'assistant' && !(streaming && m.id === streamingId) ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
               elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
+              memoryUse={!props.instructor && m.role === "assistant" && !(streaming && m.id === streamingId) ? props.memoryUse?.[m.id] : undefined}
             />
           )}
           {m.elapsedTurn && !answerActionRowShown(m, personalWorkspace, streaming && m.id === streamingId) && <ElapsedReceipt message={m} />}
@@ -1989,7 +2158,10 @@ export function ChatPanel(props: Props) {
                 disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
+          {lessonLines.after.get(m.id)?.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           </Fragment>}</TurnBoundary>)}
+        {shown.items.length === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
+        {lessonLines.bottom.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
         </CodeBlockScope>
 
         {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}
@@ -2048,6 +2220,8 @@ export function ChatPanel(props: Props) {
         )}
 
         {props.verifyPanel}
+        {submissionNotice && <div className="hps-page-notice" role="status" aria-live="polite">{submissionNotice}</div>}
+        {props.questionPanel && <div ref={questionRef} className="hps-question-anchor">{props.questionPanel}</div>}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
@@ -2114,14 +2288,7 @@ export function ChatPanel(props: Props) {
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
-        ) : activityStatus ? <ActivityStatus status={activityStatus}
-          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
-          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
-          onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
-          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
-          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
-        </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
+        ) : statusScreen ? null : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
           <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
@@ -2132,6 +2299,7 @@ export function ChatPanel(props: Props) {
             onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(() => { sendWhenOnline(props.onRetryLast, 'press'); }); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={() => props.onReportProblem("error")}
+            onDiagnose={props.onDiagnose}
             audience={audience}
           />
         )}
@@ -2149,7 +2317,12 @@ export function ChatPanel(props: Props) {
         />
       )}
 
+      <AddonScope api={addonApi}>
       <footer className="hps-input-area">
+        {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
+          questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+          questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
+        }}>답변할 질문으로 이동 ↑</button>}
         {!props.instructor && config?.profile?.lesson && <PanelBoundary panel="goal-status">{() => <GoalStatusBar
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
           pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
@@ -2157,11 +2330,15 @@ export function ChatPanel(props: Props) {
         {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
+        {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
+        {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
+        {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
+        {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2171,9 +2348,10 @@ export function ChatPanel(props: Props) {
         <AttachmentFailures items={attachmentFailures.items} retry={attachmentFailures.retry} remove={attachmentFailures.remove} />
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
-        {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
+        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId}>
+          <ModelControl config={config} streaming={streaming} />
           <EffortControl config={config} post={postToHost} />
-          <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
+          <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} /></ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
@@ -2316,8 +2494,8 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
-        {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
-          {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
+        {draftParts.some(part => part.id !== undefined && !part.quote) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
+          {draftParts.filter(part => part.id !== undefined && !part.quote).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
             onChange={text => {
               if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
               setDraftParts(previous => changePaste(previous, part.id!, text));
@@ -2325,24 +2503,41 @@ export function ChatPanel(props: Props) {
             onRemove={() => removePaste(part.id!)}
             onInline={() => { setDraftParts(previous => changePaste(previous, part.id!, part.text, true));requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
         </div>}
+        {/* CGP-KNOW-D-036: the status screen takes the composer's place; the input card below is hidden, not
+            unmounted, so the draft and its caret survive until the activity can run again. */}
+        {statusScreen && <ActivityStatus status={statusScreen}
+          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
+          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
+          onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
+          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+        </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
+        {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
+        {addon && <addon.Notice />}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
-          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
+          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) ? "true" : undefined}
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
+          data-activity-status={statusScreen ? "true" : undefined}
+          data-addon={addon ? "true" : undefined}
+          hidden={!!statusScreen}
         >
           {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
           {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}
           {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
               CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
-          {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+          {!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) && <div className="hps-file-context-stack">
+            {quotePart && <QuoteChip part={quotePart} disabled={unavailable} onRemove={() => removeQuote(quotePart.id!)} />}
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
@@ -2350,8 +2545,8 @@ export function ChatPanel(props: Props) {
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
-            autoFocus
-            readOnly={unavailable || folderMissing}
+            autoFocus={!props.questionPanel}
+            readOnly={unavailable || folderMissing || !!props.questionPanel}
             aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
             aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             aria-autocomplete={config?.fileMentions ? "list" : undefined}
@@ -2368,7 +2563,7 @@ export function ChatPanel(props: Props) {
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => setComposing(false)}
+            onCompositionEnd={() => { setComposing(false); composingRef.current = false; const waiting = pendingAddonInsert.current.splice(0); if (waiting.length) setTimeout(() => { for (const text of waiting) insertAtCaretNow(text); }, 0); }}
             onKeyDown={(e) => {
               const isComposing = imeComposing(e, composing);
               if (!isComposing && fileMentions.keyDown(e)) return;
@@ -2386,7 +2581,7 @@ export function ChatPanel(props: Props) {
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
-              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing) return;
+              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing || props.questionPanel) return;
               e.preventDefault();
               if (imagePreparationBlocksSend()) return;
               // Roll-expand owns Enter while it is open (idle-only flow).
@@ -2412,19 +2607,24 @@ export function ChatPanel(props: Props) {
               submit();
             }}
             placeholder={
-              personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
+              props.questionPanel ? "위 질문 카드에서 답변해 주세요." : personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
                 ? queued
                   ? "이어서 적으면 예약 메시지에 덧붙여요"
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"
                 : rollExpand
                   ? "한 가지만 더 떠올려서 적어주세요"
+                  : config.profile?.automations?.enabled
+                    ? "자동화하고 싶은 업무를 이야기해 주세요"
                   : imagePasteEnabled
                     ? platformizeKeys("메시지를 입력하고 Enter — 이미지는 ⌘V로 붙여넣기 (Shift+Enter 줄바꿈)")
                     : "메시지를 입력하고 Enter (Shift+Enter 줄바꿈)"
             }
-            rows={personalWorkspace ? 1 : 3}
+            rows={personalWorkspace ? 1 : automationCompact ? 2 : 3}
           />
-          {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
+          {personalWorkspace && !folderMissing && planFirst.on && !props.instructor
+            ? <div className="hps-selected-tools">{toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}<SelectedPlanFirst locked={streaming} /></div>
+            : null}
+          {personalWorkspace && !folderMissing && !(planFirst.on && !props.instructor) && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           {(!folderMissing || streaming) && <div className="hps-input-buttons">
             {personalWorkspace && !folderMissing && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!folderMissing && !streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
@@ -2437,6 +2637,9 @@ export function ChatPanel(props: Props) {
                 {ux.hints.roll_input_button.label}
               </button>
             )}
+            {addon && <addon.Control />}
+            {!props.instructor && !personalWorkspace && planFirst.available !== false && <PlanFirstChip on={planFirst.on} disabled={streaming || folderMissing} />}
+            <ApprovalPresetLabel preset={approvalPreset} />
             {streaming ? (
               <button
                 onClick={() => {
@@ -2449,7 +2652,7 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '응답 멈추기' : undefined}
                 data-hp-tooltip={personalWorkspace ? '응답 멈추기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="stop" /> : 'Stop'}
+                {personalWorkspace ? <ChatIcon kind="stop" /> : automationCompact ? '중지' : 'Stop'}
               </button>
             ) : rollExpand ? (
               <button
@@ -2464,12 +2667,12 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={planAwaiting || attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
-                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
+                aria-label={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
+                {planAwaiting ? PLAN_WAITING_LABEL : personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>}
@@ -2477,6 +2680,7 @@ export function ChatPanel(props: Props) {
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
         <CopyFeedbackOutlet />
       </footer>
+      </AddonScope>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
         imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
@@ -2505,6 +2709,11 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
+        {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
+        {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
+            Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
+        {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
@@ -2945,6 +3154,23 @@ function StepDivider({ id, label }: { id: string; label: string }) {
   return <div className="hps-step-divider" role="separator" aria-label={label} data-step-divider={id}><span className="hps-step-divider-label" aria-hidden="true">{label}</span></div>;
 }
 
+/**
+ * CGP-KNOW-D-022 (DES-KNOW-40) — "AI 기억: 켜짐" with the memory folder. The same words on every seat that has the store,
+ * minors included (DEC-02): no switch, no off state, no "선생님이 정해요". Not focusable and not a control.
+ * CGP-KNOW-D-005 (DES-KNOW-07) — the state names its scope, "이 작업 공간 안에서만" (the one scope the store enforces,
+ * CGP-KNOW-R-005), and the tooltip and the accessible text explain it in one sentence. A class seat has no store, so it has
+ * no line and there is no class wording.
+ */
+function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 'header' | 'settings'; temporary?: boolean }) {
+  return place === 'header'
+    // Two items of the header row (the wrapper is display: contents): the state with its scope never shrinks or cuts, the
+    // folder yields first and is visually hidden on a narrow header (screen readers still read it; the tooltip names it).
+    ? <span className="hps-memory-now" data-testid="memory-state-header">
+        <span className="hps-memory-now-state" data-hp-tooltip={temporary ? `${MEMORY_SCOPE_SENTENCE} ${MEMORY_TEMPORARY_SENTENCE}` : MEMORY_SCOPE_SENTENCE}><span className="hps-memory-now-on">{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-scope">{' · '}{MEMORY_SCOPE_HEADER}</span>{temporary && <span className="hps-memory-now-temp" data-testid="memory-temporary-note"><span className="hps-memory-now-temp-sep">{' · '}</span>{MEMORY_TEMPORARY_NOTE}</span>}</span><span className="hps-memory-now-folder" data-hp-tooltip={MEMORY_SCOPE_SENTENCE}>{' · '}<code dir="ltr">{folder}</code></span><span className="hps-sr-only" data-testid="memory-scope-sentence">{' '}{MEMORY_SCOPE_SENTENCE}{temporary && ` ${MEMORY_TEMPORARY_SENTENCE}`}</span>
+      </span>
+    : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · {MEMORY_SCOPE_HEADER} · <code dir="ltr">{folder}</code></p>;
+}
+
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
 }
@@ -2958,12 +3184,16 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
     return <div className="hps-denial-notice" role="status" aria-live="polite" aria-atomic="true" data-denial-source={view.source}>
       <ChatIcon kind="lock" size={16} />
       <div><span className="hps-denial-source">{view.label}</span><p>{view.text}</p></div>
-      <button type="button" onClick={'settings' in view ? () => postToHost({ type: "openMacPrivacySettings" }) : onReport}>{view.action}</button>
+      {/* #3586 — a card with no action (the timeout) has no button at all. */}
+      {view.action ? <button type="button" onClick={'settings' in view ? () => postToHost({ type: "openMacPrivacySettings" }) : onReport}>{view.action}</button> : null}
     </div>;
   }
   // CGP-KNOW-D-021 — a Studio-browser download is a quiet secondary line, not a tool row.
   const download = message.id.startsWith('download-') ? downloadLineView(t.label, t.state) : null;
   if (download) return <DownloadLine id={message.id} view={download} />;
+  // CGP-KNOW-D-027 — a memory write is a quiet secondary line with its own 되돌리기, not a tool row.
+  const memoryWrite = isMemoryWriteId(message.id) ? memoryWriteLineView(t.label) : null;
+  if (memoryWrite) return <MemoryWriteLine id={message.id} view={memoryWrite} />;
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;
@@ -3054,6 +3284,7 @@ function MessageItem({
   quotable = false,
   quoteAction,
   elapsed,
+  memoryUse,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -3104,6 +3335,8 @@ function MessageItem({
   quoteAction?: ReactNode;
   /** CGP-CHAT-D-015: the observed elapsed receipt, placed at the end of the answer action row. */
   elapsed?: ReactNode;
+  /** CGP-KNOW-R-026 — the number of memory items this answer's request carried; absent when it carried none. */
+  memoryUse?: number;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -3149,6 +3382,7 @@ function MessageItem({
             <ChatIcon kind="retry" size={16} />
           </button>
         )}
+        {!personal && message.role === "assistant" && !isStreamingThis && !!message.content.trim() && <AnswerExtras answerId={message.id} content={message.content} />}
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       {message.role === 'user' && editing && onCancelEdit && onSaveEdit ? <EditPrompt
@@ -3189,10 +3423,14 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         <PanelBoundary panel="citations">{personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />}</PanelBoundary>
       )}
+      {/* CGP-KNOW-D-026 — "기억 사용 N" sits in the answer's action row; an answer without that row keeps it here. */}
+      {message.role === "assistant" && memoryUse && !answerActionRowShown(message, personal, isStreamingThis) ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : null}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}
       {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
+        memory={memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : undefined}
         content={message.content}
+        answerId={message.id}
         status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
@@ -3405,6 +3643,7 @@ function ErrorBanner({
   onRetry,
   onDismiss,
   onReport,
+  onDiagnose,
   audience = "classroom",
 }: {
   message: string;
@@ -3414,6 +3653,7 @@ function ErrorBanner({
   onRetry: () => void;
   onDismiss: () => void;
   onReport: () => void;
+  onDiagnose?: () => void;
   audience?: SeatAudience;
 }) {
   // Spot common transport-layer signals so the framing is honest about the
@@ -3461,6 +3701,15 @@ function ErrorBanner({
             data-hp-tooltip={reportButtonTitle(audience)}
           >
             <ChatIcon kind="flag" size={16} /> 문제 보내기
+          </button>
+        )}
+        {!notice && onDiagnose && (
+          <button
+            className="hps-error-banner-report hps-error-banner-diagnose"
+            onClick={onDiagnose}
+            data-hp-tooltip="이 컴퓨터의 Studio 설정을 확인해요"
+          >
+            진단하기
           </button>
         )}
         <button
@@ -3597,7 +3846,7 @@ function UpdateBanner({
 
 
 /** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
-export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
+export function HeaderActions({ personal, automation = false, taskId, children }: { personal: boolean; automation?: boolean; taskId?: string; children: import('react').ReactNode }) {
   const [open, setOpen] = useState(false);
   const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
@@ -3616,7 +3865,7 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
     const choices = items();
     (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
   }, [personal, open]);
-  if (!personal) return <div className="hps-actions">{children}</div>;
+  if (!personal) return <ConversationActions compact={automation}>{children}</ConversationActions>;
   return <div className="hps-actions tw-chat-menu" ref={root} onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, items())} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {

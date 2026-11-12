@@ -481,6 +481,30 @@ jobs:
           node scripts/release/build-contract.mjs record "$RUNNER_TEMP/hps-build-contract.json" \
             win32-x64 dist "$RUNNER_TEMP/hps-smoke"
 
+      # studio#3396 item 3 — the packaged webview must not loop on Windows metrics. On 2026-11-02 a
+      # Windows seat on v2026.1029.0 hit React #185 in the composer's auto-resize: Windows draws
+      # classic scrollbars, which the measure depended on. This runs the composer width sweep against
+      # the webview THIS build packaged (not the source), in headless Chrome with the runner's own
+      # Segoe UI / Malgun Gothic and classic scrollbars. A #185, the error card, or a held layout
+      # loop fails the build, so the release cannot be promoted. Budget: at most 10 minutes per
+      # release (cost-first). Korean and English only, 2 px steps where the composer turns
+      # multi-line, 20 px above, stop at the first failure; emoji and code drafts stay in the PR smoke.
+      - name: Composer layout-loop gate (packaged webview)
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          HEADLESS_CHROMIUM: C:\Program Files\Google\Chrome\Application\chrome.exe
+          FOCUS_REQUIRE_BROWSER: "1"
+          COMPOSER_METRICS: native
+          COMPOSER_DRAFTS: ko,en
+          COMPOSER_RANGES: 280-640:2,660-1200:20
+          COMPOSER_MAX_FAILURES: "1"
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "hps-smoke"
+          $env:COMPOSER_WEBVIEW_DIST = Join-Path $smokeRoot "resources/app/extensions/hypeproof-chat/webview-ui/dist"
+          if (-not (Test-Path (Join-Path $env:COMPOSER_WEBVIEW_DIST "index.html"))) { throw "packaged webview not found at $env:COMPOSER_WEBVIEW_DIST" }
+          node extensions/hypeproof-chat/test/composer-expand-oscillation-browser.smoke.mjs
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

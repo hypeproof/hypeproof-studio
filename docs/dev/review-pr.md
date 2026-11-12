@@ -31,6 +31,8 @@ bash scripts/review-pr.sh <PR번호-또는-브랜치> [--provider claude|codex|s
 
 **Ctrl+C** 를 누르면 앱·서버·worktree를 자동 정리합니다.
 
+The review app runs with the in-memory secret store (`--inmemory-secrets`), so macOS shows no keychain prompt. The store is emptied when the app closes, and each review launches a fresh app.
+
 ## 사전 조건
 
 - `/Applications/HypeProof Studio.app` 설치돼 있어야 함 (base app)
@@ -50,6 +52,7 @@ bash scripts/review-pr.sh <PR번호-또는-브랜치> [--provider claude|codex|s
 - 매 실행마다 임의 서명 값(32자 hex)을 새로 생성 — 운영 `.dev.vars`를 복사하거나 심링크하지 않습니다.
 - 포트 8787이 이미 점유돼 있으면 점유 프로세스 PID를 출력하고 즉시 종료합니다.
 - 환경 변수에 운영 URL(`hypeproof-ai.xyz`)이 있으면 즉시 종료합니다.
+- The Dev app runs with `--no-workspace-trust`: the review copy's state workspace does not ask the workspace trust question. Only the Dev copy changes; the official app, user settings and the official build are not affected.
 
 ## 문제 해결
 

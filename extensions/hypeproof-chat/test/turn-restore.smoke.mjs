@@ -315,7 +315,7 @@ await t("host wiring: one restore point before every runtime, one review after i
   const src = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   const send = src.slice(src.indexOf("  private async handleSend("), src.indexOf("  private async runBrowserLoop("));
   ok(send.length > 1000, "handleSend not found");
-  const begin = send.indexOf("const turnRestorePoint = await this.beginTurnRestore(streamId);");
+  const begin = send.indexOf("const turnRestorePoint = temporaryTurn ? null : await this.beginTurnRestore(streamId);");
   ok(begin > 0, "beginTurnRestore not awaited in handleSend");
   ok(begin > send.indexOf("streamStart"), "restore point taken before the turn's stream exists (its failure line needs the timeline)");
   for (const runtime of ["runSdkCoach({", "await runProxyRuntime();", "runLocalCoach({"]) {

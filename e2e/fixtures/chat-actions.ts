@@ -16,16 +16,24 @@ export async function chatMenuAction(chat: Chat, name: string) {
   }
 }
 
+// When the Service routes the model itself (service#297: one 자동 choice), the menu is disabled
+// and there is nothing to pick; the turn runs on whatever the Service routes it to.
+async function selectModel(select: Locator, alias: string) {
+  await expect(select).toBeVisible();
+  if (await select.isDisabled()) return;
+  await select.selectOption(alias);
+}
+
 export async function chooseChatModel(chat: Chat, alias: string) {
   if (!(await menuToggle(chat).count())) {
-    await chat.getByRole('combobox', { name: '대화 모델' }).selectOption(alias);
+    await selectModel(chat.getByRole('combobox', { name: '대화 모델' }), alias);
     return;
   }
   await chatMenuAction(chat, '설정');
   const dialog = chat.getByRole('dialog', { name: '대화 설정', exact: true });
   await expect(dialog).toBeVisible();
   await dialog.getByText('응답 고급 설정', { exact: true }).click();
-  await dialog.getByRole('combobox', { name: '대화 모델' }).selectOption(alias);
+  await selectModel(dialog.getByRole('combobox', { name: '대화 모델' }), alias);
   await chat.getByRole('button', { name: '대화 설정 닫기', exact: true }).click();
   await expect(dialog).toBeHidden();
 }

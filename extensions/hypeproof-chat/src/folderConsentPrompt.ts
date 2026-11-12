@@ -5,6 +5,8 @@ export interface FolderConsentPromptPorts {
   id(): string;
   scope(): string;
   present(prompt: FolderConsentPrompt | null): Promise<boolean | void>;
+  /** #3586 — reported once when the window runs out of time. */
+  expired?(id: string): void;
 }
 
 /** Presentation only. The existing host remains responsible for scope, storage and grant narrowing. */
@@ -18,7 +20,7 @@ export class FolderConsentRequest {
     if (this.pending || !folder) return Promise.resolve(undefined);
     const prompt = { id: this.ports.id(), folder }, scope = this.ports.scope();
     return new Promise(resolve => {
-      const timer = setTimeout(() => this.cancel(), this.timeoutMs);
+      const timer = setTimeout(() => this.expire(), this.timeoutMs);
       this.pending = { id: prompt.id, scope, finish: value => {
         clearTimeout(timer); this.pending = undefined;
         void this.ports.present(null).catch(() => {}); resolve(value);
@@ -37,4 +39,5 @@ export class FolderConsentRequest {
   }
   invalidateIfScopeChanged(): void { if (this.pending && this.pending.scope !== this.ports.scope()) this.cancel(); }
   cancel(): void { this.pending?.finish(undefined); }
+  private expire(): void { const id = this.pending?.id; if (id !== undefined) this.ports.expired?.(id); this.cancel(); }
 }

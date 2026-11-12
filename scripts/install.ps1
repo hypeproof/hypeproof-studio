@@ -1219,7 +1219,9 @@ function Invoke-Doctor {
     # resting on "click-install already provided a Studio that self-seeds its
     # SDK" - a premise nothing implements: the native claude.exe is deliberately
     # excluded from the app bundle (verify-branding.sh fails the build if it
-    # leaks in), and there is no in-app seeder yet. So a participant who
+    # leaks in). The in-app on-demand seeder (sdkSeedFetch.ts, REQ-M46) runs only
+    # when it is switched on for the seat and the learner confirms it, so it is
+    # not a reason to skip this check either. So a participant who
     # installed via the .exe and then ran the coach's "환경 세팅 점검"
     # (workshop-setup skill -> HPS_SKIP_STUDIO=1) got "doctor: ALL CHECKS PASSED"
     # on a machine with no claude.exe. Studio then fell back to the proxy coach

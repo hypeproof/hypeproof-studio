@@ -18,8 +18,8 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 
 | Command | Arguments | Result | Notes |
 |---|---|---|---|
-| `hypeproof.chalk.activateInstructor` | `{ contractVersion, sessionNonce, issuerToken, verifiedServerUrl, connection? }` | `{ ok, contractVersion, reason? }` | Called once Studio has decided the seat is an instructor. Chalk opens its own surface. `reason` (when `ok:false`): `serverChanged`, `serverMissing`, `contractVersion`, `invalidArgs`. |
-| `hypeproof.chalk.deactivateInstructor` | `{ contractVersion, sessionNonce, reason }` | `{ ok }` | `reason`: `issuerRemoved`, `rejected`, `studentSlotWins`, `superseded`. Chalk aborts open turns, drops the token and the nonce, and shows nothing. |
+| `hypeproof.chalk.activateInstructor` | `{ contractVersion, sessionNonce, issuerToken, verifiedServerUrl, connection?, models? }` | `{ ok, contractVersion, reason? }` | Called once Studio has decided the seat is an instructor. Chalk opens its own surface. `reason` (when `ok:false`): `serverChanged`, `serverMissing`, `contractVersion`, `invalidArgs`. |
+| `hypeproof.chalk.deactivateInstructor` | `{ contractVersion, sessionNonce, reason }` | `{ ok }` | `reason`: `issuerRemoved`, `rejected`, `studentSlotWins`, `superseded`, `runtimeChanged` (#3578: `hypeproofChat.instructorRuntime` left `chalk-extension`). Chalk aborts open turns, drops the token and the nonce, and shows nothing. A Chalk that does not know a reason ends the session as a general end, so the new value is backward-compatible. Studio sends this only when a session is active. |
 | `hypeproof.chalk.status` | — | `{ instructorMode, version }` | Read-only. Student-slot precedence (#1463) is decided by Studio; Studio passes the result. |
 | `hypeproof.chalk.onTurnEvent` | `{ contractVersion, sessionNonce, turnId, event }` | depends on the event (§2.4) | Studio sends turn events to Chalk. |
 
@@ -30,6 +30,7 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 | `hypeproof.runtime.runLocalTurn` | `{ contractVersion, sessionNonce, turnId, messages, model?, tools, systemBrief, cwd, policy }` | `{ accepted: true, requestedModel, executorModel }` or `{ accepted: false, reason, message? }` | Starts a turn. Execution is asynchronous; the result arrives as events. `policy` must be `"chalk-instructor"`. |
 | `hypeproof.runtime.cancelTurn` | `{ contractVersion, sessionNonce, turnId }` | `{ cancelled }` | Stops the turn; Studio then sends `done(cancelled)`. |
 | `hypeproof.runtime.previewOpen` | `{ contractVersion, webPath }` | `{ ok, error? }` | No session nonce in v0 (this command is not tied to a turn). `webPath` must stay inside the Studio folder. |
+| `hypeproof.runtime.humanWait` | `{ contractVersion, sessionNonce, turnId, waitId, state }`, `state` is `start`, `keepalive` or `end` | `{ ok }` or `{ ok: false, reason }` | Chalk announces a wait for a person (approval, overwrite confirmation) in a Chalk turn (#3601). The turn's stall watch counts it as a pause. `reason`: `contractVersion`, `stale` (no session, unknown turn or waitId), `turn-ended`, `invalidArgs`, `limit` (more than 4 waits open). Ended by Chalk, by the turn closing, or by deactivate; a wait with no keepalive for 90 s ends by itself. Optional: a Chalk that does not send it leaves the stall watch to the tool rule. |
 
 ### 2.3 Refusal reasons from `runLocalTurn`
 
@@ -83,13 +84,44 @@ Studio sends `done` exactly once per turn.
   - `subscription-codex` → `내 Codex 구독`
 - Studio's source for the value is the legacy computation (`chatPanelProvider.ts`, `instructorConnection`), which depends on the local executor. The value is fixed for the life of a process. A change (for example, a restart with other settings) starts a new session, so `activateInstructor` carries the new value. No separate notification is needed.
 
+- `models` (optional in `activateInstructor`, added 2026-11-07, #3564): `{ default: string, choices: [{ alias, id, label }] }`.
+  - Studio sends it only when a local runner exists. Its values are the ones the legacy panel shows (`localModelSelection`): one choice, the local model.
+  - It is display data only. The model that runs a turn is still Studio's `local.model`, whatever `model?` Chalk sends in `runLocalTurn`.
+  - Absent means no choices are known. Chalk must then show no model choice (the band shows "—" as before).
+  - Chalk reads the named field and ignores fields it does not know. A Chalk without this change still activates.
+  - `models` is not part of the session-sameness check. The local model is fixed for the life of the app, so a steady session is not re-activated for it.
+
 ## 6. Approval
 
-Approval policy is owned by Studio: Studio decides whether an action needs approval. Chalk is asked only through `approvalRequest` and answers with the human's choice; Chalk's answer is only the answer.
+Approval policy is owned by Studio: Studio decides whether an action needs approval (`hypeproofChat.requireApprovalFor`). Chalk is asked only through `approvalRequest` and answers with the human's choice; Chalk's answer is only the answer.
 
 Deny by default: a missing answer, a closed dialog, an error, or a turn that is already closed is `approved: false`.
 
-In this version (S-2) Studio does not send `approvalRequest`. Runtime approvals (writes, shell, browser) use the existing Studio modal, exactly as before. The `approvalRequest` event is defined here so that Chalk can answer it when Studio starts sending it (M-4 / S-2b).
+Which approvals Chalk shows (decided from the Studio policy, S-2b):
+- `writeFile` only, when `requireApprovalFor` includes it. Studio sends `approvalRequest` with `action.prompt` (`{ id, title, verb, files }`) and Chalk shows its own dialog. This comes from the workspace write tools (Write/Edit) on the local runner.
+- `browser_open` and `live_preview_start` are Studio browser tools, built by the same function on the legacy instructor path and the contract path (`src/chalk/instructorBrowserTools.ts`). They run in Studio with no approval step and are not `toolCall`s to Chalk. Gating outside URLs is out of scope for this contract version and is tracked separately (studio#3464). Do not describe `browser_open` as a Chalk prompt.
+- Not sent to Chalk, and kept in Studio: `executeShell`, `delegateAgent`, `browserType`, `consultHelper`, and the read-outside-workspace refusal. The instructor tool profile has no shell, subagent, type or consult tool, so these do not reach an instructor turn.
+- Any other runtime approval still uses the existing Studio modal.
+
+`docs/contract/studio-chalk.md` §6 before S-2b said Studio did not send `approvalRequest`. That is now corrected: S-2b sends it for `writeFile` when the policy asks for it.
+
+## 6a. Instructor parity commands (S-2b, M-4)
+
+Chalk calls these Studio commands. Each carries `contractVersion` and `sessionNonce`, is refused with `{ ok: false, reason: "noSession" }` (or `null` for `inboxView`) when the nonce is stale, and returns only the short result shape listed here.
+
+| Command | Arguments | Result | Notes |
+|---|---|---|---|
+| `hypeproof.runtime.openExternal` | `{ url }` | `{ ok }` or `{ ok: false, reason }` | Opens through the same link check as the learner link path (http and https only). `reason` is `refused` or `invalidArgs`. |
+| `hypeproof.runtime.openReport` | `{ context? }` | `{ ok }` | Only `context.source` is read, and only when it matches `^[a-z0-9-]{1,32}$`. Every other key is dropped, including any token key. Runs the existing report command; no token is put in the report body. The report request sends the student token in the `Authorization` header to the Service, as the report button always has (`reportProblem.ts`, `reportProblemHelpers.ts`). |
+| `hypeproof.runtime.inboxView` | — | `InboxView` or `null` | Studio's classroom inbox view. |
+| `hypeproof.runtime.inboxOpen` | `{ objectId, generation }` | `{ ok }` | |
+| `hypeproof.runtime.inboxLink` | `{ objectId, url, generation, action }` | `{ ok }` | `action` is `open` or `copy`. Same behavior as the Studio inbox link. |
+| `hypeproof.runtime.reviewPrepare` | `{ week? }` | `{ ok }` or `{ ok: false, message }` | Studio prepares the review. The model call is Studio's. |
+| `hypeproof.chalk.onInboxState` (Studio → Chalk) | `{ view }` | — | Sent when the inbox changes and a session is active. |
+
+`done` events for an error can carry `requestId` and `runbookUrl` (taken from the Service error body). They are present only when the error had them.
+
+`hypeproof.chalk.onReviewState` is not part of the contract: Chalk reads review data from the admin API itself.
 
 ## 7. Model
 
@@ -112,4 +144,8 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-08): `hypeproof.runtime.humanWait` (§2.2, #3601). Backward-compatible addition: a Chalk that does not send it leaves the stall watch to the tool rule; a Studio without the command makes Chalk's call fail, which Chalk ignores.
+- v0 (2026-11-07): `deactivateInstructor` reason `runtimeChanged` (#3578). Backward-compatible: a Chalk that does not know the reason ends the session as a general end. Studio sends it once when the runtime leaves `chalk-extension` and a session is active.
+- v0 (2026-11-07): `activateInstructor` gets an optional `models` field (§5, #3564). Backward-compatible addition; sent only with a local runner.
+- v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.
 - v0 (2026-10-23): first contract (S-2 in Studio; M-2 in Chalk). Adds `connection?` and `runLocalTurn` `message` as backward-compatible additions.

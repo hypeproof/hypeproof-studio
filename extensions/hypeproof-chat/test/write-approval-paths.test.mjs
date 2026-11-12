@@ -275,7 +275,7 @@ test('real host presentation requires a visible surface and terminal posts cance
  }
  for(const operation of ['opsRequestStop','invalidateProfile']){
   let ended=false;const pending=request.confirm(prompt).then(value=>{ended=true;return value});
-  const lifecycle={writeApprovalRequest:request,activeStreams:new Map(),pendingApprovals:new Map(),profileGeneration:0,endTaskCommandAllows(){},refreshCrBytesContext:async()=>{},refreshSitePublishContext(){},_instructorMode:{reset(){}}};
+  const lifecycle={writeApprovalRequest:request,activeStreams:new Map(),pendingApprovals:new Map(),profileGeneration:0,endTaskCommandAllows(){},refreshCrBytesContext:async()=>{},refreshSitePublishContext(){},_instructorMode:{reset(){}},reconcileSavedLinkSafety:async()=>{}};
   P[operation].call(lifecycle);await Promise.resolve();assert.equal(ended,true,operation+' cancels even without a running stream');assert.equal(await pending,false);
  }
 

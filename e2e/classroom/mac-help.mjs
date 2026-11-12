@@ -26,6 +26,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { macWindow } from './mac-window.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-help'));
 const servicePort = Number(process.env.HPS_HELP_SERVICE_PORT || 18921), boardPort = Number(process.env.HPS_HELP_BOARD_PORT || 18922), debugPort = Number(process.env.HPS_HELP_DEBUG_PORT || 9521), prefix = 'help-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-', HOURS = 12;
@@ -88,7 +89,7 @@ const server = createServer(async (req, res) => { try { const parts = []; for aw
   if (dropNextHelpPost && req.method === 'POST' && url === '/v1/classroom/shares') { dropNextHelpPost = false; wire.push({ at: Date.now(), injected: 'answer dropped after the Service stored it', status: r.status }); req.socket.destroy(); return; }
   res.writeHead(r.status, Object.fromEntries(r.headers)); if (r.body) for await (const chunk of r.body) res.write(chunk); res.end(); } catch { if (!res.headersSent) res.writeHead(500); res.end(); } });
 server.listen(servicePort, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + server.address().port;
-const { default: chalk } = await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const board = createServer(async (req, res) => { try { const parts = []; for await (const b of req) parts.push(b); const body = Buffer.concat(parts);
   const rr = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(rr.status, Object.fromEntries(rr.headers)); res.end(Buffer.from(await rr.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 board.listen(boardPort, '127.0.0.1'); await once(board, 'listening');
@@ -124,7 +125,7 @@ writeFileSync(path.join(home, 'help-session.json'), JSON.stringify(session, null
 let browser = null; const cleanup = () => { try { app?.kill(); } catch {} try { void browser?.close(); } catch {} server.close(); board.close(); local.close(); process.exit(0); }; process.on('SIGTERM', cleanup); process.on('SIGINT', cleanup);
 
 async function instructor() { browser = await chromium.launch({ headless: process.env.HPS_BOARD_HEADLESS === '1' }); const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
-  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await page.locator('#token').fill(teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor();
+  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await signInChalk(page, teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   return { page, shot: (name) => page.screenshot({ path: path.join(out, name), fullPage: true }) }; }
 
 const results = {};

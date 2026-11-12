@@ -55,6 +55,8 @@ export function jsonProcess(
     input = "",
     signal,
     onEvent = () => {},
+    // #3601: every parsed stream line is progress for the stall watch.
+    onProgress = () => {},
     timeout = 180000,
   } = {},
 ) {
@@ -91,10 +93,10 @@ export function jsonProcess(
       } else resolve(result);
     };
     const abort = () => end(new Error("개발 모델 요청을 중지했습니다."));
-    const timer = setTimeout(
+    const timer = timeout > 0 ? setTimeout(
       () => end(new Error("개발 모델 응답 시간이 초과되었습니다.")),
       timeout,
-    );
+    ) : undefined;
     signal?.addEventListener("abort", abort, { once: true });
     proc.stderr.on("data", () => {}); // CLI diagnostics can include account/config data.
     proc.stdin.on("error", () => {});
@@ -109,6 +111,7 @@ export function jsonProcess(
       try {
         const event = JSON.parse(line);
         if (event.type === "result") result = event;
+        onProgress();
         onEvent(event);
       } catch {
         // A CLI prints update notices and warnings on stdout too (#1041 review).

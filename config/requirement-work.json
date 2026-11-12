@@ -250,6 +250,9 @@
         "CH-05",
         "CH-06",
         "CH-07",
+        "CH-08",
+        "CH-09",
+        "CH-10",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -291,7 +294,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "0b8e0222540750aabaaca330c75ccab11de46ca2e85399e4f46857c1a49d8b1f",
+      "sha256": "9727acfd579ace0bf221f7cab3bde02384b68a563d6abf3c1c241885610453d2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -385,7 +388,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "bea279a4ecc66363548ffa11dd85680af21300779535f4710c8cb30b962747ab",
+      "sha256": "fe4bdcaba96059fa9f15e4f4cd05169af63ed68d78655ae33d0d56ab0a8fb4ff",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -462,7 +465,7 @@
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "9f496edc8b93328a29b19ec75430a721864a0c993f9f80f8bbbd198f75f67e5b",
+      "sha256": "d9ee86f93b8d83981aaed7efd674d737902d984b1dbdf0e7159752fe1a25f8af",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -807,6 +810,54 @@
       "test": "docs/requirements/private-release-access.md"
     },
     {
+      "path": "docs/requirements/email-automation.md",
+      "ids": [
+        "EA-01",
+        "EA-02",
+        "EA-03",
+        "EA-04",
+        "EA-05",
+        "EA-06",
+        "EA-07",
+        "EA-08",
+        "EA-09",
+        "EA-10",
+        "EA-11"
+      ],
+      "inline_prefixes": [
+        "EA"
+      ],
+      "sha256": "d458b81ce2e679a15aa9c5c6851394c257b12a47b15974a83454d5c742bb932a",
+      "owner": "TJ-kr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/email-automation.md",
+      "test": "docs/testing/email-automation.md"
+    },
+    {
+      "path": "docs/requirements/workplace-automation-journey.md",
+      "ids": [
+        "WAJ-01",
+        "WAJ-02",
+        "WAJ-03",
+        "WAJ-04",
+        "WAJ-05",
+        "WAJ-06",
+        "WAJ-07",
+        "WAJ-08",
+        "WAJ-09",
+        "WAJ-10",
+        "WAJ-11",
+        "WAJ-12",
+        "WAJ-13"
+      ],
+      "inline_prefixes": [],
+      "sha256": "4f3312bbe9f4d242a66c5c1f65c082d7f80d67f6d16d3d89fe2cdf0fac768266",
+      "owner": "TJ-kr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/workplace-automation-journey.md",
+      "test": "docs/requirements/workplace-automation-journey.md"
+    },
+    {
       "path": "docs/requirements/personal-claude-continuation.md",
       "ids": [
         "PCC-01",
@@ -850,6 +901,33 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
       "test": "docs/testing/desktop-mobile-companion.md"
+    },
+    {
+      "path": "docs/requirements/mobile-growth-roadmap.md",
+      "ids": [
+        "MREF-01",
+        "MREF-02",
+        "MREF-03",
+        "MREF-04",
+        "MREF-05",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05",
+        "MPER-01",
+        "MPER-02",
+        "MPER-03",
+        "MPER-04",
+        "MPER-05",
+        "MIRS-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/mobile-growth-roadmap.md",
+      "test": "docs/testing/native-mobile-growth.md"
     }
   ],
   "work_items": [
@@ -1244,7 +1322,10 @@
             "ENV-02",
             "ENV-03",
             "ENV-04",
-            "ENV-07"
+            "ENV-07",
+            "CH-08",
+            "CH-09",
+            "CH-10"
           ]
         }
       ],
@@ -4109,6 +4190,102 @@
       ]
     },
     {
+      "id": "email-automation-workshop",
+      "title": "Reviewed Google email automation and cohort recipe sharing",
+      "issue": 1604,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/email-automation.md",
+          "ids": [
+            "EA-01",
+            "EA-02",
+            "EA-03",
+            "EA-04",
+            "EA-05",
+            "EA-06",
+            "EA-07",
+            "EA-08",
+            "EA-09",
+            "EA-10",
+            "EA-11"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "DEC-025: final matching Mac/Windows candidates and three-principal Google/dataset acceptance remain open. Windows659de97d non-owner preview/update/rollback and Mac third-user v1 pinning pass. Mac dbff37ed lookup recovery passes but catalogue-first/internal-ID presentation remains partial. Mac11b82da2 fork publication/source readback and Windows659de97d non-owner fork import/private preview pass. Ops0047 is applied only to isolated test D1; private Servicefa7472b is active. Matching Mac/Windows11b82da2 fork publication/import/fresh preview pass after verified upload and credential-preserving upgrade. Windows11b82da2 now reports real6/6 through the online private Service to the local Chalk board (normal1, unknown2); eight refusal and nine participant regression reads pass. Complete the remaining lifecycle/Google-identity matrix and full class readiness. SS-11 is conditional on expanded WAJ runtime implementation. No new mail authorized; preserve commercial and20-real-learner gates.",
+      "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
+      "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
+      "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
+      "evidence_required": "Pinned App/Service/Ops revisions, automated controls, actual Google OAuth and receipt, Windows installed-app execution, A/B sharing and measured model usage with price basis. DEC-025 SS-01-12 receipts including all three principals, Mac publisher, actual Windows download/install/run, package version/digest, separate Google data and update/withdrawal evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/automationHost.ts",
+        "extensions/hypeproof-chat/src/automationDraft.ts",
+        "extensions/hypeproof-chat/src/googleAutomation.ts",
+        "extensions/hypeproof-chat/src/googleAutomationMcp.ts",
+        "extensions/hypeproof-chat/src/automationPanel.ts",
+        "extensions/hypeproof-chat/src/sdkCoach.ts",
+        "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/UserQuestionCard.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+      ],
+      "verification_inputs": [
+        "docs/testing/email-automation.md",
+        "extensions/hypeproof-chat/test/google-automation.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs",
+        ".github/workflows/platform-fixtures.yml",
+        "extensions/hypeproof-chat/test/automation-conversation-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs",
+        "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts",
+        "extensions/hypeproof-chat/test/automationQuest.test.ts",
+        "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs",
+        "docs/plan/skill-store-cross-platform.md"
+      ]
+    },
+    {
+      "id": "workplace-automation-journey-design",
+      "title": "Template-based workplace automation learner journey",
+      "issue": 1603,
+      "kind": "design",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/workplace-automation-journey.md",
+          "ids": [
+            "WAJ-01",
+            "WAJ-02",
+            "WAJ-03",
+            "WAJ-04",
+            "WAJ-05",
+            "WAJ-06",
+            "WAJ-07",
+            "WAJ-08",
+            "WAJ-09",
+            "WAJ-10",
+            "WAJ-11",
+            "WAJ-12",
+            "WAJ-13"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "DEC-024 P0 design is documented with a representative concept image and acceptance matrix; no new runtime acceptance. Parent Epic1603 is a tracking reference, not expanded-scope implementation completion. Decompose P1-P5 into separate execution packets before implementation; preserve the email runner, Windows and commercial gates. DEC-025 adds post-implementation Mac-to-Windows store reuse for the expanded templates, with source/package trust research and recipient-owned deployment; do not count email-only evidence as WAJ completion.",
+      "design_delta": "Conversational problem framing, two choices per decision, one template outcome image, nine evidence-based quests, learner-owned Google assets and Apps Script web app, background processing and iterative improvement; four proposed template families cover ten curriculum cases.",
+      "positive_control": "A learner agrees on one real problem, verifies a template with synthetic inputs, opens their own deployed web app, observes scheduled processing with Studio closed, then handles a second input and a versioned improvement.",
+      "negative_control": "Unconfirmed choices, concept images, saved code, deployment URL strings and installed triggers cannot establish runtime success. Missing inputs, cross-account access, stale evidence, duplicated output and unapproved or uncertain mail remain blocked.",
+      "evidence_required": "WAJ-01-13 acceptance matrix; independent expected outputs; two real Google identities; deployed web-app access and version; actual scheduled run and stop; second-input and rollback evidence; truthful instructor status. All new runtime acceptance NOT_RUN.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/automationProtocol.ts",
+        "extensions/hypeproof-chat/src/automationQuest.ts",
+        "extensions/hypeproof-chat/src/appsScriptRuntime.ts"
+      ],
+      "verification_inputs": [
+        "docs/requirements/workplace-automation-journey.md"
+      ]
+    },
+    {
       "id": "chalk-confirm-instruction-diff",
       "title": "확정 전 안내 문구 줄 비교 (CGP-AGENT-R-016)",
       "issue": 2118,
@@ -4273,6 +4450,158 @@
         "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
         "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
         "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+      ]
+    },
+    {
+      "id": "mobile-reflection-v1",
+      "title": "Native reflection and searchable project library",
+      "issue": 3688,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MREF-01",
+            "MREF-02",
+            "MREF-03",
+            "MREF-04",
+            "MREF-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Implement iOS/Android reflection, verify old data and failed-save recovery, run native CI, then promote a verified testing candidate. Source and simulator evidence are partial; physical acceptance remains open.",
+      "design_delta": "Five optional local human-owned notes. Library title/search derives from notes without modifying confirmed intent. No new AI policy or runtime.",
+      "positive_control": "A returning user finds a reflection-only thought, adds a learning note, restarts and recovers all saved fields.",
+      "negative_control": "A failed observation save followed by another successful save never drops visible observation text. Notes from this or another project are never silently sent to AI.",
+      "evidence_required": "Exact-source native tests, independent review and installed-device observation. Source edits alone do not fulfill the complete requirement.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/ios/Sources/StudioCore/Intent.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "mobile-voice-v1",
+      "title": "Native on-device voice with explicit send and stop boundaries",
+      "issue": 3687,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MVOICE-01",
+            "MVOICE-02",
+            "MVOICE-03",
+            "MVOICE-04",
+            "MVOICE-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
+      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
+      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
+      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
+      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "personal-reflection-v1",
+      "title": "Account-owned first question on iPhone and existing desktop",
+      "issue": 3725,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-01",
+            "MPER-02",
+            "MPER-03",
+            "MPER-04",
+            "MPER-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Complete independent verification, native CI and release-pinned installed-device acceptance. No physical or question-quality pass is inferred from source tests.",
+      "design_delta": "Reuse account sessions, server conversations and the existing desktop task store; add cloud-owned personal reflection separate from host-owned build tasks.",
+      "positive_control": "A phone user receives a question with the desktop closed and later opens the exact conversation in existing Studio.",
+      "negative_control": "An uncertain response, account switch, stale snapshot or cancellation preserves words and cannot execute an extra paid turn or desktop tools.",
+      "evidence_required": "Pinned Service and Studio source, independent review, native CI, existing desktop and physical iPhone evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/personalReflection.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/accountSession.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection.test.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs",
+        "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "ios-credential-continuity-v1",
+      "title": "Preserve iPhone account identity through interrupted refresh",
+      "issue": 3736,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MIRS-01"
+          ]
+        }
+      ],
+      "depends_on": [
+        "personal-reflection-v1"
+      ],
+      "next_action": "Verify credential intent persistence, identity checks and actual simulator Keychain, then signed same-account continuity. Parent #3729 remains the release prerequisite.",
+      "design_delta": "Persist refresh intent in the existing credential item; validate active same-account/session before adopting rotation.",
+      "positive_control": "Valid rotation preserves the account and existing question conversation.",
+      "negative_control": "Interruption, failed storage or mismatched account cannot replay or adopt a credential; drafts remain.",
+      "evidence_required": "Pinned Swift controls, actual Keychain simulator evidence and separately reported physical/live authentication.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     }
   ]

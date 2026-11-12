@@ -1,6 +1,8 @@
 import { AnswerWikiReview } from './AnswerWikiReview';
+import { AnswerExtras } from './answerExtras';
 import { CopyFeedback } from './CopyFeedback';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutLoopGuard } from './layoutLoopGuard';
 
 /**
  * CGP-DS-R-018 / REQ-STUDIO-STROKE-ICONS — the webview's one stroke icon set. Studio's own paths
@@ -18,7 +20,7 @@ export type IconKind =
   | 'back' | 'forward' | 'message' | 'chevron-down' | 'chevron-up' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
-  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban';
+  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban' | 'bookmark' | 'mic' | 'speaker';
 export type IconSize = 16 | 20 | 24;
 
 export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: IconSize; label?: string }) {
@@ -83,6 +85,9 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'return' && <path d="m9 5-7 7 7 7M2 12h13a6 6 0 0 0 6-6" />}
     {kind === 'minus' && <path d="M7 12h10" />}
     {kind === 'ban' && <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>}
+    {kind === 'mic' && <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" /></>}
+    {kind === 'speaker' && <><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>}
+    {kind === 'bookmark' && <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.5L12 16l-6.5 4.5V5A1.5 1.5 0 0 1 7 3.5Z" />}
     {kind === 'game' && <><rect x="2.5" y="7" width="19" height="11" rx="4" /><path d="M7 10.5v4M5 12.5h4M15.5 12h.01M18 14h.01" /></>}
     {kind === 'menu' && <path d="M4 7h16M4 12h16M4 17h16" />}
     {kind === 'settings' && <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /><circle cx="12" cy="12" r="6.5" /></>}
@@ -141,7 +146,7 @@ export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>]
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
 export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 
-export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status }: { /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
+export function CopyAnswer({ content, answerId, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status, memory }: { /** The answer's message id: an extra control on the answer (answerExtras.tsx) keys itself by it. */ answerId?: string; /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; /** CGP-KNOW-D-026 — the answer's "기억 사용 N" chip, metadata before the elapsed receipt. */ memory?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
   const [wikiOpen, setWikiOpen] = useState(false);
   const wikiAction = useRef<HTMLButtonElement>(null);
@@ -157,10 +162,12 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTur
     {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" data-hp-tooltip="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
+    {answerId && <AnswerExtras answerId={answerId} content={content} />}
     {onToWiki && wikiTurnId && <button ref={wikiAction} type="button" className="hps-answer-wiki hps-answer-action" aria-label={ANSWER_TO_WIKI_LABEL} aria-expanded={wikiOpen} onClick={() => setWikiOpen(true)} data-hp-tooltip={ANSWER_TO_WIKI_LABEL}>
       <ChatIcon kind="book" size={16} />
     </button>}
     {verdict}
+    {memory}
     {status}
     <CopyFeedback failed={state === 'failed'}>{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? '답변을 복사했습니다' : '복사하지 못했습니다. 답변을 선택해 복사해 주세요.'}</span></>}</CopyFeedback>
   </div>
@@ -180,6 +187,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   const follow = useRef(true);
   const readingAnchor = useRef<{ element: HTMLElement; offset: number } | null>(null);
   const [away, setAway] = useState(false);
+  const measuredAway = useLayoutLoopGuard(setAway, 'chat.away');
   // Explicit history navigation is reading, not a new live answer to follow.
   const pauseFollowing = () => {
     if (!enabled) return;
@@ -218,7 +226,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   useLayoutEffect(() => {
     if (enabled && ref.current) {
       if (follow.current) ref.current.scrollTop = ref.current.scrollHeight;
-      else setAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
+      else measuredAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
     }
   }, [enabled, revision, ref, textSize]);
   useLayoutEffect(() => {
@@ -266,6 +274,7 @@ function composerCaretLine(node: HTMLTextAreaElement) {
 /** Keep one editor node while compact and expanded layouts share draft ownership. */
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
+  const measuredExpanded = useLayoutLoopGuard(setExpanded, 'composer.expanded');
   useLayoutEffect(() => {
     if (!ref.current) return;
     const node = ref.current;
@@ -300,11 +309,20 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const compactWidth = Math.max(40, (card?.clientWidth ?? node.clientWidth) - inset - (tools?.offsetWidth ?? 0) - (controls?.offsetWidth ?? 44) - 12);
       const line = parseFloat(getComputedStyle(node).lineHeight) || 24;
       // Measure at the compact width so a wrapped paragraph cannot oscillate between layouts.
-      node.style.width = `${compactWidth}px`;
+      // The measure must not depend on the layout it decides. Collapsed to 0px, an overflowing
+      // field drew a vertical scrollbar in the single-line layout and not in the expanded one, so
+      // the same draft wrapped at two different widths: one line expanded, two lines collapsed, and
+      // `expanded` flipped until React stopped with #185 (2026-11-02, a Windows seat on
+      // v2026.1029.0, whose scrollbars are wider; test/composer-expand-oscillation-browser.smoke.mjs).
+      // No scrollbar while measuring, and the width pinned with min and max as well.
+      const saved = [node.style.minWidth, node.style.maxWidth, node.style.overflowY];
+      node.style.width = node.style.minWidth = node.style.maxWidth = `${compactWidth}px`;
+      node.style.overflowY = 'hidden';
       node.style.height = '0px';
       const needsRoom = hasContext || node.scrollHeight > line + 1;
+      [node.style.minWidth, node.style.maxWidth, node.style.overflowY] = saved;
       node.style.width = '';
-      setExpanded(needsRoom);
+      measuredExpanded(needsRoom);
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
         height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
@@ -334,6 +352,6 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       node.removeEventListener('select', rememberCaret);
       node.removeEventListener('keyup', rememberCaret);
     };
-  }, [enabled, draft, ref, hasContext, expanded]);
+  }, [enabled, draft, ref, hasContext, expanded, measuredExpanded]);
   return expanded;
 }

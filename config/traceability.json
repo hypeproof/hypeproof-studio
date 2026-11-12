@@ -2683,6 +2683,9 @@
           "path": "docs/testing/classroom-admin.md"
         },
         {
+          "path": "chalk/test/issuer-forget.browser.mjs"
+        },
+        {
           "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
@@ -2705,6 +2708,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/sharing-draft.browser.mjs"
         }
       ]
     },
@@ -3288,6 +3294,12 @@
         },
         {
           "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "chalk/test/instructor-console.test.mjs"
+        },
+        {
+          "path": "chalk/test/console-duration.browser.mjs"
         }
       ]
     },
@@ -4619,6 +4631,9 @@
           "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/chalk-instructor-rejudge.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx"
         }
       ]
@@ -4958,6 +4973,53 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-CONTRACT-V0",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SUB",
+        "ST-DES-CHALK-INSTRUCTOR"
+      ],
+      "sources": [
+        {
+          "path": "docs/contract/studio-chalk.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalkContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/modeDecision.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/serverBase.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/instructorBrowserTools.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-CONTRACT-V0",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SUB",
+        "ST-DES-CHALK-INSTRUCTOR",
+        "ST-IMP-CHALK-CONTRACT-V0"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-contract.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-approval-spy.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-tool-merge.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CHALK-GEN-APP",
       "stage": "implementation",
       "label": "Chalk 생성 도구 4개 — 앱 측 (E2-6 / #1295, #1306)",
@@ -5200,6 +5262,167 @@
         },
         {
           "path": "scripts/test/bootstrap-service-packages.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-EMAIL-AUTOMATION",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/email-automation.md"
+        },
+        {
+          "path": "docs/plan/apps-script-quests.md"
+        },
+        {
+          "path": "docs/plan/automation-local-acceptance.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EMAIL-AUTOMATION",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/email-automation.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/google-automation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-store-client.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-render.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-ledger.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs"
+        },
+        {
+          "path": "scripts/tests/install-email-test-fixture.ps1"
+        },
+        {
+          "path": "scripts/tests/install-email-ui-update-fixture.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automationQuest.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-ops.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-resume.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-automation-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-WORKPLACE-AUTOMATION",
+      "stage": "design",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/workplace-automation-journey.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EMAIL-AUTOMATION",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION",
+        "ST-TEST-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomationMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationPanel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationStoreClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationDraft.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationLedger.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationSurface.tsx"
+        },
+        {
+          "path": "scripts/install-email-test.ps1"
+        },
+        {
+          "path": "scripts/install-email-ui-update.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptRuntime.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptEmailProject.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuest.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuestSession.ts"
         }
       ]
     },
@@ -6391,6 +6614,9 @@
         },
         {
           "path": "e2e/accounts/mac-return.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/account-start-entry.test.tsx"
         }
       ]
     },
@@ -6411,6 +6637,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         }
       ]
     },
@@ -6499,6 +6728,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/browserSafetyHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ExternalLinkBlocked.tsx"
         }
       ]
     },
@@ -6513,6 +6745,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/external-link-route.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/external-link-blocked.test.tsx"
         }
       ]
     },
@@ -6628,6 +6863,48 @@
       ]
     },
     {
+      "id": "ST-IMP-PLAN-FIRST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/planFirst.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PlanFirst.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/planFirst.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PLAN-FIRST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-PLAN-FIRST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/plan-first-browser-loop.test.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CODE-BLOCK-TOOLS",
       "stage": "implementation",
       "owner": "jayleekr",
@@ -6693,6 +6970,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/quote-reply.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quote-popover-layout.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
@@ -6883,6 +7163,42 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/preview-recovery.test.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COACH-LOCALHOST-PREVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/previewServerFacts.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COACH-LOCALHOST-PREVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-COACH-LOCALHOST-PREVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/coach-localhost-preview.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-preview-url.smoke.mjs"
         }
       ]
     },
@@ -7295,6 +7611,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-type-scale-browser.smoke.mjs"
         }
       ]
     },
@@ -7532,6 +7851,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/turn-restore.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-restore-large.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/turn-review.test.tsx"
@@ -8515,6 +8837,71 @@
       ]
     },
     {
+      "id": "ST-REQ-APPROVAL-PRESET",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-COMMAND-ALLOW"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-APPROVAL-PRESET",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-APPROVAL-PRESET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/approvalPreset.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/shellFolderScope.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/shellOutward.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/outwardMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ApprovalPresetLabel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-APPROVAL-PRESET",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-APPROVAL-PRESET",
+        "ST-IMP-APPROVAL-PRESET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/approval-preset.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/approval-preset-label.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outward-ask-once.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outward-per-repo.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-ACTIVITY-TRASH",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -9165,6 +9552,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
         }
       ]
     },
@@ -9185,6 +9578,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-status-chatpanel.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-status-screen-layout.smoke.mjs"
         }
       ]
     },
@@ -9539,6 +9935,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/quitGuardHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/workPower.ts"
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
@@ -10483,6 +10882,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/layoutLoopGuard.ts"
         }
       ]
     },
@@ -10496,6 +10898,15 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/composer-geometry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/composer-expand-oscillation-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/layout-loop-guard.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/layout-loop-guard.test.tsx"
         },
         {
           "path": "extensions/hypeproof-chat/test/focus-placeholder.smoke.mjs"
@@ -11381,6 +11792,69 @@
       ]
     },
     {
+      "id": "ST-REQ-UPDATE-NO-CLICK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE",
+        "ST-REQ-UPDATE-ON-QUIT"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Automatic updates without a click (#3411)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-UPDATE-NO-CLICK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-NO-CLICK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/autoUpdate.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/stagedUpdate.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-UPDATE-NO-CLICK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-NO-CLICK",
+        "ST-IMP-UPDATE-NO-CLICK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/auto-update.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-orchestration.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-WORK-POWER",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -12078,6 +12552,9 @@
         },
         {
           "path": "scripts/patches/core/korean/install.mjs"
+        },
+        {
+          "path": "scripts/patches/core/korean/build_patch.py"
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/EffortControl.tsx"
@@ -14530,6 +15007,55 @@
       ]
     },
     {
+      "id": "ST-REQ-CHALK-APPROVAL-PRESET",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### CH-08 수업 버전별 AI가 묻는 방식 (CGP-AGENT-R-001) · 2026-11-04"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-APPROVAL-PRESET",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-APPROVAL-PRESET",
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/authoring.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-APPROVAL-PRESET",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-APPROVAL-PRESET",
+        "ST-IMP-CHALK-APPROVAL-PRESET"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/approval-preset.browser.mjs"
+        },
+        {
+          "path": "chalk/test/approval-preset-drift.test.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md",
+          "section": "### T-51 수업 버전별 AI가 묻는 방식 (CH-08, CGP-AGENT-R-001) · 2026-11-04"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-CHALK-HELP-TRIAGE",
       "stage": "requirement",
       "label": "REQ-CGP-LEARN-17: Chalk help-request queue keyboard triage (next, previous, open, answer-and-advance)",
@@ -16096,6 +16622,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
         }
       ]
     },
@@ -16113,6 +16651,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-state-line.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-state-line-browser.smoke.mjs"
         }
       ]
     },
@@ -16288,6 +16832,1558 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-MANAGER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory manager: view and delete each item (CGP-KNOW-R-023)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-MANAGER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MyWorksDrawer.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemorySettingsList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-MANAGER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-MANAGER",
+        "ST-IMP-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-manager.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-manager-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-settings.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-settings-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-NOTICE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-ACTIVITY-MEMORY-SCOPE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## One-time memory notice (CGP-KNOW-R-031)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-NOTICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryNotice.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryNotice.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-NOTICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-NOTICE",
+        "ST-IMP-MEMORY-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-notice.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-notice-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-USE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory use on an answer: \"기억 사용 N\" and per-task exclusion (CGP-KNOW-R-026)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-USE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUse.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUseView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryUseChip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/memoryUse.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CitationPreview.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-USE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE",
+        "ST-IMP-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-WRITE-LINE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory write line: a turn's memory write shows in the turn, with an undo (CGP-KNOW-R-027, CGP-KNOW-D-027)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-WRITE-LINE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-WRITE-LINE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryWrite.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryWriteLine.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryWriteLine.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryRememberTool.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/localRuntime/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-WRITE-LINE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-WRITE-LINE",
+        "ST-IMP-MEMORY-WRITE-LINE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-write-line.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-write-line.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-write-line-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/stroke-icons.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/glyphIcon.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-memory.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/scripts/run-tsx-tests.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-remember-tool.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-CAPACITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory capacity: used/limit and cleanup (CGP-KNOW-R-024)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-CAPACITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-CAPACITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-CAPACITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-CAPACITY",
+        "ST-IMP-MEMORY-CAPACITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-capacity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-capacity-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TEMPORARY-TASK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## \"기록 없이 묻기\": a task this computer does not keep (CGP-KNOW-R-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TEMPORARY-TASK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TEMPORARY-TASK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/temporaryTask.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TEMPORARY-TASK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TEMPORARY-TASK",
+        "ST-IMP-TEMPORARY-TASK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/temporary-task.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/temporary-task-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-STUDIO-DOCTOR",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## H. Report problem (#64)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-STUDIO-DOCTOR",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-DOCTOR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studioDoctor.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioDoctorHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/problemReport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reportProblemHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ProblemReportDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STUDIO-DOCTOR",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-DOCTOR",
+        "ST-IMP-STUDIO-DOCTOR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/studio-doctor.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/studio-doctor-ui.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/korean-shell.smoke.mjs"
+        },
+        {
+          "path": "docs/operations/release-casebook/cases.yaml"
+        }
+      ]
+    },
+    {
+      "id": "ST-INT-SKILL-STORE",
+      "stage": "intent",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "LAB-PRODUCT-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "docs/intents/skill-store.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SKILL-STORE",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-INT-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Public skill store (#3418)"
+        },
+        {
+          "path": "docs/policy/skill-store-policy.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SKILL-STORE",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/skillStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/skillStorePanel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/skillStoreProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SkillStore.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/questSkill.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationDraftSeal.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/storeMail.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SKILL-STORE",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-SKILL-STORE",
+        "ST-IMP-SKILL-STORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/skill-store.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/skill-store-client.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/skill-store-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quest-skill-store.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/store-mail-custody.smoke.mjs"
+        },
+        {
+          "path": "e2e/store/mac-store.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-VOICE-DICTATION-READALOUD",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Studio voice: dictation and read-aloud (hps-voice-policy/1; CGP-VOICE-R-003, R-004, R-012, R-016, R-024, CGP-VOICE-D-003, D-018, CGP-CHAT-R-009)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-DICTATION-READALOUD",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-DICTATION-READALOUD",
+        "ST-TEST-VOICE-DICTATION-READALOUD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voiceServed.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceCopy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceDictation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceMicSettings.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceProvider.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceDisclosureSheet.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DictationControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/composerAddon.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/answerExtras.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/dictationAddon.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-DICTATION-READALOUD",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-DICTATION-READALOUD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-served.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-dictation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-read-aloud.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-ui.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-mount.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-MOBILE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/README.md"
+        },
+        {
+          "path": "apps/studio-native/FOUNDRY.md"
+        },
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/docs/mobile-conversation.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-MOBILE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/.gitignore"
+        },
+        {
+          "path": "apps/studio-native/package.json"
+        },
+        {
+          "path": "apps/studio-native/ios/Package.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Service.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Intent.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/xcshareddata/xcschemes/HPStudio.xcscheme"
+        },
+        {
+          "path": "apps/studio-native/android/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/gradle.properties"
+        },
+        {
+          "path": "apps/studio-native/android/settings.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/values/styles.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/xml/paths.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioService.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-verify.sh"
+        },
+        {
+          "path": "products.yaml"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/Contents.json"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/Icon.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/Contents.json"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/drawable/studio_icon.xml"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudio-Mac.entitlements"
+        },
+        {
+          "path": "apps/studio-native/ios/App/PrivacyInfo.xcprivacy"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-128@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-128@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-16@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-16@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-256@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-256@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-32@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-32@2x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-512@1x.png"
+        },
+        {
+          "path": "apps/studio-native/ios/App/Assets.xcassets/AppIcon.appiconset/MacIcon-512@2x.png"
+        },
+        {
+          "path": "apps/studio-native/scripts/foundry-native-acceptance.py"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/res/values-night/styles.xml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/mobileConversation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/mobileConversationHost.ts"
+        },
+        {
+          "path": "release.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-MOBILE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE",
+        "ST-IMP-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ServiceTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java"
+        },
+        {
+          "path": ".github/workflows/studio-native-mobile.yml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-verify.sh"
+        },
+        {
+          "path": "apps/studio-native/scripts/macos-verify.sh"
+        },
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
+        },
+        {
+          "path": "apps/studio-native/tests/test_foundry_native_acceptance.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/ios-verify.sh"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation-service.integration.mjs"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-environment.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_android_environment.py"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MOBILE-REFLECTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-MOBILE-REFLECTION",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MOBILE-REFLECTION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/Intent.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MOBILE-REFLECTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-REFLECTION",
+        "ST-IMP-MOBILE-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MOBILE-VOICE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-MOBILE-VOICE",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MOBILE-VOICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/App/VoiceController.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/StudioModel.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/VoiceReviewPCM.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MOBILE-VOICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MOBILE-VOICE",
+        "ST-IMP-MOBILE-VOICE"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceReviewPCMTests.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LESSON-STARTERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-STARTERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonStarters.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonStarters.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-STARTERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-STARTERS",
+        "ST-IMP-LESSON-STARTERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-starters.test.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TRUST-OWN-FOLDERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## A. Lifecycle & autoOnboard"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TRUST-OWN-FOLDERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studioFolderTrust.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "scripts/patches/core/hps-studio-folder-trust.patch"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TRUST-OWN-FOLDERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TRUST-OWN-FOLDERS",
+        "ST-IMP-TRUST-OWN-FOLDERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/studio-folder-trust.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-PERSONAL-REFLECTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-PERSONAL-REFLECTION",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PERSONAL-REFLECTION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/personalReflection.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PERSONAL-REFLECTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION",
+        "ST-IMP-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/personal-reflection.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LESSON-SETTINGS-CHANGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-SETTINGS-CHANGE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-SETTINGS-CHANGE",
+        "ST-IMP-CAPABILITY-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonSettingsChange.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonSettingsChange.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/lessonSettingsChange.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-SETTINGS-CHANGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-SETTINGS-CHANGE",
+        "ST-IMP-LESSON-SETTINGS-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-settings-change.test.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-LAB-CONNECT",
+      "stage": "requirement",
+      "label": "Chalk instructor access through the Lab login, never a pasted issuer",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-BOA-DISTRIBUTION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/README.md",
+          "section": "## Lab login connection"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-LAB-CONNECT",
+      "stage": "implementation",
+      "label": "Chalk connect routes, sealed session and token-free instructor pages",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LAB-CONNECT"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/connect.ts"
+        },
+        {
+          "path": "chalk/src/lib/connect-panel.ts"
+        },
+        {
+          "path": "chalk/src/routes/connect.ts"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/routes/lab-tokens.ts"
+        },
+        {
+          "path": "chalk/src/lib/service-read.ts"
+        },
+        {
+          "path": "chalk/src/env.ts"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "chalk/wrangler.toml"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/board.html"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/budgets.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-LAB-CONNECT",
+      "stage": "test",
+      "label": "Connect flow, session-only Bearer and no issuer in URLs, bodies or logs",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LAB-CONNECT",
+        "ST-IMP-CHALK-LAB-CONNECT"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/connect.test.mjs"
+        },
+        {
+          "path": "chalk/test/harness/connect.mjs"
+        },
+        {
+          "path": "chalk/test/issuer-forget.browser.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## iPhone credential continuity (MIRS-01, Studio #3736)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-IOS-CREDENTIAL-CONTINUITY"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-IOS-CREDENTIAL-CONTINUITY",
+        "ST-IMP-IOS-CREDENTIAL-CONTINUITY"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
         }
       ]
     }

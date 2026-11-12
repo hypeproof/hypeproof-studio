@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { bootstrapServicePackages } from '../bootstrap-service-packages.mjs';
-const names = ['measurement-core-0.1.0', 'service-contracts-0.1.0', 'service-contracts-0.1.1', 'measurement-0.3.5', 'service-testkit-0.1.2'];
+const names = ['measurement-core-0.1.0', 'service-contracts-0.1.0', 'service-contracts-0.1.2', 'measurement-0.3.5', 'service-testkit-0.1.5', 'measurement-core-0.1.1', 'service-testkit-0.1.4'];
 const bytes = asset => Buffer.from('synthetic fixture ' + asset);
 const digest = b => createHash('sha256').update(b).digest('hex');
 const pins = () => ({ version: 1, repository: 'hypeproof/hypeproof-service', packages: names.map(name => {
@@ -20,10 +20,10 @@ async function fixture(t) {
 }
 test('verified acquisition is atomic, cache reuse requires no credential or network', async t => {
   const f = await fixture(t);
-  assert.equal(await bootstrapServicePackages({ root: f.root, manifest: pins(), download: f.download }), 5);
-  assert.equal(f.calls(), 5);
-  assert.equal(await bootstrapServicePackages({ root: f.root, manifest: pins(), download: async () => assert.fail('must not download verified cache') }), 5);
-  assert.equal((await readdir(join(f.root, '.private-service-cache'))).length, 5);
+  assert.equal(await bootstrapServicePackages({ root: f.root, manifest: pins(), download: f.download }), 7);
+  assert.equal(f.calls(), 7);
+  assert.equal(await bootstrapServicePackages({ root: f.root, manifest: pins(), download: async () => assert.fail('must not download verified cache') }), 7);
+  assert.equal((await readdir(join(f.root, '.private-service-cache'))).length, 7);
 });
 test('corrupt cached package fails closed without network or silent replacement', async t => {
   const f = await fixture(t); await bootstrapServicePackages({ root: f.root, manifest: pins(), download: f.download });

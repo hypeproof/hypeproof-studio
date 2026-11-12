@@ -9,6 +9,11 @@ export interface ChalkEnv {
   // Server-to-server credential for attesting an Access operator to Service.
   // Never included in App/browser requests or instructor write forwarding.
   HPS_CHALK_SERVICE_SECRET?: string;
+  // Shared with the Lab (same value on both servers, at least 32 characters). It
+  // authenticates the connect-code exchange and Chalk's two Lab workshop calls,
+  // and keys the sealed session cookie. Never sent to a browser. Unset = the Lab
+  // connection is off and instructor calls are refused.
+  HPS_CHALK_CONNECT_SECRET?: string;
 }
 
 export const DEFAULT_SERVICE_ORIGIN = "https://api.hypeproof-ai.xyz";

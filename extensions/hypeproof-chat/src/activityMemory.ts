@@ -15,6 +15,10 @@ import { createHash, randomBytes } from "node:crypto";
 
 /** The store, relative to the activity root. */
 export const MEMORY_FOLDER = [".hypeproof", "memory"] as const;
+/**
+ * `items` is also the capacity the learner sees (REQ-STUDIO-MEMORY-CAPACITY, CGP-KNOW-R-024): `append()` refuses a new
+ * file once the folder holds this many (listed plus unlisted). Change it here; the view carries it to the webview.
+ */
 export const MEMORY_LIMITS = { items: 200, bytes: 16 * 1024, chars: 2000 } as const;
 
 /**
@@ -174,14 +178,19 @@ export class ActivityMemory {
     return entries.flatMap(entry => entry.text?.trim() ? [{ name: entry.name, text: entry.text }] : []);
   }
 
-  /** Adds one item as a new file; never touches an existing one. `task` records where it came from. Returns the file name. */
-  async append(raw: string, now = Date.now(), task?: string | null): Promise<string> {
+  /**
+   * Adds one item as a new file; never touches an existing one. `task` records where it came from. Returns the file name.
+   * `replacing` (REQ-STUDIO-MEMORY-CAPACITY): a listed file the caller removes right after this write (a correction).
+   * The write then does not count that file, so a full store can still have an item replaced; it adds no item.
+   */
+  async append(raw: string, now = Date.now(), task?: string | null, replacing?: string): Promise<string> {
     const text = memoryText(raw).trim();
     if (!text) throw new MemoryStoreError("empty");
     if ([...text].length > MEMORY_LIMITS.chars) throw new MemoryStoreError("invalid");
     const dir = await this.folder(true);
     const { entries, other } = await this.list();
-    if (entries.length + other >= MEMORY_LIMITS.items) throw new MemoryStoreError("full");
+    const replaced = replacing !== undefined && entries.some(entry => entry.name === replacing) ? 1 : 0;
+    if (entries.length + other - replaced >= MEMORY_LIMITS.items) throw new MemoryStoreError("full");
     const name = `${new Date(now).toISOString().replace(/[:.]/g, "-")}-${randomBytes(4).toString("hex")}.md`;
     // O_EXCL: an existing name is an error, never an overwrite.
     const handle = await fs.open(path.join(dir!, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -201,6 +210,26 @@ export class ActivityMemory {
     if (!stat.isFile() || stat.nlink !== 1n) throw new MemoryStoreError("not_file");
     const digest = await pinDigest(file, stat);
     return { file, dev: stat.dev, ino: stat.ino, ctimeNs: stat.ctimeNs, birthtimeNs: stat.birthtimeNs, size: stat.size, digest };
+  }
+
+  /** A listed file's bytes exactly as stored, for a write that may need to put them back (REQ-STUDIO-MEMORY-WRITE-LINE). */
+  async readRaw(name: string): Promise<Buffer> {
+    const { file, size } = await this.identify(name);
+    if (size > BigInt(MEMORY_PIN_BYTES)) throw new MemoryStoreError("invalid");
+    const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => { throw new MemoryStoreError("changed"); });
+    try { return await handle.readFile(); } finally { await handle.close(); }
+  }
+
+  /**
+   * REQ-STUDIO-MEMORY-WRITE-LINE — puts back a file that an undone replacement removed: the same name and the same bytes, an
+   * exclusive create (an existing name is `changed`, never an overwrite). The only write path besides `append()`.
+   */
+  async restore(name: string, bytes: Buffer): Promise<void> {
+    if (!memoryFileName(name) || bytes.length > MEMORY_LIMITS.bytes) throw new MemoryStoreError("invalid");
+    const dir = await this.folder(true);
+    const handle = await fs.open(path.join(dir!, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+      .catch(() => { throw new MemoryStoreError("changed"); });
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
   }
 
   /** The absolute path of a listed file, for opening it in the editor. */

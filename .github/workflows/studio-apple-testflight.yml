@@ -1,0 +1,65 @@
+name: Studio Apple TestFlight
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release/studio-unified-preview']
+    paths: ['apps/studio-native/**', '.github/workflows/studio-apple-testflight.yml', '.github/workflows/studio-native-mobile.yml']
+permissions:
+  contents: read
+concurrency:
+  group: studio-apple-testflight
+  cancel-in-progress: false
+jobs:
+  native-candidate:
+    if: github.repository == 'hypeproof/hypeproof-studio'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require successful native CI for this exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 apps/studio-native/scripts/verify-native-candidate.py gate --output "$RUNNER_TEMP/native-release-gate.json" --timeout 1500 --interval 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-native-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-release-gate.json
+          if-no-files-found: error
+          retention-days: 14
+  upload:
+    needs: native-candidate
+    if: github.repository == 'hypeproof/hypeproof-studio'
+    environment: apple-native-preview
+    runs-on: macos-15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # Desktop is the existing Studio RC, never a mobile-derived Catalyst app.
+        platform: [ios]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive, validate and upload signed preview
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_DEVELOPER_TEAM_ID: ${{ vars.APPLE_DEVELOPER_TEAM_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPLE_DISTRIBUTION_P12: ${{ secrets.APPLE_DISTRIBUTION_P12 }}
+          APPLE_DISTRIBUTION_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_PASSWORD }}
+          APPLE_PROFILE: ${{ secrets.APPLE_IOS_PROFILE }}
+        run: bash apps/studio-native/scripts/apple-upload.sh '${{ matrix.platform }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-testflight-${{ matrix.platform }}-${{ github.sha }}
+          path: apps/studio-native/evidence/apple-${{ matrix.platform }}/
+          retention-days: 14

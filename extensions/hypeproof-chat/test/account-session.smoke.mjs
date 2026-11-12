@@ -51,10 +51,15 @@ assert.equal(accountProductionEnabled(false,'https://api.hypeproof-ai.xyz/v1','h
 assert.equal(safeDeviceUrl(SITE+'/studio/connect?access_token=leak',SITE),false);
 assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),false);
 {
-  const {world,client}=harness();
+  let signedIn=0;
+  const {world,client}=harness({signedIn:async()=>{signedIn++;}});
   await client.start(); assert.equal(client.view().status,'waiting'); assert.equal(world.store.size,0);
   await client.poll(); assert.equal(world.store.size,0,'pending approval grants no credentials');
+  assert.equal(signedIn,0);
   world.poll='approved'; await client.poll(); assert.equal(client.view().status,'signedIn');
+  assert.equal(signedIn,1);
+  await client.refreshView(); await client.poll();
+  assert.equal(signedIn,1,'background refresh never resumes an activity');
   const view=JSON.stringify(client.view()); for(const secret of ['account-secret','refresh-secret','device-secret','do-not-forward','never-forward'])assert.equal(view.includes(secret),false);
   assert.equal(client.view().passes[0].expires_at,null,'an unstarted pass must not present its activation deadline as its usage end');
   assert.equal(client.view().passes[0].duration_seconds,2592000);assert.equal(client.view().passes[0].activation_deadline_at,9000000);

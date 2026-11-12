@@ -49,12 +49,17 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
+import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
+import { MCP_MEMORY_REMEMBER } from "./memoryRememberTool.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
 import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
+import { presetAsksBeforeChanges, type ApprovalPresetId } from "./approvalPreset.ts";
+import { destructiveStaysInFolder } from "./shellFolderScope.ts";
+import { readOutward } from "./shellOutward.ts";
 import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
@@ -378,6 +383,10 @@ export function permittedMcpToolsFor(
   const orchestrator = orchestratorBindingFor(profile, roster);
   if (orchestrator?.consult) tools.push(MCP_CONSULT);
   if (orchestrator?.siteCheck) tools.push(MCP_SITE_CHECK);
+  if (!isMinorTier(profile) && profile.automations?.enabled === true && profile.automations.provider === "gmail") {
+    tools.push(...GOOGLE_AUTOMATION_MCP_TOOLS);
+    if (profile.automations.appsScript === true) tools.push(...APPS_SCRIPT_MCP_TOOLS);
+  }
   // One-click publish: its own grant, independent of `sdk_tools.browser` — the profile's
   // `publishing` block is the owner (the same gate the toolbar button uses), minors never.
   if (sitePublishAllowed(profile.publishing, isMinorProfile(profile)).ok) tools.push(MCP_PUBLISH_SITE);
@@ -927,7 +936,7 @@ export const SDK_AUTO_COMPACT_WINDOW_TOKENS = 200_000;
  * ambient environment that names one is dropped before ours are added.
  */
 const OWNED_HEADER_LINE =
-  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
+  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator|store-run)\s*:/i;
 
 /**
  * #749 (AE-14) — the seat a CLI session belongs to: this student, on this
@@ -1074,8 +1083,16 @@ export function sdkConfigDirFor(
    * updated (and every existing test) behaves as before.
    */
   seatKey?: string,
+  /**
+   * #3640 — a Dev review sets this (devSdkConfigRoot) so the coach's CLI state
+   * lives inside the review's Dev state folder and is removed with it. Omitted →
+   * the home/APPDATA path above, unchanged.
+   */
+  root?: string,
 ): string {
   const seat = seatKey?.trim() ? `/${seatKey.trim()}` : "";
+  const rootDir = root?.trim();
+  if (rootDir) return `${rootDir}${seat}`;
   // Windows: %APPDATA%\HypeProof-Studio\… (beside the seeded SDK binary).
   // macOS/Linux: ~/.hypeproof-studio/… — both sit with the rest of our per-user
   // state, so wiping a student's Studio data removes this with everything else.
@@ -1085,6 +1102,15 @@ export function sdkConfigDirFor(
   if (home) return `${home}/.hypeproof-studio/${SDK_CONFIG_DIR_NAME}${seat}`;
   // No home at all (locked-down CI): a relative dir still beats inheriting ~/.claude.
   return `.hypeproof-studio/${SDK_CONFIG_DIR_NAME}${seat}`;
+}
+
+/**
+ * #3640 — the coach's CLI config root inside an isolated Dev app's global storage.
+ * Only the Dev app (the same name test as testStateCandidates) gets one; a release
+ * or any other app name gets undefined, so its path stays sdkConfigDirFor's home path.
+ */
+export function devSdkConfigRoot(appName: string, globalStoragePath: string): string | undefined {
+  return appName === "HypeProof Studio Dev" && globalStoragePath.trim() ? `${globalStoragePath}/claude-config` : undefined;
 }
 
 /**
@@ -1109,6 +1135,8 @@ export function buildSdkGatewayEnv(
   /** #751 G2 — the lesson step on screen and the learner's help mode for this turn. Teaching pointers the Service re-checks; never grants. */
   lessonStep?: string;
   helpMode?: string;
+  /** Epic #3418 D2 — `<item_id>@<version>` of the installed store skill this turn runs; the Service composes it. */
+  storeRun?: string;
     proxyUrl: string;
     token: string;
     /** 작업 폴더 절대경로 — 워커가 `x-hps-workspace` 로 받아 시스템 블록에 넣는다. */
@@ -1141,6 +1169,12 @@ export function buildSdkGatewayEnv(
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   env.ANTHROPIC_BASE_URL = anthropicBaseUrlFor(args.proxyUrl);
   env.ANTHROPIC_AUTH_TOKEN = args.token;
+  // Bundled CLI 0.3.207 starts an unawaited generate_session_title request
+  // beside the first SDK prompt unless this switch is set. That paid helper
+  // competes with the learner's turn for the native-trial single request lease
+  // (trial_busy/429). Studio owns its conversation title; never inherit an
+  // ambient opt-in to the CLI's separate model-generated terminal title.
+  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
   // The env scrub above cannot reach credentials stored on DISK. The CLI reads
   // those from its config dir and prefers them over ANTHROPIC_AUTH_TOKEN, so the
   // coach must get a config dir of its own or the workshop token is ignored
@@ -1183,6 +1217,10 @@ export function buildSdkGatewayEnv(
   const custom: string[] = [];
   if(args.fundingSource){if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(args.fundingSource))throw Error('invalid funding source');custom.push(`x-hps-funding-source: ${args.fundingSource}`);}
   if (args.effort) custom.push(`x-hps-effort: ${args.effort}`);
+  if (args.storeRun !== undefined) {
+    if (!/^ski_[0-9a-f]{32}@[1-9]\d{0,5}$/.test(args.storeRun)) throw Error('invalid store run');
+    custom.push(`x-hps-store-run: ${args.storeRun}`);
+  }
   if (args.lessonBinding && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(args.lessonBinding)) custom.push(`x-hps-lesson-binding: ${args.lessonBinding}`);
   // A help mode is meaningful only for a named step: the Service refuses one without it, so neither goes out alone.
   if (args.lessonStep && /^[a-zA-Z0-9_-]{1,64}$/.test(args.lessonStep)) {
@@ -1367,6 +1405,8 @@ export function buildSdkQueryOptions(
   /** #751 G2 — the lesson step on screen and the learner's help mode for this turn. Teaching pointers the Service re-checks; never grants. */
   lessonStep?: string;
   helpMode?: string;
+  /** Epic #3418 D2 — `<item_id>@<version>` of the installed store skill this turn runs; the Service composes it. */
+  storeRun?: string;
     proxyUrl: string;
     token: string;
     cwd?: string;
@@ -1438,6 +1478,7 @@ export function buildSdkQueryOptions(
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,
       helpMode: args.helpMode,
+      storeRun: args.storeRun,
       token: args.token,
       ...(args.configDir ? { configDir: args.configDir } : {}),
       // 시스템 프롬프트 경로는 워커가 버리므로 헤더로 보낸다 (#431).
@@ -1517,7 +1558,8 @@ export function profileToAgentOptions(
  * or 400 (request the gateway refuses outright) will fail all 10 retries
  * identically. 403 is NOT here — the worker uses it for session-window/roster
  * states that the SDK doesn't retry (they surface as a terminal error), and
- * 5xx/429/529 stay retryable (the SDK's backoff is the right behavior there).
+ * 5xx/529 stay retryable. Capacity 429 is handled separately without an auth
+ * error, because a budget refusal needs action rather than CLI backoff.
  */
 export const SDK_FATAL_AUTH_STATUSES: ReadonlySet<number> = new Set([400, 401]);
 
@@ -1535,6 +1577,24 @@ export function sdkFatalAuthStatus(msg: Record<string, unknown>): number | null 
 /** True for the SDK's retry tick (`{type:"system", subtype:"api_retry"}`). */
 export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
   return msg["type"] === "system" && msg["subtype"] === "api_retry";
+}
+
+/** SDK API failures are control messages, not assistant prose. Never display
+ * their raw body: a gateway error can contain private request details. A 429
+ * also covers a hard budget reservation refusal, so waiting through CLI retries
+ * cannot be assumed to help. Leave retry to an explicit learner action. */
+function sdkApiFailure(msg: Record<string, unknown>): Error | null {
+  const rateLimit = (isSdkRetryEvent(msg) && msg.error_status === 429)
+    || (msg.type === 'assistant' && msg.error === 'rate_limit');
+  const assistantFailure = msg.type === 'assistant' && (msg.isApiErrorMessage === true
+    || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
+  if (!rateLimit && !assistantFailure) return null;
+  // REQ-M44 — a CLI line carrying the Service's own sentence (trial or pass end) ends the turn with that sentence.
+  if (msg.type === 'assistant') { const line = sdkCliErrorLine(msg); if (line && sdkServiceSentence(line)) return null; }
+  return Object.assign(new Error(rateLimit
+    ? '요청이 제한됐어요. 이용권·사용량과 실행 중인 작업을 확인한 뒤 다시 보내 주세요. 잔액이 있어도 AI 서비스의 요청 제한이 적용될 수 있어요. (429)'
+    : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
+    { name: 'SdkApiError', ...(rateLimit ? { status: 429 } : {}) });
 }
 
 // ── First-token / idle stall watchdog (#403) ────────────────────────────────
@@ -2138,6 +2198,11 @@ export interface SdkStreamHandlers {
    * before. Attach it with sdkBusyPolicyFor (orchestrator seats only).
    */
   busy?: SdkBusyPolicy;
+  /**
+   * Email-automation turns: an unmanaged 429 or CLI API failure ends the turn at once instead of
+   * waiting out CLI retries, because a budget refusal needs the learner's action (#1604).
+   */
+  failFast?: boolean;
 }
 
 /**
@@ -2206,6 +2271,8 @@ const SDK_CLI_ERROR_TEXT = /Claude Code returned an error result|Claude Code pro
 /** The text of a CLI-generated API-error assistant message, or null for anything the model said. */
 export function sdkCliErrorLine(msg: Record<string, unknown>): string | null {
   if (msg["type"] !== "assistant") return null;
+  // A reply cut at the output limit is the model's own text, not a CLI refusal line.
+  if (msg["error"] === "max_output_tokens") return null;
   const synthetic = (msg["message"] as { model?: unknown } | undefined)?.model === "<synthetic>";
   if (msg["error"] === undefined && !synthetic) return null;
   const text = extractSdkText(msg);
@@ -2399,7 +2466,7 @@ export async function consumeSdkStream(
       // A response that came back after the retries answers them: their status no longer describes this turn.
       // The CLI's own "API Error: …" line is an assistant message too — it is the failure, not an answer (`error` set, or
       // the CLI's `<synthetic>` model).
-      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
+      else if (msg["type"] === "assistant" && (msg["error"] === undefined || msg["error"] === "max_output_tokens") && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
         lastRetryStatus = undefined;
         // …and ends a busy episode: the next rush counts from zero again.
         busyRetries = 0;
@@ -2412,6 +2479,18 @@ export async function consumeSdkStream(
         // Kill the subprocess's retry loop first, then surface the token error.
         h.abortQuery();
         throw h.makeFatalAuthError(fatal);
+      }
+      // A served busy policy owns its bounded busy-retry episode (REQ-M44 keeps the CLI's error
+      // lines out of the bubble). Without that policy an automation turn fails immediately on a
+      // budget/concurrency refusal.
+      const managedBusyFailure = busy && (
+        (isSdkRetryEvent(msg) && SDK_BUSY_STATUSES.has(Number(msg.error_status)))
+        || (msg.type === 'assistant' && ['rate_limit', 'overloaded'].includes(String(msg.error)))
+      );
+      const apiFailure = managedBusyFailure || !h.failFast ? null : sdkApiFailure(msg);
+      if (apiFailure) {
+        h.abortQuery();
+        throw apiFailure;
       }
       // Retry ticks are the pathology, not progress — they must not renew the
       // watchdog budget.
@@ -2603,7 +2682,9 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
     (MCP_BROWSER_EXTRA_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
+    toolName === MCP_MEMORY_REMEMBER ||
     toolName === MCP_PUBLISH_SITE
   );
 }
@@ -2621,6 +2702,11 @@ export interface CoachToolAction {
    * own reading of the command: they may add the flag, never drop it.
    */
   destructive?: boolean;
+  /**
+   * DEC-11f — shell tools: the folder the agent's shell is in when this command starts (the SDK PreToolUse hook's
+   * `cwd`; the Bash tool keeps its folder between commands). Set by the host from the hook, never from tool input.
+   */
+  shellCwd?: string;
 }
 
 function firstString(input: unknown, keys: string[]): string | undefined {
@@ -2676,6 +2762,18 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   // 그게 없어서 문구가 통째로 비었다("코치가 명령을 실행하려고 해요:" 뒤가 공백).
   // CR-06 — choosing an option acts inside the already-opened page like a click, so it
   // takes the click's kind (auto-allowed by the default approval list).
+  // CGP-AGENT-R-001 — page_pdf_save reaches the approval path only under a preset that asks before changes:
+  // it writes `<name>.pdf` beside the work-folder page, so it is shown and checked as that file write.
+  if (action.toolName === MCP_PAGE_PDF_SAVE) {
+    const page = firstString(action.input, ["path"]) ?? "";
+    const pdf = page ? page.replace(/\.html?$/i, "") + ".pdf" : "";
+    return { kind: "writeFile", description: `PDF로 저장: ${pdf || "알 수 없는 파일"}`, payload: { path: pdf } };
+  }
+  // REQ-STUDIO-MEMORY-REMEMBER-TOOL — a note saved to the activity's memory store is a write inside the work folder
+  // (`.hypeproof/memory/`), so it is shown and decided as that: the same approval preset, no modal where a file write has none.
+  if (action.toolName === MCP_MEMORY_REMEMBER) {
+    return { kind: "writeFile", description: "기억에 남기기", payload: { path: ".hypeproof/memory/", paths: [{ path: ".hypeproof/memory/", change: "new" }] } };
+  }
   if (action.toolName === MCP_PUBLISH_SITE) {
     const repo = firstString(action.input, ["repo_name"]) ?? "";
     const stage = firstString(action.input, ["stage"]) === "save" ? "save" : "publish";
@@ -2745,7 +2843,7 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     return {
       kind: "executeShell",
       description: `${action.toolName}: ${command}`,
-      payload: { command },
+      payload: { command, ...(typeof action.shellCwd === "string" ? { shellCwd: action.shellCwd } : {}) },
       ...(destructive ? { destructive: true } : {}),
     };
   }
@@ -2999,6 +3097,19 @@ export function evaluateSdkToolUse(args: {
    * the source of a Gate 1 deny (폴더 권한); never changes the verdict.
    */
   folderRemoved?: ReadonlySet<string>;
+  /**
+   * CGP-AGENT-R-001 — the lesson's approval preset (approvalPreset.ts). Can only turn an
+   * "allow" into an "ask" (before_changes / always_ask: every shell command asks); never
+   * changes a deny and never turns an ask into an allow. Absent → today's verdicts.
+   */
+  approvalPreset?: ApprovalPresetId | null;
+  /**
+   * DEC-11 amended (Jay 2026-11-04) — the seat runs in `auto` (approvalModeFor: no served preset and not a
+   * minor). A destructive command whose every target stays inside the work folder then runs without a modal;
+   * one that reaches outside, or that this layer cannot read, keeps the strong confirm. Never changes a deny.
+   * DEC-11e: a command that may send data off this computer asks (the host remembers allowed destinations).
+   */
+  autoInFolder?: boolean;
 }): SdkToolVerdict {
   const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
@@ -3087,10 +3198,20 @@ export function evaluateSdkToolUse(args: {
       return denyVerdict("app_bundle_program", "command runs a program inside an app bundle (.app/Contents/)", toolName, audience, APP_BUNDLE_PROGRAM_REASON);
     }
     // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
-    if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
+    if (link?.decision === "ask" || shellUnreadable(command)) {
       return { decision: "ask", destructive: true };
     }
-    return { decision: "allow" };
+    const auto = args.autoInFolder === true && !args.approvalPreset;
+    // DEC-11e — auto: a command that may send data off this computer (git push, ssh/scp/sftp/rsync to a host,
+    // curl/wget uploads to a host that is not this one) reaches the host, which asks once per destination.
+    const outward = auto && readOutward(command).outward;
+    if (isDestructiveCommand(command)) {
+      // DEC-11 amended — auto: deleting or moving files inside the work folder does not ask; outside still does.
+      return auto && destructiveStaysInFolder(command, workspaceRoot, canon) ? (outward ? { decision: "ask" } : { decision: "allow" }) : { decision: "ask", destructive: true };
+    }
+    if (outward) return { decision: "ask" };
+    // CGP-AGENT-R-001 — a stricter lesson preset asks before every command, not only destructive ones.
+    return presetAsksBeforeChanges(args.approvalPreset) ? { decision: "ask" } : { decision: "allow" };
   }
 
   // ── Agent/Task tool — subagent delegation (#282 P2 slice 3, REQ-M22) ──────
@@ -3110,6 +3231,12 @@ export function evaluateSdkToolUse(args: {
     return { decision: "ask" };
   }
 
+  // The registered host rechecks capability and requires an exact-preview native
+  // confirmation for every send. This dispatch grant cannot approve delivery.
+  if ((ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
+    return { decision: "allow" };
+  }
+
   // ── Orchestrator tools (A2; spec §3.2, §5.1, §6.1) ───────────────────────
   // Gate 1 already proved a served roster granted them (permittedMcpToolsFor:
   // adults only). site_check measures the learner's own preview, read-only:
@@ -3119,6 +3246,9 @@ export function evaluateSdkToolUse(args: {
   // the single source of that choice (#499). Helpers have no tools, so a
   // consult can cause no external effect.
   if (toolName === MCP_SITE_CHECK) return { decision: "allow" };
+  // REQ-STUDIO-MEMORY-REMEMBER-TOOL — registered by the host only on a personal activity; like a work-folder write it
+  // goes to the approval path, where the preset (and not this tool) decides whether a modal opens.
+  if (toolName === MCP_MEMORY_REMEMBER) return { decision: "ask" };
   if (toolName === MCP_CONSULT) return { decision: "ask" };
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────
@@ -3176,6 +3306,9 @@ export function evaluateSdkToolUse(args: {
   }
   // #3221 — page_pdf_save prints the student's own work-folder page with Studio's browser and writes the PDF beside it;
   // the host re-checks the folder and its write consent. Like a preview, not an outward action.
+  // CGP-AGENT-R-001 (Jay 2026-11-04) — under 바꾸기 전에 묻기 / 항상 묻기 the PDF is a file change like any write, so it
+  // asks first (the host shows the file-save approval, sdkToolToActionRequest maps it to writeFile).
+  if (toolName === MCP_PAGE_PDF_SAVE && presetAsksBeforeChanges(args.approvalPreset)) return { decision: "ask" };
   if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START || toolName === MCP_PAGE_PDF_SAVE) {
     // Auto-allow once the browser capability is granted: a screenshot of the
     // student's own tab / serving their own workspace locally is the coach
