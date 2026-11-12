@@ -279,10 +279,36 @@ export interface InstallerScriptInput {
   relaunch?: boolean | "background";
 }
 
+// Release-owner verified Apple team (#3811). This trust anchor ships in the app;
+// a download, environment variable or the old local-signing identity cannot replace it.
+export const MAC_UPDATE_TEAM_ID = "RZBNT9ZB67";
+export const MAC_UPDATE_BUNDLE_ID = "ai.hypeproof.studio";
+
+/** Used before offering a restart AND on the final staged copy before any swap. */
+export function renderMacUpdateVerification(): string {
+  // Apple TN3127 Developer ID Application requirement, also used by #620 signing.
+  // Check the outer identifier separately: nested helpers have their own identifiers.
+  const requirement = `identifier "${MAC_UPDATE_BUNDLE_ID}" and anchor apple generic ` +
+    `and certificate 1[field.1.2.840.113635.100.6.2.6] exists ` +
+    `and certificate leaf[field.1.2.840.113635.100.6.1.13] exists ` +
+    `and certificate leaf[subject.OU] = "${MAC_UPDATE_TEAM_ID}"`;
+  return `verify_signed_update() {
+  local app="$1" bid assessment
+  bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") || return 1
+  [[ "$bid" == ${shJsonString(MAC_UPDATE_BUNDLE_ID)} ]] || return 1
+  /usr/bin/codesign --verify --deep --strict --all-architectures "$app" || return 1
+  /usr/bin/codesign --verify --strict --all-architectures ${shJsonString("-R=" + requirement)} "$app" || return 1
+  assessment=$(LC_ALL=C /usr/sbin/spctl --assess --type execute --verbose=4 "$app" 2>&1) || { printf '%s\\n' "$assessment"; return 1; }
+  # Require the single authority result; an extra source line in a file name is not proof.
+  [[ "$(printf '%s\\n' "$assessment" | /usr/bin/sed -n 's/^source=//p')" == 'Notarized Developer ID' ]] || return 1
+}
+`;
+}
+
 /**
  * Render the installer.sh contents. Pure string assembly so unit tests can
  * snapshot it. The script is intentionally bash-only + relies on macOS-native
- * tools (osascript, pgrep, xattr, mv, open, /usr/libexec/PlistBuddy).
+ * tools (codesign, spctl, pgrep, mv, open, /usr/libexec/PlistBuddy).
  *
  * Safety properties:
  *   - Refuses to run if the new bundle's CFBundleIdentifier doesn't match
@@ -290,7 +316,8 @@ export interface InstallerScriptInput {
  *   - Refuses to run if NEW or OLD path doesn't end in ".app".
  *   - Stages and backs up beside OLD so each rename is on the same volume.
  *   - Never deletes OLD if backup fails; restores it if installation fails.
- *   - Strips quarantine AFTER swap (a fresh xattr -dr).
+ *   - Verifies the final copy's Apple signature, pinned team/bundle and notarization
+ *     before touching OLD. Preserves quarantine and the existing rollback.
  *   - Refuses to replace an app that is still running (including cancelled quit).
  *   - Logs everything to `logPath`; exit code is non-zero on any abort.
  */
@@ -338,6 +365,8 @@ echo "  old:  $OLD_APP"
 echo "  bid:  $EXPECTED_BUNDLE_ID"
 
 abort() { echo "[ABORT] $*"; exit 1; }
+
+${renderMacUpdateVerification()}
 
 [[ "$NEW_APP" == *.app ]] || abort "new app path doesn't end in .app: $NEW_APP"
 [[ "$OLD_APP" == *.app ]] || abort "old app path doesn't end in .app: $OLD_APP"
@@ -389,17 +418,11 @@ restore_on_exit() {
 }
 trap restore_on_exit EXIT
 ditto "$NEW_APP" "$STAGE/next.app" || abort "could not stage new app; old app unchanged"
+verify_signed_update "$STAGE/next.app" || abort "new app signature or notarization rejected; old app unchanged"
 mv "$OLD_APP" "$BACKUP_PATH" || abort "could not back up old app; refusing to delete it"
 echo "[ok] backed up old → $BACKUP_PATH"
 mv "$STAGE/next.app" "$OLD_APP" || abort "could not install new app; restoring previous app"
 echo "[ok] installed new app"
-
-# Strip quarantine on the freshly-moved bundle. Required: install-mac.sh
-# does this on first install; an auto-update without this step would trigger
-# Gatekeeper on the new launch (even though path+bid trust persists, the
-# downloaded bundle has its OWN quarantine attr from curl).
-xattr -dr com.apple.quarantine "$OLD_APP" 2>/dev/null || true
-echo "[ok] stripped quarantine"
 
 # Reopen
 ${input.relaunch === false ? ": # next launch is user initiated" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"`}
