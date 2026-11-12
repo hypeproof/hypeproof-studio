@@ -409,6 +409,26 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 
 검증: Service `worker/test/classroom-participation.test.mjs`, 앱 `extensions/hypeproof-chat/test/classroom-participation-consent.test.mjs`.
 
+<a id="e5-instructor-ops"></a>
+
+### 재직자 수업의 강사 운영 · 2026-11-12 (E5 · #3775–#3778)
+
+출처: 후원사 요청(2026-11-12). 성인 20–30명의 하루 재직자 수업을 Jay가 아닌 강사가 Chalk에서 열고 운영한다. Service 계약은 hypeproof-service E5 스택(`class-run-instructors`·`classroom-questions`·`class-run-join-codes`·`classroom-participation`)이다. 이 절은 Chalk `/manage`가 그 계약을 어떻게 보여 주는지만 정한다.
+
+#### 수업 운영 기능과 운영 강사 (#3775)
+
+| 항목 | 계약 |
+|---|---|
+| 강사 운영 기능 | ‘이번 수업 명단·관측 설정’ 안에 네 가지를 한 묶음으로 보인다: **관측**(`ops_observe`) · **학생에게 보내기**(`ops_distribute`) · **질문 카드**(`ops_questions`) · **기록 회수**(`ops_collect`). 저장은 기존 `PUT …/runs/:run`의 `flags`이고 Service가 저장된 값과 합친다. 원격 조치·보고서·발송 스위치는 그대로 둔다 |
+| 질문 카드와 보내기 | 질문 카드는 ‘학생에게 보내기’ 통로로 전달된다. 질문 카드를 켜면 학생에게 보내기도 켜지고, 학생에게 보내기를 끄면 질문 카드도 꺼진다. 화면은 그때마다 그 사실을 한 줄로 말한다(저장 전) |
+| 운영 강사 | `/status`의 `instructors`(`viewer_role`, `list`)로 담당 강사(owner)와 공동 강사, 내 역할을 보인다. 내 강사 ID(`viewer`)는 복사 버튼과 함께 보여 동료가 추가될 수 있게 한다 |
+| 추가·빼기·나가기 | 담당 강사는 강사 ID로 공동 강사를 추가(`POST /instructors`)하고 뺀다(`DELETE /instructors/:id`). 공동 강사는 자기만 나갈 수 있다. 담당 강사는 빠지지 않는다 |
+| 배정되지 않은 강사 | 403 `not_run_instructor`이면 학생을 한 명도 보이지 않고 “이 수업은 배정된 강사만 운영합니다. 담당 강사(owner)에게 공동 강사 추가를 요청하세요.”와 담당 강사 ID를 보인다. 이때 `/status`가 없으므로 내 강사 ID는 Chalk `/connect/status`의 `instructor_id`(Lab 연결 issuer의 `u`, 토큰 아님)에서 읽는다. `owner_only`는 “담당 강사(owner)만 공동 강사를 추가하거나 다른 강사를 뺄 수 있습니다.” |
+| 관리자 열람 | `viewer_role`이 `override`이면 수업 정보와 운영 강사 칸에 “관리자 열람 — 기록이 남습니다”를 쓴다. Service가 요청마다 `instructor_override`를 감사 기록에 남긴다 |
+| 참여 동의 | 좌석 행마다 `participation_consent`를 “동의함 / 동의 전”으로 보인다. 동의 전 좌석도 숨기거나 거르지 않는다. 동의 전 좌석은 질문 카드에 답을 보낼 수 없다(Service가 409 `consent_required`) |
+
+검증: [재직자 수업의 강사 운영](../testing/classroom-admin.md#e5-instructor-ops-run).
+
 ### 신원과 수업 실행 계약
 
 기존 cohort/profile/token/authoring를 정본으로 쓴다. `class_run_id`는 기존 `sessions.session_id`에 1:1 연결한 회차 ID다. 같은 cohort의 누적 roster를 재사용하되 새 `class_run_seats`는 **그 수업 명단의 불변 snapshot + 명시적 변경 revision**이다. 별도 학생 계정을 만들지 않는다. 좌석과 학생의 연결이 바뀌면 이력을 남기고 이전 학생 기록/명령을 새 사용자에게 넘기지 않는다.
