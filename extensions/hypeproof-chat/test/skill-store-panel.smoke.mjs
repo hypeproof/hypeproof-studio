@@ -26,7 +26,7 @@ globalThis.__vscodeStub = {
     showInformationMessage: async () => undefined, showWarningMessage: async () => undefined,
     createWebviewPanel: () => {
       const p = { posted: [], handler: null, webview: { html: '', postMessage: async (m) => { p.posted.push(JSON.parse(JSON.stringify(m))); return true; }, onDidReceiveMessage: (h) => { p.handler = h; } },
-        reveal() {}, onDidChangeViewState() {}, onDidDispose() {} };
+        reveal() {}, onDidChangeViewState() {}, onDidDispose(h) { p.disposeHandler = h; } };
       panels.push(p); return p;
     },
   },
@@ -117,4 +117,23 @@ assert.equal(identityPolls, 2, 'polled until verified');
 assert.equal(last().identity, undefined);
 assert.match(last().notice, /^본인인증을 마쳤어요\. 이제 한 개당 최대 100,000원까지 올릴 수 있어요\.$/);
 console.log('PASS identity verification opened, polled, reflected');
+
+// hype-verify 1673a021: a double start opens the browser once; closing the panel stops waiting for good.
+identityPolls = 0;
+const before = stubModule.env.opened.length;
+let slow = false;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => { if (slow && String(url).includes('/identity/idv_')) await new Promise((r) => setTimeout(r, 1500)); return realFetch(url, init); };
+await Promise.all([panel.handler({ type: 'storeVerifyIdentity' }), panel.handler({ type: 'storeVerifyIdentity' })]);
+await settle();
+assert.equal(stubModule.env.opened.length - before, 1, 'one browser tab for a double start');
+slow = true;
+await new Promise((r) => setTimeout(r, 3200)); // a poll is now in flight
+const disposed = panel.disposeHandler;
+disposed();
+const pollsAtClose = identityPolls;
+await new Promise((r) => setTimeout(r, 7000));
+assert.ok(identityPolls <= pollsAtClose + 1, `no polling after close (${identityPolls - pollsAtClose} more)`);
+globalThis.fetch = realFetch;
+console.log('PASS identity: one start at a time, no polling after the panel closes');
 rmSync(dir, { recursive: true, force: true });

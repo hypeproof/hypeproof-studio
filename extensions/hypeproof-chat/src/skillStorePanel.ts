@@ -46,6 +46,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   let poll: ReturnType<typeof setTimeout> | undefined;
   let checkoutOrder: { id: string; startedAt: number } | undefined;
   let identityPoll: ReturnType<typeof setTimeout> | undefined;
+  let identityStarting = false;
   /** The finished quest this window already published, so 「내 스토어」 does not offer it twice. */
   let publishedDraft: string | undefined;
   const client = () =>
@@ -151,11 +152,13 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   const watchIdentity = (sessionId: string, startedAt: number) => {
     if (identityPoll) clearTimeout(identityPoll);
     identityPoll = setTimeout(async () => {
-      if (state.identity?.sessionId !== sessionId) return;
+      if (state.identity?.sessionId !== sessionId || !panel) return;
       let r: { state: string; failure?: string };
       try { r = await client().identityState(sessionId); } catch { r = { state: "pending" }; }
+      // The panel may have closed, or the seller stopped waiting, while the answer was on its way.
+      if (state.identity?.sessionId !== sessionId || !panel) return;
       if (r.state === "verified") {
-        await load("sell", { identity: undefined });
+        await load(state.tab, { identity: undefined });
         return void (await push({ notice: STORE_COPY.identityDone(state.seller?.cap_krw ?? 0) }));
       }
       if (r.state === "failed" || r.state === "expired" || Date.now() - startedAt > CHECKOUT_LIMIT_MS) {
@@ -232,8 +235,12 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           await push({ busy: false, attributionPreview: { partnerCode: msg.partnerCode, instructorCode: msg.instructorCode, partner: names.partner, instructor: names.instructor } });
         });
       case "storeVerifyIdentity":
+        // One verification at a time: a second start (a double click) would open the browser twice.
+        if (state.identity || identityStarting) return;
+        identityStarting = true;
         return run(async () => {
-          const started = await c.startIdentity();
+          let started;
+          try { started = await c.startIdentity(); } finally { identityStarting = false; }
           await push({ busy: false, identity: { sessionId: started.session_id, sandbox: started.sandbox }, notice: STORE_COPY.identityWaiting });
           await vscode.env.openExternal(vscode.Uri.parse(started.verify_url));
           watchIdentity(started.session_id, Date.now());
@@ -330,7 +337,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     panel.onDidDispose(() => {
       panel = undefined;
       stopPoll();
+      // A closed panel stops waiting: no poll survives it, and reopening shows no stale waiting state.
       if (identityPoll) clearTimeout(identityPoll);
+      state = { ...state, identity: undefined };
       checkoutOrder = undefined;
     });
   };

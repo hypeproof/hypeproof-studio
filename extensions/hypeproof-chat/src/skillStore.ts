@@ -110,7 +110,9 @@ export class StoreClient {
     let got: URL | null = null;
     try { got = new URL(r?.verify_url); } catch { /* malformed */ }
     if (!got || got.origin !== expected.origin || got.pathname !== expected.pathname || !/^idv_[0-9a-f]{32}$/.test(r?.session_id ?? "") || got.searchParams.get("session") !== r.session_id) throw new StoreClientError("invalid_response");
-    return r;
+    // Open a URL built here from the expected page and the session, never the Service's string as is.
+    expected.searchParams.set("session", r.session_id);
+    return { ...r, verify_url: expected.toString() };
   }
   identityState(sessionId: string) {
     return this.call<{ state: "pending" | "verified" | "failed" | "expired"; failure?: string }>(`/identity/${encodeURIComponent(sessionId)}`);

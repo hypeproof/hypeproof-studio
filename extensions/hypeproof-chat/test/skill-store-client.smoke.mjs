@@ -125,6 +125,9 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
   const { c, calls } = client(() => [201, good]);
   assert.equal((await c.startIdentity()).session_id, ID);
   assert.deepEqual([calls[0].url, calls[0].method], ['https://service.test/v1/store/identity/start', 'POST']);
+  // Extra parameters or a fragment never reach the browser: the opened URL is rebuilt from the session.
+  const extra = client(() => [201, { ...good, verify_url: good.verify_url + '&next=https://evil.test/#x' }]);
+  assert.equal((await extra.c.startIdentity()).verify_url, `https://service.test/v1/store/identity/verify?session=${ID}`);
   for (const verify_url of ['https://evil.test/v1/store/identity/verify?session=' + ID, 'https://service.test/v1/store/checkout?session=' + ID, `https://service.test/v1/store/identity/verify?session=idv_${'c'.repeat(32)}`, 'nope']) {
     const bad = client(() => [201, { ...good, verify_url }]);
     await assert.rejects(bad.c.startIdentity(), (e) => e.code === 'invalid_response', verify_url);
