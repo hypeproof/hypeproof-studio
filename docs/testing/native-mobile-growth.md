@@ -153,3 +153,26 @@ build and observation, add a reproducing journey or state control, fix the
 smallest boundary, run exact-source simulator/native checks, distribute a test
 candidate, then ask for the specific installed retest. Do not close physical or
 live-provider acceptance from mocked transport, CI or upload success alone.
+
+## TestFlight request and receipt — MTF-T01
+
+For MTF-01 / Studio #3768, run `python3 -m unittest discover -s
+apps/studio-native/tests -p 'test_*.py' -v`. Deployment contract controls check
+legacy input, every partial request, malformed/newline values, SHA movement,
+gate artifact binding, invocation outside the checkout, and the real shell's
+pre-signing refusal. A gate from another release attempt must stop the actual
+upload shell before signing configuration and cannot be relabeled by receipt
+emission. Matching correlated and no-input gates remain valid; source, native
+identity and request mismatches are refused. The archive/export/validation/upload tail executes with
+synthetic tools: any nonzero phase stops before a success receipt; a complete
+run binds package bytes and app/run identity without claiming availability.
+Existing native-gate controls still reject stale or mismatched CI artifacts.
+These controls perform no signing, Apple call or workflow dispatch.
+
+Authorized deployment acceptance: supply one Harness request, verify the run
+name and gate `deployment_request` match its exact digest/source, then inspect
+that run attempt's `upload-receipt.json` and IPA digest. A missing receipt stays
+uncertain until the original provider operation is reconciled. Observe Apple
+processing/tester availability separately and record the exact installed version.
+The existing no-input manual path emits `deployment_request: null`; Harness
+must not attach that uncorrelated receipt to one of its own operations.

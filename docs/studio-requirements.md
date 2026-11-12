@@ -9056,3 +9056,13 @@ exact-source native journeys, distribute a verified test candidate, and record
 the installed retest separately. Missing, skipped or failed required journeys
 cannot pass the native gate. Compilation, simulator, uploaded package, tester
 availability and actual device behavior remain distinct states throughout.
+
+### Correlated iPhone testing delivery — MTF-01
+
+`ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
+receipts to the existing exact-source native CI and Apple environment gates.
+Partial inputs/source movement or an older release-attempt gate refuse signing.
+The exact current-attempt gate is checked before signing and receipt emission;
+failed-job-only reruns must not reuse an older successful gate. Successful command completion
+does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
+and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).

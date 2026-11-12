@@ -62,6 +62,7 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 | P1 / M3 | `ST-REQ-MOBILE-COHORT` | https://github.com/hypeproof/hypeproof-studio/issues/3696 |
 | P0 / M1 | `ST-REQ-MOBILE-CD-GATE` | https://github.com/hypeproof/hypeproof-studio/issues/3697 |
 | P1 / M1 | `ST-REQ-MOBILE-CD-OPS` | https://github.com/hypeproof/hypeproof-studio/issues/3698 |
+| P0 / M1 | `ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` | https://github.com/hypeproof/hypeproof-studio/issues/3768 |
 | P0 / M1 | `ST-TEST-MOBILE-MILESTONE` | https://github.com/hypeproof/hypeproof-studio/issues/3699 |
 | P0 / M1 | `LAB-REQ-PHILOSOPHY-PROTOCOL` | https://github.com/hypeproof/hypeprooflab/issues/1542 |
 | P1 / M3 | `LAB-REQ-COHORT-LEARNING` | https://github.com/hypeproof/hypeprooflab/issues/1543 |
@@ -77,6 +78,27 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 | MREF-03 | Notes do not become AI context or human-confirmed intention automatically; project data remains isolated. | Captured context and cross-project tests.  MREF-T03. |
 | MREF-04 | Reflection-only projects are distinguishable and searchable; visible unsaved text remains exportable. | Library journey and export round-trip regression.  MREF-T04. |
 | MREF-05 | Native controls remain usable with keyboard, system theme and accessibility; exact candidate CI is retained before a testing build. | Native iOS/Android evidence; physical-device accessibility remains a separate acceptance.  MREF-T05. |
+
+## Correlated native deployment — MTF-01
+
+### MTF-01
+
+MTF-01 refines the existing mobile CD gate/operations direction for Studio #3768.
+Optional Harness request inputs are all-or-none and bind expected source,
+operation and request digest to the trigger, clean checkout, successful native
+CI and upload run/attempt. The upload consumes the exact current-attempt gate
+artifact and revalidates its source, request and native identity before signing
+and receipt emission. An older successful gate retained by a failed-job-only
+rerun is refused; rerun all jobs to create a fresh gate. A mismatch stops before
+signing. Existing no-input
+manual/push runs and the `apple-native-preview` environment remain intact.
+After archive/export/validation/upload succeed, preserve a credential-free
+receipt with the actual app/build identity and IPA digest. Uploaded, Apple
+processing, tester availability and physical acceptance remain separate facts.
+No success receipt means an uncertain outcome to reconcile, never automatic
+permission to resend. This adds no approval engine, desktop build or bypass of
+the existing environment and source-CI gates. MTF-T01 covers the contract; live
+trusted workflow and Harness consumption remain distinct acceptance evidence.
 
 
 ## Native voice client slice — #3687
