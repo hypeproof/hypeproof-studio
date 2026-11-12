@@ -193,6 +193,10 @@ export const STORE_COPY = {
   codesHelp: "HypeProof 교육 파트너나 강사에게 받은 코드가 있으면 입력하세요. 처음 올릴 때 한 번만 정하고, 그 뒤에는 운영팀만 바꿀 수 있어요.",
   codesNone: "코드가 없으면 비워 두고 올리면 돼요. 나중에 직접 추가할 수는 없어요.",
   codesCheck: "코드를 확인한 뒤에 올릴 수 있어요.",
+  codesConsent: "정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 업체·강사에게 제공되는 것에 동의해요.",
+  codesConsentNeeded: "코드를 쓰려면 제공 동의가 필요해요. 동의하지 않으면 「코드 없이 진행」을 눌러 주세요. 그러면 코드 없이 올라가요.",
+  codesSkip: "코드 없이 진행",
+  pgFeeEstimate: "결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.",
   codesFixed: "바꾸려면 운영팀에 문의해 주세요.",
   codesEmpty: "등록한 파트너·강사 코드가 없어요.",
   payoutNotDue: (krw: number) => `정산 대상 금액이 ${won(krw)} 이상이 되면 받을 계좌를 여쭤볼게요.`,
@@ -259,6 +263,8 @@ const ERRORS: Record<string, string> = {
   payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
   invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
   holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
+  referral_consent_required: "코드를 쓰려면 판매 실적 제공에 동의해 주세요. 동의하지 않으면 코드 없이 올릴 수 있어요.",
+  referral_consent_missing: "판매 실적 제공에 동의하지 않은 판매자예요. 운영팀에 문의해 주세요.",
 };
 /** Korean bank codes (금융결제원 표준 코드) the Service accepts for a payout account. */
 export const PAYOUT_BANKS: readonly (readonly [code: string, name: string])[] = [

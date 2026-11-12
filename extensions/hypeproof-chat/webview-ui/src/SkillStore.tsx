@@ -194,15 +194,19 @@ interface AttributionGate { ready: boolean; input?: StoreAttributionInput }
 function useAttribution(state: StoreState) {
   const [partnerCode, setPartnerCode] = useState("");
   const [instructorCode, setInstructorCode] = useState("");
+  const [consent, setConsent] = useState(false);
   // A seller view the panel has not loaded yet is left to the Service, which refuses an undecided first publish.
   const decided = state.seller?.attribution?.decided !== false;
+  const consentVersion = state.seller?.attribution?.consent_version ?? "";
   const empty = !partnerCode.trim() && !instructorCode.trim();
   const preview = state.attributionPreview;
   const confirmed = Boolean(preview && preview.partnerCode === partnerCode && preview.instructorCode === instructorCode);
+  // A code shares the seller's display name and sale amounts with that partner/instructor: it needs the consent.
   const input: StoreAttributionInput | undefined = decided ? undefined : empty ? { none: true }
-    : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}) };
-  const gate: AttributionGate = { ready: decided || empty || confirmed, input };
-  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, gate };
+    : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}), consent: { version: consentVersion, granted: true } };
+  const gate: AttributionGate = { ready: decided || empty || (confirmed && consent && Boolean(consentVersion)), input };
+  const skip = () => { setPartnerCode(""); setInstructorCode(""); setConsent(false); };
+  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, consent, setConsent, skip, empty, gate };
 }
 
 function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAttribution>; state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
@@ -214,7 +218,12 @@ function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAtt
     <label>강사 코드<input value={a.instructorCode} maxLength={20} autoComplete="off" placeholder="예: I-ABCDE-FGHJK" onChange={e => a.setInstructorCode(e.target.value)} /></label>
     <button disabled={busy || (!a.partnerCode.trim() && !a.instructorCode.trim())} onClick={() => send({ type: "storeResolveCodes", partnerCode: a.partnerCode, instructorCode: a.instructorCode })}>코드 확인</button>
     {p ? <p role="status">확인했어요. {p.partner ? `파트너: ${p.partner.name}${!a.partnerCode.trim() ? " (강사 소속으로 함께 등록돼요)" : ""}` : ""}{p.partner && p.instructor ? " · " : ""}{p.instructor ? `강사: ${p.instructor.name}` : ""}. 올리면 이대로 한 번만 등록돼요.</p>
-      : a.gate.ready ? <p>{STORE_COPY.codesNone}</p> : <p>{STORE_COPY.codesCheck}</p>}
+      : a.empty ? <p>{STORE_COPY.codesNone}</p> : <p>{STORE_COPY.codesCheck}</p>}
+    {!a.empty && <>
+      <label><input type="checkbox" checked={a.consent} onChange={e => a.setConsent(e.target.checked)} />{STORE_COPY.codesConsent}</label>
+      {!a.consent && <p>{STORE_COPY.codesConsentNeeded}</p>}
+      <button disabled={busy} onClick={a.skip}>{STORE_COPY.codesSkip}</button>
+    </>}
   </section>;
 }
 
@@ -259,8 +268,9 @@ function Settlement({ s, busy, send }: { s: StoreSellerView; busy: boolean; send
       {t.refunded > 0 && <li>환불됨 {won(t.refunded)}</li>}
     </ul>
     <p>{s.payout === "linked_adult_required" ? STORE_COPY.payoutLinkedAdult : STORE_COPY.payoutNotStarted}</p>
+    <p>{STORE_COPY.pgFeeEstimate}</p>
     {s.payout_account && <PayoutAccount account={s.payout_account} busy={busy} send={send} />}
-    {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
+    {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료(예상)</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
       <tbody>{s.sales.map(x => <tr key={x.order_id}><td>{x.title}</td><td>{won(x.gross)}</td><td>{won(x.pg_fee)}</td><td>{won(x.seller)}</td><td>{won(x.commission)}</td><td>{won(x.partner)}</td><td>{won(x.instructor)}</td><td>{SALE_STATUS[x.status] ?? x.status}</td><td>{x.policy_version}</td></tr>)}</tbody></table>
       : <p>아직 판매가 없어요.</p>}
     {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}

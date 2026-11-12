@@ -49,7 +49,7 @@ globalThis.fetch = async (url, init = {}) => {
   const reply = (status, json) => new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json' } });
   if (path === '/items' && (init.method ?? 'GET') === 'GET') return reply(200, { items: [] });
   if (path === '/me') return reply(200, { age_group: 'adult', installs: [], can_buy_paid: true });
-  if (path === '/seller') return reply(200, { tier: 'new', cap_krw: 100000, identity_verified: true, attribution: { decided: !undecided, partner: null, instructor: null, source: undecided ? null : 'seller', seller_editable: false }, items: [], sales: [], totals: { refund_window: 0, payout_hold: 0, payable: 15456, refunded: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout_account: { state: 'due', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false }, payout: 'not_started', policy_version: 'v2' });
+  if (path === '/seller') return reply(200, { tier: 'new', cap_krw: 100000, identity_verified: true, attribution: { decided: !undecided, partner: null, instructor: null, source: undecided ? null : 'seller', seller_editable: false, consent_version: 'store-referral-2026-11-12', consent_given: null }, items: [], sales: [], totals: { refund_window: 0, payout_hold: 0, payable: 15456, refunded: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout_account: { state: 'due', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false }, payout: 'not_started', policy_version: 'v2' });
   if (path === '/attribution/resolve') return reply(200, { partner: { name: '세바시' }, instructor: { name: '김강사', partner_name: '세바시' } });
   if (path === '/attribution') { if (!undecided) return reply(409, { error: 'attribution_already_set' }); undecided = false; return reply(200, { decided: true, partner: { name: '세바시' }, instructor: { name: '김강사' }, source: 'seller', seller_editable: false }); }
   if (path === '/items' && init.method === 'POST') { if (failPublish-- > 0) return reply(503, { error: 'unavailable' }); return reply(201, { id: 'ski_' + 'a'.repeat(32), status: 'listed', tier: 'new', cap_krw: 100000 }); }
@@ -81,14 +81,15 @@ assert.deepEqual(last().attributionPreview, { partnerCode: '', instructorCode: '
 assert.equal(calls.some((c) => c.path === '/attribution'), false);
 
 // Publish: the choice is registered first, then the item. The publish fails once (Service hiccup).
-await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: { instructor_code: 'I-ABCDE-FGHJK' } });
+const ATTR = { instructor_code: 'I-ABCDE-FGHJK', consent: { version: 'store-referral-2026-11-12', granted: true } };
+await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: ATTR });
 await settle();
 const writes = () => calls.filter((c) => c.method !== 'GET' && c.path !== '/attribution/resolve').map((c) => c.path);
 assert.deepEqual(writes(), ['/attribution', '/items']);
-assert.deepEqual(calls.find((c) => c.path === '/attribution').body, { instructor_code: 'I-ABCDE-FGHJK' });
+assert.deepEqual(calls.find((c) => c.path === '/attribution').body, ATTR, 'the consent goes with the codes');
 assert.ok(last().error, 'the failed publish is shown');
 // The retry publishes without registering a second time.
-await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: { instructor_code: 'I-ABCDE-FGHJK' } });
+await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: ATTR });
 await settle();
 assert.deepEqual(writes(), ['/attribution', '/items', '/items']);
 assert.equal(last().notice, '스토어에 올렸어요.');
