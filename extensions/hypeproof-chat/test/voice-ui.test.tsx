@@ -38,7 +38,7 @@ const hostSays = (data: Record<string, unknown>) => act(() => { g.window.dispatc
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
 // ---- scripted browser objects ----
-interface Rig { speechEnvCalls: number; recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; cancels: number; inserted: string[]; insertOk: boolean }
+interface Rig { speechEnvCalls: number; recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; utterances: Array<{ onend: (() => void) | null }>; cancels: number; inserted: string[]; insertOk: boolean }
 class FakeRecorder {
   static supported = ["audio/webm;codecs=opus"];
   static isTypeSupported(m: string) { return FakeRecorder.supported.includes(m); }
@@ -60,7 +60,7 @@ const dictEnv = () => ({
   clearTimeout: (id: unknown) => { const i = timers.findIndex((x) => x.id === id); if (i >= 0) timers.splice(i, 1); },
 });
 const speechEnv = () => (rig.speechEnvCalls++, {
-  synth: { speak: (u: { text: string; lang: string; voice: unknown }) => rig.spoken.push({ text: u.text, lang: u.lang, voice: u.voice }), cancel: () => { rig.cancels++; }, getVoices: () => [{ lang: "ko-KR", localService: true, name: "Yuna" }] },
+  synth: { speak: (u: { text: string; lang: string; voice: unknown; onend: (() => void) | null }) => { rig.spoken.push({ text: u.text, lang: u.lang, voice: u.voice }); rig.utterances.push(u); }, cancel: () => { rig.cancels++; }, getVoices: () => [{ lang: "ko-KR", localService: true, name: "Yuna" }] },
   makeUtterance: (text: string) => ({ text, lang: "", rate: 1, voice: null, onend: null, onerror: null }),
 });
 const noSpeech = () => (rig.speechEnvCalls++, { synth: undefined, makeUtterance: () => ({}) as never });
@@ -79,7 +79,7 @@ function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }:
 const profileOn = (extra: Record<string, unknown> = {}) => ({ profile_id: "p", voice: { dictation: true, read_aloud: true, policy_version: V1, ...extra } });
 
 async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean } = {}) {
-  rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], cancels: 0, inserted: [], insertOk: true };
+  rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], utterances: [], cancels: 0, inserted: [], insertOk: true };
   timers.length = 0; clock = 0; denyMic = false; g.__posted.length = 0;
   await act(() => root.render(createElement(Harness, { profile, ...opts, key: Math.random() })));
   if (opts.acked && posted("voiceDisclosureRead").length) await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
@@ -290,6 +290,28 @@ t("read-aloud: speaks the answer in Korean on the device, skips code and says so
   ok(rig.cancels >= 1, "stop cancels the synthesizer");
   ok(byLabel("읽어 주기"), "and offers it again");
   eq(byLabel("읽어 주기").getAttribute("aria-pressed"), "false", "released once stopped");
+  eq(tripwire, [], "no network");
+});
+
+// CGP-CHAT-D-009: the control follows real playback. A reading that ends by itself (the synthesizer's
+// end event on the last utterance, not a press) releases the control, without cancelling anything.
+t("read-aloud: a reading that ends by itself releases the control and offers 읽어 주기 again", async () => {
+  await mount(profileOn(), { acked: true });
+  await act(() => click(byLabel("읽어 주기") as never));
+  eq(byLabel("그만 읽기")?.getAttribute("aria-pressed"), "true", "pressed while it reads");
+  ok(rig.utterances.length > 0, "the synthesizer was handed utterances");
+  const cancelsBefore = rig.cancels;
+  for (const u of rig.utterances.slice(0, -1)) {
+    await act(() => { u.onend?.(); });
+    eq(byLabel("그만 읽기")?.getAttribute("aria-pressed"), "true", "an earlier part ending does not release it");
+  }
+  await act(() => { rig.utterances[rig.utterances.length - 1].onend?.(); });
+  ok(!byLabel("그만 읽기"), "no stop control once the reading has ended");
+  const listen = byLabel("읽어 주기");
+  ok(listen, "읽어 주기 is offered again after a natural end");
+  eq(listen.getAttribute("aria-pressed"), "false", "released after a natural end");
+  eq(listen.textContent.trim(), "읽어 주기", "the visible label is back to 읽어 주기");
+  eq(rig.cancels, cancelsBefore, "a natural end cancels nothing");
   eq(tripwire, [], "no network");
 });
 
