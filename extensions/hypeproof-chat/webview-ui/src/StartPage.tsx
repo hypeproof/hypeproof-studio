@@ -16,6 +16,7 @@ import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice, freeEndedBody } from "../../src/freeStart";
 import { PURCHASE_COPY } from "../../src/passPurchase";
 import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
+import { imeComposing } from "./imeGuard";
 
 /** The last two segments of a workspace path ("…/local-trial-744/workspace"); the full path stays in the title and accessible name. */
 export function shortWorkspace(path: string): string {
@@ -106,6 +107,12 @@ export function StartPage() {
     : FREE_START_COPY.readyTitle;
   // The class a join link named, shown only on the class code form.
   const joinClass = entry === "classroom" ? state.joinLink?.classId : undefined;
+  // DES-SHELL-04 — the code form is the last branch of the card chain below (same conditions, same order).
+  const codeForm = !(accountEntry && state.account) && !freeCard && !(state.profile && !editing) && !buying && entry !== null;
+  // A refused code is said directly under the code field, in the flow: not a toast, not the card's end.
+  // Any other error (the host leaves `errorAt` unset) stays in the card's error area.
+  const fieldError = codeForm && state.errorAt === "code" && !!state.error;
+  const errorLine = (className: string) => <div className={className} id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>;
   const openCode = () => { setToken(""); setEntry("classroom"); setEditing(true); };
   const products = purchase?.products ?? [];
   // CONV-PURCHASE-R-002 — back from the purchase-time sign-in, the host gives the chosen pass back.
@@ -228,7 +235,13 @@ export function StartPage() {
             <p className="studio-join-help">링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은 코드를 직접 입력해 주세요.</p>
           </div>}
           <label htmlFor="course-code">{free ? FREE_START_COPY.codeLabel : entry === "trial" ? "체험 참여 코드" : "수업 참여 코드"}</label>
-          <input ref={input} id="course-code" type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="받은 코드를 여기에 붙여넣으세요" autoComplete="off" spellCheck={false} disabled={state.checking} aria-describedby={joinClass ? "join-link-note code-help connection-error" : "code-help connection-error"}/>
+          {/* DES-SHELL-04 — type=password is what keeps the Korean IME out of the code: Chromium (Electron, the
+              VS Code webview) gives password fields ASCII-only input on macOS and no IME on Windows and Linux.
+              inputmode has no "latin" value and only steers on-screen keyboards; lang and autocapitalize do
+              not switch a desktop IME. Paste is never blocked. If a composition is open anyway (an IME
+              that ignores the field type), Enter belongs to it (CGP-DS-R-027) and never submits the code. */}
+          <input ref={input} id="course-code" type="password" value={token} onChange={e => setToken(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && imeComposing(e)) e.preventDefault(); }} placeholder="받은 코드를 여기에 붙여넣으세요" autoComplete="off" spellCheck={false} disabled={state.checking} aria-invalid={fieldError || undefined} aria-describedby={joinClass ? "join-link-note code-help connection-error" : "code-help connection-error"}/>
+          {fieldError && errorLine("studio-error studio-field-error")}
           <p id="code-help" className="studio-help">코드는 이 기기에 안전하게 저장됩니다.</p>
           <button className="studio-primary" disabled={state.checking || !token.trim()} type="submit">{state.checking ? "코드 확인 중…" : "코드 확인하기"}<span aria-hidden="true">→</span></button>
           {state.profile && <button className="studio-text-button" type="button" onClick={() => { dropJoin(); setEditing(false); }}>기존 활동으로 돌아가기</button>}
@@ -239,7 +252,7 @@ export function StartPage() {
         {state.legacyConnection && !state.profile && <p className="studio-help">이전 연결은 이 기기에 보관돼 있습니다. 사용할 서버의 참여 코드를 다시 입력해 주세요.</p>}
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
         <div aria-live="polite" role="status" className="studio-status">{status}</div>
-        {state.error && <div className="studio-error" id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>}
+        {state.error && !fieldError && errorLine("studio-error")}
         <div className="studio-card-footer">{freeCard ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>

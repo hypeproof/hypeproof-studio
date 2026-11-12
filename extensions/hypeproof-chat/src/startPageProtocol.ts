@@ -25,6 +25,11 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
+  /**
+   * DES-SHELL-04 — `error` is the refusal of the code the learner just submitted, so the start page
+   * draws it under the code field. Absent: any other error, drawn in the card's error area.
+   */
+  errorAt?: "code";
   profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string;
     /** Free start (SPEC iteration 4 §2.4) — the free allowance seat: labels say 무료 사용, never 체험. */
     free?: boolean };
