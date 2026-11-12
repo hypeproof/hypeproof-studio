@@ -395,6 +395,8 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 
 결정은 [ADR 0012](../adr/0012-employee-class-data-ownership.md)에 있다. 이 절은 화면과 API 계약만 적는다.
 
+수업 코드 하나로 좌석을 연결하는 계약(E5 #3778)은 [수업 코드 한 번으로 좌석 연결](classroom-join-code.md)에 있다.
+
 | 항목 | 계약 |
 |---|---|
 | 안내문 | Service `GET /v1/classroom/ops/participation/notice`가 `{notice:{version,title,body,accept,decline},policy}`를 준다. 자격 증명 없이 읽는다. 앱은 이 글을 그대로 보여 준다 |
