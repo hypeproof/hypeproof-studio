@@ -32,6 +32,7 @@ import CryptoKit
                 if !hold {
                     try await Task.sleep(nanoseconds: 300_000_000)
                     try Task.checkCancellation(); JourneyTransport.store.finishedSpeech(); deliver(text, true)
+                    JourneyTransport.store.deliveredSpeech()
                 } else {
                     // Continue revising partial recognition like ongoing speech.
                     // Stop/background must cancel this producer; a delayed test
@@ -60,21 +61,35 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private let stopLock = NSLock()
     private var stopped = false
     private var delayed: DispatchWorkItem?
+    private let historyID = UUID()
     // This protocol is installed only in the fixture's private session. Accept
     // every request so an unexpected URL fails locally instead of reaching DNS.
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let delay = Self.store.responseDelay(request)
-        guard delay > 0 else { complete(); return }
-        let work = DispatchWorkItem { [weak self] in self?.complete() }
-        stopLock.lock(); delayed = work; let cancelled = stopped; stopLock.unlock()
-        if cancelled { work.cancel(); return }
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: work)
+        guard Self.store.holdHistory(request, id: historyID) else { complete(); return }
+        // Fail this fixture before ConversationService's 25-second timeout.
+        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + 20)
     }
-    private func complete() {
+    private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
-        guard !cancelled else { return }
+        guard !cancelled else { Self.store.cancelHistory(historyID); return }
+        if Self.store.historyMayFinish() { complete(historyOutcome: .speech); return }
+        if ProcessInfo.processInfo.systemUptime >= deadline {
+            complete(historyOutcome: .timeout); return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.waitForSpeech(deadline: deadline) }
+        stopLock.lock(); delayed = work; let stoppedBeforeSchedule = stopped; stopLock.unlock()
+        if stoppedBeforeSchedule { work.cancel(); Self.store.cancelHistory(historyID); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+    private func complete(historyOutcome: JourneyHistoryOutcome? = nil) {
+        stopLock.lock()
+        if stopped { stopLock.unlock(); Self.store.cancelHistory(historyID); return }
+        // Resolve under the same lock as stopLoading, but never hold that lock
+        // across client callbacks (URLSession may synchronously stop loading).
+        if let historyOutcome { Self.store.finishHistory(historyID, outcome: historyOutcome) }
+        stopLock.unlock()
         do {
             let (status, object) = try Self.store.respond(request)
             guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else { throw URLError(.badServerResponse) }
@@ -84,9 +99,13 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
     override func stopLoading() {
-        stopLock.lock(); stopped = true; delayed?.cancel(); delayed = nil; stopLock.unlock()
+        stopLock.lock(); stopped = true; delayed?.cancel(); delayed = nil
+        Self.store.cancelHistory(historyID)
+        stopLock.unlock()
     }
 }
+
+private enum JourneyHistoryOutcome { case speech, timeout }
 
 private struct JourneyAcceptedTurn: Codable {
     let id: String
@@ -114,7 +133,11 @@ private final class JourneyStore: @unchecked Sendable {
     private let code = String(repeating: "a", count: 64)
     private let requestID = String(repeating: "b", count: 64)
     private var value: JourneySnapshot
-    private var activeHistoryReads = 0
+    private var activeHistoryReads: Set<UUID> = []
+    private var speechDelivered = false
+    private var historyBarrierTimeouts = 0
+    private var historyBarrierCompletions = 0
+    private var historyBarrierCancellations = 0
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
@@ -128,20 +151,43 @@ private final class JourneyStore: @unchecked Sendable {
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
             "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
             "speech_ended_during_history": value.speechEndedDuringHistory,
+            "history_barrier_timeouts": historyBarrierTimeouts,
+            "history_barrier_completions": historyBarrierCompletions,
+            "history_barrier_cancellations": historyBarrierCancellations,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
-    func responseDelay(_ request: URLRequest) -> TimeInterval {
+    func holdHistory(_ request: URLRequest, id: UUID) -> Bool {
         lock.lock(); defer { save(); lock.unlock() }
-        guard request.httpMethod == "GET", request.url?.path == "/v1/me/reflection" else { return 0 }
+        guard request.httpMethod == "GET", request.url?.path == "/v1/me/reflection" else { return false }
         value.historyReads += 1
-        guard JourneyConfiguration.scenario == "queued-voice", value.historyReads >= 2 else { return 0 }
-        activeHistoryReads += 1; value.delayedHistoryReads += 1
-        return 2
+        guard JourneyConfiguration.scenario == "queued-voice", value.historyReads == 2 else { return false }
+        activeHistoryReads.insert(id); value.delayedHistoryReads += 1
+        return true
+    }
+    func historyMayFinish() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return speechDelivered
+    }
+    func finishHistory(_ id: UUID, outcome: JourneyHistoryOutcome) {
+        lock.lock(); defer { lock.unlock() }
+        guard activeHistoryReads.remove(id) != nil else { return }
+        switch outcome {
+        case .speech: historyBarrierCompletions += 1
+        case .timeout: historyBarrierTimeouts += 1
+        }
+    }
+    func cancelHistory(_ id: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        if activeHistoryReads.remove(id) != nil { historyBarrierCancellations += 1 }
     }
     func finishedSpeech() {
         lock.lock(); defer { save(); lock.unlock() }
-        if activeHistoryReads > 0 { value.speechEndedDuringHistory += 1 }
+        if !activeHistoryReads.isEmpty { value.speechEndedDuringHistory += 1 }
+    }
+    func deliveredSpeech() {
+        // Release only after the real voice callback has synchronously queued
+        // its durable send. UI automation latency cannot outrun a fixed delay.
+        lock.lock(); defer { lock.unlock() }; speechDelivered = true
     }
     func callback(_ url: URL) throws -> URL {
         lock.lock(); defer { save(); lock.unlock() }
@@ -223,7 +269,6 @@ private final class JourneyStore: @unchecked Sendable {
             return (200, ["account": ["id": "journey-account", "status": "active"], "session_id": "journey-session"])
         case ("GET", "/v1/me/conversations"): return (200, ["conversations": []])
         case ("GET", "/v1/me/reflection"):
-            activeHistoryReads = max(0, activeHistoryReads - 1)
             return (200, reflection())
         case ("POST", "/v1/me/reflection/turns"):
             guard let id = body["id"] as? String, let text = body["text"] as? String,
