@@ -21,6 +21,16 @@ ENV = {'GITHUB_REPOSITORY': gate.REPOSITORY, 'GITHUB_SHA': HEAD, 'GITHUB_RUN_ID'
        'NATIVE_EXPECTED_SHA': HEAD, 'NATIVE_OPERATION_ID': 'testflight-19', 'NATIVE_REQUEST_DIGEST': 'd' * 64}
 SOURCE = {'checkout_sha': HEAD, 'native_tree': 'b' * 40, 'native_workflow': 'c' * 40}
 
+def gate_document(source=SOURCE, env=ENV):
+    identity = gate.release_identity(source, env)
+    return {'schema': 'hps-native-release-gate/1', 'verdict': 'PASS',
+            'release_checkout_sha': identity['source_sha'], 'source_head_sha': identity['source_sha'],
+            'release_run_id': identity['run_id'], 'release_run_attempt': identity['run_attempt'],
+            'deployment_request': identity['deployment_request'],
+            'native_tree': source['native_tree'], 'native_workflow': source['native_workflow'],
+            'native_run_id': 100, 'native_run_attempt': 3, 'artifact_id': 456,
+            'signing': 'NOT_RUN', 'deployment': 'NOT_RUN'}
+
 class DeploymentContracts(unittest.TestCase):
     def test_legacy_inputs_are_optional_but_partial_request_is_refused(self):
         self.assertIsNone(gate.deployment_request({}, HEAD))
@@ -64,7 +74,9 @@ class DeploymentContracts(unittest.TestCase):
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture')
         head = git('rev-parse', 'HEAD')
         env = {**os.environ, **ENV, 'GITHUB_SHA': head, 'NATIVE_EXPECTED_SHA': head, 'RUNNER_TEMP': str(Path(directory) / 'runner')}
-        Path(env['RUNNER_TEMP']).mkdir()
+        gate_path = Path(env['RUNNER_TEMP']) / 'native-release-gate/native-release-gate.json'
+        gate_path.parent.mkdir(parents=True)
+        gate_path.write_text(json.dumps(gate_document(gate.source_identity(root), env)))
         return root, scripts, ios, env
 
     def test_real_cli_finds_repo_from_script_for_external_and_nested_cwd(self):
@@ -72,7 +84,7 @@ class DeploymentContracts(unittest.TestCase):
             root, scripts, ios, env = self.fixture_repo(directory)
             for index, cwd in enumerate([Path(directory), ios]):
                 output = Path(directory) / f'preflight-{index}.json'
-                p = subprocess.run([sys.executable, str(scripts / 'verify-native-candidate.py'), 'request', '--output', str(output)], cwd=cwd, env=env, capture_output=True, text=True)
+                p = subprocess.run([sys.executable, str(scripts / 'verify-native-candidate.py'), 'request', '--release-gate', str(Path(env['RUNNER_TEMP']) / 'native-release-gate/native-release-gate.json'), '--output', str(output)], cwd=cwd, env=env, capture_output=True, text=True)
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertEqual(json.loads(output.read_text())['source_sha'], env['GITHUB_SHA'])
 
@@ -84,7 +96,47 @@ class DeploymentContracts(unittest.TestCase):
             self.assertNotEqual(p.returncode, 0)
             self.assertIn('differs from trigger or checkout', p.stderr)
             self.assertFalse((root / 'apps/studio-native/evidence').exists())
-            self.assertEqual(list(Path(env['RUNNER_TEMP']).iterdir()), [])
+            self.assertEqual([p.name for p in Path(env['RUNNER_TEMP']).iterdir()], ['native-release-gate'])
+
+    def test_gate_refuses_stale_or_mismatched_identity_and_accepts_legacy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'gate.json'
+            identity = gate.release_identity(SOURCE, ENV)
+            expected = {key: gate_document()[key] for key in ('native_run_id', 'native_run_attempt', 'artifact_id', 'native_tree', 'native_workflow')}
+            path.write_text(json.dumps(gate_document()))
+            self.assertEqual(gate.verify_release_gate(path, SOURCE, identity), expected)
+            for field, value in [('release_run_attempt', 1), ('release_run_id', 122),
+                                 ('source_head_sha', 'e' * 40), ('release_checkout_sha', 'e' * 40),
+                                 ('native_tree', 'e' * 40), ('native_workflow', 'e' * 40),
+                                 ('deployment_request', None), ('verdict', 'FAIL'), ('signing', 'PASS'),
+                                 ('native_run_id', True), ('artifact_id', 0)]:
+                path.write_text(json.dumps({**gate_document(), field: value}))
+                with self.subTest(field=field), self.assertRaises(gate.Refused):
+                    gate.verify_release_gate(path, SOURCE, identity)
+            legacy_env = {key: value for key, value in ENV.items() if not key.startswith('NATIVE_')}
+            path.write_text(json.dumps(gate_document(SOURCE, legacy_env)))
+            self.assertEqual(gate.verify_release_gate(path, SOURCE, gate.release_identity(SOURCE, legacy_env)), expected)
+            path.unlink()
+            with self.assertRaises(gate.Refused): gate.verify_release_gate(path, SOURCE, identity)
+
+    def test_actual_shell_stale_gate_stops_before_signing_and_receipt_cannot_relabel_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, scripts, ios, env = self.fixture_repo(directory)
+            path = Path(env['RUNNER_TEMP']) / 'native-release-gate/native-release-gate.json'
+            document = json.loads(path.read_text()); document['release_run_attempt'] = 1
+            path.write_text(json.dumps(document))
+            p = subprocess.run(['bash', str(scripts / 'apple-upload.sh'), 'ios'], cwd=directory, env=env, capture_output=True, text=True)
+            self.assertNotEqual(p.returncode, 0); self.assertIn('another run or attempt', p.stderr)
+            self.assertNotIn('Missing deployment configuration', p.stderr)
+            self.assertFalse((root / 'apps/studio-native/evidence').exists())
+            self.assertEqual([p.name for p in Path(env['RUNNER_TEMP']).iterdir()], ['native-release-gate'])
+            package, info, outcomes = self.make_receipt_inputs(Path(directory))
+            output = Path(directory) / 'receipt.json'
+            p = subprocess.run([sys.executable, str(scripts / 'verify-native-candidate.py'), 'receipt',
+                                '--release-gate', str(path), '--package', str(package), '--archive-info', str(info),
+                                '--command-results', str(outcomes), '--output', str(output)], cwd=directory, env=env, capture_output=True, text=True)
+            self.assertNotEqual(p.returncode, 0); self.assertIn('another run or attempt', p.stderr)
+            self.assertFalse(output.exists())
 
     def make_receipt_inputs(self, root):
         package = root / 'fixture.ipa'; package.write_bytes(b'synthetic IPA bytes')
@@ -166,6 +218,9 @@ print('fixture command completed')
                     value = json.loads(receipt.read_text()); self.assertEqual(value['state'], 'uploaded')
                     self.assertEqual((temp / 'calls').read_text().splitlines(), ['archive', 'export', 'validation', 'upload'])
                     self.assertEqual(value['source_sha'], env['GITHUB_SHA'])
+                    self.assertEqual(value['native_gate']['native_run_id'], 100)
+                    self.assertEqual(value['native_gate']['native_run_attempt'], 3)
+                    self.assertEqual(value['native_gate']['artifact_id'], 456)
 
     def test_workflow_keeps_existing_gates_and_optional_correlation(self):
         workflow = (NATIVE.parents[1] / '.github/workflows/studio-apple-testflight.yml').read_text()
@@ -176,5 +231,8 @@ print('fixture command completed')
                           'environment: apple-native-preview', 'platform: [ios]', 'cancel-in-progress: false']:
             self.assertIn(preserved, workflow)
         self.assertEqual(workflow.count('required: false'), 3)
+        self.assertIn('uses: actions/download-artifact@v4', workflow)
+        self.assertEqual(workflow.count('name: studio-native-release-gate-${{ github.run_id }}-${{ github.run_attempt }}'), 2)
+        self.assertLess(workflow.index('uses: actions/download-artifact@v4'), workflow.index('name: Archive, validate and upload'))
 
 if __name__ == '__main__': unittest.main()

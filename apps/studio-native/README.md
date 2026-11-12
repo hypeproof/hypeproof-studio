@@ -98,9 +98,14 @@ before signing. Existing no-input manual dispatch and release-branch push remain
 supported. Correlated run names are `studio-testflight:<operation_id>:<request_digest>`.
 
 The native gate artifact includes `deployment_request`, `release_run_id` and
-`release_run_attempt`. After successful archive, export, validation and upload,
+`release_run_attempt`. The upload downloads that exact attempt's gate artifact
+and checks its source, run/attempt, request and native CI identity before signing
+and again before recording a receipt. A failed-job-only rerun cannot reuse an
+older successful gate: rerun all jobs to produce a fresh gate. After successful
+archive, export, validation and upload,
 the existing Apple artifact contains `upload-receipt.json` (`hps-native-upload-receipt/1`):
-source/run/attempt, optional request, bundle/version/build, IPA SHA-256/size and
+source/run/attempt, optional request, verified `native_gate` identity,
+bundle/version/build, IPA SHA-256/size and
 each command's `exit_code`. Its `state: uploaded` records command completion;
 `apple_processing` and `tester_availability` remain `NOT_OBSERVED`. It does not
 authorize a retry, prove Apple processing or mark the app available. A failed or

@@ -924,7 +924,7 @@
         "MTF-01"
       ],
       "inline_prefixes": [],
-      "sha256": "48bc865bb11dbf15e868e33eb4fdc2ee943685dc669d218e0c9a2e5b79f46000",
+      "sha256": "a42521c39edf325cc6f88beec847795d510a97c57c7a3412f8f36ca4818f34d2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4623,7 +4623,7 @@
       "next_action": "Verify the contract and independently inspect an authorized exact-source workflow receipt; Apple processing, tester availability and physical acceptance remain separate.",
       "design_delta": "Reuse existing native-CI and Apple environment gates; optional all-or-none Harness correlation and credential-free upload observation.",
       "positive_control": "One complete request carries the same source/operation/digest through the gate and successful command receipt with actual package hash.",
-      "negative_control": "Partial/malformed request, moved source or failed archive/validation/upload cannot emit a success receipt or claim tester availability.",
+      "negative_control": "Partial/malformed request, moved source, an older release-attempt gate or failed archive/validation/upload cannot emit a success receipt or claim tester availability.",
       "evidence_required": "Focused synthetic contract and shell controls, unchanged native-gate regressions, exact trusted workflow/Harness evidence separately.",
       "implementation_paths": [
         ".github/workflows/studio-apple-testflight.yml",

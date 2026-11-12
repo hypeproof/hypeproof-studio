@@ -95,7 +95,10 @@ For MTF-01 / Studio #3768, run `python3 -m unittest discover -s
 apps/studio-native/tests -p 'test_*.py' -v`. Deployment contract controls check
 legacy input, every partial request, malformed/newline values, SHA movement,
 gate artifact binding, invocation outside the checkout, and the real shell's
-pre-signing refusal. The archive/export/validation/upload tail executes with
+pre-signing refusal. A gate from another release attempt must stop the actual
+upload shell before signing configuration and cannot be relabeled by receipt
+emission. Matching correlated and no-input gates remain valid; source, native
+identity and request mismatches are refused. The archive/export/validation/upload tail executes with
 synthetic tools: any nonzero phase stops before a success receipt; a complete
 run binds package bytes and app/run identity without claiming availability.
 Existing native-gate controls still reject stale or mismatched CI artifacts.

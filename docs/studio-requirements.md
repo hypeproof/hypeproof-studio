@@ -9016,6 +9016,8 @@ The existing iPhone personal conversation preserves account identity across one-
 
 `ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
 receipts to the existing exact-source native CI and Apple environment gates.
-Partial inputs/source movement refuse signing; successful command completion
+Partial inputs/source movement or an older release-attempt gate refuse signing.
+The exact current-attempt gate is checked before signing and receipt emission;
+failed-job-only reruns must not reuse an older successful gate. Successful command completion
 does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
 and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).

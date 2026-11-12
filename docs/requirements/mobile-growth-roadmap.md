@@ -84,7 +84,11 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 MTF-01 refines the existing mobile CD gate/operations direction for Studio #3768.
 Optional Harness request inputs are all-or-none and bind expected source,
 operation and request digest to the trigger, clean checkout, successful native
-CI and upload run/attempt. A mismatch stops before signing. Existing no-input
+CI and upload run/attempt. The upload consumes the exact current-attempt gate
+artifact and revalidates its source, request and native identity before signing
+and receipt emission. An older successful gate retained by a failed-job-only
+rerun is refused; rerun all jobs to create a fresh gate. A mismatch stops before
+signing. Existing no-input
 manual/push runs and the `apple-native-preview` environment remain intact.
 After archive/export/validation/upload succeed, preserve a credential-free
 receipt with the actual app/build identity and IPA digest. Uploaded, Apple

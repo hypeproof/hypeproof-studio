@@ -61,6 +61,31 @@ def release_identity(source, environ):
             'run_attempt': integer(int(environ['GITHUB_RUN_ATTEMPT'])),
             'deployment_request': deployment_request(environ, source['checkout_sha'])}
 
+def verify_release_gate(path, source, identity):
+    # Failed-job-only reruns can retain a successful dependency from an older
+    # attempt. Require the downloaded current-attempt artifact before signing,
+    # then check it again when recording the upload observation.
+    if path is None or path.is_symlink() or not path.is_file() or path.stat().st_size > 16384:
+        raise Refused('A regular current-attempt native release gate is required; rerun all jobs')
+    document = json.loads(path.read_text())
+    if not isinstance(document, dict) or document.get('schema') != 'hps-native-release-gate/1' or document.get('verdict') != 'PASS':
+        raise Refused('Native release gate must be a successful gate document')
+    for field in ('release_checkout_sha', 'source_head_sha'):
+        if sha(document.get(field)) != identity['source_sha']:
+            raise Refused('Native release gate source differs from upload source')
+    if (integer(document.get('release_run_id')) != identity['run_id']
+            or integer(document.get('release_run_attempt')) != identity['run_attempt']):
+        raise Refused('Native release gate belongs to another run or attempt; rerun all jobs')
+    if 'deployment_request' not in document or document['deployment_request'] != identity['deployment_request']:
+        raise Refused('Native release gate deployment request differs from upload request')
+    if document.get('signing') != 'NOT_RUN' or document.get('deployment') != 'NOT_RUN':
+        raise Refused('Unexpected native release gate stage')
+    for field in ('native_tree', 'native_workflow'):
+        if sha(document.get(field)) != source[field]:
+            raise Refused('Native release gate source mismatch: ' + field)
+    return {**{field: integer(document.get(field)) for field in ('native_run_id', 'native_run_attempt', 'artifact_id')},
+            **{field: document[field] for field in ('native_tree', 'native_workflow')}}
+
 def upload_receipt(identity, package, archive_info, command_results, environ):
     # Only the trusted upload script supplies these command outcomes, after each
     # command has returned. This is an upload observation, not Apple availability.
@@ -216,6 +241,7 @@ def main():
     parser.add_argument('--package', type=Path)
     parser.add_argument('--archive-info', type=Path)
     parser.add_argument('--command-results', type=Path)
+    parser.add_argument('--release-gate', type=Path)
     args = parser.parse_args()
     if os.environ.get('GITHUB_REPOSITORY') != REPOSITORY:
         raise Refused('Unexpected repository')
@@ -230,12 +256,14 @@ def main():
             result = wait_for_candidate(source, identity['source_sha'], args.timeout, args.interval)
             result.update(deployment_request=identity['deployment_request'],
                           release_run_id=identity['run_id'], release_run_attempt=identity['run_attempt'])
-        elif args.mode == 'request':
-            result = {'schema': 'hps-native-upload-preflight/1', 'repository': REPOSITORY, **identity}
         else:
-            if not all((args.package, args.archive_info, args.command_results)):
-                raise Refused('Receipt requires package, archive info and command outcomes')
-            result = upload_receipt(identity, args.package, args.archive_info, args.command_results, os.environ)
+            identity['native_gate'] = verify_release_gate(args.release_gate, source, identity)
+            if args.mode == 'request':
+                result = {'schema': 'hps-native-upload-preflight/1', 'repository': REPOSITORY, **identity}
+            else:
+                if not all((args.package, args.archive_info, args.command_results)):
+                    raise Refused('Receipt requires package, archive info and command outcomes')
+                result = upload_receipt(identity, args.package, args.archive_info, args.command_results, os.environ)
     # A rerun uses a fresh runner. Never overwrite an existing upload observation.
     with args.output.open('x' if args.mode == 'receipt' else 'w') as output:
         output.write(json.dumps(result, indent=2) + '\n')
