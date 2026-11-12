@@ -1,7 +1,11 @@
-// Read-aloud on a completed answer (REQ-CGPV-24, CGP-CHAT-R-009): "소리로 듣기" in the answer's action
+// Read-aloud on a completed answer (REQ-CGPV-24, CGP-CHAT-R-009): "읽어 주기" in the answer's action
 // row. The operating system's own voice reads it, in Korean, on this device: no Service call and no
 // network (src/voiceReadAloud.ts calls nothing but `speechSynthesis`). Plays only on a press; one
 // answer at a time; the same button stops it. Nothing is stored and nothing is logged.
+//
+// Control (CGP-CHAT-D-009, design row CGP-CHAT-D67): idle = speaker glyph + "읽어 주기"; while this
+// answer is read = pressed (`aria-pressed`, a fill in voice.css), the still level glyph and "그만 읽기".
+// The shared hub means at most one button in the window is ever pressed.
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useVoice } from "./VoiceProvider";
@@ -57,7 +61,7 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
   return (
     <>
       <button type="button" className="hps-answer-action hps-voice-listen" aria-pressed={playing} onClick={press} data-hp-tooltip={playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL} aria-label={playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL}>
-        <ChatIcon kind={playing ? "stop" : "speaker"} size={16} /><span>{playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL}</span>
+        <ChatIcon kind={playing ? "level" : "speaker"} size={16} /><span>{playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL}</span>
       </button>
       <span className="hps-sr-only" role="status">{playing ? READ_ALOUD_PLAYING : ""}{note ? ` ${note}` : ""}</span>
       {note && <span className="hps-voice-skipped">{note}</span>}

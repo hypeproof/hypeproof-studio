@@ -53,6 +53,17 @@
 .hps-msg-role .hps-voice-listen:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 .hps-msg-role .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }
 .hps-answer-actions .hps-voice-listen:disabled { opacity: 0.5; cursor: default; }
+/* CGP-CHAT-D-009 (CGP-CHAT-D67): while its answer is read the button is pressed. The state is a fill, primary
+   ink, the level glyph and "그만 읽기", never colour alone. The personal row uses the verdict's selection fill
+   (the same row's other pressed control); the classroom name line uses the pressed state layer. Nothing here or
+   on the glyph animates, in any motion mode, so the indicator is still under reduced motion by construction.
+   Forced colours: the global [aria-pressed="true"] rule in tokens.css gives the Highlight pair. */
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-voice-listen[aria-pressed="true"] {
+  color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1));
+  background-color: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-2));
+}
+.hps-msg-role .hps-voice-listen[aria-pressed="true"] { color: var(--hp-text-primary-default); background-color: var(--hp-bg-control-pressed); }
+.hps-voice-listen[aria-pressed="true"] .hps-icon { animation: none; transition: none; }
 .hps-voice-skipped { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
 
 /* ---- the disclosure sheet (inside the shared modal surface) ---- */
