@@ -719,7 +719,7 @@ export type WebviewMessage = (
   | { type: "publishClose" }
   | { type: "publishCopy"; versionId: string }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }
-  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number }
+  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string }
   | { type: "publishRevoke"; linkId: string }
   // cr-evidence — the experiment evidence panel (CR-24–CR-27, CR-69; CR switch only, re-checked by the host).
   | { type: "evidenceOpen"; experimentId?: string }

@@ -2828,6 +2828,17 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-sharing-pill:focus-visible, .hps-sharing-refresh:focus-visible, .hps-share-settings > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
 .hps-share-settings > summary { min-height: var(--ds-c-studio-tokens-control-md); font-size: var(--hp-font-caption); cursor: pointer; }
 .hps-share-settings { overflow-wrap: anywhere; }
+/* CGP-ART-D-012 — the responsibility notice before the first link: three bullets and 알겠어요. */
+.hps-publish-notice { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); padding: var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-body); line-height: var(--ds-c-studio-styles-typography-16); background: var(--hp-bg-panel-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); overflow-wrap: anywhere; }
+.hps-publish-notice ul { margin: 0; padding-inline-start: var(--ds-c-studio-styles-space-20); display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); }
+.hps-publish-notice-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); }
+.hps-publish-notice-actions button { min-block-size: var(--hp-control-min); min-inline-size: var(--hp-control-min); padding-block: 0; padding-inline: var(--ds-c-studio-styles-space-7); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); cursor: pointer; }
+.hps-publish-notice-actions .hps-publish-notice-ack { font-weight: var(--ds-c-studio-styles-typography-17); border-color: var(--hp-text-primary-default); }
+.hps-publish-notice-actions button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-publish-notice-actions button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-publish-notice-actions button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+.hps-publish-notice-actions button:disabled { opacity: .55; cursor: default; }
+@media (forced-colors: active) { .hps-publish-notice { border-color: CanvasText; } .hps-publish-notice-actions button { border-color: ButtonText; } }
 /* CGP-ART-D-019: keep visible activity without motion when reduced motion is selected. */
 .hps-idle-progress-motion { position: relative; overflow: hidden; display: inline-grid; place-items: center; width: var(--hp-font-caption); height: var(--hp-font-caption); flex-shrink: 0; }
 .hps-idle-progress-motion::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, currentColor, transparent); transform: translateX(-100%); animation: hps-shimmer var(--hp-dur-shimmer) linear infinite; }
