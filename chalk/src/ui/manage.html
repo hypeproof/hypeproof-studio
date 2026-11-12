@@ -425,8 +425,9 @@ col.c-ver{width:var(--ds-c-chalk-manage-size-121)}
 .ops-sort{display:inline-flex;align-items:center;gap:var(--ds-c-chalk-manage-space-15);margin-block:0;margin-inline-start:auto;font-size:var(--ds-c-chalk-manage-type-28);color:var(--ink-text-2);white-space:nowrap}
 .ops-sort select{width:auto;margin:0;min-height:var(--ds-c-chalk-manage-size-8);font-size:var(--ds-c-chalk-manage-type-28)}
 /* Card rows (760px and below, also when the detail sits beside the list at 1280): the version, labelled 버전, sits at the end of
-   the seat line, so a card is no taller than before; the status line spans under both. */
-@container seats (max-width:760px){#ops .ops-seat{grid-template-columns:var(--ds-c-chalk-manage-size-138) minmax(0,1fr) auto var(--ds-c-chalk-manage-size-53)}#ops .ops-seat>td.c-ver{grid-column:3;grid-row:1;justify-self:end;text-align:end;max-inline-size:var(--ds-c-chalk-manage-size-117)}#ops .ops-seat>td.c-ver::before{content:attr(data-label) " ";color:var(--ink-mute)}#ops .ops-seat>td.c-step{grid-column:2/4}#ops .ops-seat>td.c-act{grid-column:4}}
+   the seat line, so a card is no taller than before; the status line spans under both. The cell is a flex row so the label, the
+   Hangul fallback font and the icon share no line box (mixed fonts on one line made it 0.7px taller than the seat line). */
+@container seats (max-width:760px){#ops .ops-seat{grid-template-columns:var(--ds-c-chalk-manage-size-138) minmax(0,1fr) auto var(--ds-c-chalk-manage-size-53)}#ops .ops-seat>td.c-ver{grid-column:3;grid-row:1;justify-self:end;display:flex;align-items:center;justify-content:flex-end;column-gap:var(--ds-c-chalk-manage-space-13);text-align:end;max-inline-size:var(--ds-c-chalk-manage-size-116)}#ops .ops-seat>td.c-ver::before{content:attr(data-label);color:var(--ink-mute)}#ops .ops-seat>td.c-step{grid-column:2/4}#ops .ops-seat>td.c-act{grid-column:4}}
 @container seats (max-width:480px){#ops .ops-seat>td.c-ver{grid-column:3/-1}#ops .ops-seat>td.c-step,#ops .ops-seat>td.c-act{grid-column:1/-1}}
 /* CGP-DS-R-030 (REQ-CGP-DS-35): the seat table, roster counters, help-queue ages and the legacy activity list use tabular figures,
    so a count or a "N분 전" keeps its width as it ticks. Controls are listed with their descendants because the UA `font` reset on
