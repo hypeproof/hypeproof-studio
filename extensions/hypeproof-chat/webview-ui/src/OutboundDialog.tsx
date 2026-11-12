@@ -3,7 +3,7 @@ import { finishModal } from './modalMotion';
 import './modalSurface.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { normalizeTextSize } from '../../src/textSize';
-import { MEMORY_SELECTED_LABEL } from '../../src/outboundConsent';
+import { ASSESSMENT_GROUPS, MEMORY_SELECTED_LABEL } from '../../src/outboundConsent';
 import { outboundPromptItemIds, PUBLIC_AUDIENCE_ACK, type OutboundPrompt, type PublicAudiencePrompt } from '../../src/outboundApproval';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
@@ -17,19 +17,28 @@ const visible = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f\u202
 
 /**
  * CGP-KNOW-D-006 / DES-KNOW-09 — native HTML modal over one host-frozen R-006 manifest: recipient, an unchecked checklist
- * of every item (all are one atomic payload, so 보내기 needs every box), the fixed 포함하지 않는 것 box, 보내기 / 취소.
+ * of every item, the fixed 포함하지 않는 것 box, 보내기 / 취소. Work assessment can confirm
+ * groups of items. The atomic payload still requires the complete set of original item IDs.
  * CGP-KNOW-D-033 / DES-KNOW-51: memory items appear only inside a collapsed "기억 파일 (기본 제외)" group (native
  * details/summary, keyboard operable); opening it checks nothing. With no memory item the group says so.
  */
 export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: OutboundPrompt; onAnswer: (id: string, selected: string[] | null) => void; textSize?: unknown }) {
   const dialog = useRef<HTMLDialogElement>(null), answered = useRef(false), composing = useRef(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState(() => new Set<string>());
   const ids = outboundPromptItemIds(prompt);
-  const complete = ids.length > 0 && ids.every(id => selected.includes(id));
+  const complete = ids.length > 0 && ids.every(id => selected.has(id));
   const memoryIds = prompt.sections.flatMap(s => s.items.filter(i => i.memory).map(i => i.id)), memoryCount = memoryIds.length;
-  const memoryPending = memoryIds.some(id => !selected.includes(id));
+  const memoryPending = memoryIds.some(id => !selected.has(id));
+  const selectItems = (itemIds: readonly string[], checked: boolean) => setSelected(current => {
+    const next = new Set(current);
+    for (const id of itemIds) {
+      if (checked) next.add(id);
+      else next.delete(id);
+    }
+    return next;
+  });
   const renderItem = (item: OutboundPrompt['sections'][number]['items'][number]) => <label key={item.id} className="hps-outbound-item">
-    <input type="checkbox" checked={selected.includes(item.id)} onChange={e => { const on = e.target.checked; setSelected(cur => on ? (cur.includes(item.id) ? cur : [...cur, item.id]) : cur.filter(id => id !== item.id)); }} />
+    <input type="checkbox" checked={selected.has(item.id)} onChange={e => selectItems([item.id], e.target.checked)} />
     <span>{visible(item.label)} · {item.bytes.toLocaleString('ko-KR')} 바이트{item.memory && <span> · {MEMORY_SELECTED_LABEL}</span>}</span>
   </label>;
   const finish = (value: string[] | null) => { if (answered.current) return; answered.current = true; finishModal(dialog.current, () => onAnswer(prompt.id, value)); };
@@ -51,8 +60,32 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
       <RecipientMemory />
       {si === 0 && prompt.public && <p>누구나 볼 수 있어요</p>}
       {si === 0 && prompt.notes.map((note, ni) => <p key={ni}>{visible(note)}</p>)}
-      {section.items.filter(item => !item.memory).map(renderItem)}
-      {(section.items.some(item => item.memory) || (si === 0 && !memoryCount)) && <details className="hps-outbound-memory" data-outbound-memory>
+      {prompt.groupedAssessment ? <>
+        <p>보낼 작업 기록 {section.items.length.toLocaleString('ko-KR')}건을 종류별로 확인해 주세요.</p>
+        {ASSESSMENT_GROUPS.map(group => {
+          const items = section.items.filter(item => item.assessment?.group === group.id);
+          if (!items.length) return null;
+          const groupIds = items.map(item => item.id);
+          const bytes = items.reduce((total, item) => total + item.bytes, 0);
+          return <div key={group.id} className="hps-outbound-assessment-group">
+            <label className="hps-outbound-item">
+              <input type="checkbox" checked={groupIds.every(id => selected.has(id))}
+                onChange={e => selectItems(groupIds, e.target.checked)} />
+              <span>{group.label} {items.length.toLocaleString('ko-KR')}건 보내기 · {bytes.toLocaleString('ko-KR')} 바이트</span>
+            </label>
+            <details className="hps-outbound-memory">
+              <summary>{group.label} 개별 기록 보기</summary>
+              <ul>
+                {items.map(item => <li key={item.id}>
+                  {visible(item.label)} · {item.bytes.toLocaleString('ko-KR')} 바이트
+                  {item.assessment?.text && <p className="hps-outbound-record">{item.assessment.text.split('\n').map(visible).join('\n')}</p>}
+                </li>)}
+              </ul>
+            </details>
+          </div>;
+        })}
+      </> : section.items.filter(item => !item.memory).map(renderItem)}
+      {!prompt.groupedAssessment && (section.items.some(item => item.memory) || (si === 0 && !memoryCount)) && <details className="hps-outbound-memory" data-outbound-memory>
         <summary>{MEMORY_GROUP_LABEL}{section.items.some(item => item.memory) && <span> · {section.items.filter(item => item.memory).length}개</span>}</summary>
         {section.items.some(item => item.memory)
           ? <><p>직접 고른 기억 파일이에요. 펼쳐서 확인해야 함께 보낼 수 있어요.</p>{section.items.filter(item => item.memory).map(renderItem)}</>
@@ -63,7 +96,7 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
       <h3 id="outbound-excluded-title">포함하지 않는 것</h3>
       <ul>{excluded.map(text => <li key={text}>{text}</li>)}</ul>
     </section>
-    {!complete && <p className="hps-outbound-hint" id="outbound-hint">보낼 항목을 모두 확인해야 보낼 수 있어요.{memoryPending && ' 기억 파일도 펼쳐서 확인해 주세요.'}</p>}
+    {!complete && <p className="hps-outbound-hint" id="outbound-hint">{prompt.groupedAssessment ? '보낼 기록 묶음을 모두 확인해야 보낼 수 있어요.' : '보낼 항목을 모두 확인해야 보낼 수 있어요.'}{memoryPending && ' 기억 파일도 펼쳐서 확인해 주세요.'}</p>}
     <div className="hps-outbound-actions">
       <button type="button" data-outbound-cancel onClick={() => finish(null)}>취소</button>
       <button type="button" className="hps-outbound-send" disabled={!complete} aria-describedby={complete ? undefined : 'outbound-hint'} onClick={() => { if (complete) finish([...selected]); }}>보내기</button>

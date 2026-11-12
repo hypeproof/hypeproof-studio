@@ -1,21 +1,26 @@
-import { OUTBOUND_EXCLUDED, outboundDetails, outboundLabel, type OutboundManifest } from "./outboundConsent.ts";
+import { OUTBOUND_EXCLUDED, isGroupedAssessment, outboundDetails, outboundLabel, type AssessmentRecordReview, type OutboundManifest } from "./outboundConsent.ts";
 
 /**
  * CGP-KNOW-D-006 / DES-KNOW-09: the in-panel presentation of one CGP-KNOW-R-006 manifest.
  * The manifest stays the producer's immutable payload; this only asks for one explicit decision over it.
  */
-export interface OutboundPromptItem { id: string; label: string; bytes: number; memory?: true }
+export interface OutboundPromptItem { id: string; label: string; bytes: number; memory?: true; assessment?: AssessmentRecordReview }
 export interface OutboundPromptSection { recipient: string; items: OutboundPromptItem[] }
-export interface OutboundPrompt { id: string; public: boolean; notes: string[]; sections: OutboundPromptSection[]; excluded: string }
+export interface OutboundPrompt { id: string; public: boolean; notes: string[]; sections: OutboundPromptSection[]; excluded: string; groupedAssessment?: true }
 
 /** Freeze a manifest into the prompt the webview draws. Every item gets a stable, unique id. Null when R-006 would refuse it. */
 export function outboundPrompt(id: string, manifest: OutboundManifest): OutboundPrompt | null {
   if (!id || outboundDetails(manifest) === null) return null;
+  const groupedAssessment = isGroupedAssessment(manifest);
   const sections = [manifest, ...(manifest.also ?? [])].map((s, si) => ({
     recipient: outboundLabel(s.recipient),
-    items: s.items.map((item, ii) => ({ id: `${si}:${ii}`, label: outboundLabel(item.name), bytes: item.bytes, ...(item.memory === true ? { memory: true as const } : {}) })),
+    items: s.items.map((item, ii) => ({
+      id: `${si}:${ii}`, label: outboundLabel(item.name), bytes: item.bytes,
+      ...(item.memory === true ? { memory: true as const } : {}),
+      ...(groupedAssessment && item.assessment ? { assessment: { ...item.assessment } } : {}),
+    })),
   }));
-  return { id, public: manifest.public === true, notes: (manifest.notes ?? []).map(outboundLabel), sections, excluded: OUTBOUND_EXCLUDED };
+  return { id, public: manifest.public === true, notes: (manifest.notes ?? []).map(outboundLabel), sections, excluded: OUTBOUND_EXCLUDED, ...(groupedAssessment ? { groupedAssessment: true } : {}) };
 }
 export const outboundPromptItemIds = (prompt: OutboundPrompt): string[] => prompt.sections.flatMap(s => s.items.map(i => i.id));
 

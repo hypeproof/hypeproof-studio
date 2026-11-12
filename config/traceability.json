@@ -10009,6 +10009,10 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-design.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Work assessment grouped confirmation (CGP-KNOW-R-006)"
         }
       ]
     },

@@ -5466,6 +5466,16 @@ Evidence: `answer-attempts.smoke.mjs`, `answer-attempts.test.tsx`,
 Chromium: 44px targets, 14px text, focus ring, both seats, dark and light, 1420/800/320,
 measured against clientWidth) in `extensions/hypeproof-chat/test/`.
 
+## Work assessment grouped confirmation (CGP-KNOW-R-006)
+
+Before “내 작업 돌아보기” sends records for assessment, the learner sees the exact
+destination and one unchecked box per kind of record. An independent disclosure
+opens the records in that group, with their text where available and byte counts.
+Send requires every group and the host checks the original full set of item IDs.
+The current activity, connection and exact batch must still match before sending.
+Cancel, timeout, a stale batch or an unavailable chat panel authorizes no send.
+Public publication retains its separate content and audience decisions.
+
 ## Public publication second confirmation (CGP-KNOW-R-007)
 
 REQ-KNOW-10 / CGP-KNOW-010 / PI#2: after the per-content outbound confirmation

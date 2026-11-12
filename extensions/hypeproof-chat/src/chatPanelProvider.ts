@@ -8493,10 +8493,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(JSON.stringify(msg.eventIds)!==JSON.stringify(snapshot.events.map(e=>e.id))){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'새 작업 기록이 추가됐습니다. 보낼 내용을 다시 확인해 주세요.'});return;}
         const controller=new AbortController();this.observationAssessment=controller;
         try{
+          const scope = this.writeApprovalScope();
+          const frozen = JSON.stringify(snapshot);
           // REQ-KNOW-09: the ticked box in the panel is the learner's choice; the host still lists recipient, items and sizes
           // for exactly this body and sends nothing on Cancel. `snapshot` is a structuredClone and assessmentBatch is pure,
           // so the confirmed items and the body below are the same bytes (CR-10 pins the body expression literally).
           if(!await confirmOutbound({recipient:`관찰 평가 API (원문은 저장하지 않음) · ${new URL(proxy).host}`,items:observationOutboundItems(assessmentBatch(snapshot).events)})||await this.context.secrets.get(TOKEN_KEY)!==token){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'보내지 않았습니다. 기록은 그대로 있습니다.'});return;}
+          if (controller.signal.aborted || scope !== this.writeApprovalScope()
+              || proxy !== vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')
+              || frozen !== JSON.stringify(this.nativeObservation?.snapshot()) || frozen !== JSON.stringify(recorder.snapshot())) {
+            await this.post({ type: 'observationState', learningPath: this.nativeLearningPath, batch: null,
+              error: '보내지 않았습니다. 현재 작업의 기록과 연결을 다시 확인해 주세요.' });
+            return;
+          }
           const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{...observationHeaders(token),'content-type':'application/json'},body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
           if(!response.ok){const failure=await response.json() as {error?:{code?:string}};throw Error(/^[a-z_0-9]{1,80}$/.test(failure.error?.code??'')?failure.error!.code:'assessment_failed');}
           const result=await response.json() as {findings:unknown;capability_model?:unknown};
