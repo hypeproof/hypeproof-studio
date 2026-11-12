@@ -102,6 +102,32 @@ assert.equal(last().notice, '스토어에 올렸어요.');
 assert.equal(last().attributionPreview, undefined);
 console.log('PASS first publication registers the choice once, then publishes');
 
+// #3763: the registration commits but its answer is lost. The retry gets attribution_already_set, reads the
+// recorded choice back and goes on to publish instead of stopping at 「이미 정했어요」.
+undecided = true;
+await panel.handler({ type: 'storeLoad', tab: 'sell' });
+await settle();
+assert.equal(last().seller.attribution.decided, false);
+const fetchBefore = globalThis.fetch;
+let dropAnswer = true;
+globalThis.fetch = async (url, init) => {
+  const r = await fetchBefore(url, init);
+  if (dropAnswer && new URL(url).pathname.endsWith('/attribution')) { dropAnswer = false; throw new TypeError('fetch failed'); }
+  return r;
+};
+calls.length = 0;
+await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: ATTR });
+await settle();
+assert.equal(undecided, false, 'the first try committed on the Service');
+assert.deepEqual(writes(), ['/attribution']);
+await panel.handler({ type: 'storePublishQuest', title: '서류 제출 요청', summary: '안내 메일', price_krw: 5000, attribution: ATTR });
+await settle();
+globalThis.fetch = fetchBefore;
+assert.deepEqual(writes(), ['/attribution', '/attribution', '/items'], 'the retry publishes');
+assert.equal(last().seller.attribution.decided, true);
+assert.notEqual(last().error, '파트너·강사 코드는 이미 정했어요. 바꾸려면 운영팀에 문의해 주세요.');
+console.log('PASS a lost registration answer does not block the publish');
+
 // The payout account goes to the Service as typed and never into the panel state.
 await panel.handler({ type: 'storeSavePayoutAccount', bankCode: '004', accountNumber: '123456789012', holderName: '홍길동' });
 await settle();

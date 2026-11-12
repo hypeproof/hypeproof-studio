@@ -7,6 +7,7 @@ import struct
 
 from core import digest, public_payload, require
 import routing
+import macos_signing
 
 ALGORITHM = 'typed-double-v1'
 MAX_SAFE = 2**53 - 1
@@ -85,6 +86,7 @@ def producer_input(state, policy, registry, operation_id=None):
                      'resolutionDigest': typed_digest(resolution) if resolution else None, 'verdict': result['verdict']})
     if operation_id:
         require(plan['status'] == 'READY' and policy['routing']['mode'] == 'active', 'complete active effective PASS required for publication')
+        macos_signing.require_official(state)
     anchor = {'schema': 'hps-publisher-anchor/1', 'algorithm': ALGORITHM,
               'repository': state['candidate']['repository'], 'candidateDigest': key,
               'operationId': operation_id, 'candidateBranch': branch(state['candidate']),
@@ -95,4 +97,5 @@ def producer_input(state, policy, registry, operation_id=None):
     public_payload(shared)
     return {'schema': 'hype-release-publisher-input/1', 'candidate': copy.deepcopy(state['candidate']),
             'state': copy.deepcopy(state), 'registry': shared, 'contract': contract, 'plan': plan,
-            'effective': rows, 'anchor': anchor, 'channelSequence': journal['sequence']}
+            'effective': rows, 'anchor': anchor, 'channelSequence': journal['sequence'],
+            'signingStatus': macos_signing.status(state)}

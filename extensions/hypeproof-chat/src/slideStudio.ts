@@ -44,7 +44,10 @@ export function slideStudioProposal(s: WikiState, template: DeckTemplate, patch:
 /** JSON safe inside a <script> element: no "<", and no U+2028/2029. */
 export const scriptJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 
+// CGP-DS-R-004: on light host kinds the description colour is pulled 20% toward the foreground, as in
+// tokens.css: Light+ #717171 on its #F3F3F3 card is 4.4:1 (test/host-theme-kinds-computed.smoke.mjs).
 export const SLIDE_STUDIO_CSS = `:root{color-scheme:light dark;--fg:var(--vscode-foreground,CanvasText);--bg:var(--vscode-editor-background,Canvas);--card:var(--vscode-sideBar-background,var(--bg));--line:var(--vscode-panel-border,var(--vscode-widget-border,GrayText));--muted:var(--vscode-descriptionForeground,var(--fg));--accent:var(--vscode-focusBorder,Highlight);--btn:var(--vscode-button-background,ButtonFace);--btn-fg:var(--vscode-button-foreground,ButtonText);--changed:var(--vscode-diffEditor-insertedTextBackground,rgba(155,185,85,.2));--was:var(--vscode-diffEditor-removedTextBackground,rgba(255,0,0,.12))}
+body.vscode-light,body.vscode-high-contrast-light{--muted:color-mix(in srgb,var(--vscode-descriptionForeground,var(--fg)) 80%,var(--fg))}
 *{box-sizing:border-box}
 body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font-family:var(--vscode-font-family,system-ui,sans-serif);font-size:14px;line-height:1.5;word-break:keep-all;overflow-wrap:anywhere}
 h1{margin:0 0 12px;font-size:16px;font-weight:700}

@@ -164,12 +164,38 @@ An example path is: install and use the same account → “요즘 어떤 일에
 | ID | Requirement | Verification |
 |---|---|---|
 | MPER-01 | iPhone starts with an optional everyday question and existing voice/text composer. No desktop pairing code or running desktop is required for the personal conversation. Existing account browser authentication remains. | Native UI shell and real installed-device flow. |
-| MPER-02 | Same-account personal messages appear in the existing desktop task store; selecting another task does not create a new reflection identity or turn this conversation into a tool runner. | Host/store tests and two-device acceptance. |
+| MPER-02 | Same-account personal messages appear in the existing desktop task store. A visible “나의 질문” action on the default first screen and restored personal task navigation works without a command palette or status bar. Selecting another task does not create a new reflection identity or turn this conversation into a tool runner. | Rendered first-entry → account/admission → real host/store tests, workspace-reload controls and separate two-device acceptance. |
 | MPER-03 | Preserve drafts and submitted words on failure; retry the same uncertain ID without repeating AI. Stale/account-switched snapshots and reserved message-ID collisions are refused. | Native cache, host, account and Service negative controls. |
-| MPER-04 | Account/AI storage disclosure precedes first use; existing entitlement and monetary ceiling apply; cancellation cannot promise a dispatched provider call is unbilled. | Account tests, Service gate evidence and release smoke. |
+| MPER-04 | Account/AI storage disclosure precedes first use; existing entitlement and monetary ceiling apply. Explicit question intent survives existing login and personal-pass selection, but canceled login, sign-out, a different account/activity/task or an invalid reload marker cannot redirect later. Classroom activities never silently become personal. Cancellation cannot promise a dispatched provider call is unbilled. | Account/admission negative controls, source-bound reload evidence, Service gates and separate release smoke. |
 | MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
+
+### Desktop visible question entry (Studio #3798)
+
+This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,
+pass activation, activity validation, workspace preparation and ChatPanelProvider
+reflection method. A normal pass is selected with its existing explicit button;
+only the existing eligible super grant follows its existing immediate-entry rule.
+No entitlement, checkout, provider call, new Mac app or account store is added.
+Missing/denied access explains the existing account/pass choice and preserves work.
+
+One in-memory intent owns login/preparation in the current window. A folder reload
+carries only account/session identity on the existing activity-resume marker, already
+bound to Service, activity, credential generation, physical folder and expiry. The
+marker is consumed before account revalidation and can continue only once. Failed
+storage, an invalid marker, account/session change or another navigation never creates
+an inferred approval or an automatic retry. Once admission opens the chat, a refused
+late question snapshot cannot roll back the person's selected activity or task.
+Concurrent configuration reads await the
+same durable TaskWorkspaceStore initialization before reflection can open. A current
+draft or stream retains the existing refusal/stop boundary. Existing reflection
+storage disclosure precedes its first GET/import; entry sends no AI turn or tool call.
+
+Cost: existing bounded account/profile/activity reads and one reflection snapshot
+read; zero hosted AI calls from entry. Local focused tests use synthetic HTTP and
+actual disk stores. Build/test success does not prove installation, live access or
+question quality; those require separate exact-package evidence.
 
 ## iPhone credential continuity (MIRS-01, Studio #3736)
 

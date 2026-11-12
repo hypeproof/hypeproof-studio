@@ -388,10 +388,22 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "ef0358fe53f5a2257aeb91919378479cf62e81f017c4c7e3ecf7aa75a3989864",
+      "sha256": "a021c52910ceba1cf2a1828dcc87f2d561515eeacc567a89ad89650a6772fa31",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
+      "test": "docs/testing/classroom-admin.md"
+    },
+    {
+      "path": "docs/requirements/classroom-join-code.md",
+      "ids": [
+        "ADM-15"
+      ],
+      "inline_prefixes": [],
+      "sha256": "45b3f8161d187115baa346e5e16c70005968ab9ca4e0e589e0fb066e3e8a0281",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/classroom-join-code.md",
       "test": "docs/testing/classroom-admin.md"
     },
     {
@@ -683,7 +695,7 @@
       "inline_prefixes": [
         "SX"
       ],
-      "sha256": "6fece3ab5c2a3d7fd862b9888c139a8f4c43be000203bb160255fa372e994672",
+      "sha256": "c819235b8a14bf0b374b344f3ca23545cf783b145efc69e328a06b39e36cfe31",
       "owner": "jayleekr",
       "intent": "docs/intents/studio-learning-experience.md",
       "design": "docs/design/studio-learning-experience.md",
@@ -923,7 +935,7 @@
         "MIRS-01"
       ],
       "inline_prefixes": [],
-      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "sha256": "e6d4c3de8b93220c33257db34861abbde7e21c78922c5966146295d725234955",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -1433,6 +1445,37 @@
         "docs/testing/classroom-admin.md",
         "docs/requirements/classroom-admin.md",
         "docs/plan/learning-agent-experience-epics.md"
+      ]
+    },
+    {
+      "id": "e5-class-join-code",
+      "title": "재직자 수업: 수업 코드 하나로 좌석 연결",
+      "issue": 3778,
+      "kind": "implementation",
+      "feature_ids": [
+        "deliver-operate"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-join-code.md",
+          "ids": [
+            "ADM-15"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Service 수업 코드(hypeproof-service E5)와 App 8자리 입력, Chalk 코드 만들기·폐기를 함께 낸다. Mac dev host 종단 검증은 #3779.",
+      "design_delta": "기존 /connect 연결 생성(connectSeat)을 재사용하고, 코드는 해시만 저장하며 학습 토큰이 좌석을 정한다.",
+      "positive_control": "명단에 있는 수강생 두 명이 같은 수업 코드로 각자 좌석에 연결되고 두 번째 창이 첫 창을 대체한다.",
+      "negative_control": "코드만으로 연결·다른 수업 토큰·좌석 없는 handle·폐기된 강사의 코드·만료/폐기/대체 코드를 구분하는 응답 금지.",
+      "evidence_required": "Service·App·Chalk SHA, 테스트 명령과 결과, dev host 화면. NOT RUN과 합성/실기 증거를 구분한다.",
+      "implementation_paths": [
+        "chalk/src",
+        "extensions/hypeproof-chat/src"
+      ],
+      "verification_inputs": [
+        "docs/requirements/classroom-join-code.md",
+        "docs/testing/classroom-admin.md"
       ]
     },
     {
@@ -4602,6 +4645,47 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "personal-reflection-desktop-entry",
+      "title": "Visible first-screen and restored personal question entry",
+      "issue": 3798,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-02",
+            "MPER-04"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Independently verify exact source and the unseeded first-entry/reload journey; then record separately authorized desktop candidate evidence. No installed/live acceptance inferred from source controls.",
+      "design_delta": "Connect visible existing StartPage and personal task navigation to existing account/pass/activity/store preparation, with one-shot account/session-bound workspace continuation.",
+      "positive_control": "An unseeded signed-out first screen reaches the existing reflection task through actual login/admission; a normal pass chooser and real folder reload retain only the explicit question intent.",
+      "negative_control": "Canceled or denied login/admission, account/task/activity change, duplicate entry, draft/stream and failed marker persistence cannot redirect late, lose work or dispatch a model/tool turn.",
+      "evidence_required": "Pinned source, focused rendered UI/host/disk evidence, independent review and separately identified actual desktop/Service evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/src/startPageProtocol.ts",
+        "extensions/hypeproof-chat/src/studioNavigation.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx",
+        "extensions/hypeproof-chat/test/personal-entry-harness.mjs",
+        "extensions/hypeproof-chat/test/initial-surface.smoke.mjs",
+        "extensions/hypeproof-chat/test/activity-resume.test.mjs",
+        "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
       ]
     }
   ]

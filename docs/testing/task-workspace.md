@@ -268,6 +268,29 @@ personal header already scrolls by 11px before any popover in this fixture; the 
 prints that as a note). Packaged-app, physical IME and screen-reader acceptance are
 reported separately.
 
+## Read-aloud control (CGP-CHAT-D-009 / CGP-CHAT-D67)
+
+`test/voice-mount.test.tsx` renders the real ChatPanel with served voice and two answers in
+the personal and classroom seats and presses the controls on the minimal DOM: idle
+`읽어 주기` with the speaker glyph; pressed `aria-pressed="true"`, `그만 읽기` and the level
+glyph; the second answer takes over and releases the first (one pressed at a time); the
+pressed control stops its own reading. The same file keeps the unserved markup byte-identical.
+`test/voice-ui.test.tsx` reads `aria-pressed` across play and stop on one answer, and across a
+reading that ends by itself. The answer is read in at least two utterances (the test asserts the
+count): an earlier utterance's end keeps it pressed with `그만 읽기`, and the last utterance's end
+event (no press) releases the control to `aria-pressed="false"` and `읽어 주기` without a cancel.
+
+`test/voice-browser.smoke.mjs` drives the real App bundle in headless Chromium at 320px,
+both seats, dark and light, with a recording synthesizer: the pressed control has a fill that
+the idle one has not, a 44px box and 14px text; the level glyph and its shape compute
+`animation-name: none` and run no animation with motion allowed, with OS reduced motion and
+with `data-reduced-motion="true"`; in forced colours the pressed and idle controls differ; the
+second answer takes over and the first reading is cancelled. These browser-only checks (the
+personal pressed fill, the cancel) must not skip: with `FOCUS_REQUIRE_BROWSER=1`, as the CI smoke
+shards set it, a missing Chromium fails the smoke instead of printing NOT RUN. Every read is a state, a computed style or a minimum box, not a
+text width, so a runner's fonts do not change the verdict. A real Korean voice, screen-reader
+speech of the pressed state and the packaged app are reported separately.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell

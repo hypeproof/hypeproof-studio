@@ -472,6 +472,50 @@ The existing curriculum-runtime grant remains authoritative for every seat/runti
 This display does not implement the separate minor-publication confirmation row R-012.
 No new recipient, default, publication permission or human agreement is introduced.
 
+## DEC-ART-R-012: publish responsibility notice (2026-11-12, agent choice)
+
+Built (notice for every seat, Studio-only):
+
+- Placement (agent choice): an inline sheet beside the button that makes a new link, not a modal.
+  The publish flow already has a visitor preview and an outbound checklist with a public step
+  (CGP-KNOW-R-007); a third modal would train dismissal. The sheet comes first, so nothing is
+  built or sent before it is acknowledged.
+- Scope (agent choice): both link producers, `submit` (first publish) and `link` (another channel's
+  link of a running experiment), are gated. A learner who published before this change reads the
+  notice once at their next new link.
+- Versioning (agent choice): `PUBLISH_NOTICE_VERSION` in `extensions/hypeproof-chat/src/publishNotice.ts`.
+  Any copy change is a new version. Acknowledgments are kept per owner digest per version in machine
+  `globalState` (not workspace state), so another learner on the same machine reads it and moving
+  folders does not ask again. The record is local; it is not sent to the Service and Chalk cannot
+  see it. A cleared profile asks again, which is the safe direction.
+- Copy (agent choice): three bullets adapted from the observed ChatGPT terms modal (who can open it,
+  who is responsible for its content, personal data), in the learner's register. No policy or
+  removal claim is made, because no Studio removal policy is written down.
+
+Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk badge):
+
+- What exists: no served SX-41 flag (spec only, `docs/requirements/studio-learning-experience.md`
+  SX-41, P2), no Service link state other than live/revoked/expired, no confirm route, no Chalk list.
+  `curriculumRuntimeAllowed` lets minor cohorts publish ("Age does not decide it", 2026-10-05), so a
+  minor cohort's link is reachable as soon as it is issued, before and after this change.
+- Plan, in order, each its own PR behind a default-off profile flag, "Confirmed by Jay: no":
+  1. Service (hypeproof-service): a served profile flag (for example
+     `curriculum_runtime.publish_confirmation: "instructor"`, absent = off); `POST /experiments/:id/links`
+     creates the link `pending_confirmation` when the flag is on; the test origin answers a pending
+     link like a revoked one (no content, no session open, no events); an issuer-token route lists
+     and confirms (or declines) pending links of the issuer's cohorts; the project read returns
+     `pending_confirmation` with its request time. Negative test: a pending link's URL, files and
+     `__hp` routes return no product content.
+  2. Studio: a fourth sharing state `선생님 확인을 기다리고 있어요` with the spinner-free `기다리는 중` label
+     and a time-since counter, refreshed by the existing 15-second and focus reads (no reload); copy
+     stays off until confirmed.
+  3. Chalk: pending confirmations listed in `/manage` with a count badge, confirm and decline.
+- Open question 4 (agent answer, conservative): for a minor cohort the CR-20 one-minute clock starts
+  at instructor confirmation, not at the learner's publish action. The waiting time is recorded
+  separately (the counter above and the request/confirm times), never as a product miss and never
+  as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
+- Confirmed by Jay: no (all choices above are agent choices).
+
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
 Agent-selected conservative implementation, not a new human policy agreement:
@@ -1834,8 +1878,19 @@ Jay decided that availability follows the class: a per-class switch is added (th
 
 - Engine: the OS voice through `speechSynthesis`, Korean `ko-KR`, no Service call (policy D1). Only an on-device Korean voice is chosen; with none the default voice of the platform speaks (the Electron webview has no streaming voices). Unmeasured: voice quality on macOS and Windows.
 - Per answer: personal seats in the answer action row, classroom seats beside the speaker's name (they have no action row). Plays on a press only; one at a time; the same button stops it; fenced code skipped and announced (`코드는 건너뛰었어요`, REQ-CGPV-24).
-- Label `소리로 듣기` is the register's proposed copy, agent-chosen.
+- Label `소리로 듣기` is the register's proposed copy, agent-chosen. Superseded 2026-11-12 by `읽어 주기` / `그만 읽기` (CGP-CHAT-D-009 below).
 - Confirmed by Jay: yes (2026-11-09) for the engine; no for the label and placement.
+
+## CGP-CHAT-D-009: read-aloud control (CGP-CHAT-D67, 2026-11-12)
+
+Audit of main (f9754fdf7) against the design row; only the gaps changed. Already met: the speaker glyph on the control, `aria-pressed` bound to the playing state, one reading in the window (one shared hub, so starting a second answer stops the first) and the control drawing nothing unless the Service serves read-aloud. Gaps: the labels were `소리로 듣기` / `읽기 멈추기`; the only playing cue was a swap to the stop square, with no pressed styling; no test pressed two answers or read `aria-pressed`.
+- Labels (agent choice): `읽어 주기` and, while reading, `그만 읽기`, the row's own copy (CGP-CHAT-R67 uses the same two). They replace the voice register's `소리로 듣기` (REQ-CGPV-24, recorded above as agent-chosen, never confirmed). The settings-change line (CGP-SHELL-R-024) names the class switch by the same constant, so it now says `읽어 주기 꺼짐 → 켜짐`. The Jay-confirmed disclosure sentence (`답을 소리로 읽어 줘요. ...`) is unchanged.
+- Indicator (agent choice): while its answer is read the button draws a level glyph (three bars, new `level` icon, stroked like the set) in the speaker's place and a fill: the verdict's selection fill in the personal action row, the pressed state layer beside the classroom speaker's name. The state is glyph, words, fill and `aria-pressed`, never colour alone. The glyph is in the speaker's slot, so the button does not grow; the two labels have the same number of syllables.
+- Motion (agent choice): the indicator never animates, in any motion mode. The row only asks that it is still under reduced motion; a looping animation would last as long as a reading (minutes) and the motion rules allow loops only for bounded pending indicators. Still everywhere meets the clause without a second code path. `voice.css` also sets `animation: none; transition: none` on the pressed glyph.
+- Forced colours: no new rule; the global `[aria-pressed="true"]` rule (CGP-DS-R-016) draws the pressed control in the system selection pair.
+- Not changed: when voice is not served nothing is drawn (byte-identical markup, `voice-mount.test.tsx`), no flag or policy, minors follow the served block, nothing is stored or logged, and no message goes to the host. Classroom seats keep the control beside the speaker's name (they have no action row, 2026-11-09 placement). Not part of this row and not changed: the voice register's loading and replay states (DES-CGPV-24) and CGP-CHAT-R67's "starting a new send stops playback" (on main a reading stops on a press, another answer, the answer unmounting or voice going off; no send hook was found in `ReadAloudButton.tsx` or `VoiceProvider.tsx`).
+- Not covered: a real Korean voice, a screen reader announcing the pressed state, and the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
 
 ## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
 
@@ -1980,3 +2035,15 @@ No Service change. Studio already sends its version on every 45 s heartbeat (`x-
 - Sort order (agent choice): release versions ascending or descending, then other version text, then unknown last in both directions; ties keep the Service's order. `기본 순서` is the Service's order. The choice survives a refresh and resets on disconnect; it never changes the selection or the action targets.
 - Not covered: a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu), a real screen reader, staging or production data, the GitHub read from a deployed Chalk Worker.
 - Confirmed by Jay: yes for the DEC-24 floor rule (2026-11-12); no for the agent-selected choices above (floor source, cache times, sorting, placement, look).
+
+## CGP-DS-R-004: webviews follow the host theme kind (REQ-CGP-DS-03, 2026-11-12, agent decision)
+
+Audit of main (4f1602fb2). The extension creates one webview view and twelve webview panels (`grep -rn "createWebviewPanel\|registerWebviewViewProvider" extensions/hypeproof-chat/src`). Already met: the chat and the four panels on the same bundle (start, automation, local review, skill store) map all four kinds through `tokens.css` (CGP-DS-D-002 roles, the light-kind muted mix, CGP-DS-R-012 elevation with HC flat plus a 1px edge); the start and disconnected screens stay forest; the seven inline-HTML panels read `--vscode-*` directly and five of them already passed. Gaps: the preview shell painted a fixed `#1b1b2a` page with `#ddd` text in every kind, and dimmed its placeholder and review notice with `opacity` (3.2:1 and 4.4:1 on Light+); the slide studio's `--muted` was Light+ `#717171` on its `#F3F3F3` card (4.4:1). No test loaded the four body classes over every surface on the computed cascade, and there were no screenshots at 320/390/1280.
+
+- Preview shell page (agent choice): `var(--vscode-editor-background)` / `var(--vscode-foreground)`, with the old `#1b1b2a` / `#ddd` as fallbacks. Under the HypeProof Studio theme the empty preview is now the forest editor surface instead of a blue-black one.
+- Secondary text in the inline panels (agent choice): the theme's `descriptionForeground` for the preview placeholder and notice, never the foreground at reduced opacity; on light kinds the slide studio mixes it 80% with the foreground, the same rule `tokens.css` uses (CGP-DS-D-002).
+- "Token set per kind" (agent reading of the acceptance): the chat's text, app, ring and CTA roles equal the theme's own keys and the elevation follows the kind; inline panels have no token layer, so for them it means the painted page is the theme's editor surface and every text pair passes.
+- Contrast measure (agent choice): computed colours composited over every painted layer, colours normalised through a canvas; no glyph sampling, so CI and the Ubuntu worker agree whatever fonts are installed. Gradient stops count as possible backgrounds.
+- Not changed: Chalk (REQ-CGP-DS-03 says Both, but Chalk is a dark-only web page with no host theme kind); forced colors (forced-colors-computed); the learner's own page inside the preview frame.
+- Not covered: the packaged app in a real VS Code high-contrast theme on macOS or Windows: NOT RUN. The default-theme variables come from the recorded table plus colour-registry defaults, not from a live VS Code.
+- Confirmed by Jay: no (agent-selected choices above).

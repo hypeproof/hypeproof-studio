@@ -15,6 +15,7 @@ export interface ActivitySummary {
 export interface StartState {
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
+  personalReflectionPending?: boolean;
   /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
   skillStore?: boolean;
   activities?: ActivitySummary[];
@@ -104,6 +105,9 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  /** MPER-02/04: explicit personal-question intent, never an AI turn. */
+  | { type: "openPersonalReflection" }
+  | { type: "cancelPersonalReflection" }
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }
   | { type: "startUpdateDismiss"; version: string }
@@ -148,5 +152,6 @@ export type StartRequest =
   | { type: "continueFromGithub"; repo: string }
   | { type: "startNew" }
   | { type: "inboxOpen"; objectId: string; generation: number }
-  | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" };
+  | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer };
 export type StartResponse = { type: "startState"; state: StartState };

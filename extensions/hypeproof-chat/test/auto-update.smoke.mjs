@@ -126,7 +126,7 @@ try {
     const state = new Map();
     const context = { globalStorageUri: { fsPath: path.join(dir, 'storage') }, globalState: { get: (k, d) => state.has(k) ? state.get(k) : d, update: async (k, v) => { if (v === undefined) state.delete(k); else state.set(k, v); } } };
     const spawned = [], commands = [], notices = [], opened = [], timers = [];
-    let downloaded;
+    let downloaded, rejectVerification = false, verificationCalls = 0;
     const bytes = Buffer.from('fixture verified archive bytes');
     const info = { available: true, sizeBytes: bytes.length, version: '0.1.51', releaseUrl: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.51', downloadUrl: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex') };
     const vscode = {
@@ -147,6 +147,19 @@ try {
         const next = path.join(path.dirname(downloaded), 'new.app'); fs.mkdirSync(next); fs.writeFileSync(path.join(next, 'version'), info.version);
       },
       execFile: () => { throw new Error('No external credentials in tests'); },
+      // The real updater owns the verification script; this fixture isolates the OS process.
+      // update-installer.smoke.mjs exercises that script's signing/Gatekeeper outcomes.
+      execFileSync: (exe, args, options) => {
+        assert.equal(platform, 'darwin', 'Windows must not invoke Apple verification');
+        assert.equal(exe, '/bin/bash');
+        assert.equal(args[0], '-c');
+        assert.equal(args[2], 'hps-update-verification');
+        assert.equal(args[3], path.join(path.dirname(downloaded), 'new.app'));
+        assert.equal(options.timeout, 60_000);
+        verificationCalls++;
+        if (rejectVerification) throw new Error('fixture: Apple verification rejected');
+        return '';
+      },
       spawn: (exe, args) => {
         spawned.push({ exe, args }); const child = new EventEmitter(); child.unref = () => {}; child.pid = 2147483647;
         queueMicrotask(() => child.emit('spawn')); return child;
@@ -170,6 +183,22 @@ try {
     assert.deepEqual(spawned, []); assert.deepEqual(commands, []); assert.deepEqual(notices, [], 'staging says nothing');
     assert.equal(stagedUpdateVersion(context), '0.1.51');
     assert.deepEqual(JSON.parse(JSON.stringify(state.get(AUTO_UPDATE_NOTICE_KEY))), { version: '0.1.51', releaseUrl: info.releaseUrl });
+    assert.equal(verificationCalls, platform === 'darwin' ? 1 : 0, 'Mac background staging verifies the candidate');
+
+    // A rejected newer Mac candidate cannot replace an already verified stage or interrupt the learner.
+    if (platform === 'darwin') {
+      rejectVerification = true;
+      await assert.rejects(stageUpdateInBackground({ ...info, version: '0.1.52' }, context), /새 앱의 서명 또는 Apple 보안 확인에 실패/);
+      rejectVerification = false;
+      assert.equal(verificationCalls, 2, 'the newer candidate reached the OS verification boundary');
+      assert.equal(stagedUpdateVersion(context), '0.1.51', 'keep the previous verified stage');
+      assert.equal(state.get(AUTO_UPDATE_NOTICE_KEY).version, '0.1.51', 'no applied notice for the rejected candidate');
+      assert.equal(JSON.parse(fs.readFileSync(pkg, 'utf8')).version, '0.1.50', 'the installed app is untouched');
+      assert.deepEqual(spawned, [], 'no installer after failed verification');
+      assert.deepEqual(commands, [], 'no quit after failed verification');
+      assert.deepEqual(notices, [], 'no restart offer after failed verification');
+      console.log('PASS background Apple verification rejection preserves the app and prior verified stage');
+    }
 
     // 4b. Idle restart through the real scheduler: a running turn never applies, however long idle.
     let now = 1_000_000, focused = false, focusListener;

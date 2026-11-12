@@ -20,6 +20,8 @@ import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntr
 import { PublishReadGate } from "./publishReadGate";
 import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
 import { runWorkTakeaway } from "./workTakeawayHost";
+import { runShowWhatIMade } from "./showWhatIMadeHost";
+import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
@@ -144,6 +146,10 @@ import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllow
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
 import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
 import { PublishSession } from "./publishSession";
+import { PublishNoticeLedger } from "./publishNotice";
+
+/** globalState key: CGP-ART-R-012 responsibility-notice acknowledgments, per owner digest per notice version. */
+const PUBLISH_NOTICE_STATE = "hypeproof-chat.publishNoticeAcks";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
@@ -566,7 +572,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private attemptWrite?: Promise<void>;
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
-  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
+  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore; ready?: Promise<void> };
   /** Failed turns are not in durable history yet; keep only bounded, task-bound retry metadata. */
   private turnRequests = new Map<string, { scope: string; message: ChatMessage }>();
   /** CGP-CHAT-R-029 — the one removed file/page chip and the one rename that 되돌리기 can still put back. */
@@ -681,14 +687,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
   }
 
-  async openPersonalReflection(): Promise<void> {
+  async openPersonalReflection(stillWanted: () => boolean = () => true): Promise<void> {
     const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
+    if(!stillWanted())return;
     if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
     if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
     const scope=this.mobileConversationScope(true);
     if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
     const store=this.currentTaskStore()!;
-    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
+    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(!stillWanted()||this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
     let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
     if(!b){
       const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
@@ -825,14 +832,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
-    if (this.taskWorkspace?.activityId === activity.id) return;
+    if (this.taskWorkspace?.activityId === activity.id) { await this.taskWorkspace.ready; return; }
     const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
-    this.taskWorkspace = { activityId: activity.id, store };
-    try {
-      await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
-    } catch {
-      // The error view is shown, and sends are blocked. Never replace unreadable history.
-    }
+    const opening = { activityId: activity.id, store, ready: Promise.resolve() };
+    this.taskWorkspace = opening;
+    opening.ready = (async () => {
+      try {
+        await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
+      } catch {
+        // The error view is shown, and sends are blocked. Never replace unreadable history.
+      }
+    })();
+    await opening.ready;
   }
 
   /**
@@ -2479,6 +2490,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly publishSession = new PublishSession({
     previewVisitor: showVisitorPreview,
     confirmOutbound,
+    // Per learner (owner digest, never the identity) per notice version, kept across workspaces.
+    publishNotice: new PublishNoticeLedger(
+      {
+        get: () => this.context.globalState.get<unknown>(PUBLISH_NOTICE_STATE),
+        update: (value) => this.context.globalState.update(PUBLISH_NOTICE_STATE, value),
+      },
+      (token) => crBytesOwner(token),
+    ),
     scopeKey: () => String(this.profileGeneration),
     privateDirectories: () => this.cachedProfile?.learning_wiki?.plan?.dir ? [this.cachedProfile.learning_wiki.plan.dir] : [],
     switchOn: () => this.isCurriculumRuntimeEnabled(),
@@ -2524,7 +2543,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (view.available) { this.lastGoodPublish = { scope, at: Date.now(), view }; return view; }
     const last = this.lastGoodPublish;
     if (!view.read_failed || !last || last.scope !== scope) { if (!view.read_failed) this.lastGoodPublish = null; return view; }
-    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice };
+    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice, publish_notice: view.publish_notice ?? null };
   }
 
   /** CR-17 — the "Publish for user test" command: re-checks the served switch, then opens the panel. */
@@ -2539,7 +2558,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** One publish action from the panel, each behind the served switch (a message can be posted without the panel). */
-  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
+  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.postDenialNotice("lesson");
       await this.post({ type: "publishState", view: null, error: lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()) });
@@ -2567,7 +2586,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message, ...(r.lines ? { errorLines: r.lines } : {}) });
       }
       if (msg.type === "publishLink") {
-        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays });
+        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays, ...(typeof msg.noticeVersion === "string" ? { notice_version: msg.noticeVersion } : {}) });
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message });
       }
       const r = await this.publishSession.revoke(String(msg.linkId ?? ""));
@@ -5158,7 +5177,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
-  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
+  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null>; inboxAnswer?(objectId: string, revision: number, generation: number, answer: unknown): Promise<void> } | null = null;
   private currentClassNoticeId: string | undefined;
   classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
   async postInbox(): Promise<void> {
@@ -8393,6 +8412,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
+    if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -8620,6 +8640,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "checkpointSave": await this.handleCheckpointSave(msg); return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
+      case "inboxAnswer": await this.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
       case "artifactApprove": await this.approveArtifactInteractively(); return;
       case "helpDraft": await this.helpSource?.draft(msg.key, msg.draft); return;
@@ -12113,6 +12134,50 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const stored = this.context.globalState?.get<unknown>(this.learnerNicknameKey());
     const screened = typeof stored === "string" ? screenNickname(stored) : null;
     return screened?.ok ? screened.value : "";
+  }
+
+  /**
+   * REQ-STUDIO-SHOW-WHAT-I-MADE (#3794 slice 1) — "내가 만든 것 보여주기", on by default (Jay, 2026-11-12)
+   * and switchable off with `showWhatIMadeEnabled`. Local only: no Service call, no model call, nothing published.
+   */
+  async showWhatIMade(): Promise<void> {
+    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showWhatIMadeEnabled', true);
+    await runShowWhatIMade(this.context.extensionUri, {
+      enabled,
+      root: () => this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      refusal: (target) => this.folderWriteRefusalFor(target),
+      capturePage: (root, abs) => this.captureShowPageImage(root, abs),
+      noteWrite: (absPath, data) => noteHostWrite([{ absPath, data }], "studio"),
+    });
+  }
+
+  /** The person's HTML page as a 1920x1080 picture, served and shot by Studio's own browser like savePagePdf. */
+  private async captureShowPageImage(workRoot: string, file: string): Promise<Uint8Array | null> {
+    if (this.pagePdfBusy || this.deckPdfBusy) return null;
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const real = canonicalFolder(file);
+      root = active && isInsideFolder(real, canonicalFolder(active)) ? active : workRoot;
+      if (active && root !== active) return null;
+    } catch { return null; }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(file)).split(path.sep).join("/");
+    const page = resolvePageInFolder(root, rel);
+    if (!page.ok) return null;
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      tab = await vscode.window.openBrowserTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, background: true });
+      channel = await this.deckPdfAttach(tab);
+      return await captureShowPage(channel.send, { expectedUrl: url });
+    } catch {
+      return null;
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+    }
   }
 
   private takeawayBusy = false;

@@ -136,6 +136,10 @@ const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const hexOf = (c) => "#" + c.map((n) => Math.round(n).toString(16).padStart(2, "0")).join("").toUpperCase();
 /** A colour as painted over `under`: translucent theme colours and `color-mix(in srgb, A p%, B)`. */
 function paint(v, under) {
+  // A state layer (CGP-DS-D-003) is its ink mixed with transparent: in srgb that is the ink at that alpha,
+  // so it is painted over what lies under it.
+  const layer = /^color-mix\(in srgb,\s*(#[0-9a-f]{6})\s+(\d+)%,\s*transparent\)$/i.exec(v ?? "");
+  if (layer) { const p = Number(layer[2]) / 100; return isHex(under) ? hexOf(rgb(layer[1]).map((x, i) => x * p + rgb(under)[i] * (1 - p))) : null; }
   const m = /^color-mix\(in srgb,\s*(#[0-9a-f]{6,8})\s+(\d+)%,\s*(#[0-9a-f]{6,8})\)$/i.exec(v ?? "");
   if (m) { const [a, b, p] = [paint(m[1], under), paint(m[3], under), Number(m[2]) / 100]; return hexOf(rgb(a).map((x, i) => x * p + rgb(b)[i] * (1 - p))); }
   const f = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(v ?? "");
@@ -329,6 +333,9 @@ const NEGATIVE = [
   ["3", "warning text from editorWarning.foreground (Light+ #BF8803)", mutate("tokens.css", "--hp-text-warn-default: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, #E6A373));", "--hp-text-warn-default: var(--vscode-editorWarning-foreground, #E6A373);")],
   ["3", "the CTA from focusBorder (white on Light+ #0090F1)", mutate("tokens.css", "--hp-bg-accent-default: var(--vscode-button-background, #D5F279);", "--hp-bg-accent-default: var(--vscode-focusBorder, #D5F279);")],
   ["3", "the accent text left lime (1.2:1 on white)", mutate("tokens.css", "--hp-text-accent-default: var(--vscode-textLink-foreground, #D5F279);", "--hp-text-accent-default: #D5F279;")],
+  // CGP-CHAT-D-009: the classroom read-aloud control pressed is primary ink on the pressed state layer; a layer
+  // at full strength is the ink on itself (1:1), so the pair must be measured, not skipped.
+  ["3", "the pressed state layer at full strength (ink on itself)", mutate("tokens.css", "--hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent); /* CGP-DS-D-003: light surface */", "--hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 100%, transparent); /* CGP-DS-D-003: light surface */")],
   ["3", "instructor band labels back on the muted role (4.0:1 on the Light+ band)", mutate("styles.css", ".hps-instructor-connection { color: var(--hp-text-primary-default); }", ".hps-instructor-connection { color: var(--hp-text-muted-default); }")],
   ["4", "the ring from the panel border", mutate("tokens.css", "--hp-ring-focus-default: var(--vscode-focusBorder, #D5F279);", "--hp-ring-focus-default: var(--vscode-panel-border, #D5F279);")],
   ["5", "a start-screen colour read from the host", mutate("start.css", /(\.studio-account-pass > span \{[^}]*?color: )var\(--hp-text-muted-default\)/, "$1var(--vscode-descriptionForeground, #aaa)")],

@@ -233,7 +233,7 @@ which Git ignores and which does not exist in a new clone or worktree.
 2. Run `gh auth login` once with an account that can read
    `hypeproof/hypeproof-service`.
 3. Run `npm run bootstrap:service` at the repository root. It prints
-   `Verified 7 pinned private Service packages in ignored local cache.`
+   `Verified 6 pinned private Service packages in ignored local cache.`
 4. Only then run `npm ci`, at the root or in the package you work on.
 
 If step 3 is skipped, `npm ci` ends in `npm error code ENOENT` on a

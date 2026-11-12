@@ -362,3 +362,22 @@ One line per requirement. It must equal the union of the Targets column above; t
 ## Run status
 
 All rows NOT RUN as of 2026-09-29. The registry trace (`worker/test/cr-traceability.test.mjs`) runs in `worker` `npm test`; its passing means the documents agree with each other, not that any CR row is implemented.
+
+## Publish responsibility notice (CGP-ART-R-012 / CGP-ART-D-012)
+
+REQ-STUDIO-PUBLISH-NOTICE (`docs/studio-requirements.md`). Evidence class: synthetic (no Service, no real learner, no packaged App).
+
+| Check | What it proves | File |
+|---|---|---|
+| Host gate | `submit` and `link` refuse before any preview, checklist or request until the current version is acknowledged; a wrong version is refused and not recorded; one record per owner digest per version (first time kept); another learner and an older version read it again; no ledger, no owner, an unsaved record and seven malformed stores fail closed; a well-formed record passes (positive control) | `extensions/hypeproof-chat/test/publish-notice.smoke.mjs` |
+| Panel | the real `PublishPanel`: the sheet opens on publish and on another link, nothing is sent before 알겠어요, 취소 and Escape send nothing and return focus, Escape during IME composition keeps the sheet, 알겠어요 sends the version, an acknowledged learner skips the sheet | `extensions/hypeproof-chat/test/publish-notice.test.tsx` |
+| Layout | headless Chromium, 320/800/1420 x dark/light x personal/classroom x forced colours (24 renders): each bullet at most two lines, measured and under a font-independent bound (Hangul 1 em, other 0.6 em), buttons at least 44 px, text at least 14 px, contrast 4.5:1, edges, focus ring, no horizontal overflow | `extensions/hypeproof-chat/test/publish-notice-layout.smoke.mjs` |
+
+Run (2026-11-12/13), host snts (Ubuntu 24.04.5, Node 22.23.4, headless Chromium), base `4046f722d`, code head `f3d1589f7`:
+
+- Red on base: all three new tests fail on `4046f722d` (the notice module does not exist).
+- Mutations, each red: no gate in `submit`; any notice version accepted; a second record overwriting the first; an ownerless token acknowledged; a missing ledger passing; the panel skipping the sheet.
+- 320 px measure (Chromium default sans): bullets 2, 2 and 2 lines; worst-case widths 422, 346 and 451 px against 506 px for two lines.
+- Full `hypeproof-chat` suite (every step of `npm test`, continued past failures): `tsc` OK, 617 steps OK, 2 failed: `model-selection.smoke.mjs` and `sdk-result-drift.smoke.mjs`, which fail the same way on base `4046f722d`. 119 render tests passed. Two earlier runs caught `korean-input.smoke.mjs` (Escape without an IME guard) and `type-scale.smoke.mjs` (leading 1.35, weight 700) on this change; both are fixed and passed at `f3d1589f7`.
+- After rebasing onto `origin/main` (9 commits, none in the publish files), on the rebased head: `tsc` OK, the 18 publish, outbound, type-scale, korean-input and design-token smokes OK, 120 render tests passed. The full suite was not repeated on the rebased head.
+- Not run: the packaged App, a real screen reader, the Service, the minor-cohort path (not built).

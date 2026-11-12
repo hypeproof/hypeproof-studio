@@ -58,6 +58,7 @@
       { "command": "hypeproof-chat.prepareCompanionWorkspace", "title": "휴대폰 연결: 로컬 작업 폴더 준비", "category": "HypeProof" },
       { "command": "hypeproof-chat.exportMyWork", "title": "내 작업 내보내기", "category": "HypeProof" },
       { "command": "hypeproof-chat.takeMyWork", "title": "내 작업 가져가기", "enablement": "config.hypeproofChat.workTakeawayEnabled" },
+      { "command": "hypeproof-chat.showWhatIMade", "title": "내가 만든 것 보여주기", "category": "HypeProof", "enablement": "config.hypeproofChat.showWhatIMadeEnabled" },
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
       { "command": "hypeproof-chat.activityTrash", "title": "활동 휴지통 열기", "enablement": "config.hypeproofChat.activityTrashEnabled" },
@@ -573,6 +574,10 @@
           "type": "boolean", "default": false, "scope": "machine",
           "description": "미리보기 화면에 표시를 남겨 한꺼번에 보낼 수 있게 합니다. 수업에서 제공하는 실행 환경과 이미지 권한이 있어야 합니다. 기본은 꺼짐입니다."
         },
+        "hypeproofChat.showWhatIMadeEnabled": {
+          "type": "boolean", "default": true, "scope": "machine",
+          "description": "내가 만든 것 보여주기를 쓸 수 있게 합니다. 누구에게 무엇을 보여 줄지 묻고, 내 작품과 내가 적은 문장으로 짧은 장면을 이 기기의 작업 폴더에만 만듭니다. 아무것도 올리거나 보내지 않습니다. 기본은 켜짐입니다."
+        },
         "hypeproofChat.workTakeawayEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
           "description": "활동이 바뀔 때 내 작업을 이 기기에 따로 저장해 둘 수 있게 합니다. 모든 이용 방식에서 기본은 꺼짐이며, 참여 코드나 AI 사용 권한은 옮기지 않습니다."
@@ -762,7 +767,7 @@
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "cd webview-ui && npm run dev",
     "package": "vsce package --no-dependencies",
-    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs",
+    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/classroom-join-code.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
     "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",

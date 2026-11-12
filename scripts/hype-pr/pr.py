@@ -87,16 +87,27 @@ def _lock(handle, seconds):
 
     Released when the handle is closed, also when the process dies.
     """
-    try:
-        import fcntl
-    except ImportError:  # No fcntl (Windows): runs are not serialized.
-        return True
     import time
+
+    if os.name == "nt":
+        import msvcrt
+        # Lock the same byte in every process, including a newly created file.
+        # Append mode is used by prepare_engine; flush before byte-range locking.
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write("0")
+            handle.flush()
+    else:
+        import fcntl
 
     deadline = time.monotonic() + seconds
     while True:
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if os.name == "nt":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return True
         except OSError:
             if time.monotonic() >= deadline:
