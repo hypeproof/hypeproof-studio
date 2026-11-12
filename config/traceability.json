@@ -6715,6 +6715,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## N. Native browser + agentic control (#278)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Named HTML auto-preview (REQ-D5)"
         }
       ]
     },
@@ -7199,6 +7203,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/live-preview-url.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-recovery-provider.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
         }
       ]
     },
