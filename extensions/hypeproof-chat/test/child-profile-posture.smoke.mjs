@@ -150,7 +150,7 @@ assert.equal(child.childRefusalNow('store'), null);
 
 // ── Wiring: each surface's handler checks the child seat first ───────────────────
 const wiring = [
-  ['extension.ts', /"hypeproof-chat\.showPasses".*refuseOnChildSeat\("purchase"\)/],
+  ['startPage.ts', /private async handlePurchase\(msg: StartRequest\): Promise<void> \{\n(?:\s*\/\/.*\n)?\s+const childRefusal = msg\.type === "purchaseCancel" \|\| msg\.type === "purchaseHide" \? null : childRefusalNow\("purchase"\);/],
   ['extension.ts', /"hypeproof-chat\.publishSite".*refuseOnChildSeat\("publish"\)/],
   ['extension.ts', /"hypeproof-chat\.publishTestVersion".*refuseOnChildSeat\("publish"\)/],
   ['extension.ts', /"hypeproof-chat\.ventureMemory".*refuseOnChildSeat\("memory"\)/],
@@ -170,7 +170,7 @@ const wiring = [
   ['proxyClient.ts', /profile: applyChildPosture\(\(await res\.json\(\)\) as ResolvedProfile\)/],
 ];
 for (const [file, re] of wiring) assert.match(src(file), re, `${file}: ${re}`);
-assert.match(readFileSync(fileURLToPath(new URL('../webview-ui/src/ChatPanel.tsx', import.meta.url)), 'utf8'), /config\.guardianNotice && <p className="hps-class-window" role="note" data-testid="guardian-notice">/, 'GRD-24: the chat panel draws the notice with no close button');
+assert.match(readFileSync(fileURLToPath(new URL('../webview-ui/src/ChatPanel.tsx', import.meta.url)), 'utf8'), /<><ClassWindowNotice window=\{config\.classWindow\} \/>\{config\.guardianNotice && <p className="hps-class-window" role="note" data-testid="guardian-notice">/, 'GRD-24: the chat panel draws the notice with no close button');
 
 // ── Manifest: the switch exists, machine-scoped, default off ─────────────────────
 {
