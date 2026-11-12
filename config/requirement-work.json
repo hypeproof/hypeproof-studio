@@ -395,6 +395,18 @@
       "test": "docs/testing/classroom-admin.md"
     },
     {
+      "path": "docs/requirements/classroom-join-code.md",
+      "ids": [
+        "ADM-15"
+      ],
+      "inline_prefixes": [],
+      "sha256": "45b3f8161d187115baa346e5e16c70005968ab9ca4e0e589e0fb066e3e8a0281",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/classroom-join-code.md",
+      "test": "docs/testing/classroom-admin.md"
+    },
+    {
       "path": "docs/requirements/studio-native-trial-ux.md",
       "ids": [
         "TUX-A11Y-01",
@@ -1433,6 +1445,37 @@
         "docs/testing/classroom-admin.md",
         "docs/requirements/classroom-admin.md",
         "docs/plan/learning-agent-experience-epics.md"
+      ]
+    },
+    {
+      "id": "e5-class-join-code",
+      "title": "재직자 수업: 수업 코드 하나로 좌석 연결",
+      "issue": 3778,
+      "kind": "implementation",
+      "feature_ids": [
+        "deliver-operate"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-join-code.md",
+          "ids": [
+            "ADM-15"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Service 수업 코드(hypeproof-service E5)와 App 8자리 입력, Chalk 코드 만들기·폐기를 함께 낸다. Mac dev host 종단 검증은 #3779.",
+      "design_delta": "기존 /connect 연결 생성(connectSeat)을 재사용하고, 코드는 해시만 저장하며 학습 토큰이 좌석을 정한다.",
+      "positive_control": "명단에 있는 수강생 두 명이 같은 수업 코드로 각자 좌석에 연결되고 두 번째 창이 첫 창을 대체한다.",
+      "negative_control": "코드만으로 연결·다른 수업 토큰·좌석 없는 handle·폐기된 강사의 코드·만료/폐기/대체 코드를 구분하는 응답 금지.",
+      "evidence_required": "Service·App·Chalk SHA, 테스트 명령과 결과, dev host 화면. NOT RUN과 합성/실기 증거를 구분한다.",
+      "implementation_paths": [
+        "chalk/src",
+        "extensions/hypeproof-chat/src"
+      ],
+      "verification_inputs": [
+        "docs/requirements/classroom-join-code.md",
+        "docs/testing/classroom-admin.md"
       ]
     },
     {
