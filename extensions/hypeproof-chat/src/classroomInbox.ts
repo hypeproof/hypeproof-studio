@@ -65,7 +65,8 @@ export function validateAnswer(raw: unknown, spec: QuestionSpec): QuestionAnswer
   if (keys[0] === "skipped") return a.skipped === true ? { skipped: true } : null;
   if (spec.type === "choice") return keys[0] === "choice" && Number.isSafeInteger(a.choice) && (a.choice as number) >= 0 && (a.choice as number) < spec.options.length ? { choice: a.choice as number } : null;
   if (keys[0] !== "text" || typeof a.text !== "string" || !a.text.trim() || [...a.text].length > MAX_ANSWER_CHARS || CONTROL_RE.test(a.text)) return null;
-  return { text: a.text };
+  // Normalized exactly as the Service stores it, so what this device shows as sent is what the instructor reads.
+  return { text: a.text.replace(/\r\n?/g, "\n").trim() };
 }
 export function validateItem(raw: unknown): Verdict<InboxItem> {
   const bad = (code: "schema" | "unsupported_kind" = "schema"): Verdict<never> => ({ ok: false, code });

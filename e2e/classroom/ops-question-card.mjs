@@ -9,8 +9,8 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 //  - the answers view follows the board's refresh while it is open; withdrawal through the distribution ledger;
 //  - nothing ever says a learner opened or read a card.
 // Real here: Chalk /manage in Chromium, Chalk worker + forwarder, the Service router + SQLite. The learner devices are the
-// Service sync protocol driven directly (receipts as the app sends them); this Studio checkout's app does not yet declare
-// `inbox_question`, so its InboxSession is not used here.
+// Service sync protocol driven directly (receipts as the app sends them); the app's own inbox path is covered by
+// e2e/classroom/ops-question.mjs.
 import assert from 'node:assert/strict';
 import { e5Stack, OPS_ALL, until } from './e5-chalk.mjs';
 
