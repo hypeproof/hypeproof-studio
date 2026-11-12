@@ -135,6 +135,7 @@ export class StartPage {
   private accountEntryRevision = 0;
   private reflectionEntry?: ReflectionEntry;
   private reflectionEntering = false;
+  private openingChat?: vscode.WebviewPanel;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -449,8 +450,15 @@ export class StartPage {
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;
-    await this.chat.openInEditor(entry);
-    if (this.panel === entry) this.panel = undefined;
+    // Chat reuses this webview and can send ready before openInEditor resolves.
+    // Its messages must never be interpreted as canceling the start-page intent.
+    this.openingChat = entry;
+    try {
+      await this.chat.openInEditor(entry);
+      if (this.panel === entry) this.panel = undefined;
+    } finally {
+      if (this.openingChat === entry) this.openingChat = undefined;
+    }
     this.started = true;
     this.deferProfileUntilEntry = false;
     this.chat.refreshConfig();
@@ -466,7 +474,9 @@ export class StartPage {
     this.panel = panel;
     panel.webview.html = this.chat.renderHtml(panel.webview, vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist"))
       .replace(/<html\b/, '<html data-surface="start"');
-    panel.webview.onDidReceiveMessage((msg: StartRequest) => { void this.handle(msg); });
+    panel.webview.onDidReceiveMessage((msg: StartRequest) => {
+      if (this.panel === panel && this.openingChat !== panel) void this.handle(msg);
+    });
     // #747 — the naming step happens in the chat panel; this tab is retained
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.

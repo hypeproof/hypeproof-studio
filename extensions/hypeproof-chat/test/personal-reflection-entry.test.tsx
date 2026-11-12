@@ -53,6 +53,18 @@ async function main() {
  console.log('PASS visible first entry and restored rail → real account/admission/host/store; same-account task reuse and zero AI/tool turns');
  await close();
 
+ for (const phase of ['beforeHandoff', 'beforeConsent']) {
+  const mounted = await personalEntryFixture({ realPanel: true });
+  mounted.control[phase] = async () => mounted.current.source.emit({ type: 'ready' });
+  await mounted.current.page.openPersonalReflectionEntry();
+  await mounted.login();
+  assert.equal(mounted.requests.filter((r: any) => r.route.endsWith('/me/reflection')).length, 1,
+    `chat ready during ${phase} must not cancel the first question`);
+  assert.equal(mounted.current.h.currentTaskStore().getHistory()[0].id, 'phone-user');
+  mounted.close();
+ }
+ console.log('PASS real start-panel listener ignores chat ready during handoff and disclosure');
+
  await setup({ passes: [{ id: 'normal-pass', product_name: '내 이용권', status: 'paid', requests_remaining: 10, requests_limit: 10, requests_used: 0, duration_seconds: 86400 }] });
  await click('[data-testid="personal-reflection-entry"]'); await login();
  assert.equal(fixture.current.connections.current, undefined); assert.equal(reflectionGets(), 0);

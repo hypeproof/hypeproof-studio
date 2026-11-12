@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 let bundle;
 const state = (beforeUpdate = () => {}) => { const map = new Map(); return { map, keys: () => [...map.keys()], get: (key, fallback) => map.has(key) ? map.get(key) : fallback, update: async (key, value) => { beforeUpdate(key, value); if (value === undefined) map.delete(key); else map.set(key, value); } }; };
 export const deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return { promise, resolve }; };
-export async function personalEntryFixture({ reload = false, passes, publish = () => {} } = {}) {
+export async function personalEntryFixture({ reload = false, passes, publish = () => {}, realPanel = false } = {}) {
   bundle ??= await build({ stdin: { contents: "export {StartPage} from './src/startPage';export {AccountSession} from './src/accountSession';export {ActivityConnections} from './src/activityConnections';export {ChatPanelProvider} from './src/chatPanelProvider';export {TaskWorkspaceStore} from './src/taskWorkspaceStore';export {ensureWorkspace} from './src/extension';export {consumeActivityResume,resumeKey} from './src/studioNavigation';export {fetchProfileResult} from './src/proxyClient';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hps-personal-entry-'))), work = path.join(root, 'my-work'); fs.mkdirSync(work);
   const service = 'http://127.0.0.1:31999/v1', site = 'http://127.0.0.1:31999';
@@ -41,7 +41,7 @@ export async function personalEntryFixture({ reload = false, passes, publish = (
   };
   const vscode = { ViewColumn: { One: 1 }, Uri: { file: fsPath => ({ fsPath }), joinPath: (...parts) => ({ fsPath: parts.map(p => p.fsPath ?? p).join('/') }) }, env: { clipboard: { writeText: async () => {} } },
     workspace: { workspaceFolders: reload ? [] : [{ uri: { fsPath: work }, name: 'my-work' }], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? service : key === 'siteBase' ? site : fallback }) },
-    window: { showInformationMessage: async () => control.consent, showWarningMessage: async () => undefined },
+    window: { showInformationMessage: async () => { await control.beforeConsent?.(); return control.consent; }, showWarningMessage: async () => undefined },
     commands: { executeCommand: async (name, ...args) => { commands.push({ name, args }); if (name === 'vscode.openFolder') await control.beforeOpen?.(); if (name === 'hypeproof-chat.personalReflection') await current.page.openPersonalReflectionEntry(); } } };
   const mod = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, process, structuredClone, setTimeout, clearTimeout, setInterval, clearInterval, AbortController, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto, fetch });
@@ -61,17 +61,24 @@ export async function personalEntryFixture({ reload = false, passes, publish = (
     h.postConfig = async () => { await h.prepareTaskWorkspace(false); };
     h.refreshConfig = async () => { await h.postConfig(); };
     h.focusDiagnostic = () => {};
-    h.openInEditor = async entry => { h.editorChat = entry; await h.postConfig(); };
+    h.openInEditor = async entry => { h.editorChat = entry; await control.beforeHandoff?.(); await h.postConfig(); };
     let page;
     const accounts = new AccountSession({ service, site, secrets: raw.secrets, label: 'Synthetic desktop', fetch, openBrowser: async () => true, changed: () => page?.accountChanged(), signedIn: async () => page.finishAccountSignIn() }); sessions.push(accounts);
     connections.accountToken = binding => accounts.resolvePass(binding); h.setReflectionAccount(accounts);
-    const source = { postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); publish(copy); return true; } };
-    const panel = { webview: source, reveal() {}, dispose() {} };
+    const listeners = new Set();
+    const source = {
+      postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); publish(copy); return true; },
+      onDidReceiveMessage: listener => { listeners.add(listener); return { dispose: () => listeners.delete(listener) }; },
+      emit: message => { for (const listener of listeners) listener(message); },
+    };
+    const panel = { webview: source, reveal() {}, dispose() {}, onDidChangeViewState: () => ({ dispose() {} }), onDidDispose: () => ({ dispose() {} }) };
+    vscode.window.createWebviewPanel = () => panel;
+    h.renderHtml = () => '<html></html>';
     page = new StartPage(context, h, (p, commit, selected, reflection, validate) => ensureWorkspace(p, context, false, commit, selected, reflection, validate), undefined, accounts);
     // Presentation mounting is the VS Code seam; all action dispatch/admission/store methods remain real.
-    page.show = async () => { page.panel ??= panel; await page.refresh(); };
+    if (!realPanel) page.show = async () => { page.panel ??= panel; await page.refresh(); };
     page.offerWaited = true; page.trialOffer = null; page.products = null;
-    await page.show();
+    await page.show(); if (realPanel) await page.refresh();
     return { context, h, page, accounts, connections, panel, source };
   };
   let current = await make(), chatSurface = false;
