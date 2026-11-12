@@ -566,7 +566,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private attemptWrite?: Promise<void>;
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
-  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
+  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore; ready?: Promise<void> };
   /** Failed turns are not in durable history yet; keep only bounded, task-bound retry metadata. */
   private turnRequests = new Map<string, { scope: string; message: ChatMessage }>();
   /** CGP-CHAT-R-029 — the one removed file/page chip and the one rename that 되돌리기 can still put back. */
@@ -681,14 +681,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
   }
 
-  async openPersonalReflection(): Promise<void> {
+  async openPersonalReflection(stillWanted: () => boolean = () => true): Promise<void> {
     const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
+    if(!stillWanted())return;
     if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
     if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
     const scope=this.mobileConversationScope(true);
     if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
     const store=this.currentTaskStore()!;
-    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
+    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(!stillWanted()||this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
     let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
     if(!b){
       const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
@@ -825,14 +826,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
-    if (this.taskWorkspace?.activityId === activity.id) return;
+    if (this.taskWorkspace?.activityId === activity.id) { await this.taskWorkspace.ready; return; }
     const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
-    this.taskWorkspace = { activityId: activity.id, store };
-    try {
-      await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
-    } catch {
-      // The error view is shown, and sends are blocked. Never replace unreadable history.
-    }
+    const opening = { activityId: activity.id, store, ready: Promise.resolve() };
+    this.taskWorkspace = opening;
+    opening.ready = (async () => {
+      try {
+        await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
+      } catch {
+        // The error view is shown, and sends are blocked. Never replace unreadable history.
+      }
+    })();
+    await opening.ready;
   }
 
   /**
@@ -8393,6 +8398,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
+    if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }

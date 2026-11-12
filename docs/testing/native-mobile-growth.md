@@ -88,3 +88,44 @@ Signed acceptance: open the existing iPhone personal conversation, preserve a dr
 Run43137056162/1 failed all9 Android UI tests while the captured foreground was `Application Not Responding: com.google.android.apps.nexuslauncher`; the original PNG showed the Pixel Launcher ANR dialog, with the emulator awake and unlocked. This evidence identifies the foreground obstruction, not a passing app test or a proven emulator root cause. Preserve that failed run.
 
 The native Android script now records bounded read-only window/power observations after installation and before instrumentation. Missing state, sleep, keyguard or a foreground ANR/error dialog cannot start UI tests. Failure capture adds a machine-readable diagnosis and input hashes while retaining the original nonzero exit code, logs and screenshot. Studio ANRs remain distinct from foreign ANRs. No dialogs are dismissed, failed tests skipped, or acceptance rules relaxed. Readiness permits starting tests only; full native test completion is still required. Actual Foundry profile adoption remains separately NOT RUN.
+
+
+## Desktop visible question entry (#3798)
+
+`personal-reflection-entry.test.tsx` renders the actual StartPage and sends its typed
+messages to the actual StartPage host, AccountSession, ActivityConnections,
+ensureWorkspace and reflection/task-store implementation. The fixture supplies
+VS Code services, presentation/configuration lifecycle seams and synthetic HTTP
+responses; first entry has no seeded account
+credential, activity binding, task or history. The source proof is separate from the
+installed desktop and real Service/Google acceptance below.
+
+- Start with default hidden status/activity bars. Press **나의 질문**, finish the
+  existing browser account flow and eligible grant, confirm storage disclosure, then
+  observe original same-account message IDs in the existing task. No AI POST/tool
+  dispatch is an entry side effect.
+- With a normal account pass, the existing **이 이용권으로 시작하기** choice retains
+  question intent. Missing access or a refused activation shows the account/pass
+  reason; no automatic purchase/free fallback or workspace replacement occurs.
+- Cancel login, leave the account screen, switch accounts during activation, or press
+  entry repeatedly while a snapshot is pending. No late redirect, second reflection
+  task, extra AI turn or foreign-account transcript may appear.
+- Change task/activity while the first snapshot is pending. The selected work and
+  admitted activity remain connected after the stale response is refused. A negative
+  control that restores the old post-admission rollback must fail this assertion.
+- Begin with no active folder and allow the actual workspace router to switch to its
+  prepared folder. Recreate the host, consume the real activity-resume marker, and
+  revalidate account/session. Exactly one continuation is allowed; a second launch,
+  stale/mismatched marker or different account must not revive it.
+- From a restored personal task, use the visible rail action to reuse reflection.
+  Preserve existing draft/active stream refusal. Concurrent config reads must wait
+  for the real durable store initialization rather than reading an empty half-ready
+  store; a negative control that removes the shared wait must fail.
+
+Focused command: `node scripts/run-tsx-tests.mjs personal-reflection-entry` from
+`extensions/hypeproof-chat`. Relevant existing controls are initial-surface,
+activity-resume, studio-folder-navigation, account-start-entry and
+mobile-conversation-host. Evidence must name the exact source, Node/OS, command and
+exit code. Simulator/native tests, physical iPhone, actual Google/account admission,
+installed desktop focus/navigation and live model quality remain **NOT_RUN** unless
+separately observed. A prepared runner or green build is not that observation.

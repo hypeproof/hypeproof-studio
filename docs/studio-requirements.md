@@ -1,5 +1,20 @@
 # Studio behavioral requirements
 
+## Personal question entry (#3798)
+
+MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
+screen and existing personal task navigation, including shipped layouts with the
+status/activity bars hidden. The explicit intent uses existing account sign-in,
+personal admission and activity/workspace preparation before opening the existing
+reflection task. Normal pass selection retains that intent; it never starts checkout
+or grants AI access. A validated, consumed-once activity-resume marker carries the
+account/session binding through a required folder reload. Cancel, logout, a changed
+account/task/activity, active work or failed persistence preserves the original work
+and cannot trigger a late question redirect. Classroom entry remains explicit.
+
+See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
+and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
+
 ## Personal task workspace (#1756)
 
 `REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and

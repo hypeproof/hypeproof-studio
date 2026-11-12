@@ -24,6 +24,7 @@ import { passSurface, type PassSurface, type PurchasePathEvent } from "./funnelE
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
 import { TEXT_SIZE_KEY } from "./textSize";
+import type { ActivityResume } from './studioNavigation';
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -67,6 +68,7 @@ const isLegacyHistoryKey = (key: string): boolean =>
 type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding; replacesFree?: string };
 /** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
 type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
+type ReflectionEntry = { accountId?: string; sessionId?: string; activity?: string; workspace?: string; service: string; opening: boolean; waiting?: boolean; task?: string };
 
 /** App entry surface; authentication and cohort authority remain in Service. */
 export class StartPage {
@@ -131,10 +133,13 @@ export class StartPage {
   private useGrantAfterSignIn = false;
   private enteringAccountGrant = false;
   private accountEntryRevision = 0;
+  private reflectionEntry?: ReflectionEntry;
+  private reflectionEntering = false;
+  private openingChat?: vscode.WebviewPanel;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
-    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
+    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string, reflection?: ActivityResume['personalReflection'], validateEntry?: () => Promise<void>) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
   ) {
@@ -152,6 +157,8 @@ export class StartPage {
   accountChanged(): void {
     // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
     const account = this.accounts?.view();
+    if (this.reflectionEntry && ((this.reflectionEntry.accountId && account?.account?.id !== this.reflectionEntry.accountId)
+        || (this.reflectionEntry.waiting && account?.status === 'signedOut' && !account.busy))) this.reflectionEntry = undefined;
     if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
     else if (this.purchaseSignIn && (!account || (account.status === "signedOut" && !account.busy))) this.purchaseSignIn = undefined;
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
@@ -166,6 +173,7 @@ export class StartPage {
 
   /** Explicit login resumes granted personal use; background refresh never changes activities. */
   async finishAccountSignIn(): Promise<void> {
+    if (this.reflectionEntry) { await this.continuePersonalReflection(); return; }
     if (!this.useGrantAfterSignIn) return;
     this.useGrantAfterSignIn = false;
     const account = this.accounts?.view();
@@ -174,6 +182,106 @@ export class StartPage {
     const grant = account.passes?.find(pass => pass.id === "super" && pass.status === "active" && pass.requests_remaining > 0);
     if (!grant) return;
     await this.enterGrantedAccountPass();
+  }
+
+  private reflectionStillWanted(entry: ReflectionEntry): boolean {
+    const current = activityConnections(this.context)?.current;
+    return this.reflectionEntry === entry && this.settings().proxyUrl === entry.service
+      && current?.id === entry.activity && current?.workspace === entry.workspace
+      && (!entry.accountId || this.accounts?.view().account?.id === entry.accountId)
+      && (!entry.task || this.chat.mobileConversationScope(true)?.task === entry.task);
+  }
+  private async assertReflectionEntry(entry: ReflectionEntry): Promise<void> {
+    if (!this.reflectionStillWanted(entry) || (entry.sessionId && await this.accounts?.conversationSession() !== entry.sessionId)
+        || !this.reflectionStillWanted(entry)) throw new ActivityConnectionError('계정이나 활동이 바뀌었어요. 현재 화면에서 나의 질문을 다시 선택해 주세요.');
+  }
+  /** One explicit action owns login, existing admission and the existing reflection task. */
+  async openPersonalReflectionEntry(): Promise<void> {
+    if (this.reflectionEntry || this.reflectionEntering || this.busy) return;
+    const current = activityConnections(this.context)?.current;
+    if (current?.kind === 'classroom' || current?.lesson || this.chat.isInstructor) {
+      await this.show(); this.error = '수업은 그대로 유지했어요. 개인 활동을 선택한 뒤 나의 질문을 시작해 주세요.'; await this.refresh(); return;
+    }
+    if (this.chat.hasActiveStream()) {
+      await this.show(); this.error = '진행 중인 작업을 마치거나 중지한 뒤 나의 질문을 열어 주세요.'; await this.refresh(); return;
+    }
+    if (!this.accounts) { await this.show(); await this.handle({ type: 'accountSignIn' }); return; }
+    const entry: ReflectionEntry = { accountId: this.accounts.view().account?.id, activity: current?.id, workspace: current?.workspace, service: this.settings().proxyUrl, opening: false, task: this.chat.mobileConversationScope(true)?.task };
+    this.reflectionEntry = entry; this.useGrantAfterSignIn = false; this.error = undefined;
+    try {
+      if (this.accounts.view().status !== 'signedIn') {
+        await this.show(); await this.refresh();
+        if (!this.reflectionStillWanted(entry)) return;
+        entry.waiting = true; await this.accounts.start();
+        if (this.accounts.view().status !== 'signedIn') return;
+      }
+      await this.continuePersonalReflection();
+    } catch (error) { await this.reflectionEntryFailed(entry, error); }
+  }
+  private async reflectionEntryFailed(entry: ReflectionEntry, error: unknown): Promise<void> {
+    if (this.reflectionEntry !== entry) return;
+    if (!this.reflectionStillWanted(entry)) { this.reflectionEntry = undefined; return; }
+    this.reflectionEntry = undefined;
+    await this.show();
+    this.error = error instanceof AccountError || error instanceof ActivityConnectionError || error instanceof Error
+      ? error.message : '나의 질문을 열지 못했어요. 기존 작업은 그대로 있어요.';
+    await this.refresh();
+  }
+  private async continuePersonalReflection(passId?: string): Promise<void> {
+    const entry = this.reflectionEntry, accounts = this.accounts;
+    if (!entry || !accounts || this.reflectionEntering) return;
+    this.reflectionEntering = true;
+    try {
+      await this.assertReflectionEntry(entry);
+      const session = await accounts.conversationSession();
+      await this.assertReflectionEntry(entry);
+      const account = accounts.view();
+      if (!session || account.status !== 'signedIn' || !account.account?.id) throw new ActivityConnectionError('Google 로그인을 마친 뒤 나의 질문을 다시 선택해 주세요.');
+      entry.sessionId = session; entry.accountId = account.account.id;
+      const current = activityConnections(this.context)?.current;
+      if (current?.kind === 'personal' && activityConnections(this.context)?.matchesService) {
+        if (current.accountPass && current.accountPass.sessionId !== session) throw new ActivityConnectionError('이 개인 활동의 계정이 달라요. 내 계정의 활동을 선택해 주세요.');
+        const profile = await this.chat.ensureProfile(true); await this.assertReflectionEntry(entry);
+        if (profile?.activity_kind !== 'personal' || profile.lesson) throw new ActivityConnectionError('개인 활동 연결을 확인하지 못했어요. 내 계정 · 이용권에서 확인해 주세요.');
+        entry.opening = true;
+        if (this.panel) await this.openChat();
+        await this.chat.refreshConfig(); await this.assertReflectionEntry(entry);
+        await this.chat.openPersonalReflection(() => this.reflectionStillWanted(entry));
+        if (this.reflectionEntry === entry) this.reflectionEntry = undefined;
+        return;
+      }
+      if (current && !current.free) throw new ActivityConnectionError('현재 활동은 그대로 유지했어요. 개인 활동을 선택한 뒤 나의 질문을 시작해 주세요.');
+      // Keep the existing account pass chooser. A normal pass may start its paid period on
+      // activation, so only its explicit button selects it; the existing super grant is immediate.
+      const chosen = passId ?? account.passes?.find(pass => pass.id === 'super' && pass.status === 'active' && pass.requests_remaining > 0)?.id;
+      await this.show(); await this.assertReflectionEntry(entry);
+      if (!chosen) {
+        this.error = account.passes?.length ? '나의 질문에 사용할 이용권을 골라 주세요.' : '개인 AI 이용 권한이 아직 없어요. 내 계정 · 이용권에서 권한을 확인해 주세요. 기존 작업은 그대로 있어요.';
+        await this.refresh(); return;
+      }
+      try { await this.activateAccountPass(chosen, () => this.reflectionStillWanted(entry)); }
+      catch (error) {
+        await this.assertReflectionEntry(entry);
+        this.error = error instanceof Error ? error.message : '이용권을 확인하지 못했어요. 다른 이용권을 선택하거나 새로고침해 주세요.';
+        await this.refresh(); return;
+      }
+      await this.assertReflectionEntry(entry);
+      if (this.candidate?.profile.activity_kind !== 'personal' || this.candidate.profile.lesson) throw new ActivityConnectionError('이 이용권은 개인 질문 활동이 아니에요. 기존 활동은 그대로 유지했어요.');
+      await this.handle({ type: 'beginCourse' }, () => this.reflectionStillWanted(entry), entry);
+    } catch (error) { await this.reflectionEntryFailed(entry, error); }
+    finally { this.reflectionEntering = false; }
+  }
+  /** Called only with the existing one-shot, validated workspace-resume marker. */
+  async resumePersonalReflection(intent: NonNullable<ActivityResume['personalReflection']>): Promise<void> {
+    if (this.reflectionEntry || !this.accounts) return;
+    const current = activityConnections(this.context)?.current, revision = this.accountEntryRevision;
+    if (current?.kind !== 'personal') return;
+    const task = this.chat.mobileConversationScope(true)?.task;
+    await this.accounts.refreshView();
+    if (this.accountEntryRevision !== revision || activityConnections(this.context)?.current !== current
+        || this.accounts.view().account?.id !== intent.accountId || this.chat.mobileConversationScope(true)?.task !== task) return;
+    this.reflectionEntry = { ...intent, activity: current.id, workspace: current.workspace, task, service: this.settings().proxyUrl, opening: true };
+    await this.continuePersonalReflection();
   }
 
   private async enterGrantedAccountPass(): Promise<void> {
@@ -272,6 +380,7 @@ export class StartPage {
    * learner types the code and starts the class themselves, through the ordinary path.
    */
   async openJoinLink(classId: string): Promise<void> {
+    this.reflectionEntry = undefined;
     if (!isClassId(classId)) return;
     this.joinLink = { classId, seq: (this.joinLink?.seq ?? 0) + 1 };
     this.error = undefined;
@@ -317,6 +426,7 @@ export class StartPage {
 
   /** Release only the entry panel we own; never close user editors or the chat. */
   closeForAutomationPreview(): vscode.ViewColumn | undefined {
+    this.reflectionEntry = undefined;
     const entry = this.panel;
     if (!entry) return undefined;
     const column = entry.viewColumn;
@@ -340,8 +450,15 @@ export class StartPage {
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;
-    await this.chat.openInEditor(entry);
-    if (this.panel === entry) this.panel = undefined;
+    // Chat reuses this webview and can send ready before openInEditor resolves.
+    // Its messages must never be interpreted as canceling the start-page intent.
+    this.openingChat = entry;
+    try {
+      await this.chat.openInEditor(entry);
+      if (this.panel === entry) this.panel = undefined;
+    } finally {
+      if (this.openingChat === entry) this.openingChat = undefined;
+    }
     this.started = true;
     this.deferProfileUntilEntry = false;
     this.chat.refreshConfig();
@@ -357,12 +474,14 @@ export class StartPage {
     this.panel = panel;
     panel.webview.html = this.chat.renderHtml(panel.webview, vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist"))
       .replace(/<html\b/, '<html data-surface="start"');
-    panel.webview.onDidReceiveMessage((msg: StartRequest) => { void this.handle(msg); });
+    panel.webview.onDidReceiveMessage((msg: StartRequest) => {
+      if (this.panel === panel && this.openingChat !== panel) void this.handle(msg);
+    });
     // #747 — the naming step happens in the chat panel; this tab is retained
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
       // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
       // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
       this.passListShown = true; this.accounts?.cancel(false); } });
@@ -572,6 +691,7 @@ export class StartPage {
    * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
    */
   async showPurchase(surface?: unknown): Promise<void> {
+    this.reflectionEntry = undefined;
     // CONV-FUNNEL-R-006 — the command argument names the surface; anything else is the end card's.
     this.passListSurface = passSurface(surface, "end_card");
     await this.show();
@@ -848,6 +968,7 @@ export class StartPage {
       legacyHistory,
       activities,
       checking: this.busy,
+      personalReflectionPending: !!this.reflectionEntry,
       started: !this.candidate && this.started && !!p,
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
@@ -907,8 +1028,12 @@ export class StartPage {
     } finally { await this.chat.setConnectionChanging(false); }
   }
 
-  private async handle(msg: StartRequest, continuation?: () => boolean): Promise<void> {
+  private async handle(msg: StartRequest, continuation?: () => boolean, reflection?: ReflectionEntry): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.type === 'openPersonalReflection') { await this.openPersonalReflectionEntry(); return; }
+    if (msg.type === 'accountActivate' && this.reflectionEntry) { await this.continuePersonalReflection(msg.passId); return; }
+    if (!continuation && !['startReady', 'accountRefresh', 'accountReopen', 'accountCopyLink'].includes(msg.type)) this.reflectionEntry = undefined;
+    if (msg.type === 'cancelPersonalReflection') { if (this.accounts?.view().status === 'waiting' || this.accounts?.view().busy) this.accounts.cancel(); await this.refresh(); return; }
     if (!continuation && !["startReady", "accountRefresh", "accountReopen", "accountCopyLink"].includes(msg.type)) this.accountEntryRevision++;
     if (!["startReady", "accountSignIn", "accountReopen", "accountCopyLink", "accountRefresh"].includes(msg.type)) this.useGrantAfterSignIn = false;
     if (msg.type.startsWith("account")) {
@@ -1147,6 +1272,8 @@ export class StartPage {
           await verifyActivity({proxyUrl:candidate?.proxyUrl ?? vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token},profile.activity_id ?? '');
         }
         const commit = async (directory?: string) => {
+          if (reflection) await this.assertReflectionEntry(reflection);
+          if (continuation && !continuation()) throw new ActivityConnectionError('활동 열기를 취소했어요. 기존 작업은 유지됩니다.');
           if (!this.panel || (candidate && !committed && this.candidate !== candidate)) throw new Error("Activity entry was cancelled");
           if (!candidate || committed) return;
           previous = await this.context.secrets.get(TOKEN_KEY);
@@ -1157,12 +1284,14 @@ export class StartPage {
             // REQ-L12 ⑫ — read who held this folder before the pass takes it over (carry-over offer).
             const previousHolder = carryoverAdvertised(profile) ? await connections.forWorkspace(root).catch(() => undefined) : undefined;
             rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass,candidate.replacesFree ? { replacesFree: candidate.replacesFree } : undefined);
+            if (reflection && this.reflectionEntry === reflection) { reflection.activity = connections.current?.id; reflection.workspace = connections.current?.workspace; }
             await this.recordCarryoverOffer(profile!, root, previousHolder, !!candidate.replacesFree && previousHolder?.id === candidate.replacesFree);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
           this.chat.invalidateProfile();
           if (vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           if (!await this.chat.ensureProfile(true)) throw new Error('connection validation failed');
+          if (reflection) await this.assertReflectionEntry(reflection);
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           // REQ-L12 ⑦ — the purchased activity is entered and verified; the order record has done its job.
           // Retired only now: a check above that fails rolls the entry back and must leave 다시 연결 possible.
@@ -1170,10 +1299,26 @@ export class StartPage {
           this.candidate = undefined;
         };
         const selectedWorkspace = candidate?.workspace ?? (connections?.matchesService && connections.current?.serverId === profile.activity_id ? connections.current?.workspace : undefined);
-        if (await this.begin(profile, commit, selectedWorkspace)) return; // workspace switch reloads the window
+        if (reflection) await this.assertReflectionEntry(reflection);
+        if (await this.begin(profile, commit, selectedWorkspace, reflection?.accountId && reflection.sessionId ? { accountId: reflection.accountId, sessionId: reflection.sessionId } : undefined, reflection ? () => this.assertReflectionEntry(reflection) : undefined)) {
+          // The validated activity-resume marker now owns this one explicit navigation.
+          if (reflection && this.reflectionEntry === reflection) this.reflectionEntry = undefined;
+          return;
+        }
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
+        if (reflection) { await this.assertReflectionEntry(reflection); reflection.opening = true; }
         await this.openChat();
+        if (reflection) {
+          // Admission is complete. A later question refusal must not roll back the activity
+          // after the person has already changed tasks or started work in its chat.
+          try {
+            await this.chat.setConnectionChanging(false);
+            await this.chat.refreshConfig(); await this.assertReflectionEntry(reflection);
+            await this.chat.openPersonalReflection(() => this.reflectionStillWanted(reflection));
+          } catch (error) { await this.reflectionEntryFailed(reflection, error); }
+          if (this.reflectionEntry === reflection) this.reflectionEntry = undefined;
+        }
       } catch (error) {
         let restoreFailed = false;
         if (committed) {
@@ -1190,6 +1335,7 @@ export class StartPage {
           ? '활동 연결 복구를 완료하지 못했습니다. 파일은 삭제하지 않았습니다. 앱을 다시 열어 현재 활동을 확인해 주세요.'
           : entryError(error);
       } finally {
+        if (reflection && this.reflectionEntry === reflection) this.reflectionEntry = undefined;
         this.busy = false; await this.chat.setConnectionChanging(false);
         await this.refresh();
       }
