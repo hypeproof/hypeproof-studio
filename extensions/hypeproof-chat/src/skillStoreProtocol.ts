@@ -87,6 +87,8 @@ export interface StoreSellerView {
   tier: "none" | "new" | "standard" | "verified" | "minor";
   cap_krw: number;
   identity_verified: boolean;
+  /** A course that does not sell (every youth course) keeps this account from listing or selling (#3772). */
+  course_blocked?: boolean;
   /** The partner and instructor the seller registered at their first publication (names only; policy v2 `attribution.*`). */
   attribution: StoreAttributionView;
   items: { id: string; title: string; price_krw: number; status: string; report_count: number }[];
@@ -145,6 +147,8 @@ export interface StoreState {
   /** A seller update that adds connections, tools or outputs waits for this consent (F5). */
   consent?: { itemId: string; widened: string[] };
   attributionPreview?: StoreAttributionPreview;
+  /** A mobile identity verification the seller opened in the browser; the panel waits for its outcome. */
+  identity?: { sessionId: string; sandbox: boolean };
 }
 /** The App's single-step draft. The Service checks the text, seals it and never returns it. */
 export interface StorePublishDraft {
@@ -168,6 +172,8 @@ export type StoreRequest =
   | { type: "storeSearch"; query: string }
   | { type: "storePublishQuest"; title: string; summary: string; price_krw: number; attribution?: StoreAttributionInput }
   | { type: "storeResolveCodes"; partnerCode: string; instructorCode: string }
+  | { type: "storeVerifyIdentity" }
+  | { type: "storeCancelIdentity" }
   | { type: "storeSavePayoutAccount"; bankCode: string; accountNumber: string; holderName: string }
   | { type: "storeRun"; itemId: string }
   | { type: "storeOverlayOpen"; itemId: string }

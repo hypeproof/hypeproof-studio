@@ -145,7 +145,11 @@ export class DownloadTracker<D> {
       }
       const item: Pending<D> = { name, policy, dest, key, shownAt: this.now() };
       this.pending.set(guid, item);
-      while (this.pending.size > TRACK_MAX) this.pending.delete(this.pending.keys().next().value as string);
+      while (this.pending.size > TRACK_MAX) {
+        const [oldestGuid, oldest] = this.pending.entries().next().value!;
+        this.pending.delete(oldestGuid);
+        this.deps.notify({ ...downloadFailedNotice(oldest.name, "tracking-limit"), key: oldest.key }, oldest.dest);
+      }
       this.deps.notify({ ...downloadProgressNotice(name), key }, dest);
       return;
     }

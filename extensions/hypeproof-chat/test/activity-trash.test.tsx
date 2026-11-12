@@ -405,6 +405,21 @@ t("every rendered trash control gets min-height 44px from the real stylesheet; �
   await advance(TRASH_TOAST_MS);
 });
 
+t("#3294 invalid deletion times preserve the list and original restore target", async () => {
+  for (const at of [8640000000000001, -8640000000000001, NaN, Infinity]) {
+    await render(`invalid-time-${String(at)}`);
+    await send({ view: view([{ ...entry, at }]) });
+    await press("휴지통 ·");
+    ok(all(e => e.tagName === "SPAN" && e.textContent === "삭제 시각 미확인").length === 1, "unknown time is disclosed instead of invented");
+    ok(button("영구 삭제"), "permanent-delete confirmation remains available");
+    await press("복원");
+    eq(lastAction().action, "restore"); eq(lastAction().target, entry.id); eq(lastAction().scope, SCOPE);
+    await send({ view: view([]), requestId: lastAction().requestId, result: { action: "restore", id: entry.id, path: entry.path } });
+  }
+  await render("valid-time-control"); await send({ view: view() }); await press("휴지통 ·");
+  eq(all(e => e.tagName === "TIME")[0].getAttribute("dateTime"), new Date(entry.at).toISOString(), "valid timestamp preserved");
+});
+
 (async () => {
   for (const [label, fn] of tests) {
     try { await fn(); console.log(`  ok   ${label}`); }

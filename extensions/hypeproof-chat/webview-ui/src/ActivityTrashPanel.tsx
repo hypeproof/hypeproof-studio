@@ -8,11 +8,16 @@ import './modalSurface.css';
 
 import { useEffect, useRef, useState } from 'react';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
-import { TRASH_TOAST_MS, TRASH_UNDO_LABEL, trashResultNotice, type ActivityTrashAction, type ActivityTrashItem, type ActivityTrashView } from '../../src/activityTrashView';
+import { TRASH_TOAST_MS, TRASH_UNDO_LABEL, trashResultNotice, trashDeletedTime, type ActivityTrashAction, type ActivityTrashItem, type ActivityTrashView } from '../../src/activityTrashView';
 import { ArtifactProvenanceList } from './ArtifactProvenanceList';
 import { focusIsLost, returnTarget, useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
 import { onHostMessage, postToHost } from './vscode';
+
+function DeletedTime({ at }: { at: number }) {
+  const time = trashDeletedTime(at);
+  return time ? <time dateTime={time.iso}>{time.label}</time> : <span>삭제 시각 미확인</span>;
+}
 
 interface Toast { key: number; text: string; undo: string | null }
 
@@ -146,7 +151,7 @@ export function ActivityTrashPanel({ files, scopeKey, onAsk, onOpenTurn }: {
         {view.entries.length === 0 ? <p className="tw-trash-note">휴지통이 비어 있어요.</p>
           : <ul aria-label="휴지통의 파일">{view.entries.map(entry => <li key={entry.id}>
             <span className="tw-trash-name">{entry.path}</span>
-            <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('ko-KR')}</time>
+            <DeletedTime at={entry.at} />
             <div className="tw-trash-actions">
               <button type="button" data-trash-restore="" aria-disabled={pending || undefined} aria-label={`복원: ${entry.path}`} onClick={event => { if (pending) return; act('restore', entry.id, { kind: 'list', index: view.entries.indexOf(entry), origin: event.currentTarget }); }}>복원</button>
               <button type="button" aria-disabled={pending || undefined} aria-label={`영구 삭제: ${entry.path}`} onClick={event => { if (pending) return; purgeOpener.current = event.currentTarget; setPurge(entry); }}>영구 삭제…</button>
