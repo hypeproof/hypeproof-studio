@@ -286,6 +286,30 @@ second answer takes over. Every read is a state, a computed style or a minimum b
 text width, so a runner's fonts do not change the verdict. A real Korean voice, screen-reader
 speech of the pressed state and the packaged app are reported separately.
 
+## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)
+
+`test/voice-mute.test.tsx` renders the real VoicePanel, owned by the real popup and session
+reducers, next to a real read-aloud button under a served-voice profile (disclosure read), with a
+scripted synthesizer on the minimal DOM. Both presentations show exactly one `마이크 끄기` and one
+`소리 끄기` button, each with `aria-pressed` and its glyph. `소리 끄기` cancels a reading within the
+press, holds read-aloud (disabled, `읽어 주기, 소리 꺼짐`), sends no session event and leaves capture
+open. `마이크 끄기` sends one `mute`, closes capture and leaves the switch and the reading alone. Both
+are kept across collapse and expand; ending the conversation turns sound back on. Each change is
+announced in a status region. Red on main: all seven cases fail (no such buttons).
+
+`test/voice-read-aloud.smoke.mjs` checks the hub against the switch without React: muting cancels
+synchronously, a muted hub starts nothing, a hub without the switch is unchanged (negative
+control), a disposed hub stops listening. Red on main: the first assertion fails.
+
+`test/voice-mute-controls.smoke.mjs` drives the same composition in headless Chromium, dark and
+light at 1420 and 320 plus forced colours, with real mouse presses: two named toggles per
+presentation, 44px boxes, 20px glyphs, inside the viewport, no sideways scroll, pressed differs by
+glyph, fill and edge (and still differs in forced colours), off words at 14px or more, switches
+independent and kept across collapse and expand. Negative controls run by hand: main's VoicePanel
+fails it (no buttons) and a pressed rule without the edge fails it. Reads are states, computed
+styles and minimum boxes, not text widths, so a runner's fonts do not change the verdict. A real
+voice, a screen reader and the packaged app are reported separately.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell

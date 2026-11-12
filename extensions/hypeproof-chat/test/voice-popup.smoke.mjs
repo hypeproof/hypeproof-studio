@@ -216,8 +216,9 @@ const startInputs = (over = {}) => ({
   assert.equal(expanded.state.presentation, "expanded");
   assert.deepEqual(expanded.voiceEvents, []);
 
-  // 작은 컨트롤은 세 조작을 **항상** 제공한다.
-  assert.deepEqual([...COMPACT_CONTROLS], ["mute", "stop", "expand"]);
+  // The compact control always offers these. CGP-VOICE-R-002: speaker mute is its own control,
+  // never folded into the microphone's.
+  assert.deepEqual([...COMPACT_CONTROLS], ["mute", "output_mute", "stop", "expand"]);
 
   // 컨트롤이 사라지면 멈춘다 — 그리고 조건이 풀려도 **자동 재개하지 않는다**.
   const hidden = runPopupEvents([{ type: "open" }, { type: "pause", reason: "controls_hidden" }]);
