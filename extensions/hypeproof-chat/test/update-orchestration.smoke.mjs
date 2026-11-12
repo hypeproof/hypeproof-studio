@@ -55,7 +55,7 @@ try {
     callbacks[0].fn();
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(banners, [], 'network failure must not clear the banner or claim latest');
-    assert.equal(callbacks[1].ms, 24 * 60 * 60_000);
+    assert.equal(callbacks[1].ms, 4 * 60 * 60_000, "#3411: every 4 hours");
     globalThis.fetch = async () => Response.json(release);
     await callbacks[1].fn();
     await new Promise(resolve => setImmediate(resolve));
@@ -68,7 +68,7 @@ try {
   } finally { globalThis.setTimeout = realTimeout; globalThis.setInterval = realInterval; }
 
   // REQ-STUDIO-START-UPDATE-NOTICE — a transient failure retries after 15 minutes (at most 3 per
-  // 24-hour cycle) instead of waiting a day; a success needs no retry, and dispose cancels a pending one.
+  // 4-hour cycle, #3411) instead of waiting for the next check; a success needs no retry, and dispose cancels a pending one.
   {
     const timers = [], seen = [], realClear = globalThis.clearTimeout;
     const flush = () => new Promise(r => setImmediate(r));

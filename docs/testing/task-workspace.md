@@ -233,6 +233,41 @@ Check arrow focus, Space selection, Enter confirmation, draft-preserving arrival
 and idle arrival. Physical IME, native screen-reader speech and forced-colors
 acceptance must be reported separately from synthetic DOM/browser tests.
 
+## Plan card (CGP-CHAT-D-004 / CGP-CHAT-D30)
+
+`test/plan-first-layout.smoke.mjs` drives the real App in headless Chromium on both
+seats, dark and light, at 320, 480 and 800px: the classroom chip's `aria-pressed`, the
+personal tools-menu item and pill, the card's numbered steps and four actions, the send
+button reading `계획 승인 기다리는 중` and disabled, and geometry (44px targets, no overlap,
+no horizontal scroll, text at least 14px). D-004 adds: every action has the primary's
+height and font size, and `이대로 진행` has its own fill and a heavier weight than each
+secondary action.
+Colours come from tokens only (`test/design-tokens.smoke.mjs` lints every webview sheet).
+Packaged-app and forced-colors acceptance are reported separately.
+
+## Selection action popover and quote chip (CGP-CHAT-D-007 / CGP-CHAT-D72)
+
+`test/quote-reply.test.tsx` checks the pure placement rules (above, the 48px flip,
+row and view clamps, a selection scrolled away), the chip's draft parts (typed text
+kept, quote first when sent, one quote at a time, × removes only the quote), Escape
+from the page and during IME composition, an Escape a menu already handled or pressed
+while a modal is open (the popover stays), nothing during a mouse drag, and the popover
+leaving an answer that starts streaming, through ChatPanel on the minimal DOM.
+`test/elevation-computed.smoke.mjs` measures the popover's overlay level in Dark+ and
+Light+ and, in high contrast and forced colors, that it drops the shadow and keeps a 1px
+solid edge (the theme's contrastBorder in high contrast).
+
+`test/quote-popover-layout.smoke.mjs` drives the real App in headless Chromium with CDP
+mouse and key input, personal and classroom, dark and light, at 320 and 1420px: nothing
+mid-drag; in the page within 150ms of the release and of a selection made without the
+mouse; no entry animation; above the first line with a 2px gap, below the last line when
+the selection is under 48px from the conversation's top; a 44px action that nothing covers;
+Escape from the page; none on the streaming answer; the chip inside the composer card on
+two lines with an ellipsis and a 44px `인용 빼기`; no horizontal scroll added (the 320px
+personal header already scrolls by 11px before any popover in this fixture; the smoke
+prints that as a note). Packaged-app, physical IME and screen-reader acceptance are
+reported separately.
+
 ## Activity trash in 내 작품 (CGP-KNOW-D-013)
 
 - `test/activity-trash-panel.smoke.mjs`: the real provider routes the panel's requests into the

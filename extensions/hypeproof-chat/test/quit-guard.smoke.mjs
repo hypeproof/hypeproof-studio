@@ -23,7 +23,17 @@ const queued = ext.quitGuardPrompt({ turnRunning: false, queuedUnsent: true });
 assert.deepEqual(lines(queued), ["보내지 않은 메시지가 있어요.", "끝내면 이 메시지는 보내지 않아요."]);
 const both = ext.quitGuardPrompt({ turnRunning: true, queuedUnsent: true });
 assert.deepEqual(lines(both), ["지금 하고 있는 대답이 멈춰요.", "보내려던 메시지도 보내지 않아요."]);
-for (const p of [turn, queued, both]) {
+// A preview build in progress is named too (CGP-SHELL-R-004: "a preview build is in progress").
+const preview = ext.quitGuardPrompt({ turnRunning: false, queuedUnsent: false, previewBuilding: true });
+assert.deepEqual(lines(preview), ["만들고 있는 미리보기가 멈춰요.", "만든 파일은 그대로 남아요."]);
+const turnPreview = ext.quitGuardPrompt({ turnRunning: true, queuedUnsent: false, previewBuilding: true });
+assert.deepEqual(lines(turnPreview), ["대답과 미리보기 만들기가 멈춰요.", "만든 파일은 그대로 남아요."]);
+const previewQueued = ext.quitGuardPrompt({ turnRunning: false, queuedUnsent: true, previewBuilding: true });
+assert.deepEqual(lines(previewQueued), ["만들고 있는 미리보기가 멈춰요.", "보내려던 메시지도 보내지 않아요."]);
+const all = ext.quitGuardPrompt({ turnRunning: true, queuedUnsent: true, previewBuilding: true });
+assert.deepEqual(lines(all), ["대답과 미리보기 만들기가 멈춰요.", "보내려던 메시지도 보내지 않아요."]);
+assert.equal(ext.quitGuardPrompt({ turnRunning: false, queuedUnsent: false, previewBuilding: false }), null, "no preview build, nothing else: no dialog");
+for (const p of [turn, queued, both, preview, turnPreview, previewQueued, all]) {
   assert.ok(lines(p).length <= 2, "body is at most two lines");
   for (const line of lines(p)) assert.ok([...line].length <= 24, `short Korean line: ${line}`);
   // The core accepts the extension's copy unchanged (no truncation or rejection).

@@ -43,6 +43,12 @@ Windows. Then they publish the rc as a prerelease.
 
 - [ ] Testers who want double-click files get `HypeProof-<rc tag>-Test-Kit.zip` from the
       same page. A browser download of a Mac zip is quarantined; the one-liner is not.
+- [ ] Windows testers run the PowerShell line from the notes (or double-click
+      `update-windows.cmd` on the rc page). It replaces the installed App:
+
+      ```powershell
+      irm https://github.com/hypeproof/hypeproof-studio/releases/download/<rc tag>/update-windows.cmd -OutFile "$env:TEMP\hps-update.cmd"; & "$env:TEMP\hps-update.cmd"
+      ```
 
 Installed Apps do not update to a prerelease. Install the rc build by hand.
 

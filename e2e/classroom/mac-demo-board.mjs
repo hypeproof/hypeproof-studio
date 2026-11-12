@@ -14,6 +14,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const session = JSON.parse(readFileSync(path.join(home, 'session.json'), 'utf8')), out = path.join(home, 'board'); mkdirSync(out, { recursive: true });
@@ -22,7 +23,7 @@ const before = await status(); assert.equal(seatOf(before, 'A1')?.connection?.st
 for (const id of ['A2', 'A3']) assert.equal(seatOf(before, id)?.connection?.state, 'active', id + ' (scripted seat) should be connected');
 
 const browser = await chromium.launch({ headless: process.env.HPS_BOARD_HEADLESS === '1' }), page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-await page.goto(session.board); await page.locator('#token').fill(session.teacherToken); await page.locator('#cohort').fill(session.cohort); await page.locator('#connect button').first().click();
+await page.goto(session.board); await signInChalk(page, session.teacherToken); await page.locator('#cohort').fill(session.cohort); await page.locator('#connect button').first().click();
 await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#ops-check').click();
 const row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`); await row('A6').waitFor();
 assert.match(await row('A1').innerText(), /앱이 같은 발급분|준비|입장/); assert.match(await page.locator('#ops-selection').innerText(), /선택한 좌석이 없습니다/);

@@ -9,6 +9,8 @@ const require = createRequire(import.meta.url);
 const built = await build({ stdin: { contents: "export { ChatPanelProvider } from './src/chatPanelProvider';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 let token = 'seat-a';
 const receipts = new Map();
+// CGP-SHELL-R-024 keeps its own per-seat baseline in the same globalState; these checks are about entry receipts only.
+const entryReceipts = () => [...receipts].filter(([key]) => key.startsWith('hps.lessonCapabilityEntry.'));
 let failWrite = false;
 const settings = { coachRuntime: 'agent-sdk', requireApprovalFor: ['writeFile', 'delegateAgent', 'webSearch'] };
 const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} } };
@@ -47,8 +49,8 @@ assert.equal((await publish()).lessonCapabilityEntry.seen, false, 'failed persis
 failWrite = false;
 await Promise.all([ack(first.id), ack(first.id)]);
 assert.equal((await publish()).lessonCapabilityEntry.seen, true, 'next persists idempotently');
-assert.equal(receipts.size, 1);
-assert.ok([...receipts].every(([key,value])=>/^hps\.lessonCapabilityEntry\.[a-f0-9]{64}$/.test(key) && value === true), 'only opaque boolean receipts persisted');
+assert.equal(entryReceipts().length, 1);
+assert.ok(entryReceipts().every(([key,value])=>/^hps\.lessonCapabilityEntry\.[a-f0-9]{64}$/.test(key) && value === true), 'only opaque boolean receipts persisted');
 assert.ok(!JSON.stringify([...receipts]).includes(token), 'no credential in persisted keys or values');
 assert.ok(!JSON.stringify([...receipts]).includes(profile.activity_id), 'no raw activity id persisted');
 const otherWindow = Object.assign(Object.create(module.exports.ChatPanelProvider.prototype), h);
@@ -57,7 +59,7 @@ assert.equal(posts.at(-1).config.lessonCapabilityEntry.seen, true, 'another prov
 profile.lesson = { ...profile.lesson, version: 'v2' };
 assert.equal((await publish()).lessonCapabilityEntry.seen, false, 'new version');
 await ack(first.id);
-assert.equal(receipts.size, 1, 'old view cannot acknowledge new lesson');
+assert.equal(entryReceipts().length, 1, 'old view cannot acknowledge new lesson');
 profile.lesson = { ...profile.lesson, version: 'v1', sha256: 'hash2' };
 assert.equal((await publish()).lessonCapabilityEntry.seen, false, 'new immutable revision');
 profile.lesson = { ...profile.lesson, sha256: 'hash1', course_id: 'other-course' };

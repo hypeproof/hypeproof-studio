@@ -65,7 +65,10 @@ const browser = await launch(bin);
 const artifact = process.env.PREVIEW_ASK_ARTIFACT_DIR;
 if (artifact) mkdirSync(artifact, {recursive:true});
 // The shell runs inside an outer page, as in VS Code, where the outer webview frame
-// delivers host messages with iframe.contentWindow.postMessage (ev.source === parent).
+// delivers host messages with iframe.contentWindow.postMessage. VS Code's webview preamble
+// sets window.parent = window and window.top = window before the shell's script runs; the
+// shim below does the same, so a gate that compares ev.source with window.parent fails here
+// exactly as it did in the installed App (#3476).
 const settle = () => new Promise(r => setTimeout(r, 120));
 const inShell = expr => browser.evaluate(`(()=>{const S=document.getElementById('shell').contentWindow;const D=S.document;return (${expr});})()`);
 const send = async data => { await browser.evaluate(`document.getElementById('shell').contentWindow.postMessage(${JSON.stringify(data)},'*')`); await settle(); };
@@ -96,8 +99,8 @@ try {
   for (const width of [320,800,1420]) for (const theme of ['Dark+', 'Light+']) for (const forcedColors of [false,true]) {
     const vars = Object.entries(THEMES[theme]).filter(([,v]) => typeof v === 'string' && v.startsWith('#')).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
     // CSP is removed only for this test's API shim; production CSP is covered by csp-sandbox.
-    const html = shell.replace(/<meta http-equiv="Content-Security-Policy"[^>]+>/, '').replace('<head>', `<head><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m)});</script><style>:root{${vars}}</style>`);
-    await browser.load(`<!doctype html><html><head><style>html,body{margin:0;height:100%}#shell{width:100vw;height:100vh;border:0;display:block}</style></head><body><iframe id="shell"></iframe></body></html>`, {width, forcedColors, dark:theme==='Dark+'});
+    const html = shell.replace(/<meta http-equiv="Content-Security-Policy"[^>]+>/, '').replace('<head>', `<head><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m)});window.parent=window;window.top=window;</script><style>:root{${vars}}</style>`);
+    await browser.load(`<!doctype html><html><head><style>html,body{margin:0;height:100%}#shell{width:100vw;height:100vh;border:0;display:block}#sibling{display:none}</style></head><body><iframe id="shell"></iframe><iframe id="sibling" sandbox="allow-scripts"></iframe></body></html>`, {width, forcedColors, dark:theme==='Dark+'});
     await browser.evaluate(`document.getElementById('shell').srcdoc=${JSON.stringify(html)};true`);
     for (let i = 0; i < 50 && !(await inShell(`Array.isArray(S.posted)&&D.readyState==='complete'`)); i++) await settle();
     assert.equal(await inShell(`S.posted.some(m=>m.type==='previewReady')`), true, 'shell booted');
@@ -112,6 +115,11 @@ try {
     await settle();
     assert.equal(await inShell(`D.querySelector('iframe').srcdoc`), hostileNested, 'nested frame cannot replace the rendered preview');
     assert.equal(await hidden(),false,'nested frame cannot alter header identity');
+    // Another webview in the same window (a sibling frame, sandboxed with scripts) posts to the shell directly.
+    await browser.evaluate(`document.getElementById('sibling').srcdoc=${JSON.stringify(`<script>parent.frames[0].postMessage({type:'renderPreview',revision:7,html:'sibling-hijack'},'*');parent.frames[0].postMessage({type:'previewAskState',revision:7,enabled:false},'*');<\/script>`)};true`);
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(await inShell(`D.querySelector('iframe').srcdoc`), hostileNested, 'a sibling webview cannot replace the rendered preview');
+    assert.equal(await hidden(),false,'a sibling webview cannot hide the header');
     await send({type:'renderPreview',revision:7,html:hostileDetached});
     await new Promise(r => setTimeout(r, 900));
     assert.equal(await inShell(`D.querySelector('iframe').srcdoc`), hostileDetached, 'detached nested frame cannot replace the rendered preview');

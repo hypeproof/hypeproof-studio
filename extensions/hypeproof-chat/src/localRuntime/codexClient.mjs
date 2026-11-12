@@ -90,6 +90,8 @@ export class CodexLocalClient {
     this.lines = createInterface({ input: this.proc.stdout });
     this.lines.on("line", (line) => {
       try {
+        // #3601: every protocol message from Codex is progress for the stall watch.
+        this.onProgress?.();
         this.receive(JSON.parse(line));
       } catch {
         this.fail(new Error("codex_protocol_error"));
@@ -249,7 +251,9 @@ export class CodexLocalClient {
     tools = [],
     onToolCall,
     maxOutputBytes = 24000,
+    onProgress,
   }) {
+    this.onProgress = onProgress;
     if (this.busy) throw new Error("codex_busy");
     if (!this.models?.some((m) => m.id === model))
       throw new Error("codex_model_unavailable");

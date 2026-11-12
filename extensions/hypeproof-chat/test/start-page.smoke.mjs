@@ -50,6 +50,7 @@ await page.handle({type:'beginCourse'});assert.equal(stored,'valid-old');assert.
 response='valid';await page.handle({type:'beginCourse'});assert.equal(stored,'valid-new');assert.equal(starts,1);assert.equal(page.panel,undefined);assert.equal(page.candidate,undefined);assert.equal(page.started,true);
 attach();await page.handle({type:'disconnectCourse'});assert.equal(stored,undefined);assert.equal(states.at(-1).state.profile,undefined);
 await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer'],'CGP-SHELL-R-014: 설정 opens the learner sheet, never the settings editor directly');
+await page.handle({type:'reportProblem'});assert.deepEqual(commands,['workbench.view.explorer','hypeproof-chat.reportProblem'],'REQ-STUDIO-FEEDBACK-ENTRY: 의견·문제 보내기 runs the existing report command');
 console.log('PASS host candidate transaction: 401/403/network/malformed, active-stream exclusion, preview/cancel, workspace/storage/revalidation rollback, committed entry, disconnect and navigation');
 
 response='waiting';stored='valid-old';const pending=page.handle({type:'connectCourse',token:'valid-first'});
@@ -258,6 +259,21 @@ console.log('PASS saved activity selection: record drives token/workspace, crede
   console.log('PASS openChat(): panel present calls openInEditor, absent is noop');
 }
 
+// Reclaim only the owned welcome panel; editors and a transferred chat stay open.
+{
+  let disposals = 0;
+  const beforeCommands = commands.length;
+  page.panel = { viewColumn: 1, dispose() { disposals++; } };
+  page.candidate = { token: 'synthetic-pending-candidate' };
+  assert.equal(page.closeForAutomationPreview(), 1);
+  assert.equal(disposals, 1);
+  assert.equal(page.panel, undefined);
+  assert.equal(page.candidate, undefined);
+  assert.equal(page.closeForAutomationPreview(), undefined);
+  assert.equal(disposals, 1, 'a transferred chat or user editor is never closed');
+  assert.equal(commands.length, beforeCommands, 'no global close-editor or layout commands');
+  console.log('PASS automation canvas reclaim: only owned welcome panel closes, column preserved');
+}
 // A focus action arriving during slow restore must not open a second chat surface.
 {
  let release, restored=false, focused=0, shown=0;const focusPhases=[];chat.focusDiagnostic=phase=>focusPhases.push(phase);

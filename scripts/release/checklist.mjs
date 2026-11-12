@@ -39,8 +39,18 @@ function field(section, name) {
 export function howToCheck(body = '') {
   const section = releaseSection(body);
   if (section && section.trim()) {
-    const first = section.trim().split('\n')[0].trim().replace(/^(?:[-*]\s*)?How to verify\s*:\s*/i, '');
-    if (first && !PLACEHOLDER.test(first)) return first.slice(0, 160);
+    // The labelled line wins. A "Release manager check:" line may come first (#3538), so the first
+    // line is read only when the section has no "How to verify:" field at all.
+    const labelled = field(section, 'How to verify');
+    if (labelled !== null) {
+      if (labelled && !PLACEHOLDER.test(labelled)) return labelled.slice(0, 160);
+    } else {
+      // The manager answer line is not a way to check anything, so it never stands in for one.
+      const first = section.trim().split('\n')[0].trim();
+      if (first && !PLACEHOLDER.test(first) && !/^(?:[-*]\s*)?Release manager check\s*:/i.test(first)) {
+        return first.slice(0, 160);
+      }
+    }
   }
   const manual = body.match(/-\s*\[[ xX]\]\s*manual:\s*(.+)/i);
   if (manual && !manual[1].includes('<!--')) return manual[1].trim().slice(0, 160);

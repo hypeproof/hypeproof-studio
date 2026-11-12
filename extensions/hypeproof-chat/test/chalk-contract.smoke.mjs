@@ -1,13 +1,21 @@
 // Chalk command contract v0, studio side. A stub command bus stands in for the Chalk extension,
 // and a stub runner stands in for the local executor. No vscode module is loaded.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   ChalkContractHost,
   CONTRACT_VERSION,
   NO_LOCAL_RUNTIME_MESSAGE,
   connectionFor,
+  contractModels,
+  applyInstructorRuntimeSetting,
+  endSessionForRuntime,
+  needsChalkPrompt,
+  reportSourceLabel,
   resolveInstructorRuntime,
+  syncInstructorSession,
 } from "../src/chalkContract.ts";
+import { localModelSelection } from "../src/localRuntime/index.ts";
 
 let failed = 0;
 async function t(name, fn) {
@@ -20,6 +28,22 @@ async function t(name, fn) {
   }
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
+
+
+function makeOps(over = {}) {
+  const calls = [];
+  const rec = (name, v) => { calls.push([name, v]); return v; };
+  return {
+    calls,
+    openExternal: async (url) => rec("openExternal", { ok: true, url }),
+    openReport: async (source) => rec("openReport", { ok: true, source }),
+    inboxView: async () => rec("inboxView", { run: "r1", cards: [] }),
+    inboxOpened: async (objectId, generation) => { rec("inboxOpened", { objectId, generation }); },
+    inboxLink: async (objectId, url, generation, action) => rec("inboxLink", { ok: true, objectId, url, generation, action }),
+    reviewPrepare: async (week) => rec("reviewPrepare", { ok: true, week }),
+    ...over,
+  };
+}
 
 function makeBus(activateReply = { ok: true }) {
   const handlers = new Map();
@@ -58,7 +82,7 @@ function makeRunner({ available = true, executorModel = "claude-test", behaviour
 
 async function activated(bus, runner) {
   let n = 0;
-  const host = new ChalkContractHost(bus, runner, () => `nonce-${++n}`);
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => `nonce-${++n}`);
   host.register();
   const r = await host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "server" });
   assert.equal(r.ok, true);
@@ -81,7 +105,7 @@ await t("activateInstructor carries version, nonce, token, verified url and conn
 
 await t("a refused activation leaves the host inactive and passes the reason", async () => {
   const bus = makeBus({ ok: false, reason: "serverChanged" });
-  const host = new ChalkContractHost(bus, makeRunner(), () => "n");
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "n");
   host.register();
   const r = await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
   assert.deepEqual(r, { ok: false, reason: "serverChanged" });
@@ -187,6 +211,139 @@ await t("cancelTurn with a stale nonce does nothing", async () => {
   assert.deepEqual(c, { cancelled: false });
 });
 
+console.log("=== M-4 commands (S-2b) ===");
+const sessionArgs = { contractVersion: 1, sessionNonce: "nonce-1" };
+await t("openExternal passes url through the ops and refuses without a session", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { ...sessionArgs, url: "https://runbook.example/x" }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { contractVersion: 1, sessionNonce: "old", url: "https://x" }), { ok: false, reason: "noSession" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { ...sessionArgs, url: "" }), { ok: false, reason: "invalidArgs" });
+  assert.equal(ops.calls.length, 1);
+});
+
+await t("openReport keeps only a short lowercase source label and drops every other key (token keys too)", async () => {
+  assert.equal(reportSourceLabel({ source: "chalk" }), "chalk");
+  assert.equal(reportSourceLabel({ source: "Chalk Ext" }), undefined);
+  assert.equal(reportSourceLabel({ source: "a".repeat(33) }), undefined);
+  assert.equal(reportSourceLabel({ source: "a".repeat(32) }), "a".repeat(32));
+  assert.equal(reportSourceLabel(undefined), undefined);
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  const reply = await bus.call("hypeproof.runtime.openReport", { ...sessionArgs, context: { source: "chalk", issuerToken: "tok-value", token: "secret" } });
+  assert.deepEqual(reply, { ok: true });
+  assert.deepEqual(ops.calls, [["openReport", { ok: true, source: "chalk" }]]);
+  assert.ok(!JSON.stringify(reply).includes("tok-value"));
+});
+
+await t("inboxView returns the view or null, and never passes a token to the ops", async () => {
+  const bus = makeBus();
+  const ops = makeOps({ inboxView: async () => null });
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.equal(await bus.call("hypeproof.runtime.inboxView", sessionArgs), null);
+  assert.equal(await bus.call("hypeproof.runtime.inboxView", { contractVersion: 1, sessionNonce: "old" }), null);
+});
+
+await t("inboxOpen and inboxLink validate arguments and call the ops once", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxOpen", { ...sessionArgs, objectId: "o1", generation: 3 }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxOpen", { ...sessionArgs, objectId: "o1", generation: "3" }), { ok: false });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxLink", { ...sessionArgs, objectId: "o1", url: "https://a.example", generation: 3, action: "copy" }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxLink", { ...sessionArgs, objectId: "o1", url: "https://a.example", generation: 3, action: "delete" }), { ok: false });
+  assert.deepEqual(ops.calls.map(c => c[0]), ["inboxOpened", "inboxLink"]);
+});
+
+await t("reviewPrepare passes an integer week only and calls prepare once", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.reviewPrepare", { ...sessionArgs, week: 4 }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.reviewPrepare", { ...sessionArgs, week: "4" }), { ok: true });
+  assert.deepEqual(ops.calls, [["reviewPrepare", { ok: true, week: 4 }], ["reviewPrepare", { ok: true, week: undefined }]]);
+});
+
+await t("done(error) carries requestId and runbookUrl when the runner error has them, and omits them otherwise", async () => {
+  const bus = makeBus();
+  const runner = makeRunner({
+    behaviour: async () => { const e = new Error("fail"); e.requestId = "req-42"; e.runbookUrl = "https://runbook.example/x"; throw e; },
+  });
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await bus.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t9", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const done = bus.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "done");
+  assert.deepEqual(done.event, { kind: "done", status: "error", message: "fail", requestId: "req-42", runbookUrl: "https://runbook.example/x" });
+
+  const bus2 = makeBus();
+  const plain = makeRunner({ behaviour: async () => { throw new Error("plain"); } });
+  const host2 = new ChalkContractHost(bus2, plain, makeOps(), () => "nonce-1");
+  host2.register();
+  await host2.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await bus2.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t10", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const done2 = bus2.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "done");
+  assert.deepEqual(done2.event, { kind: "done", status: "error", message: "plain" });
+});
+
+await t("pushInbox sends onInboxState only in an active session, with the nonce and version", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps({ inboxView: async () => ({ run: "r1" }) }), () => "nonce-1");
+  host.register();
+  await host.pushInbox();
+  assert.equal(bus.calls.filter((c) => c.id === "hypeproof.chalk.onInboxState").length, 0);
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await host.pushInbox();
+  const sent = bus.calls.filter((c) => c.id === "hypeproof.chalk.onInboxState");
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].args[0], { contractVersion: 1, sessionNonce: "nonce-1", view: { run: "r1" } });
+});
+
+await t("needsChalkPrompt routes only writeFile, and only when the policy asks for it (openBrowser is not a Chalk prompt)", async () => {
+  const defaults = ["executeShell", "openBrowser", "delegateAgent", "browserType"];
+  assert.equal(needsChalkPrompt("openBrowser", defaults), false, "browser_open never reaches the approval gate on the local runner");
+  assert.equal(needsChalkPrompt("writeFile", defaults), false);
+  assert.equal(needsChalkPrompt("writeFile", [...defaults, "writeFile"]), true);
+  for (const kind of ["executeShell", "delegateAgent", "browserType", "consultHelper", "readFile", "openBrowser"]) {
+    assert.equal(needsChalkPrompt(kind, [...defaults, "writeFile", "consultHelper"]), false, `${kind} must stay in Studio`);
+  }
+});
+
+await t("askApproval sends an approvalRequest with the prompt and resolves false without an explicit approval", async () => {
+  const bus = makeBus();
+  let asked = null;
+  const runner = makeRunner({
+    behaviour: async (input) => {
+      asked = await input.askApproval({ kind: "writeFile", toolName: "Write", input: { file_path: "lesson/a.html" }, title: "파일 쓰기", verb: "쓰기", files: ["lesson/a.html"] });
+    },
+  });
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  bus.handlers.get("hypeproof.runtime.runLocalTurn");
+  await bus.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t11", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const req = bus.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "approvalRequest");
+  assert.equal(req.event.action.prompt.title, "파일 쓰기");
+  assert.equal(req.event.action.prompt.verb, "쓰기");
+  assert.deepEqual(req.event.action.prompt.files, ["lesson/a.html"]);
+  assert.equal(asked, false, "no reply from Chalk means not approved");
+});
+
 console.log("=== deactivate and preview ===");
 await t("deactivate aborts open turns, sends the reason, and later turns are refused", async () => {
   const bus = makeBus();
@@ -232,6 +389,177 @@ await t("connection values follow the legacy label source (chatPanelProvider ins
   assert.equal(connectionFor("codex", true), "subscription-codex");
   assert.equal(connectionFor("claude", false), "server");
   assert.equal(connectionFor(undefined, true), "server");
+});
+
+console.log("=== activateInstructor models (#3564) ===");
+// The local runner's choices, as the legacy panel shows them (localRuntime/index.ts localModelSelection).
+const LOCAL = { provider: "claude", executable: "claude", model: "claude-test", label: "Claude Code · 로컬 구독 · claude-test" };
+await t("with a local runner, activateInstructor carries models equal to localModelSelection (default and choices)", async () => {
+  const bus = makeBus();
+  const models = contractModels(localModelSelection(LOCAL));
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  const r = await host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "subscription-claude", models });
+  assert.equal(r.ok, true);
+  const call = bus.calls.find((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.deepEqual(call.args[0].models, { default: LOCAL.model, choices: [{ alias: LOCAL.model, id: LOCAL.model, label: LOCAL.label }] });
+});
+
+await t("with no local runner, activateInstructor sends no models field at all", async () => {
+  const bus = makeBus();
+  await activated(bus, makeRunner({ available: false }));
+  const call = bus.calls.find((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.equal("models" in call.args[0], false, "models must be absent without a local runner");
+});
+
+await t("contractModels returns nothing for an absent selection and copies only default and choices", () => {
+  assert.equal(contractModels(null), undefined);
+  assert.equal(contractModels(undefined), undefined);
+  const sel = localModelSelection(LOCAL);
+  assert.deepEqual(Object.keys(contractModels(sel)).sort(), ["choices", "default"]);
+});
+
+await t("syncInstructorSession passes the wanted models into activation, and omits them when not wanted", async () => {
+  const models = contractModels(localModelSelection(LOCAL));
+  const seen = [];
+  const host = {
+    active: false,
+    activate: async (input) => { seen.push(input); return { ok: true }; },
+    deactivate: async () => undefined,
+  };
+  const base = { isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  await syncInstructorSession(host, {}, { ...base, models });
+  await syncInstructorSession(host, {}, base);
+  assert.deepEqual(seen[0].models, models);
+  assert.equal(seen[1].models, undefined);
+});
+
+// Models stay out of the session-sameness check (#3564): a steady session is not re-activated for them.
+await t("a steady session is not re-activated when only the models differ", async () => {
+  let activations = 0;
+  const host = {
+    active: true,
+    activate: async () => { activations++; return { ok: true }; },
+    deactivate: async () => undefined,
+  };
+  const base = { isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  const view = { token: "tok", url: "https://api.example/v1", connection: "subscription-claude" };
+  await syncInstructorSession(host, view, { ...base, models: contractModels(localModelSelection(LOCAL)) });
+  assert.equal(activations, 0);
+});
+
+console.log("=== runtime switch (#3578) ===");
+const DEACT = "hypeproof.chalk.deactivateInstructor";
+const wantFor = () => ({ isInstructor: true, panelMode: "instructor", issuerToken: "tok", url: "https://api.example/v1", connection: "server" });
+await t("leaving chalk-extension ends an active session with reason runtimeChanged, exactly once", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  view = await endSessionForRuntime(host, view, "legacy");
+  view = await endSessionForRuntime(host, view, "legacy");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "one deactivate for the switch, none for the repeated refresh");
+  assert.equal(sent[0].args[0].reason, "runtimeChanged");
+  assert.equal(host.active, false);
+});
+
+await t("leaving chalk-extension with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  await endSessionForRuntime(host, {}, "legacy");
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("after the switch to legacy, a turn with the old nonce is refused noSession", async () => {
+  const bus = makeBus();
+  const runner = makeRunner();
+  const host = await activated(bus, runner);
+  await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  const reply = await bus.call("hypeproof.runtime.runLocalTurn", { contractVersion: 1, sessionNonce: "nonce-1", turnId: "t-old", policy: "chalk-instructor", messages: [], tools: [] });
+  assert.equal(reply.accepted, false);
+  assert.equal(reply.reason, "noSession");
+  assert.equal(runner.runs.length, 0, "the runner never sees the old-nonce turn");
+});
+
+await t("returning to chalk-extension activates again with a new nonce", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  let view = await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy");
+  view = await syncInstructorSession(host, view, { ...wantFor(), connection: "server" });
+  const activations = bus.calls.filter((c) => c.id === "hypeproof.chalk.activateInstructor");
+  assert.equal(activations.length, 2, "the first activation and the one after returning");
+  assert.equal(host.active, true);
+  assert.notEqual(activations[1].args[0].sessionNonce, activations[0].args[0].sessionNonce);
+});
+
+// The listener's handler is a pure function (applyInstructorRuntimeSetting), so the order and the
+// failure path are tested on behaviour, not on source text. The listener in extension.ts only wires it.
+await t("a switch to legacy ends the session once, before a refresh that rejects (profile or whoami down)", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const order = [];
+  let view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  await applyInstructorRuntimeSetting("legacy", {
+    endSession: async () => { order.push("end"); view = await endSessionForRuntime(host, view, "legacy"); },
+    refresh: async () => { order.push("refresh"); throw new Error("whoami unreachable"); },
+  }).catch(() => undefined);
+  assert.deepEqual(order, ["end", "refresh"], "the end comes before the refresh");
+  const sent = bus.calls.filter((c) => c.id === DEACT);
+  assert.equal(sent.length, 1, "exactly one deactivate although the refresh failed");
+  assert.equal(sent[0].args[0].reason, "runtimeChanged");
+});
+
+await t("a synchronous refresh failure after a switch to legacy still leaves exactly one deactivate", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  await applyInstructorRuntimeSetting("legacy", {
+    endSession: async () => { await endSessionForRuntime(host, { token: "tok", url: "https://api.example/v1", connection: "server" }, "legacy"); },
+    refresh: () => { throw new Error("config read failed"); },
+  }).catch(() => undefined);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 1);
+});
+
+await t("a repeated legacy switch with no active session sends nothing", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "nonce-1");
+  host.register();
+  const deps = { endSession: () => endSessionForRuntime(host, {}, "legacy"), refresh: async () => undefined };
+  await applyInstructorRuntimeSetting("legacy", deps);
+  await applyInstructorRuntimeSetting("legacy", deps);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+});
+
+await t("a switch to chalk-extension does not end the session and still refreshes", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const order = [];
+  await applyInstructorRuntimeSetting("chalk-extension", {
+    endSession: async () => { order.push("end"); },
+    refresh: async () => { order.push("refresh"); },
+  });
+  assert.deepEqual(order, ["refresh"]);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
+});
+
+// Wiring: the listener in extension.ts uses the handler, and the provider exposes the end helper.
+await t("the instructorRuntime listener calls the handler, which ends the session before the refresh", () => {
+  const ext = readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
+  assert.match(ext, /affectsConfiguration\("hypeproofChat\.instructorRuntime"\)\) \{\s*void applyInstructorRuntimeSetting\(/);
+  assert.match(ext, /endSession: \(\) => provider\.endChalkSessionForRuntime\(\),\s*refresh: \(\) => provider\.refreshConfig\(\)/);
+  const panel = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  assert.match(panel, /^  endChalkSessionForRuntime\(\): Promise<void> \{/m);
+  assert.match(panel, /return this\.contractSync;\n  \}/);
+});
+
+await t("a chalk-extension runtime keeps the session untouched", async () => {
+  const bus = makeBus();
+  const host = await activated(bus, makeRunner());
+  const view = { token: "tok", url: "https://api.example/v1", connection: "server" };
+  assert.equal(await endSessionForRuntime(host, view, "chalk-extension"), view);
+  assert.equal(bus.calls.filter((c) => c.id === DEACT).length, 0);
+  assert.equal(host.active, true);
 });
 
 if (failed > 0) {

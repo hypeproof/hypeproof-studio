@@ -10,7 +10,14 @@ import { FREE_FOLDER_COUNT, isFreeSeat } from './seatVocabulary';
 export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
+/** Someone else holds this folder (another activity, or another window mid-open): the folder is not ours to remove. */
+export class ActivityFolderInUseError extends ActivityConnectionError { readonly folderInUse = true; }
 /** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
+/** A lock that cannot name an owner is treated as a write in progress for this long, then as stale. */
+export const LOCK_GRACE_MS = 10_000;
+function lockIsOlderThanGrace(lock:string):boolean {
+  try { return Date.now() - fs.statSync(lock).mtimeMs > LOCK_GRACE_MS; } catch { return false; }
+}
 export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
 /**
  * #3213 — the work folder could not be created: its path is taken by a link whose target is gone
@@ -226,7 +233,7 @@ export class ActivityConnections {
     if (bound.id === id) return;
     // The earlier activity keeps its saved record; selecting it later reports this folder as taken.
     if (typeof takeover === 'function' ? takeover(bound) : takeover) { fs.writeFileSync(file, fresh, {mode:0o600}); return; }
-    throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
+    throw new ActivityFolderInUseError(FOLDER_TAKEN_MESSAGE);
   }
   /** The binding files that may hold this folder, under the current and the pre-canonicalRoot spelling. */
   private bindingFiles(root: string): string[] {
@@ -306,7 +313,7 @@ export class ActivityConnections {
         return bound.id !== id && !freeTakesOver(p,root,bound,owners?.get(bindingOwnerKey(bound)));
       });
       if (taken && !passTakesOver(p,root)) {
-        throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
+        throw new ActivityFolderInUseError(FOLDER_TAKEN_MESSAGE);
       }
       prepare();
     } finally { release(); }
@@ -383,10 +390,24 @@ export class ActivityConnections {
     this.claim(root,r.id);
     return this.lock(root);
   }
+  /**
+   * Remove a lock whose content cannot name an owner, only if it is still byte-for-byte what was judged
+   * stale and still older than the grace period (a new owner replacing it in between is never removed).
+   * Serialized with the dead-pid recovery barrier. Deletes the lock file only.
+   */
+  private removeStaleLock(lock:string, recovery:string, raw:string, busy:()=>ActivityFolderInUseError):void {
+    try { fs.mkdirSync(recovery,{mode:0o700}); } catch { throw busy(); }
+    try {
+      let latest: string;
+      try { latest = fs.readFileSync(lock,'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw busy(); }
+      if (latest !== raw || !lockIsOlderThanGrace(lock)) throw busy();
+      fs.unlinkSync(lock);
+    } finally { fs.rmdirSync(recovery); }
+  }
   private lock(root:string):()=>void {
     const lock = this.bindingPath(root) + '.lock';
     const recovery=lock+'.recovery';
-    const busy=()=>new ActivityConnectionError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
+    const busy=()=>new ActivityFolderInUseError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
     const nonce = crypto.randomUUID();
     for (let attempt=0;attempt<2;attempt++) {
       if (fs.existsSync(recovery)) throw busy();
@@ -395,9 +416,20 @@ export class ActivityConnections {
         return () => { if (fs.existsSync(lock) && JSON.parse(fs.readFileSync(lock,'utf8')).nonce === nonce) fs.unlinkSync(lock); };
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-        const owner = JSON.parse(fs.readFileSync(lock,'utf8'));
-        if (!Number.isInteger(owner.pid) || owner.pid < 1) throw new ActivityConnectionError('작업 폴더 잠금 정보를 확인할 수 없습니다.');
-        try { process.kill(owner.pid,0); }
+        // A lock another window is still writing (or one we cannot read) is someone else's: in use, not a generic failure.
+        // Once it is older than the grace period nobody is still writing it: an empty, corrupt or pid-less
+        // lock is stale and is cleaned like a dead-pid lock (only the lock file, never the learner's folder).
+        let raw: string;
+        try { raw = fs.readFileSync(lock,'utf8'); } catch { throw busy(); }
+        let owner: { pid?: unknown; nonce?: unknown } = {};
+        let readable = true;
+        try { const parsed = JSON.parse(raw); if (parsed && typeof parsed === 'object') owner = parsed; else readable = false; } catch { readable = false; }
+        if (!readable || !Number.isInteger(owner.pid) || (owner.pid as number) < 1) {
+          if (!lockIsOlderThanGrace(lock)) throw busy();
+          this.removeStaleLock(lock, recovery, raw, busy);
+          continue;
+        }
+        try { process.kill(owner.pid as number,0); }
         catch (error) {
           if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
             // Serialize dead-owner recovery. Acquirers check this barrier both
@@ -405,17 +437,17 @@ export class ActivityConnections {
             try { fs.mkdirSync(recovery,{mode:0o700}); } catch { throw busy(); }
             try {
               if (fs.existsSync(lock)) {
-                const latest=JSON.parse(fs.readFileSync(lock,'utf8'));
+                let latest: { nonce?: unknown }; try { latest=JSON.parse(fs.readFileSync(lock,'utf8')); } catch { throw busy(); }
                 if (latest.nonce===owner.nonce) fs.unlinkSync(lock);
               }
             } finally { fs.rmdirSync(recovery); }
             continue;
           }
         }
-        throw new ActivityConnectionError('다른 창에서 이 폴더를 사용 중입니다. 작업이 끝난 뒤 다시 보내 주세요.');
+        throw busy();
       }
     }
-    throw new ActivityConnectionError('작업 폴더 잠금을 얻지 못했습니다. 다시 시도해 주세요.');
+    throw new ActivityFolderInUseError('작업 폴더 잠금을 얻지 못했습니다. 다시 시도해 주세요.');
   }
   wrap(): vscode.ExtensionContext {
     const original = this.raw.secrets;

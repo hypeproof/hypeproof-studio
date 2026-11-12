@@ -3,6 +3,38 @@
 .hps-shell[data-chat-detail="personal"] .hps-header { color: var(--tw-muted); padding-block: var(--ds-c-studio-chatdetails-space-1); }
 /* US-05 — the current activity (kind · name) in the personal header; it yields before the remaining line. */
 .hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state line in the header row. The state words never shrink. The folder gives
+   way before anything else (its shrink factor dwarfs the activity line's 1000), so the activity kind stays whole as on a
+   heading without it; the row gap separates the state from "· folder" (no negative margin). */
+.hps-memory-now { display: contents; }
+.hps-memory-now-state { flex: none; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); white-space: nowrap; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-now-folder { flex: 0 1000000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); color: var(--tw-muted); }
+/* Up to 1100px the row has no room for the state without cutting the activity line (the kind, or a name that is whole
+   without it): the state takes a band under the heading, at its end (the band the coach run state also uses at ≤480px,
+   coachRunState.css), so the activity line, the state and every control stay as whole as they are without it. The folder
+   is visually hidden there; its words stay in the tooltip and the accessible text. */
+@media (max-width: 1100px) {
+  .tw-heading:has(.hps-memory-now-state) { position: relative; padding-bottom: calc(var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state { position: absolute; inset-inline-end: var(--ds-c-studio-coachrunstate-space-1); bottom: var(--ds-c-studio-coachrunstate-space-2); margin: 0; }
+  .hps-memory-now-folder { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* CGP-KNOW-D-005 (DES-KNOW-07): at 480px and below the coach run state shares the band (at its start), so the state with
+   its scope takes at most half the band at its end. When it does not fit there, the scope words move to a second line as
+   a unit (and break only between words if even that line is too narrow), never cut. The band is two lines tall there. */
+@media (max-width: 480px) {
+  .tw-heading:has(.hps-memory-now-state .hps-memory-now-scope) { padding-bottom: calc(2 * var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state { max-width: 50%; white-space: normal; text-align: end; line-height: var(--hp-leading-label); }
+  .tw-heading .hps-memory-now-on { white-space: nowrap; }
+  .tw-heading .hps-memory-now-scope { display: inline-block; word-break: keep-all; }
+  /* A 기록 없이 묻기 task adds a no-write phrase: it is one unbreakable unit on its own line, so the state may take the full
+     band width and the band grows by one line (tokens only). */
+  .tw-heading:has(.hps-memory-now-temp) { padding-bottom: calc(3 * var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state:has(.hps-memory-now-temp) { max-width: 100%; }
+  .tw-heading .hps-memory-now-temp { display: block; white-space: nowrap; }
+  .tw-heading .hps-memory-now-temp-sep { display: none; }
+}
+.hps-memory-now code, .hps-memory-state-setting code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); background: transparent; padding: 0; }
+.hps-memory-state-setting { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
 .hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2); font-size: var(--ds-c-studio-chatdetails-type-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* CONV-ENDCARD-R-003 — the ended free seat's way back to the pass list: a quiet text link, not a
@@ -878,4 +910,33 @@ body.vscode-high-contrast .hps-shell .hps-input > .hps-file-mentions { border-co
   .hps-find-btn:disabled { color: GrayText; }
   ::highlight(hp-find) { background-color: Mark; color: MarkText; }
   ::highlight(hp-find-current) { background-color: Highlight; color: HighlightText; }
+}
+
+/* CGP-KNOW-D-023 (DES-KNOW-41): "AI가 기억하는 것" in 대화 설정. Rows and controls are 44px; every word is 14px; the source
+   line sits under the item text (so at 320px it wraps below it). The confirm is a small modal with no scroller of its own. */
+.hps-memory-settings { display: grid; gap: var(--ds-c-studio-chatdetails-space-12); min-width: 0; }
+.hps-memory-settings h3 { margin: 0; font-size: var(--hp-font-body); }
+.hps-memory-settings-search { display: grid; gap: var(--ds-c-studio-chatdetails-space-13); font-size: var(--hp-font-caption); }
+.hps-memory-settings-search input { box-sizing: border-box; width: 100%; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-search input:focus-visible,
+.hps-memory-settings-delete:focus-visible,
+.hps-memory-settings-actions button:focus-visible,
+.hps-memory-settings .tw-memory-source button:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-memory-settings-list { display: grid; gap: var(--ds-c-studio-chatdetails-space-12); margin: 0; padding: 0; list-style: none; }
+.hps-memory-settings-list > li { display: grid; gap: var(--ds-c-studio-chatdetails-space-13); align-content: center; min-height: var(--ds-c-studio-chatdetails-size-8); min-width: 0; padding-block: var(--ds-c-studio-chatdetails-space-13); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
+.hps-memory-settings-text { margin: 0; font-size: var(--hp-font-caption); overflow-wrap: anywhere; white-space: pre-wrap; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-settings-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-12); min-width: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); }
+.hps-memory-settings .tw-memory-source button { min-height: var(--ds-c-studio-chatdetails-size-8); max-width: 100%; padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); text-align: start; overflow-wrap: anywhere; color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-delete,
+.hps-memory-settings-actions button { justify-self: start; min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-memory-settings-delete:hover, .hps-memory-settings-actions button:hover, .hps-memory-settings .tw-memory-source button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-memory-settings-delete:active, .hps-memory-settings-actions button:active, .hps-memory-settings .tw-memory-source button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-memory-settings-empty, .hps-memory-settings-note { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-settings-note:empty { display: none; }
+.hps-memory-settings-confirm { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); padding: var(--ds-c-studio-chatdetails-space-5); color: var(--vscode-foreground, var(--hp-text-primary-default)); background: var(--tw-panel, var(--vscode-editor-background)); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, currentColor); border-radius: var(--hp-radius-dialog); font-size: var(--hp-font-caption); }
+.hps-memory-settings-confirm h4 { margin: 0 0 var(--ds-c-studio-chatdetails-space-12); font-size: var(--hp-font-body); }
+.hps-memory-settings-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-c-studio-chatdetails-space-12); margin-top: var(--ds-c-studio-chatdetails-space-12); }
+.hps-memory-settings-danger { font-weight: var(--hp-weight-strong); }
+@media (forced-colors: active) {
+  .hps-memory-settings-delete, .hps-memory-settings-actions button, .hps-memory-settings-search input, .hps-memory-settings .tw-memory-source button { border-color: ButtonText; }
 }

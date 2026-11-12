@@ -240,6 +240,10 @@ function normalizedTitle(value: string): string {
  * on-disk lock plus revision comparison across processes. Recovery requires a demonstrably
  * dead same-host owner and an atomically claimed owner lease; age is never authority.
  */
+/** CGP-KNOW-R-029 — the temporary task's fixed name, and the answer to anything that would keep it. */
+export const TEMPORARY_TASK_TITLE = '기록 없이 묻기';
+export const TEMPORARY_TASK_REFUSAL = '기록 없이 묻는 작업은 저장하거나 옮기지 않아요.';
+
 export class TaskWorkspaceStore {
   readonly scope: string;
   readonly filePath: string;
@@ -262,6 +266,11 @@ export class TaskWorkspaceStore {
   private appearance: AppearanceData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
+  /**
+   * CGP-KNOW-R-029 (REQ-KNOW-47) — "기록 없이 묻기": a task held in this object only. It is never written to the task
+   * file or any sidecar; leaving it (another task, a new task, 다시 열기) or dropping the store discards it.
+   */
+  private temporary?: { task: TaskDocument; verdicts: VerdictEvent[] };
 
   constructor(rootPath: string, scope: string) {
     if (!nonempty(rootPath, 4096) || !nonempty(scope, 16384)) fail('invalid', '작업 저장 범위가 필요합니다.');
@@ -338,7 +347,8 @@ export class TaskWorkspaceStore {
   }
 
   getView(): TaskWorkspaceView {
-    const activeTaskId = this.data?.activeTaskId ?? null;
+    const temporary = this.loadError ? undefined : this.temporary?.task;
+    const activeTaskId = temporary?.id ?? this.data?.activeTaskId ?? null;
     const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) => {
       // CGP-KNOW-R-008 — the learner's emoji and colour, if any, from the appearance sidecar.
       const appearance = this.loadError ? undefined : this.appearance.tasks[id];
@@ -353,9 +363,10 @@ export class TaskWorkspaceStore {
       scope: this.scope,
       revision: this.data?.revision ?? 0,
       activeTaskId,
-      tasks: summaries.filter(task => !hidden(task)),
+      tasks: [...(temporary ? [{ id: temporary.id, title: temporary.title, createdAt: temporary.createdAt, updatedAt: temporary.updatedAt, messageCount: temporary.messageCount }] : []), ...summaries.filter(task => !hidden(task))],
       archived,
-      sourceSelection: clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
+      sourceSelection: temporary ? null : clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
+      ...(temporary ? { temporaryTaskId: temporary.id } : {}),
       ...(this.loadError ? { error: { code: this.loadError.code, message: this.loadError.message } } : {}),
     };
   }
@@ -381,28 +392,32 @@ export class TaskWorkspaceStore {
     if (!task || !row) return null;
     return { taskTitle: task.title, messageId: row.id, archived: task.id !== this.data.activeTaskId && archivedIn(this.archive, task.id) };
   }
-  getActiveTask(): TaskDocument | undefined { return this.getTask(this.data?.activeTaskId); }
+  getActiveTask(): TaskDocument | undefined { return this.getTask(this.activeId()); }
   getTask(taskId: string | undefined): TaskDocument | undefined {
     if (this.loadError) throw this.loadError;
+    if (taskId && taskId === this.temporary?.task.id) return clone(this.temporary.task);
     const task = this.data?.tasks.find(value => value.id === taskId);
     return task ? clone(task) : undefined;
   }
   /** The full conversation, earlier versions included (joinVersions); the task file holds only the visible one. */
-  getHistory(taskId = this.data?.activeTaskId): ChatMessage[] {
+  getHistory(taskId = this.activeId()): ChatMessage[] {
+    if (taskId && taskId === this.temporary?.task.id) return clone(this.temporary.task.messages);
     const task = this.getTask(taskId);
     return task ? joinVersions(task.messages, taskId ? this.versions.tasks[taskId] : undefined) : [];
   }
   /** CGP-CHAT-R-005 — the learner's latest verdict per answer in this task. */
-  getVerdicts(taskId = this.data?.activeTaskId): VerdictMap {
+  getVerdicts(taskId = this.activeId()): VerdictMap {
+    if (taskId && taskId === this.temporary?.task.id) return latestVerdicts(this.temporary.verdicts);
     if (this.loadError || !taskId) return {};
     return latestVerdicts(this.verdicts.tasks[taskId] ?? []);
   }
   /** Every verdict event of the task, oldest first (history is kept; latest wins for display). */
-  getVerdictHistory(taskId = this.data?.activeTaskId): VerdictEvent[] {
+  getVerdictHistory(taskId = this.activeId()): VerdictEvent[] {
+    if (taskId && taskId === this.temporary?.task.id) return clone(this.temporary.verdicts);
     if (this.loadError || !taskId) return [];
     return clone(this.verdicts.tasks[taskId] ?? []);
   }
-  getDraft(taskId = this.data?.activeTaskId): ActivityDraft { return this.getTask(taskId)?.draft ?? emptyActivityDraft(); }
+  getDraft(taskId = this.activeId()): ActivityDraft { return this.getTask(taskId)?.draft ?? emptyActivityDraft(); }
 
   initialize(legacyMessages: ChatMessage[] = [], legacyDraft: ActivityDraft = emptyActivityDraft()): Promise<TaskWorkspaceView> {
     return this.mutate((data, versions) => {
@@ -426,11 +441,53 @@ export class TaskWorkspaceStore {
     });
   }
 
-  create(title: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+  /** CGP-KNOW-R-029 — the id of the open temporary task, or null. */
+  temporaryTaskId(): string | null { return this.temporary?.task.id ?? null; }
+  isTemporary(taskId: string | null | undefined): boolean { return !!taskId && taskId === this.temporary?.task.id; }
+  /**
+   * CGP-KNOW-R-029 — open a temporary task over the current one. Nothing is written: the task file's open task stays
+   * what it was, so a restart opens that one. Opening another temporary task replaces this one.
+   */
+  createTemporary(expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    if (this.loadError) return Promise.reject(this.loadError);
+    try {
+      const settled = this.leaveTemporary(expected);
+      this.checkExpected(this.requireData(this.data), settled);
+    } catch (error) { return Promise.reject(error); }
+    const task = this.newTask(TEMPORARY_TASK_TITLE, Date.now());
+    task.titleOrigin = 'manual';
+    this.temporary = { task, verdicts: [] };
+    return Promise.resolve(this.getView());
+  }
+  /** Discards the temporary task; an expectation made on it is carried over to the task underneath. */
+  private leaveTemporary(expected: TaskWorkspaceExpected): TaskWorkspaceExpected {
+    if (!this.temporary) return expected;
+    const left = expected?.taskId === this.temporary.task.id;
+    this.temporary = undefined;
+    return left ? { taskId: this.data?.activeTaskId ?? null, revision: expected.revision } : expected;
+  }
+  private activeId(): string | undefined { return this.temporary?.task.id ?? this.data?.activeTaskId; }
+  private refuseTemporary(taskId: string): void {
+    if (this.isTemporary(taskId)) fail('invalid', TEMPORARY_TASK_REFUSAL);
+  }
+  /** The temporary task's in-memory edits; never the task file. */
+  private updateTemporary(update: (task: TaskDocument) => void): Promise<TaskWorkspaceView> {
+    const task = this.temporary!.task;
+    update(task);
+    task.messageCount = task.messages.length;
+    task.updatedAt = Math.max(Date.now(), task.updatedAt);
+    return Promise.resolve(this.getView());
+  }
+
+  create(title: string, expected: TaskWorkspaceExpected, initialDraft?: ActivityDraft): Promise<TaskWorkspaceView> {
+    if (initialDraft && !validDraft(initialDraft)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 초안 형식이 올바르지 않습니다.'));
+    const draft = initialDraft ? clone(initialDraft) : undefined;
+    expected = this.leaveTemporary(expected);
     return this.mutate(data => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
       const task = this.newTask(normalizedTitle(title), Date.now());
+      if (draft) task.draft = draft;
       current.tasks.push(task);
       current.activeTaskId = task.id;
       return current;
@@ -438,6 +495,8 @@ export class TaskWorkspaceStore {
   }
 
   select(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return Promise.resolve(this.getView());
+    expected = this.leaveTemporary(expected);
     return this.mutate((data, _versions, archive) => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
@@ -455,6 +514,7 @@ export class TaskWorkspaceStore {
    * updated listed task opens next; with none left, a new empty task does.
    */
   archiveTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return Promise.reject(new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL));
     return this.mutate((data, _versions, archive) => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
@@ -475,6 +535,7 @@ export class TaskWorkspaceStore {
 
   /** CGP-CHAT-R-025 — 다시 열기: back in the list, and open. The task's content was never changed. */
   restoreTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    expected = this.leaveTemporary(expected);
     return this.mutate((data, _versions, archive) => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
@@ -496,6 +557,7 @@ export class TaskWorkspaceStore {
    * `undo` is null when nothing changed.
    */
   async renameWithUndo(taskId: string, title: string): Promise<{ view: TaskWorkspaceView; undo: RenameUndo<TitleOrigin> | null }> {
+    if (this.isTemporary(taskId)) throw new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL);
     let undo: RenameUndo<TitleOrigin> | null = null;
     const view = await this.updateTask(taskId, task => {
       const before = { title: task.title, titleOrigin: task.titleOrigin };
@@ -533,6 +595,7 @@ export class TaskWorkspaceStore {
   }
 
   private appendSystemLine(taskId: string, safe: ChatMessage): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return this.updateTemporary(task => { if (!task.messages.some(m => m.id === safe.id)) task.messages.push(clone(safe)); });
     return this.mutate((data, versions) => {
       const current = this.requireData(data);
       const task = this.requireTask(current, taskId);
@@ -546,6 +609,11 @@ export class TaskWorkspaceStore {
   }
 
   append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) {
+      if (!Array.isArray(messages) || !messages.every(validIncoming)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 대화 형식이 올바르지 않습니다.'));
+      // The full conversation (earlier versions included) stays in memory; the title stays "기록 없이 묻기".
+      return this.updateTemporary(task => { task.messages = this.mergeMessages(task.messages, messages); });
+    }
     return this.updateTask(taskId, (task, versions) => {
       if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       // CGP-CHAT-R-002 — merge into the full conversation, then store the visible part in the task
@@ -564,6 +632,10 @@ export class TaskWorkspaceStore {
     });
   }
   saveDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) {
+      if (!validDraft(draft)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 초안 형식이 올바르지 않습니다.'));
+      return this.updateTemporary(task => { task.draft = clone(draft); });
+    }
     return this.updateTask(taskId, task => {
       if (!validDraft(draft)) fail('invalid', '저장할 초안 형식이 올바르지 않습니다.');
       task.draft = clone(draft);
@@ -571,6 +643,7 @@ export class TaskWorkspaceStore {
   }
   /** Explicitly fork the displayed work; never merge it over another writer's changes. */
   recoverDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return Promise.reject(new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL));
     const current = this.requireData(this.data);
     if (taskId !== current.activeTaskId || !validDraft(draft)) return Promise.reject(new TaskWorkspaceStoreError('stale', '현재 작업의 입력을 다시 확인해 주세요.'));
     const original = clone(this.requireTask(current, taskId));
@@ -588,6 +661,7 @@ export class TaskWorkspaceStore {
     }, true);
   }
   clearHistory(taskId: string): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) { this.temporary!.verdicts = []; return this.updateTemporary(task => { task.messages = []; }); }
     const cleared = this.updateTask(taskId, (task, versions) => { task.messages = []; task.messageCount = 0; delete versions.tasks[taskId]; });
     // CGP-CHAT-R-005 — the answers are gone, so are their drawn verdicts (the spool keeps the events).
     return cleared.then(view => this.mutateVerdicts(taskId, () => null).then(() => view));
@@ -598,6 +672,7 @@ export class TaskWorkspaceStore {
    */
   recordVerdict(taskId: string, event: VerdictEvent): Promise<VerdictMap> {
     if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
+    if (this.isTemporary(taskId)) { this.temporary!.verdicts = appendVerdict(this.temporary!.verdicts, clone(event)); return Promise.resolve(latestVerdicts(this.temporary!.verdicts)); }
     return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
   /**
@@ -606,6 +681,7 @@ export class TaskWorkspaceStore {
    * not jump to the top of the list for a cosmetic choice.
    */
   setAppearance(taskId: string, appearance: TaskAppearance | null): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return Promise.reject(new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL));
     if (appearance !== null && !validTaskAppearance(appearance)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '고를 수 있는 아이콘과 색이 아닙니다.'));
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
@@ -639,6 +715,7 @@ export class TaskWorkspaceStore {
     return operation;
   }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) return Promise.reject(new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL));
     return this.updateTask(taskId, task => {
       if (!validSurface(selection)) fail('invalid', '저장할 출처 주소가 올바르지 않습니다.');
       task.sourceSelection = clone(selection);
@@ -653,6 +730,7 @@ export class TaskWorkspaceStore {
    * versions sidecar entry and the verdict events), for a move to another personal activity.
    */
   exportTask(taskId: string): MovedTask {
+    this.refuseTemporary(taskId);
     const task = this.getTask(taskId) ?? fail('not_found', '이 작업을 찾을 수 없습니다. 작업 목록을 다시 열어 주세요.');
     return { task, versions: this.versions.tasks[taskId] ? clone(this.versions.tasks[taskId]) : null, verdicts: clone(this.verdicts.tasks[taskId] ?? []) };
   }
@@ -764,6 +842,7 @@ export class TaskWorkspaceStore {
    * leaves unreachable sidecar entries behind, which a later receive of the same id overwrites.
    */
   async releaseTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    if (this.isTemporary(taskId)) throw new TaskWorkspaceStoreError('invalid', TEMPORARY_TASK_REFUSAL);
     const view = await this.mutate(data => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);

@@ -153,6 +153,8 @@ export interface FileAttachmentPreview {
 }
 
 export interface ChatConfig {
+  // #3563 — true when the Chalk runtime verified this user as an instructor. The Studio chat then points to the Chalk tab. Absent otherwise.
+  chalkInstructorTab?: true;
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -163,10 +165,18 @@ export interface ChatConfig {
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
   /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
   capabilityChange?: import('./aiCapabilities').CapabilityChange;
+  /** CGP-SHELL-R-024 / D-023 (ADM-11): the instructor changed this classroom seat's lesson settings; system lines in the chat. */
+  lessonSettingsChanges?: import('./lessonSettingsChange').LessonSettingsNotice[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
+  /**
+   * CGP-KNOW-D-022 (DES-KNOW-40): this seat has the activity's personal memory store (the R-005 binding: personal and trial
+   * activities, minors included per DEC-02). The chat then draws the read-only state line "AI 기억: 켜짐" with the folder,
+   * in the activity header and in the settings dialog. Absent: no store, no line. Never a switch: there is no off value.
+   */
+  memoryState?: { folder: string };
   /** CGP-DS-R-015: `workbench.reduceMotion`: true = on, false = off, absent = system. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
@@ -177,6 +187,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
+  temporaryTask?: { allowed: boolean };
   /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
   taskMove?: import('./taskMove').TaskMoveView;
   activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
@@ -189,6 +201,8 @@ export interface ChatConfig {
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
+  /** Display-only: host-confirmed local subscription AI route; never an execution grant. */
+  localSubscription?: boolean;
   /** CGP-SHELL-R-015: host-confirmed cohort policy, never inferred from a local menu. */
   cohortSettings?: { model: boolean; effort: boolean };
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
@@ -287,6 +301,8 @@ export interface TrialEndNotifyView {
 }
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
+  /** Service-owned opt-in, never inferred from a local setting. */
+  automations?: { enabled: boolean; provider: 'gmail'; appsScript?: boolean; maxRecipients?: number; oauthClientId?: string };
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
@@ -308,6 +324,8 @@ export interface ResolvedProfile {
    * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
    */
   conversation_carryover?: { available: boolean };
+  /** CGP-CHAT-R-004 (DEC-10) — a class turned "먼저 계획 보기" off. Only `available: false` counts; absent → the toggle shows as before. */
+  plan_first?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -414,8 +432,28 @@ export interface ResolvedProfile {
     /** Photos attached as files saved to `images/`, paths only to the model (attachedImages.ts). hype-dental D-028. */
     image_files?: boolean;
   };
+  /**
+   * Studio voice (hps-voice-policy/1, voiceServed.ts): present only when the Service serves dictation
+   * and/or read-aloud to this seat. Absent → no voice UI anywhere, byte-identical to before voice existed.
+   */
+  voice?: { dictation?: boolean; read_aloud?: boolean; policy_version?: string; engine?: { dictation?: string; read_aloud?: string }; caps?: { currency?: string; unit?: string; seat_day?: number; class_session?: number; global_day?: number } };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
+  /**
+   * CGP-AGENT-R-001/R-002 — the frozen lesson's approval preset (approvalPreset.ts). Absent → the
+   * app's own approval tiers. Read with servedApprovalPreset(), which ignores an unknown id.
+   */
+  approval_preset?: import("./approvalPreset").ServedApprovalPreset;
+  /**
+   * DEC-30 step 3 (CGP-KNOW-R-037) — the lesson's starter sentences, 0..4 single lines. Absent when the lesson has none.
+   * Read with servedLessonStarters(), which drops anything that is not a safe single line.
+   */
+  starters?: string[];
+  /**
+   * DEC-30 — the lesson's AI role and tone as the Service serves them to this seat (the tone is already clamped on a
+   * minor seat: `tone_clamped` replaces `tone`). Display only; nothing here reaches a coach prompt (step 4). Absent when unset.
+   */
+  assistant_style?: { role?: string; tone?: { id: string; label: string }; tone_clamped?: true };
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
   tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
@@ -432,8 +470,10 @@ export interface ResolvedProfile {
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
    * session (via the hypeproof.browser.safeSession setting). Absent / "browse"
    * → normal browser. Inert on a Studio build without the fork core patch.
+   * REQ-N11 (2026-11-07): `hardened: true` turns `hypeproof.browser.hardenedSessionEnabled` on for the cohort
+   * (absent → the registered default, off); for a minor or safe seat the extension locks all three settings.
    */
-  browser_session?: { mode: "safe" | "browse"; allowlist?: string[] };
+  browser_session?: { mode: "safe" | "browse"; allowlist?: string[]; hardened?: boolean };
   // #320 — true when the cohort is a minor cohort (explicit flag or age_range
   // upper bound < 18). Drives minor-specific UX and force-pins the coach to the
   // proxy runtime (#371).
@@ -544,6 +584,9 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | ({ type: 'automationAnswer' } & import('./automationProtocol').AutomationAnswer)
+  | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
+  | { type: 'automationClose' }
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
@@ -554,6 +597,8 @@ export type WebviewMessage = (
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
+  /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
+  | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
   | { type: 'taskRename'; title: string; requestId?: string }
@@ -634,6 +679,16 @@ export type WebviewMessage = (
   | { type: "fileMentionCancel"; requestId: string }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
+  /**
+   * Dictation (voiceHost.ts). The finished clip goes to the host, which alone may reach the Service; the
+   * webview's CSP allows no network. `audio` is base64 of one Opus WebM/Ogg clip, held in memory only.
+   */
+  | { type: "voiceTranscribe"; requestId: string; mime: string; seconds: number; audio: string }
+  /** The learner pressed 마이크 설정 열기. The host picks the OS pane; the webview names no URL. */
+  | { type: "voiceOpenMicSettings" }
+  /** Ask which policy versions the learner has already read the disclosure for / record that they did. */
+  | { type: "voiceDisclosureRead" }
+  | { type: "voiceDisclosureAck"; policyVersion: string }
   /** CGP-VOICE-R-009 — voice "보여주기": ask for the two-item menu, then attach one chosen target per click. */
   | { type: "voiceShowThisMenu"; requestId: string }
   | { type: "voiceShowThis"; requestId: string; target: string }
@@ -706,6 +761,12 @@ export type WebviewMessage = (
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
   /** CGP-SHELL-R-035 — "새로운 기능" after an update; local record only, no telemetry. */
+  /** CGP-CHAT-R-004 — "먼저 계획 보기": the mode switch and the learner's decision on the waiting plan. */
+  | { type: "planFirstRequest" }
+  | { type: "planFirstSet"; on: boolean }
+  | { type: "planFirstApprove"; planId: string; text: string }
+  | { type: "planFirstRedo"; planId: string; text: string }
+  | { type: "planFirstDecline"; planId: string }
   | { type: "whatsNewRequest"; requestId: string }
   | { type: "whatsNewShown"; notesId: string }
   | { type: "whatsNewDismiss"; notesId: string }
@@ -718,14 +779,18 @@ export type WebviewMessage = (
   | { type: "answerToWiki"; messageId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
+  | { type: "openChalkInstructorPanel" } // #3563 — the Chalk tab button in the instructor notice; the host runs the Chalk command
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
   | { type: "setTextSize"; size: string }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
-  | { type: "openReportModal"; source?: "error" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "openReportModal"; source?: "error" | "crash" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
   | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
   | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
+  /** REQ-STUDIO-DOCTOR — the quiet doctor line's answer (`fix` = its fix button) and the error card's 「진단하기」. */
+  | { type: "doctorNoticeAnswer"; id: string; fix: boolean }
+  | { type: "runDoctor" }
   | { type: "problemReportAutoSetting"; enabled: boolean }
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
   // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
@@ -742,6 +807,8 @@ export type WebviewMessage = (
   | { type: "acknowledgeLessonCapabilities"; id: string }
   | { type: "dismissClassWindow"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
+  /** CGP-SHELL-R-024 — a settings-change line was on screen; the host moves the seat's persisted baseline. */
+  | { type: "lessonSettingsChangeSeen"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
   | { type: "saveCoach"; name: string; personality: string }
@@ -804,8 +871,14 @@ export type WebviewMessage = (
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "activityMemoryRequest" }
+  | { type: "memoryWriteUndo"; id: string }
   // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
-  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string }
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string; names?: string[]; confirmedPin?: string }
+  // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — whether the one-time memory notice is due here; 확인 on it, bound to the activity it showed.
+  | { type: "memoryNoticeRequest" }
+  | { type: "memoryNoticeAck"; activity: string }
+  /** CGP-KNOW-R-026 — the items one answer's request carried; with `id` and `exclude`, leaves one out of (or back into) this task. */
+  | { type: "memoryUseRequest"; requestId: string; messageId: string; id?: string; exclude?: boolean }
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
@@ -861,6 +934,8 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
+  | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
   | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
   | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
@@ -869,6 +944,8 @@ export type HostMessage = (
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | { type: "problemReportForm"; form: import("./problemReport").ProblemReportFormView | null }
   | { type: "problemReportOffer"; offer: { reason: import("./problemReport").OfferReason } | null }
+  /** REQ-STUDIO-DOCTOR — one quiet line for a failing check (null hides it). */
+  | { type: "doctorNotice"; notice: import("./studioDoctor").DoctorNotice | null }
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
@@ -885,7 +962,7 @@ export type HostMessage = (
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | { type: "attachmentsPrepared"; requestId: string; failures: import("./attachmentFailure").AttachmentFailure[] }
-  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode}
+  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode;notice?:string}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
@@ -921,6 +998,8 @@ export type HostMessage = (
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
+  /** CGP-ART-D-002 — the preview bar's 바뀐 곳 보기: open the chat review at this file (null: just the bar). */
+  | { type: "turnReviewShow"; turnId: string; path: string | null }
   /** REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder is gone: one notice with 다시 고르기; null hides it. */
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
@@ -933,6 +1012,11 @@ export type HostMessage = (
   /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
   | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
   | { type: "activityMemoryState"; view: import("./activityMemoryView").ActivityMemoryView | null; requestId?: string; result?: import("./activityMemoryView").ActivityMemoryResult }
+  /** REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — the activity whose one-time memory notice is due; null shows none. */
+  | { type: "memoryNoticeState"; notice: import("./memoryNotice").MemoryNoticeView | null }
+  /** CGP-KNOW-R-026 — answer id → number of memory items its request carried, for the open task. */
+  | { type: "memoryUseMarks"; marks: Record<string, number> }
+  | { type: "memoryUseItems"; requestId: string; messageId: string; items: import("./memoryUseView").MemoryUseEntry[] | null }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
@@ -940,6 +1024,8 @@ export type HostMessage = (
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
+  /** CGP-ART-D-008 — a safe-session link outside the cohort allowlist did not open (flag `safeLinkAllowlistEnabled`). */
+  | { type: "externalLinkBlocked"; host: string; at: number }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
@@ -989,6 +1075,7 @@ export type HostMessage = (
   | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error" | "running"; at: number }
   // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
   | { type: "downloadLineNotice"; id: string; notice: string | null }
+  | { type: "memoryWriteResult"; id: string; state: "undone" | "restored" | "refused"; notice: string | null }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }
@@ -1001,6 +1088,11 @@ export type HostMessage = (
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
   | { type: "fileMentionPicked"; requestId: string; ok: boolean }
+  /** Dictation answer: text for the composer, or a calm refusal in Korean (voiceHost.ts). */
+  | { type: "voiceTranscribeResult"; requestId: string; ok: true; text: string }
+  | { type: "voiceTranscribeResult"; requestId: string; ok: false; kind: import("./voiceHost").TranscribeKind; message: string; retry: boolean }
+  | { type: "voiceMicSettingsResult"; ok: boolean }
+  | { type: "voiceDisclosureState"; acknowledged: string[] }
   /** CGP-VOICE-R-009 — the menu state (re-read on every open) and the result of one attach click. */
   | { type: "voiceShowThisMenu"; requestId: string; items: import("./voicePopupHelpers").ShowThisItem[] }
   | { type: "voiceShowThisResult"; requestId: string; target: import("./voicePopupHelpers").ShowThisTarget | null; ok: boolean; reference?: import("./voicePopupHelpers").ReferenceTarget; error?: string }
@@ -1029,6 +1121,7 @@ export type HostMessage = (
   | { type: "aiDisclosure"; text: string }
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
+  | { type: "planFirstState"; on: boolean; plan: { id: string; text: string } | null; available?: false; switchedOff?: true }
   | { type: "whatsNewChanged" }
   | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto

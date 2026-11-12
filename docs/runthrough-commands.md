@@ -19,7 +19,7 @@
 ```bash
 # 1. 세션이 열려 있는지 — 안 열려 있으면 코치가 빈 응답만 낸다
 curl -s -H "Authorization: Bearer $ISSUER" \
-  https://chalk.hypeproof-ai.xyz/admin/cohorts/dental-pilot-2026-a/state | jq .session   # 강사 surface = Chalk (plan task F)
+  https://api.hypeproof-ai.xyz/admin/chalk/cohorts/dental-pilot-2026-a/state | jq .session   # Service read; Chalk itself takes only the Lab login connection
 
 # 2. 워크스페이스를 비운다 — 남아 있으면 "만든 것"과 "있던 것"이 구분 안 된다
 rm -rf ~/HypeProofClinic/*

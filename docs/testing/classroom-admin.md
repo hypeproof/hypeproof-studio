@@ -160,7 +160,7 @@ npm --prefix chalk run typecheck
 | AT-15 | ADM-01/02/07 | 미등록·pairing 만료/재사용·발급만 성공·앱검증 실패·runtime 정상 | 발급≠활성화, 미등록 unknown, ticket 1회, 교차 좌석/수업 위조 거부 | Service+D1+App |
 | AT-16 | ADM-01/02/11 | 15개 run 명단, 누적 roster 340개, 무활동 2명, 교체 좌석 | 현재 수업 명단 전부 표시·누적 테스트 좌석 제외·변경 이력, 신호 없는 학생 누락 0 | DB+Chalk browser |
 | AT-17 | ADM-02/04/11 | step event 중복/역순/구버전·lesson v1 중 v2 발행·자유 활동 | lesson/step/revision 일치, 서버 수신시각과 source 시각 분리, 완료 추정 0 | contract+App UI |
-| AT-18 | ADM-02/09 | 401 expired/signature, session_closed/roster_missing, approval 대기, network, provider 공통 장애, 휴식 | 정확한 사유·다음 조치, 확인된 차단만 빨간 글자, 무신호 회색, 공통 장애 묶음 | calibration+browser |
+| AT-18 | ADM-02/09 | 401 expired/signature, session_closed/roster_missing, approval 대기, network, provider 공통 장애, 휴식 | 정확한 사유·다음 조치, 확인된 차단만 빨간 글자, 무신호 회색, 공통 장애 묶음; 조회 복구 시 해당 장애 경고만 해제하고 미전송 질문·다른 조치 결과 보존 | calibration+browser |
 | AT-19 | ADM-07/10 | 학생/다른 강사/폐기 issuer/direct API/forged scope·action/임의 path·shell | 서버/클라이언트 allowlist·scope 모두 차단, 토큰·프롬프트 로그 노출 0 | Service+host negative |
 | AT-20 | ADM-05/10 | 강사 2명 동시 reset, duplicate key 같은/다른 payload, response loss | CAS 1개 효과, 같은 key 기존 결과/다른 payload 409, queued를 성공 표기 안 함 | real D1 concurrent |
 | AT-21 | ADM-07/10 | lease 만료·옛 epoch·새 로그인·재기동 후 지연 명령·클라이언트 시간 왜곡 | 잘못된 세대/기기/활동에 실행 0, TTL 이후 실행 0, 이전 결과 replay만 | host crash/fault |
@@ -1473,6 +1473,37 @@ collection contract.
 | 기존 브라우저 시험의 고정 문구 갱신 | `ops.mjs`, `ops-g1-layout.mjs`, `ops-roster.mjs` | PASS (문구만 바꿈, 판정 그대로) |
 
 **NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).
+
+<a id="adm-11-settings-change-run"></a>
+
+## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)
+
+요구: [수업 설정 변경 알림](../requirements/classroom-admin.md#adm-11-settings-change). Service 변경 없음.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `extensions/hypeproof-chat/test/lesson-settings-change-host.smoke.mjs` (`npm test`의 smoke 묶음) | 실제 `ChatPanelProvider`를 esbuild로 묶어 가짜 vscode 위에서 돌린다: 실제 `postConfig`·`handleMessage`·U3 사전 확인 채택(`adoptPreflightProfile`), 창 여러 개가 같은 globalState를 쓴다. 첫 로드는 줄 없음·기준선 저장(토큰·activity id·시작 문장 글 없음) · 승인 방식+계획 먼저 변경은 한 줄 `선생님이 도움 방식을 바꿨어요: 승인 방식 중요한 것만 묻기 → 바꾸기 전에 묻기 · 계획 먼저 켜짐 → 꺼짐`, 마지막 저장 메시지 뒤 · 같은 프로필 재전송은 같은 줄(같은 id) · 보기 전 다시 열기는 다시 보임 · 접힌 패널에서 그려진 것은 본 것이 아님(다시 열면 다시 보임), 패널이 보이면 본 것으로 셈 · 본 뒤 다시 열기는 반복 없음 · 시작 문장 변경은 `시작 문장 바뀜`, 글은 config 어디에도 없음 · 보기 전 원래대로 돌아가면 줄 없음 · 질문 실행 중 변경은 줄 없음·기다림, 실행 중인 질문의 승인 방식 그대로, 끝나면 줄 · U3 사전 확인 채택은 실행 중이어도 바로 줄, 시작하는 질문 앞 · 런타임 설정만 바뀌면 줄 없음 · 같은 기기의 다른 수업 좌석은 자기 기준선 · 한 세션의 agent-sdk→proxy 전환은 줄을 만들지도, 다음 세션의 능력 변경을 가리지도 않음 · 실제 `editImage`가 찾은 변경은 그 작업이 끝날 때 줄 · 화면 보임 hook 두 곳과 질문·이미지 편집 끝의 다시 보내기 배선 · 숨은 동안 좌석이 바뀌면 앞 좌석의 줄은 그대로 남음 · 실행 중으로 보였지만 끝난 뒤에 끝난 설정 보내기가 줄을 스스로 다시 보냄 · `hypeproofChat.coachRuntime` 변경은 실제 `extension.ts` listener에서 설정을 한 번 다시 보내고(대조군: 관계없는 설정은 0번), 그 뒤 강사의 능력 변경은 알림 · 개인 좌석은 줄 없음 | 아래 실행 기록 |
+| `extensions/hypeproof-chat/test/lesson-settings-change.test.tsx` (`scripts/run-tsx-tests.mjs`) | 실제 `ChatPanel`을 mini-dom에 올린다: 줄 하나, 순서 `u1, a1, 줄, u2`(다음 질문 앞) · 줄 자체는 live region이 아님 · 패널에 늘 있는 `response-announcer`(`role=status`)가 그 글을 한 번 가짐, 다시 그려도 그대로 · 메시지 말풍선·이름·아바타·버튼·dialog 없음 · 보이는 동안 `lessonSettingsChangeSeen` 한 번, 다시 그려도 한 번 · 본 줄은 그려지지만 알림 영역에 나오지 않고 보고 없음 · 숨겨진 문서에서는 보고 안 함, 보이면 한 번 · 빈 대화에서도 그려짐 · 강사 화면에는 없음 · CSS: Panel 배경 토큰, 14px 캡션 단계, 토큰만 | 아래 실행 기록 |
+| `extensions/hypeproof-chat/test/lesson-settings-change.test.mjs` (`npm run test:lesson-settings-change`) | 순수 규칙: 좌석 판정(수업·lesson·binding / 강사·로컬·개인·알 수 없음 제외) · 순서와 문구(`기본`, `해요`/`물어봐요`/`안 해요`, `켜짐`/`꺼짐`, `바뀜`; 묻는지만 바뀐 것은 줄 없음) · 학생 입력이 다르면 능력 비교 안 함 · 같은 변경 같은 id, 추가 변경은 옛 기준선에서 한 줄, 되돌리면 지움 · 실행 중 지연 · seen 한 번만, 모르는 id 무시 · 깨진 기록은 조용히 기준선 재설정 · 좌석 32개 상한 · 배치(메시지 뒤 / 같은 작업의 빈 대화는 맨 위 / 자리를 잃은 안 본 줄은 맨 아래, 본 줄은 안 그림) | 아래 실행 기록 |
+
+실행 기록(호스트·SHA·명령·exit)은 PR 본문에 있다. base(`caacedfb5`)의 제품 코드에 이 시험들을 돌리면 host 시험은 `baseline persisted in globalState`에서, 화면 시험은 `one line, got 0`에서 실패한다(순수 규칙 시험은 모듈이 없어 불러오지 못한다).
+
+**알려진 한계(시험이 일부러 다루지 않음)**: 지금 입력에서 드러나지 않던 강사의 능력 변경이 학생의 다음 런타임·이용권 변경으로 드러나면 줄이 없다([요구의 기준선 항목](../requirements/classroom-admin.md#adm-11-settings-change)). 후속은 서버가 준 능력 필드를 기준선에 저장하는 것이다.
+
+**NOT RUN**: 설치된 Studio 창에서 강사가 Chalk로 설정을 바꾼 뒤 학생 화면 확인, 실제 U3 운영(회차 flag `ops_distribute` 기본 OFF), 실제 화면 읽기 프로그램의 낭독, Windows. VS Code가 접힌 사이드바 webview에 `visibilityState`를 어떻게 알리는지는 재지 않았다: 그래서 ‘본 것’은 호스트의 `view.visible`·편집기 패널 `visible`로 판정하고, 숨은 동안 그려진 줄은 패널이 보일 때 센다.
+
+<a id="adm-05-help-notice-run"></a>
+
+## 새 도움 요청 알림과 주의 목록 행 · 2026-11-11 (ADM-05 · CGP-AGENT-R-024 · CGP-AGENT-D-011)
+
+요구: [새 도움 요청 알림과 주의 목록 행](../requirements/classroom-admin.md#adm-05-help-notice). Service 변경 없음.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/help-notice.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고(페이지 안에서만, OS 입력·보이는 창 없음): 첫 조회는 알림 0 · 이번 수업의 새 요청은 알림과 ‘새 항목’ · 다른 수업 요청은 알림도 목록도 없음 · 알림에 본문(질문·피드백) 문자열이 없음 · 브라우저·OS 알림 컨트롤이 없고 `Notification` 생성·권한 요청이 0(탭이 가려져도) · 열기(Enter)가 가장 먼저 온 새 요청을 열고 표시를 지움 · 닫기는 알림만 숨김 · 다른 수업은 기준선 재설정, 늦게 불러온 오래된 요청은 알림 아님 · 페이지의 실제 `refresh()`를 모의 Service에 돌려서: 첫 조회는 기준선, 두 갱신 사이에 온 요청은 알림, 다른 수업 행이 섞여 와도 알림·목록 없음, 수업 전환은 옛 기준선보다 새 요청이 있어도 조용히 기준선 재설정. 행: 굵은 14px 제목·흐린 14px 요약(40자 이하)·상대 시간·44px 단일 행동·행 56px 이상, 1280과 375에서 가로 넘침 0, 긴 학생 ID는 말줄임+툴팁 | snts(Ubuntu, headless Chromium)에서 43개 확인 PASS. 같은 시험을 base(`f2eba10e1`)의 `manage.html`로 돌리면 실패(알림 영역 없음) |
+| `chalk/test/help-triage.browser.mjs` | 키보드 분류(J/K·Enter·E)가 새 행 구조에서도 그대로 | 아래 실행 기록 |
+
+**NOT RUN**: 실제 학생 기기의 도움 요청 전송, 운영 배포. 알림은 10초 갱신 주기라 접수 후 최대 약 10초 뒤(탭이 보일 때)에 뜬다.
 
 <a id="adm-01-roster-csv-run"></a>
 

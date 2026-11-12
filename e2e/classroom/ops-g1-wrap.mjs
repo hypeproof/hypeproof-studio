@@ -29,9 +29,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-g1-wrap'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'), { setResendFetch } = await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
@@ -62,7 +63,7 @@ try {
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + server.address().port, errors = [], teacher = await local.teacher('teacher-a');
   const open = async () => { const p = await browser.newPage({ viewport: { width: 1280, height: 720 } }); p.on('pageerror', (e) => errors.push(e.message)); await p.goto(origin + '/manage');
-    await p.locator('#token').fill(teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-wrap-steps > li').first().waitFor(); return p; };
+    await signInChalk(p, teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-wrap-steps > li').first().waitFor(); return p; };
   const steps = (p) => p.locator('#ops-wrap-steps > li').evaluateAll((l) => l.map((x) => ({ state: x.dataset.state, cls: x.className, badge: x.querySelector('.wrap-badge')?.textContent, text: x.innerText.replace(/\n+/g, '\n') })));
   const states = async (p) => (await steps(p)).map((s) => s.state);
   // Wait until the four steps read as expected (the page polls and advances on its own); fail with what it did show.
