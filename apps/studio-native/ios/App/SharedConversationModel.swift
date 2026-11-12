@@ -104,6 +104,9 @@ private struct SharedCacheFile: Codable {
     var cache: ConversationCache { overlay(entries[selected ?? ""] ?? ConversationCache(), id: selected ?? "") }
     var title: String { conversations.first { $0.id == selected }?.title ?? "대화 이어가기" }
     var canSend: Bool { signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
+    var sendingCurrentRequest: Bool {
+        busy || (queuedSend != nil && queuedSend?.id == selected && queuedSend?.requestID == cache.request?.id)
+    }
     init() {
 #if DEBUG
         service = NativeJourneyFixture.service ?? ConversationService()

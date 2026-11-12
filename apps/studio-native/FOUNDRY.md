@@ -132,7 +132,7 @@ symlink beneath the ignored tree and assert that the native command never starts
 A shell launch, Keychain probe, build or local-note screenshot does not establish
 that someone can sign in and receive a question. The existing iOS verification
 entrypoint must run `StudioJourneyTests` and collect the actual XCTest log with
-`scripts/collect-native-journeys.py`. Seven required cases exercise the real app
+`scripts/collect-native-journeys.py`. Eight required cases exercise the real app
 account continuation, view actions, cache/outbox and voice state machine while
 external Service, browser callback and recognizer transports are synthetic.
 
@@ -143,6 +143,10 @@ validates the actual PKCE exchange and namespaces its synthetic Keychain/cache
 and server snapshot. It never presets `signedIn`, replaces the app's send action,
 uses live credentials or grants a real account AI eligibility. The synthetic
 trace and screenshots are XCTest attachments. This seam has no Release code.
+
+The queued-voice case delays only the fixture history GET for two seconds and
+requires trace evidence that speech actually ended during that read, then one
+POST, a visible reply and resumed listening. A delay alone cannot pass the case.
 
 The collector separates device build, simulator journey and physical evidence.
 Missing/skipped/duplicate/incomplete required cases, a nonzero native command or

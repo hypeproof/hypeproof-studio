@@ -11,6 +11,7 @@ REQUIRED = {
     'MFR-T01': 'testFirstInstallSignInToFirstAnswerWithoutDesktop',
     'MFR-T02': 'testDictationEditsDraftThenSendGetsReplyWithoutDesktop',
     'MFR-T03': 'testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend',
+    'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
     'MFR-T04': 'testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch',
     'MFR-T05': 'testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',

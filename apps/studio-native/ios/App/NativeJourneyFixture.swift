@@ -31,7 +31,7 @@ import CryptoKit
                 try Task.checkCancellation(); deliver(text, false)
                 if !hold {
                     try await Task.sleep(nanoseconds: 300_000_000)
-                    try Task.checkCancellation(); deliver(text, true)
+                    try Task.checkCancellation(); JourneyTransport.store.finishedSpeech(); deliver(text, true)
                 } else {
                     // Continue revising partial recognition like ongoing speech.
                     // Stop/background must cancel this producer; a delayed test
@@ -50,18 +50,31 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "access-denied"].contains(scenario)
+        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "access-denied", "queued-voice"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
 
 private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     static let store = JourneyStore()
+    private let stopLock = NSLock()
+    private var stopped = false
+    private var delayed: DispatchWorkItem?
     // This protocol is installed only in the fixture's private session. Accept
     // every request so an unexpected URL fails locally instead of reaching DNS.
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        let delay = Self.store.responseDelay(request)
+        guard delay > 0 else { complete(); return }
+        let work = DispatchWorkItem { [weak self] in self?.complete() }
+        stopLock.lock(); delayed = work; let cancelled = stopped; stopLock.unlock()
+        if cancelled { work.cancel(); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: work)
+    }
+    private func complete() {
+        stopLock.lock(); let cancelled = stopped; stopLock.unlock()
+        guard !cancelled else { return }
         do {
             let (status, object) = try Self.store.respond(request)
             guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else { throw URLError(.badServerResponse) }
@@ -70,7 +83,9 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
             client?.urlProtocolDidFinishLoading(self)
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
-    override func stopLoading() {}
+    override func stopLoading() {
+        stopLock.lock(); stopped = true; delayed?.cancel(); delayed = nil; stopLock.unlock()
+    }
 }
 
 private struct JourneyAcceptedTurn: Codable {
@@ -88,6 +103,9 @@ private struct JourneySnapshot: Codable {
     var speechCaptures = 0
     var desktopRequests = 0
     var retryFailures = 0
+    var historyReads = 0
+    var delayedHistoryReads = 0
+    var speechEndedDuringHistory = 0
 }
 private final class JourneyStore: @unchecked Sendable {
     private let lock = NSLock()
@@ -96,6 +114,7 @@ private final class JourneyStore: @unchecked Sendable {
     private let code = String(repeating: "a", count: 64)
     private let requestID = String(repeating: "b", count: 64)
     private var value: JourneySnapshot
+    private var activeHistoryReads = 0
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
@@ -107,8 +126,22 @@ private final class JourneyStore: @unchecked Sendable {
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
             "accepted_turns": value.accepted.count, "browser_callbacks": value.callbacks,
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
+            "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
+            "speech_ended_during_history": value.speechEndedDuringHistory,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+    }
+    func responseDelay(_ request: URLRequest) -> TimeInterval {
+        lock.lock(); defer { save(); lock.unlock() }
+        guard request.httpMethod == "GET", request.url?.path == "/v1/me/reflection" else { return 0 }
+        value.historyReads += 1
+        guard JourneyConfiguration.scenario == "queued-voice", value.historyReads >= 2 else { return 0 }
+        activeHistoryReads += 1; value.delayedHistoryReads += 1
+        return 2
+    }
+    func finishedSpeech() {
+        lock.lock(); defer { save(); lock.unlock() }
+        if activeHistoryReads > 0 { value.speechEndedDuringHistory += 1 }
     }
     func callback(_ url: URL) throws -> URL {
         lock.lock(); defer { save(); lock.unlock() }
@@ -179,7 +212,9 @@ private final class JourneyStore: @unchecked Sendable {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": "journey-account", "status": "active"], "session_id": "journey-session"])
         case ("GET", "/v1/me/conversations"): return (200, ["conversations": []])
-        case ("GET", "/v1/me/reflection"): return (200, reflection())
+        case ("GET", "/v1/me/reflection"):
+            activeHistoryReads = max(0, activeHistoryReads - 1)
+            return (200, reflection())
         case ("POST", "/v1/me/reflection/turns"):
             guard let id = body["id"] as? String, let text = body["text"] as? String,
                   let revision = body["revision"] as? Int else { return (400, ["error": "invalid_request"]) }

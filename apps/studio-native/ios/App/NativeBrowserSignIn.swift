@@ -11,10 +11,11 @@ import UIKit
         if NativeJourneyFixture.enabled, let callback = try await NativeJourneyFixture.authenticate(url: url) { return callback }
 #endif
         try Task.checkCancellation()
+        let id = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard !Task.isCancelled, pending == nil else { continuation.resume(throwing: CancellationError()); return }
-                let id = UUID(); generation = id; pending = continuation
+                generation = id; pending = continuation
                 let browser = ASWebAuthenticationSession(url: url, callbackURLScheme: "hypeproof-studio-mobile") { [weak self] callback, error in
                     Task { @MainActor in
                         guard let self, self.generation == id else { return }
@@ -33,7 +34,12 @@ import UIKit
                     self.finish(.failure(StudioError.message("로그인 시간이 지났어요. 다시 시작해 주세요.")))
                 }
             }
-        } onCancel: { Task { @MainActor [weak self] in self?.cancel() } }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard let self, self.generation == id else { return }
+                self.cancel()
+            }
+        }
     }
     func cancel() { finish(.failure(CancellationError())) }
     private func finish(_ result: Result<URL, Error>) {

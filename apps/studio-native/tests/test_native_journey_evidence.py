@@ -23,7 +23,7 @@ class JourneyEvidence(unittest.TestCase):
             simulator_log.write_text(log if log is not None else ''.join(case(name) for name in journey.REQUIRED.values()))
             return journey.collect(SHA, build_log, build_exit, simulator_log, test_exit)
 
-    def test_seven_executed_journeys_allow_test_candidate_without_fabricating_physical_acceptance(self):
+    def test_eight_executed_journeys_allow_test_candidate_without_fabricating_physical_acceptance(self):
         result = self.run_fixture()
         self.assertEqual(result['test_candidate_eligibility'], 'PASS')
         self.assertEqual(result['physical_device'], {'status': 'NOT_RUN', 'blocks_test_candidate': False})
@@ -42,6 +42,13 @@ class JourneyEvidence(unittest.TestCase):
                 result = self.run_fixture(log=log)
                 self.assertEqual(result['build']['status'], 'PASS')
                 self.assertEqual(result['test_candidate_eligibility'], 'BLOCKED')
+
+    def test_prior_seven_journeys_cannot_replace_queued_voice_execution(self):
+        queued = 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening'
+        result = self.run_fixture(log=''.join(case(name) for name in journey.REQUIRED.values() if name != queued))
+        self.assertEqual(result['test_candidate_eligibility'], 'BLOCKED')
+        missing = next(item for item in result['simulator_journeys']['cases'] if item['requirement'] == 'MFR-T03-queued')
+        self.assertEqual(missing['status'], 'NOT_RUN')
 
     def test_failed_then_passed_or_nonzero_runner_cannot_hide_original_failure(self):
         names = list(journey.REQUIRED.values()); good = ''.join(case(name) for name in names)

@@ -237,7 +237,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var status: some View {
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
-        if model.syncing { ProgressView("대화 확인 중").font(.caption) }
+        if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
 #if DEBUG
         if NativeJourneyFixture.enabled { Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace") }
 #endif
@@ -263,7 +263,7 @@ struct SharedConversationView: View {
     private func reconcileVoiceReply() {
         guard voice.turn.phase == .waiting, let requestID = voiceRequestID, let id = model.selected else { return }
         let completedWaitExpired = voiceCompletionWaitStarted.map { Date().timeIntervalSince($0) >= 30 } ?? false
-        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
+        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.sendingCurrentRequest, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
         case .waiting:
             // Desktop event and request reads are separate. Allow the next poll to deliver its answer.
             if model.cache.request?.status == "completed" && voiceCompletionWaitStarted == nil { voiceCompletionWaitStarted = Date() }

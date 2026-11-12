@@ -67,28 +67,27 @@ final class StudioShellTests: XCTestCase {
         let restored = editable("reflection-observation", in: app)
         XCTAssertEqual(restored.value as? String, "Two customers waited outside")
         app.buttons["닫기"].tap()
-        // Voice auto-send consent is explicit. Cancelling it cannot capture,
-        // send or replace an existing keyboard draft.
+        // This disconnected tab records locally; it must not imply an AI reply.
+        XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
+        XCTAssertTrue(app.staticTexts["여기는 이 기기의 보관함이에요. 답변을 받으려면 질문 탭에서 계정으로 시작해 주세요."].exists)
         let draft = editable("thoughtInput", in: app)
         draft.tap(); draft.typeText("Keep this unfinished thought")
         app.buttons["voiceConversation"].tap()
-        XCTAssertTrue(app.buttons["startVoiceConsent"].waitForExistence(timeout: 5))
-        let cancelVoice = app.buttons["cancelVoiceConsent"]
-        XCTAssertTrue(cancelVoice.waitForExistence(timeout: 5))
-        cancelVoice.tap()
-        XCTAssertTrue(app.textFields["thoughtInput"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["startVoiceConsent"].waitForNonExistence(timeout: 5))
+        // The missing AI grant still requires its real disclosure. There is no
+        // extra voice-consent screen, and declining the grant must not record,
+        // transmit or replace the existing draft.
+        XCTAssertTrue(app.navigationBars["무료 AI 연결"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["startVoiceConsent"].exists)
+        XCTAssertFalse(app.buttons["cancelVoiceConsent"].exists)
+        XCTAssertFalse(app.buttons["동의하고 연결"].isEnabled)
+        XCTAssertFalse(app.buttons["stopVoice"].exists)
+        app.buttons["닫기"].tap()
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         XCTAssertTrue(app.buttons["dictateVoice"].exists)
         XCTAssertFalse(app.buttons["stopVoice"].exists)
-        // On an unconnected client, accepting voice must transition to AI
-        // consent after dismissal, without losing the draft or recording.
-        app.buttons["voiceConversation"].tap()
-        XCTAssertTrue(app.buttons["startVoiceConsent"].waitForExistence(timeout: 5))
-        app.buttons["startVoiceConsent"].tap()
-        XCTAssertTrue(app.navigationBars["무료 AI 연결"].waitForExistence(timeout: 5))
-        app.buttons["닫기"].tap()
+        app.terminate(); app.launch(); app.tabBars.buttons["기기 기록"].tap()
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
+        XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
         XCTAssertFalse(app.buttons["stopVoice"].exists)
         XCTAssertEqual(app.webViews.count, 0)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "native-iphone-intent"; shot.lifetime = .keepAlways; add(shot)
@@ -190,6 +189,25 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual((result["submitted_ids"] as? [String])?.count, 1)
         XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
         try evidence("journey-voice-stop", app: app)
+    }
+    @MainActor func testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening() throws {
+        let app = launch("queued-voice"); signIn(app)
+        app.buttons["연동 설정"].tap(); app.buttons["새로 고침"].tap()
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertTrue(syncing.waitForExistence(timeout: 5))
+        let voice = app.buttons["sharedVoice"]; enabled(voice); voice.tap()
+        answer(app)
+        valueContains(field(app), "Keep this spoken draft without sending")
+        let stop = app.buttons["sharedVoiceStop"]; enabled(stop); stop.tap()
+        let result = try trace(app)
+        XCTAssertGreaterThanOrEqual(result["delayed_history_reads"] as? Int ?? 0, 1)
+        XCTAssertGreaterThanOrEqual(result["speech_ended_during_history"] as? Int ?? 0, 1, "The fixture must actually overlap speech completion and history sync; merely delaying a request is insufficient evidence.")
+        XCTAssertEqual(result["accepted_turns"] as? Int, 1)
+        XCTAssertEqual((result["submitted_ids"] as? [String])?.count, 1)
+        XCTAssertEqual(result["submitted_texts"] as? [String], ["I want to understand my next step"])
+        XCTAssertGreaterThanOrEqual(result["speech_captures"] as? Int ?? 0, 2, "The queued request must retain its voice-reply continuation.")
+        XCTAssertFalse(app.staticTexts["sharedError"].exists)
+        try evidence("journey-queued-voice", app: app)
     }
     @MainActor func testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch() throws {
         let app = launch("voice-hold"); signIn(app)
