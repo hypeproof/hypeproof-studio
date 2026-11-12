@@ -276,7 +276,7 @@ function Settlement({ s, busy, send }: { s: StoreSellerView; busy: boolean; send
     {s.sales.length ? <table><thead><tr><th>스킬</th><th>판매가</th><th>결제 수수료(예상)</th><th>내 몫 (80%)</th><th>HypeProof 수수료 (20%)</th><th>그중 파트너</th><th>그중 강사</th><th>상태</th><th>정책</th></tr></thead>
       <tbody>{s.sales.map(x => <tr key={x.order_id}><td>{x.title}</td><td>{won(x.gross)}</td><td>{won(x.pg_fee)}</td><td>{won(x.seller)}</td><td>{won(x.commission)}</td><td>{won(x.partner)}</td><td>{won(x.instructor)}</td><td>{SALE_STATUS[x.status] ?? x.status}</td><td>{x.policy_version}</td></tr>)}</tbody></table>
       : <p>아직 판매가 없어요.</p>}
-    {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
+    {s.items.length > 0 && <><h3>내 스토어</h3><ul>{s.items.map(i => <li key={i.id}>{i.title} · {i.price_krw ? won(i.price_krw) : "무료"} · {s.course_blocked ? STORE_COPY.courseBlockedItem : i.status === "listed" ? STORE_COPY.listed : i.status === "review" ? "검토 대기" : "내려감"}</li>)}</ul></>}
   </section>;
 }
 

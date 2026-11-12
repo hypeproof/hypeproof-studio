@@ -88,6 +88,11 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     try {
       const me = await c.me();
       const seller = tab === "sell" ? await c.seller() : state.seller;
+      // A course that does not sell: no quest prefill and no "가격만 정하면 올릴 수 있어요" next to the reason.
+      if (seller?.course_blocked) {
+        extra = { ...extra, questDraft: undefined };
+        if ((extra.notice ?? state.notice) === STORE_COPY.questPrefill) extra = { ...extra, notice: undefined };
+      }
       await push({ access: "ready", tab, items, ageGroup: me.age_group, installs: me.installs, seller, busy: false, ...extra });
     } catch (error) {
       const signedOut = error instanceof StoreClientError && error.code === "account_required";

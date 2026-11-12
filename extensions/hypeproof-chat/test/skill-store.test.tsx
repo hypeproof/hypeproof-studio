@@ -264,8 +264,10 @@ async function main() {
 
 // #3772: a course that does not sell shows why and offers no listing.
 {
-  const blocked = html(base({ tab: 'sell', seller: { ...SELLER, course_blocked: true, attribution: { ...DECIDED, decided: false } }, questDraft: { title: 'x', summary: 'y', steps: [] } }));
-  assert.ok(blocked.includes('이 과정에서는 스킬을 팔 수 없어요. 청소년 과정 수강생은 스토어에 스킬을 올리거나 팔 수 없고'));
+  const blocked = html(base({ tab: 'sell', seller: { ...SELLER, course_blocked: true, attribution: { ...DECIDED, decided: false }, items: [{ id: PAID.id, title: '회의록 정리 스킬', price_krw: 0, status: 'listed', report_count: 0 }] }, questDraft: { title: 'x', summary: 'y', steps: [] } }));
+  assert.ok(blocked.includes('이 과정에서는 스킬을 팔 수 없어요. 판매를 하지 않는 과정(청소년 과정 등)의 수강생은'));
+  assert.ok(blocked.includes('회의록 정리 스킬 · 무료 · 판매 중지(과정 제한)'), 'a hidden item is not shown as on sale');
+  assert.equal(blocked.includes('판매 중<'), false);
   for (const hidden of ['스킬 올리기', '스토어에 등록', '파트너·강사 코드', '휴대폰 본인인증']) assert.equal(blocked.includes(hidden), false, hidden);
   assert.ok(blocked.includes('정산 내역'), 'the settlement history stays');
 }
