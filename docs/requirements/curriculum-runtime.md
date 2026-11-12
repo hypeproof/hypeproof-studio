@@ -190,3 +190,13 @@ Three §12 items are rows elsewhere and are not repeated: no provider keys in st
 ## Change rules
 
 Implementation PRs name the CR IDs they address, the real paths, the evidence class of each run (live-host / captured-replay / synthetic, per MC-38) and what remains NOT RUN. To change a label, a field or a target, edit this table first. Requirement IDs are never reused.
+
+### CR-46 evidence selection in Studio (#3356)
+
+Product Builder lets the learner search the Service-provided evidence labels locally,
+ignoring letter case and surrounding search whitespace. Filtering changes only
+visibility: selected evidence refs remain selected and are submitted unchanged,
+including when the search has no matches. The panel shows selected and matching
+counts, explains empty results and offers clear-search. Clearing returns keyboard
+focus to the search input; switching skills resets search with the form. This adds
+no evidence ranking, judgments, retrieval, provider calls or Service write behavior.
