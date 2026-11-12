@@ -9011,3 +9011,11 @@ physical Korean ASR, five-turn acceptance or a human growth outcome.
 ### Native iPhone credential continuity — MIRS-01
 
 The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
+
+### Correlated iPhone testing delivery — MTF-01
+
+`ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
+receipts to the existing exact-source native CI and Apple environment gates.
+Partial inputs/source movement refuse signing; successful command completion
+does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
+and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).

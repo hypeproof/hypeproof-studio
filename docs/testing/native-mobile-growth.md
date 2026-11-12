@@ -88,3 +88,23 @@ Signed acceptance: open the existing iPhone personal conversation, preserve a dr
 Run43137056162/1 failed all9 Android UI tests while the captured foreground was `Application Not Responding: com.google.android.apps.nexuslauncher`; the original PNG showed the Pixel Launcher ANR dialog, with the emulator awake and unlocked. This evidence identifies the foreground obstruction, not a passing app test or a proven emulator root cause. Preserve that failed run.
 
 The native Android script now records bounded read-only window/power observations after installation and before instrumentation. Missing state, sleep, keyguard or a foreground ANR/error dialog cannot start UI tests. Failure capture adds a machine-readable diagnosis and input hashes while retaining the original nonzero exit code, logs and screenshot. Studio ANRs remain distinct from foreign ANRs. No dialogs are dismissed, failed tests skipped, or acceptance rules relaxed. Readiness permits starting tests only; full native test completion is still required. Actual Foundry profile adoption remains separately NOT RUN.
+
+## TestFlight request and receipt — MTF-T01
+
+For MTF-01 / Studio #3768, run `python3 -m unittest discover -s
+apps/studio-native/tests -p 'test_*.py' -v`. Deployment contract controls check
+legacy input, every partial request, malformed/newline values, SHA movement,
+gate artifact binding, invocation outside the checkout, and the real shell's
+pre-signing refusal. The archive/export/validation/upload tail executes with
+synthetic tools: any nonzero phase stops before a success receipt; a complete
+run binds package bytes and app/run identity without claiming availability.
+Existing native-gate controls still reject stale or mismatched CI artifacts.
+These controls perform no signing, Apple call or workflow dispatch.
+
+Authorized deployment acceptance: supply one Harness request, verify the run
+name and gate `deployment_request` match its exact digest/source, then inspect
+that run attempt's `upload-receipt.json` and IPA digest. A missing receipt stays
+uncertain until the original provider operation is reconciled. Observe Apple
+processing/tester availability separately and record the exact installed version.
+The existing no-input manual path emits `deployment_request: null`; Harness
+must not attach that uncorrelated receipt to one of its own operations.

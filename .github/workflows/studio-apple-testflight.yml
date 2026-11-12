@@ -1,11 +1,29 @@
 name: Studio Apple TestFlight
+run-name: ${{ inputs.operation_id && format('studio-testflight:{0}:{1}', inputs.operation_id, inputs.request_digest) || 'Studio Apple TestFlight' }}
 on:
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Optional full source SHA; supply all three request fields together'
+        required: false
+        type: string
+      operation_id:
+        description: 'Harness operation ID'
+        required: false
+        type: string
+      request_digest:
+        description: 'Harness SHA-256 request digest'
+        required: false
+        type: string
   push:
     branches: ['release/studio-unified-preview']
     paths: ['apps/studio-native/**', '.github/workflows/studio-apple-testflight.yml', '.github/workflows/studio-native-mobile.yml']
 permissions:
   contents: read
+env:
+  NATIVE_EXPECTED_SHA: ${{ inputs.expected_sha }}
+  NATIVE_OPERATION_ID: ${{ inputs.operation_id }}
+  NATIVE_REQUEST_DIGEST: ${{ inputs.request_digest }}
 concurrency:
   group: studio-apple-testflight
   cancel-in-progress: false

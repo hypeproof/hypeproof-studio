@@ -920,10 +920,11 @@
         "MPER-03",
         "MPER-04",
         "MPER-05",
-        "MIRS-01"
+        "MIRS-01",
+        "MTF-01"
       ],
       "inline_prefixes": [],
-      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "sha256": "48bc865bb11dbf15e868e33eb4fdc2ee943685dc669d218e0c9a2e5b79f46000",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4602,6 +4603,36 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "native-deployment-receipt-v1",
+      "title": "Bind TestFlight requests and upload receipts to exact source",
+      "issue": 3768,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTF-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the contract and independently inspect an authorized exact-source workflow receipt; Apple processing, tester availability and physical acceptance remain separate.",
+      "design_delta": "Reuse existing native-CI and Apple environment gates; optional all-or-none Harness correlation and credential-free upload observation.",
+      "positive_control": "One complete request carries the same source/operation/digest through the gate and successful command receipt with actual package hash.",
+      "negative_control": "Partial/malformed request, moved source or failed archive/validation/upload cannot emit a success receipt or claim tester availability.",
+      "evidence_required": "Focused synthetic contract and shell controls, unchanged native-gate regressions, exact trusted workflow/Harness evidence separately.",
+      "implementation_paths": [
+        ".github/workflows/studio-apple-testflight.yml",
+        "apps/studio-native/scripts/verify-native-candidate.py",
+        "apps/studio-native/scripts/apple-upload.sh"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/tests/test_native_deployment_contract.py",
+        "apps/studio-native/tests/test_verify_native_candidate.py"
       ]
     }
   ]
