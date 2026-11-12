@@ -23,6 +23,9 @@ import { InboxSession, InboxStore, inboxDir, inboxView } from "./classroomInboxS
 
 export const CREDENTIAL_KEY = "hypeproof.classroomOps.credential";
 const META_KEY = "hypeproof.classroomOps.connection";
+/** E5 (ADR 0012): the consent recorded for which connection, at which notice version. Never the notice text or the credential. */
+const PARTICIPATION_KEY = "hypeproof.classroomOps.participationConsent";
+export interface ParticipationNotice { version: string; title: string; body: string; accept: string; decline: string }
 /**
  * Which inbox the learner is shown: the one of the connection that is valid now, or of the last one that ended the
  * normal way (class over). Kept apart from META_KEY because that one is forgotten when a class ends, and material the
@@ -352,8 +355,56 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     void this.resumePendingUploads().then(async () => { if (!(await this.pendingStates()).some((st) => st.scope?.grant_id === meta.grant_id && this.meta?.grant_id === meta.grant_id)) await this.forget(); });
   }
 
+  /**
+   * E5 (ADR 0012) — the class data notice, served by the Service so that the version a consent names is the text shown.
+   * `notice: null` = this Service predates the notice: the seat connects as before and class answers stay unavailable.
+   */
+  async participationNotice(): Promise<{ ok: true; notice: ParticipationNotice | null } | { ok: false; reason: "ops_disabled" | "unreachable" }> {
+    let res: Response;
+    try { res = await fetch(`${this.base()}/classroom/ops/participation/notice`, { signal: AbortSignal.timeout(10000) }); } catch { return { ok: false, reason: "unreachable" }; }
+    const body = (await res.json().catch(() => null)) as { reason?: string; notice?: ParticipationNotice } | null;
+    if (res.status === 404) return body?.reason === "ops_disabled" ? { ok: false, reason: "ops_disabled" } : { ok: true, notice: null };
+    const n = body?.notice;
+    if (!res.ok || !n || typeof n.version !== "string" || typeof n.body !== "string" || typeof n.title !== "string" || typeof n.accept !== "string" || typeof n.decline !== "string") return { ok: false, reason: "unreachable" };
+    return { ok: true, notice: { version: n.version, title: n.title, body: n.body, accept: n.accept, decline: n.decline } };
+  }
+  /** The notice as a modal. True only for the explicit accept button; closing the dialog is not consent. */
+  private async askParticipation(notice: ParticipationNotice): Promise<boolean> {
+    return (await vscode.window.showInformationMessage(notice.title, { modal: true, detail: notice.body }, notice.accept, notice.decline)) === notice.accept;
+  }
+  /** Records consent for the live connection. Remembered per grant so the answer path knows whether to ask again. */
+  async recordParticipationConsent(version: string, consent = true): Promise<"recorded" | "withdrawn" | "notice_outdated" | "guardian_consent_required" | "failed"> {
+    const grant = this.meta?.grant_id;
+    if (!this.credential || !grant) return "failed";
+    const res = await fetch(`${this.base()}/classroom/ops/participation/consent`, { method: "POST", headers: { authorization: `Bearer ${this.credential}`, "content-type": "application/json" }, body: JSON.stringify({ consent, notice_version: version }), signal: AbortSignal.timeout(10000) }).catch(() => null);
+    if (!res) return "failed";
+    if (res.ok) { await this.context.globalState.update(PARTICIPATION_KEY, consent ? { grant_id: grant, notice_version: version, at: Date.now() } : undefined); return consent ? "recorded" : "withdrawn"; }
+    const reason = ((await res.json().catch(() => ({}))) as { reason?: string }).reason;
+    return reason === "notice_outdated" || reason === "guardian_consent_required" ? reason : "failed";
+  }
+  /** Whether this window's live connection has a recorded consent at `version`. */
+  participationConsented(version: string): boolean {
+    const r = this.context.globalState.get<{ grant_id: string; notice_version: string }>(PARTICIPATION_KEY);
+    return !!r && r.grant_id === this.meta?.grant_id && r.notice_version === version;
+  }
+  /** Command palette: read the notice again and give or withdraw consent for this class. */
+  async participationConsentInteractively(): Promise<void> {
+    if (!this.credential || !this.meta) { void vscode.window.showInformationMessage("먼저 ‘수업 연결’로 이번 수업에 연결하세요."); return; }
+    const got = await this.participationNotice();
+    if (!got.ok || !got.notice) { void vscode.window.showWarningMessage("수업 참여 데이터 안내를 불러오지 못했습니다. 동의 상태는 바뀌지 않았습니다."); return; }
+    const withdraw = "동의 철회";
+    const pick = await vscode.window.showInformationMessage(got.notice.title, { modal: true, detail: got.notice.body }, got.notice.accept, withdraw);
+    if (!pick) return;
+    const r = await this.recordParticipationConsent(got.notice.version, pick !== withdraw);
+    void vscode.window.showInformationMessage(r === "recorded" ? "수업 참여 데이터 동의를 기록했습니다." : r === "withdrawn" ? "동의를 철회했습니다. 이 수업에서 더 수집하지 않으며 이 수업에서 남긴 답변을 지웠습니다." : r === "guardian_consent_required" ? "이 수업은 보호자 동의가 필요합니다. 앱에서 직접 동의할 수 없습니다." : "동의 상태를 기록하지 못했습니다. 잠시 뒤 다시 시도하세요.");
+  }
+
   /** Learner-initiated: type the one-time code the instructor handed over. */
   async connectInteractively(): Promise<void> {
+    // E5 (ADR 0012): the learner reads the class data notice BEFORE the code is used. Declining uses nothing and connects nothing.
+    const got = await this.participationNotice();
+    if (!got.ok) { void (got.reason === "ops_disabled" ? vscode.window.showInformationMessage("이 수업 서버에는 수업 연결 기능이 켜져 있지 않습니다. 수업 참여에는 영향이 없습니다.") : vscode.window.showWarningMessage("수업 참여 데이터 안내를 불러오지 못해 연결하지 않았습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.")); return; }
+    if (got.notice && !(await this.askParticipation(got.notice))) { void vscode.window.showInformationMessage("동의하지 않아 이번 수업에는 연결하지 않았습니다. Studio 개인 사용은 그대로 할 수 있습니다."); return; }
     const ticket = await vscode.window.showInputBox({
       title: "수업 연결", prompt: "강사가 알려준 수업 연결 코드를 입력하세요 (10분 안에 한 번만 쓸 수 있습니다)",
       placeHolder: "XXXX-XXXX-XXXX", ignoreFocusOut: true, validateInput: (v) => (v.replace(/[^0-9A-Za-z]/g, "").length === 12 ? null : "12자리 코드를 입력하세요"),
@@ -380,8 +431,10 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const meta: ConnectionMeta = { grant_id: b.grant_id, class_run_id: b.class_run_id, seat_id: b.seat_id, expires_at: b.expires_at, poll_after_ms: b.poll_after_ms, connected_at: Date.now(), ...(b.student ? { student: b.student } : {}), ...(b.run ? { run: b.run } : {}), lesson: b.lesson ? { course_id: b.lesson.course_id, version: b.lesson.version } : null };
     await this.context.globalState.update(META_KEY, meta);
     await this.start(meta, b.credential);
+    // A failed record is not a refusal: the answer path sees no consent for this grant and asks again (#3776).
+    const recorded = got.notice ? await this.recordParticipationConsent(got.notice.version) : null;
     void vscode.window.showInformationMessage(
-      `수업에 연결했습니다 (좌석 ${b.seat_id}). 강사 화면에는 입장·단계·오류 상태만 보입니다. 대화 내용과 파일은 보내지 않으며, 이 연결로는 AI를 쓸 수 없습니다. 명령 팔레트의 ‘수업 연결 끊기’로 언제든 끊을 수 있습니다.`,
+      `수업에 연결했습니다 (좌석 ${b.seat_id}). 강사 화면에는 입장·단계·오류 상태만 보입니다. 대화 내용과 파일은 보내지 않으며, 이 연결로는 AI를 쓸 수 없습니다. 명령 팔레트의 ‘수업 연결 끊기’로 언제든 끊을 수 있습니다.${recorded && recorded !== "recorded" ? " 수업 참여 데이터 동의는 아직 기록되지 않았습니다. 첫 답변 때 다시 묻습니다." : ""}`,
     );
   }
 

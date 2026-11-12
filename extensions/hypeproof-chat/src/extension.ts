@@ -504,6 +504,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.classroomDisconnect", () => classroomOps.disconnectInteractively()),
     vscode.commands.registerCommand("hypeproof-chat.classroomNotes", () => classroomOps.showCoachingNotes()),
     vscode.commands.registerCommand("hypeproof-chat.classroomCollectionConsent", () => classroomOps.collectionConsentInteractively()),
+    vscode.commands.registerCommand("hypeproof-chat.classroomParticipationConsent", () => classroomOps.participationConsentInteractively()),
     vscode.commands.registerCommand("hypeproof-chat.classroomApproveArtifact", () => provider.approveArtifactInteractively()),
 
     vscode.commands.registerCommand("hypeproof-chat.clearHistory", async () => {
