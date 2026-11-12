@@ -262,6 +262,8 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 
 의미 색 역할의 이름은 `--hp-{text|bg|border|ring}-{role}-{state}`다(CGP-DS-D-001). 범주는 그 색을 칠하는 속성(글자·바탕·테두리·포커스 링), 역할은 쓰임, 상태는 `default`·`hover`·`pressed`·`selected` 중 하나다. hover·pressed 바탕은 글자색을 면 위에 8%, 14%(밝은 면은 12%) 섞은 상태층이다(CGP-DS-D-003, DES-CGP-DS-04). 컨트롤을 알아보게 하는 테두리는 이렇게 섞지 않고 3:1 이상인 고정색 `--hp-border-control-default`를 쓴다. 컴포넌트 CSS는 이 이름만 읽는다. 두 테마가 모든 역할을 따로 묶는다: 어두운 forest(`:root`)와 밝은 Paper(회고·변화 기록 면). 글자 크기 단계는 `--hp-font-*`라서 `--hp-text-*`는 언제나 글자색이다. 이전 이름과의 대응은 아래 블록 다음의 표에 있다.
 
+웹뷰는 호스트 테마 종류를 따른다(CGP-DS-R-004). `body.vscode-dark`·`vscode-light`·`vscode-high-contrast`·`vscode-high-contrast-light` 네 가지가 각자의 토큰 묶음으로 풀리고, 자기 HTML을 그리는 패널(미리보기 틀, 덱 장 다듬기 등)은 테마의 편집기 바탕을 칠한다. 보조 글자는 `opacity`로 흐리게 하지 않고 테마의 설명 색을 쓰며, 밝은 종류에서는 글자색 쪽으로 20% 섞는다. 고대비 종류에서는 그림자 대신 1px 테두리를 그린다. 시작 화면은 어느 테마에서나 forest다.
+
 ```css
 :root {
   /* 호스트 대응(CGP-DS-D-002, DES-CGP-DS-02). 역할마다 같은 일을 하는 VS Code 테마 색을 읽고, fallback은 forest 값이다.

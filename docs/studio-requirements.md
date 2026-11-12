@@ -5104,6 +5104,48 @@ Test: `extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs` (recorded th
 re-derived from `theme-defaults` when `vscodium-base` is checked out, and 14 negative controls).
 Decision: DEC-DS-D-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
+## Host theme kinds (CGP-DS-R-004)
+
+`REQ-STUDIO-HOST-THEME-KINDS` adopts REQ-CGP-DS-03 ("Webview follows the host theme kind
+(light/dark/high-contrast)"). Product Intent PI#1: a learner who runs VS Code in a light or a
+high-contrast theme reads every Studio screen in that theme, and the HypeProof Studio theme still
+draws the HP palette (dark + lime). No scored outcome. Builds on the host theme mapping above
+(CGP-DS-D-002) and the elevation levels (CGP-DS-R-012).
+
+- Scope: every webview this extension creates. The chat view and the four panels that load the
+  same bundle (start page, automation, local review, skill store) take their colours from
+  `tokens.css`; the seven panels that draw their own HTML (artifact history, the image-edit
+  comparison, personal continuation, slide studio, visitor preview, work takeaway, the preview
+  shell) read the `--vscode-*` theme variables directly.
+- Each of `body.vscode-dark`, `body.vscode-light`, `body.vscode-high-contrast` and
+  `body.vscode-high-contrast vscode-high-contrast-light` maps to its own token set on the chat:
+  the text, app surface, focus ring and CTA roles resolve to that theme's `foreground`,
+  `editor.background`, `focusBorder` and `button.background`; elevation is the dark level on
+  dark kinds, the light level on light kinds and flat in both high-contrast kinds; the four kinds
+  give four different token sets. Under the HypeProof Studio theme the roles equal the forest
+  palette.
+- The branded start and disconnected screens stay forest in every kind (DEC-27, CGP-DS-D-002).
+- Every panel that draws its own HTML paints the theme's `editor.background` as its page.
+- Text: every visible element with its own text is at least 4.5:1 against what is painted under
+  it, with its colour's alpha and every ancestor's opacity applied, in all four kinds and at
+  320, 390 and 1280px. Secondary text on light kinds is the description colour pulled 20%
+  toward the foreground (as in `tokens.css`), never the foreground dimmed with `opacity`.
+- High-contrast kinds: no element casts an outer shadow unless it also draws a solid, opaque,
+  at least 1px border on every side.
+- Changed by CGP-DS-R-004: the preview shell's page was a fixed `#1b1b2a` with `#ddd` text in
+  every theme; it now paints the editor surface and the theme's text, and its placeholder and
+  review notice use the description colour instead of the text at 70% and 85% opacity (3.2:1
+  and 4.4:1 on Light+). The slide studio's secondary text (`--muted`) takes the light-kind mix
+  (Light+ `#717171` on its `#F3F3F3` card was 4.4:1).
+
+Test: `extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs` (headless Chromium,
+nine surfaces, four kinds plus the HypeProof Studio theme, three widths, one screenshot per
+surface, kind and width with `HOST_THEME_KINDS_EVIDENCE=<dir>`, seven negative controls; it
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Colours are read from the computed
+cascade, never sampled from glyphs, so the result does not depend on installed fonts.
+Verification: `docs/testing/host-theme-kinds.md`. Decision: CGP-DS-R-004 in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
 ## Text contrast table (CGP-DS-D-028)
 
 DES-CGP-DS-42, traces to CGP-DS-R-034 (REQ-CGP-DS-42, "no text token below 4.5:1 is used for
@@ -9144,3 +9186,45 @@ The exact current-attempt gate is checked before signing and receipt emission;
 failed-job-only reruns must not reuse an older successful gate. Successful command completion
 does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
 and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).
+
+## Show what I made (#3794 slice 1)
+
+`REQ-STUDIO-SHOW-WHAT-I-MADE` follows `ST-INT-NATIVE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12). It
+serves the moment a person shows what they made to someone else. It is not "make me a promo video". Desktop only,
+on by default (Jay, 2026-11-12: slice 1 stores only in the person's workspace and sends nothing); the machine
+setting `hypeproofChat.showWhatIMadeEnabled` turns it off. Uploading and sharing wait for the consent item.
+
+- Command `hypeproof-chat.showWhatIMade` (`내가 만든 것 보여주기`) opens one panel and asks one question at a
+  time: `누구에게 보여 주고 싶나요?` (up to 40 characters), then `그 사람이 처음 3초 안에 무엇을 봤으면 하나요?`
+  (up to 60), then the person's own material. The native picker may only return an image (PNG, JPG, WebP, GIF;
+  sniffed bytes, 20 MB at most) or an HTML page inside the work folder, with no link on the path. A page becomes a
+  1920x1080 picture of its first screen through Studio's own preview server and browser tab (the `savePagePdf` path).
+  Folder consent applies before any write.
+- Studio drafts exactly one scene: the person's 3-second answer as the headline over their material, and a closing
+  card `내가 만든 것 · <audience>에게`. No model call is made. No AI-generated people, no stock imagery, and no text
+  except the person's own words, apart from that one closing label. The person can edit the headline, accept or
+  redo (back to the 3-second question, the audience kept). Nothing is published.
+- Files go to `<work folder>/.hypeproof/show/<YYYYMMDD-HHMMSS>/`: `index.html` (the HyperFrames composition),
+  `material-N.<ext>` (a copy of the person's bytes), `anime.umd.min.js`, `NotoSansKR-Korean.woff2` and
+  `decisions.json`. `decisions.json` counts the person's choices (audience, 3-second goal, material, headline
+  edits, accept, redo) and holds no person text.
+- Composition contract: 1920x1080, 15 s (`data-duration`, never over 15), `data-no-timeline` on the root, and one
+  paused Anime.js 4.5.0 timeline pushed to `window.__hfAnime`. The HyperFrames animejs adapter seeks it in
+  composition milliseconds, so a frame is a function of time alone. No GSAP (its license does not clearly allow
+  redistribution in the app). There is no clock, randomness or network read. The only references are the material,
+  Anime.js and the font beside the file. Person text is HTML-escaped, split into one span per word, and never placed
+  inside a script. `scripts/check-show-composition.mjs` runs `hyperframes check --json` on a generated composition
+  and must report 0 errors and 0 warnings.
+- Playback happens inside the panel through the vendored Apache-2.0 `<hyperframes-player>` and runtime (0.9.38), with
+  the composition as `srcdoc`. The runtime keeps its upstream file name so the player never injects its CDN copy. The
+  panel CSP admits only nonce'd scripts and the webview resource origin. Vendored files, versions, licenses and
+  sha256 are listed in `media/show/VENDORED.json`.
+- No telemetry and no new network call.
+
+Out of scope (TODO #3794): Service upload and the `-try` share link, MP4/WebM export, mobile, the consent-version
+bump.
+
+Evidence: `test/show-what-i-made.smoke.mjs` (vendored pins, composition contract, escaping, flow state machine,
+host writes and refusals, headless offline playback sought to fixed times, panel layout at 360/800/1420) and
+`scripts/check-show-composition.mjs` (HyperFrames checker, run on a worker with a pinned CLI). Not covered: the
+installed Electron app. A real-app run of the panel is NOT RUN in this slice.

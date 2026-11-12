@@ -18591,6 +18591,119 @@
           "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-HOST-THEME-KINDS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Host theme kinds (CGP-DS-R-004)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOST-THEME-KINDS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOST-THEME-KINDS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-KINDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/host-theme-kinds.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SHOW-WHAT-I-MADE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Show what I made (#3794 slice 1)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHOW-WHAT-I-MADE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMade.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/media/show/VENDORED.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-SHOW-WHAT-I-MADE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE",
+        "ST-IMP-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/show-what-i-made.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/scripts/check-show-composition.mjs"
+        }
+      ]
     }
   ]
 }

@@ -174,6 +174,13 @@ role `--hp-{text|bg|border|ring}-{role}-{state}` and binds each one in both the 
 and the light (Paper) theme; `tokens.css` is the first import of the webview. The contract is
 in `docs/studio-requirements.md` "Semantic colour roles and token order (CGP-DS-D-001)".
 
+Every webview the extension creates follows the host theme kind (CGP-DS-R-004, REQ-CGP-DS-03):
+`body.vscode-dark`, `vscode-light`, `vscode-high-contrast` and `vscode-high-contrast-light` each
+resolve to their own token set, the panels that draw their own HTML paint the theme's editor
+surface, text stays at least 4.5:1 and high-contrast kinds draw an edge where a shadow is used.
+The branded start screen stays forest. Contract: `docs/studio-requirements.md` "Host theme kinds
+(CGP-DS-R-004)".
+
 Chalk's generated TypeScript transport must exactly equal the canonical CSS, be checked
 before its build, and be injected before page styles through every actual HTML route.
 No network request, account state or live Service dependency is added. Missing document
