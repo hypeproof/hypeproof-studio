@@ -2047,3 +2047,48 @@ Audit of main (4f1602fb2). The extension creates one webview view and twelve web
 - Not changed: Chalk (REQ-CGP-DS-03 says Both, but Chalk is a dark-only web page with no host theme kind); forced colors (forced-colors-computed); the learner's own page inside the preview frame.
 - Not covered: the packaged app in a real VS Code high-contrast theme on macOS or Windows: NOT RUN. The default-theme variables come from the recorded table plus colour-registry defaults, not from a live VS Code.
 - Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-ART-R-004 / CGP-ART-D-004: 이 부분 고치기 in the Chalk plan view (2026-11-13)
+
+Jay approved building it on 2026-11-13. It is an extension of the authoring assistant (CGP-AGENT-R-014), and the approval allows one new Haiku prompt, for this scope only, under these constraints:
+- the same `HPS_AUTHORING_ASSISTANT` flag;
+- the same US$0.20 per instructor per KST day cap;
+- metadata-only logs;
+- the Service, not the model, splices the result back, so every byte outside the section stays unchanged;
+- a Chalk plan view with 이 부분 고치기.
+
+The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed by Jay: yes (2026-11-13) for the approved scope and constraints above. Confirmed by Jay: no for the agent-selected choices below.
+
+- **Generator (agent choice, from the plan).** `chalk-plan/1` files are written by Studio instructor mode through the Chalk tools. Neither hps-authoring-batch nor the assistant route writes them. The assistant's existing prompt and key allow-list cover SessionDesign keys only, and its draft projection drops `plan_ref`. So the section revision is a second task beside it: its own prompt, a `{section_html}` output and the chalk-plan validator. It reuses the assistant's flag, price revision, cap, charge ledger, client and log line.
+- **Anchor (agent choice).** The anchor is `{file, section, marker?:{name,value}}`: a whole section, or an element inside it whose marker value is unique in that section.
+  - Cell markers (`data-chalk-field`, `-role`, `-requires`, `-forbids`, `-derived-from`) are not addressable, because their values repeat by design.
+  - The Service locates the element in the stored file with the parser's tokenizer. Chalk uses the same uniqueness rule, so it only offers what the Service will accept.
+- **Save, not proposal (agent choice).** Unlike CH-10, the result is saved as the next draft revision through the PUT /plan save. Reasons:
+  - The existing FB-01 compare is `GET /diff` between saved revisions.
+  - The FB-05 link (`chalk_feedback_revisions`) needs a revision.
+  - Saving server-side keeps the byte-identical splice from passing back through the browser.
+
+  A draft is never what learners get: freeze, rehearsal and confirmation still gate that.
+- **What the Service refuses (agent choice).** With 422 and nothing stored:
+  - a shape change;
+  - anything PUT /plan refuses;
+  - a link or resource the plan does not already carry;
+  - a new `data-chalk-requires` word, a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`;
+  - any parser finding (warn or fail) that the stored plan did not already have.
+
+  Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
+  - the pointer outline is CSS `:hover` on the innermost mark;
+  - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
+  - keyboard focus shows both the outline and the button, and Enter opens the composer, as the row asks.
+
+  Showing the button on hover alone would need that lock changed. That is a design-system decision, not made here.
+- **Rendering (agent choice).** The plan is parsed with `DOMParser`, rebuilt from a closed tag list, and keeps only `data-chalk-*` attributes. It is drawn as light paper (surface white, ink `#242c28`). The outline uses `ink-50`, about 5.9:1 on the paper, and `Highlight` under forced colors.
+- **Forwarder (agent choice).** Chalk admits the path by name until its service-contracts pin moves past 0.1.5, the same pattern as CGP-SHELL-R-003. The forward budget is 45 s for this path only, because the Service waits up to 30 s on Haiku.
+- **Copy.** The section names, the composer wording and the error sentences are the agent's wording.
+- **Not covered:**
+  - a real Haiku answer: NOT RUN, the model is a fake client in tests;
+  - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
+  - a real screen reader;
+  - staging or production.

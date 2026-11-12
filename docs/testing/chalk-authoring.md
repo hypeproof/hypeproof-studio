@@ -189,6 +189,16 @@ B, 기본 수업 복귀 뒤 다시 미션 없음. 완료 조건은 모두 ☐. A
 |---|---|---|---|---|
 | T-53 | CH-10, CGP-AGENT-R-014, CGP-AGENT-D-012 | 실제 `/authoring` 페이지(헤드리스 Chromium, 1280·375px, `chalk/test/authoring-assistant.browser.mjs`). Service는 페이지 안 `fetch` 대역(플래그 꺼짐 404, 빈 본문 400, 제안, 429, 502, 저장 409). 저장된 초안 열기(플래그 꺼짐 → 켜짐) → 요청 보내기 → 카드 → 버리기 → 적용(409) → 적용(성공) → 429·빈 제안·502·404 → 고정된 버전 보기 → 편집 | 꺼짐이면 상자가 숨음. 켜짐이면 300자 칸 하나, 비면 보내기 막힘, 입력해도 초안은 수정됨이 아님. 카드는 항목/이전/새 값 표, 페이지의 라벨, HTML처럼 보이는 값은 글자로만 보이고 요소가 생기거나 실행되지 않음. 카드만으로는 PUT 0건·폼 불변. 버리기는 PUT 0건. 적용은 PUT 1건, `expected_revision`이 제안의 revision, 본문은 원래 초안에 제안한 키만 더한 것. 409는 정해진 문구이고 폼이 되돌아오며 revision 불변. 429 문구, 404이면 상자 숨음. 고정된 버전을 보는 동안·저장 안 한 편집이 있으면 칸과 버튼이 막힘. 가로 스크롤 없음, 버튼 44px 이상 | `npm test`(chalk) 안의 위 파일 PASS 줄. 서버 전달은 `authoring-forward.test.mjs`의 `POST …/proposal` 허용·그 밖의 POST 404 |
 
+<a id="t-54-plan-section"></a>
+
+### T-54 계획서 부분 고치기 (CH-11, CGP-ART-R-004, CGP-ART-D-004) · 2026-11-13
+
+| 번호 | 요구 | 절차 | 기대 결과 | 증거 |
+|---|---|---|---|---|
+| T-54a | CH-11, CGP-ART-D-004 | 실제 `/authoring` 페이지를 헤드리스 Chromium으로 1280·768px에서 연다(`chalk/test/plan-section.browser.mjs`). Service는 페이지 안 `fetch` 대역이다: 플래그 꺼짐 404, 빈 본문 400, 수정 결과, 409·429·422·바뀐 것 없음, 계획서 읽기, 비교. 계획서는 Service의 실제 `r5.html` fixture(바이트 동일 사본)에 링크·그림·스크립트·이벤트 속성을 넣은 것이다. 절차: 저장된 초안 열기(꺼짐 → 켜짐) → 계획서 불러오기 → 실제 마우스 이동 → 실제 클릭 → 실제 Tab → Enter → Esc → 저장 안 한 편집 → 오류 네 가지 → 보내기 → 고대비 → 운영 계획안 없음 → 보내다 404 | 꺼짐이면 숨고 확인 요청 본문은 `{}`. 계획서 안에 스크립트·`style`·링크·그림·핸들러가 없고 `data-chalk-*` 밖의 속성이 없으며 핸들러가 실행되지 않는다. 절 전체와 고유 항목(`s-1`·`s-2`·`obj-1`·`P1`·`ev-1`)이 모두 `tabindex=0`이다. 마우스를 올리면 가장 안쪽 부분만 1px 실선 테두리가 생기고(종이 대비 3:1 이상) 버튼은 나타나지 않는다. 클릭이나 Tab으로 고르면 테두리와 ‘이 부분 고치기’(44px 이상, 14px 이상)가 그 부분의 위쪽 끝 모서리 ±2px에 나타난다. Enter를 누르면 요청 칸이 그 부분 아래 0–8px에 열리고, 제목이 그 부분 이름이며 500자 제한이고 비어 있으면 보내기가 막힌다. Esc를 누르면 닫히고 초점이 돌아온다. 저장 안 한 편집이 있으면 보내기가 막힌다. 오류마다 정해진 문구가 나오고 revision은 그대로다. 보내기 본문은 `at`(표식 키)·`request`·`expected_revision`·`request_id`이고 줄 번호나 위치가 없다. 초안과 계획서를 다시 읽고 `diff?file=lesson&from=2&to=4`를 표로 보여 준다. 고친 부분에 표시가 남고 초점은 비교 제목에 있다. 가로 스크롤이 없고, 버튼은 44px 이상, 글자는 14px 이상이며, 고대비에서도 테두리가 보인다. 기반(main)에서는 보기가 없어 실패한다 | `npm test`(chalk) 안의 `PASS plan-section.browser` 줄 |
+| T-54b | CH-11 | `chalk/test/plan-section-forward.test.mjs` | 연결된 강사 issuer로 `POST …/plan/section-revision`만 본문 바이트 그대로 전달한다. 위조 헤더는 떨어진다. 같은 경로의 GET·PUT과 비슷한 경로는 404다. 전달 시간은 45초이고 다른 경로는 기존 값(8초, 배포 60초)이다 | `PASS plan-section forward` 줄 |
+| T-54c | CGP-ART-R-004 | hypeproof-service `worker/test/chalk-plan-section.test.mjs`, `worker/test/chalk-section-revision.test.mjs`(hypeproof-service#433) | 실제 fixture 네 개(r5·evidence-1306·ops-333·ops-366)의 고를 수 있는 부분 119개마다 바깥 바이트가 같다. 새 링크·도구·스크립트, 금지 제거, 안전 수준 낮춤, 새 형식 위반은 거절되고 아무것도 저장되지 않는다. 플래그 꺼짐 404, 오래된 revision 409(모델 호출 없음), 0084가 없으면 503(비용 없음), 상한 429(호출 없음). FB-05 기록이 남고, 비교에는 그 부분만 나온다. 모델에는 요청과 그 부분만 간다. 기록에는 메타데이터만 남는다 | Service PR의 Evidence 절 |
+
 ## 검증 환경과 증거
 
 - 합성 병원 자료와 가상 학생 두 명, 강사 두 명 사용. 운영 데이터·운영 토큰 사용 금지.

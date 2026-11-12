@@ -253,6 +253,7 @@
         "CH-08",
         "CH-09",
         "CH-10",
+        "CH-11",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -294,7 +295,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "9727acfd579ace0bf221f7cab3bde02384b68a563d6abf3c1c241885610453d2",
+      "sha256": "8f0949ad39b0000fb02f6088c9aae150517281554ff9abfe8ad48f9b827ec511",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -1337,7 +1338,8 @@
             "ENV-07",
             "CH-08",
             "CH-09",
-            "CH-10"
+            "CH-10",
+            "CH-11"
           ]
         }
       ],
