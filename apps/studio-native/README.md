@@ -2,17 +2,23 @@
 
 Native SwiftUI iPhone and Android clients for HP Studio. The desktop product is the existing HypeProof Studio application and its RC pipeline. A separate mobile-derived Mac Catalyst application is no longer built or distributed.
 
-The iPhone 0.2 candidate makes account-linked desktop conversation the primary surface. Existing local notebooks are preserved in the **기기 메모** tab. Linked conversations use the original desktop task store, existing coach and execution gates; they never fall back to a separate mobile model call. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
+The current candidate starts iPhone and Android with an everyday question. The
+same account's personal conversation uses Service `reflection-api@1`, independently
+of a running desktop. Existing local notebooks remain in **기기 기록**. Making
+requests lead to the existing desktop's reviewed task flow. The optional iPhone
+linked-task view remains a distinct, desktop-hosted execution experience. This
+source is a candidate; live Service rollout and physical cross-device acceptance
+are required before announcing availability.
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
-A person records an observation, optionally connects free AI after age and transmission consent, and confirms/revises their intention in their own words. Project-local drafts and revision history survive restart. Export and explicit deletion are available. AI may suggest a next question; it cannot create confirmed human intent. Recent 20 messages plus the latest confirmed intent are sent for only the selected project.
+In the separate local notebook, a person records an observation, optionally connects free AI after age and transmission consent, and confirms/revises their intention in their own words. Project-local drafts and revision history survive restart. Export and explicit deletion are available. AI may suggest a next question; it cannot create confirmed human intent. Recent 20 messages plus the latest confirmed intent are sent for only the selected project.
 
 Philosophy → Product Intent → behavior: introspection, multiple perspectives and practice inform the prompt and the observation/reflection flow (ST-INT-NATIVE). These are design hypotheses, not established growth outcomes, diagnoses or personality/fate scores. Foundry execution and economic dashboards are future work.
 
 ## Boundary and costs
 
-Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
+Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The local notebook uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
 
 Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. The local notebook remains device-local. The linked iPhone surface adds explicit opt-in account sync of selected personal conversation text, with a protected local cache and durable request IDs. Files, tool output, temporary chats and classroom records are excluded. Account data is stored through HypeProof Service over TLS; this is not end-to-end encryption. Handwriting, push notifications, Foundry deployment and financial telemetry remain outside this candidate.
 
@@ -66,7 +72,7 @@ The next vertical slice and dependent work are recorded in [mobile growth roadma
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
 
-## Existing desktop and linked conversation
+## Optional iPhone desktop-task continuity
 
 On the existing desktop, select a personal task and run **iPhone과 이 대화 연결**.
 The disclosure asks before its user/assistant text is uploaded. Sign in to the
@@ -107,3 +113,26 @@ Acceptance requires actual desktop -> iPhone -> desktop round-trip, preserved
 message identities, voice/skip behavior, offline recovery without duplicate model
 execution, account revoke and local draft preservation. Source tests, simulator
 checks and upload success must be reported separately from this observation.
+
+
+## Android account questions (#3733)
+
+The launcher remains in the existing Android package. Browser approval includes
+the exact existing device code in the trusted URL; the person does not copy a
+code between devices. Authentication is checked against `/v1/me`, then account
+credentials are encrypted by Android Keystore and stored in no-backup storage.
+A refresh token is marked spent before dispatch; uncertain rotation requires
+fresh sign-in instead of replaying a one-use token.
+
+The account-scoped cache saves words and a stable outbox ID/revision before
+sending. Reconnection checks the shared conversation. Failed saves, stale replies
+and account changes preserve the committed state; malformed files stay read-only
+and can be exported verbatim. Dictation and explicit voice conversation reuse
+the native on-device implementation. Only the initiating request's answer may
+be read aloud. Polling pauses in the background; voice stops on navigation or
+background and never automatically reopens the microphone.
+
+These questions use existing account AI entitlements and Service cost limits.
+The free local notebook connection is separate; it does not grant a signed-in AI
+allowance. No Android desktop task list, new Mac application, handwriting, push,
+automatic Foundry execution or philosophical growth outcome is claimed here.

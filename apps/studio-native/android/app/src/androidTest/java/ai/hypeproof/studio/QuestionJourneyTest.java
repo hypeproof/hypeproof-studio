@@ -46,6 +46,7 @@ public class QuestionJourneyTest {
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("내가 더 듣고 싶은 이야기")));
         ready();onView(withText("말로 적기")).perform(click());onView(withText("취소")).perform(click());
         onView(withContentDescription("질문 대화 입력")).perform(replaceText("한 번 더 생각한 말"),closeSoftKeyboard());app.recreate();
+        app.onActivity(a->{try{var root=QuestionActivity.class.getDeclaredField("root");root.setAccessible(true);assertTrue(((android.view.View)root.get(a)).getPaddingLeft()>0);}catch(Exception e){throw new AssertionError(e);}});
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("한 번 더 생각한 말")));assertEquals("한 번 더 생각한 말",store.load("test-account").draft);screen("android-account-questions");
     }
     @Test public void realKeystoreEncryptsRotatesAndRefusesTamperedCredentials()throws Exception{
@@ -53,4 +54,10 @@ public class QuestionJourneyTest {
         store.saveCredentials(credentials);assertEquals(credentials,store.loadCredentials());File file=new File(new File(context.getNoBackupFilesDir(),"reflection"),"account.bin");byte[] bytes=Files.readAllBytes(file.toPath());assertFalse(new String(bytes,StandardCharsets.ISO_8859_1).contains("private-synthetic"));
         store.markRefreshSpent();assertNull(store.loadCredentials());store.saveCredentials(credentials);bytes=Files.readAllBytes(file.toPath());bytes[bytes.length-1]^=1;Files.write(file.toPath(),bytes);assertThrows(Exception.class,store::loadCredentials);byte[] corrupt=Files.readAllBytes(file.toPath());assertArrayEquals(bytes,corrupt);store.preserveBrokenCredentials();assertNull(store.loadCredentials());
     }
+    @Test public void malformedUTF8CacheStaysUntouchedAndExportsOriginalBytes()throws Exception{
+        ReflectionStorage store=new ReflectionStorage(context);ReflectionState state=new ReflectionState("corrupt-account");state.draft="kept";store.save(state);
+        File file=new File(new File(context.getNoBackupFilesDir(),"reflection"),"conversation-corrupt-account.json");byte[] bytes=Files.readAllBytes(file.toPath());for(int i=0;i<bytes.length-4;i++)if(bytes[i]=='k'&&bytes[i+1]=='e'&&bytes[i+2]=='p'&&bytes[i+3]=='t'){bytes[i]=(byte)0xc3;bytes[i+1]=0x28;break;}Files.write(file.toPath(),bytes);
+        assertThrows(Exception.class,()->store.load("corrupt-account"));assertArrayEquals(bytes,Files.readAllBytes(file.toPath()));File exported=new File(context.getCacheDir(),"malformed-questions-export.json");store.exportOriginal("corrupt-account",exported);assertArrayEquals(bytes,Files.readAllBytes(exported.toPath()));Files.delete(exported.toPath());
+    }
+
 }

@@ -30,4 +30,12 @@ public class ReflectionStateTest {
         state.draft="valid";state.enqueue();assertThrows(Exception.class,state::enqueue);
         JSONObject encoded=state.json();encoded.getJSONObject("request").remove("expected_revision");assertThrows(Exception.class,()->new ReflectionState("A",encoded.toString()));assertThrows(Exception.class,()->new ReflectionState("A","{broken"));
     }
+    @Test public void malformedUTF8AndUnpairedDraftSurrogatesNeverBecomeReplacementText() throws Exception {
+        ReflectionState state=new ReflectionState("A");state.draft="kept";byte[] encoded=ReflectionState.encode(state.json().toString());
+        for(int i=0;i<encoded.length-4;i++)if(encoded[i]=='k'&&encoded[i+1]=='e'&&encoded[i+2]=='p'&&encoded[i+3]=='t'){encoded[i]=(byte)0xc3;encoded[i+1]=0x28;break;}
+        assertThrows(Exception.class,()->ReflectionState.decode(encoded));
+        state.draft="\uD800";assertThrows(Exception.class,()->ReflectionState.encode(state.json().toString()));
+        state.draft="한글과 🙂";assertEquals(state.draft,new ReflectionState("A",ReflectionState.decode(ReflectionState.encode(state.json().toString()))).draft);
+    }
+
 }

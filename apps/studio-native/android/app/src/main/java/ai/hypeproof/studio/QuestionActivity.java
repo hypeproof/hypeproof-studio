@@ -57,7 +57,7 @@ public final class QuestionActivity extends Activity {
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
         if(saved!=null&&model.account()!=null&&model.account().equals(saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
-        build();update();
+        update();
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
     @Override protected void onPause(){if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
@@ -71,10 +71,11 @@ public final class QuestionActivity extends Activity {
     private void build(){
         boolean dark=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
         ink=dark?Color.rgb(224,239,231):Color.rgb(28,65,54);paper=dark?Color.rgb(22,32,28):Color.rgb(245,244,239);muted=dark?Color.rgb(180,201,188):Color.rgb(82,101,91);card=dark?Color.rgb(41,59,46):Color.rgb(230,239,230);
-        shownAccount=model.account();transcriptKey="";root=column();root.setBackgroundColor(paper);
+        shownAccount=model.account();transcriptKey="";root=column();root.setBackgroundColor(paper);root.setPadding(dp(20),dp(8),dp(20),dp(8));
+        androidx.core.view.WindowInsetsControllerCompat bars=androidx.core.view.WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView());bars.setAppearanceLightStatusBars(!dark);bars.setAppearanceLightNavigationBars(!dark);
         root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(20),insets.getSystemWindowInsetTop()+dp(8),dp(20),bottom+dp(8));return insets;});
         LinearLayout header=new LinearLayout(this);header.addView(text("HP Studio",22,true),new LinearLayout.LayoutParams(0,-2,1));header.addView(button("기기 기록",()->{stopVoice();startActivity(new Intent(this,MainActivity.class));}));header.addView(button("메뉴",this::menu));root.addView(header);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout body=column();heading=text(ReflectionState.OPENING,28,true);hint=text(ReflectionState.HINT,16,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout body=column();heading=text(ReflectionState.OPENING,28,true);heading.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_BALANCED);hint=text(ReflectionState.HINT,16,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         status=text("",13,false);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
         actions=column();root.addView(actions);voiceActions=column();root.addView(voiceActions);
         LinearLayout compose=new LinearLayout(this);compose.setGravity(Gravity.BOTTOM);composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(48));composer.setMaxLines(4);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});

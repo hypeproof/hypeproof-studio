@@ -25,8 +25,8 @@ final class ReflectionStorage implements ReflectionModel.Store {
         try{out=f.startWrite();out.write(value);f.finishWrite(out);}catch(Exception e){if(out!=null)f.failWrite(out);throw e;}
     }
     private String name(String account) throws Exception {if(!account.matches("[A-Za-z0-9_-]{1,128}"))throw new IOException("invalid_account");return "conversation-"+account+".json";}
-    public ReflectionState load(String account) throws Exception {byte[] b=read(name(account),4194304);return b==null?new ReflectionState(account):new ReflectionState(account,new String(b,StandardCharsets.UTF_8));}
-    public void save(ReflectionState state) throws Exception {byte[] bytes=state.json().toString().getBytes(StandardCharsets.UTF_8);if(bytes.length>4194304)throw new IOException("storage_limit");write(name(state.account),bytes);}
+    public ReflectionState load(String account) throws Exception {byte[] b=read(name(account),4194304);return b==null?new ReflectionState(account):new ReflectionState(account,ReflectionState.decode(b));}
+    public void save(ReflectionState state) throws Exception {byte[] bytes=ReflectionState.encode(state.json().toString());if(bytes.length>4194304)throw new IOException("storage_limit");write(name(state.account),bytes);}
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
     private javax.crypto.SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);
@@ -35,7 +35,7 @@ final class ReflectionStorage implements ReflectionModel.Store {
         generator.init(new KeyGenParameterSpec.Builder(alias,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());return generator.generateKey();
     }
     private void credentials(JSONObject value) throws Exception {
-        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key());byte[] encrypted=cipher.doFinal(value.toString().getBytes(StandardCharsets.UTF_8));
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key());byte[] encrypted=cipher.doFinal(ReflectionState.encode(value.toString()));
         ByteArrayOutputStream out=new ByteArrayOutputStream();out.write(1);out.write(cipher.getIV());out.write(encrypted);write("account.bin",out.toByteArray());
     }
     public void saveCredentials(NativeDeviceSignIn.Credentials c) throws Exception {credentials(new JSONObject().put("account",c.account()).put("session",c.session()).put("access_token",c.bearer()).put("refresh_token",c.refresh()).put("expires_at",c.expiresAt()));}
@@ -44,7 +44,7 @@ final class ReflectionStorage implements ReflectionModel.Store {
         byte[] bytes=read("account.bin",65536);if(bytes==null)return null;
         if(bytes.length<30||bytes[0]!=1)throw new IOException("invalid_credentials");
         Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,bytes,1,12));
-        JSONObject v=new JSONObject(new String(cipher.doFinal(bytes,13,bytes.length-13),StandardCharsets.UTF_8));if(v.optBoolean("refresh_spent"))return null;
+        JSONObject v=new JSONObject(ReflectionState.decode(cipher.doFinal(bytes,13,bytes.length-13)));if(v.optBoolean("refresh_spent"))return null;
         java.util.Map<String,Object> fields=new java.util.HashMap<>();for(String k:java.util.List.of("account","session","access_token","refresh_token"))fields.put(k,v.get(k));
         return new NativeDeviceSignIn.Credentials(NativeDeviceSignIn.identifier(fields,"account"),NativeDeviceSignIn.identifier(fields,"session"),NativeDeviceSignIn.token(fields,"access_token"),NativeDeviceSignIn.token(fields,"refresh_token"),ReflectionState.integer(v,"expires_at"));
     }

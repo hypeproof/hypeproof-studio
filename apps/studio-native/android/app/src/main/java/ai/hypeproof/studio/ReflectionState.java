@@ -21,6 +21,8 @@ final class ReflectionState {
         messages=v.getJSONArray("messages");validateMessages(messages);earlier=bool(v,"has_earlier");
         request=v.isNull("request")?null:v.getJSONObject("request");validateRequest(request,true);
     }
+    static String decode(byte[] bytes) throws Exception {return java.nio.charset.StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString();}
+    static byte[] encode(String value) throws Exception {java.nio.ByteBuffer buffer=java.nio.charset.StandardCharsets.UTF_8.newEncoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).encode(java.nio.CharBuffer.wrap(value));byte[] bytes=new byte[buffer.remaining()];buffer.get(bytes);return bytes;}
     ReflectionState copy() throws Exception {return new ReflectionState(account,json().toString());}
     JSONObject json() throws Exception {return new JSONObject().put("version",1).put("account",account).put("revision",revision).put("draft",draft).put("opening",opening).put("hint",hint).put("messages",messages).put("has_earlier",earlier).put("request",request==null?JSONObject.NULL:request);}
     static String string(JSONObject v,String key,int limit) throws Exception {Object s=v.get(key);if(!(s instanceof String)||((String)s).length()>limit||((String)s).indexOf('\0')>=0)throw new Exception("invalid_response");return (String)s;}
