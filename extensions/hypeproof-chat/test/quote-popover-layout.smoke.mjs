@@ -34,10 +34,13 @@ const page = (dark) => `<html style="${vars(dark ? 'Dark+' : 'Light+')}"><style>
 const workspace = { scope: 'quote-popover', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '물 끓이기', createdAt: 1, updatedAt: 1, messageCount: 12 }], sourceSelection: null };
 const configFor = seat => chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: seat === 'personal' ? workspace : undefined });
 const PARA = '물은 바다에서 높은 산까지 어디에서나 끓지만, 끓는 온도는 그곳의 공기 압력에 따라 달라져요. 압력이 낮으면 더 낮은 온도에서 끓어요.';
+// The long quote (step 5) is the whole target answer: about 1,000 characters, so it needs well over two lines
+// in a 1420px composer with any font; the smoke also measures that (an unclamped copy) instead of assuming it.
+const LONG = `${PARA} ${PARA} ${PARA}`;
 const history = [];
 for (let i = 1; i <= 6; i++) {
   history.push({ id: `u${i}`, role: 'user', content: `질문 ${i}: 물은 왜 끓어요?`, createdAt: i * 2 });
-  history.push({ id: `a${i}`, role: 'assistant', content: `${i}번째 설명이에요. ${PARA}\n\n두 번째 문단이에요. ${PARA}\n\n세 번째 문단이에요. ${PARA}`, createdAt: i * 2 + 1 });
+  history.push({ id: `a${i}`, role: 'assistant', content: `${i}번째 설명이에요. ${PARA}\n\n두 번째 문단이에요. ${LONG}\n\n세 번째 문단이에요. ${LONG}`, createdAt: i * 2 + 1 });
 }
 const TARGET = 'a4';
 
@@ -144,14 +147,18 @@ try {
     const chip = await b.evaluate(`(()=>{
       const c=document.querySelector('.hps-quote-chip');if(!c)return null;const t=c.querySelector('.hps-quote-chip-text'),x=c.querySelector('.hps-quote-chip-remove'),card=document.querySelector('.hps-input');
       const s=getComputedStyle(t),q=e=>e.getBoundingClientRect();
-      return {inCard:card.contains(c),card:q(card).toJSON(),chip:q(c).toJSON(),h:t.clientHeight,sh:t.scrollHeight,lh:parseFloat(s.lineHeight),px:parseFloat(s.fontSize),clamp:s.webkitLineClamp,ellipsis:s.textOverflow,
+      // How tall the same text is without the clamp, at the same width and font: scrollHeight of a clamped box is
+      // engine-dependent (some Chromium builds report the clamped height), so the unclamped copy is the reference.
+      const copy=t.cloneNode(true);copy.style.cssText='display:block;-webkit-line-clamp:none;line-clamp:none;overflow:visible;position:absolute;visibility:hidden;inset-block-start:0;inline-size:'+t.clientWidth+'px';
+      t.parentNode.appendChild(copy);const full=copy.getBoundingClientRect().height;copy.remove();
+      return {inCard:card.contains(c),card:q(card).toJSON(),chip:q(c).toJSON(),h:t.clientHeight,full,lh:parseFloat(s.lineHeight),px:parseFloat(s.fontSize),clamp:s.webkitLineClamp,ellipsis:s.textOverflow,
         x:q(x).toJSON(),xName:x.getAttribute('aria-label'),draft:document.querySelector('.hps-input textarea').value,scrollW:document.documentElement.scrollWidth,innerW:innerWidth};})()`);
     assert.ok(chip, `${label}: no quote chip after pressing 인용하기`);
     assert.ok(chip.inCard && chip.chip.left >= chip.card.left - .5 && chip.chip.right <= chip.card.right + .5, `${label}: chip outside the composer card`);
     assert.equal(chip.draft, '', `${label}: the quote went into the editor text`);
     assert.equal(chip.clamp, '2', `${label}: line clamp`); assert.equal(chip.ellipsis, 'ellipsis', `${label}: ellipsis`);
     assert.ok(chip.h <= 2 * chip.lh + 1 && chip.h >= 2 * chip.lh - 1, `${label}: chip text is ${chip.h}px, not two ${chip.lh}px lines`);
-    assert.ok(chip.sh > chip.h + 1, `${label}: a long quote should be cut (scrollHeight ${chip.sh} vs ${chip.h})`);
+    assert.ok(chip.full >= 3 * chip.lh - 1, `${label}: fixture: the quote should need more than two lines unclamped (${chip.full}px at ${chip.lh}px lines)`);
     assert.ok(chip.px >= 14, `${label}: chip text ${chip.px}px`);
     assert.ok(chip.x.width >= 44 - .5 && chip.x.height >= 44 - .5, `${label}: × is ${chip.x.width}x${chip.x.height}`);
     assert.equal(chip.xName, '인용 빼기');
