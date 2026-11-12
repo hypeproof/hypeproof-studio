@@ -13,6 +13,22 @@ if [[ "$(adb -s "$ANDROID_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')" !=
   echo 'Refusing to replace records on a physical device.' >&2
   exit 2
 fi
+# Gradle may leave a freshly booted emulator asleep or behind its keyguard.
+# Only the disposable emulator verified above may be prepared this way.
+capture_failure() {
+  status=$?
+  trap - EXIT
+  if [[ "$status" != 0 ]]; then
+    adb -s "$ANDROID_SERIAL" shell dumpsys window > "$evidence/failure-window.txt" 2>&1 || true
+    adb -s "$ANDROID_SERIAL" shell dumpsys power > "$evidence/failure-power.txt" 2>&1 || true
+    adb -s "$ANDROID_SERIAL" exec-out screencap -p > "$evidence/failure-screen.png" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+trap capture_failure EXIT
+adb -s "$ANDROID_SERIAL" shell input keyevent KEYCODE_WAKEUP
+adb -s "$ANDROID_SERIAL" shell wm dismiss-keyguard
+adb -s "$ANDROID_SERIAL" shell settings put system screen_off_timeout 1800000
 {
   git -C "$native_root" rev-parse HEAD
   git -C "$native_root" diff --name-only
