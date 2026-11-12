@@ -874,15 +874,15 @@
         "MREF-03",
         "MREF-04",
         "MREF-05",
+        "MTF-01",
         "MVOICE-01",
         "MVOICE-02",
         "MVOICE-03",
         "MVOICE-04",
-        "MVOICE-05",
-        "MTF-01"
+        "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "bfb760a51cce78e571fc64acc77c47d5cd93bc246f97c86950f4eadf46b30603",
+      "sha256": "5539428c1f40bda68f1784d56075ae851c114f7c44849bcb0eaa1d00254e80cc",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -935,33 +935,6 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-design.md",
       "test": "docs/testing/classroom-admin.md"
-    },
-    {
-      "path": "docs/requirements/mobile-growth-roadmap.md",
-      "ids": [
-        "MREF-01",
-        "MREF-02",
-        "MREF-03",
-        "MREF-04",
-        "MREF-05",
-        "MVOICE-01",
-        "MVOICE-02",
-        "MVOICE-03",
-        "MVOICE-04",
-        "MVOICE-05",
-        "MPER-01",
-        "MPER-02",
-        "MPER-03",
-        "MPER-04",
-        "MPER-05",
-        "MIRS-01"
-      ],
-      "inline_prefixes": [],
-      "sha256": "e6d4c3de8b93220c33257db34861abbde7e21c78922c5966146295d725234955",
-      "owner": "jayleekr",
-      "intent": "docs/PRODUCT-INTENT.md",
-      "design": "docs/requirements/mobile-growth-roadmap.md",
-      "test": "docs/testing/native-mobile-growth.md"
     }
   ],
   "work_items": [
