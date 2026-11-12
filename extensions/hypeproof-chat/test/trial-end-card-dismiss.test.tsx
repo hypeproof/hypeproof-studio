@@ -1,8 +1,8 @@
-// CONV-FUNNEL-R-003 — the webview side of the end card's two buttons. The real ChatPanel on the
-// minimal DOM (fixtures/mini-dom.mjs) draws the TUX-COND-07 card; pressing `오늘은 여기까지` posts
-// `trialEndCardDismiss` to the host (which counts offer_dismissed end_card) and closes the card;
-// pressing the Primary calls the passes handler and posts no dismissal. The host side is
-// test/trial-end-card-host.smoke.mjs. The banner captures what the panel posts to the host.
+// TUX-COND-07 / CONV-ENDCARD-R-003, retired 2026-11-13 (REQ-L12 ①–④ removed). The end-of-trial card
+// was a pass offer; the chat no longer draws it, nor the header "이용권 살펴보기" link. The real
+// ChatPanel on the minimal DOM (fixtures/mini-dom.mjs) shows that a card from an older host ends as the
+// ordinary banner, and that an ended free seat keeps only the composer note. The host side is
+// test/trial-end-card-host.smoke.mjs.
 
 import { click, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
@@ -57,8 +57,7 @@ async function harness(trialEndCard: TrialEndCardView | null, config: ChatConfig
       onDismissError: () => { calls.dismissError++; error = null; void render(); },
       onSetToken: noop, onSettings: noop, onRunCode: noop, onNamingRitual: noop, onSaveCoach: noop,
       onReportProblem: noop, onInstallUpdate: noop, onDismissUpdate: noop, onPublish: noop,
-      // The App's own wiring (App.tsx): the Primary posts trialEndCardPasses, which the host counts as
-      // offer_clicked end_card and answers with the pass list (test/trial-end-card-host.smoke.mjs).
+      // An older host's card, and the handler an older App passed: neither draws anything now.
       trialEndCard, onTrialEndCardPasses: () => { calls.passes++; postToHost({ type: "trialEndCardPasses" }); },
       config, instructor: false,
     };
@@ -84,23 +83,15 @@ async function harness(trialEndCard: TrialEndCardView | null, config: ChatConfig
 
 const dismissals = () => posted.filter((m) => m.type === "trialEndCardDismiss").length;
 
-t("오늘은 여기까지 posts one trialEndCardDismiss and closes the card", async () => {
+t("a card from an older host draws no pass card: the ordinary banner, no pass button", async () => {
   posted.length = 0;
   const h = await harness(card);
-  ok(h.card(), "card drawn");
-  await h.press(h.escape());
-  eq(dismissals(), 1, "one dismissal per press");
-  eq(h.calls.dismissError, 1, "the card closes as before");
-  eq(h.card(), undefined, "card gone");
-  eq(h.calls.passes, 0, "the escape opens nothing");
-});
-
-t("negative control: the Primary posts no dismissal", async () => {
-  posted.length = 0;
-  const h = await harness(card);
-  await h.press(h.primary());
-  eq(h.calls.passes, 1, "the passes handler runs (host counts offer_clicked)");
-  eq(dismissals(), 0, "no trialEndCardDismiss");
+  eq(h.card(), undefined, "no end-of-trial card");
+  eq(h.primary(), undefined, "no pass Primary");
+  ok(!h.text().includes("기본 버튼"), "the card's Primary label is not drawn");
+  ok(h.bannerClose(), "the ordinary banner is drawn instead");
+  eq(h.calls.passes, 0, "nothing calls the passes handler");
+  eq(posted.filter((m) => m.type === "trialEndCardPasses").length, 0);
 });
 
 t("negative control: closing an ordinary error banner posts no dismissal", async () => {
@@ -127,18 +118,14 @@ const inUse = { state: "active", ends_at: later, request_limit: 10, requests_use
 const PASS = { request_limit: 200, requests_used: 200, expires_at: Date.now() + 86_400_000 };
 const passPresses = () => posted.filter((m) => m.type === "trialEndCardPasses").length;
 
-t("ended free seat: after 오늘은 여기까지 the header has no 이용권 살펴보기 link", async () => {
+t("ended free seat: no card and no 이용권 살펴보기 link in the header", async () => {
   posted.length = 0;
   const h = await harness(card, seat({ free: true, trial: exhausted }));
-  ok(h.card(), "card drawn");
-  eq(h.headerLink().length, 0, "while the card is on screen it is the only offer");
-  eq(h.endedNote(), undefined, "no composer note while the card is on screen");
-  await h.press(h.escape());
-  eq(h.card(), undefined, "card closed");
-  eq(h.headerLink().length, 0, "no header link after the card is closed");
-  ok(!h.text().includes("이용권 살펴보기") || !!h.card(), "the header never names the pass list");
+  eq(h.card(), undefined, "no card");
+  eq(h.headerLink().length, 0, "no header link");
+  ok(!h.text().includes("이용권 살펴보기"), "the pass list is never named");
   eq(passPresses(), 0, "nothing posts trialEndCardPasses");
-  eq(dismissals(), 1, "only the escape counted a dismissal");
+  eq(dismissals(), 0, "no card, so no dismissal");
 });
 
 t("ended free seat: the composer says why the AI no longer answers, with no count", async () => {
@@ -179,23 +166,6 @@ t("negative control: a code-issued trial (not free) that ended has no link", asy
   ok(h.activityNow()?.startsWith("AI 체험"), "the header is drawn as a code-issued trial");
   eq(h.headerLink().length, 0, "code-issued trial keeps today's header");
   eq(h.endedNote(), undefined, "no note");
-});
-
-t("personal Claude is explicit, keeps the end card, and excludes minor and code-issued seats", async () => {
-  posted.length = 0;
-  const cfg = seat({ free: true, trial: exhausted });
-  const h = await harness(card, cfg);
-  ok(h.personalClaude(), "personal free seat offers the choice");
-  eq(posted.filter(m => m.type === "trialEndCardClaude").length, 0, "never starts itself");
-  await h.press(h.personalClaude());
-  eq(posted.filter(m => m.type === "trialEndCardClaude").length, 1, "one explicit request");
-  eq(h.calls.passes, 0, "does not buy a pass");
-  eq(h.calls.dismissError, 0, "original work stays on screen");
-  ok(h.card(), "card remains");
-  const minor = await harness(card, { ...cfg, profile: { ...cfg.profile!, minor_cohort: true } } as ChatConfig);
-  eq(minor.personalClaude(), undefined, "minor has no personal provider path");
-  const code = await harness(card, { ...cfg, profile: { ...cfg.profile!, profile_id: "studio-native-trial" } } as ChatConfig);
-  eq(code.personalClaude(), undefined, "code-issued seat is unchanged");
 });
 
 (async () => {

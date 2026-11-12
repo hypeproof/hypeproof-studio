@@ -85,7 +85,6 @@ import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, freeSeatEnded, freeSeatEndedNote, trialHeaderLine } from "./activityLabel";
 import { RefusalBanner } from "./RefusalBanner";
 import { errorBannerPresentation } from "./errorBannerPresentation";
-import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -234,12 +233,10 @@ interface Props {
   activityUnavailable?: ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
-  /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
+  /** TUX-COND-07 (retired 2026-11-13) — an end-of-trial card from an older host. Never drawn; it only marks a trial ending. */
   trialEndCard?: import("../../src/protocol").TrialEndCardView | null;
   /** REQ-CGP-LEARN-13 — a moderation block for this turn ending; drawn instead of every other ending card. */
   safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView | null;
-  /** TUX-COND-07 — the card's Primary. The host opens the start page's pass list; nothing else does. */
-  onTrialEndCardPasses?: () => void;
   canRetryLast: boolean;
   sendPending?: boolean;
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
@@ -2286,9 +2283,7 @@ export function ChatPanel(props: Props) {
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
-        ) : statusScreen ? null : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
-        ) : error && (
+        ) : statusScreen ? null : error && (
           <ErrorBanner
             message={error}
             requestId={props.errorRequestId}
@@ -2509,7 +2504,6 @@ export function ChatPanel(props: Props) {
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
           onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
