@@ -16,7 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import {
-  type ApplyWindow, type Clock, type InboxCard, type InboxIndex, type InboxItem, type InboxLink, type InboxView, type JournalEntry, type OfferAck, type WithdrawAck,
+  type ApplyWindow, type Clock, type InboxCard, type InboxIndex, type InboxItem, type InboxLink, type InboxView, type JournalEntry, type OfferAck, type QuestionSpec, type WithdrawAck,
   applyOffer, applyWithdraw, contentCanonical, decideOffer, decideWithdraw, emptyIndex, journalAck, journalAdd, parseIndex, pendingReceipts, validateItem, validateWithdraw, withinApplyWindow,
 } from "./classroomInbox.ts";
 
@@ -86,7 +86,7 @@ export class InboxStore {
   /** Writes the immutable revision file. An existing file with the same content is reused; a different one is a conflict. */
   async writeRevision(item: InboxItem): Promise<{ ok: true; file: string; bytes: number } | { ok: false; code: "hash_conflict" | "store_failed" }> {
     const file = this.revFile(item), target = path.join(this.dir, "rev", file);
-    const text = JSON.stringify({ schema: item.schema, object_id: item.object_id, revision: item.revision, kind: item.kind, title: item.title, body: item.body, links: item.links, ...(item.lesson !== undefined ? { lesson: item.lesson } : {}), content_hash: item.content_hash });
+    const text = JSON.stringify({ schema: item.schema, object_id: item.object_id, revision: item.revision, kind: item.kind, title: item.title, body: item.body, links: item.links, ...(item.lesson !== undefined ? { lesson: item.lesson } : {}), ...(item.question ? { question: item.question } : {}), content_hash: item.content_hash });
     try {
       if (await this.writeOnce(target, text) === "exists") {
         const held = await this.readRevision(file, item.content_hash);
@@ -99,10 +99,11 @@ export class InboxStore {
   private async quarantine(file: string) { try { await fs.mkdir(path.join(this.dir, "quarantine"), { recursive: true }); await fs.rename(file, path.join(this.dir, "quarantine", `${path.basename(file)}.${Date.now()}`)); } catch { /* best effort */ } }
 
   /** Re-hashes what is on disk. Null = missing, torn or not the content the index promised. */
-  async readRevision(file: string, expectedHash: string): Promise<{ kind: string; title: string; body: string; links: InboxLink[] } | null> {
+  async readRevision(file: string, expectedHash: string): Promise<{ kind: string; title: string; body: string; links: InboxLink[]; question?: QuestionSpec } | null> {
     try {
       const v = JSON.parse(await fs.readFile(path.join(this.dir, "rev", file), "utf8"));
-      const c = { kind: String(v.kind), title: String(v.title), body: String(v.body), links: Array.isArray(v.links) ? v.links.map((l: InboxLink) => ({ label: String(l.label), url: String(l.url) })) : [], ...(v.lesson !== undefined ? { lesson: v.lesson } : {}) };
+      const c = { kind: String(v.kind), title: String(v.title), body: String(v.body), links: Array.isArray(v.links) ? v.links.map((l: InboxLink) => ({ label: String(l.label), url: String(l.url) })) : [], ...(v.lesson !== undefined ? { lesson: v.lesson } : {}), ...(v.question !== undefined ? { question: v.question as QuestionSpec } : {}) };
+      // The form is hashed with the rest: a question file whose options were edited on disk reads as unreadable.
       return sha256(contentCanonical(c)) === expectedHash ? c : null;
     } catch { return null; }
   }
@@ -113,7 +114,8 @@ export class InboxStore {
     for (const e of Object.values(index.objects).sort((a, b) => b.received_at - a.received_at || b.seq - a.seq)) {
       if (e.tombstone) { cards.push({ object_id: e.object_id, kind: e.kind, title: "", body: "", links: [], revision: e.revision, received_at: e.tombstone.at, is_new: false, withdrawn: true, unreadable: false }); continue; }
       const c = await this.readRevision(e.file, e.content_hash);
-      cards.push(c ? { object_id: e.object_id, kind: c.kind, title: c.title, body: c.body, links: c.links, revision: e.revision, received_at: e.received_at, is_new: !e.opened, withdrawn: false, unreadable: false, content_hash: e.content_hash, ...(e.setting ? { setting: e.setting.state } : {}) }
+      cards.push(c ? { object_id: e.object_id, kind: c.kind, title: c.title, body: c.body, links: c.links, revision: e.revision, received_at: e.received_at, is_new: !e.opened, withdrawn: false, unreadable: false, content_hash: e.content_hash, ...(e.setting ? { setting: e.setting.state } : {}),
+          ...(c.kind === "question" && c.question ? { question: c.question, answer: { sent: e.answer && e.answer.revision === e.revision && e.answer.content_hash === e.content_hash ? e.answer.sent?.value ?? null : null } } : {}) }
         : { object_id: e.object_id, kind: e.kind, title: e.title, body: "", links: [], revision: e.revision, received_at: e.received_at, is_new: false, withdrawn: false, unreadable: true });
     }
     return { n, index, cards };

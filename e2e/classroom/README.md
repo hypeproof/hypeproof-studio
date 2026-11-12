@@ -111,6 +111,16 @@ node --experimental-strip-types --experimental-sqlite e2e/classroom/mac-demo.mjs
   visible controls and checks, at every step, the mission header the real window draws and the mission the Service put into
   the provider request (`HPS_G2_RUN=<folder>` keeps a run's evidence apart from an earlier one). Browser counterpart:
   `authoring-mission.mjs`.
+- Employee class end to end (E5, #3779) on this Mac: `HPS_DEVHOST_SOURCE="<official shell>.app" HPS_DEVHOST_DIR=e2e/test-results/classroom-devhost-e5 node e2e/classroom/mac-devhost.mjs prepare`,
+  then `HPS_DEVHOST_DIR=e2e/test-results/classroom-devhost-e5 node --experimental-strip-types --experimental-sqlite --no-warnings e2e/classroom/mac-employee-class.mjs`
+  (ports 19031/19032, debug 9631, a few minutes; it exits when done). Strict run ownership: the instructor configures the run
+  on the Chalk page (roster, lesson, 관측 · 학생에게 보내기 · 질문 카드 clicked there) and so becomes its owner, imports
+  `handle,name` names, makes the class code; the real window runs 수업 연결 with that code, answers VS Code's own class data
+  notice modal (`window.dialogStyle=custom`, driven over the debugging port) and the handle confirmation; a question card goes
+  to all seats; the real learner chooses and presses 제출 in the inbox; synthetic A2 (connected before the send) skips and A3
+  (late joiner) receives it; withdrawal from Chalk; an unassigned second instructor gets `not_run_instructor`. Every request the
+  page, the Chalk worker and the app made is checked for the names. `employee-class/result.json` has expected/observed per row
+  (PASS / FAIL / BLOCKED), the shell version, extension source SHA and `not_run` (Windows, multi-PC, production, staging).
 
 ## Instructor UI review preview (synthetic, for looking at the screens)
 
