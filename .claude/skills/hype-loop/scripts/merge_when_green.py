@@ -108,9 +108,9 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
         log(repo, pr, "poll", policy_error=type(exc).__name__)
         return "policy_blocked"
     fields = ("state,number,author,baseRefName,headRefOid,isDraft,labels,latestReviews,reviews,"
-              "mergeStateStatus,mergeable,reviewDecision,statusCheckRollup")
+              "mergeStateStatus,mergeable,reviewDecision,statusCheckRollup,files,commits,changedFiles")
     if rule:
-        fields += ",headRefName,files,commits,changedFiles,isCrossRepository"
+        fields += ",headRefName,isCrossRepository"
     got = gh("pr", "view", str(pr), "--repo", repo, "--json", fields)
     if got.returncode != 0:
         log(repo, pr, "poll", error=(got.stderr or got.stdout).strip()[:200])
@@ -138,6 +138,8 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
     log(repo, pr, "poll", head=state.get("headRefOid"), merge_state=merge_state, pending=len(pending), bad=bad, blockers=assessment.blockers)
     if state.get("headRefOid") != head:
         return None if settling else "head_moved"
+    if assessment.tier == "A":
+        return "policy_blocked"  # #385: a human merges tier A; this watcher never does
     if state.get("state") != "OPEN":
         return "policy_blocked"
     if not checks:
