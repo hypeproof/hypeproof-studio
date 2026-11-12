@@ -81,6 +81,8 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 
 ## Correlated native deployment — MTF-01
 
+### MTF-01
+
 MTF-01 refines the existing mobile CD gate/operations direction for Studio #3768.
 Optional Harness request inputs are all-or-none and bind expected source,
 operation and request digest to the trigger, clean checkout, successful native

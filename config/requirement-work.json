@@ -924,7 +924,7 @@
         "MTF-01"
       ],
       "inline_prefixes": [],
-      "sha256": "a42521c39edf325cc6f88beec847795d510a97c57c7a3412f8f36ca4818f34d2",
+      "sha256": "d243c8ae78bcbd208fafdfdc5e00f859245978dc31ec4bdde96d325d828b1c39",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
