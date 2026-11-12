@@ -7,7 +7,7 @@
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
 import { StoreClient, StoreClientError, STORE_COPY, storeErrorMessage } from "./skillStore";
-import type { StoreHostMessage, StoreLocalConnections, StoreQuestDraft, StoreRequest, StoreState, StoreStepView, StoreTab } from "./skillStoreProtocol";
+import type { StoreAttributionInput, StoreHostMessage, StoreLocalConnections, StoreQuestDraft, StoreRequest, StoreState, StoreStepView, StoreTab } from "./skillStoreProtocol";
 import { adaptOverlay } from "./questSkill";
 
 export const SKILL_STORE_COMMAND = "hypeproof-chat.skillStore";
@@ -124,6 +124,18 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     }, POLL_MS);
   };
 
+  /**
+   * First publication (policy v2): the seller's partner/instructor choice is registered once, right before the
+   * publish it belongs to. A seller who already chose (or whose binding an operator set) skips this.
+   */
+  const registerFirst = async (c: StoreClient, attribution: StoreAttributionInput | undefined) => {
+    if (state.seller?.attribution?.decided !== false) return;
+    if (!attribution) throw new StoreClientError("attribution_required");
+    const view = await c.registerAttribution(attribution);
+    // Recorded at once: if the publish after it fails, a retry must not register a second time.
+    if (state.seller) state = { ...state, seller: { ...state.seller, attribution: view } };
+  };
+
   const handle = async (msg: StoreRequest) => {
     if (!msg || typeof msg.type !== "string") return;
     const c = client();
@@ -180,8 +192,20 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         });
       case "storePublish":
         return run(async () => {
+          await registerFirst(c, msg.attribution);
           const r = await c.publish(msg.draft);
-          await load("sell", { notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
+          await load("sell", { attributionPreview: undefined, notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
+        });
+      case "storeResolveCodes":
+        return run(async () => {
+          const names = await c.resolveCodes(msg.partnerCode, msg.instructorCode);
+          await push({ busy: false, attributionPreview: { partnerCode: msg.partnerCode, instructorCode: msg.instructorCode, partner: names.partner, instructor: names.instructor } });
+        });
+      case "storeSavePayoutAccount":
+        // The number goes straight to the Service and is not kept in the panel state or logged here.
+        return run(async () => {
+          await c.savePayoutAccount({ bank_code: msg.bankCode, account_number: msg.accountNumber, holder_name: msg.holderName });
+          await load("sell", { notice: STORE_COPY.payoutSaved });
         });
       case "storeSearch":
         state = { ...state, query: msg.query.slice(0, 40) };
@@ -190,9 +214,10 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         return run(async () => {
           const offer = deps.questOffer?.();
           if (!offer) throw new StoreClientError("no_finished_quest");
+          await registerFirst(c, msg.attribution);
           const r = await c.publishPackage(offer.pkg({ title: msg.title, summary: msg.summary, price_krw: msg.price_krw }));
           publishedDraft = JSON.stringify(offer.draft);
-          await load("sell", { questDraft: undefined, notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
+          await load("sell", { questDraft: undefined, attributionPreview: undefined, notice: r.status === "review" ? STORE_COPY.inReview : STORE_COPY.published });
         });
       case "storeRun":
         return run(async () => {
