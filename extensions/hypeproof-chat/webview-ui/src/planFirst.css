@@ -69,7 +69,9 @@
   border-radius: var(--hp-space-3);
   cursor: pointer;
 }
-.hps-plan-approve { color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default); border: var(--ds-c-focus-width) solid var(--hp-border-accent-default); font-weight: var(--hp-weight-strong); }
+/* CGP-CHAT-D-004: distinct (accent fill, strong weight) but the same size as the secondary actions. Scoped under
+   .hps-plan-actions so the shared `font: inherit` above does not reset the weight. */
+.hps-plan-actions .hps-plan-approve { color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default); border: var(--ds-c-focus-width) solid var(--hp-border-accent-default); font-weight: var(--hp-weight-strong); }
 .hps-plan-secondary { color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-focus-width) solid var(--hp-border-control-default); }
 .hps-plan-secondary:hover { background-color: var(--hp-bg-control-hover); }
 .hps-plan-secondary:active { background-color: var(--hp-bg-control-pressed); }

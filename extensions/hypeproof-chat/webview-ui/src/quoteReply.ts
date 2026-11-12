@@ -1,9 +1,10 @@
 /**
  * CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY): quote part of one answer into the next message.
  * Pure logic only: which selection counts, which text in it is answer text, how it becomes a `> `
- * block, and how that block joins the draft. The quote is plain draft text the learner can edit;
- * nothing here sends anything.
+ * block, how that block joins the draft (CGP-CHAT-D-007: a removable chip at the start of the
+ * draft) and where the popover goes. Nothing here sends anything.
  */
+import { normalizeDraft, type DraftPart } from './pastedDraft';
 
 export const QUOTE_LABEL = '인용하기';
 /** Longest quote, in characters (grapheme clusters), before it is cut. */
@@ -36,7 +37,9 @@ export interface QuoteSelection {
   getRangeAt?(index: number): QuoteRange;
 }
 
-export interface AnswerQuote { messageId: string; block: string; truncated: boolean }
+/** The selected range's line boxes, kept with the quote so the popover can follow scrolling without reading the selection again. */
+export interface QuoteRangeRects { getClientRects(): ArrayLike<{ top: number; bottom: number; left: number; right: number; width: number; height: number }> }
+export interface AnswerQuote { messageId: string; block: string; truncated: boolean; range?: QuoteRangeRects }
 
 type Point = { node: QuoteNode; offset: number };
 
@@ -185,11 +188,41 @@ export function quoteFromSelection(selection: QuoteSelection | null | undefined)
 }
 
 /**
- * The draft with the quote block appended, followed by a blank line for the reply. The existing
- * draft is kept byte for byte as the prefix; only the separator before the block is added.
+ * CGP-CHAT-D-007 — the draft with the quote as its first part: a hidden part (like a folded paste)
+ * drawn as the quote chip, so the editor keeps exactly what the learner typed. Sending, queueing
+ * and saving use the full draft, so the message starts with the `> ` block and a blank line. One
+ * quote at a time: a new quote replaces the chip, never the typed text.
  */
-export function mergeQuoteIntoDraft(draft: string, block: string): string {
-  if (!draft) return `${block}\n\n`;
-  const separator = draft.endsWith('\n\n') ? '' : draft.endsWith('\n') ? '\n' : '\n\n';
-  return `${draft}${separator}${block}\n\n`;
+export function withQuote(parts: DraftPart[], block: string, id: number): DraftPart[] {
+  return normalizeDraft([{ text: `${block}\n\n`, id, quote: true }, ...parts.filter(part => !part.quote)]);
+}
+
+/** The chip's text: the quote without its `> ` marks, its lines joined by a space (the chip shows two lines). */
+export function quoteChipText(part: DraftPart): string {
+  return part.text.split('\n').map(line => line.replace(/^>[ ]?/, '').trim()).filter(Boolean).join(' ');
+}
+
+/** CGP-CHAT-D-007 — the popover goes below the selection when the selection's top is closer than this to the top of the conversation. */
+export const QUOTE_FLIP_MIN = 48;
+/** Space between the selection and the popover. */
+export const QUOTE_GAP = 2;
+
+export interface QuoteBox { top: number; bottom: number; left: number; right: number }
+export interface QuotePlacement { side: 'above' | 'below'; top: number; left: number }
+
+/**
+ * Where the popover goes, in viewport coordinates. `first` and `last` are the selection's top and
+ * bottom line boxes, `view` the visible part of the conversation, `row` the answer's row (the
+ * horizontal bounds) and `size` the popover. Above the first line, centred on it; below the last
+ * line when the space above is under QUOTE_FLIP_MIN (or under the popover's own height). While the
+ * selection is in view the popover is kept inside the view, so it never sits under the header or
+ * the composer; a selection scrolled out of view takes its popover with it.
+ */
+export function placeQuote(first: QuoteBox, last: QuoteBox, view: QuoteBox, row: QuoteBox, size: { width: number; height: number }): QuotePlacement {
+  const side = first.top - view.top >= Math.max(QUOTE_FLIP_MIN, size.height + QUOTE_GAP) ? 'above' : 'below';
+  let top = side === 'above' ? first.top - QUOTE_GAP - size.height : last.bottom + QUOTE_GAP;
+  if (last.bottom > view.top && first.top < view.bottom) top = Math.max(view.top, Math.min(top, view.bottom - size.height));
+  const anchor = side === 'above' ? first : last;
+  const left = Math.max(row.left, Math.min((anchor.left + anchor.right - size.width) / 2, row.right - size.width));
+  return { side, top, left };
 }
