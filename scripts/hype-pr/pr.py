@@ -406,6 +406,31 @@ def required_checks(repo: dict[str, Any]) -> list[str]:
     return list(repo.get("required_status_checks") or [])
 
 
+def merge_tier(repo: str, paths: list[str]) -> dict[str, Any] | None:
+    """Tier of the PR's paths from policy/merge-tiers.yaml (#385), or None when the
+    repository has no tier policy. A classification error is reported as tier "?"
+    and treated like tier A: it never gets auto-merge."""
+    path = ROOT / "scripts/merge-tier/merge_tier.py"
+    try:
+        spec = importlib.util.spec_from_file_location("hypeproof_merge_tier", path)
+        if not spec or not spec.loader or not path.is_file():
+            raise RuntimeError(f"tier classifier missing: {path}")
+        tiers = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = tiers  # dataclasses resolve their module by name
+        spec.loader.exec_module(tiers)
+    except Exception as exc:  # noqa: BLE001 - any failure here fails closed
+        return {"tier": "?", "reasons": [f"classifier unavailable: {exc}"]}
+    try:
+        tier_policy = tiers.load_policy(ROOT / "policy/merge-tiers.yaml")
+        if not tier_policy.classified(repo):
+            return None
+        result = tiers.classify(repo, paths, tier_policy)
+    except tiers.TierError as exc:
+        return {"tier": "?", "reasons": [str(exc)]}
+    return {"tier": result["tier"], "reasons": tiers.reasons(result),
+            "matched": [m["path"] for m in result["matched"]]}
+
+
 def plan(
     *,
     policy: dict[str, Any],
@@ -425,8 +450,13 @@ def plan(
     reviewer_logins = eligible_reviewers if request_reviewers else []
     profile_allows_auto_merge = bool(profile_repo.get("allow_auto_merge"))
     checks = required_checks(repo)
+    tier = merge_tier(full, paths)
 
     blockers: list[str] = []
+    if tier and tier["tier"] == "A":
+        blockers.append("merge_tier_a:" + ",".join(tier["reasons"]))
+    elif tier and tier["tier"] != "B":
+        blockers.append("merge_tier_unknown:" + "; ".join(tier["reasons"]))
     if not auto_merge:
         blockers.append("auto_merge_not_requested")
     if draft:
@@ -468,6 +498,7 @@ def plan(
             "blocked_by": uniq(blockers),
         },
         "required_status_checks": checks,
+        "merge_tier": tier,
     }
 
 
@@ -869,6 +900,13 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     lane = release_lane(args, report)
     labels = lane["labels"]
     paths = report["paths"] if report else (args.path or [])
+    if args.auto_merge:
+        tier = merge_tier(repo_full_name(find_repo(policy, args.repo)[0]), paths)
+        if tier and tier["tier"] != "B":
+            raise ValueError(
+                f"--auto-merge refused: this PR is tier {tier['tier']} ({'; '.join(tier['reasons'])}) under "
+                "policy/merge-tiers.yaml. A human approver approves the head commit and merges it; "
+                "drop --auto-merge (#385)")
     planned = plan(
         policy=policy,
         repo_ref=args.repo,
