@@ -5,6 +5,9 @@
 
 import { SHOW_COPY, SHOW_LIMITS, escapeHtml, type ShowStep } from "./showWhatIMade.ts";
 
+/** A paused player opens on a frame where the headline and material are in place, not the black frame at 0 s. */
+export const SHOW_POSTER_SECONDS = 5;
+
 export interface ShowPanelView {
   step: ShowStep;
   audience: string;
@@ -91,5 +94,6 @@ const on=(id,fn)=>{const e=document.getElementById(id);if(e)e.addEventListener('
 const ask=document.getElementById('ask');if(ask)ask.addEventListener('submit',e=>{e.preventDefault();send({type:'answer',text:ask.answer.value})});
 const retitle=document.getElementById('retitle');if(retitle)retitle.addEventListener('submit',e=>{e.preventDefault();send({type:'headline',text:document.getElementById('headline').value})});
 on('back',()=>send({type:'back'}));on('pick',()=>send({type:'pick'}));on('redo',()=>send({type:'redo'}));on('accept',()=>send({type:'accept'}));on('close',()=>send({type:'close'}));
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();send({type:'close'})}});})();</script></body></html>`;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();send({type:'close'})}});
+const pl=document.getElementById('player');if(pl){let i=0;const t=setInterval(()=>{i++;try{if(pl.duration>0){clearInterval(t);if(pl.paused&&!(pl.currentTime>0))pl.seek(${SHOW_POSTER_SECONDS})}}catch{}if(i>100)clearInterval(t)},100)}})();</script></body></html>`;
 }
