@@ -21,14 +21,14 @@
   },
   "dependencies": {
     "hono": "^4.13.7",
-    "@hypeproof/service-contracts": "file:../.private-service-cache/hypeproof-service-contracts-0.1.2.tgz"
+    "@hypeproof/service-contracts": "file:../.private-service-cache/hypeproof-service-contracts-0.1.5.tgz"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",
     "postcss": "^8.5.23",
     "typescript": "^5.4.0",
     "wrangler": "^4.147.0",
-    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.5.tgz"
+    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.7.tgz"
   },
   "overrides": {
     "sharp": "0.35.5"
