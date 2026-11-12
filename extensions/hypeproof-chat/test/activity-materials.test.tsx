@@ -197,6 +197,32 @@ t("#3266: a different activity never inherits the note draft", async () => {
 });
 
 
+t("#3313: URL drafts stay scoped and survive refresh and refusal", async () => {
+  const root = await mountPanel();
+  try {
+    const field = () => all(e => e.getAttribute("name") === "material-url")[0];
+    const input = async (text: string) => act(async () => { const e = field(); (e as unknown as { type: string }).type = "url"; e.value = text; e.dispatchEvent(ev("input")); });
+    await hostSays({ type: "materialsState", view: VIEW });
+    await input("https://example.com/activity-a");
+    await hostSays({ type: "materialsState", view: { ...VIEW } });
+    eq(field().value, "https://example.com/activity-a", "refresh retains draft");
+    const other = { ...VIEW, scope: "activity-b" };
+    await hostSays({ type: "materialsState", view: other });
+    eq(field().value, "", "different scope starts empty");
+    ok(byText("button", "주소 넣기")[0].hasAttribute("disabled"), "empty scope cannot add old address");
+    await input("https://example.com/activity-b");
+    const form = all(e => e.localName === "form" && e.findAll(c => c.getAttribute("name") === "material-url").length > 0)[0];
+    await act(async () => { form.dispatchEvent(ev("submit")); });
+    const request = last("materialAddUrl")!;
+    eq(request.url, "https://example.com/activity-b", "only current edited address submitted");
+    await hostSays({ type: "materialsState", view: other, requestId: request.requestId, error: "추가하지 못했어요" });
+    eq(field().value, "https://example.com/activity-b", "refusal retains current address");
+    await hostSays({ type: "materialsState", view: null });
+    await hostSays({ type: "materialsState", view: VIEW });
+    eq(field().value, "", "B draft never leaks back into A");
+  } finally { await act(async () => { root.unmount(); }); }
+});
+
 // Pending note requests belong to their original material scope.
 for (const transition of ["same", "switch", "return", "unavailable"]) t(`#3266 pending note after ${transition}`, async () => {
   const root = await mountPanel();
