@@ -20,7 +20,7 @@ import {
   SHOW_COPY, SHOW_TIMING, SHOW_PLAYER_FILE, SHOW_RUNTIME_FILE, SHOW_ANIME_FILE, SHOW_FONT_FILE, SHOW_FOLDER_ASSETS, captureShowPage, showComposition, showDecisionRecord,
   showInitialState, showMaterialKind, showReduce,
 } from "../src/showWhatIMade.ts";
-import { showPanelHtml } from "../src/showWhatIMadeView.ts";
+import { showPanelHtml, SHOW_POSTER_SECONDS } from "../src/showWhatIMadeView.ts";
 import { findChromium, launch } from "./lib/headless-chromium.mjs";
 
 const require = createRequire(import.meta.url);
@@ -305,6 +305,12 @@ if (!bin) {
       assert.deepEqual(m.small, [], `${name}@${width} 44px targets`);
       assert.equal(m.h1, 1);
       assert.ok(m.questions <= 1, "never more than one question on screen");
+      if (comp) {
+        // A paused player opens on the poster frame (headline and material in place), not the black frame at 0 s.
+        let shownAt = 0;
+        for (let i = 0; i < 30 && shownAt === 0; i++) { shownAt = await browser.evaluate("document.getElementById('player').currentTime||0"); if (!shownAt) await new Promise((r) => setTimeout(r, 100)); }
+        assert.equal(shownAt, SHOW_POSTER_SECONDS, `${name}@${width} opens on the ${SHOW_POSTER_SECONDS} s poster frame`);
+      }
       const ring = await browser.focusVisibleStyle("button"); assert.equal(ring["outline-width"], "2px");
       await shoot(`${name}-${width}`);
       cases++;
