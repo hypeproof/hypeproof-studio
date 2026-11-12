@@ -1529,7 +1529,7 @@ collection contract.
 
 ## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
 
-요구: [수업별 Studio 업데이트 고정](../requirements/classroom-admin.md#adm-11-update-freeze), Studio REQ-I21. Service 계약: hypeproof/hypeproof-service#428. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium), Studio base `5c6eb4dab`, Service base `6c7e517`.
+요구: [수업별 Studio 업데이트 고정](../requirements/classroom-admin.md#adm-11-update-freeze), Studio REQ-I21. Service 계약: hypeproof/hypeproof-service#428. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium), Studio base `5c6eb4dab`(이후 `main` 위로 rebase), Service base `6c7e517`.
 
 | 시험 | 무엇을 | 결과 · 증거 |
 |---|---|---|
@@ -1539,7 +1539,7 @@ collection contract.
 | `chalk/test/update-freeze-forward.test.mjs` | `PUT`/`DELETE …/update-freeze`만 강사 연결 issuer로 Service에 감, 다른 메서드·경로는 404로 Service에 안 감, Service 판정 유지 | head 통과, base 실패(빨강) |
 | `chalk/test/latest-release.test.mjs` | `security_critical`: 정식 출시의 노트 표시 줄만, rc·실패·모르는 출시는 false, 캐시와 함께 재사용, 시험용 `HPS_STUDIO_LATEST_RELEASE_SECURITY` | head 7/7 통과 |
 | `chalk/test/update-freeze.browser.mjs` (`chalk` `npm test`에 포함) | 실제로 서빙한 `/console`, 1280·390px: 수업 줄 배지 글·자물쇠·`--hp-warn`·1px 테두리·14px·대비, 조회 전용 연결은 배지만, 보안 출시 표시, 이름표 붙은 날짜 입력 2개가 범위 글을 가리킴(`aria-live`), Tab으로 닿고 ↑ 키로 날짜가 바뀌면 범위 글이 따라감, 44px·14px, 가로 넘침 없음, Service 거절 문구, 저장 `PUT {from, until}` 뒤 배지 갱신, 61일 이상은 보내기 전에 막음, 풀기 `DELETE` 뒤 배지 없음 | head PASS. base에서 고정 칸이 없어 실패(빨강) |
-| 전체 | Studio 확장 `npm test`, `chalk` typecheck·`npm test`, 확장·webview typecheck, `next-work.py --check` | RESULTS_PENDING |
+| 전체 | Studio 확장 `npm test`의 모든 조각(첫 실패에서 멈추지 않게 하나씩: 스모크 전부, `npm run` 묶음, 렌더 시험 전부 = 617개), `chalk` typecheck·`FOCUS_REQUIRE_BROWSER=1 npm test`, 확장·webview typecheck, `next-work.py --check` | rebase 전 head에서 617개 모두 exit 0(알려진 base 실패 `learning-block-caption-computed`·`model-selection`·`sdk-result-drift`도 이번엔 통과), `chalk` `npm test` 0, typecheck 3개 0, `next-work.py --check` 0. 측정: 배지 10.57:1, 14px, 28.4px 높이, 날짜 입력 46px, 버튼 50~52px(1280·390). 첫 `chalk` 전체 실행에서 `console-duration` 시험의 고정 응답이 새 `/studio/latest-release` 읽기를 몰라 실패했다. 그래서 그 읽기는 고정이 있을 때만 하도록 고쳤다. 확장 `design-tokens` 스모크가 16px·rem 값을 잡아 토큰과 `ch`로 바꿨다. `main`(`96cf59519`) 위로 rebase 한 head `62e8130e0`에서 Chalk typecheck·`npm test`, 확장 typecheck·build, 업데이트 관련 스모크 16개와 렌더 시험 전부를 다시 돌려 모두 0 |
 
 **NOT RUN**: 실제 강사 브라우저(macOS·Windows), 실제 화면 읽기 프로그램, 보안 표시가 있는 실제 출시와 회원 미러 복사(`mirror-release.yml`은 출시 때만 돈다), KV 전파 시간, 배포된 Service·Chalk, 실제 학생 기기.
 
