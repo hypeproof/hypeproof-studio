@@ -106,9 +106,19 @@ try {
     await guidance("parent is a file", path.join(home, "pfile", "Class"));
     fs.symlinkSync(path.join(home, "gone"), path.join(home, "plink"));
     await guidance("parent is a dangling link", path.join(home, "plink", "Class"));
-    fs.mkdirSync(path.join(home, "pro")); fs.chmodSync(path.join(home, "pro"), 0o500);
-    if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(home, "pro", "Class"));
-    fs.chmodSync(path.join(home, "pro"), 0o700);
+    const protectedDir = path.join(home, "pro"); fs.mkdirSync(protectedDir);
+    if (process.platform === "win32") {
+      // chmod does not deny directory creation on Windows. Deny writes only on this owned fixture,
+      // then restore the ACL even when the guidance assertion fails.
+      const account = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`;
+      run("icacls.exe", [protectedDir, "/deny", `${account}:(WD,AD)`]);
+      try { await guidance("ACL read-only parent", path.join(protectedDir, "Class")); }
+      finally { run("icacls.exe", [protectedDir, "/remove:d", account]); }
+    } else {
+      fs.chmodSync(protectedDir, 0o500);
+      try { if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(protectedDir, "Class")); }
+      finally { fs.chmodSync(protectedDir, 0o700); }
+    }
     // N9: two windows open the same empty folder; the loser (busy lock or FOLDER_TAKEN) must not remove the winner's folder.
     {
       const race = path.join(home, "RaceFolder");

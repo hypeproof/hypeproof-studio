@@ -20,7 +20,7 @@ import { exportWork, collectWorkFolder, WorkExportTooLarge, WORK_EXPORT_LIMITS, 
 import { createTaskHarness } from './task-workspace-harness.mjs';
 
 const require = createRequire(import.meta.url);
-const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'work-export-')));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'work-export-')));
 const TOKEN = 'hps_student_token_9f8e7d6c5b4a';
 const ACTIVITY_TOKEN = 'hps_activity_token_1a2b3c4d5e';
 
@@ -72,7 +72,7 @@ function fixture(name) {
   put(root, 'evil\u202etxt.txt', 'bidi-name');
   put(base, 'outside/secret.txt', 'outside-the-folder');
   fs.symlinkSync(path.join(base, 'outside/secret.txt'), path.join(root, 'link.txt'));
-  fs.symlinkSync(path.join(base, 'outside'), path.join(root, 'linkdir'));
+  fs.symlinkSync(path.join(base, 'outside'), path.join(root, 'linkdir'), 'dir');
   return root;
 }
 const EXPECTED_FILES = ['작업 폴더/config.js', '작업 폴더/images/logo.png', '작업 폴더/index.html', '작업 폴더/style.css', '작업 폴더/sub/dir/app.js', '작업 폴더/한글 이름.txt'];
@@ -154,7 +154,7 @@ try {
   assert.equal(fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('꽃집'), true);
 
   // Destination inside the work folder (also through a link) is refused, nothing written.
-  fs.symlinkSync(path.join(root, 'sub'), path.join(base, 'into-source'));
+  fs.symlinkSync(path.join(root, 'sub'), path.join(base, 'into-source'), 'dir');
   for (const inside of [root, path.join(root, 'sub'), path.join(base, 'into-source')]) {
     const before = fs.readdirSync(path.join(root, 'sub'));
     await assert.rejects(exportWork({ root, destination: inside, secrets: [], tasks: [], now }), /destination_inside/);

@@ -132,7 +132,7 @@ const disk = showComposition({ headline: hostile, audience: "엄마</p><script>x
 // 3. Host: real panel messages, picker, folder writes (vscode stubbed)
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-")));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-")));
   fs.mkdirSync(path.join(root, "art")); fs.writeFileSync(path.join(root, "art", "drawing.png"), PNG);
   fs.writeFileSync(path.join(root, "art", "fake.png"), "<svg onload=alert(1)>");
   fs.writeFileSync(path.join(root, "page.html"), "<h1>hi</h1>");
