@@ -1,5 +1,15 @@
-/* CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY): the 인용하기 button under the answer that holds the selection. */
-.hps-quote-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-quoteaction-space-15); margin-top: var(--ds-c-studio-quoteaction-space-13); animation: hps-quote-in var(--hp-dur-content) var(--hp-ease); }
+/* CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY) / CGP-CHAT-D-007: the 인용하기 popover over the selection.
+   Out of flow, placed by QuoteAction.tsx above the selection (below it near the top of the conversation).
+   It is drawn at once, with no fade, so it is there within one frame of the selection (D-007 asks for
+   at most 150 milliseconds). A 44px button in a 1px border, so with its 2px gap it fits the 48px flip threshold. */
+.hps-quote-row {
+  position: absolute; z-index: 5;
+  display: flex; flex-wrap: nowrap; align-items: center; gap: var(--ds-c-studio-quoteaction-space-15);
+  margin: 0; padding: 0; white-space: nowrap;
+  color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-quoteaction-radius-10);
+  box-shadow: var(--hp-elevation-overlay);
+}
 .hps-quote-action {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: var(--ds-c-studio-quoteaction-size-8); min-width: var(--ds-c-studio-quoteaction-size-8); box-sizing: border-box; padding: 0 var(--ds-c-studio-quoteaction-space-1);
@@ -12,5 +22,17 @@
 .hps-quote-action:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-quote-action:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .hps-quote-action:disabled { cursor: default; opacity: .6; }
-.hps-quote-note { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-quoteaction-type-1); }
-@keyframes hps-quote-in { from { opacity: 0; } to { opacity: 1; } }
+.hps-quote-note { padding-inline-end: var(--ds-c-studio-quoteaction-space-1); color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-quoteaction-type-1); }
+/* The quote chip in the composer (D06 chip family): two lines at most with an ellipsis, a 44px × remove. */
+.hps-quote-chip { flex-wrap: nowrap; padding-inline-start: var(--hp-space-2); border-inline-start: var(--ds-c-focus-width) solid var(--hp-border-accent-default); }
+.hps-quote-chip-text {
+  flex: 1 1 0; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
+  overflow-wrap: anywhere; white-space: normal;
+  color: var(--hp-text-muted-default); font-size: var(--hp-font-body); line-height: var(--hp-leading-label);
+}
+.hps-quote-chip .hps-quote-chip-remove { cursor: pointer; }
+@media (forced-colors: active) {
+  .hps-quote-row { border-color: ButtonText; }
+  .hps-quote-chip { border-inline-start-color: CanvasText; }
+}
