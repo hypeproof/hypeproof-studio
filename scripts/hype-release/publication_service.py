@@ -16,6 +16,7 @@ import subprocess
 
 from core import canonical, digest, require, reserve, settle, utc, now
 import publisher
+import macos_signing
 
 EVIDENCE_REPOSITORY = 'hypeproof/hypeproof-studio-releases'
 WORKFLOW = 'release-promote.yml'
@@ -60,6 +61,7 @@ def studio_call(checkout, revision, command, value, node='node'):
 
 
 def execution_request(state, policy, registry, product, workflow_head):
+    macos_signing.require_official(state)
     current = publisher.producer_input(state, policy, registry)
     contract = product['contract']
     require(current['plan']['status'] == 'READY' and policy['routing']['mode'] == 'active'
@@ -217,6 +219,7 @@ def dispatch(session, registry, operation_id, github):
     workflow = github.api(f"repos/{request['repository']}/actions/workflows/{WORKFLOW}")
     require(workflow.get('state') == 'active' and workflow.get('path') == '.github/workflows/' + WORKFLOW,
             'existing trusted workflow is not active')
+    macos_signing.verify_remote(github, session.state, github.release(request['repository'], session.candidate['tag']))
     state = copy.deepcopy(session.state)
     state['operations'][operation_id]['result']['dispatchAttempted'] = True
     session.save(state)  # Mark attempt before POST; timeout is observation-only.
@@ -270,6 +273,10 @@ def observe_publication(session, operation_id, github):
         require(artifact['name'] in remote and remote[artifact['name']]['size'] == artifact['size']
                 and remote[artifact['name']].get('digest') == 'sha256:' + artifact['sha256'],
                 'formal release package bytes differ from this candidate')
+    signing = macos_signing.require_official(session.state)['receiptAsset']
+    require(signing['name'] in remote and remote[signing['name']]['size'] == signing['size']
+            and remote[signing['name']].get('digest') == 'sha256:' + signing['sha256'],
+            'formal release signing receipt differs from collected immutable evidence')
     # A workflow dispatch/PR merge alone never completes this candidate.
     state = copy.deepcopy(session.state)
     state['stablePublished'] = True

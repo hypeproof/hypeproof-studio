@@ -21,6 +21,7 @@ from transport import GitHub, GitHubStore, LocalGitStore, NativeGitHub
 import native_testflight
 import routing
 import publisher
+import macos_signing
 
 
 def read(path):
@@ -263,12 +264,15 @@ def main(argv=None, github=None, actions=None, identity=None):
         result = collect(github, candidate, a.directory, tag["tagObject"])
         if s["artifacts"]:
             require(s["artifacts"] == result["artifacts"], "candidate packages changed; cut a new RC")
+        if s.get('macSigning'):
+            require(s['macSigning'] == result['macSigning'], 'Mac signing evidence changed; cut a new RC')
         return session.save({**s, **result})
     if a.command == "report":
         release = verify_remote_packages(github, s)
         return {"files": report(s, release, a.directory), "releaseUrl": release["html_url"], "publication": "NOT_RUN"}
     if a.command == "promote-check":
-        verify_remote_packages(github, s)
+        remote = verify_remote_packages(github, s)
+        macos_signing.verify_remote(github, s, remote)
         return engine_check(a.checkout, a.engine_store, a.engine_policy, a.intent, candidate, s["artifacts"])
     if a.command == "resume-upload":
         operation = s["operations"].get(a.operation)

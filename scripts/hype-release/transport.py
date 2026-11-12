@@ -94,6 +94,13 @@ class GitHub:
             if temp is not None:
                 temp.unlink(missing_ok=True)
 
+    def artifact_zip(self, repo, artifact_id, destination):
+        require(type(artifact_id) is int and artifact_id > 0, 'numeric Actions artifact ID required')
+        with Path(destination).open('xb') as output:
+            result = subprocess.run(['gh', 'api', f'repos/{repository(repo)}/actions/artifacts/{artifact_id}/zip'],
+                                    stdout=output, stderr=subprocess.PIPE, timeout=600)
+        require(result.returncode == 0, 'Actions artifact download failed; no release evidence accepted')
+
 
 def load_native_broker():
     # Authentication code belongs to this same trusted Harness checkout. Neither

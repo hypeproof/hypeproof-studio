@@ -92,6 +92,17 @@ complete identity matches; obtain the existing engine's new artifact-bound manif
 evidence and approval before promotion. There is no waiver that turns an old PASS
 report into acceptance of a new package.
 
+Official Mac collection additionally requires the final
+`HypeProof-Studio-darwin-arm64.signing.json` receipt, byte-identical to the receipt
+in the exact successful build run's `hypeproof-studio-macos-signing-receipt`
+Actions artifact. Harness pins Apple team `RZBNT9ZB67` and bundle
+`ai.hypeproof.studio`, verifies final ZIP/source/run/attempt identity and retains
+`state.macSigning`. Local-only or expired/mismatched evidence blocks official
+promotion. Historical records remain readable as `legacy`, never relabelled
+official. The existing publisher rechecks before dispatch and preserves the
+receipt alongside package bytes. See `docs/RELEASE-MAC-SIGNING.md` in Harness.
+This Mac verdict does not change or complete the separate TestFlight state.
+
 ## Evidence and acceptance
 
 Evidence keys:
