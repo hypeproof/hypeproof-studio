@@ -18477,6 +18477,68 @@
           "path": "docs/testing/native-mobile-growth.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SHOW-WHAT-I-MADE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Show what I made (#3794 slice 1)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHOW-WHAT-I-MADE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMade.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/media/show/VENDORED.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-SHOW-WHAT-I-MADE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE",
+        "ST-IMP-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/show-what-i-made.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/scripts/check-show-composition.mjs"
+        }
+      ]
     }
   ]
 }
