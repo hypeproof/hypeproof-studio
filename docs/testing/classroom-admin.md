@@ -1550,8 +1550,9 @@ collection contract.
 | 시험 | 무엇을 | 결과 · 증거 |
 |---|---|---|
 | `e2e/classroom/ops-run-team.mjs` (`npm run test:classroom-ops-run-team`, #3775) | 배정 없는 fixture(`ownership: 'strict'`). 담당 강사가 화면에서 명단과 네 가지 기능을 저장(질문 카드 → 학생에게 보내기 자동 켜짐, 보내기 끄면 질문 카드 꺼짐)하고 DB `flags_json`에 네 값이 들어간다. 운영 강사 칸·내 강사 ID 복사(클립보드 값 확인). 배정 안 된 강사 B: 학생 0명, `not_run_instructor` 문구와 담당 강사 ID, 자기 ID. 담당 강사가 B를 추가 → B가 명단을 보고 공동 강사로 표시, 추가 양식 없음·나가기 있음, 낡은 화면의 추가 시도는 `owner_only` 문구. B가 나가고, 담당 강사가 다시 추가한 뒤 뺀다(DB에 removed). override 강사: “관리자 열람 — 기록이 남습니다”와 `instructor_override` 감사. 좌석 A1의 동의를 운영 자격증명으로 기록하면 A1 “동의함”, A2·A3 “동의 전”, 세 좌석 모두 보인다 | 2026-11-12 7/7 PASS |
+| `e2e/classroom/ops-question-card.mjs` (`npm run test:classroom-ops-question-card`, #3776) | 질문 카드가 꺼진 수업에는 작성란이 없고, 화면에서 켜고 저장하면 생긴다. 보기 1개·중복 보기는 화면이 막고, 미리 보기와 확인 단계(확인 전 `/contents`·`/distributions` 요청 0건). ‘모든 좌석’은 명단 3석 전부가 대상(DB `targets_json`). 기기 쪽은 Service sync 규약을 직접 몬다: A1 기기가 받아 두면 전달됨, 질문 카드를 모르는 앱 A2는 “앱 업데이트 필요”, 미연결 A3는 “미연결 — 연결되면 전달” → 연결 뒤 대기하던 카드를 받아 전달됨. 동의 뒤 A1 답(2번)·A3 건너뜀 → 답함·보기별 수·요약. 선택한 좌석에만 짧은 답 카드, `<img onerror>` 답은 글자 그대로(img 0개, 스크립트 실행 없음), 회수(DB `revoked_at`) 뒤에도 받은 답은 남고 새 답은 `withdrawn`. 질문 화면 어디에도 열람·읽음 문구 없음 | 2026-11-12 6/6 PASS |
 
-**NOT RUN**: 실제 Studio 앱, 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
+**NOT RUN**: 실제 Studio 앱(이 체크아웃의 앱은 아직 `inbox_question`을 선언하지 않아 기기는 Service sync 규약으로 대신 몰았다), 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
 
 <a id="help-queue-keyboard-triage-run"></a>
 

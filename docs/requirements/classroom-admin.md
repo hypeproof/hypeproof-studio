@@ -427,6 +427,21 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 | 관리자 열람 | `viewer_role`이 `override`이면 수업 정보와 운영 강사 칸에 “관리자 열람 — 기록이 남습니다”를 쓴다. Service가 요청마다 `instructor_override`를 감사 기록에 남긴다 |
 | 참여 동의 | 좌석 행마다 `participation_consent`를 “동의함 / 동의 전”으로 보인다. 동의 전 좌석도 숨기거나 거르지 않는다. 동의 전 좌석은 질문 카드에 답을 보낼 수 없다(Service가 409 `consent_required`) |
 
+#### 질문 카드 보내기 (#3776)
+
+| 항목 | 계약 |
+|---|---|
+| 보이는 조건 | 이 수업의 질문 카드(`ops_questions`)와 학생에게 보내기가 켜져 있고 강사 연결이 `distribute` 권한을 가질 때만 선택 줄에 ‘질문 카드 보내기’가 보인다 |
+| 작성 | 질문(평문 2,000자), 카드 제목(80자, 비우면 ‘강사 질문’), 답 형식 객관식(보기 2–6개, 한 줄에 하나, 각 80자, 중복 불가) 또는 짧은 답(500자). 화면이 먼저 형식을 확인하고 최종 판단은 Service(`content_invalid`)가 한다 |
+| 미리 보기 | 학생 보관함에 보일 제목·질문·보기(또는 짧은 답 칸)와 “학생은 답하거나 건너뛸 수 있습니다.”를 글자 그대로 보인다 |
+| 받을 학생 | ‘모든 좌석’ = 이번 수업 명단의 모든 좌석(지금 연결 안 된 학생은 연결되면 받는다). ‘선택한 좌석’ = 학생 목록에서 고른 좌석(기존 선택을 그대로 쓴다). 확인 단계에서 대상 수와 지금 연결·미연결 수를 말하고, 확인 전에는 아무것도 저장·전송하지 않는다 |
+| 보내기 | `POST /contents {kind:'question', title, body, question}` → `POST /distributions {targets, expected_roster_revision}`. 두 요청의 idempotency key는 확인 단계에서 정하므로 다시 눌러도 카드가 두 번 가지 않는다 |
+| 보낸 질문 카드 | 이 수업의 질문 카드 목록(`GET /contents`의 `kind:'question'`). 카드마다 `GET /questions/:object/answers`로 좌석별 연결·상태·답을 보인다. 목록이 열려 있는 동안 학생 현황과 같은 간격(10초, ‘지금 갱신’)으로 다시 읽는다 |
+| 상태 | 전달 전 · 전달됨 · 답함 세 가지뿐이다. 전달됨은 학생 기기가 그 판을 받아 두었다는 Service의 확인이다. 열람·읽음은 기록되지 않으므로 어떤 문구로도 쓰지 않는다 |
+| 전달 전 사유 | `delivery.state`와 좌석 연결로 말한다: 미연결(`accepted`·연결 없음) → “미연결 — 연결되면 전달”, `unsupported` → “앱 업데이트 필요 — 이 앱은 질문 카드를 받지 못합니다”, `offered`·`received` → “기기 확인 대기”, `not_sent` → “이 좌석에는 보내지 않음”, 회수·만료·실패·좌석 변경은 각각의 말 |
+| 답 | 객관식은 보기별 답한 수와 좌석별 “N번 · 보기”, 짧은 답은 학생이 쓴 글을 글자 그대로(`textContent`), 건너뛰면 “건너뜀” |
+| 회수 | ‘이 질문 카드 회수’ → 확인 → 그 카드의 살아 있는 배포마다 `POST /distributions/:id/revoke {expected_row_revision}`. 이미 받은 답은 남는다 |
+
 검증: [재직자 수업의 강사 운영](../testing/classroom-admin.md#e5-instructor-ops-run).
 
 ### 질문 카드 · 수강생 앱 · 2026-11-12 (E5 #3776 · DEC-030)
