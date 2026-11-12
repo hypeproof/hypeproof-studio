@@ -19,3 +19,27 @@ public struct VoiceTurn: Equatable, Sendable {
     }
     public mutating func stop() { token = UUID(); projectID = nil; phase = .idle }
 }
+
+/// Endpoint detection uses both voice activity and stable recognition. A pause
+/// before the first word cannot send an empty turn; a recognition stall cannot
+/// cut off speech that is still audible. Times are monotonic seconds.
+public struct VoiceEndpoint: Sendable {
+    public enum Decision: Equatable { case listen, finish, noSpeech }
+    private let startedAt: Double
+    private var lastSpeech: Double?
+    private var lastRevision: Double?
+    private var text = ""
+    public init(now: Double) { startedAt = now }
+    public mutating func audio(rms: Double, now: Double) {
+        if rms.isFinite && rms >= 0.012 { lastSpeech = now }
+    }
+    public mutating func recognized(_ value: String, now: Double) {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value != text { text = value; lastRevision = now }
+    }
+    public func decision(now: Double) -> Decision {
+        if now - startedAt >= 30 { return text.isEmpty ? .noSpeech : .finish }
+        guard !text.isEmpty, let revision = lastRevision else { return .listen }
+        return now - max(revision, lastSpeech ?? revision) >= 1.6 ? .finish : .listen
+    }
+}

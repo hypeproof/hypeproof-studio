@@ -84,6 +84,7 @@ public struct ConversationCache: Codable, Sendable {
     public var cursor = 0
     public var draft = ""
     public var request: SharedRequest?
+    public var requestFailure: String?
     public var context: [String: String]?
     public init() {}
     public func applyingEdits(_ edits: [String: String]) -> ConversationCache {
@@ -130,10 +131,12 @@ public struct ConversationCache: Codable, Sendable {
         messages = state.messages; cursor = state.revision
         let acknowledged = request.map { pending in value.acknowledged_id == pending.id || state.messages.contains(where: { $0.id == pending.id && $0.role == "user" && $0.content == pending.text }) } ?? false
         if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
+        if request?.status == "completed" { requestFailure = nil }
     }
     public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
         request = try .pending(draft)
+        requestFailure = nil
         if reflection { request?.expectedRevision = cursor }
         draft = ""
     }
@@ -172,6 +175,8 @@ public enum SyncFailure: Error, LocalizedError {
         switch self {
         case .invalidResponse: return "연동 응답을 확인하지 못했어요. 저장된 기록은 유지해요."
         case .http(let status, let code):
+            if ["native_signin_expired", "native_signin_not_pending", "invalid_native_signin"].contains(code) { return "로그인 요청이 만료됐거나 이미 사용됐어요. 로그인을 다시 시작해 주세요." }
+            if ["invalid_code_verifier", "invalid_code_challenge", "invalid_return_uri"].contains(code) { return "이 앱의 로그인 요청을 확인하지 못했어요. 로그인을 다시 시작해 주세요." }
             if code == "reflection_access_required" { return "이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요." }
             if code == "reflection_budget_limit" { return "오늘의 AI 사용 한도에 도달했어요. 기록은 그대로 남아 있어요." }
             if code == "reflection_busy" { return "다른 기기에서 답변을 받고 있어요. 잠시 뒤 같은 대화를 확인해 주세요." }
@@ -182,7 +187,7 @@ public enum SyncFailure: Error, LocalizedError {
             if code == "slow_down" { return "연결 확인 중이에요. 잠시 기다려 주세요." }
             if status == 409 { return "앞선 요청이나 컴퓨터의 상태를 확인해 주세요. 작성한 글은 보존했어요." }
             if status == 429 { return "연동 요청이 많아요. 잠시 뒤 다시 확인해 주세요." }
-            return "연결하지 못했어요. 컴퓨터와 인터넷 상태를 확인해 주세요. 작성한 글은 남아 있어요."
+            return "연결하지 못했어요. 인터넷 상태를 확인하고 다시 시도해 주세요. 작성한 글은 남아 있어요."
         }
     }
 }
@@ -215,6 +220,16 @@ public final class ConversationService: @unchecked Sendable {
         let value = try JSONDecoder().decode(DeviceSignIn.self, from: data)
         guard value.verification_uri_complete.scheme == "https", value.verification_uri_complete.host == "hypeproof-ai.xyz" else { throw SyncFailure.invalidResponse }
         return value
+    }
+    public func startNativeSignIn(_ proof: NativeAccountProof) async throws -> NativeAccountStart {
+        let (data, _) = try await request("/v1/auth/native/start", method: "POST", body: ["state": proof.state, "code_challenge": proof.challenge, "code_challenge_method": "S256", "redirect_uri": NativeAccountProof.redirectURI, "label": "HP Studio iPhone"])
+        let value = try JSONDecoder().decode(NativeAccountStart.self, from: data)
+        try value.validate(); return value
+    }
+    public func exchangeNativeSignIn(code: String, proof: NativeAccountProof) async throws -> AccountTokens {
+        let (data, _) = try await request("/v1/auth/native/exchange", method: "POST", body: ["code": code, "code_verifier": proof.verifier, "redirect_uri": NativeAccountProof.redirectURI])
+        let value = try JSONDecoder().decode(AccountTokens.self, from: data)
+        try value.validate(); return value
     }
     public func pollSignIn(_ device: String) async throws -> AccountTokens? {
         let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])

@@ -905,6 +905,18 @@
     {
       "path": "docs/requirements/mobile-growth-roadmap.md",
       "ids": [
+        "MFR-01",
+        "MFR-02",
+        "MFR-03",
+        "MFR-04",
+        "MFR-05",
+        "MFR-06",
+        "MIRS-01",
+        "MPER-01",
+        "MPER-02",
+        "MPER-03",
+        "MPER-04",
+        "MPER-05",
         "MREF-01",
         "MREF-02",
         "MREF-03",
@@ -914,16 +926,10 @@
         "MVOICE-02",
         "MVOICE-03",
         "MVOICE-04",
-        "MVOICE-05",
-        "MPER-01",
-        "MPER-02",
-        "MPER-03",
-        "MPER-04",
-        "MPER-05",
-        "MIRS-01"
+        "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "sha256": "e76568017167c1963f795119a427d4a3f07ac8f7dddde8a8a06809ca91c177f3",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4492,7 +4498,7 @@
     },
     {
       "id": "mobile-voice-v1",
-      "title": "Native on-device voice with explicit send and stop boundaries",
+      "title": "Native on-device voice with continuous conversation and stop boundaries",
       "issue": 3687,
       "kind": "implementation",
       "feature_ids": [],
@@ -4509,14 +4515,16 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
-      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
-      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
-      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
-      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
+      "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
+      "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
+      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android alignment and iPhone legacy notebook journey acceptance remain open.",
       "implementation_paths": [
         "apps/studio-native/ios/App/VoiceController.swift",
         "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
         "apps/studio-native/ios/App/HPStudioApp.swift",
         "apps/studio-native/ios/App/StudioModel.swift",
         "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
@@ -4525,6 +4533,7 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
@@ -4602,6 +4611,49 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "native-first-answer-friction-v1",
+      "title": "Code-free iPhone login and continuous voice with full-journey release evidence",
+      "issue": 3771,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MFR-01",
+            "MFR-02",
+            "MFR-03",
+            "MFR-04",
+            "MFR-05",
+            "MFR-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify Service405/Lab1590 native auth and exact-source native journeys; distribute TestFlight then collect live sign-in and physical Korean audio evidence.",
+      "design_delta": "Minimum intervention: same-device sign-in, durable Send through sync, persistent errors, silence endpoints and foreground-only next turn.",
+      "positive_control": "Sign in without codes, dictate then send, and receive an answer with no desktop; conversation continues until stopped.",
+      "negative_control": "Missing or skipped journeys, stale capture, expired login and uncertain requests cannot become acceptance or duplicate submissions.",
+      "evidence_required": "Exact source, simulator case identities, backend/browser proof and physical version/build separately.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/App/NativeBrowserSignIn.swift",
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/NativeAccountAuth.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/NativeAccountAuthTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
+        "apps/studio-native/ios/App/NativeJourneyFixture.swift",
+        "apps/studio-native/scripts/collect-native-journeys.py",
+        "apps/studio-native/tests/test_native_journey_evidence.py"
       ]
     }
   ]
