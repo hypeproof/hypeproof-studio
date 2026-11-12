@@ -15242,6 +15242,9 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
+        },
+        {
+          "path": "docs/requirements/voice-conversation.md"
         }
       ]
     },
@@ -15254,6 +15257,9 @@
         "ST-TEST-VOICE-MUTE-SWITCHES"
       ],
       "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
+        },
         {
           "path": "extensions/hypeproof-chat/src/voiceOutputMute.ts"
         },
@@ -15287,6 +15293,13 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/voice-read-aloud.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-popup.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/task-workspace.md",
+          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
         }
       ]
     },
