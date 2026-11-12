@@ -1,0 +1,12 @@
+{
+  "kind": "native-testflight",
+  "repository": "hypeproof/hypeproof-studio",
+  "sourceSha": "0000000000000000000000000000000000000000",
+  "sourcePrs": [3768],
+  "workflow": "studio-apple-testflight.yml",
+  "environment": "apple-native-preview",
+  "platform": "ios",
+  "ref": "main",
+  "changes": [{"before": "Replace with the observed previous behavior", "after": "Replace with the exact candidate behavior"}],
+  "rollback": "Retain the previous TestFlight build; a replacement upload requires a distinct verified candidate."
+}

@@ -44,6 +44,21 @@ protected-branch rules.
    (that skill's "In the delivery loop", steps 2–3). Studio's feature map is hypeprooflab
    `web/src/content/private/studio-prd/`.
 
+## Asking for approval on a Lab PR
+
+When a hypeprooflab PR waits for a human approval of its head commit, show the pages
+before asking. After Vercel reports the Preview for that exact head, run
+`python3 scripts/hype-pr/pr.py preview --repo hypeproof/hypeprooflab --pr N` (from the
+Lab checkout) and put its Preview section in the approval request: each affected route,
+its preview link and what changed there. A link is evidence only where the check says
+`shown`. Say any `NOT SHOWN` or `UNREACHABLE` route plainly in the request, with the
+reason the tool gives (for example a build-time flag set differently in Vercel Preview
+and Production), and list it as a decision for the owner; never present that link as
+proof and never change Vercel settings to make it pass. `/members/**` is checked only
+on the preview branch site. Exit 4 means the preview is not deployed yet: wait, do not
+ask. `--comment --apply` under `with-agent-identity.sh` keeps the same section as one
+PR comment for that head. A push makes the section stale; run it again.
+
 ## Keep the critical path short
 
 Do not block editing on packet IDs, session IDs, GitHub ACK comments, watcher
@@ -59,6 +74,25 @@ Use English for engineering work and GitHub records. Report outcomes to the requ
 Korean. State what changed, how it was tested, what was merged or deployed, and
 which real-product observations remain.
 
+## Scoped failure recovery
+
+A failed GitHub write or waiting review is an operation blocker, not proof that
+all authorized delivery is blocked. Read a tool's `recovery` directive and retain
+the worktree, exact commits, observed evidence and existing PR URL. Repair a
+missing wrapper yourself; reuse existing authentication consent. Never use a
+personal token or replay a write whose result is unknown. Reconcile remote state
+first; after PR creation, retry only a failed board update.
+
+While that operation waits, select and execute an independent authorized local
+implementation or verification task from the requirement ledger, checking active
+ownership first. Record the actual diff or test result, the blocked operation,
+its recovery condition and the next task. A status poll is not a development tick.
+Before ending an ongoing delivery request, inspect discovery for remaining ready
+work; do not stop at the first authentication, CI or review obstacle. Preserve
+explicit user stops, budget/resource limits, human gates and safety breakers.
+If every authorized independent task is externally blocked, report that evidence
+and the concrete resume condition; never claim work continued after execution ended.
+
 ## Candidate handoff
 
 For RC delivery or rotating release ownership, use `hype-release` after the source
@@ -67,3 +101,11 @@ actual native theme, participation-code access, test verdicts, costs and next ac
 Build/merge completion does not update an existing tag, its bytes or installed apps.
 Use the existing Studio approval engine and repository publisher; do not manufacture
 a second approval path or ask a teammate to test without working account access.
+
+## Telling the people a PR waits on
+
+When a PR waits on a person (a gate, a criteria owner, the issue author), do not rely on a
+GitHub review request. Author a one-line card and run
+`scripts/notify/stakeholders.py request` from the canonical Harness (see
+`scripts/notify/README.md`). Recipients, escalation and dedupe come from data and the
+private registry. Report what is blocked and on whom in the same words.

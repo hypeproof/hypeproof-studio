@@ -85,6 +85,28 @@ push·이슈·PR 등 네트워크 쓰기는 `with-agent-identity.sh <command>`�
 인증 실패나 브로커 미활성은 GitHub 쓰기의 BLOCKED다. 사람 토큰으로 쓰거나
 보호 규칙을 낮추는 우회는 하지 않는다. 로컬 개발·검증은 계속할 수 있다.
 
+### 실패 범위를 좁혀 계속하기
+
+`--author`는 인증이 아니다. 로컬 `hype-pr create/request-reviewers --apply`와
+보드 쓰기는 wrapper 표시, 명시적인 `GH_TOKEN`, GitHub가 반환한 실제 봇 신원을
+확인한 뒤 변경한다. 쓰기 거부의 `recovery.scope`는 해당 작업만의 범위다.
+`continue_independent_work`는 기존 승인 범위 안의 독립 작업을 계속하라는 지시이며,
+실패한 쓰기를 우회하거나 무조건 반복할 권한이 아니다.
+
+- wrapper 누락은 에이전트가 올바른 wrapper 호출로 고친다. 이미 받은 동의를 재사용한다.
+- 인증·네트워크·리뷰 대기는 해당 push/PR/merge/deploy만 보류한다. 다음 의존성 없는
+  요구사항, 로컬 구현, 실패 재현, 검증 중 실제 진행 가능한 작업을 선택해 이어간다.
+- PR 생성 뒤 보드만 실패하면 반환된 `existing_pr`를 보존하고 보드 갱신만 재시도한다.
+  응답을 잃어 생성 여부가 불확실하면 먼저 원격 상태를 읽고, PR 생성은 재실행하지 않는다.
+- Board and authentication results carry a `reason` code. Report `reason`, `message` and
+  `recovery.instruction` as given; never infer a cause (for example "the App has no Projects
+  permission") from raw GitHub text. The board step uses its own board-scoped bot token (#565).
+- 같은 실패의 무조건 재시도나 상태 조회만으로 개발 회차를 완료 처리하지 않는다.
+  완료한 diff·테스트 증거와 보류 작업·복구 조건·다음 작업을 남긴다.
+- 전체 작업 종료 전에는 요구사항 탐색과 현재 세션 소유권을 확인한다. 사용자 중지,
+  명시된 예산/안전 제한, 또는 모든 승인된 독립 작업의 실제 외부 차단이 있을 때만
+  그 근거와 재개 조건을 보고한다. 인간 승인, 자원 큐, STOP 파일은 계속 존중한다.
+
 ### Harness가 연결을 진행하는 방법
 
 팀원에게 인증 명령을 복사해서 실행하라고 넘기지 않는다. 온보딩 또는 첫 push/PR
@@ -121,6 +143,14 @@ GitHub 로그인 복구 후 아직 동의 기록이 없을 때는 이미 받은 
 선택한다. 단순 온보딩에 workflow 권한을 추가하지 않는다. `probe_cleanup_failed`는
 진단 토큰 폐기 미확인으로 보고하고 자동 재시도하지 않는다.
 
+이미 허가된 작업의 Actions 실행에는 `ensure --actions`와 wrapper의
+`HYPEPROOF_AGENT_ACTIONS=1`을 쓴다. 이 프로필은 대상 저장소 하나의
+`metadata:read`, `contents:read`, `actions:write`만 요청하며, 소스·workflow 파일
+수정 권한을 포함하지 않는다. `--workflows`와 함께 사용할 수 없다.
+기존 작업 허가는 재사용하고 내부 토큰 선택을 별도 사용자 승인 절차로 만들지 않는다.
+실행 대상·소스 SHA·중복 실행 여부를 확인하고 기존 workflow·environment gate는
+그대로 지킨다. 브로커가 거부하면 개인 토큰이나 로컬 키로 우회하지 않는다.
+
 ## 3. 리뷰와 배포 권한
 
 공용 승인 카드와 등록된 사람 확인을 통한 단일 GitHub 리뷰 전달은
@@ -133,6 +163,11 @@ GitHub 로그인 복구 후 아직 동의 기록이 없을 때는 이미 받은 
 읽은 담당 에이전트가 `prepare`의 8개 맥락 항목을 채워 `deliver`한다. 같은 PR의
 상태를 `get`/`reconcile`로 이어받는다. 이미 보낸 요청을 채널 변경이나 세션 재시작
 때문에 다시 실행하지 않는다. 미등록 연결을 설치 완료로 표현하지 않는다.
+
+Before asking a person to approve a hypeprooflab PR, include the `pr.py preview` Preview
+section for the exact head: the preview link of each changed page and what changed there.
+A link is evidence only where the check says `shown`; a `NOT SHOWN` route is stated plainly
+as a decision for the owner, never presented as proof (#566, `skills/hype-deliver`).
 
 리뷰 요청과 배포 권한은 repo마다 다르게 해석하지 않는다.
 

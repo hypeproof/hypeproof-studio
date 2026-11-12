@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
+import inspect
+import re
 import json
 import os
 import subprocess
@@ -11,7 +14,7 @@ import urllib.parse
 import uuid
 from pathlib import Path
 
-from core import Blocked, canonical, digest, public_payload, repository, require
+from core import Blocked, canonical, candidate_state_key, digest, public_payload, repository, require
 
 
 class ApiError(Blocked):
@@ -25,19 +28,30 @@ class GitHub:
         args = ["gh", "api", "--method", method, path]
         if data is not None:
             args += ["--input", "-"]
-        p = subprocess.run(args, input=None if data is None else canonical(data), text=True, capture_output=True, timeout=90)
+        p = subprocess.run(args, input=None if data is None else canonical(data), text=True, encoding="utf-8", capture_output=True, timeout=90)
         if p.returncode:
             # Never echo credentials, payloads or raw remote error bodies.
             raise ApiError(f"GitHub {method} failed for {path.split('?')[0]}; reconcile before retrying a write", "HTTP 404" in p.stderr)
         return json.loads(p.stdout) if p.stdout.strip() else None
 
     def actor(self):
+        if os.environ.get('HYPEPROOF_AGENT_WRITE_TOKEN_ACTIVE') == '1':
+            # Installation tokens cannot GET /user. Read the existing member
+            # login for attribution only; every mutation keeps this client's App
+            # token. No personal credential is used for a write or exported.
+            env = {k: v for k, v in os.environ.items() if k not in {'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'}}
+            proc = subprocess.run(['gh', 'api', '--method', 'GET', 'user'], env=env,
+                                  capture_output=True, text=True, encoding='utf-8', timeout=90)
+            require(proc.returncode == 0, 'authenticated member attribution unavailable; preserve App-only writes and restore member read access')
+            actor = json.loads(proc.stdout).get('login')
+            require(isinstance(actor, str) and actor, 'authenticated member login unavailable')
+            return actor
         return self.api("user")["login"]
 
     def upload(self, repo, release_id, path):
         path = Path(path)
         endpoint = f"https://uploads.github.com/repos/{repository(repo)}/releases/{int(release_id)}/assets?name={urllib.parse.quote(safe_name(path.name))}"
-        p = subprocess.run(["gh", "api", "--method", "POST", endpoint, "-H", "Content-Type: application/octet-stream", "--input", str(path)], capture_output=True, text=True, timeout=90)
+        p = subprocess.run(["gh", "api", "--method", "POST", endpoint, "-H", "Content-Type: application/octet-stream", "--input", str(path)], capture_output=True, text=True, encoding="utf-8", timeout=90)
         require(p.returncode == 0, "upload response uncertain: reconcile by filename and digest before retrying")
         return json.loads(p.stdout)
 
@@ -64,17 +78,98 @@ class GitHub:
         if destination.exists():
             verify_download(destination, asset)
             return
-        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as out:
-            temp = Path(out.name)
-            try:
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as out:
+                temp = Path(out.name)
                 p = subprocess.run(["gh", "api", f"repos/{repository(repo)}/releases/assets/{asset['id']}",
                                     "-H", "Accept: application/octet-stream"], stdout=out, stderr=subprocess.PIPE, timeout=600)
                 require(p.returncode == 0, "asset download failed; original destination preserved")
                 out.flush()
-                verify_download(temp, asset)
-                os.link(temp, destination)  # No replacement of another process's output.
-            finally:
+            # Windows refuses unlinking an open temporary file. Close before
+            # verification/linking while preserving exclusive destination creation.
+            verify_download(temp, asset)
+            os.link(temp, destination)
+        finally:
+            if temp is not None:
                 temp.unlink(missing_ok=True)
+
+
+def load_native_broker():
+    # Authentication code belongs to this same trusted Harness checkout. Neither
+    # a candidate nor a CLI option can select another executable module. Installed
+    # skill callers invoke the canonical release.py instead of mixing runtimes.
+    module_path = Path(__file__).resolve().parents[1] / "agent-identity/agent-auth.py"
+    require(module_path.is_file() and not module_path.is_symlink(),
+            "native operations require the canonical Harness scripts/hype-release/release.py")
+    spec = importlib.util.spec_from_file_location("hype_release_canonical_agent_auth", module_path)
+    broker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(broker)
+    return broker
+
+
+class NativeGitHub(GitHub):
+    """Native-only broker transport. Human identity is read separately, never written.
+
+    Keep the legacy RC transport untouched. These instances have exactly one
+    grant profile and refuse the other profile's endpoints before obtaining a token.
+    """
+    def __init__(self, repositories, *, actions=False):
+        self.repositories = {repository(repo) for repo in repositories}
+        self.actions = actions
+        self.broker = load_native_broker()
+        require("actions" in inspect.signature(self.broker.broker_token).parameters,
+                "canonical agent-auth lacks Actions profile; adopt Harness #553, never fall back")
+
+    def _environment(self, path, method):
+        match = re.fullmatch(r"repos/(hypeproof/[A-Za-z0-9_.-]+)(/[^#]*)?", path)
+        require(match and match[1] in self.repositories, "native request outside configured repositories")
+        repo, suffix = match[1], (match[2] or "")
+        if self.actions:
+            allowed = (method == "GET" and suffix.startswith("/actions/")) or (
+                method == "POST" and suffix == "/actions/workflows/studio-apple-testflight.yml/dispatches")
+        else:
+            allowed = (method == "GET" and (not suffix or suffix.startswith(("/git/", "/contents/", "/pulls/")))) or (
+                method in {"POST", "PATCH"} and suffix.startswith("/git/"))
+        require(allowed, "native endpoint does not match credential profile")
+        try:
+            token = self.broker.broker_token(repo, actions=True) if self.actions else self.broker.broker_token(repo)
+        except Exception:
+            raise Blocked("native broker authentication failed; no ambient credential fallback") from None
+        env = {k: v for k, v in os.environ.items() if k not in {"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_DEBUG"}}
+        env.update(GH_TOKEN=token, GH_HOST="github.com", GH_PROMPT_DISABLED="1")
+        return env
+
+    def api(self, path, method="GET", data=None, *, binary=False):
+        env = self._environment(path, method)
+        args = ["gh", "api", "--method", method, path]
+        if data is not None:
+            args += ["--input", "-"]
+        result = subprocess.run(args, input=None if data is None else canonical(data).encode(),
+                                capture_output=True, env=env, timeout=90)
+        if result.returncode:
+            raise ApiError("native GitHub request failed; reconcile uncertain writes", b"HTTP 404" in result.stderr)
+        require(len(result.stdout) <= 16 * 1024 * 1024, "native API response exceeds bound")
+        return result.stdout if binary else (json.loads(result.stdout) if result.stdout.strip() else None)
+
+    def artifact_zip(self, repo, artifact_id, destination):
+        require(self.actions and type(artifact_id) is int and artifact_id > 0, "Actions artifact identity required")
+        path = f"repos/{repository(repo)}/actions/artifacts/{artifact_id}/zip"
+        env = self._environment(path, "GET")
+        with Path(destination).open("xb") as output:
+            result = subprocess.run(["gh", "api", path], stdout=output, stderr=subprocess.PIPE,
+                                    env=env, timeout=180)
+        require(result.returncode == 0 and 0 < Path(destination).stat().st_size <= 1024 ** 3,
+                "native artifact download failed or exceeds bound")
+
+    def actor(self):
+        raise Blocked("human identity must be read separately from bot grant profiles")
+
+    def upload(self, *args):
+        raise Blocked("native profile cannot upload release assets")
+
+    def download(self, *args):
+        raise Blocked("native profile uses Actions artifacts only")
 
 
 def file_hash(path):
@@ -104,7 +199,7 @@ class GitHubStore:
     def __init__(self, github, repo, candidate):
         self.github = github
         self.repo = repository(repo)
-        self.branch = "ops/release-state/" + digest({"repository": candidate["repository"], "tag": candidate["tag"]})[:32]
+        self.branch = "ops/release-state/" + candidate_state_key(candidate)
 
     def read(self):
         try:
@@ -141,7 +236,7 @@ class LocalGitStore:
     """Offline rehearsal using a shared bare Git repo and real atomic update-ref."""
     def __init__(self, directory, candidate):
         self.directory = Path(directory).resolve()
-        self.ref = "refs/heads/ops/release-state/" + digest({"repository": candidate["repository"], "tag": candidate["tag"]})[:32]
+        self.ref = "refs/heads/ops/release-state/" + candidate_state_key(candidate)
         if not self.directory.exists():
             subprocess.run(["git", "init", "--bare", "--quiet", str(self.directory)], check=True)
         require(self.git("rev-parse", "--is-bare-repository").strip() == "true", "rehearsal store must be a bare repository")
@@ -149,10 +244,13 @@ class LocalGitStore:
     def git(self, *args, data=None, check=True):
         env = {**os.environ, "GIT_AUTHOR_NAME": "Release rehearsal", "GIT_AUTHOR_EMAIL": "rehearsal@example.invalid",
                "GIT_COMMITTER_NAME": "Release rehearsal", "GIT_COMMITTER_EMAIL": "rehearsal@example.invalid"}
-        p = subprocess.run(["git", "--git-dir", str(self.directory), *args], input=data, text=True, capture_output=True, env=env)
+        # Git's mktree protocol needs literal LF; Windows text-mode pipes would
+        # turn state.json\n into a filename ending in CR. Send UTF-8 bytes.
+        p = subprocess.run(["git", "--git-dir", str(self.directory), *args],
+                           input=None if data is None else data.encode("utf-8"), capture_output=True, env=env)
         if check and p.returncode:
             raise Blocked("STATE_CONFLICT or invalid local Git store")
-        return p.stdout
+        return p.stdout.decode("utf-8")
 
     def read(self):
         revision = self.git("rev-parse", "--verify", self.ref, check=False).strip()

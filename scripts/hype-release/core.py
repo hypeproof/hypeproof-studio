@@ -71,13 +71,30 @@ def policy_contract(policy):
 def candidate_contract(candidate, policy):
     require(repository(candidate.get("repository")) in policy["repositories"], "repository outside policy")
     require(re.fullmatch(r"[a-f0-9]{40}", candidate.get("sourceSha", "")), "full candidate SHA required")
-    require(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", candidate.get("version", "")), "final version required")
-    require(re.fullmatch(re.escape(candidate["version"]) + r"-rc\.[1-9][0-9]*", candidate.get("tag", "")), "matching immutable RC tag required")
+    if candidate.get("kind") == "native-testflight":
+        require(candidate["repository"] == "hypeproof/hypeproof-studio" and
+                candidate.get("workflow") == "studio-apple-testflight.yml" and
+                candidate.get("environment") == "apple-native-preview" and
+                candidate.get("platform") == "ios" and candidate.get("ref") == "main",
+                "unsupported native workflow/environment/platform/ref")
+        require("tag" not in candidate, "native candidates must not invent an RC tag")
+    else:
+        require(candidate.get("kind") in {None, "desktop-rc"}, "unsupported candidate kind")
+        require(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", candidate.get("version", "")), "final version required")
+        require(re.fullmatch(re.escape(candidate["version"]) + r"-rc\.[1-9][0-9]*", candidate.get("tag", "")), "matching immutable RC tag required")
     prs = candidate.get("sourcePrs")
     require(isinstance(prs, list) and prs and all(type(n) is int and n > 0 for n in prs) and len(prs) == len(set(prs)), "explicit unique source PRs required")
     require(bool(candidate.get("changes")) and all(isinstance(x, dict) and x.get("before") and x.get("after") for x in candidate["changes"]), "Before/After changes required")
     require(bool(candidate.get("rollback")), "rollback instructions required")
     return candidate
+
+
+def candidate_state_key(candidate):
+    # Preserve every existing desktop branch key, including kind-less records.
+    if candidate.get("kind") != "native-testflight":
+        return digest({"repository": candidate["repository"], "tag": candidate["tag"]})[:32]
+    return digest({key: candidate[key] for key in
+                   ("kind", "repository", "sourceSha", "workflow", "environment", "platform", "ref")})[:32]
 
 
 def initial(candidate, policy, actor, timestamp=None):
