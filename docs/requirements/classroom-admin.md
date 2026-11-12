@@ -427,7 +427,38 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 | 관리자 열람 | `viewer_role`이 `override`이면 수업 정보와 운영 강사 칸에 “관리자 열람 — 기록이 남습니다”를 쓴다. Service가 요청마다 `instructor_override`를 감사 기록에 남긴다 |
 | 참여 동의 | 좌석 행마다 `participation_consent`를 “동의함 / 동의 전”으로 보인다. 동의 전 좌석도 숨기거나 거르지 않는다. 동의 전 좌석은 질문 카드에 답을 보낼 수 없다(Service가 409 `consent_required`) |
 
+#### 질문 카드 보내기 (#3776)
+
+| 항목 | 계약 |
+|---|---|
+| 보이는 조건 | 이 수업의 질문 카드(`ops_questions`)와 학생에게 보내기가 켜져 있고 강사 연결이 `distribute` 권한을 가질 때만 선택 줄에 ‘질문 카드 보내기’가 보인다 |
+| 작성 | 질문(평문 2,000자), 카드 제목(80자, 비우면 ‘강사 질문’), 답 형식 객관식(보기 2–6개, 한 줄에 하나, 각 80자, 중복 불가) 또는 짧은 답(500자). 화면이 먼저 형식을 확인하고 최종 판단은 Service(`content_invalid`)가 한다 |
+| 미리 보기 | 학생 보관함에 보일 제목·질문·보기(또는 짧은 답 칸)와 “학생은 답하거나 건너뛸 수 있습니다.”를 글자 그대로 보인다 |
+| 받을 학생 | ‘모든 좌석’ = 이번 수업 명단의 모든 좌석(지금 연결 안 된 학생은 연결되면 받는다). ‘선택한 좌석’ = 학생 목록에서 고른 좌석(기존 선택을 그대로 쓴다). 확인 단계에서 대상 수와 지금 연결·미연결 수를 말하고, 확인 전에는 아무것도 저장·전송하지 않는다 |
+| 보내기 | `POST /contents {kind:'question', title, body, question}` → `POST /distributions {targets, expected_roster_revision}`. 두 요청의 idempotency key는 확인 단계에서 정하므로 다시 눌러도 카드가 두 번 가지 않는다 |
+| 보낸 질문 카드 | 이 수업의 질문 카드 목록(`GET /contents`의 `kind:'question'`). 카드마다 `GET /questions/:object/answers`로 좌석별 연결·상태·답을 보인다. 목록이 열려 있는 동안 학생 현황과 같은 간격(10초, ‘지금 갱신’)으로 다시 읽는다 |
+| 상태 | 전달 전 · 전달됨 · 답함 세 가지뿐이다. 전달됨은 학생 기기가 그 판을 받아 두었다는 Service의 확인이다. 열람·읽음은 기록되지 않으므로 어떤 문구로도 쓰지 않는다 |
+| 전달 전 사유 | `delivery.state`와 좌석 연결로 말한다: 미연결(`accepted`·연결 없음) → “미연결 — 연결되면 전달”, `unsupported` → “앱 업데이트 필요 — 이 앱은 질문 카드를 받지 못합니다”, `offered`·`received` → “기기 확인 대기”, `not_sent` → “이 좌석에는 보내지 않음”, 회수·만료·실패·좌석 변경은 각각의 말 |
+| 답 | 객관식은 보기별 답한 수와 좌석별 “N번 · 보기”, 짧은 답은 학생이 쓴 글을 글자 그대로(`textContent`), 건너뛰면 “건너뜀” |
+| 회수 | ‘이 질문 카드 회수’ → 확인 → 그 카드의 살아 있는 배포마다 `POST /distributions/:id/revoke {expected_row_revision}`. 이미 받은 답은 남는다 |
+
 검증: [재직자 수업의 강사 운영](../testing/classroom-admin.md#e5-instructor-ops-run).
+
+### 질문 카드 · 수강생 앱 · 2026-11-12 (E5 #3776 · DEC-030)
+
+강사가 보낸 질문 카드는 공지·자료와 같은 보관함에 들어온다. 이 절은 앱 쪽 계약만 적는다.
+
+| 항목 | 계약 |
+|---|---|
+| 받기 | 앱은 연결과 sync에서 능력 `inbox_question`을 밝힌다. 카드는 `kind:'question'`과 `question:{type:'choice',options}` 또는 `{type:'text'}`를 싣는다. 선택지는 2~6개, 줄바꿈 없는 80자 이하, 서로 달라야 한다. 이 모양이 아니면 받지 않는다 |
+| 해시 | `sha256(JSON [schema, kind, title, body, links, ['choice', options] | ['text']])`. 여섯째 요소는 질문에만 붙고 공지·자료·프롬프트·설정의 해시는 그대로다. 디스크에서 선택지가 바뀐 카드는 읽을 수 없는 카드로 보인다 |
+| 화면 | 질문 글은 글자 그대로 보인다. 선택형은 라디오 목록과 ‘제출’, 서술형은 500자 입력칸과 ‘제출’이다. ‘건너뛰기’는 늘 있다. 고르거나 적는 것만으로는 아무것도 보내지 않는다 |
+| 보내기 | 학생이 누를 때만 `POST /v1/classroom/ops/participation/answers`를 좌석 자격 증명으로 보낸다. 같은 답을 다시 보내면 같은 `idempotency_key`를 쓰고, 바꾼 답은 새 키를 쓴다 |
+| 보냈다는 말 | Service가 2xx로 답한 뒤에만 “답변을 보냈습니다”와 ‘답 바꾸기’를 보인다. 그 답은 (카드, 판) 단위로 이 기기에만 남아 재시작 뒤에도 보인다. 새 판이 오거나 회수되면 지운다 |
+| 동의 없음 | 409 `consent_required`면 연결 때와 같은 안내문 모달을 띄우고, 동의가 기록되면 같은 답을 한 번 다시 보낸다. 거절하거나 닫으면 보내지 않고 카드를 남긴 채 “동의하지 않아 답을 보내지 않았습니다.”라고 말한다 |
+| 거절 응답 | `withdrawn`·`not_offered`·`content_mismatch`·`run_ended`·`ops_questions_disabled`·`answer_invalid`·연결 종료(401)·네트워크 오류마다 “…답을 보내지 않았습니다” 꼴의 짧은 문장을 카드 아래에 보인다 |
+
+검증: 앱 `test/classroom-question-card.test.mjs`(규칙·해시), `test/classroom-question-answer.test.mjs`(호스트), `test/inbox-question-card.test.tsx`(화면), `e2e/classroom/ops-question.mjs`(실제 호스트 + 로컬 Service). Service `worker/test/classroom-question-card.test.mjs`.
 
 ### 신원과 수업 실행 계약
 
