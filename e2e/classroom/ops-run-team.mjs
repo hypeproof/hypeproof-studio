@@ -56,6 +56,7 @@ try {
   assert.equal(await b.locator('#ops-seats .ops-seat').count(), 0, 'no learner is shown to an unassigned instructor');
   assert.equal(await b.locator('#ops-team-denied').isVisible(), true); assert.equal(await T(b, 'ops-team-me'), 'teacher-b', 'the refused instructor still sees the id to hand over');
   assert.equal(await b.locator('#ops-setup').isVisible(), false, 'no run setup form is drawn for a run the caller cannot operate (dev host E5 finding)');
+  if (await b.locator('#join-code-open').count()) assert.equal(await b.locator('#join-code-open').isVisible(), false, 'and no class code button');
   ok('an unassigned instructor sees the not_run_instructor copy, the owner and their own id — and no learner');
 
   // ── the owner adds the colleague; the colleague operates as co-instructor ──
