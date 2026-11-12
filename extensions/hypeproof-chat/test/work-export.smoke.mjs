@@ -423,7 +423,12 @@ try {
     // VS Code's notification link syntax (base/common/linkedText.ts); a match runs with allowCommands.
     const LINK = /\[([^\]]+)\]\(((?:https?:\/\/|command:|file:)[^\)\s]+)(?: (["'])(.+?)(\3))?\)/i;
     const many = path.join(base, 'many'); for (let i = 0; i < 120; i++) put(many, `p/${String(i).padStart(3, '0')}.txt`, 'page ' + i);
-    const hostile = path.join(base, '[열기](command:workbench.action.terminal.new)', 'a\u202egpj.exe\u2028b');
+    // NTFS forbids colons in directory names; exercise the exact command-link sanitizer
+    // directly on every OS, and retain real-disk notification checks with a valid name.
+    const commandFolder = '[열기](command:workbench.action.terminal.new)';
+    assert.equal(mod.exports.displayFolder(commandFolder), '［열기］(command:workbench.action.terminal.new)');
+    const diskCommandFolder = process.platform === 'win32' ? commandFolder.replace(':', '：') : commandFolder;
+    const hostile = path.join(base, diskCommandFolder, 'a\u202egpj.exe\u2028b');
     fs.mkdirSync(hostile, { recursive: true });
     const reports = [];
     const saveProgress = vscode.window.withProgress;
@@ -440,7 +445,7 @@ try {
     assert.ok(line.startsWith('저장했어요: '), line);
     assert.ok(!LINK.test(line), 'no notification link forms from the folder name: ' + line);
     assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/u.test(line), 'no control or bidi character in the line');
-    assert.ok(line.includes('［열기］(command:workbench.action.terminal.new)'), 'the folder is still readable: ' + line);
+    assert.ok(line.includes(mod.exports.displayFolder(diskCommandFolder)), 'the folder is still readable: ' + line);
     assert.ok(line.includes('a\ufffdgpj.exe\ufffdb'), 'hidden characters show as a mark: ' + line);
     assert.ok(Array.from(line).length < 1000, 'under the notification cut at 1000 characters');
     assert.ok(line.includes(' · ' + path.basename(zip) + ' · 작업 파일 120개 · 대화 0개'), 'file name and counts stay whole: ' + line);
@@ -451,7 +456,7 @@ try {
     const long = mod.exports.displayFolder('/Users/학생/' + 'x'.repeat(2000) + '/끝 폴더');
     assert.equal(Array.from(long).length, 120); assert.ok(long.startsWith('/Users/학생/x') && long.endsWith('x/끝 폴더') && long.includes('…'), long);
     // A hostile work folder name reaches the same line through the zip name: still no link and no hidden mark.
-    const hostileRoot = path.join(base, 'w\u200f\u061c\u200b\ufeff\u2060ork[a](command:x)'); put(hostileRoot, 'a.txt', 'a');
+    const hostileRoot = path.join(base, 'w\u200f\u061c\u200b\ufeff\u2060ork[a](command' + (process.platform === 'win32' ? '：' : ':') + 'x)'); put(hostileRoot, 'a.txt', 'a');
     const info1 = shown.info.length;
     pick = async () => [{ scheme: 'file', fsPath: hostile }];
     const zip2 = await mod.exports.runWorkExport({ root: hostileRoot, secrets: [], tasks: [], current: () => true });

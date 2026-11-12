@@ -222,7 +222,7 @@ try {
   }
 
   // 2. The real call site.
-  const ext = fs.readFileSync(path.join(here, "../src/extension.ts"), "utf8");
+  const ext = fs.readFileSync(path.join(here, "../src/extension.ts"), "utf8").replace(/\r\n/g, "\n");
   const site = ext.slice(ext.indexOf("async function openWorkspaceFolder("));
   const siteBody = site.slice(0, site.indexOf("\n}\n"));
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
@@ -249,7 +249,7 @@ try {
   assert.deepEqual([...fs.readFileSync(patch, "utf8").matchAll(/^diff --git a\/(\S+) /gm)].map((m) => m[1]), [PURE_REL, REL]);
   run("git", ["apply", "--check", "--ignore-whitespace", patch], tree); // prepare_vscode.sh's apply_patch flags
   run("git", ["apply", patch], tree);
-  const patched = fs.readFileSync(path.join(tree, REL), "utf8");
+  const patched = fs.readFileSync(path.join(tree, REL), "utf8").replace(/\r\n/g, "\n");
   assert.equal(patched.split("this.isHpsStudioCreatedFolder(uri)").length, 2, "one trust hook, inside doGetUriTrustInfo");
   const hookAt = patched.indexOf("this.isHpsStudioCreatedFolder(uri)");
   assert.ok(hookAt > patched.indexOf("private doGetUriTrustInfo(") && hookAt < patched.indexOf("let resultState = false;"));
