@@ -38,7 +38,9 @@ const bundle = await build({
   stdin: { contents: `import React from 'react'; import {renderToStaticMarkup} from 'react-dom/server'; import {ToolLine} from './webview-ui/src/ChatPanel'; import {RunningProcessesPanel} from './webview-ui/src/RunningProcesses';
     const row = (shell, state) => renderToStaticMarkup(<ToolLine message={{id:'s',role:'tool',content:'',createdAt:0,tool:{icon:'',label:'',state,shell}}} onReport={()=>{}}/>);
     export const rows = row({purpose:'개발 서버가 뜨는지 확인해요',command:'npm run dev -- --port 5173 '+'--flag '.repeat(80),collapsed:false}, 'running');
-    export const long = row({purpose:'모든 테스트를 차례로 돌려요',command:'npm run test:unit -- --reporter=dot ⏎ '.repeat(52),collapsed:false}, 'done');
+    // ~4,600 characters: more than 240px of text at every tested width with any monospace font (CI's font set
+    // fits 2,000 characters into 208px at 1420px). The probe also checks that the content really is taller.
+    export const long = row({purpose:'모든 테스트를 차례로 돌려요',command:'npm run test:unit -- --reporter=dot ⏎ '.repeat(120),collapsed:false}, 'done');
     export const panel = renderToStaticMarkup(<RunningProcessesPanel entries={[{id:'live',purpose:'미리보기 서버',kind:'preview',folder:'작업 폴더 전체 (site)',address:'127.0.0.1:43299',state:'running'},{id:'sdk',purpose:'테스트 감시',state:'stopped'}]} onStop={()=>{}}/>);`, resolveDir: root, loader: 'tsx' },
   bundle: true, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
   alias: { react: root + '/webview-ui/node_modules/react', 'react-dom': root + '/webview-ui/node_modules/react-dom' }, nodePaths: [root + '/webview-ui/node_modules'],
@@ -89,7 +91,7 @@ const probe = `(() => {
     const width = (text) => { const s = document.createElement('span'); s.textContent = text; code.appendChild(s); const w = s.getBoundingClientRect().width; s.remove(); return w; };
     const mono = Math.abs(width('iiiiiiiiii') - width('WWWWWWWWWW'));
     const longPre = document.querySelector('#long pre'), lp = getComputedStyle(longPre);
-    const block = { mono, longHeight: r(longPre).height, longScroll: longPre.scrollHeight - longPre.clientHeight, longOverflow: lp.overflowY };
+    const block = { mono, longContent: longPre.scrollHeight, longHeight: r(longPre).height, longScroll: longPre.scrollHeight - longPre.clientHeight, longOverflow: lp.overflowY };
     if (!copy) return { ...block, copy: null };
     const c = getComputedStyle(copy), cr = r(copy), pr = r(pre);
     return { ...block, copy: {
@@ -174,7 +176,9 @@ async function check(b, extraCss = '', shots) {
     if (m.dotFolder) bad.push(`${at}: "폴더: ." is shown`);
     if (m.overflow > 0) bad.push(`${at}: horizontal overflow ${m.overflow}px`);
     if (m.mono > 0.5) bad.push(`${at}: the command is not monospace (${m.mono.toFixed(1)}px apart)`);
-    if (m.longHeight > 240.5 || m.longScroll <= 0 || !/^(auto|scroll)$/.test(m.longOverflow)) bad.push(`${at}: a long command block is ${m.longHeight.toFixed(0)}px, overflow ${m.longOverflow}, ${m.longScroll}px to scroll (want <=240px, scrolling)`);
+    // Fixture precondition first: the cap is only measurable on content taller than the cap.
+    if (m.longContent <= 260) bad.push(`${at}: fixture: the long command is only ${m.longContent}px of content, the 240px cap is not exercised`);
+    else if (m.longHeight > 240.5 || m.longScroll <= 0 || !/^(auto|scroll)$/.test(m.longOverflow)) bad.push(`${at}: a long command block is ${m.longHeight.toFixed(0)}px, overflow ${m.longOverflow}, ${m.longScroll}px to scroll (want <=240px, scrolling)`);
     await copyChecks(b, at, bad);
     // Focus: the shared ring, measured. The button sits outside a scroll scope (+2px); the summary
     // and the scrolling <pre> sit inside .hps-messages (-2px, never clipped).
