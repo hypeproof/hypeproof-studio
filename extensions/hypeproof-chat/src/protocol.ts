@@ -165,6 +165,8 @@ export interface ChatConfig {
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
   /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
   capabilityChange?: import('./aiCapabilities').CapabilityChange;
+  /** CGP-SHELL-R-024 / D-023 (ADM-11): the instructor changed this classroom seat's lesson settings; system lines in the chat. */
+  lessonSettingsChanges?: import('./lessonSettingsChange').LessonSettingsNotice[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
@@ -442,6 +444,16 @@ export interface ResolvedProfile {
    * app's own approval tiers. Read with servedApprovalPreset(), which ignores an unknown id.
    */
   approval_preset?: import("./approvalPreset").ServedApprovalPreset;
+  /**
+   * DEC-30 step 3 (CGP-KNOW-R-037) — the lesson's starter sentences, 0..4 single lines. Absent when the lesson has none.
+   * Read with servedLessonStarters(), which drops anything that is not a safe single line.
+   */
+  starters?: string[];
+  /**
+   * DEC-30 — the lesson's AI role and tone as the Service serves them to this seat (the tone is already clamped on a
+   * minor seat: `tone_clamped` replaces `tone`). Display only; nothing here reaches a coach prompt (step 4). Absent when unset.
+   */
+  assistant_style?: { role?: string; tone?: { id: string; label: string }; tone_clamped?: true };
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
   tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
@@ -795,6 +807,8 @@ export type WebviewMessage = (
   | { type: "acknowledgeLessonCapabilities"; id: string }
   | { type: "dismissClassWindow"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
+  /** CGP-SHELL-R-024 — a settings-change line was on screen; the host moves the seat's persisted baseline. */
+  | { type: "lessonSettingsChangeSeen"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
   | { type: "saveCoach"; name: string; personality: string }

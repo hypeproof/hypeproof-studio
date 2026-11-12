@@ -3174,3 +3174,20 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
    beside the coach name; they may shrink and wrap onto a second row inside the action group instead of
    pushing the shell wider (CGP-DS-R-013 pane widths). Wide panes keep one row. */
 .hps-shell:not([data-chat-detail="personal"]) .hps-actions { flex-shrink: 1; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+
+/* DEC-30 step 3 (CGP-KNOW-R-037, CGP-KNOW-D-037): the lesson's starter sentences, wrapping compact chips above the composer. */
+.hps-lesson-starters { display: flex; flex-direction: column; gap: var(--hp-space-1); min-width: 0; }
+.hps-lesson-starters-hint { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); }
+.hps-lesson-starters-list { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.hps-lesson-starters-list > li { min-width: 0; max-width: 100%; display: flex; }
+.hps-lesson-starter {
+  min-height: var(--hp-control-min); min-width: var(--hp-control-min); max-width: 100%; box-sizing: border-box;
+  padding: var(--hp-space-1) var(--hp-space-2); text-align: start; overflow-wrap: anywhere;
+  font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+  color: inherit; background: transparent; cursor: pointer;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+}
+.hps-lesson-starter:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-lesson-starter:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-lesson-starter:disabled { cursor: not-allowed; opacity: 0.6; }
+.hps-lesson-starter:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
