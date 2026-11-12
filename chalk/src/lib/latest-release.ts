@@ -19,7 +19,7 @@ export function formalReleaseVersion(body: unknown): string | null {
   const release = body as Record<string, unknown>;
   if (release.draft !== false || release.prerelease !== false || typeof release.tag_name !== "string") return null;
   const match = FORMAL_TAG.exec(release.tag_name.trim());
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 export interface LatestRelease {

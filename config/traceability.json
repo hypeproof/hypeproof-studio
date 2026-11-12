@@ -18251,7 +18251,7 @@
     {
       "id": "ST-IMP-CHALK-SEAT-VERSION",
       "stage": "implementation",
-      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version",
+      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CHALK-SEAT-VERSION",
@@ -18260,6 +18260,12 @@
       "sources": [
         {
           "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
         }
       ]
     },
@@ -18275,6 +18281,9 @@
       "sources": [
         {
           "path": "chalk/test/seat-version.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
         },
         {
           "path": "e2e/classroom/ops-g1-layout.mjs"
