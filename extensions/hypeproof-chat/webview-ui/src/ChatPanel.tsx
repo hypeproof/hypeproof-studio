@@ -1877,6 +1877,8 @@ export function ChatPanel(props: Props) {
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
       {personalWorkspace && !props.instructor && <ConversationCopyStatus state={conversationCopy.state} />}
       {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
+      {/* GRD-24 — child seat: the guardian notice stays on screen (no close button). Host-computed. */}
+      {!props.instructor && config.guardianNotice && <p className="hps-class-window" role="note" data-testid="guardian-notice"><span>{config.guardianNotice}</span></p>}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
         <LessonCapabilitySheet key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} onAcknowledge={() => {

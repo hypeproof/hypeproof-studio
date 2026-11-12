@@ -596,6 +596,12 @@
           "type": "boolean", "default": true, "scope": "machine",
           "description": "미성년 수업(안전 브라우저)에서 채팅 링크가 수업 허용 목록 밖이면 열지 않고 알림을 보여 줍니다. 수업 정보가 미성년 수업이고 허용 목록이 있을 때만 켜집니다. 지원을 위해 끄면 이 기기에서는 막지 않습니다."
         },
+        "hypeproofChat.guardianEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "보호자 계정의 아이 프로필 보호 모드를 켭니다. 켜면 아이 프로필에서는 올리기·구매·연결·스토어·기억을 쓰지 않고, 보호자가 기록을 볼 수 있다는 안내를 늘 보여 줍니다. 기본은 꺼짐이며 꺼져 있으면 지금 동작이 바뀌지 않습니다."
+        },
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
           "description": "활동 파일을 지울 때 암호화된 활동 휴지통에 보관합니다. 모든 이용 방식에서 기본은 꺼짐입니다. 키는 운영체제의 키 저장소에 보관하며 활동 폴더를 제거할 때 사본도 제거합니다. 사용 여부는 소유자가 결정합니다."

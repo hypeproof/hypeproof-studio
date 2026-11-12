@@ -212,6 +212,8 @@ export interface ChatConfig {
   model: string;
   hasToken: boolean;
   workTakeawayEnabled?: boolean;
+  /** GRD-24 — host-computed (childProfile.ts): the always-visible guardian notice on a child seat. */
+  guardianNotice?: string;
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
@@ -482,6 +484,11 @@ export interface ResolvedProfile {
   // upper bound < 18). Drives minor-specific UX and force-pins the coach to the
   // proxy runtime (#371).
   minor_cohort?: boolean;
+  /**
+   * Guardian child profile (proposed Service contract, GRD-08). Read only through childProfile.ts, and only
+   * while `hypeproofChat.guardianEnabled` is on; then the seat fails closed as a minor child seat.
+   */
+  child_profile?: boolean;
   // Drives chat-panel tone (game vs search-webapp UI copy) (#159).
   game?: { template_tier: string };
   /** kids-quest — the list of pre-built worlds (GET /v1/worlds/:id returns the HTML). */
