@@ -19,8 +19,8 @@
 //       end of the seat line, inside its row, overlapping nothing, and the card is no taller than without it;
 //   (h) the legacy activity list says 버전 <version> / 버전 확인 불가 in its usage line;
 //   (i) DEC-24 (Jay, 2026-11-12): through the page's own readLatest() and GET /studio/latest-release, a seat below the latest
-//       formal release is flagged (an older release, an rc of the latest), a seat at it, above it (a newer release or rc) or
-//       not on a release version is not, an unknown version stays 확인 불가; a feed that is down, answers 503, null or an rc
+//       formal release is flagged (an older release, an rc of the latest, a dev build's package version 0.1.5), a seat at
+//       it, above it (a newer release or rc) or not on a release version is not, an unknown version stays 확인 불가; a feed that is down, answers 503, null or an rc
 //       flags nobody and clears earlier flags; the page reads the feed at most every 5 minutes, from its refresh.
 // Without a browser this prints NOT RUN; with FOCUS_REQUIRE_BROWSER=1 (CI) a missing browser fails.
 import assert from 'node:assert/strict';
@@ -235,16 +235,18 @@ try {
   check(legacy['student-S3'].endsWith(' · 버전 확인 불가'), 'legacy unknown row: ' + legacy['student-S3']);
 
   // (i) DEC-24: the floor is the latest formal release, read by the page from GET /studio/latest-release.
-  const FLOOR = { F1: '2026.1109.0', F2: '2026.1111.0-rc.1', F3: '2026.1111.0', F4: '2026.1112.0', F5: '2026.1111.1-rc.1', F6: 'dev-build', F7: null };
+  // F8 is what a Studio dev build (F5, Studio Dev) really sends: the extension package version, not a calendar tag. It compares
+  // below every calendar release and is flagged; a version string cannot tell it from an old 0.1.x release (DEC-24 note).
+  const FLOOR = { F1: '2026.1109.0', F2: '2026.1111.0-rc.1', F3: '2026.1111.0', F4: '2026.1112.0', F5: '2026.1111.1-rc.1', F6: 'dev-build', F7: null, F8: '0.1.5' };
   // The helper's evaluate does not await a promise; readLatest() is async, so this one does.
   const evalAsync = async (expression) => { const r = await b.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed'); return r.result.value; };
   const floor = (answer, force = true) => evalAsync(`(async () => {
     window.__latest = 0;
     window.fetch = async (url) => { if (String(url) !== '/studio/latest-release') return new Response('{}'); window.__latest++; ${answer} };
     const versions = ${JSON.stringify(FLOOR)};
-    board = { session: { session_id: 'K2' }, roster: { rendered: 7 }, now: new Date().toISOString(),
+    board = { session: { session_id: 'K2' }, roster: { rendered: 8 }, now: new Date().toISOString(),
       seats: Object.entries(versions).map(([id, v]) => ({ user_id: 'student-' + id, state: 'ok', idle_ms: 60000, calls_in_session: 3, failures_in_session: 0, heartbeat: 'alive', client_version: v })) };
-    opsData = { seats: Object.keys(versions).map((id) => ({ seat_id: id, student_id: 'student-' + id, attention: 'ok', signal: 'fresh' })), counts: { total: 7, runtime_ready: 7 }, run: { class_run_id: 'R2', roster_revision: 1, flags: {} }, actions: [] };
+    opsData = { seats: Object.keys(versions).map((id) => ({ seat_id: id, student_id: 'student-' + id, attention: 'ok', signal: 'fresh' })), counts: { total: 8, runtime_ready: 8 }, run: { class_run_id: 'R2', roster_revision: 1, flags: {} }, actions: [] };
     renderSeats(opsData); renderBoard(board);
     await readLatest(${force});
     const rows = [...document.querySelectorAll('#ops-rows .ops-seat')];
@@ -256,12 +258,13 @@ try {
   })()`);
   const up = await floor(`return Response.json({ version: '2026.1111.0', checked_at: null, source: 'test' });`);
   check(up.calls === 1 && up.floor === '2026.1111.0', 'the page reads the floor from /studio/latest-release: ' + JSON.stringify(up));
-  check(up.flagged === 'F1,F2', 'below the latest formal (an older release, an rc of it) is flagged; equal, newer, a newer rc and dev-build are not: ' + up.flagged);
+  check(up.flagged === 'F1,F2,F8', 'below the latest formal (an older release, an rc of it, a dev build\'s 0.1.5) is flagged; equal, newer, a newer rc and a non-version string are not: ' + up.flagged);
+  check(up.text.F8 === '0.1.5 · 업데이트 필요', 'a dev build keeps its version in the accessible text: ' + up.text.F8);
   check(up.unknown === 'F7', 'an unknown version stays 확인 불가, never flagged: ' + up.unknown);
   check(up.text.F1 === '2026.1109.0 · 업데이트 필요' && up.text.F3 === '2026.1111.0' && up.text.F4 === '2026.1112.0', 'flagged cells keep the version in the accessible text: ' + JSON.stringify(up.text));
   check(up.legacy['student-F1'].endsWith(' · 버전 2026.1109.0 · 업데이트 필요') && up.legacy['student-F3'].endsWith(' · 버전 2026.1111.0'), 'the legacy line says it too: ' + JSON.stringify(up.legacy));
   const gated = await floor(`return Response.json({ version: '2026.1112.0' });`, false);
-  check(gated.calls === 0 && gated.floor === '2026.1111.0' && gated.flagged === 'F1,F2', 'within 5 minutes the page does not read the feed again: ' + JSON.stringify(gated));
+  check(gated.calls === 0 && gated.floor === '2026.1111.0' && gated.flagged === 'F1,F2,F8', 'within 5 minutes the page does not read the feed again: ' + JSON.stringify(gated));
   for (const [name, answer] of [
     ['feed down', `throw new TypeError('fetch failed');`],
     ['503', `return new Response('', { status: 503 });`],

@@ -1,7 +1,9 @@
 // DEC-24 (Jay, 2026-11-12) for CGP-SHELL-R-034: Chalk reads the latest published formal Studio release from the public
 // release (the anonymous source Studio's update checker reads) and serves it at GET /studio/latest-release for /manage.
 // Planted answers, no network: only a plain x.y.z, non-draft, non-prerelease tag becomes the floor; every failure is
-// null (unknown → nobody flagged); no credential leaves; a good answer is reused for 10 minutes, a failure for 1 minute.
+// null (unknown → nobody flagged; a 403/429 rate limit too, retried after a minute, so refreshes do not hammer GitHub); no
+// credential leaves; a good answer is reused for 10 minutes. Outside production HPS_STUDIO_LATEST_RELEASE answers instead, and
+// the e2e harness sets it off, so CI never reads GitHub.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
@@ -84,5 +86,30 @@ test('GET /studio/latest-release serves the floor or null, with no instructor co
       assert.deepEqual(Object.keys(body).sort(), ['checked_at', 'source', 'version']);
       assert.equal(body.version, want);
     }
+  } finally { globalThis.fetch = previous; resetLatestReleaseMemo(); }
+});
+
+test('outside production HPS_STUDIO_LATEST_RELEASE answers without GitHub; the e2e harness sets it off', async () => {
+  const {default: app} = await import('../src/index.ts');
+  const {withHeaderConnection, withBearerAsConnection} = await import('./harness/connect.mjs');
+  const previous = globalThis.fetch;
+  const read = async (fetcher, env) => (await (await fetcher.fetch(new Request('https://chalk.test/studio/latest-release'), env)).json());
+  try {
+    resetLatestReleaseMemo();
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw new Error('GitHub must not be read here'); };
+    assert.deepEqual(await read(app, {ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: 'off'}), {version: null, checked_at: null, source: 'HPS_STUDIO_LATEST_RELEASE'});
+    assert.equal((await read(app, {ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: '2026.1111.0'})).version, '2026.1111.0');
+    assert.equal((await read(app, {ENVIRONMENT: 'dev', HPS_STUDIO_LATEST_RELEASE: '2026.1111.0-rc.1'})).version, null, 'an rc is never a floor, here either');
+    // Both browser-test wrappers default it to off, so no CI run that opens /manage reads GitHub.
+    for (const wrapper of [withHeaderConnection, withBearerAsConnection]) {
+      assert.equal((await read(wrapper(app), {})).source, 'HPS_STUDIO_LATEST_RELEASE', wrapper.name);
+      assert.equal((await read(wrapper(app), {HPS_STUDIO_LATEST_RELEASE: '2026.1109.0'})).version, '2026.1109.0', wrapper.name + ' keeps a named floor');
+    }
+    assert.equal(calls, 0, 'no GitHub read outside production with the override');
+    // Production ignores the override and reads the public release.
+    globalThis.fetch = async (url) => { calls++; assert.equal(String(url), LATEST_RELEASE_API); return Response.json(release('v2026.1109.0')); };
+    const prod = await read(app, {ENVIRONMENT: 'production', HPS_STUDIO_LATEST_RELEASE: '2026.1999.0'});
+    assert.equal(prod.version, '2026.1109.0'); assert.equal(calls, 1);
   } finally { globalThis.fetch = previous; resetLatestReleaseMemo(); }
 });
