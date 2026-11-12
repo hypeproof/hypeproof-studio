@@ -9091,7 +9091,8 @@ The existing iPhone personal conversation preserves account identity across one-
 
 `REQ-STUDIO-SHOW-WHAT-I-MADE` follows `ST-INT-NATIVE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12). It
 serves the moment a person shows what they made to someone else. It is not "make me a promo video". Desktop only,
-behind the machine setting `hypeproofChat.showWhatIMadeEnabled` (default off) until the consent item lands.
+on by default (Jay, 2026-11-12: slice 1 stores only in the person's workspace and sends nothing); the machine
+setting `hypeproofChat.showWhatIMadeEnabled` turns it off. Uploading and sharing wait for the consent item.
 
 - Command `hypeproof-chat.showWhatIMade` (`내가 만든 것 보여주기`) opens one panel and asks one question at a
   time: `누구에게 보여 주고 싶나요?` (up to 40 characters), then `그 사람이 처음 3초 안에 무엇을 봤으면 하나요?`

@@ -10,7 +10,7 @@
 // Every file the composition loads sits beside it in the show folder; it names no network URL.
 //
 // Out of scope for this slice (TODO #3794): Service upload and the -try share link, MP4/WebM export, mobile,
-// and the consent-version bump. The feature stays behind `hypeproofChat.showWhatIMadeEnabled` until consent lands.
+// and the consent-version bump. Slice 1 is local only, so it is on by default (Jay, 2026-11-12); sharing waits for consent.
 
 import { jpegInfo, type CdpSend } from "./deckPdf.ts";
 

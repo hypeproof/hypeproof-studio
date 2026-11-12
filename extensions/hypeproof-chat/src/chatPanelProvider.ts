@@ -12118,11 +12118,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * REQ-STUDIO-SHOW-WHAT-I-MADE (#3794 slice 1) — "내가 만든 것 보여주기", behind the default-off
-   * `showWhatIMadeEnabled` flag. Local only: no Service call, no model call, nothing published.
+   * REQ-STUDIO-SHOW-WHAT-I-MADE (#3794 slice 1) — "내가 만든 것 보여주기", on by default (Jay, 2026-11-12)
+   * and switchable off with `showWhatIMadeEnabled`. Local only: no Service call, no model call, nothing published.
    */
   async showWhatIMade(): Promise<void> {
-    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showWhatIMadeEnabled', false);
+    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showWhatIMadeEnabled', true);
     await runShowWhatIMade(this.context.extensionUri, {
       enabled,
       root: () => this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
