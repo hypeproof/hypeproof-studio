@@ -13312,6 +13312,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ShellRow.tsx"
         }
       ]
     },
@@ -13343,6 +13346,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-row-copy.test.tsx"
         }
       ]
     },
