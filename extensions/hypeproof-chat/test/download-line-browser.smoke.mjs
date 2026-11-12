@@ -1,8 +1,8 @@
 // CGP-KNOW-D-021 (DES-KNOW-38): download lines in the chat timeline, the real App bundle in headless
 // Chromium, measured on the real markup. Both seats (personal, classroom), dark and light, 800 and
 // 1420 px, plus forced colours:
-//   1. a line is secondary (muted) text: personal at 14px (learner minimum; the register's 13px loses),
-//      smaller than the answer body; classroom at that seat's tool-row size, never above its answers;
+//   1. a line is secondary (muted) text at 14px in both seats (learner minimum, CGP-DS-R-008 / DEC-29b;
+//      the register's 13px loses), smaller than the 16px answer body;
 //      it stays inside the chat column;
 //   2. a done line shows name, size, 열기 and 폴더에서 보기 as 44px targets with a solid focus ring;
 //      a press posts {downloadLineAction, id, action}; a host refusal shows under the line;
@@ -80,15 +80,9 @@ try {
     assert.ok(m.answer, `${tag}: answer rendered`);
     for (const l of m.lines) {
       // 1. Secondary text, subordinate to the answer, inside the column.
-      if (seat === 'personal') {
-        assert.ok(Math.abs(l.font - 14) < 0.5, `${tag}: ${l.state} line text ${l.font}px is the 14px caption`);
-        assert.ok(l.font < m.answer.font, `${tag}: ${l.state} line (${l.font}px) is smaller than the answer (${m.answer.font}px)`);
-      } else {
-        // The classroom chat is 13px; the line takes that size (the register's 13px), never above the answer
-        // and never down to the 12px tool rows.
-        assert.ok(Math.abs(l.font - 13) < 0.5 && l.font <= m.answer.font + 0.1, `${tag}: ${l.state} line ${l.font}px is 13px, answer ${m.answer.font}px`);
-        assert.ok(l.font > m.tool, `${tag}: ${l.state} line (${l.font}px) above the ${m.tool}px tool rows`);
-      }
+      // Both seats: the 14px caption under the 16px answer (CGP-DS-R-008; the classroom since DEC-29b).
+      assert.ok(Math.abs(l.font - 14) < 0.5, `${tag}: ${l.state} line text ${l.font}px is the 14px caption`);
+      assert.ok(l.font < m.answer.font, `${tag}: ${l.state} line (${l.font}px) is smaller than the answer (${m.answer.font}px)`);
       if (!forcedColors) assert.notEqual(l.color, m.answer.color, `${tag}: ${l.state} line uses the secondary colour`);
       assert.ok(l.box.left >= m.list.left - 0.5 && l.box.right <= m.list.right + 0.5, `${tag}: ${l.state} line inside the chat column`);
     }
@@ -136,5 +130,5 @@ try {
     assert.equal((await b.evaluate(probe)).lines.length, count, `${tag}: forged label refused`);
     states++;
   }
-  console.log(`PASS download lines in ${states} seat/theme/width states: secondary text (personal 14px below the answer, classroom 13px), 44px 열기/폴더에서 보기 with a focus ring, persistent failure line, 받는 중 without an invented percentage, in-place final line`);
+  console.log(`PASS download lines in ${states} seat/theme/width states: secondary text (both seats 14px below the 16px answer), 44px 열기/폴더에서 보기 with a focus ring, persistent failure line, 받는 중 without an invented percentage, in-place final line`);
 } finally { await b.close(); }

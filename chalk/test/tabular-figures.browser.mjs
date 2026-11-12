@@ -31,7 +31,7 @@ const SCENES = {
     setup: `(() => {
       const now = ${NOW};
       const seats = Array.from({ length: 12 }, (_, i) => ({ seat_id: 'A' + (i + 1), student_id: '학생-' + (i + 10), attention: ['ok', 'caution', 'blocked', 'unknown'][i % 4], signal: 'fresh' }));
-      token = 't'; cohort = 'c1'; helpState = 'ok'; helpCounts = { open: 2, answered: 0 }; helpExpanded = true;
+      connected = true; cohort = 'c1'; helpState = 'ok'; helpCounts = { open: 2, answered: 0 }; helpExpanded = true;
       opsData = { seats, counts: { total: 12, runtime_ready: 9 }, run: { class_run_id: 'R1', roster_revision: 1, flags: {} } };
       helpRows = [1, 2].map((n) => ({ id: 'h' + n, kind: 'help', session_id: 'S1', student_id: '학생-' + (n + 9), status: 'received', revision: 1, created_at: Math.floor(now / 1000) - 60 * n * 7, expires_at: Math.floor(now / 1000) + 3600 }));
       board = { session: { session_id: 'S1' }, seats: [] };

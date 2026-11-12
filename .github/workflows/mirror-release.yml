@@ -254,6 +254,17 @@ jobs:
           - \`HypeProof.Studio-win32-x64-*.zip\` — portable zip
 
           EOF
+            # Per-release Windows command (verify-unified-release.yml, 2026-11-02), public, no login.
+            if [[ -f dist/update-windows.cmd ]]; then
+              cat >> mirror-release-notes.md <<EOF
+          One command for this exact build (no GitHub login), in PowerShell:
+
+          \`\`\`powershell
+          irm https://github.com/$SOURCE_REPO/releases/download/$TAG/update-windows.cmd -OutFile "\$env:TEMP\\hps-update.cmd"; & "\$env:TEMP\\hps-update.cmd"
+          \`\`\`
+
+          EOF
+            fi
           else
             cat >> mirror-release-notes.md <<EOF
           ### Windows

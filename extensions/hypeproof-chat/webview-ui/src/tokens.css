@@ -214,7 +214,7 @@ body.vscode-high-contrast, body.vscode-high-contrast .studio-start, body.vscode-
   --hp-elevation-overlay: var(--ds-c-elevation-overlay-dark);
 }
 /* Fields that paint their own HP background use the muted text role. */
-.hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-text-placeholder-default: var(--hp-text-muted-default); }
+.hp-surface, .hp-evidence-form, .hps-instructor-model-input, .automation-panel, .hps-user-question, .hps-question-input-label { --hp-text-placeholder-default: var(--hp-text-muted-default); }
 
 /* Light (Paper) theme: reading surfaces (retrospective · growth record · reports) flip to Paper
  * (SX-54). Every semantic role of :root is bound again here, so a role never inherits a forest

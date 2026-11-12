@@ -44,7 +44,7 @@ function surface() {
 }
 
 const activity = () => ({ ...provider.quitGuardActivity() }); // copy out of the vm realm
-assert.deepEqual(activity(), { turnRunning: false, queuedUnsent: false });
+assert.deepEqual(activity(), { turnRunning: false, queuedUnsent: false, previewBuilding: false });
 assert.equal(quitGuardPrompt(activity()), null, "idle: no dialog");
 
 // Sidebar reports a queued message (no taskId: the report bypasses the task checks).
@@ -52,7 +52,7 @@ const sidebar = surface();
 provider.resolveWebviewView(sidebar);
 await sidebar.send({ type: "queueState", queued: true });
 assert.deepEqual(provider.posted, [], "a queue report is never answered with a task error");
-assert.deepEqual(activity(), { turnRunning: false, queuedUnsent: true });
+assert.deepEqual(activity(), { turnRunning: false, queuedUnsent: true, previewBuilding: false });
 assert.equal(quitGuardPrompt(activity()).detail.split("\n")[0], "보내지 않은 메시지가 있어요.");
 
 // The editor chat reports its own queue; clearing one surface keeps the other.
@@ -88,6 +88,27 @@ provider.pendingApprovals = new Map([["a", {}]]);
 assert.equal(activity().turnRunning, true, "a turn waiting on an approval");
 provider.pendingApprovals = new Map();
 assert.equal(activity().turnRunning, false);
+
+// A preview build in progress (revealBuilt holds the "preview-build" lease) is reported until it ends.
+let finishSave;
+Object.assign(provider, {
+  cachedProfile: null,
+  archiveAdultPage() {},
+  surfaceStructureIssues() {},
+  saveGameToWorkspace: () => new Promise((resolve) => { finishSave = resolve; }),
+  isLiveServerPreview: () => false,
+  inlineEngineIfNeeded: async (html) => html,
+  preview: { show: async () => {} },
+});
+const reveal = provider.revealBuilt("<!doctype html><html><head><title>t</title></head><body><p>hi</p></body></html>");
+await new Promise((resolve) => setImmediate(resolve));
+assert.ok(finishSave, "the reveal reached the save");
+assert.equal(activity().previewBuilding, true, "a preview build in progress is reported");
+assert.deepEqual(quitGuardPrompt(activity()).detail.split("\n"), ["만들고 있는 미리보기가 멈춰요.", "만든 파일은 그대로 남아요."]);
+finishSave(false);
+assert.equal(await reveal, true);
+assert.equal(activity().previewBuilding, false, "the build's end clears it");
+assert.equal(quitGuardPrompt(activity()), null);
 
 // The command the core calls is registered with this answer.
 const ext = fs.readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");

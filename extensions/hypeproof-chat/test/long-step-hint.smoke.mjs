@@ -225,7 +225,7 @@ const line = (id, state, extra = {}) => ({ id, role: "tool", content: "", create
   assert.match(app, /case "toolLog": dispatch\(\{ type: "toolLog", [^\n]*step: msg\.step, since: msg\.since/, "App passes step + since to the reducer");
   const panel = fs.readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
   assert.match(panel, /stalled: !!error/, "the panel hands the stall/error state to the hint");
-  assert.match(panel, /useLiveRegion\(\[responseAnnouncementText, longStepAnnouncement, connectivity\.announcement\]\)/, "the hint speaks through the response announcer");
+  assert.match(panel, /useLiveRegion\(\[responseAnnouncementText, longStepAnnouncement, (?:lessonAnnouncement, )?connectivity\.announcement\]\)/, "the hint speaks through the response announcer");
   ok("provider, App and ChatPanel wiring");
 }
 

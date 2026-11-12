@@ -336,5 +336,6 @@ test('decide: create only on schedule with an app change and no live class; ever
 test('the release PR template puts the rc one-liner first and carries the case checklist', () => {
   const tpl = fs.readFileSync(path.join(here, '../templates/release-pr.md'), 'utf8');
   assert.ok(tpl.indexOf('{{INSTALL_ONELINER}}') < tpl.indexOf('## 1. Candidate'));
+  assert.ok(tpl.indexOf('{{INSTALL_WINDOWS}}') < tpl.indexOf('## 1. Candidate'), 'the Windows rc command sits next to the Mac one');
   for (const k of ['{{BLACKBOX_CASES}}', '{{CHANGED_REQUIREMENTS}}']) assert.ok(tpl.includes(k), k);
 });

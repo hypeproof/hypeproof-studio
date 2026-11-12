@@ -18,8 +18,22 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { StagedUpdate } from "./stagedUpdate";
+import {
+  AUTO_UPDATE_CHECK_INTERVAL_MS,
+  AUTO_UPDATE_NOTICE_KEY,
+  AUTO_UPDATE_RELEASE_LABEL,
+  AUTO_UPDATE_SETTING,
+  IDLE_POLL_MS,
+  WindowPresence,
+  autoUpdateAppliedCopy,
+  autoUpdateNoticeAction,
+  idleApplyBlocker,
+  shouldStageInBackground,
+  type AutoUpdateNotice,
+  type IdleApplySnapshot,
+} from "./autoUpdate";
 import {
   downloadVerifiedUpdate,
   fetchLatestUpdateRelease,
@@ -55,7 +69,8 @@ import {
 } from "./updateCheckerHelpers";
 
 const EXPECTED_BUNDLE_ID = "ai.hypeproof.studio";
-const CHECK_INTERVAL_MS = 24 * 3600 * 1000;
+// #3411: every 4 hours (was 24 h), so a release reaches a running Studio the same day.
+const CHECK_INTERVAL_MS = AUTO_UPDATE_CHECK_INTERVAL_MS;
 const INITIAL_DELAY_MS = 30 * 1000;
 // A transient failure (offline at login, a GitHub hiccup) used to wait a full day for the next try,
 // so an app started just before a release could show nothing all day (Jay 2026-10-29). Retry a
@@ -150,6 +165,13 @@ function stagedUpdate(context: vscode.ExtensionContext): StagedUpdate {
   return new StagedUpdate(path.join(context.globalStorageUri.fsPath, "updates", identity));
 }
 
+/** #3411: this window's entry in the per-app registry of open Studio windows. */
+export function windowPresence(context: vscode.ExtensionContext): WindowPresence {
+  const app = detectAppBundle(process.execPath) ?? process.execPath;
+  const identity = createHash("sha256").update(app).digest("hex");
+  return new WindowPresence(path.join(context.globalStorageUri.fsPath, "updates", identity, "windows"), `${process.pid}-${randomUUID()}`);
+}
+
 /** Learner copy for an explicit restart that did not start the installer. */
 export function refusedRestartNotice(result: "busy" | "held"): string {
   return result === "busy"
@@ -157,16 +179,161 @@ export function refusedRestartNotice(result: "busy" | "held"): string {
     : "대답이나 수업이 진행 중이라 지금은 재시작하지 않았어요. 끝난 뒤 Studio를 끝내면 준비한 업데이트를 설치해요.";
 }
 
+async function launchStagedInstaller(platform: "darwin" | "win32", script: string): Promise<number> {
+  if (platform !== process.platform) throw new Error("Staged update platform mismatch");
+  const child = platform === "darwin"
+    ? cp.spawn("/bin/bash", [script], { detached: true, stdio: "ignore", env: installerEnv(process.env) })
+    : cp.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", env: installerEnv(process.env) });
+  await waitForSpawn(child);
+  child.unref();
+  return child.pid!;
+}
+
+function stagedIsNewer(version: string): boolean {
+  return isUpdateVersion(currentBundleVersion()) && compareVersions(version, currentBundleVersion()) > 0;
+}
+
 export async function installStagedUpdate(context: vscode.ExtensionContext, allowed: () => boolean): Promise<boolean> {
-  return stagedUpdate(context).install(allowed, version => isUpdateVersion(currentBundleVersion()) && compareVersions(version, currentBundleVersion()) > 0, async (platform, script) => {
-    if (platform !== process.platform) throw new Error("Staged update platform mismatch");
-    const child = platform === "darwin"
-      ? cp.spawn("/bin/bash", [script], { detached: true, stdio: "ignore", env: installerEnv(process.env) })
-      : cp.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", env: installerEnv(process.env) });
-    await waitForSpawn(child);
-    child.unref();
-    return child.pid!;
+  return stagedUpdate(context).install(allowed, stagedIsNewer, launchStagedInstaller);
+}
+
+/**
+ * #3411 idle restart: launch the staged relaunching installer and quit Studio. `allowed`
+ * is re-read inside the lease right before the launch, so a turn that starts meanwhile
+ * keeps the update staged and Studio running.
+ */
+export async function applyStagedUpdateNow(context: vscode.ExtensionContext, allowed: () => boolean): Promise<boolean> {
+  const started = await stagedUpdate(context).install(allowed, stagedIsNewer, launchStagedInstaller, { relaunch: true });
+  if (started) setTimeout(() => { void vscode.commands.executeCommand("workbench.action.quit"); }, 400);
+  return started;
+}
+
+/** The staged version when it is newer than the running app, else null. */
+export function stagedUpdateVersion(context: vscode.ExtensionContext): string | null {
+  const version = stagedUpdate(context).stagedVersion();
+  return version && isUpdateVersion(version) && stagedIsNewer(version) ? version : null;
+}
+
+/** Whether `hypeproofChat.autoUpdate` is on (default true). */
+export function autoUpdateEnabled(): boolean {
+  try {
+    return vscode.workspace?.getConfiguration?.("hypeproofChat")?.get<boolean>(AUTO_UPDATE_SETTING, true) !== false;
+  } catch { return true; }
+}
+
+const backgroundInflight = new Map<string, Promise<boolean>>();
+
+/**
+ * #3411: download, verify and stage a found update with no UI. Returns false when this
+ * install cannot self-update (dev host, low disk); throws on a failed download or
+ * verification. The prepared update is applied by the quit hook or an idle restart.
+ */
+export function stageUpdateInBackground(info: UpdateInfo, context: vscode.ExtensionContext): Promise<boolean> {
+  if (!info.available || !assetPickerForPlatform()) return Promise.resolve(false);
+  return pickInflight(backgroundInflight, info.version, async () => {
+    const free = freeDiskBytes();
+    if (free !== null && !hasFreeDisk(free, MIN_FREE_DISK_BYTES)) return false;
+    const silent = () => {};
+    // A newer release replaces an older staged one; remove the older download afterwards
+    // (Windows never cleans %TEMP%, and each download is over 100 MB).
+    const previous = stagedUpdate(context).stagedScript();
+    if (process.platform === "darwin") {
+      const appPath = detectAppBundle(process.execPath);
+      if (!appPath) return false;
+      await prepareMacUpdate(info, context, appPath, silent);
+    } else {
+      await prepareWindowsUpdate(info, context, silent);
+    }
+    const previousDir = previous ? path.dirname(previous) : null;
+    if (previousDir && path.dirname(previousDir) === os.tmpdir() && path.basename(previousDir).startsWith("hps-update-") &&
+        stagedUpdate(context).stagedScript() !== previous) {
+      try { fs.rmSync(previousDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+    const notice: AutoUpdateNotice = { version: info.version, releaseUrl: info.releaseUrl };
+    await context.globalState.update(AUTO_UPDATE_NOTICE_KEY, notice);
+    return true;
   });
+}
+
+/**
+ * #3411: after an automatic update, say once which version is running, with the release
+ * link. Kept while the staged version has not started yet.
+ */
+export async function announceAutoUpdate(context: vscode.ExtensionContext, currentVersion: string): Promise<void> {
+  const stored = context.globalState.get<unknown>(AUTO_UPDATE_NOTICE_KEY);
+  const action = autoUpdateNoticeAction(stored, currentVersion, compareVersions);
+  if (action === "none" || action === "keep") return;
+  await context.globalState.update(AUTO_UPDATE_NOTICE_KEY, undefined);
+  if (action === "drop") return;
+  const notice = stored as AutoUpdateNotice;
+  const choice = await vscode.window.showInformationMessage(autoUpdateAppliedCopy(currentVersion), AUTO_UPDATE_RELEASE_LABEL);
+  if (choice === AUTO_UPDATE_RELEASE_LABEL) await vscode.env.openExternal(vscode.Uri.parse(notice.releaseUrl));
+}
+
+export interface IdleApplyDeps {
+  context: vscode.ExtensionContext;
+  autoUpdate: () => boolean;
+  /** provider.autoUpdateActivity() */
+  activity: () => Omit<IdleApplySnapshot, "autoUpdate" | "staged" | "otherWindows" | "windowFocused" | "unfocusedMs">;
+  windowFocused: () => boolean;
+  /** Fires on every focus change, so a short visit resets the background timer. */
+  onFocusChange?: (listener: (focused: boolean) => void) => vscode.Disposable;
+  presence: WindowPresence;
+  stagedNewer?: () => boolean;
+  apply?: (allowed: () => boolean) => Promise<boolean>;
+  now?: () => number;
+}
+
+/**
+ * #3411: restart into a staged update only when nothing can be interrupted
+ * (idleApplyBlocker). Ticks every minute; the same check runs again inside the install
+ * lease right before the installer starts. Never during a turn.
+ */
+export function scheduleIdleApply(deps: IdleApplyDeps): vscode.Disposable & { tick(): Promise<boolean> } {
+  const now = deps.now ?? Date.now;
+  let unfocusedSince: number | null = deps.windowFocused() ? null : now();
+  let applying = false;
+  let disposed = false;
+  const focus = deps.onFocusChange?.(focused => { unfocusedSince = focused ? null : (unfocusedSince ?? now()); });
+  const snapshot = (staged: boolean): IdleApplySnapshot => {
+    const focused = deps.windowFocused();
+    if (focused) unfocusedSince = null; else unfocusedSince ??= now();
+    return {
+      ...deps.activity(),
+      autoUpdate: deps.autoUpdate(),
+      staged,
+      otherWindows: deps.presence.others(now()),
+      windowFocused: focused,
+      unfocusedMs: unfocusedSince === null ? 0 : now() - unfocusedSince,
+    };
+  };
+  const tick = async (): Promise<boolean> => {
+    if (disposed || applying) return false;
+    deps.presence.beat(now());
+    if (deps.windowFocused()) unfocusedSince = null; else unfocusedSince ??= now();
+    if (!deps.autoUpdate()) return false;
+    let staged = false;
+    try { staged = (deps.stagedNewer ?? (() => stagedUpdateVersion(deps.context) !== null))(); } catch { staged = false; }
+    if (!staged || idleApplyBlocker(snapshot(staged)) !== null) return false;
+    applying = true;
+    try {
+      return await (deps.apply ?? (allowed => applyStagedUpdateNow(deps.context, allowed)))(() => !disposed && idleApplyBlocker(snapshot(true)) === null);
+    } catch (error) {
+      console.warn(`[hypeproof-chat/update] idle apply failed: ${(error as Error).message}`);
+      return false;
+    } finally { applying = false; }
+  };
+  deps.presence.beat(now());
+  const timer = setInterval(() => { void tick(); }, IDLE_POLL_MS);
+  return {
+    tick,
+    dispose() {
+      disposed = true;
+      clearInterval(timer);
+      focus?.dispose();
+      deps.presence.dispose();
+    },
+  };
 }
 
 export function runUpdate(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<void> {
@@ -174,6 +341,65 @@ export function runUpdate(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<voi
   if (!assetPickerForPlatform()) return Promise.reject(new Error("Unsupported update platform"));
   const impl = process.platform === "win32" ? runUpdateWindows : runUpdateMac;
   return pickInflight(inflight, info.version, () => impl(info, deps));
+}
+
+interface PreparedMac { stageId: string; installerPath: string; logPath: string; currentVersion: string }
+
+/** Free disk in the temp volume, or null when it cannot be read. */
+function freeDiskBytes(): number | null {
+  try {
+    const stat = fs.statfsSync(os.tmpdir());
+    return (stat.bavail as unknown as number) * (stat.bsize as unknown as number);
+  } catch { return null; } /* statfsSync not available pre-node-20? best-effort skip */
+}
+
+/**
+ * Download, verify, unzip and stage a macOS update. Writes three installers: the explicit
+ * restart one (foreground relaunch), the quit one (stays closed) and the idle one (#3411,
+ * background relaunch). No UI: the explicit path wraps this in a progress notification.
+ */
+async function prepareMacUpdate(info: UpdateInfo, context: vscode.ExtensionContext, appPath: string, report: (message: string) => void): Promise<PreparedMac> {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hps-update-${info.version}-`));
+  const zipPath = path.join(workDir, "update.zip");
+
+  report("다운로드 중…");
+  await downloadVerifiedUpdate(info, zipPath);
+
+  report("압축 풀기…");
+  cp.execSync(`unzip -q ${shellQuote(zipPath)} -d ${shellQuote(workDir)}`);
+
+  // The zip contains a top-level "HypeProof Studio.app" — find it.
+  const candidates = fs.readdirSync(workDir).map((n) => path.join(workDir, n));
+  const newAppPath = candidates.find((c) => c.endsWith(".app") && fs.statSync(c).isDirectory());
+  if (!newAppPath) {
+    throw new Error("zip 안에서 .app 번들을 찾지 못했어요.");
+  }
+
+  report("검역 속성 제거…");
+  try {
+    cp.execSync(`xattr -dr com.apple.quarantine ${shellQuote(newAppPath)}`);
+  } catch { /* xattr returns non-zero if no attrs to strip — that's fine */ }
+
+  report("설치 스크립트 준비…");
+
+  // Write installer.sh + log path
+  const supportDir = path.join(os.homedir(), "Library", "Application Support", "HypeProof-Studio");
+  fs.mkdirSync(supportDir, { recursive: true });
+  const installerPath = path.join(supportDir, `installer-${info.version}.sh`);
+  const logDir = path.join(os.homedir(), "Library", "Logs", "HypeProofStudio");
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `update-${info.version}.log`);
+
+  const currentVersion = currentBundleVersion(appPath);
+  const scriptInput = { newAppPath, oldAppPath: appPath, expectedBundleId: EXPECTED_BUNDLE_ID,
+    newVersion: info.version, oldVersion: currentVersion, logPath };
+  fs.writeFileSync(installerPath, renderInstallerScript(scriptInput), { mode: 0o755 });
+  const quitInstaller = path.join(workDir, "install-on-quit.sh");
+  fs.writeFileSync(quitInstaller, renderInstallerScript({ ...scriptInput, relaunch: false }), { mode: 0o700 });
+  const idleInstaller = path.join(workDir, "install-when-idle.sh");
+  fs.writeFileSync(idleInstaller, renderInstallerScript({ ...scriptInput, relaunch: "background" }), { mode: 0o700 });
+  const stageId = stagedUpdate(context).stage("darwin", quitInstaller, [newAppPath], info.version, idleInstaller);
+  return { stageId, installerPath, logPath, currentVersion };
 }
 
 async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<void> {
@@ -188,16 +414,13 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
   }
 
   // 2. Disk space check (pure predicate in updateCheckerHelpers.hasFreeDisk)
-  try {
-    const stat = fs.statfsSync(os.tmpdir());
-    const free = (stat.bavail as unknown as number) * (stat.bsize as unknown as number);
-    if (!hasFreeDisk(free, MIN_FREE_DISK_BYTES)) {
-      vscode.window.showWarningMessage(
-        `업데이트하려면 1 GB 이상 여유공간이 필요해요. 현재 ${(free / 1e9).toFixed(1)} GB 남음.`,
-      );
-      return;
-    }
-  } catch { /* statfsSync not available pre-node-20? best-effort skip */ }
+  const free = freeDiskBytes();
+  if (free !== null && !hasFreeDisk(free, MIN_FREE_DISK_BYTES)) {
+    vscode.window.showWarningMessage(
+      `업데이트하려면 1 GB 이상 여유공간이 필요해요. 현재 ${(free / 1e9).toFixed(1)} GB 남음.`,
+    );
+    return;
+  }
 
   // 3. Download + extract with progress notification
   await vscode.window.withProgress(
@@ -207,52 +430,8 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
       cancellable: false,
     },
     async (progress) => {
-      const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hps-update-${info.version}-`));
-      const zipPath = path.join(workDir, "update.zip");
-
-      progress.report({ message: "다운로드 중…" });
-      await downloadVerifiedUpdate(info, zipPath);
-
-      progress.report({ message: "압축 풀기…" });
-      cp.execSync(`unzip -q ${shellQuote(zipPath)} -d ${shellQuote(workDir)}`);
-
-      // The zip contains a top-level "HypeProof Studio.app" — find it.
-      const candidates = fs.readdirSync(workDir).map((n) => path.join(workDir, n));
-      const newAppPath = candidates.find((c) => c.endsWith(".app") && fs.statSync(c).isDirectory());
-      if (!newAppPath) {
-        throw new Error("zip 안에서 .app 번들을 찾지 못했어요.");
-      }
-
-      progress.report({ message: "검역 속성 제거…" });
-      try {
-        cp.execSync(`xattr -dr com.apple.quarantine ${shellQuote(newAppPath)}`);
-      } catch { /* xattr returns non-zero if no attrs to strip — that's fine */ }
-
-      progress.report({ message: "설치 스크립트 준비…" });
-
-      // 4. Write installer.sh + log path
-      const supportDir = path.join(os.homedir(), "Library", "Application Support", "HypeProof-Studio");
-      fs.mkdirSync(supportDir, { recursive: true });
-      const installerPath = path.join(supportDir, `installer-${info.version}.sh`);
-      const logDir = path.join(os.homedir(), "Library", "Logs", "HypeProofStudio");
-      fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, `update-${info.version}.log`);
-
-      const currentVersion = currentBundleVersion(appPath);
-      const script = renderInstallerScript({
-        newAppPath,
-        oldAppPath: appPath,
-        expectedBundleId: EXPECTED_BUNDLE_ID,
-        newVersion: info.version,
-        oldVersion: currentVersion,
-        logPath,
-      });
-      fs.writeFileSync(installerPath, script, { mode: 0o755 });
-      const quitInstaller = path.join(workDir, "install-on-quit.sh");
-      fs.writeFileSync(quitInstaller, renderInstallerScript({ newAppPath, oldAppPath: appPath,
-        expectedBundleId: EXPECTED_BUNDLE_ID, newVersion: info.version, oldVersion: currentVersion,
-        logPath, relaunch: false }), { mode: 0o700 });
-      const stageId = stagedUpdate(deps.context).stage("darwin", quitInstaller, [newAppPath], info.version);
+      const { stageId, installerPath, logPath, currentVersion } =
+        await prepareMacUpdate(info, deps.context, appPath, message => progress.report({ message }));
 
       // 5. Confirmation modal — give the user a clear "this will restart Studio"
       // moment so the auto-quit isn't surprising.
@@ -345,18 +524,44 @@ function windowsAppProcessName(): string {
  * single-instance lock made the relaunched process hand off to the dying old
  * one and exit (updated, but didn't relaunch).
  */
+/**
+ * Download, verify and stage a Windows update: the quit wrapper (Setup without relaunch)
+ * and the idle wrapper (#3411, Setup relaunches Studio). No UI.
+ */
+async function prepareWindowsUpdate(info: UpdateInfo, context: vscode.ExtensionContext, report: (message: string) => void): Promise<{ stageId: string; workDir: string; exePath: string }> {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hps-update-${info.version}-`));
+  // Preserve the installer's own name (…UserSetup-x64-<ver>.exe) so it's
+  // recognizable if the user runs it manually.
+  const installerName =
+    safeBasename(info.downloadUrl) || `HypeProofStudioSetup-${info.version}.exe`;
+  const exePath = path.join(workDir, installerName);
+
+  report("다운로드 중…");
+  await downloadVerifiedUpdate(info, exePath);
+
+  const quitInstaller = path.join(workDir, "install-on-quit.ps1");
+  fs.writeFileSync(quitInstaller, renderWindowsUpdateWrapper({
+    appProcessName: windowsAppProcessName(), installerPath: exePath,
+    installerArgs: ["/silent", "/norestart", "/mergetasks=!runcode", `/LOG="${path.join(workDir, "update.log")}"`],
+  }), "utf8");
+  const idleInstaller = path.join(workDir, "install-when-idle.ps1");
+  fs.writeFileSync(idleInstaller, renderWindowsUpdateWrapper({
+    appProcessName: windowsAppProcessName(), installerPath: exePath,
+    installerArgs: ["/silent", "/mergetasks=runcode", `/LOG="${path.join(workDir, "update-idle.log")}"`],
+  }), "utf8");
+  const stageId = stagedUpdate(context).stage("win32", quitInstaller, [exePath], info.version, idleInstaller);
+  return { stageId, workDir, exePath };
+}
+
 async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<void> {
   // 1. Disk space check (same predicate as macOS).
-  try {
-    const stat = fs.statfsSync(os.tmpdir());
-    const free = (stat.bavail as unknown as number) * (stat.bsize as unknown as number);
-    if (!hasFreeDisk(free, MIN_FREE_DISK_BYTES)) {
-      vscode.window.showWarningMessage(
-        `업데이트하려면 1 GB 이상 여유공간이 필요해요. 현재 ${(free / 1e9).toFixed(1)} GB 남음.`,
-      );
-      return;
-    }
-  } catch { /* statfsSync not available? best-effort skip */ }
+  const free = freeDiskBytes();
+  if (free !== null && !hasFreeDisk(free, MIN_FREE_DISK_BYTES)) {
+    vscode.window.showWarningMessage(
+      `업데이트하려면 1 GB 이상 여유공간이 필요해요. 현재 ${(free / 1e9).toFixed(1)} GB 남음.`,
+    );
+    return;
+  }
 
   await vscode.window.withProgress(
     {
@@ -365,23 +570,7 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
       cancellable: false,
     },
     async (progress) => {
-      const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hps-update-${info.version}-`));
-      // Preserve the installer's own name (…UserSetup-x64-<ver>.exe) so it's
-      // recognizable if the user runs it manually.
-      const installerName =
-        safeBasename(info.downloadUrl) || `HypeProofStudioSetup-${info.version}.exe`;
-      const exePath = path.join(workDir, installerName);
-
-      progress.report({ message: "다운로드 중…" });
-      await downloadVerifiedUpdate(info, exePath);
-
-      const quitInstaller = path.join(workDir, "install-on-quit.ps1");
-      fs.writeFileSync(quitInstaller, renderWindowsUpdateWrapper({
-        appProcessName: windowsAppProcessName(), installerPath: exePath,
-        installerArgs: ["/silent", "/norestart", "/mergetasks=!runcode", `/LOG="${path.join(workDir, "update.log")}"`],
-      }), "utf8");
-      const stageId = stagedUpdate(deps.context).stage("win32", quitInstaller, [exePath], info.version);
-
+      const { stageId, workDir, exePath } = await prepareWindowsUpdate(info, deps.context, message => progress.report({ message }));
       // 2. Confirmation modal — the installer will close Studio, so warn first.
       const currentVersion = currentBundleVersion();
       const choice = await vscode.window.showInformationMessage(
@@ -533,6 +722,13 @@ export interface SchedulerDeps {
   /** Push update info to the webview (so it can render a banner). null clears it. */
   pushUpdateBanner: (info: UpdateInfo | null) => void;
   currentVersion: string;
+  /** #3411: stage found updates silently. Absent or false keeps the banner flow. */
+  autoUpdate?: () => boolean;
+  /** CGP-SHELL-R-001: a class seat downloads nothing; the banner shows the held line. */
+  classHeld?: () => boolean;
+  /** Test seams; default to the real staging. */
+  stagedVersion?: () => string | null;
+  stage?: (info: UpdateInfo) => Promise<boolean>;
 }
 
 export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
@@ -565,6 +761,25 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       deps.pushUpdateBanner(null);
       return;
     }
+    // #3411: with auto-update on, a found release is downloaded and staged with no prompt;
+    // the banner stays the fallback (auto off, class seat, or a failed/impossible staging).
+    if (deps.autoUpdate?.() === true) {
+      const classHeld = deps.classHeld?.() === true;
+      let stagedVersion: string | null = null;
+      try { stagedVersion = (deps.stagedVersion ?? (() => stagedUpdate(deps.context).stagedVersion()))(); } catch { stagedVersion = null; }
+      if (stagedVersion === info.version && !classHeld) { deps.pushUpdateBanner(null); return; }
+      if (shouldStageInBackground({ autoUpdate: true, classHeld, available: info.available, version: info.version, stagedVersion })) {
+        try {
+          if (await (deps.stage ?? (i => stageUpdateInBackground(i, deps.context)))(info)) {
+            if (!disposed) deps.pushUpdateBanner(null);
+            return;
+          }
+        } catch (error) {
+          console.warn(`[hypeproof-chat/update] background staging failed: ${(error as Error).message}`);
+        }
+        if (disposed) return;
+      }
+    }
     const dismissals = deps.context.globalState.get<Record<string, number>>(DISMISSAL_KEY, {});
     const now = Math.floor(Date.now() / 1000);
     if (shouldShowBanner(info, dismissals, now)) {
@@ -577,7 +792,7 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
   // Fire once after a short delay so activation isn't blocked on a network round-trip.
   timer = setTimeout(() => {
     void run();
-    // Then repeat every 24h.
+    // Then repeat every 4 h (#3411).
     timer = setInterval(() => { retries = 0; void run(); }, CHECK_INTERVAL_MS);
   }, INITIAL_DELAY_MS);
 

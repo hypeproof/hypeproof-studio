@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// The page holds no token: every request carries a Lab-connected session (harness/connect.mjs).
+import { TEST_CONNECT_SECRET, sessionCookie } from './harness/connect.mjs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 const bin = findChromium();
 if (!bin) {
@@ -15,7 +17,7 @@ if (!bin) {
 }
 const { default: app } = await import('../src/index.ts');
 const server = createServer(async (req, res) => {
-  const r = await app.fetch(new Request('http://127.0.0.1' + req.url), { ENVIRONMENT: 'test' });
+  const r = await app.fetch(new Request('http://127.0.0.1' + req.url, { headers: { cookie: await sessionCookie('t') } }), { ENVIRONMENT: 'test', HPS_CHALK_CONNECT_SECRET: TEST_CONNECT_SECRET });
   res.writeHead(r.status, Object.fromEntries(r.headers));
   res.end(Buffer.from(await r.arrayBuffer()));
 });
@@ -26,13 +28,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function go(width = 1280) {
   await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
   await b.send('Page.navigate', { url: origin + '/authoring' });
-  for (let i = 0; i < 100; i++) { await wait(50); if (await b.evaluate(`document.readyState==='complete'&&!!document.getElementById('first-run')`).catch(() => false)) break; }
+  for (let i = 0; i < 100; i++) { await wait(50); if (await b.evaluate(`document.readyState==='complete'&&!!document.getElementById('first-run')&&!!window.chalkConnection?.current?.connected`).catch(() => false)) break; }
   await b.evaluate(`window.confirm=()=>true;0`);
 }
 const ev = (js) => b.evaluate(`(() => { ${js} })()`);
 const visible = () => ev(`return !document.getElementById('first-run').hidden && document.getElementById('first-run').getBoundingClientRect().height > 0`);
 // A new lesson the way an instructor makes one: connection fields filled, then the page's own 새 강의 만들기 button.
-const newLesson = () => ev(`for (const [k,v] of [['token','t'],['cohort','c1'],['profile','p1']]) document.getElementById(k).value=v;
+const newLesson = () => ev(`for (const [k,v] of [['cohort','c1'],['profile','p1']]) document.getElementById(k).value=v;
   document.getElementById('new').click(); return null;`).then(() => wait(50)).then(() => ev(`const c=content(); return { audience: document.getElementById('audience').value, tier: document.getElementById('audience_tier').value, contentAudience: c.audience, hasTier: 'audience_tier' in c, contentTier: c.audience_tier ?? null, status: document.getElementById('status').textContent };`));
 let checks = 0;
 try {
