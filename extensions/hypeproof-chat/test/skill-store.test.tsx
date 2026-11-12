@@ -190,15 +190,16 @@ async function main() {
   assert.ok(host.textContent.includes('확인했어요. 파트너: 세바시 (강사 소속으로 함께 등록돼요) · 강사: 김강사. 올리면 이대로 한 번만 등록돼요.'));
   // Checked names are not enough: sharing the sales record needs the consent.
   assert.ok(publish().hasAttribute('disabled'), 'checked but not consented');
-  assert.ok(host.textContent.includes('정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 업체·강사에게 제공되는 것에 동의해요.'));
+  assert.ok(host.textContent.includes('정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 코드의 파트너·강사에게 제공되는 것에 동의해요.'));
   const consentBox = byLabel(host, '파트너·강사 코드').querySelector('input[type="checkbox"]');
   consentBox.type = 'checkbox'; consentBox.checked = true;
   await act(() => click(consentBox));
   await act(() => click(publish()));
   assert.deepEqual(sent.at(-1).attribution, { instructor_code: 'I-ABCDE-FGHJK', consent: { version: CONSENT_V, granted: true } });
-  // Changing the code after the check needs a new check (negative control).
+  // Changing the code after the check needs a new check and a new consent (negative control).
   await typeInto(byLabel(host, '파트너·강사 코드').querySelectorAll('input')[1], 'I-ZZZZZ-ZZZZZ');
   assert.ok(publish().hasAttribute('disabled'));
+  assert.equal(byLabel(host, '파트너·강사 코드').querySelector('input[type="checkbox"]').checked, false, 'the consent is asked again for the new code');
   // Declining: 「코드 없이 진행」 clears the codes and the publish registers none.
   await act(() => click(buttons(byLabel(host, '파트너·강사 코드'), '코드 없이 진행')[0]));
   await act(() => click(publish()));
@@ -241,6 +242,24 @@ async function main() {
   assert.ok(onFile.includes('지급 계좌: 국민은행 ****9012'));
   assert.ok(onFile.includes('예금주 확인: 테스트 확인만 했어요.'));
   assert.equal(onFile.includes('계좌번호'), false, 'no form until the seller asks to change it');
+}
+
+// Seller identity (#3770): an unverified seller gets the phone verification button; while it runs the panel waits.
+{
+  const none = { ...SELLER, tier: 'none' as const, cap_krw: 0 };
+  const { host, root, sent } = await mounted(base({ tab: 'sell', seller: none }));
+  assert.ok(host.textContent.includes('유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 한 번만 하면 돼요.'));
+  await act(() => click(buttons(host, '휴대폰 본인인증')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeVerifyIdentity' });
+  await act(() => root.render(<SkillStoreView state={base({ tab: 'sell', seller: none, identity: { sessionId: 'idv_' + 'a'.repeat(32), sandbox: true } })} send={m => sent.push(m)} />));
+  assert.ok(host.textContent.includes('브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.'));
+  assert.ok(host.textContent.includes('지금은 테스트 본인인증이에요.'));
+  assert.equal(buttons(host, '휴대폰 본인인증').length, 0, 'no second start while one runs');
+  await act(() => click(buttons(host, '기다리지 않기')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeCancelIdentity' });
+  await act(() => root.unmount());
+  assert.ok(html(base({ tab: 'sell', seller: { ...SELLER, tier: 'minor' } })).includes('만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고'));
+  assert.equal(html(base({ tab: 'sell', seller: SELLER })).includes('휴대폰 본인인증'), false, 'a verified seller is not asked again');
 }
 
 // The age question appears before buying or selling when the Service does not know the age.

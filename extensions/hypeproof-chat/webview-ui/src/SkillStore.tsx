@@ -206,7 +206,10 @@ function useAttribution(state: StoreState) {
     : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}), consent: { version: consentVersion, granted: true } };
   const gate: AttributionGate = { ready: decided || empty || (confirmed && consent && Boolean(consentVersion)), input };
   const skip = () => { setPartnerCode(""); setInstructorCode(""); setConsent(false); };
-  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, consent, setConsent, skip, empty, gate };
+  // The consent is to the partner/instructor these codes name: a changed code asks for it again.
+  const changePartner = (v: string) => { setPartnerCode(v); setConsent(false); };
+  const changeInstructor = (v: string) => { setInstructorCode(v); setConsent(false); };
+  return { decided, partnerCode, instructorCode, setPartnerCode: changePartner, setInstructorCode: changeInstructor, confirmed, consent, setConsent, skip, empty, gate };
 }
 
 function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAttribution>; state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
@@ -308,7 +311,10 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
     {state.questDraft && <QuestPublish draft={state.questDraft} cap={s?.cap_krw} busy={busy} send={send} gate={a.gate} />}
     {s && <section className="record-policy" aria-label="판매자 정보">
       <p>판매자 등급: {TIER_LABELS[s.tier] ?? s.tier} · 한 개당 최대 {won(s.cap_krw)}</p>
-      {s.tier === "none" && <p>유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 지금은 무료 스킬만 올릴 수 있어요.</p>}
+      {s.tier === "none" && (state.identity
+        ? <section aria-label="본인인증 진행 중"><p>{STORE_COPY.identityWaiting}</p>{state.identity.sandbox && <p>{STORE_COPY.identitySandbox}</p>}<button disabled={busy} onClick={() => send({ type: "storeCancelIdentity" })}>{STORE_COPY.identityCancel}</button></section>
+        : <><p>{STORE_COPY.identityNeeded} 지금은 무료 스킬만 올릴 수 있어요.</p><button disabled={busy} onClick={() => send({ type: "storeVerifyIdentity" })}>{STORE_COPY.identityButton}</button></>)}
+      {s.tier === "minor" && <p>{STORE_COPY.identityMinor}</p>}
       {bound?.decided && <p>{bound.partner || bound.instructor
         ? `등록한 코드: ${[bound.partner ? `파트너 ${bound.partner.name}` : "", bound.instructor ? `강사 ${bound.instructor.name}` : ""].filter(Boolean).join(" · ")}. `
         : `${STORE_COPY.codesEmpty} `}{bound.seller_editable ? "" : STORE_COPY.codesFixed}</p>}

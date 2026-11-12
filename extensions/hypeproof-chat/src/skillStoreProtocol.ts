@@ -145,6 +145,8 @@ export interface StoreState {
   /** A seller update that adds connections, tools or outputs waits for this consent (F5). */
   consent?: { itemId: string; widened: string[] };
   attributionPreview?: StoreAttributionPreview;
+  /** A mobile identity verification the seller opened in the browser; the panel waits for its outcome. */
+  identity?: { sessionId: string; sandbox: boolean };
 }
 /** The App's single-step draft. The Service checks the text, seals it and never returns it. */
 export interface StorePublishDraft {
@@ -168,6 +170,8 @@ export type StoreRequest =
   | { type: "storeSearch"; query: string }
   | { type: "storePublishQuest"; title: string; summary: string; price_krw: number; attribution?: StoreAttributionInput }
   | { type: "storeResolveCodes"; partnerCode: string; instructorCode: string }
+  | { type: "storeVerifyIdentity" }
+  | { type: "storeCancelIdentity" }
   | { type: "storeSavePayoutAccount"; bankCode: string; accountNumber: string; holderName: string }
   | { type: "storeRun"; itemId: string }
   | { type: "storeOverlayOpen"; itemId: string }

@@ -45,6 +45,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   let state: StoreState = { access: "ready", tab: "browse", items: [], ageGroup: "unknown", installs: [], testPayments: true };
   let poll: ReturnType<typeof setTimeout> | undefined;
   let checkoutOrder: { id: string; startedAt: number } | undefined;
+  let identityPoll: ReturnType<typeof setTimeout> | undefined;
+  let identityStarting = false;
   /** The finished quest this window already published, so 「내 스토어」 does not offer it twice. */
   let publishedDraft: string | undefined;
   const client = () =>
@@ -131,9 +133,42 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   const registerFirst = async (c: StoreClient, attribution: StoreAttributionInput | undefined) => {
     if (state.seller?.attribution?.decided !== false) return;
     if (!attribution) throw new StoreClientError("attribution_required");
-    const view = await c.registerAttribution(attribution);
+    let view;
+    try {
+      view = await c.registerAttribution(attribution);
+    } catch (error) {
+      // The consent text changed version while the panel was open: reload the seller view so the next try sends it.
+      if (error instanceof StoreClientError && error.code === "referral_consent_required") {
+        const seller = await c.seller().catch(() => undefined);
+        if (seller) state = { ...state, seller };
+      }
+      throw error;
+    }
     // Recorded at once: if the publish after it fails, a retry must not register a second time.
     if (state.seller) state = { ...state, seller: { ...state.seller, attribution: view } };
+  };
+
+  /** Polls the verification the seller opened in the browser until the Service reports its outcome. */
+  const watchIdentity = (sessionId: string, startedAt: number) => {
+    if (identityPoll) clearTimeout(identityPoll);
+    identityPoll = setTimeout(async () => {
+      if (state.identity?.sessionId !== sessionId || !panel) return;
+      let r: { state: string; failure?: string };
+      try { r = await client().identityState(sessionId); } catch { r = { state: "pending" }; }
+      // The panel may have closed, or the seller stopped waiting, while the answer was on its way.
+      if (state.identity?.sessionId !== sessionId || !panel) return;
+      if (r.state === "verified") {
+        // The new tier and cap come from a fresh seller view, whatever tab is open.
+        const seller = await client().seller().catch(() => state.seller);
+        await load(state.tab, { identity: undefined, seller });
+        return void (await push({ notice: STORE_COPY.identityDone(state.seller?.cap_krw ?? 0) }));
+      }
+      if (r.state === "failed" || r.state === "expired" || Date.now() - startedAt > CHECKOUT_LIMIT_MS) {
+        const code = r.state === "failed" ? (r.failure === "under_minimum_age" ? "under_minimum_age_identity" : r.failure ?? "identity_failed") : "identity_expired";
+        return void (await push({ identity: undefined, busy: false, error: storeErrorMessage(new StoreClientError(code)) }));
+      }
+      watchIdentity(sessionId, startedAt);
+    }, POLL_MS);
   };
 
   const handle = async (msg: StoreRequest) => {
@@ -201,6 +236,22 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
           const names = await c.resolveCodes(msg.partnerCode, msg.instructorCode);
           await push({ busy: false, attributionPreview: { partnerCode: msg.partnerCode, instructorCode: msg.instructorCode, partner: names.partner, instructor: names.instructor } });
         });
+      case "storeVerifyIdentity":
+        // One verification at a time: a second start (a double click) would open the browser twice.
+        if (state.identity || identityStarting) return;
+        identityStarting = true;
+        return run(async () => {
+          let started;
+          try { started = await c.startIdentity(); } finally { identityStarting = false; }
+          // The panel closed while the start was on its way: open nothing and wait for nothing.
+          if (!panel) return;
+          await push({ busy: false, identity: { sessionId: started.session_id, sandbox: started.sandbox }, notice: STORE_COPY.identityWaiting });
+          await vscode.env.openExternal(vscode.Uri.parse(started.verify_url));
+          watchIdentity(started.session_id, Date.now());
+        });
+      case "storeCancelIdentity":
+        if (identityPoll) clearTimeout(identityPoll);
+        return push({ identity: undefined, notice: undefined });
       case "storeSavePayoutAccount":
         // The number goes straight to the Service and is not kept in the panel state or logged here.
         return run(async () => {
@@ -290,6 +341,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
     panel.onDidDispose(() => {
       panel = undefined;
       stopPoll();
+      // A closed panel stops waiting: no poll survives it, and reopening shows no stale waiting state.
+      if (identityPoll) clearTimeout(identityPoll);
+      state = { ...state, identity: undefined };
       checkoutOrder = undefined;
     });
   };
