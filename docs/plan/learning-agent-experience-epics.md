@@ -138,6 +138,29 @@ RBAC만으로 단계별 도움 수준·대상·행위를 표현할 수 없다.
 - 첫 PR: #732의 authoring/board/classroom에 수업 버전·단계·기능 준비 상태 연결. 같은 원인 오류 묶음과 무신호 표시.
 - 후속 PR: Studio에서 선택적 도움 요청과 검수 근거 공유. 기존 hps-classroom-share/1의 수신자·감사·철회 계약 유지.
 - 후속 PR: 거절·환경·인증·서비스·학습 도움·무신호의 원인별 다음 행동. 원문 없이 도움 요청, 학생이 해결 확인.
+
+### E5 employee classes (재직자 수업) · 2026-11-12
+
+Sponsor request 2026-11-12 (TJ): one-day employee classes of 20–30 adults, run by HypeProof
+instructors and partners, who open and operate the class themselves. Learner answers belong to
+HypeProof (free Studio use in exchange for data-collection consent); employers have no access.
+Requirements: [classroom-admin](../requirements/classroom-admin.md) 「재직자 수업 데이터」,
+[「재직자 수업의 강사 운영」](../requirements/classroom-admin.md#e5-instructor-ops), 「질문 카드 · 수강생 앱」
+(DEC-028..030) and [classroom-join-code](../requirements/classroom-join-code.md). Data ownership:
+[ADR 0012](../adr/0012-employee-class-data-ownership.md).
+
+| Slice | Outcome | State (2026-11-13) |
+|---|---|---|
+| [#3775](https://github.com/hypeproof/hypeproof-studio/issues/3775) | Instructors open and operate a class run from Chalk `/manage`; run ownership, co-instructors, audited override | merged (#3792) |
+| [#3776](https://github.com/hypeproof/hypeproof-studio/issues/3776) | Question card to all learners, with their answers | merged (#3797) |
+| [#3777](https://github.com/hypeproof/hypeproof-studio/issues/3777) | Learner names on the instructor's device only | merged (#3800) |
+| [#3778](https://github.com/hypeproof/hypeproof-studio/issues/3778) | One class code per run for learners to connect | merged (#3809) |
+| [#3779](https://github.com/hypeproof/hypeproof-studio/issues/3779) | End-to-end verification on the Mac dev host, real window and real Chalk | merged (#3816) |
+| [#3780](https://github.com/hypeproof/hypeproof-studio/issues/3780) | Production enablement (`HPS_CLASSROOM_OPS`), adult canary and rollback runbook | open |
+| [#3781](https://github.com/hypeproof/hypeproof-studio/issues/3781) | Class data notice and consent before a seat connects; HypeProof data ownership | merged (#3783) |
+
+Service counterparts: hypeproof/hypeproof-service #409, #413, #416, #417. Production stays off
+until #3780 closes.
 - P1: 새 실행 일시정지/재개, 적용 안 된 기기 표시, 종료 리포트에 판단·도움·미측정 범위 연결.
 - P1: 가설·수업/도움 revision·근거·설계 결정·다음 리허설을 연결. #745의 `hps-observation/1`·정정·불완전 기록 검증을 재사용하고 새로운 자동 점수 체계를 만들지 않음.
 - 실험: 30명 파일럿과 100명 합성 부하의 운영 목표. 수용량·학습 효과는 실측 전까지 미확인.
