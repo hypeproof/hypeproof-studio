@@ -363,7 +363,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     let res: Response;
     try { res = await fetch(`${this.base()}/classroom/ops/participation/notice`, { signal: AbortSignal.timeout(10000) }); } catch { return { ok: false, reason: "unreachable" }; }
     const body = (await res.json().catch(() => null)) as { reason?: string; notice?: ParticipationNotice } | null;
-    if (res.status === 404) return body?.reason === "ops_disabled" ? { ok: false, reason: "ops_disabled" } : { ok: true, notice: null };
+    if (res.status === 404 && body?.reason === "ops_disabled") return { ok: false, reason: "ops_disabled" };
+    // An older Service has no such route: the path falls through to a 404, or to the learner router's 401. Connect as before.
+    if (res.status === 404 || res.status === 401) return { ok: true, notice: null };
     const n = body?.notice;
     if (!res.ok || !n || typeof n.version !== "string" || typeof n.body !== "string" || typeof n.title !== "string" || typeof n.accept !== "string" || typeof n.decline !== "string") return { ok: false, reason: "unreachable" };
     return { ok: true, notice: { version: n.version, title: n.title, body: n.body, accept: n.accept, decline: n.decline } };

@@ -38,7 +38,7 @@ async function fixture(t, { notice = 'ok', answer = NOTICE.accept } = {}) {
   const requests = [];
   globalThis.fetch = async (url, init = {}) => {
     const path = new URL(url).pathname, body = init.body ? JSON.parse(init.body) : null; requests.push({ path, method: init.method ?? 'GET', body });
-    if (path.endsWith('/participation/notice')) return notice === 'ok' ? Response.json({ notice: NOTICE }) : notice === 'disabled' ? Response.json({ reason: 'ops_disabled' }, { status: 404 }) : Response.json({ error: 'not_found' }, { status: 404 });
+    if (path.endsWith('/participation/notice')) return notice === 'ok' ? Response.json({ notice: NOTICE }) : notice === 'disabled' ? Response.json({ reason: 'ops_disabled' }, { status: 404 }) : notice === 'student-router' ? Response.json({ error: 'student Bearer required' }, { status: 401 }) : notice === 'down' ? Response.json({ error: 'x' }, { status: 503 }) : Response.json({ error: 'not_found' }, { status: 404 });
     if (path.endsWith('/classroom/ops/connect')) return Response.json({ credential: 'SYNTHETIC-CRED', grant_id: 'grant-1', class_run_id: 'run-1', seat_id: 'A1', expires_at: Date.now() + 3_600_000, poll_after_ms: 60000, lesson: null }, { status: 201 });
     if (path.endsWith('/participation/consent')) return Response.json({ consent: body.consent, notice_version: body.notice_version }, { status: 201 });
     return Response.json({ reason: 'unavailable' }, { status: 503 });
@@ -79,10 +79,17 @@ test('operations off: the learner is told before anything else, nothing is asked
   assert.ok(globalThis.__dialogs[0].message.includes('수업 연결 기능이 켜져 있지 않습니다'));
 });
 
-test('a Service without the notice still connects the seat; no consent is claimed', async (t) => {
-  const f = await fixture(t, { notice: 'missing' });
+for (const notice of ['missing', 'student-router']) test(`a Service without the notice (${notice}) still connects the seat; no consent is claimed`, async (t) => {
+  const f = await fixture(t, { notice });
   await f.host.connectInteractively();
   assert.ok(f.requests.some((r) => r.path.endsWith('/classroom/ops/connect')));
   assert.ok(!f.requests.some((r) => r.path.endsWith('/participation/consent')));
   assert.equal(f.host.participationConsented('class-data-v1'), false);
+});
+
+test('a Service that is down connects nothing and says so', async (t) => {
+  const f = await fixture(t, { notice: 'down' });
+  await f.host.connectInteractively();
+  assert.ok(!f.requests.some((r) => r.path.endsWith('/classroom/ops/connect')));
+  assert.ok(globalThis.__dialogs.at(-1).message.includes('안내를 불러오지 못해 연결하지 않았습니다'));
 });
