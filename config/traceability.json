@@ -17854,6 +17854,9 @@
         },
         {
           "path": "apps/studio-native/tests/test_android_emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_cleanup.py"
         }
       ]
     },
