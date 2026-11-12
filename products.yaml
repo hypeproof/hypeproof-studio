@@ -46,6 +46,7 @@ non_product_directories:
   - proxy-poc          # pre-SDK proxy; superseded, kept for reference
   - extensions         # container dir; the product is extensions/hypeproof-chat
   - releases           # release notes written by release-cut (releases/<version>.md)
+  - policy             # Harness-synced policy data (policy/merge-tiers.yaml)
 
 entries:
   - name: measurement-host-package
