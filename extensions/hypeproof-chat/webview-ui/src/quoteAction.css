@@ -10,6 +10,8 @@
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-quoteaction-radius-10);
   box-shadow: var(--hp-elevation-overlay);
 }
+/* High contrast drops the elevation shadow, so the popover keeps a 1px contrast edge (DES-CGP-DS-13). */
+body.vscode-high-contrast .hps-quote-row { border-color: var(--vscode-contrastBorder, currentColor); }
 .hps-quote-action {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: var(--ds-c-studio-quoteaction-size-8); min-width: var(--ds-c-studio-quoteaction-size-8); box-sizing: border-box; padding: 0 var(--ds-c-studio-quoteaction-space-1);
