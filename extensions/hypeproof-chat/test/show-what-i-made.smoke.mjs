@@ -237,7 +237,9 @@ if (!bin) {
   browser.waitForEvent((m) => {
     if (m.method === "Network.requestWillBeSent") requests.push(m.params.request.url);
     if (m.method === "Runtime.exceptionThrown") problems.push(m.params.exceptionDetails?.exception?.description ?? "exception");
-    if (m.method === "Log.entryAdded" && m.params.entry.level === "error") problems.push(m.params.entry.text);
+    // Keep the URL with the text: Chromium's 404 log line does not name the resource, and some builds
+    // request /favicon.ico on their own (CI does, the snts build does not), which is not a show error.
+    if (m.method === "Log.entryAdded" && m.params.entry.level === "error") problems.push(`${m.params.entry.text} ${m.params.entry.url ?? ""}`.trim());
     return false;
   }, "collector", 600_000).catch(() => {});
   try {
