@@ -919,10 +919,11 @@
         "MPER-02",
         "MPER-03",
         "MPER-04",
-        "MPER-05"
+        "MPER-05",
+        "MIRS-01"
       ],
       "inline_prefixes": [],
-      "sha256": "d30d0f6c947efae33f06e3e72d428c71b734ad0a7d5c9ab1d49f79d5b01a7e3d",
+      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4567,6 +4568,39 @@
         "extensions/hypeproof-chat/test/personal-reflection.test.mjs",
         "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs",
         "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "ios-credential-continuity-v1",
+      "title": "Preserve iPhone account identity through interrupted refresh",
+      "issue": 3736,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MIRS-01"
+          ]
+        }
+      ],
+      "depends_on": [
+        "personal-reflection-v1"
+      ],
+      "next_action": "Verify credential intent persistence, identity checks and actual simulator Keychain, then signed same-account continuity. Parent #3729 remains the release prerequisite.",
+      "design_delta": "Persist refresh intent in the existing credential item; validate active same-account/session before adopting rotation.",
+      "positive_control": "Valid rotation preserves the account and existing question conversation.",
+      "negative_control": "Interruption, failed storage or mismatched account cannot replay or adopt a credential; drafts remain.",
+      "evidence_required": "Pinned Swift controls, actual Keychain simulator evidence and separately reported physical/live authentication.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     }

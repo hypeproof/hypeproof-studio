@@ -1,11 +1,6 @@
 import SwiftUI
 import Security
 
-private struct StoredAccount: Codable {
-    let accountID: String
-    let tokens: AccountTokens
-    let expiresAt: Date
-}
 private enum AccountKeychain {
     static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ai.hypeproof.studio.mobile.account", kSecAttrAccount as String: "device-session"]
     private static func failure(_ operation: String, _ status: OSStatus, _ message: String) -> StudioError {
@@ -50,6 +45,12 @@ private enum AccountKeychain {
         guard try readData(probe) == first else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
         try saveData(second, query: probe)
         guard try readData(probe) == second else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
+        let tokens = AccountTokens(access_token: "synthetic-access", refresh_token: String(repeating: "a", count: 64), expires_in: 3600, session_id: "synthetic-session")
+        let pending = try StoredAccount(accountID: "synthetic-account", tokens: tokens, expiresAt: Date(), refreshPending: true)
+        try saveData(JSONEncoder().encode(pending), query: probe)
+        guard let stored = try readData(probe), try JSONDecoder().decode(StoredAccount.self, from: stored).refreshPending else {
+            throw StudioError.message("로그인 갱신 상태를 안전하게 저장하지 못했어요.")
+        }
         try removeData(probe)
         guard try readData(probe) == nil else { throw StudioError.message("계정 저장소 확인에 실패했어요.") }
     }
@@ -106,6 +107,13 @@ private struct SharedCacheFile: Codable {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             account = try AccountKeychain.read()
+            if account?.refreshPending == true {
+                // The previous process may have consumed the one-use token.
+                // Never retry it. Conversation files remain untouched.
+                account = nil
+                try AccountKeychain.remove()
+                error = "로그인 갱신이 중단됐어요. 다시 로그인하면 저장된 대화를 이어갈 수 있어요."
+            }
 #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-account-storage") {
                 try AccountKeychain.verifyNativeStorage(); accountStorageVerified = true
@@ -195,9 +203,11 @@ private struct SharedCacheFile: Codable {
                     try await Task.sleep(nanoseconds: UInt64(max(3, device.interval)) * 1_000_000_000)
                     guard epoch == attempt else { return }
                     if let tokens = try await service.pollSignIn(device.device_code) {
-                        let id = try await service.accountID(tokens.access_token)
+                        let id: String
+                        do { id = try await service.accountID(tokens.access_token, sessionID: tokens.session_id) }
+                        catch { try? await service.logout(tokens.access_token); throw error }
                         guard epoch == attempt else { try? await service.logout(tokens.access_token); return }
-                        let value = StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
+                        let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                         do { try AccountKeychain.save(value) }
                         catch { accountStorageReady = false; try? await service.logout(tokens.access_token); throw error }
                         account = value; signedIn = true; signIn = nil
@@ -211,15 +221,17 @@ private struct SharedCacheFile: Codable {
     }
     func cancelLogin() { epoch = UUID(); operation?.cancel(); operation = nil; signIn = nil; busy = false }
     private func token() async throws -> String {
-        guard let old = account else { throw SyncFailure.http(401, "account_required") }
+        guard accountStorageReady, let old = account else { throw SyncFailure.http(401, "account_required") }
         if old.expiresAt > Date().addingTimeInterval(90) { return old.tokens.access_token }
         do {
-            let tokens = try await service.refresh(old.tokens.refresh_token)
-            guard account?.tokens.session_id == old.tokens.session_id else { try? await service.logout(tokens.access_token); throw CancellationError() }
-            let next = StoredAccount(accountID: old.accountID, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
-            do { try AccountKeychain.save(next) }
-            catch { accountStorageReady = false; try? await service.logout(tokens.access_token); throw error }
-            account = next; return tokens.access_token
+            let next = try await AccountCredentialRefresh.renew(old, save: { value in
+                guard self.account?.tokens.session_id == old.tokens.session_id else { throw CancellationError() }
+                do { try AccountKeychain.save(value) }
+                catch { self.accountStorageReady = false; throw error }
+            }, refresh: { try await self.service.refresh($0) }, accountID: { tokens in
+                try await self.service.accountID(tokens.access_token, sessionID: tokens.session_id)
+            }, revoke: { try? await self.service.logout($0) })
+            account = next; return next.tokens.access_token
         } catch {
             // Refresh tokens rotate once. An uncertain response requires fresh login, never reuse.
             if account?.tokens.session_id == old.tokens.session_id { clearAccount() }

@@ -8977,3 +8977,7 @@ recognizer fallback. Next-turn recording requires a visible tap; stop, backgroun
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
+
+### Native iPhone credential continuity — MIRS-01
+
+The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
