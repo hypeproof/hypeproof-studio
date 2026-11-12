@@ -158,7 +158,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
       // The panel may have closed, or the seller stopped waiting, while the answer was on its way.
       if (state.identity?.sessionId !== sessionId || !panel) return;
       if (r.state === "verified") {
-        await load(state.tab, { identity: undefined });
+        // The new tier and cap come from a fresh seller view, whatever tab is open.
+        const seller = await client().seller().catch(() => state.seller);
+        await load(state.tab, { identity: undefined, seller });
         return void (await push({ notice: STORE_COPY.identityDone(state.seller?.cap_krw ?? 0) }));
       }
       if (r.state === "failed" || r.state === "expired" || Date.now() - startedAt > CHECKOUT_LIMIT_MS) {
@@ -241,6 +243,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         return run(async () => {
           let started;
           try { started = await c.startIdentity(); } finally { identityStarting = false; }
+          // The panel closed while the start was on its way: open nothing and wait for nothing.
+          if (!panel) return;
           await push({ busy: false, identity: { sessionId: started.session_id, sandbox: started.sandbox }, notice: STORE_COPY.identityWaiting });
           await vscode.env.openExternal(vscode.Uri.parse(started.verify_url));
           watchIdentity(started.session_id, Date.now());
