@@ -14,7 +14,22 @@ REPO="hypeproof/hypeproof-studio-releases"
 APP_NAME="HypeProof Studio"
 TAG="${HPS_VERSION:-latest}"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"; [ -z "${STAGE:-}" ] || rm -rf "$STAGE"' EXIT
+INSTALLED=0
+cleanup() {
+  rm -rf "$TMP"
+  [[ -n "${STAGE:-}" ]] || return 0
+  if [[ "$INSTALLED" != 1 && -e "$STAGE/previous.app" ]]; then
+    # Keep or restore the backup if interrupted between the two renames.
+    if [[ ! -e "/Applications/$APP_NAME.app" ]] && mv "$STAGE/previous.app" "/Applications/$APP_NAME.app"; then :
+    else
+      printf '이전 앱 보존 위치: %s/previous.app\n' "$STAGE" >&2
+      return 0
+    fi
+  fi
+  rm -rf "$STAGE"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 say() { printf "\n\033[1;35m▶ %s\033[0m\n" "$*"; }
 err() { printf "\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
@@ -93,6 +108,7 @@ if ! mv "$NEXT" "/Applications/$APP_NAME.app"; then
   fi
   err "앱을 설치하지 못했습니다. 이전 설치를 복원했습니다."
 fi
+INSTALLED=1
 
 # 7. Launch
 say "Done. Launching..."

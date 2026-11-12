@@ -152,6 +152,21 @@ copy before moving the existing installation; a failed swap restores the old app
 It uses the existing mirror access and SHA-256 checks, without Node or Xcode on
 the learner's Mac. It does not remove quarantine attributes.
 
+The general `scripts/install.sh` bootstrap applies the same fixed checks to both
+authenticated downloads and the Lab public `install.sh --kit` route. Kit hashes
+still protect the archive/helpers, and kits need no GitHub login or source-policy
+files. Both the extracted app and the copy staged on the destination volume must
+pass before the old app is moved. Failed replacement restores the old app; if
+restoration itself fails, its backup is retained and its location is reported.
+Both current bootstraps also restore or retain that backup on an exit or signal
+between the backup and replacement renames; temporary-file cleanup cannot discard
+the only remaining old app. A forced kill leaves its staged backup for recovery.
+A same-version installation is reused only after verification; an unsigned one
+is replaced through the verified download/kit path. Dependency setup, SDK seeding,
+kit authentication boundaries and Windows behavior remain unchanged. The current
+bootstrap rejects unsigned historical packages, including old kits; it has no
+quarantine-removal fallback. Already-published historical script bytes are unchanged.
+
 Per-tag installers bake the same requirement from the candidate source's
 `config/macos-distribution.json` using `signingPolicy(sourceSha)`. Missing Git
 source is an error. A readable historical candidate without that policy retains

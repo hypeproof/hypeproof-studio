@@ -663,7 +663,7 @@ test('candidate policy is baked in, cannot be disabled by options, and unreadabl
 });
 
 const tool = String.raw`#!/usr/bin/env python3
-import hashlib,json,os,pathlib,plistlib,shutil,subprocess,sys,zipfile
+import hashlib,json,os,pathlib,plistlib,shutil,signal,subprocess,sys,zipfile
 name=pathlib.Path(sys.argv[0]).name; a=sys.argv[1:]; base=pathlib.Path(os.environ['FIXTURE'])
 def event(s):
  with (base/'events').open('a') as f: f.write(s+'\n')
@@ -703,6 +703,10 @@ elif name=='cp':
  corrupt(a[-1])
 elif name=='mv':
  event('mv '+a[0]+' -> '+a[1])
+ if os.environ.get('INTERRUPT_AFTER_BACKUP')=='1' and (a[1].endswith('/previous.app') or '/.hps-previous-' in a[1]):
+  r=subprocess.run(['/bin/mv',*a])
+  if r.returncode==0:os.kill(os.getppid(),signal.SIGTERM)
+  sys.exit(r.returncode)
  if os.environ.get('FAIL_SWAP')=='1' and '.hps-install' in a[0] and not a[0].endswith('/previous.app') and a[1].endswith('/HypeProof Studio.app'):sys.exit(1)
  sys.exit(subprocess.run(['/bin/mv',*a]).returncode)
 elif name=='gh':
@@ -745,7 +749,9 @@ with zipfile.ZipFile(sys.argv[1],'w') as z:
     const run=spawnSync('/bin/bash',[entry,...(kind==='bootstrap'?[]:['--no-seed'])],{encoding:'utf8',env:{PATH:bin+':'+process.env.PATH,HOME:home,FIXTURE:dir,HPS_INSTALL_ASSET_DIR:assets,HPS_NO_INSTALL_PING:'1',...env}});
     const events=fs.existsSync(path.join(dir,'events'))?fs.readFileSync(path.join(dir,'events'),'utf8'):'';
     assert.doesNotMatch(events,/QUARANTINE MODIFIED/);
-    return {status:run.status,output:run.stdout+run.stderr,old:fs.existsSync(path.join(target,'old.txt')),fresh:fs.existsSync(path.join(target,'Contents/new.txt')),events};
+    const parent=path.dirname(target);
+    const backup=fs.readdirSync(parent).some(name=>fs.existsSync(path.join(parent,name,name.startsWith('.hps-install')?'previous.app':'','old.txt')));
+    return {status:run.status,output:run.stdout+run.stderr,old:fs.existsSync(path.join(target,'old.txt')),backup,fresh:fs.existsSync(path.join(target,'Contents/new.txt')),events};
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 }
 
@@ -766,5 +772,12 @@ for(const kind of ['bootstrap','tagged']) {
       assert.notEqual(bad.status,0,bad.output);assert.equal(bad.old,true,bad.output);assert.equal(bad.fresh,false);
       assert.doesNotMatch(bad.events,/^open /m);
     }
+  });
+  test(`${kind}: interruption immediately after backup preserves the old app`,()=>{
+    const bad=scenario(kind,{}, {INTERRUPT_AFTER_BACKUP:'1'});
+    assert.notEqual(bad.status,0,bad.output);
+    assert.equal(bad.old||bad.backup,true,bad.output);
+    if(kind==='bootstrap')assert.equal(bad.old,true,'bootstrap restores the old app on TERM');
+    assert.equal(bad.fresh,false);assert.doesNotMatch(bad.events,/^open /m);
   });
 }
