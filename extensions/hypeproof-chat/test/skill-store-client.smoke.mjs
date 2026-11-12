@@ -135,3 +135,8 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
   assert.ok(s.storeErrorMessage(new s.StoreClientError('identity_in_use')).includes('한 사람은 한 계정에서만'));
   console.log('PASS identity start opens only the Service verification page');
 }
+
+// #3790 note: with no fresh seller view the verified notice names no amount (never "최대 0원").
+assert.equal(s.STORE_COPY.identityDone(undefined), '본인인증을 마쳤어요. 판매 한도는 「내 스토어」를 다시 열면 보여요.');
+assert.equal(s.STORE_COPY.identityDone(100000), '본인인증을 마쳤어요. 이제 한 개당 최대 100,000원까지 올릴 수 있어요.');
+console.log('PASS identity notice without a fresh seller view names no amount');

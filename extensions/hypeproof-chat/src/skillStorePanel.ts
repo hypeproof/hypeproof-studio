@@ -159,9 +159,9 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
       if (state.identity?.sessionId !== sessionId || !panel) return;
       if (r.state === "verified") {
         // The new tier and cap come from a fresh seller view, whatever tab is open.
-        const seller = await client().seller().catch(() => state.seller);
-        await load(state.tab, { identity: undefined, seller });
-        return void (await push({ notice: STORE_COPY.identityDone(state.seller?.cap_krw ?? 0) }));
+        const seller = await client().seller().catch(() => undefined);
+        await load(state.tab, { identity: undefined, ...(seller ? { seller } : {}) });
+        return void (await push({ notice: STORE_COPY.identityDone(seller?.cap_krw) }));
       }
       if (r.state === "failed" || r.state === "expired" || Date.now() - startedAt > CHECKOUT_LIMIT_MS) {
         const code = r.state === "failed" ? (r.failure === "under_minimum_age" ? "under_minimum_age_identity" : r.failure ?? "identity_failed") : "identity_expired";

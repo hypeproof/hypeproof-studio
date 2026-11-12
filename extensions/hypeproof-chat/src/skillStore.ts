@@ -216,7 +216,8 @@ export const STORE_COPY = {
   identityWaiting: "브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.",
   identitySandbox: "지금은 테스트 본인인증이에요. 실제 인증 기관에 연결되지 않아요.",
   identityCancel: "기다리지 않기",
-  identityDone: (cap: number) => `본인인증을 마쳤어요. 이제 한 개당 최대 ${won(cap)}까지 올릴 수 있어요.`,
+  /** Without a fresh seller view (the Service did not answer) the notice names no amount. */
+  identityDone: (cap?: number) => (cap ? `본인인증을 마쳤어요. 이제 한 개당 최대 ${won(cap)}까지 올릴 수 있어요.` : "본인인증을 마쳤어요. 판매 한도는 「내 스토어」를 다시 열면 보여요."),
   identityMinor: "만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고, 운영팀이 검토한 뒤 올라가요.",
   pgFeeEstimate: "결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.",
   codesFixed: "바꾸려면 운영팀에 문의해 주세요.",
