@@ -2652,6 +2652,9 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md"
+        },
+        {
+          "path": "docs/requirements/classroom-join-code.md"
         }
       ]
     },
