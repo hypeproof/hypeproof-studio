@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), pre = path.join(repo, 'e2e/test-results/ui-review-preview');
 const info = JSON.parse(readFileSync(path.join(pre, 'preview.json'), 'utf8')), token = readFileSync(info.token_file, 'utf8').trim(), origin = new URL(info.url).origin;
@@ -30,7 +31,7 @@ async function shot(p, name, route, caption, change, made) {
   shots.push({ file, route, viewport: `${vp.width}x${vp.height}`, browser_zoom: '100%', caption, change, made_here: made, scope: 'synthetic', source_head: source.head, primary_ctas: m.primaries, horizontal_overflow: m.overflow, token_on_page: m.tokenOnPage });
 }
 async function connect(p) {
-  await p.goto(origin + '/manage'); await p.fill('#token', token); await p.fill('#cohort', info.cohort); await p.fill('#prefix', info.seat_prefix); await p.click('#connect-go');
+  await p.goto(origin + '/manage'); await signInChalk(p, token); await p.fill('#cohort', info.cohort); await p.fill('#prefix', info.seat_prefix); await p.click('#connect-go');
   await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(info.seats - 1).waitFor(); await p.waitForTimeout(600);
 }
 const seat = (p, id) => p.locator(`#ops-seats .ops-seat[data-seat="${id}"]`);

@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { localOps } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const servicePort = Number(process.env.HPS_DEMO_SERVICE_PORT || 18761), boardPort = Number(process.env.HPS_DEMO_BOARD_PORT || 18762), prefix = 'demo-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -75,7 +76,7 @@ const tokenPath=path.join(home,'synthetic-learner-token.txt'); writeFileSync(tok
 const workHashes = () => Object.fromEntries(readdirSync(ws).filter((f) => statSync(path.join(ws, f)).isFile()).sort().map((f) => [f, sha(path.join(ws, f))]));
 
 
-const {default:chalk}=await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const {setEvaluatorTransport}=await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts');
 const {setResendFetch}=await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts');
 local.env.HPS_CLASSROOM_EVALUATOR='service-anthropic';

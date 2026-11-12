@@ -23,6 +23,13 @@ async function main(){
  assert.equal(host.querySelector('h2').textContent,'코치가 알 수 없는 도구를 쓰려고 해요');assert.ok(!host.querySelector('h2').textContent.includes('Bash'));
  await act(async()=>root.render(<CommandApprovalDialog key="kind-destructive" prompt={{...prompt,id:'kind-destructive',purpose:'destructive',destructive:true}} onAnswer={()=>{}}/>));
  assert.equal(host.querySelector('h2').textContent,'코치가 위험한 명령을 실행하려고 해요');
+ // DEC-11e: an outward command names where it sends and whether allowing remembers it; no remember button.
+ await act(async()=>root.render(<CommandApprovalDialog key="outward" prompt={{...prompt,id:'outward',purpose:'outward',command:'git push',rememberAllowed:false,outward:{destinations:['https://github.com/learner/site'],remembers:true}}} onAnswer={()=>{}}/>));
+ assert.equal(host.querySelector('h2').textContent,'코치가 이 컴퓨터 밖으로 보내는 명령을 실행하려고 해요');assert.equal(host.querySelector('[data-command-destination]').textContent,'보내는 곳: https://github.com/learner/site');assert.match(host.textContent,/같은 곳으로 보낼 때 다시 묻지 않아요/);assert.equal(host.querySelectorAll('button').length,2);
+ await act(async()=>root.render(<CommandApprovalDialog key="outward-unknown" prompt={{...prompt,id:'outward-unknown',purpose:'outward',command:'git push $R',rememberAllowed:false,outward:{destinations:[],remembers:false}}} onAnswer={()=>{}}/>));
+ assert.equal(host.querySelector('[data-command-destination]').textContent,'보내는 곳을 알 수 없어요');assert.match(host.textContent,/다음에도 다시 물어요/);
+ await act(async()=>root.render(<CommandApprovalDialog key="not-outward" prompt={{...prompt,id:'not-outward'}} onAnswer={()=>{}}/>));
+ assert.equal(host.querySelector('[data-command-destination]'),null,'negative control: an ordinary command shows no destination line');
  void nativeCancel;
  await act(async()=>root.render(<App/>));const message=async(data:any)=>act(async()=>{(globalThis.window as any).dispatchEvent({type:'message',data,bubbles:false});});
  await message({type:'commandApprovalPrompt',prompt});assert.ok(host.querySelector('.hps-command-approval'));await act(async()=>click(host.querySelector('[data-command-allow]')));assert.deepEqual((globalThis as any).__posted.at(-1),{type:'commandApprovalAnswer',id:'normal',choice:'allow'});

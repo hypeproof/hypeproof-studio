@@ -29,7 +29,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   reference-browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.60 refuses Chromium on ubuntu-latest (= 26.04 since 2026-11); pin until it supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

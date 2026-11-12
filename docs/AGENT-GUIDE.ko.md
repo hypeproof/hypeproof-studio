@@ -123,6 +123,17 @@ GitHub 로그인 복구 후 아직 동의 기록이 없을 때는 이미 받은 
 
 ## 3. 리뷰와 배포 권한
 
+공용 승인 카드와 등록된 사람 확인을 통한 단일 GitHub 리뷰 전달은
+[공용 에이전트 승인함](https://github.com/hypeproof/hypeproof-harness/blob/main/docs/AGENT-APPROVAL-INBOX.ko.md)을
+따른다. 이것은 일반 에이전트 쓰기의 개인 토큰 fallback이 아니다. 전용 사용자
+신원·실제 사람의 명시적 결정·exact-head 영수증을 검증해야 하며, 미등록 채널이나
+모델의 `approved=true`는 승인 권한이 없다. 기존 merge·배포 게이트를 유지한다.
+
+등록된 승인함이 있는 환경에서는 `scan`으로 필요한 요청을 찾고, diff와 증거를
+읽은 담당 에이전트가 `prepare`의 8개 맥락 항목을 채워 `deliver`한다. 같은 PR의
+상태를 `get`/`reconcile`로 이어받는다. 이미 보낸 요청을 채널 변경이나 세션 재시작
+때문에 다시 실행하지 않는다. 미등록 연결을 설치 완료로 표현하지 않는다.
+
 리뷰 요청과 배포 권한은 repo마다 다르게 해석하지 않는다.
 
 - 일반 HypeProof 작업은 현재 사용자의 명시적 요청 없이 reviewer를 요청하지 않는다.
@@ -228,7 +239,7 @@ consumer가 로컬에 없거나 아직 새 vendored 파일을 받지 않은 경�
 mock consumer 워크스페이스로 검증한다.
 
 ```bash
-mkdir -p /tmp/ws/hypeproof-studio /tmp/ws/sediment /tmp/ws/hypeprooflab
+mkdir -p /tmp/ws/hypeproof-studio /tmp/ws/sediment /tmp/ws/hypeprooflab /tmp/ws/hypeproof-chalk
 for d in /tmp/ws/*; do
   git -C "$d" init -q -b main
   git -C "$d" -c user.email=ci@example.com -c user.name=CI commit --allow-empty -q -m init

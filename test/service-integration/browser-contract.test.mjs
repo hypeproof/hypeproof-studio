@@ -149,19 +149,18 @@ test("브라우저를 안 켠 코호트는 어느 런타임에서도 계약을 �
 });
 
 // Pinned Service runtime: this file runs against the released testkit in
-// config/service-packages.json, which still withholds the SDK browser contract
-// from minor cohorts. hypeproof/hypeproof-service#87 makes the contract follow the
-// flag at any age, matching the client since #1527. When the pin moves to a Service
-// release that contains #87, flip this assertion (the contract must then be present).
-test("sdk: the pinned Service withholds the browser contract from a minor cohort even with sdk_tools.browser", () => {
+// config/service-packages.json, which contains hypeproof/hypeproof-service#87 (MERGED).
+// #87 makes the SDK browser contract follow the sdk_tools.browser flag at any age,
+// matching the client since #1527, so a minor cohort receives the contract.
+test("sdk: the pinned Service injects the browser contract for a minor cohort with sdk_tools.browser", () => {
   const minorWithBrowser = {
     ...KIDS,
     sdk_tools: { ...(KIDS.sdk_tools ?? {}), browser: true },
   };
   const prefix = prefixFor(minorWithBrowser, "sdk");
   assert.ok(
-    !prefix.includes("브라우저 제어 도구 사용 규약"),
-    "the pinned Service injected the SDK browser contract for a minor cohort; if the pin now includes service#87, flip this test",
+    prefix.includes("브라우저 제어 도구 사용 규약"),
+    "the pinned Service withheld the SDK browser contract from a minor cohort; the pin must include service#87",
   );
 });
 

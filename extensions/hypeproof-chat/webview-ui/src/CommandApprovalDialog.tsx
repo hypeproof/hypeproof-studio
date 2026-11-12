@@ -19,6 +19,8 @@ export function CommandApprovalDialog({prompt,onAnswer,textSize}:{prompt:Command
     onKeyDownCapture={e=>{if(imeComposing(e,composing.current)){e.stopPropagation();return;}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();finish('deny');}}}>
     <h2 id="command-approval-purpose">{commandApprovalPurposeText(prompt.purpose)}</h2>
     <pre className="hps-command-code" tabIndex={0} aria-label="실행할 명령"><code>{'$ '+visible(prompt.command)}</code></pre>
+    {prompt.outward && <p className="hps-command-destination" data-command-destination>{prompt.outward.destinations.length ? `보내는 곳: ${prompt.outward.destinations.slice(0,5).map(visible).join(', ')}${prompt.outward.destinations.length>5?` 외 ${prompt.outward.destinations.length-5}곳`:''}` : '보내는 곳을 알 수 없어요'}</p>}
+    {prompt.outward && <p className="hps-command-destination-note">{prompt.outward.remembers ? '허락하면 이 작업 폴더에서는 같은 곳으로 보낼 때 다시 묻지 않아요' : '보내는 곳을 알 수 없어서 다음에도 다시 물어요'}</p>}
     {prompt.destructive && <p className="hps-command-warning">되돌릴 수 없어요</p>}
     <div className="hps-write-actions"><button type="button" data-command-deny onClick={()=>finish('deny')}>거절</button><button type="button" data-command-allow onClick={()=>finish('allow')}>허락</button>
       {!prompt.destructive && prompt.rememberAllowed && <button type="button" onClick={()=>finish('remember')}>{TASK_COMMAND_ALLOW_LABEL}</button>}</div>

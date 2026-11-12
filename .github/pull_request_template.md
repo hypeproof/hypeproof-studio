@@ -49,7 +49,7 @@ Answer yes for Smoke when this adds a dependency on another repository or a serv
 add a line "Smoke differs from issue" with the reason.
 Hotfix PR (base hotfix/<tag>): How to verify may be left out; the Smoke lines are still required.
 Port of a hotfix to main: add a line "Forward-port of #<hotfix PR>".
-Enforced by hype-pr once config/pr-body-contract.json sets release_check.enforced.
+Enforced by the CI check `process / release-check` and by hype-pr (config/pr-body-contract.json).
 -->
 
 ## Checklist

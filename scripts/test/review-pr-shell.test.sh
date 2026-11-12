@@ -295,12 +295,12 @@ else
 fi
 
 # 33. cleanup: osascript quit by bundle ID, 15 s wait loop, no SIGKILL (#1487).
-# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s pgrep wait → warn if surviving.
+# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s wait on dev_app_pids (state path) → warn if surviving.
 # SIGKILL (kill -9) is forbidden and must be absent.
 CLEANUP_BODY="$(awk '/^cleanup\(\)/{found=1} found{print} found && /^\}/{exit}' "$SCRIPT")"
 if echo "$CLEANUP_BODY" | grep -qE 'osascript.*quit app id' && \
    echo "$CLEANUP_BODY" | grep -q 'sleep 1' && \
-   echo "$CLEANUP_BODY" | grep -qE 'pgrep.*STATE_HASH'; then
+   echo "$CLEANUP_BODY" | grep -qE 'dev_app_pids.*STATE_DIR_REAL'; then
   if echo "$CLEANUP_BODY" | grep -q 'kill -9'; then
     fail "cleanup: SIGKILL (kill -9) present — forbidden (SIGKILL 금지)"
   else
@@ -715,6 +715,288 @@ else
   fail "60: review-pr-issue-token.sh syntax error"
 fi
 rm -rf "$TK_TMP"
+
+# 55–66. Review Dev state cleanup (#3465): only this review's state folder goes.
+CLEAN_LIB="$(cd "$(dirname "$0")/../.." && pwd)/scripts/review-pr-state-cleanup.sh"
+CL_TMP="$(mktemp -d)"
+CL_WT="$CL_TMP/studio-review-branch"; mkdir -p "$CL_WT"
+CL_REAL_WT="$(cd "$CL_WT" && pwd -P)"
+CL_HASH="abc123def456"
+CL_DEV="$CL_TMP/Library/Application Support/HypeProof Studio Development"
+CL_STATE="$CL_DEV/$CL_HASH"
+mkdir -p "$CL_STATE/user-data" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_STATE/owner.json"
+echo "app copy" > "$CL_STATE/app.bin"
+CL_MAIN="$CL_DEV/0f0f0f0f0f0f"; mkdir -p "$CL_MAIN" && printf '{"format":"x","repo":"/Users/someone/main-checkout"}' > "$CL_MAIN/owner.json"
+run_cleanup() { ( STATE_HASH="$1"; STATE_DIR_REAL="$2"; WORKTREE_DIR="$CL_WT"; source "$CLEAN_LIB"; remove_review_state ); }
+
+# 61. This review's own state folder is removed.
+run_cleanup "$CL_HASH" "$CL_STATE"
+if [[ ! -e "$CL_STATE" ]]; then ok "61: this review's Dev state folder is removed after the app quit"; else fail "61: state folder survived"; fi
+
+# 62. Another checkout's state folder (different hash) is kept.
+if [[ -f "$CL_MAIN/owner.json" ]]; then ok "62: another checkout's state folder is untouched"; else fail "62: other state folder removed"; fi
+
+# 63. A path outside 'HypeProof Studio Development/' is never removed.
+mkdir -p "$CL_TMP/elsewhere/$CL_HASH" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_TMP/elsewhere/$CL_HASH/owner.json"
+run_cleanup "$CL_HASH" "$CL_TMP/elsewhere/$CL_HASH"
+if [[ -f "$CL_TMP/elsewhere/$CL_HASH/owner.json" ]]; then ok "63: folder outside the Dev state root is kept"; else fail "63: folder outside the Dev state root removed"; fi
+
+# 64. A folder whose owner.json names another repo is kept.
+mkdir -p "$CL_DEV/111111111111" && printf '{"format":"x","repo":"/Users/someone/other"}' > "$CL_DEV/111111111111/owner.json"
+run_cleanup "111111111111" "$CL_DEV/111111111111"
+if [[ -f "$CL_DEV/111111111111/owner.json" ]]; then ok "64: state owned by another repo is kept"; else fail "64: foreign-owned state removed"; fi
+
+# 65. A failed removal only warns and still returns 0.
+mkdir -p "$CL_DEV/222222222222/user-data" && printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_DEV/222222222222/owner.json"
+if [[ "$(id -u)" -eq 0 ]]; then
+  warn "65: skipped as root (chmod cannot block removal)"
+else
+  chmod 555 "$CL_DEV"
+  RC=0; OUT="$(run_cleanup 222222222222 "$CL_DEV/222222222222" 2>&1)" || RC=$?
+  chmod 755 "$CL_DEV"
+  if [[ $RC -eq 0 ]] && grep -q 'WARNING: could not remove' <<<"$OUT"; then
+    ok "65: failed removal prints a warning and returns 0"
+  else
+    fail "65: failed removal (rc=$RC, out='$OUT')"
+  fi
+fi
+
+# 66. review-pr.sh calls the cleanup before it removes the worktree, and sources the helper.
+CALL_LINE="$(grep -n '^  remove_review_state$' "$SCRIPT" | cut -d: -f1 | head -1)"
+WT_LINE="$(grep -n 'worktree remove "\$WORKTREE_DIR"' "$SCRIPT" | cut -d: -f1 | head -1)"
+if [[ -n "$CALL_LINE" && -n "$WT_LINE" && "$CALL_LINE" -lt "$WT_LINE" ]] && grep -q 'source "\$REPO/scripts/review-pr-state-cleanup.sh"' "$SCRIPT"; then
+  ok "66: review-pr.sh sources the helper and cleans state before the worktree is removed"
+else
+  fail "66: cleanup wiring wrong (call=$CALL_LINE worktree=$WT_LINE)"
+fi
+# 66b. The Dev coach's CLI config folder (#3640) inside this review's state folder goes with the state folder.
+CL_CFG_HASH="cfg999888777"
+CL_CFG_STATE="$CL_DEV/$CL_CFG_HASH"
+CL_CFG_DIR="$CL_CFG_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/claude-config"
+mkdir -p "$CL_CFG_DIR/seat-abc" && echo "cli state" > "$CL_CFG_DIR/seat-abc/state.json"
+printf '{"format":"x","repo":"%s"}' "$CL_REAL_WT" > "$CL_CFG_STATE/owner.json"
+run_cleanup "$CL_CFG_HASH" "$CL_CFG_STATE"
+if [[ ! -e "$CL_CFG_DIR" && ! -e "$CL_CFG_STATE" ]]; then ok "66b: the Dev claude-config folder under the review state folder is removed with it"; else fail "66b: claude-config folder survived the cleanup"; fi
+
+chmod -R u+w "$CL_TMP" 2>/dev/null || true
+rm -rf "$CL_TMP"
+
+# 67–71. Running-app check uses the state path, not the applicationName (#3465 follow-up).
+PS_TMP="$(mktemp -d)"
+PS_DEV="$PS_TMP/Library/Application Support/HypeProof Studio Development"
+PS_WT="$PS_TMP/studio-review-branch"; mkdir -p "$PS_WT"; PS_REAL_WT="$(cd "$PS_WT" && pwd -P)"
+mk_state() { mkdir -p "$1/user-data" && printf '{"format":"x","repo":"%s"}' "$PS_REAL_WT" > "$1/owner.json"; }
+ps_cleanup() { ( STATE_HASH="$1"; STATE_DIR_REAL="$2"; WORKTREE_DIR="$PS_WT"; source "$CLEAN_LIB"; remove_review_state ); }
+PS_PIDS=()
+
+# 67. A live process whose command line names this state folder keeps it.
+PS_LIVE="$PS_DEV/fedcba987654"; mk_state "$PS_LIVE"
+bash -c 'sleep 30; true' "$PS_LIVE/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "fedcba987654" "$PS_LIVE"
+if [[ -f "$PS_LIVE/owner.json" ]]; then ok "67: state folder of a running Dev app (path in its command line) is kept"; else fail "67: running app's state folder removed"; fi
+
+# 68. A process naming another hash's folder does not keep this state.
+PS_OTHER="$PS_DEV/a1a1a1a1a1a1"; mk_state "$PS_OTHER"
+PS_TARGET="$PS_DEV/b2b2b2b2b2b2"; mk_state "$PS_TARGET"
+bash -c 'sleep 30; true' "$PS_OTHER/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "b2b2b2b2b2b2" "$PS_TARGET"
+if [[ ! -e "$PS_TARGET" && -f "$PS_OTHER/owner.json" ]]; then ok "68: a process of another checkout does not block removal; its folder is untouched"; else fail "68: other-hash process affected removal"; fi
+
+# 69. A sibling folder whose name starts with this state's name does not match.
+PS_BASE="$PS_DEV/c3c3c3c3c3c3"; mk_state "$PS_BASE"
+PS_SIB="${PS_BASE}2"; mk_state "$PS_SIB"
+bash -c 'sleep 30; true' "$PS_SIB/user-data/fixture-app" & PS_PIDS+=($!)
+sleep 1
+ps_cleanup "c3c3c3c3c3c3" "$PS_BASE"
+if [[ ! -e "$PS_BASE" && -f "$PS_SIB/owner.json" ]]; then ok "69: sibling folder with a longer name does not match the state path"; else fail "69: prefix match blocked or wrongly kept"; fi
+
+# 70. An empty path matches nothing (it would otherwise match every process).
+PS_EMPTY_OUT="$( ( source "$CLEAN_LIB"; dev_app_pids "" ) )"
+if [[ -z "$PS_EMPTY_OUT" ]]; then ok "70: empty state path matches no process"; else fail "70: empty path matched processes"; fi
+
+# 71. review-pr.sh no longer looks for the applicationName; both places use dev_app_pids.
+if ! grep -q 'pgrep -f "hypeproof-studio-dev-' "$SCRIPT" && [[ "$(grep -c 'dev_app_pids' "$SCRIPT")" -ge 3 ]]; then
+  ok "71: review-pr.sh wait loop and warning use the state-path check"
+else
+  fail "71: applicationName pgrep still used or state-path check missing"
+fi
+
+# 77. Chalk flags reach studio-dev.py only as flags; no shell string splicing.
+if grep -q '\${CHALK_FLAG:+\$CHALK_FLAG}' "$SCRIPT" && grep -q -- '--chalk-ref) CHALK_REF_ARG' "$SCRIPT" && grep -q -- '--with-chalk) CHALK_FLAG' "$SCRIPT" && grep -q -- '--no-chalk) CHALK_FLAG' "$SCRIPT"; then
+  ok "77: --chalk-ref/--chalk-pr/--with-chalk/--no-chalk parsed and passed to studio-dev run"
+else
+  fail "77: Chalk flags missing from parser or studio-dev run"
+fi
+
+# 78. npm ci for Chalk runs only in the temporary worktree, never in the user's checkout.
+if grep -q 'npm ci --prefer-offline --silent 2>&1)' "$SCRIPT" && grep -q '(cd "\$CHALK_WT" && npm ci' "$SCRIPT" && ! grep -q '(cd "\$CHALK_SRC" && npm' "$SCRIPT"; then
+  ok "78: Chalk npm ci runs only inside the temporary worktree"
+else
+  fail "78: Chalk npm ci could touch the user's Chalk checkout"
+fi
+
+# 79. Cleanup removes the Chalk worktree before the studio worktree.
+CW_LINE="$(grep -n 'worktree remove "\$CHALK_WT"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+SW_LINE="$(grep -n 'worktree remove "\$WORKTREE_DIR"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+if [[ -n "$CW_LINE" && -n "$SW_LINE" && "$CW_LINE" -lt "$SW_LINE" ]]; then
+  ok "79: cleanup removes the Chalk worktree before the studio worktree"
+else
+  fail "79: Chalk worktree removal missing or out of order (chalk=$CW_LINE studio=$SW_LINE)"
+fi
+
+# 80. --chalk-pr rejects a non-numeric value before any network call.
+CP_OUT="$(bash "$SCRIPT" 1 --chalk-pr abc 2>&1 || true)"
+if [[ "$CP_OUT" == *"--chalk-pr needs a PR number"* ]]; then
+  ok "80: --chalk-pr rejects non-numeric input"
+else
+  fail "80: --chalk-pr accepted non-numeric input: $CP_OUT"
+fi
+
+# 81. A failed Dev run shows its last 40 lines, not only a line number.
+DF_LIB="$(cd "$(dirname "$SCRIPT")" && pwd)/review-pr-dev-failure.sh"
+DF_IN="$(seq 1 60 | sed 's/^/line /')"
+DF_OUT="$( (source "$DF_LIB"; print_dev_app_failure 3 "$DF_IN" "") 2>&1 )"
+if [[ "$DF_OUT" == *"line 60"* && "$DF_OUT" == *"line 21"* && "$DF_OUT" != *"line 20"* && "$DF_OUT" == *"exit 3"* ]]; then
+  ok "81: failed Dev run prints its last 40 lines with the exit status"
+else
+  fail "81: tail or exit status missing (out='$(echo "$DF_OUT" | head -3)')"
+fi
+
+# 82. Secret literal, JWT, dev-local value and token JSON are redacted before printing.
+DF_SECRET="dev-local-0123456789abcdef0123"
+DF_IN2="$(printf '%s\n' "HPS_SIGNING_SECRET=$DF_SECRET" "secret=$DF_SECRET" "jwt eyJhbGciOi.payload.sig" '{"token": "tok-live-XYZ123"}' "plain line")"
+DF_OUT2="$( (source "$DF_LIB"; print_dev_app_failure 1 "$DF_IN2" "$DF_SECRET") 2>&1 )"
+if [[ "$DF_OUT2" != *"0123456789abcdef"* && "$DF_OUT2" != *"eyJhbGciOi"* && "$DF_OUT2" != *"tok-live-XYZ123"* && "$DF_OUT2" == *"plain line"* && "$DF_OUT2" == *"<redacted"* ]]; then
+  ok "82: secret, JWT, dev-local and token values are redacted; plain lines stay"
+else
+  fail "82: a secret-like value was printed (out='$DF_OUT2')"
+fi
+
+# 83. review-pr.sh keeps the exit status of studio-dev.py and prints the failure before exiting.
+if grep -q '|| DEV_APP_RC=\$?' "$SCRIPT" && grep -q 'print_dev_app_failure "\$DEV_APP_RC" "\$DEV_APP_RAW" "\$LOCAL_SECRET"' "$SCRIPT" && grep -q 'exit "\$DEV_APP_RC"' "$SCRIPT"; then
+  ok "83: review-pr.sh captures the studio-dev.py exit status and prints the failure"
+else
+  fail "83: studio-dev.py failure path not wired in review-pr.sh"
+fi
+
+# 85. review-pr.sh runs the Dev app with --inmemory-secrets (no macOS keychain prompt).
+# Check the studio-dev.py run call itself: the flag must sit between "run" and the closing "2>&1".
+RUN_BLOCK="$(awk '/studio-dev\.py" run \\/{f=1} f{print} f&&/2>&1\)"/{exit}' "$SCRIPT")"
+if [[ -n "$RUN_BLOCK" ]] && grep -q -- '--inmemory-secrets' <<<"$RUN_BLOCK"; then
+  ok "85: review-pr.sh studio-dev.py run call passes --inmemory-secrets"
+else
+  fail "85: studio-dev.py run call in review-pr.sh lacks --inmemory-secrets"
+fi
+
+# 86. review-pr.sh passes --no-workspace-trust to the Dev app run (the review Dev copy only).
+RUN_BLOCK_TRUST="$(awk '/studio-dev\.py" run \\/{f=1} f{print} f&&/2>&1\)"/{exit}' "$SCRIPT")"
+if [[ -n "$RUN_BLOCK_TRUST" ]] && grep -q -- '--no-workspace-trust' <<<"$RUN_BLOCK_TRUST"; then
+  ok "86: review-pr.sh studio-dev.py run call passes --no-workspace-trust"
+else
+  fail "86: studio-dev.py run call in review-pr.sh lacks --no-workspace-trust"
+fi
+
+# 84. review-pr.sh sources the failure helper from the main checkout, like the state helper.
+if grep -q 'source "\$REPO/scripts/review-pr-dev-failure.sh"' "$SCRIPT"; then
+  ok "84: review-pr.sh sources review-pr-dev-failure.sh from the main checkout"
+else
+  fail "84: failure helper is not sourced"
+fi
+
+for pid in "${PS_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; done
+rm -rf "$PS_TMP"
+
+# 72–76. Review state removal (#3467 follow-up): the state folder is resolved at cleanup time,
+# and every silent skip prints a NOTE. Temporary HOME only; the real state folder is never touched.
+RS_LIB="$(cd "$(dirname "$0")/../.." && pwd)/scripts/review-pr-state-cleanup.sh"
+RS_TMP="$(mktemp -d)"
+RS_HASH="ab12cd34ef56"
+rs_wt() { local w="$RS_TMP/studio-review-$1"; mkdir -p "$w/scripts"; (cd "$w" && pwd -P); }
+rs_root() { echo "$RS_TMP/home/Library/Application Support/HypeProof Studio Development"; }
+mkdir -p "$(rs_root)"
+
+# 72. Normal: the state folder appears after step 1.5 (resolved empty there), cleanup resolves it, removal succeeds.
+RS_WT="$(rs_wt normal)"
+# Step 1.5 result on macOS: realpath returns nothing for a missing folder (the bug).
+# Set it directly, so this test does not depend on GNU vs BSD realpath behavior.
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  STATE_DIR_REAL=""
+  mkdir -p "$STATE_DIR/user-data" && printf '{"format":"x","repo":"%s"}' "$RS_WT" > "$STATE_DIR/owner.json"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ ! -e "$RS_TMP/home/Library/Application Support/HypeProof Studio Development/$RS_HASH" ]] && grep -q "Removed the Dev state folder" <<<"$RS_OUT"; then
+  ok "72: state folder created after step 1.5 is resolved at cleanup and removed"
+else
+  fail "72: state folder not removed after the late resolve (out='$RS_OUT')"
+fi
+
+# 73. No folder at cleanup: a NOTE says so, exit 0, and a sibling folder is untouched.
+RS_WT="$(rs_wt absent)"
+mkdir -p "$(rs_root)/0f0f0f0f0f0f/user-data"
+RS_RC=0
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_RC=$?
+if [[ $RS_RC -eq 0 ]] && grep -q "NOTE: state removal skipped: no Dev state folder" <<<"$RS_OUT" && [[ -d "$(rs_root)/0f0f0f0f0f0f" ]]; then
+  ok "73: missing folder prints a NOTE, exits 0, and leaves a sibling folder alone"
+else
+  fail "73: missing folder not reported (rc=$RS_RC, out='$RS_OUT')"
+fi
+
+# 74. owner.json names another repo: the folder is kept and the NOTE says why.
+RS_WT="$(rs_wt owner)"
+RS_OWN="$(rs_root)/$RS_HASH"; mkdir -p "$RS_OWN/user-data" && printf '{"format":"x","repo":"/Users/someone/other"}' > "$RS_OWN/owner.json"
+RS_OUT="$(
+  export HOME="$RS_TMP/home"
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"
+  STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$RS_HASH"
+  source "$RS_LIB"
+  refresh_state_dir_real
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ -f "$RS_OWN/owner.json" ]] && grep -q "owner.json does not name this review worktree" <<<"$RS_OUT"; then
+  ok "74: folder owned by another repo is kept with a NOTE"
+else
+  fail "74: foreign-owned folder handled wrongly (out='$RS_OUT')"
+fi
+rm -rf "$RS_OWN"
+
+# 75. A folder outside the Dev state root is kept with a NOTE (guard unchanged).
+RS_WT="$(rs_wt outside)"
+RS_ODD="$RS_TMP/elsewhere/$RS_HASH"; mkdir -p "$RS_ODD" && printf '{"format":"x","repo":"%s"}' "$RS_WT" > "$RS_ODD/owner.json"
+RS_OUT="$(
+  STATE_HASH="$RS_HASH"; WORKTREE_DIR="$RS_WT"; STATE_DIR_REAL="$RS_ODD"
+  source "$RS_LIB"
+  remove_review_state 2>&1
+)" || RS_OUT="subshell failed (rc=$?)"
+if [[ -f "$RS_ODD/owner.json" ]] && grep -q "outside the Dev state root" <<<"$RS_OUT"; then
+  ok "75: folder outside the Dev state root is kept with a NOTE"
+else
+  fail "75: outside-root folder handled wrongly (out='$RS_OUT')"
+fi
+
+# 76. review-pr.sh resolves the folder inside cleanup, before the wait loop and the removal.
+RS_REFRESH="$(grep -n '^  refresh_state_dir_real$' "$SCRIPT" | cut -d: -f1 | head -1 || true)"
+RS_WAIT="$(grep -n 'dev_app_pids "\$STATE_DIR_REAL"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+RS_REMOVE="$(grep -n '^  remove_review_state$' "$SCRIPT" | cut -d: -f1 | head -1 || true)"
+if [[ -n "$RS_REFRESH" && -n "$RS_WAIT" && -n "$RS_REMOVE" && "$RS_REFRESH" -lt "$RS_WAIT" && "$RS_WAIT" -lt "$RS_REMOVE" ]]; then
+  ok "76: cleanup resolves the state folder before the wait loop and the removal"
+else
+  fail "76: resolve placement wrong (refresh=$RS_REFRESH wait=$RS_WAIT remove=$RS_REMOVE)"
+fi
+rm -rf "$RS_TMP"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"

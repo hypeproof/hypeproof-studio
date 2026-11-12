@@ -16,12 +16,22 @@
 // CLI:
 //   install-kit.mjs render --tag vX --source-sha SHA --zip-sha256 HEX
 //       [--seed-name claude-agent-sdk-darwin-arm64-V.tgz --seed-sha256 HEX --seeder-sha256 HEX]
-//       --out DIR
+//       --product-version EXACT_BUILD_CONTRACT_VERSION --mac-zip PATH_TO_ACCEPTED_MAC_ZIP --out DIR
 //     writes DIR/install-mac.sh and DIR/HypeProof-<tag>-Test-Kit.zip
-//   install-kit.mjs notes --tag vX < BODY > BODY
-//     the release body with the install section added (or replaced, idempotent)
+//   install-kit.mjs render-windows --tag vX --user-setup PATH_TO_ACCEPTED_USER_SETUP_EXE --out DIR
+//     writes DIR/update-windows.cmd, pinned to this tag and to the exe's SHA-256 (2026-11-02)
+//   install-kit.mjs notes --tag vX [--mac] [--windows] < BODY > BODY
+//     the release body with the Mac and/or Windows install sections added (or replaced,
+//     idempotent); sections not asked for are removed
+//   install-kit.mjs check --tag vX --platforms JSON < RELEASE_JSON
+//     RELEASE_JSON is `gh release view --json body,assets`; fails unless every platform of the
+//     release has its installer asset and its notes section (the publish job runs it)
+//   install-kit.mjs announce --tag vX < BODY > TEXT
+//     the release announcement text: the install/update commands first, then the body
+//     without the install sections (notify-release-published.yml)
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -37,12 +47,22 @@ const SEED_RE = /^claude-agent-sdk-darwin-arm64-(\d+\.\d+\.\d+)\.tgz$/;
 const FREE_START_FROM = [2026, 1020, 0];
 const NOTES_BEGIN = '<!-- hps-install-mac:v1 -->';
 const NOTES_END = '<!-- /hps-install-mac:v1 -->';
+// Windows (2026-11-02). Asset name and markers match the section Jay added by hand to v2026.1102.2.
+export const WINDOWS_UPDATER_NAME = 'update-windows.cmd';
+const WIN_BEGIN = '<!-- hps-install-windows:v1 -->';
+const WIN_END = '<!-- /hps-install-windows:v1 -->';
+// The accepted per-user installer. Strict, because the name is baked into a PowerShell string.
+export const USER_SETUP_RE = /^HypeProof\.StudioUserSetup-x64-[0-9A-Za-z.-]+\.exe$/;
 
 export const kitZipName = tag => `HypeProof-${tag}-Test-Kit.zip`;
 // The kit name pattern that check-unified-release.mjs leaves out of the accepted bytes.
 export {TEST_KIT_ZIP as KIT_ZIP_RE} from '../../e2e/unified-release/artifact.mjs';
 export const releaseUrl = tag => `https://github.com/${REPO}/releases/download/${tag}`;
 export const oneLiner = tag => `curl -fsSL ${releaseUrl(tag)}/${INSTALLER_NAME} | bash`;
+export const windowsUpdaterUrl = tag => `${releaseUrl(tag)}/${WINDOWS_UPDATER_NAME}`;
+// PowerShell: irm cannot pipe a .cmd into iex, so save it to %TEMP% and run it.
+export const windowsOneLiner = tag =>
+  `irm ${windowsUpdaterUrl(tag)} -OutFile "$env:TEMP\\hps-update.cmd"; & "$env:TEMP\\hps-update.cmd"`;
 
 export function parseTag(tag) {
   const m = TAG_RE.exec(tag ?? '');
@@ -70,8 +90,17 @@ function fill(text, values) {
   return out;
 }
 
-function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = ''}) {
-  parseTag(tag);
+// The existing build contract resolves marked RCs to final-version bytes and
+// legacy RCs to suffixed bytes. Keep that exact caller-supplied value.
+export function productVersionFor({tag, productVersion}) {
+  const parsed = parseTag(tag);
+  const value = productVersion ?? parsed.version;
+  if (![parsed.version, parsed.core.join('.')].includes(value)) throw Error('product version does not belong to release tag');
+  return value;
+}
+
+function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = '', productVersion}) {
+  productVersionFor({tag, productVersion});
   if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '')) throw Error('source sha must be 40 lowercase hex characters');
   if (!HEX64.test(zipSha256 ?? '')) throw Error('zip sha256 must be 64 lowercase hex characters');
   if (seedName || seedSha256 || seederSha256) {
@@ -98,11 +127,29 @@ export function renderInstaller(opts) {
   const start = renderStart(tag).replace(/\n$/, '');
   if (/^START_COMMAND$/m.test(start)) throw Error('START.command must not contain the heredoc delimiter');
   return fill(template('install-mac.sh'), {
-    TAG: tag, VERSION: version, SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
+    TAG: tag, VERSION: version, PRODUCT_VERSION: productVersionFor(opts), SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
     SEED_NAME: seedName, SEED_SHA256: seedSha256, SEED_VERSION: SEED_RE.exec(seedName)?.[1] ?? '',
     SEEDER_SHA256: seederSha256, PRERELEASE: prerelease ? '1' : '0', FREE_START: isFreeStart(tag) ? '1' : '0',
     KIT_DIR_NAME: kitDirName(tag), START_COMMAND: start,
   });
+}
+
+/** update-windows.cmd for this tag: CRLF, pinned to the accepted per-user installer's SHA-256. */
+export function renderWindowsUpdater({tag, exeName, exeSha256}) {
+  parseTag(tag);
+  if (!USER_SETUP_RE.test(exeName ?? '')) throw Error(`not a Windows per-user installer: ${exeName}`);
+  if (!HEX64.test(exeSha256 ?? '')) throw Error('exe sha256 must be 64 lowercase hex characters');
+  const text = fill(template(WINDOWS_UPDATER_NAME), {TAG: tag, EXE_NAME: exeName, EXE_SHA256: exeSha256});
+  return text.replace(/\r?\n/g, '\r\n');
+}
+
+const fileSha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+export function writeWindowsUpdater({tag, userSetup}, outDir) {
+  const text = renderWindowsUpdater({tag, exeName: path.basename(userSetup ?? ''), exeSha256: fileSha256(userSetup)});
+  fs.mkdirSync(outDir, {recursive: true});
+  fs.writeFileSync(path.join(outDir, WINDOWS_UPDATER_NAME), text);
+  return [WINDOWS_UPDATER_NAME];
 }
 
 export function renderReadme({tag, sourceSha, zipSha256}) {
@@ -164,15 +211,94 @@ export function notesSection(tag) {
   ].join('\n');
 }
 
-export function withInstallSection(body, tag) {
+export function windowsNotesSection(tag) {
+  const {prerelease} = parseTag(tag);
+  const what = prerelease
+    ? `Installs this release candidate over the installed HypeProof Studio (Windows has no side-by-side test install)`
+    : 'Installs or updates HypeProof Studio';
+  return [
+    WIN_BEGIN,
+    '## Install or update on Windows (x64)',
+    '',
+    `Double-click [\`${WINDOWS_UPDATER_NAME}\`](${windowsUpdaterUrl(tag)}) (SmartScreen: 추가 정보 → 실행), or paste in PowerShell:`,
+    '',
+    '```powershell',
+    windowsOneLiner(tag),
+    '```',
+    '',
+    `${what}. The script is pinned to \`${tag}\`: it downloads this release's per-user installer (\`HypeProof.StudioUserSetup-x64-*.exe\`), checks its SHA-256, closes Studio and installs silently. No admin rights; chats and settings are kept.`,
+    WIN_END,
+  ].join('\n');
+}
+
+function strip(text, begin, end) {
+  const start = text.indexOf(begin);
+  const stop = text.indexOf(end);
+  return start >= 0 && stop > start ? text.slice(0, start) + text.slice(stop + end.length) : text;
+}
+
+const withoutSections = body => strip(strip(String(body ?? ''), NOTES_BEGIN, NOTES_END), WIN_BEGIN, WIN_END).trim();
+
+/** The body with the requested install sections first (Mac, then Windows); idempotent. */
+export function withInstallSection(body, tag, {mac = true, windows = false} = {}) {
+  const sections = [mac && notesSection(tag), windows && windowsNotesSection(tag)].filter(Boolean);
+  return `${[...sections, withoutSections(body)].join('\n\n')}\n`.replace(/\n{3,}/g, '\n\n');
+}
+
+/** Problems that keep a release from publishing: a platform without its installer or notes. */
+export function installProblems({tag, platforms, body = '', assets = []}) {
+  parseTag(tag);
+  const names = assets.map(a => (typeof a === 'string' ? a : a.name));
+  const problems = [];
+  const need = (asset, marker, section, label) => {
+    if (!names.includes(asset)) problems.push(`${label}: release asset ${asset} is missing`);
+    if (!body.includes(marker) || !body.includes(section)) problems.push(`${label}: the release notes lack the ${asset} command`);
+  };
+  if (platforms.includes('darwin-arm64')) need(INSTALLER_NAME, NOTES_BEGIN, oneLiner(tag), 'macOS');
+  if (platforms.includes('win32-x64')) need(WINDOWS_UPDATER_NAME, WIN_BEGIN, windowsOneLiner(tag), 'Windows');
+  return problems;
+}
+
+/** Announcement text: the install/update commands of the sections the body has, then the rest. */
+export function announcement(body, tag) {
   const text = String(body ?? '');
-  const start = text.indexOf(NOTES_BEGIN);
-  const end = text.indexOf(NOTES_END);
-  const base = start >= 0 && end > start ? text.slice(0, start) + text.slice(end + NOTES_END.length) : text;
-  return `${notesSection(tag)}\n\n${base.trim()}\n`.replace(/\n{3,}/g, '\n\n');
+  const lines = [];
+  if (text.includes(NOTES_BEGIN)) lines.push('macOS (Terminal):', oneLiner(tag));
+  if (text.includes(WIN_BEGIN)) lines.push(`Windows (PowerShell, or double-click ${WINDOWS_UPDATER_NAME} on the release page):`, windowsOneLiner(tag));
+  const rest = withoutSections(text);
+  return [lines.length ? `Install / update ${tag}\n${lines.join('\n')}` : '', rest].filter(Boolean).join('\n\n') + '\n';
+}
+
+/** Check the exact accepted payload before generating a public installer, on either CI OS. */
+export function verifyMacArchive(opts, archive) {
+  validate(opts);
+  const hash = crypto.createHash('sha256');
+  const fd = fs.openSync(archive, 'r');
+  try {
+    const block = Buffer.alloc(256 * 1024);
+    for (let n; (n = fs.readSync(fd, block)) > 0;) hash.update(block.subarray(0, n));
+  } finally { fs.closeSync(fd); }
+  if (hash.digest('hex') !== opts.zipSha256) throw Error('Mac archive SHA-256 does not match the pinned installer input');
+  const identity = JSON.parse(execFileSync('python3', ['-c', `
+import json, plistlib, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    plist = 'HypeProof Studio.app/Contents/Info.plist'
+    product = 'HypeProof Studio.app/Contents/Resources/app/product.json'
+    if any(z.namelist().count(p) != 1 for p in [plist, product]):
+        raise ValueError('Missing or duplicate Mac identity metadata')
+    info = plistlib.loads(z.read(plist))
+    app = json.loads(z.read(product))
+    print(json.dumps({'bundleId': info.get('CFBundleIdentifier'), 'plistVersion': info.get('CFBundleShortVersionString'), 'productVersion': app.get('version'), 'sourceSha': app.get('commit')}))
+`, path.resolve(archive)], {encoding: 'utf8', timeout: 10000, maxBuffer: 65536}));
+  const expected = productVersionFor(opts);
+  if (identity.bundleId !== 'ai.hypeproof.studio' || identity.plistVersion !== expected || identity.productVersion !== expected || identity.sourceSha !== opts.sourceSha) {
+    throw Error(`Mac archive product identity does not match ${opts.tag} at ${opts.sourceSha}`);
+  }
+  return identity;
 }
 
 export function writeKit(opts, outDir) {
+  if (opts.macZip) verifyMacArchive(opts, opts.macZip);
   const installer = renderInstaller(opts);
   const {version} = parseTag(opts.tag);
   fs.mkdirSync(outDir, {recursive: true});
@@ -200,17 +326,33 @@ function main(argv) {
   const {values} = parseArgs({args: rest, options: {
     tag: {type: 'string'}, 'source-sha': {type: 'string'}, 'zip-sha256': {type: 'string'},
     'seed-name': {type: 'string'}, 'seed-sha256': {type: 'string'}, 'seeder-sha256': {type: 'string'},
-    out: {type: 'string'},
+    out: {type: 'string'}, 'mac-zip': {type: 'string'}, 'product-version': {type: 'string'},
+    'user-setup': {type: 'string'}, mac: {type: 'boolean'}, windows: {type: 'boolean'}, platforms: {type: 'string'},
   }});
   if (command === 'render') {
     if (!values.out) throw Error('--out is required');
+    if (!values['product-version']) throw Error('--product-version is required from the build contract');
+    if (!values['mac-zip']) throw Error('--mac-zip is required to verify the accepted product identity');
     const names = writeKit({tag: values.tag, sourceSha: values['source-sha'], zipSha256: values['zip-sha256'],
-      seedName: values['seed-name'], seedSha256: values['seed-sha256'], seederSha256: values['seeder-sha256']}, values.out);
+      seedName: values['seed-name'], seedSha256: values['seed-sha256'], seederSha256: values['seeder-sha256'], macZip: values['mac-zip'], productVersion: values['product-version']}, values.out);
     for (const name of names) console.log(path.join(values.out, name));
+  } else if (command === 'render-windows') {
+    if (!values.out) throw Error('--out is required');
+    if (!values['user-setup']) throw Error('--user-setup is required: the accepted HypeProof.StudioUserSetup-x64-*.exe');
+    for (const name of writeWindowsUpdater({tag: values.tag, userSetup: values['user-setup']}, values.out)) console.log(path.join(values.out, name));
   } else if (command === 'notes') {
-    process.stdout.write(withInstallSection(fs.readFileSync(0, 'utf8'), parseTag(values.tag).tag));
+    if (!values.mac && !values.windows) throw Error('notes needs --mac and/or --windows');
+    process.stdout.write(withInstallSection(fs.readFileSync(0, 'utf8'), parseTag(values.tag).tag, {mac: Boolean(values.mac), windows: Boolean(values.windows)}));
+  } else if (command === 'check') {
+    if (!values.platforms) throw Error('--platforms is required (platforms.mjs list TAG)');
+    const release = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const problems = installProblems({tag: values.tag, platforms: JSON.parse(values.platforms), body: release.body, assets: release.assets ?? []});
+    if (problems.length) throw Error(`release ${values.tag} has no ready install command:\n${problems.join('\n')}`);
+    console.log(`install commands present for ${values.tag}`);
+  } else if (command === 'announce') {
+    process.stdout.write(announcement(fs.readFileSync(0, 'utf8'), parseTag(values.tag).tag));
   } else {
-    throw Error('usage: install-kit.mjs render|notes ... (see the header)');
+    throw Error('usage: install-kit.mjs render|render-windows|notes|check|announce ... (see the header)');
   }
 }
 

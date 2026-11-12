@@ -1,0 +1,33 @@
+/* REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026): the "기억 사용 N" chip under an answer and the items it opens.
+   Learner floors: 44px targets and 14px text (owner rule). The state is carried by words, never colour alone. */
+.hps-memory-use { margin-top: var(--ds-c-studio-styles-space-2); max-width: 100%; min-width: 0; }
+.hps-memory-use-chip,
+.hps-memory-use-action {
+  min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8);
+  padding: 0 var(--ds-c-studio-styles-space-7);
+  font: inherit; font-size: var(--hp-font-caption);
+  color: var(--vscode-foreground, var(--hp-text-primary-default)); background: transparent;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
+  cursor: pointer;
+}
+.hps-memory-use-chip:focus-visible,
+.hps-memory-use-action:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-memory-use-chip:hover,
+.hps-memory-use-action:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-memory-use-chip:active,
+.hps-memory-use-action:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+.hps-memory-use-panel { margin-top: var(--ds-c-studio-styles-space-2); max-width: 100%; }
+/* Numbers sit inside the column: an outside marker hung left of the answer at narrow widths. */
+.hps-memory-use-list { margin: 0; padding: 0; list-style-position: inside; display: grid; gap: var(--ds-c-studio-styles-space-2); }
+.hps-memory-use-item { min-width: 0; font-size: var(--hp-font-caption); }
+.hps-memory-use-item > p:first-child { display: inline; }
+.hps-memory-use-text { margin: 0; font-size: var(--hp-font-caption); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-use-note { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+@media (forced-colors: active) {
+  .hps-memory-use-chip, .hps-memory-use-action { color: ButtonText; border-color: ButtonText; background: Canvas; }
+}
+.hps-memory-use-action { display: block; margin-top: var(--ds-c-studio-styles-space-2); }
+/* CGP-KNOW-D-026 (DES-KNOW-44) — the chip is a 16px bookmark glyph and its words; in the answer's action row it keeps
+   its border, so it reads as a chip beside the borderless actions. */
+.hps-memory-use-chip { display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); flex: none; }
+.hps-memory-use-chip > .hps-icon { flex: none; }

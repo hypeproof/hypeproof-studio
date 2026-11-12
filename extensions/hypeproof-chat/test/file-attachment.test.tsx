@@ -85,6 +85,8 @@ const webviewNeverDropsOnSend = (src: string) => !/(pageAttachment|fileAttachmen
 const RELEASE = /takeFileAttachment\(|clearFileAttachment\(|dropPageAttachment\(|clearPageAttachment\(|pendingPageContext = null|pendingFileAttachment = null/;
 const rejectRegion = (src: string) => src.slice(src.indexOf("if (connections && (msg.type==='sendMessage'||msg.type==='retryMessage') && msg.activityId!==connections.scope)"), src.indexOf('      case "voiceCapabilityProbeResult":'));
 const handleSendHead = (src: string) => src.slice(src.indexOf("  private async handleSend("), src.indexOf("    const pageContext = this.pendingPageContext;"));
+// Locate the complete typed-send call independently of trailing policy arguments.
+const freshSendCall = (src: string) => src.match(/await this\.handleSend\(msg\.text, [^\n]*\); \/\/ CGP-CHAT-R-011/g) ?? [];
 const hostReleasesOnlyAtTurnStart = (src: string) =>
   rejectRegion(src).length > 500 && !RELEASE.test(rejectRegion(src)) &&
   handleSendHead(src).length > 500 && !RELEASE.test(handleSendHead(src)) &&
@@ -100,8 +102,11 @@ t("chips are host-owned: the webview keeps them on send; the host releases them 
   // Negative controls: the old code leaked, and the instrument says so.
   const oldApp = app.replace("        fileAttachError: null,\n        fileAttachNotice: null,\n", "        pageAttachment: null,\n        fileAttachment: null,\n        fileAttachError: null,\n        fileAttachNotice: null,\n");
   ok(oldApp !== app && !webviewNeverDropsOnSend(oldApp), "planted: webview dropping chips on userSent is caught");
-  const oldHost = host.replace("msg.editOf, true); // CGP-CHAT-R-011", "msg.editOf, this.takeFileAttachment()); // CGP-CHAT-R-011");
-  ok(oldHost !== host && !hostReleasesOnlyAtTurnStart(oldHost), "planted: taking the file before handleSend is caught");
+  const calls = freshSendCall(host);
+  ok(calls.length === 1, "exactly one typed-send call anchors the early-consumption mutation");
+  const oldHost = host.replace(calls[0], "this.takeFileAttachment(); " + calls[0]);
+  ok(oldHost !== host && oldHost.includes("this.takeFileAttachment(); " + calls[0]), "early-consumption mutation actually applied");
+  ok(!hostReleasesOnlyAtTurnStart(oldHost), "planted: taking the file before handleSend is caught");
   const at = host.indexOf("    this.pendingSends++;\n", host.indexOf("  private async handleSend("));
   const earlyPage = host.slice(0, at) + "    this.dropPageAttachment();\n" + host.slice(at);
   ok(earlyPage !== host && !hostReleasesOnlyAtTurnStart(earlyPage), "planted: an early page release in handleSend is caught");
@@ -123,9 +128,18 @@ t("reducer: send and rejection keep the chips; the host's null removes them", ()
 });
 
 t("host: a fresh send carries the file; retry never, and says so; remove, task switch, clear and folder change drop it", () => {
-  ok(/await this\.handleSend\(msg\.text, [^\n]*msg\.editOf, true\); \/\/ CGP-CHAT-R-011/.test(host), "a fresh send may carry the file");
+  const calls = freshSendCall(host);
+  ok(calls.length === 1, "exactly one typed-send call");
+  const policy = calls[0].match(/msg\.editOf, (.+), (.+)\); \/\/ CGP-CHAT-R-011/);
+  ok(!!policy, "typed send supplies attachment and conversation-only policies");
+  const evaluate = (expression: string, mobileTurn: unknown, userMessageId: unknown) =>
+    Function("mobileTurn", "userMessageId", "return (" + expression.replaceAll("this.mobileTurn", "mobileTurn").replaceAll("msg.userMessageId", "userMessageId") + ");")(mobileTurn, userMessageId);
+  for (const [turn, id, carry, conversationOnly] of [[undefined, undefined, true, false], [undefined, "desktop", true, false], [{id:"phone"}, "phone", false, true], [{id:"phone"}, "desktop", true, false]] as const) {
+    ok(evaluate(policy![1], turn, id) === carry, "ordinary sends may carry the file; matched remote sends cannot");
+    ok(evaluate(policy![2], turn, id) === conversationOnly, "only the matched remote send is conversation-only");
+  }
   ok(/await this\.handleSend\(msg\.prompt, [^\n]*msg\.sourceMessageId\);/.test(host), "a retry does not");
-  ok(/editOf\?: string,\n\s*\/\*\*[^\n]*\*\/\n\s*carryFile = false,\n\s*\): Promise<void> \{/.test(host), "carryFile defaults to false");
+  ok(/editOf\?: string,\n\s*\/\*\*[^\n]*\*\/\n\s*carryFile = false,\n\s*conversationOnly = false,\n\s*\): Promise<void> \{/.test(host), "carryFile defaults to false");
   ok(/if \(!carryFile && retrySourceId !== undefined && this\.fileTurnIds\?\.has\(retrySourceId\)\) \{\n\s*void this\.post\(\{ type: "fileAttachment", attachment: this\.pendingFileAttachment\?\.preview \?\? null, notice: FILE_RETRY_NOTICE \}\);/.test(host), "a retried file turn shows the notice and keeps any pending chip");
   ok(/if \(withFile !== text\) \(this\.fileTurnIds \?\?= new Set\(\)\)\.add\(userId\);/.test(host), "turns that carried a file are remembered");
   const take = host.slice(host.indexOf("private takeFileAttachment(): string | null {"), host.indexOf("private takeFileAttachment(): string | null {") + 300);
@@ -133,7 +147,7 @@ t("host: a fresh send carries the file; retry never, and says so; remove, task s
   const clear = host.slice(host.indexOf("private clearFileAttachment(): void {"), host.indexOf("private takeFileAttachment(): string | null {"));
   ok(clear.includes("this.pendingFileAttachment = null") && clear.includes('type: "fileAttachment", attachment: null'), "clear empties the slot and the chip");
   ok(/case "removeFileContext":[\s\S]{0,200}this\.clearFileAttachment\(\)/.test(host), "remove clears");
-  ok(/const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/.test(host) && /const leftTask = leaving \|\| \(msg\.type === 'taskMove' && msg\.id === msg\.taskId\);/.test(host) && /if \(leftTask && this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "task switch (and archive / reopen, CGP-CHAT-R-025; moving the open task away, CGP-KNOW-R-009) drops it");
+  ok(/const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskCreateTemporary' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/.test(host) && /const leftTask = leaving \|\| \(msg\.type === 'taskMove' && msg\.id === msg\.taskId\);/.test(host) && /if \(leftTask && this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "task switch (and archive / reopen, CGP-CHAT-R-025; moving the open task away, CGP-KNOW-R-009) drops it");
   ok(/this\.clearingHistory = true;\n(?:[^\n]*\n){0,2}\s*if \(this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "clear conversation drops it");
   ok(/this\.pendingFileAttachment\.root !== this\.resolveCoachCwd\(\) \|\| !fileAttachAllowed\(toolProfile, isInstructor\)\) this\.clearFileAttachment\(\);/.test(host), "another folder or a lost grant drops it");
   ok(/fileContext && fileAttachAllowed\(profile, this\._instructorMode\.isInstructor === true\) \? `\$\{fileContext\}\\n\\n\$\{text\}` : text/.test(host), "send re-checks the gate");

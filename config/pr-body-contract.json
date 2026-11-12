@@ -1,7 +1,7 @@
 {
   "version": 1,
   "release_check": {
-    "enforced": false,
+    "enforced": true,
     "manager_check": true,
     "smoke_check_prefix": "scripts/release/smoke/checks/"
   },

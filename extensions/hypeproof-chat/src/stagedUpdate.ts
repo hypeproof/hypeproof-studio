@@ -19,6 +19,8 @@ interface PreparedUpdate {
   script: string;
   artifacts: string[];
   fingerprints: string[];
+  /** #3411: the relaunching variant for an idle restart; one of `artifacts`, so it is fingerprinted too. */
+  relaunchScript?: string;
 }
 
 export function updateFingerprint(target: string): string {
@@ -67,14 +69,34 @@ export class StagedUpdate {
     this.pending = path.join(directory, 'pending-update.json');
   }
 
-  stage(platform: 'darwin' | 'win32', script: string, artifacts: string[], version: string): string {
-    const files = [script, ...artifacts];
-    const record: PreparedUpdate = { id: crypto.randomUUID(), version, platform, script, artifacts: files, fingerprints: files.map(updateFingerprint) };
+  stage(platform: 'darwin' | 'win32', script: string, artifacts: string[], version: string, relaunchScript?: string): string {
+    const files = [script, ...artifacts, ...(relaunchScript ? [relaunchScript] : [])];
+    const record: PreparedUpdate = { id: crypto.randomUUID(), version, platform, script, artifacts: files, fingerprints: files.map(updateFingerprint), ...(relaunchScript ? { relaunchScript } : {}) };
     fs.mkdirSync(path.dirname(this.pending), { recursive: true, mode: 0o700 });
     const temporary = this.pending + '.' + crypto.randomUUID();
     fs.writeFileSync(temporary, JSON.stringify(record), { mode: 0o600 });
     fs.renameSync(temporary, this.pending);
     return record.id;
+  }
+
+  /**
+   * #3411: the version a background download already prepared, so the next check does not
+   * download it again. Only presence is checked here; install() re-verifies every byte.
+   */
+  stagedVersion(): string | null {
+    try {
+      const record = JSON.parse(fs.readFileSync(this.pending, 'utf8')) as PreparedUpdate;
+      if (typeof record?.version !== 'string' || !Array.isArray(record.artifacts)) return null;
+      return record.artifacts.every(p => typeof p === 'string' && fs.existsSync(p)) ? record.version : null;
+    } catch { return null; }
+  }
+
+  /** The staged installer script path, or null. Used to remove a replaced download's folder. */
+  stagedScript(): string | null {
+    try {
+      const script = (JSON.parse(fs.readFileSync(this.pending, 'utf8')) as PreparedUpdate)?.script;
+      return typeof script === 'string' && path.isAbsolute(script) ? script : null;
+    } catch { return null; }
   }
 
   clear(id: string): void {
@@ -118,7 +140,11 @@ export class StagedUpdate {
     });
   }
 
-  async install(allowed: () => boolean, isNewer: (version: string) => boolean, launch: (platform: 'darwin' | 'win32', script: string) => Promise<number>): Promise<boolean> {
+  /**
+   * `relaunch` (#3411 idle restart) launches the record's relaunching script instead of the
+   * stay-closed one; a record without it is kept for the next quit.
+   */
+  async install(allowed: () => boolean, isNewer: (version: string) => boolean, launch: (platform: 'darwin' | 'win32', script: string) => Promise<number>, options: { relaunch?: boolean } = {}): Promise<boolean> {
     if (!allowed()) return false;
     // Rename consumes the record across extension hosts/windows. Cancellation never
     // calls this method; reload and workspace switches never reach the native hook.
@@ -134,11 +160,13 @@ export class StagedUpdate {
           record.artifacts.length < 2 || record.artifacts.length !== record.fingerprints.length ||
           record.artifacts[0] !== record.script ||
           !record.artifacts.every(p => typeof p === 'string' && path.isAbsolute(p)) ||
+          (record.relaunchScript !== undefined && (typeof record.relaunchScript !== 'string' || !record.artifacts.slice(1).includes(record.relaunchScript))) ||
           !record.artifacts.every((p, i) => updateFingerprint(p) === record.fingerprints[i])) {
         throw new Error('Staged update changed; keeping the installed app');
       }
       if (!isNewer(record.version)) return false;
-      if (!allowed()) {
+      const script = options.relaunch ? record.relaunchScript : record.script;
+      if (!script || !allowed()) {
         // A class/turn may start while reading the prepared artifacts. Keep it for
         // the next eligible quit; do not replace a newer download from another window.
         this.restore(claimed);
@@ -146,7 +174,7 @@ export class StagedUpdate {
       }
       const started = await this.handoff(async () => {
         if (!allowed() || !isNewer(record.version)) return undefined;
-        return launch(record.platform, record.script);
+        return launch(record.platform, script);
       });
       if (started !== 'started') this.restore(claimed);
       return started === 'started';

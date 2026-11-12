@@ -12,8 +12,11 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   KIT_ZIP_RE, isFreeStart, kitDirName, kitZipName, notesSection, oneLiner, renderInstaller, renderReadme,
-  renderStart, withInstallSection, writeKit,
+  renderStart, withInstallSection, writeKit, verifyMacArchive,
+  WINDOWS_UPDATER_NAME, announcement, installProblems, renderWindowsUpdater, windowsNotesSection, windowsOneLiner,
+  writeWindowsUpdater,
 } from '../install-kit.mjs';
+import {expectedAppVersion, buildTagMessage} from '../build-contract.mjs';
 import {isAppPackage} from '../../../e2e/unified-release/artifact.mjs';
 
 const SRC = 'd37a2d7b5ad08101a745f7d351b065018f89b20d';
@@ -89,7 +92,7 @@ test('release notes gain the one-liner once', () => {
 // ── Install runs: macOS only (ditto, PlistBuddy) ────────────────────────────
 const mac = process.platform === 'darwin';
 
-function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio'}) {
+function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio', commit = SRC}) {
   const app = path.join(dir, 'src', 'HypeProof Studio.app');
   fs.mkdirSync(path.join(app, 'Contents/MacOS'), {recursive: true});
   fs.writeFileSync(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
@@ -101,6 +104,8 @@ function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio'}) {
 </dict></plist>
 `);
   fs.writeFileSync(path.join(app, 'Contents/MacOS/HypeProof Studio'), '#!/bin/sh\nexit 0\n', {mode: 0o755});
+  fs.mkdirSync(path.join(app, 'Contents/Resources/app'), {recursive: true});
+  fs.writeFileSync(path.join(app, 'Contents/Resources/app/product.json'), JSON.stringify({version, commit, quality: 'stable'}));
   const assets = path.join(dir, 'assets');
   fs.mkdirSync(assets, {recursive: true});
   const zip = path.join(assets, 'HypeProof-Studio-darwin-arm64.zip');
@@ -156,12 +161,12 @@ test('an -rc tag installs side by side with its own profile and START script', {
   const dir = tmp('hps-install-kit-');
   try {
     const tag = 'v2026.1020.0-rc.3', v = '2026.1020.0-rc.3';
-    const {assets, sha} = fakeAppZip(dir, {version: v});
-    const r = install(dir, {tag, zipSha256: sha, assets});
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const r = install(dir, {tag, productVersion: '2026.1020.0', zipSha256: sha, assets});
     assert.equal(r.status, 0, r.stderr);
     const root = path.join(r.home, 'Applications', `HypeProof-RC-${v}`);
     const state = path.join(r.home, 'Library/Application Support', `HPS-${v}`);
-    assert.equal(plistValue(path.join(root, 'HypeProof Studio.app'), 'CFBundleShortVersionString'), v);
+    assert.equal(plistValue(path.join(root, 'HypeProof Studio.app'), 'CFBundleShortVersionString'), '2026.1020.0');
     assert.ok(fs.existsSync(path.join(root, `.hps-kit-${v}`)));
     assert.ok(fs.existsSync(path.join(state, `.hps-kit-${v}`)));
     assert.equal(fs.statSync(state).mode & 0o777, 0o700);
@@ -169,12 +174,12 @@ test('an -rc tag installs side by side with its own profile and START script', {
     assert.equal(fs.readFileSync(path.join(root, `START-${v}.command`), 'utf8'), renderStart(tag));
     assert.equal(fs.existsSync(path.join(r.home, 'Applications/HypeProof Studio.app')), false, 'the main install is untouched');
     // Re-running over its own kit is allowed.
-    assert.equal(install(dir, {tag, zipSha256: sha, assets}).status, 0);
+    assert.equal(install(dir, {tag, productVersion: '2026.1020.0', zipSha256: sha, assets}).status, 0);
     // A folder the kit did not make is never overwritten.
     const other = tmp('hps-install-kit-');
     try {
       fs.mkdirSync(path.join(other, 'home/Applications', `HypeProof-RC-${v}`), {recursive: true});
-      const refused = install(other, {tag, zipSha256: sha, assets});
+      const refused = install(other, {tag, productVersion: '2026.1020.0', zipSha256: sha, assets});
       assert.notEqual(refused.status, 0);
       assert.match(refused.stderr, /같은 이름의 다른 폴더/);
     } finally { fs.rmSync(other, {recursive: true, force: true}); }
@@ -296,8 +301,8 @@ test('one ok ping after a successful install, with only the allowed fields', {sk
   const dir = tmp('hps-install-ping-');
   const stub = await pingStub(204);
   try {
-    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0-rc.3'});
-    const r = await installAsync(dir, {tag: 'v2026.1020.0-rc.3', zipSha256: sha, assets}, ['--layout', 'app'], {HPS_INSTALL_PING_URL: stub.url});
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const r = await installAsync(dir, {tag: 'v2026.1020.0-rc.3', productVersion: '2026.1020.0', zipSha256: sha, assets}, ['--layout', 'app'], {HPS_INSTALL_PING_URL: stub.url});
     assert.equal(r.status, 0, r.stderr);
     assert.equal(stub.requests.length, 1, JSON.stringify(stub.requests));
     assertPing(stub.requests[0], 'ok', 'done', '2026.1020.0-rc.3');
@@ -407,4 +412,213 @@ test('generated scripts pass shellcheck', {skip: spawnSync('shellcheck', ['--ver
     assert.equal(r.status, 0, r.stdout + r.stderr);
     for (const f of files) assert.equal(fs.statSync(f).mode & 0o111, 0o111, `${f} is executable`);
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+test('RC kit accepts the promotable base-version app and rejects a different source commit', {skip: !mac}, () => {
+  const dir = tmp('hps-rc-product-contract-');
+  try {
+    const tag = 'v2026.1101.0-rc.1';
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1101.0'});
+    const good = install(dir, {tag, productVersion: '2026.1101.0', zipSha256: sha, assets});
+    assert.equal(good.status, 0, good.stderr);
+    const app = path.join(good.home, 'Applications/HypeProof-RC-2026.1101.0-rc.1/HypeProof Studio.app');
+    assert.equal(plistValue(app, 'CFBundleShortVersionString'), '2026.1101.0');
+    const foreign = fakeAppZip(dir, {version: '2026.1101.0', commit: 'f'.repeat(40)});
+    const bad = install(dir, {tag, productVersion: '2026.1101.0', zipSha256: foreign.sha, assets: foreign.assets});
+    assert.notEqual(bad.status, 0);
+    assert.match(bad.stderr, /소스 커밋/);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(app, 'Contents/Resources/app/product.json'), 'utf8')).commit, SRC);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+function portableMacZip(dir, identity = {}) {
+  const zip = path.join(dir, 'portable-mac.zip');
+  execFileSync('python3', ['-c', `
+import json, plistlib, sys, zipfile
+p = json.loads(sys.argv[2])
+with zipfile.ZipFile(sys.argv[1], 'w') as z:
+    z.writestr('HypeProof Studio.app/Contents/Info.plist', plistlib.dumps({'CFBundleIdentifier': p['bundleId'], 'CFBundleShortVersionString': p['plistVersion']}))
+    z.writestr('HypeProof Studio.app/Contents/Resources/app/product.json', json.dumps({'version': p['productVersion'], 'commit': p['sourceSha']}))
+`, zip, JSON.stringify({bundleId: 'ai.hypeproof.studio', plistVersion: '2026.1101.0', productVersion: '2026.1101.0', sourceSha: SRC, ...identity})]);
+  return {zip, opts: {tag: 'v2026.1101.0-rc.1', productVersion: '2026.1101.0', sourceSha: SRC, zipSha256: sha256(zip)}};
+}
+
+test('accepted archive identity is checked on Linux too: RC base version, source, bundle and digest', () => {
+  const dir = tmp('hps-portable-mac-identity-');
+  try {
+    let fixture = portableMacZip(dir);
+    assert.equal(verifyMacArchive(fixture.opts, fixture.zip).plistVersion, '2026.1101.0');
+    assert.equal(verifyMacArchive({...fixture.opts, tag: 'v2026.1101.0'}, fixture.zip).sourceSha, SRC);
+    assert.throws(() => verifyMacArchive({...fixture.opts, zipSha256: H('f')}, fixture.zip), /SHA-256/);
+    for (const identity of [{plistVersion:'2026.1101.0-rc.1'}, {productVersion:'2026.1030.0'}, {sourceSha:'f'.repeat(40)}, {bundleId:'com.example.foreign'}]) {
+      fixture = portableMacZip(dir, identity);
+      const output = path.join(dir, 'refused-kit');
+      assert.throws(() => writeKit({...fixture.opts, macZip:fixture.zip}, output), /product identity/);
+      assert.equal(fs.existsSync(output), false, 'no installer is generated for mismatched accepted bytes');
+    }
+  } finally { fs.rmSync(dir, {recursive:true, force:true}); }
+});
+
+test('public render command requires an accepted archive before writing an installer', () => {
+  const dir = tmp('hps-render-requires-archive-');
+  try {
+    const fixture = portableMacZip(dir), out = path.join(dir, 'out');
+    const args = [new URL('../install-kit.mjs', import.meta.url).pathname, 'render', '--tag', fixture.opts.tag, '--product-version', fixture.opts.productVersion, '--source-sha', SRC, '--zip-sha256', fixture.opts.zipSha256, '--out', out];
+    const missing = spawnSync(process.execPath, args, {encoding:'utf8'});
+    assert.notEqual(missing.status, 0); assert.match(missing.stderr, /--mac-zip is required/); assert.equal(fs.existsSync(out), false);
+    const good = spawnSync(process.execPath, [...args, '--mac-zip', fixture.zip], {encoding:'utf8'});
+    assert.equal(good.status, 0, good.stderr); assert.ok(fs.existsSync(path.join(out, 'install-mac.sh')));
+  } finally { fs.rmSync(dir, {recursive:true, force:true}); }
+});
+
+
+test('renderer follows the existing build contract for marked and legacy RCs', () => {
+  const dir = tmp('hps-kit-build-contract-');
+  try {
+    const tag = 'v2026.1101.0-rc.1';
+    const plan = {candidate:SRC, rcTag:tag, version:'v2026.1101.0'};
+    const cases = [
+      {message:'', version:'2026.1101.0-rc.1'},
+      {message:buildTagMessage(plan), version:'2026.1101.0'},
+      {message:buildTagMessage(plan,{managedDraft:true}), version:'2026.1101.0'},
+    ];
+    for (const {message, version} of cases) {
+      const productVersion = expectedAppVersion(tag, message);
+      assert.equal(productVersion, version);
+      const fixture = portableMacZip(dir, {plistVersion:version, productVersion:version});
+      const opts = {...fixture.opts, productVersion};
+      assert.equal(verifyMacArchive(opts, fixture.zip).productVersion, version);
+      assert.ok(renderInstaller(opts).includes(`HPS_PRODUCT_VERSION="${version}"`));
+    }
+    assert.throws(()=>renderInstaller({...base,productVersion:'2026.1102.0'}), /does not belong/);
+    const script = renderInstaller({...base,tag});
+    assert.ok(script.includes('HPS_PRODUCT_VERSION="2026.1101.0-rc.1"'), 'programmatic legacy default remains compatible');
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+// ── Windows update command (update-windows.cmd, 2026-11-02) ─────────────────
+const EXE = 'HypeProof.StudioUserSetup-x64-1.116.07355.exe';
+const winBase = {tag: 'v2026.1102.3', exeName: EXE, exeSha256: H('d')};
+const PS_TAIL = /\r?\n#PS#\r?\n/;
+
+test('update-windows.cmd is CRLF, pinned to the tag and exe SHA-256, and splits once at the marker', () => {
+  const cmd = renderWindowsUpdater(winBase);
+  assert.ok(!cmd.includes('@@'));
+  assert.equal(cmd.replace(/\r\n/g, '').includes('\n'), false, 'every line ends in CRLF');
+  assert.match(cmd, /^\$Tag = 'v2026\.1102\.3'\r$/m);
+  assert.match(cmd, new RegExp(`^\\$Exe = '${EXE.replaceAll('.', '\\.')}'\\r$`, 'm'));
+  assert.match(cmd, new RegExp(`^\\$Sha = '${H('d')}'\\r$`, 'm'));
+  assert.ok(cmd.includes('/VERYSILENT') && cmd.includes('/MERGETASKS=!runcode'));
+  // #3412 split at the first "#PS#", which a comment also contained, and ran the cmd header as PowerShell.
+  const parts = cmd.split(PS_TAIL);
+  assert.equal(parts.length, 2, 'exactly one marker line');
+  assert.ok(parts[1].startsWith('[Console]::OutputEncoding'));
+  assert.ok(parts[0].includes("-split '\\r?\\n#PS#\\r?\\n', 2"), 'the cmd header splits on the line-anchored marker');
+  assert.throws(() => renderWindowsUpdater({...winBase, exeName: "HypeProof.StudioUserSetup-x64-1'; calc.exe"}), /per-user installer/);
+  assert.throws(() => renderWindowsUpdater({...winBase, exeName: 'HypeProof.StudioSetup-x64-1.116.07355.exe'}), /per-user installer/);
+  assert.throws(() => renderWindowsUpdater({...winBase, exeSha256: 'abc'}), /sha256/);
+  assert.throws(() => renderWindowsUpdater({...winBase, tag: 'latest'}), /release tag/);
+});
+
+test('render-windows hashes the accepted installer it is given', () => {
+  const dir = tmp('hps-win-kit-');
+  try {
+    const exe = path.join(dir, EXE);
+    fs.writeFileSync(exe, 'accepted installer bytes');
+    assert.deepEqual(writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, path.join(dir, 'out')), [WINDOWS_UPDATER_NAME]);
+    const cmd = fs.readFileSync(path.join(dir, 'out', WINDOWS_UPDATER_NAME), 'utf8');
+    assert.ok(cmd.includes(`$Sha = '${sha256(exe)}'`));
+    assert.equal(isAppPackage(WINDOWS_UPDATER_NAME), false, 'the acceptance receipts never count the updater');
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+// The section Jay added by hand to v2026.1102.2 (2026-11-02): the generated one keeps its markers,
+// asset name and PowerShell form, and replaces it instead of duplicating it.
+const HAND_MADE = [
+  '<!-- hps-install-windows:v1 -->', '## Install or update on Windows (x64)', '',
+  'Double-click [`update-windows.cmd`](https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1102.3/update-windows.cmd)', '',
+  '```powershell', 'irm https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1102.3/update-windows.cmd -OutFile "$env:TEMP\\hps-update.cmd"; & "$env:TEMP\\hps-update.cmd"', '```',
+  '<!-- /hps-install-windows:v1 -->',
+].join('\n');
+
+test('release notes carry the Mac and Windows commands once, Mac first', () => {
+  const tag = 'v2026.1102.3';
+  assert.equal(windowsOneLiner(tag), HAND_MADE.split('\n')[6]);
+  const both = withInstallSection(`${HAND_MADE}\n\n## What's Changed\n- x\n`, tag, {mac: true, windows: true});
+  assert.ok(both.startsWith('<!-- hps-install-mac:v1 -->'));
+  assert.equal(both.split('<!-- hps-install-windows:v1 -->').length, 2);
+  assert.ok(both.indexOf('hps-install-mac:v1') < both.indexOf('hps-install-windows:v1'));
+  assert.ok(both.indexOf('<!-- /hps-install-windows:v1 -->') < both.indexOf("## What's Changed"));
+  assert.ok(both.includes(windowsOneLiner(tag)) && both.includes(oneLiner(tag)));
+  assert.equal(withInstallSection(both, tag, {mac: true, windows: true}), both);
+  const winOnly = withInstallSection(both, tag, {mac: false, windows: true});
+  assert.ok(winOnly.startsWith('<!-- hps-install-windows:v1 -->') && !winOnly.includes('hps-install-mac'));
+  assert.match(windowsNotesSection('v2026.1102.3-rc.1'), /over the installed HypeProof Studio/);
+});
+
+test('a release whose platform lacks its installer or notes command cannot publish', () => {
+  const tag = 'v2026.1102.3';
+  const body = withInstallSection('## What changed\n', tag, {mac: true, windows: true});
+  const assets = [{name: 'install-mac.sh'}, {name: WINDOWS_UPDATER_NAME}];
+  const both = ['darwin-arm64', 'win32-x64'];
+  assert.deepEqual(installProblems({tag, platforms: both, body, assets}), []);
+  assert.match(installProblems({tag, platforms: both, body, assets: assets.slice(0, 1)}).join('\n'), /Windows: release asset update-windows\.cmd is missing/);
+  assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag), assets}).join('\n'), /Windows: the release notes lack/);
+  assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag, {mac: false, windows: true}), assets}).join('\n'), /macOS: the release notes lack/);
+  assert.deepEqual(installProblems({tag, platforms: ['darwin-arm64'], body: withInstallSection('', tag), assets: assets.slice(0, 1)}), []);
+  // A section pinned to another tag does not count.
+  assert.match(installProblems({tag: 'v2026.1102.4', platforms: both, body, assets}).join('\n'), /lack/);
+});
+
+test('the announcement leads with both commands', () => {
+  const tag = 'v2026.1102.3';
+  const text = announcement(withInstallSection("## What's Changed\n* a\n", tag, {mac: true, windows: true}), tag);
+  const lines = text.split('\n');
+  assert.equal(lines[0], `Install / update ${tag}`);
+  assert.equal(lines[2], oneLiner(tag));
+  assert.equal(lines[4], windowsOneLiner(tag));
+  assert.ok(!text.includes('<!--') && text.includes("## What's Changed"));
+  assert.ok(lines.slice(0, 5).join('\n').length < 700, 'survives the 800-character Discord template truncation');
+  assert.equal(announcement('## Notes\n', tag), '## Notes\n');
+});
+
+// Runs the PowerShell part the way the .cmd does, with the asset-dir seam and dry run, so it never
+// closes or installs anything. Skipped where pwsh is absent; GitHub's Ubuntu and macOS images have it.
+const pwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1'], {encoding: 'utf8'}).status === 0;
+test('update-windows.cmd verifies the pinned installer before running it', {skip: !pwsh && 'pwsh not installed'}, () => {
+  const dir = tmp('hps-win-run-');
+  try {
+    const assets = path.join(dir, 'assets');
+    fs.mkdirSync(assets);
+    const exe = path.join(assets, EXE);
+    fs.writeFileSync(exe, 'accepted installer bytes');
+    writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, dir);
+    const run = () => spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command',
+      "$s = [IO.File]::ReadAllText($env:HPS_SELF, [Text.Encoding]::UTF8); iex ($s -split '\\r?\\n#PS#\\r?\\n', 2)[1]"], {
+      encoding: 'utf8', env: {...process.env, HPS_SELF: path.join(dir, WINDOWS_UPDATER_NAME), HPS_INSTALL_ASSET_DIR: assets, HPS_INSTALL_DRY_RUN: '1', TMPDIR: dir, TEMP: dir},
+    });
+    const good = run();
+    assert.equal(good.status, 0, good.stdout + good.stderr);
+    assert.match(good.stdout, /DRY RUN: .*HypeProof\.StudioUserSetup-x64-1\.116\.07355\.exe \/VERYSILENT \/SUPPRESSMSGBOXES \/NORESTART \/MERGETASKS=!runcode/);
+    fs.writeFileSync(exe, 'tampered bytes');
+    const bad = run();
+    assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+    assert.match(bad.stdout, /SHA-256 불일치/);
+    assert.doesNotMatch(bad.stdout, /DRY RUN/);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('release workflows render, check and announce the Windows command', () => {
+  const read = name => fs.readFileSync(new URL(`../../../.github/workflows/${name}`, import.meta.url), 'utf8');
+  const verify = read('verify-unified-release.yml');
+  assert.match(verify, /install-kit\.mjs render-windows --tag "\$TAG" --user-setup/);
+  assert.match(verify, /install-kit\.mjs notes --tag "\$TAG" "\$\{sections\[@\]\}"/);
+  // The check runs before the draft is published.
+  const publish = verify.indexOf('--draft=false');
+  const check = verify.indexOf('install-kit.mjs check --tag "$TAG"');
+  assert.ok(check > 0 && check < publish, 'install command check precedes publication');
+  assert.match(read('notify-release-published.yml'), /install-kit\.mjs announce --tag "\$TAG"/);
+  assert.match(read('mirror-release.yml'), /dist\/update-windows\.cmd/);
 });

@@ -78,13 +78,13 @@ try {
   h.cachedProfile = PERSONAL;
   h._instructorMode = { isInstructor: false };
   h.resolveCoachCwd = () => work;
-  h.setActivityMemoryPanel(mod.exports.registerActivityMemory({ binding: () => h.activityMemoryBinding, overview: () => h.activityMemoryOverviewTasks }));
+  h.setActivityMemoryPanel(mod.exports.registerActivityMemory({ binding: () => h.activityMemoryBinding, overview: () => h.activityMemoryOverviewTasks, tasks: () => h.activityMemoryTasks }));
   const last = () => f.posts.filter(m => m.type === 'activityMemoryState').at(-1);
   const list = async () => { await f.handle(f.scoped({ type: 'activityMemoryRequest' })); return last().view; };
   let seq = 0;
-  const press = async (action, name, scope, text) => {
+  const press = async (action, name, scope, text, names) => {
     const requestId = `s${++seq}`;
-    await f.handle(f.scoped({ type: 'activityMemoryAction', requestId, scope, action, name, ...(text ? { text } : {}) }));
+    await f.handle(f.scoped({ type: 'activityMemoryAction', requestId, scope, action, name, ...(text ? { text } : {}), ...(names ? { names } : {}) }));
     assert.equal(last().requestId, requestId);
     return last().result;
   };
@@ -108,6 +108,7 @@ try {
     const view = await list();
     assert.ok(view, 'personal view');
     assert.ok(Array.isArray(h.activityMemoryOverviewTasks), 'control: an adult personal seat has an overview');
+    assert.ok(Array.isArray(h.activityMemoryTasks) && h.activityMemoryTasks.length > 0, 'control: a personal seat names its tasks');
     assert.deepEqual(view.entries.map(e => e.text), [X]);
     await as({ profile: TRIAL, record: { ...record, kind: 'trial' } }, async () => assert.ok(await list(), 'trial view'));
   });
@@ -116,6 +117,8 @@ try {
     for (const [label, seat] of seats) await as(seat, async () => {
       assert.equal(h.activityMemoryBinding, undefined, label);
       assert.equal(h.activityMemoryOverviewTasks, null, label);
+      // REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023): no task list for source links either.
+      assert.equal(h.activityMemoryTasks, null, label);
       assert.equal(await list(), null, label);
     });
   });
@@ -124,8 +127,8 @@ try {
     const scope = (await list()).scope;
     const before = fs.readdirSync(memDir(work)).sort();
     for (const [label, seat] of seats) await as(seat, async () => {
-      for (const [action, text] of [['delete'], ['correct', '바뀐 문장'], ['open']]) {
-        const result = await press(action, 'color.md', scope, text);
+      for (const [action, text, names] of [['delete'], ['correct', '바뀐 문장'], ['open'], ['deleteAll', undefined, ['color.md']]]) {
+        const result = await press(action, action === 'deleteAll' ? '' : 'color.md', scope, text, names);
         assert.ok(result.error, `${label} ${action} refused`);
         assert.equal(last().view, null, `${label}: the answer carries no memory`);
       }
@@ -143,8 +146,8 @@ try {
     try {
       for (const [label, seat] of seats) await as(seat, async () => {
         assert.equal(await list(), null, `${label}: no view`);
-        for (const [action, text] of [['delete'], ['correct', '바뀐 문장'], ['open']]) {
-          const result = await press(action, 'color.md', scope, text);
+        for (const [action, text, names] of [['delete'], ['correct', '바뀐 문장'], ['open'], ['deleteAll', undefined, ['color.md']]]) {
+          const result = await press(action, action === 'deleteAll' ? '' : 'color.md', scope, text, names);
           assert.ok(result.error, `${label} ${action} refused by the provider`);
         }
       });
@@ -152,7 +155,7 @@ try {
       assert.deepEqual(commands, [], 'nothing was opened');
       assert.equal(fs.readFileSync(path.join(memDir(work), 'color.md'), 'utf8'), X);
     } finally {
-      h.setActivityMemoryPanel(mod.exports.registerActivityMemory({ binding: () => h.activityMemoryBinding, overview: () => h.activityMemoryOverviewTasks }));
+      h.setActivityMemoryPanel(mod.exports.registerActivityMemory({ binding: () => h.activityMemoryBinding, overview: () => h.activityMemoryOverviewTasks, tasks: () => h.activityMemoryTasks }));
     }
     // The extension wires the host to the same gated binding (secondary: source).
     const ext = fs.readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8');

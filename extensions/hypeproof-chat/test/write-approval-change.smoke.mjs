@@ -169,6 +169,8 @@ try {
   host.context = { secrets: { get: async () => 'token' } };
   host.confirmWriteFiles = (...args) => P.confirmWriteFiles.call(host, ...args);
   host.resolveActionApprovalTracked = (req) => P.resolveActionApproval.call(host, req);
+  // #3586 — the timed-out write ids the host reads after a refusal (a plain fixture needs the field too).
+  host.timedOutApprovals = new Set();
   host.writeApprovalRequest = { invalidate() {}, confirm: async (prompt) => { prompts.push(structuredClone(prompt)); await during(prompt); return answer; } };
   Object.assign(host, { writeApprovalDiffs: new Map(), writeApprovalDiffSeq: 0, writeApprovalDiffScheme: 'hps-write-approval-test', writeApprovalDiffContent: new Map() });
   for (const m of ['openWriteApprovalDiff', 'closeWriteApprovalDiffs', 'closeWriteApprovalDiffTabs']) host[m] = (...a) => P[m].call(host, ...a);

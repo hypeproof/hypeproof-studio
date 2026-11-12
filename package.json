@@ -12,8 +12,8 @@
     "test:private-service-packages": "node --test scripts/test/bootstrap-service-packages.test.mjs"
   },
   "devDependencies": {
-    "@hypeproof/service-testkit": "file:.private-service-cache/hypeproof-service-testkit-0.1.2.tgz",
-    "@hypeproof/measurement-core": "file:.private-service-cache/hypeproof-measurement-core-0.1.0.tgz",
-    "@hypeproof/service-contracts": "file:.private-service-cache/hypeproof-service-contracts-0.1.1.tgz"
+    "@hypeproof/service-testkit": "file:.private-service-cache/hypeproof-service-testkit-0.1.4.tgz",
+    "@hypeproof/measurement-core": "file:.private-service-cache/hypeproof-measurement-core-0.1.1.tgz",
+    "@hypeproof/service-contracts": "file:.private-service-cache/hypeproof-service-contracts-0.1.2.tgz"
   }
 }

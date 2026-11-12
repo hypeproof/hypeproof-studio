@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-import { state } from '../src/routes/state.ts';
+import { state as stateRoute } from '../src/routes/state.ts';
+import { withBearerAsConnection } from './harness/connect.mjs';
+const state = withBearerAsConnection(stateRoute);
 
 const request = () => new Request('https://chalk.test/cohorts/cohort-one/state', { headers: {
   authorization: 'Bearer fixture-token',

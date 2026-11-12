@@ -67,6 +67,21 @@ export function seatCapabilityKeys(profile: ResolvedProfile | null | undefined, 
   return seatAiCapabilities(withoutFolderNarrowing(profile), inputs).filter((c) => c.on).map((c) => c.key);
 }
 
+/**
+ * CGP-SHELL-R-024, the classroom line (lessonSettingsChange.ts): the REQ-M47 rows of a served profile under the learner's
+ * lasting inputs (access choice, runtime setting) as on-keys and asking keys. The per-session agent-sdk -> proxy fallback is
+ * left out on purpose: that line keeps a persisted baseline across sessions, and a fallback in one session must neither make
+ * a line nor hide the instructor's next capability change. `asks` lets the line use the card's own word (물어봐요).
+ */
+export function lessonCapabilityRows(profile: ResolvedProfile, inputs: SeatInputs): { inputs: string; on: AiCapabilityKey[]; asks: AiCapabilityKey[] } {
+  const rows = seatAiCapabilities(withoutFolderNarrowing(profile), { ...inputs, fallback: false });
+  return {
+    inputs: JSON.stringify([inputs.choice?.id ?? null, inputs.settingRuntime]),
+    on: rows.filter((r) => r.on).map((r) => r.key),
+    asks: rows.filter((r) => r.on && r.asks === true).map((r) => r.key),
+  };
+}
+
 /** Added and removed keys between two observations, in REQ-M38 order. */
 export function diffCapabilities(before: readonly AiCapabilityKey[], after: readonly AiCapabilityKey[]): { added: AiCapabilityKey[]; removed: AiCapabilityKey[] } {
   const b = new Set(before), a = new Set(after);

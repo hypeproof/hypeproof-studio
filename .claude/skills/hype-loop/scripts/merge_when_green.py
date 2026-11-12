@@ -5,7 +5,8 @@
     merge_when_green.py watch --repo hypeproof/R --pr N --head SHA    the watcher itself
     merge_when_green.py audit --repo hypeproof/R [--repo ...] [--rearm]
 
-A watcher squash-merges the PR at exactly SHA once it has checks, every check is
+A watcher shares canonical approval/target/hold readiness, binds approvals to SHA,
+and respects STOP/merges.paused. It squash-merges the PR at exactly SHA once it has checks, every check is
 SUCCESS or SKIPPED and mergeStateStatus is CLEAN (the merge runs through
 with-agent-identity.sh). Like the shell watcher it waits --delay seconds (60) before
 the first read, and for --settle-min minutes (5) a PR still showing its old head is
@@ -39,15 +40,23 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
 WRAPPER = Path(os.environ.get("HYPE_LOOP_AGENT_WRAPPER")
                or HERE.parents[3] / "scripts/agent-identity/with-agent-identity.sh")
 BOARD = Path(os.environ.get("HYPE_LOOP_BOARD") or HERE.parents[3] / "scripts/board/board.py")
+CANONICAL = HERE.parents[3]
+if not (CANONICAL / "scripts/hype-merge/monitor.py").is_file():
+    CANONICAL = Path(os.environ.get("HYPEPROOF_HARNESS") or CANONICAL)
+sys.path.insert(0, str(CANONICAL / "scripts/hype-merge"))
+import monitor  # canonical readiness; missing policy/engine fails closed
+from automerge import is_review_only_blocker
+
 GREEN = {"SUCCESS", "SKIPPED"}
-EXIT = {"merged": 0, "check_failed": 1, "dirty": 2, "head_moved": 3, "timeout": 4, "merge_failed": 5}
-STOPPED = {"check_failed", "dirty", "head_moved", "merge_failed"}
+EXIT = {"merged": 0, "check_failed": 1, "dirty": 2, "head_moved": 3, "timeout": 4, "merge_failed": 5, "policy_blocked": 6, "stopped": 7}
+STOPPED = {"check_failed", "dirty", "head_moved", "merge_failed", "policy_blocked", "stopped"}
 SILENT_S = 300
 
 
@@ -66,6 +75,9 @@ def now() -> str:
 
 
 def log(repo: str, pr: int, event: str, **fields) -> None:
+    reservation = os.environ.get("HYPE_MWG_RESERVATION")
+    if reservation:
+        fields.setdefault("reservation", reservation)
     with open(log_path(repo, pr), "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"at": now(), "event": event, **fields}, sort_keys=True) + "\n")
 
@@ -81,27 +93,56 @@ def gh(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["gh", *args], capture_output=True, text=True, timeout=120)
 
 
+def stopped() -> bool:
+    root = Path(os.environ.get("HYPE_LOOP_HOME", "~/.hypeproof/loop")).expanduser()
+    return any((root / name).exists() for name in ("STOP", "merges.paused"))
+
+
 def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
     """The watcher's verdict for one read, or None to keep waiting."""
-    got = gh("pr", "view", str(pr), "--repo", repo, "--json", "headRefOid,mergeStateStatus,statusCheckRollup")
+    if stopped():
+        return "stopped"
+    got = gh("pr", "view", str(pr), "--repo", repo, "--json",
+             "state,number,author,baseRefName,headRefOid,isDraft,labels,latestReviews,reviews,"
+             "mergeStateStatus,mergeable,reviewDecision,statusCheckRollup")
     if got.returncode != 0:
         log(repo, pr, "poll", error=(got.stderr or got.stdout).strip()[:200])
         return None
     state = json.loads(got.stdout)
-    checks = state.get("statusCheckRollup") or []
-    pending = [c.get("name") for c in checks if not c.get("conclusion")]
-    bad = [c.get("name") for c in checks if c.get("conclusion") and c["conclusion"] not in GREEN]
+    state["repository"] = {"nameWithOwner": repo}
+    # Canonical monitor binds latest review provenance to this exact head.
+    try:
+        if repo not in monitor.load_auto_merge_policy_repos():
+            log(repo, pr, "poll", blockers=["policy_forbids_machine_merge"])
+            return "policy_blocked"
+        assessment = monitor.build_queue([state])[0]
+    except Exception as exc:
+        log(repo, pr, "poll", policy_error=type(exc).__name__)
+        return "policy_blocked"
+    checks = monitor.latest_check_runs(state.get("statusCheckRollup") or [])
+    pending = [c.get("name") or c.get("context") for c in checks if
+               (not c.get("conclusion") if monitor.is_check_run(c) else c.get("state") in (None, "PENDING", "EXPECTED"))]
+    bad = [c.get("name") or c.get("context") for c in checks if
+           (bool(c.get("conclusion")) and c["conclusion"] not in GREEN if monitor.is_check_run(c)
+            else c.get("state") not in (None, "SUCCESS", "PENDING", "EXPECTED"))]
     merge_state = state.get("mergeStateStatus")
-    log(repo, pr, "poll", head=state.get("headRefOid"), merge_state=merge_state, pending=len(pending), bad=bad)
+    log(repo, pr, "poll", head=state.get("headRefOid"), merge_state=merge_state, pending=len(pending), bad=bad, blockers=assessment.blockers)
     if state.get("headRefOid") != head:
         return None if settling else "head_moved"
+    if state.get("state") != "OPEN":
+        return "policy_blocked"
     if not checks:
         return None  # no check run yet: never merge before CI has started
-    if bad and not pending:
+    if any(name != monitor.CONTROL_PLANE_GATE for name in bad) and not pending:
         return "check_failed"
     if merge_state == "DIRTY":
         return "dirty"
-    if not bad and not pending and merge_state == "CLEAN":
+    if assessment.status == "blocked" and any(
+        not b.startswith(("checks_pending_or_failed", "merge_state:UNKNOWN", "mergeable:UNKNOWN", "required_check_missing:", "required_check_not_green:", monitor.CONTROL_PLANE_GATE))
+        for b in assessment.blockers if not is_review_only_blocker(b)
+    ):
+        return "policy_blocked"
+    if not bad and not pending and merge_state == "CLEAN" and assessment.status == "ready":
         return "merged"
     return None
 
@@ -118,6 +159,8 @@ def watch(repo: str, pr: int, head: str, interval: float, timeout_s: float, dela
             time.sleep(interval)
     verdict = verdict or "timeout"
     detail = ""
+    if verdict == "merged" and stopped():
+        verdict = "stopped"
     if verdict == "merged":
         done = subprocess.run(["bash", str(WRAPPER), "gh", "pr", "merge", str(pr), "--repo", repo, "--squash",
                                "--match-head-commit", head], capture_output=True, text=True, timeout=300)
@@ -126,7 +169,7 @@ def watch(repo: str, pr: int, head: str, interval: float, timeout_s: float, dela
     board = board_done(repo, pr) if verdict == "merged" else None
     if board and not board["ok"]:
         print(f"merge_when_green: #{pr} merged but the board was not updated: {json.dumps(board)}", file=sys.stderr)
-    log(repo, pr, "exit", verdict=verdict, detail=detail, **({"board": board} if board else {}))
+    log(repo, pr, "exit", head=head, pid=os.getpid(), verdict=verdict, detail=detail, **({"board": board} if board else {}))
     return EXIT.get(verdict, 5)
 
 
@@ -152,20 +195,61 @@ def board_done(repo: str, pr: int) -> dict:
     return {"ok": ok, "items": items, **({"error": error} if error else {})}
 
 
-def start(repo: str, pr: int, head: str, interval: float, timeout_s: float, delay: float, settle_s: float) -> dict:
+
+def owner_terminal(rows: list[dict], starts: list[dict]) -> bool:
+    if not rows or not starts or rows[-1].get("event") != "exit":
+        return False
+    last, owner = rows[-1], starts[-1]
+    if last.get("reservation") and owner.get("reservation"):
+        return (last["reservation"] == owner["reservation"] and last.get("head") == owner.get("head")
+                and (owner.get("pid") is None or last.get("pid") == owner.get("pid")))
+    if "head" in last or "pid" in last:
+        return last.get("head") == owner.get("head") and last.get("pid") == owner.get("pid")
+    # Old single-owner logs have no correlation fields. Multiple starts may have
+    # overlapped under the old implementation; their unscoped terminal is uncertain.
+    return len(starts) == 1
+
+def start(repo: str, pr: int, head: str, interval: float, timeout_s: float, delay: float, settle_s: float, *, dead_pid: int | None = None) -> dict:
+    # Serialize starts for this PR on Mac/Linux; never infer stale ownership from age.
+    import fcntl
+    with open(log_path(repo, pr).with_suffix(".lock"), "a") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        return _start_locked(repo, pr, head, interval, timeout_s, delay, settle_s, dead_pid=dead_pid)
+
+
+def _start_locked(repo: str, pr: int, head: str, interval: float, timeout_s: float, delay: float, settle_s: float, *, dead_pid: int | None = None) -> dict:
+    if stopped():
+        raise RuntimeError("STOP or merges.paused is present; no watcher started")
+    old = events(repo, pr)
+    # A missing exit is uncertain, not permission to duplicate an in-flight worker.
+    starts = [e for e in old if e.get("event") in ("start_pending", "start")]
+    if starts and not owner_terminal(old, starts) and not (dead_pid is not None and starts[-1].get("pid") == dead_pid):
+        return {"repo": repo, "pr": pr, "head": head, "status": "existing_or_uncertain",
+                "log": str(log_path(repo, pr))}
     cmd = [sys.executable, str(HERE), "watch", "--repo", repo, "--pr", str(pr), "--head", head, "--interval",
            str(interval), "--timeout-min", str(timeout_s / 60), "--delay", str(delay), "--settle-min", str(settle_s / 60)]
+    reservation = uuid.uuid4().hex
+    log(repo, pr, "start_pending", head=head, reservation=reservation)
     with open(log_path(repo, pr).with_suffix(".out"), "a") as out:
         # A new session: the watcher survives the shell (or background task) that started it.
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True,
-                                env={**os.environ, "HYPE_MWG_STARTED": "1"})
-    log(repo, pr, "start", head=head, pid=proc.pid)  # now, so a second audit sees it and does not arm twice
+                                env={**os.environ, "HYPE_MWG_STARTED": "1", "HYPE_MWG_RESERVATION": reservation})
+    try:
+        log(repo, pr, "start", head=head, pid=proc.pid, reservation=reservation)
+    except OSError:
+        return {"repo": repo, "pr": pr, "head": head, "status": "launch_uncertain",
+                "reservation": reservation, "log": str(log_path(repo, pr))}
     return {"repo": repo, "pr": pr, "head": head, "pid": proc.pid, "log": str(log_path(repo, pr))}
 
 
-def alive(pid: int, repo: str, pr: int, head: str) -> bool:
+def alive(pid: int, repo: str, pr: int, head: str) -> bool | None:
     # -ww: procps on Linux cuts a piped command line at 80 columns, which hid `--pr N` on CI.
-    ps = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True)
+    try:
+        ps = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True)
+    except OSError:
+        return None
+    if ps.returncode and ps.stderr.strip():
+        return None  # denied/unavailable observation is not proof of a dead owner
     cmd = ps.stdout if ps.returncode == 0 else ""
     return ("merge_when_green.py watch" in cmd and f"--repo {repo} " in cmd and f"--head {head}" in cmd
             and re.search(rf"--pr {pr}(\s|$)", cmd) is not None)
@@ -182,18 +266,26 @@ def audit(repos: list[str], rearm: bool, interval: float, timeout_s: float, dela
         for pr in json.loads(got.stdout):
             n, head = pr["number"], pr["headRefOid"]
             row = {"repo": repo, "pr": n, "head": head[:12]}
-            runs = [e for e in events(repo, n) if e["event"] == "start"]
-            last = events(repo, n)[-1] if runs else None
+            history = events(repo, n)
+            runs = [e for e in history if e["event"] in ("start_pending", "start")]
+            last = history[-1] if runs else None
+            terminal = owner_terminal(history, runs)
+            liveness = (alive(runs[-1]["pid"], repo, n, head) if runs and
+                        runs[-1].get("head") == head and runs[-1].get("pid") and not terminal else None)
             if not runs or runs[-1].get("head") != head:
                 out["unarmed"].append(row)  # never armed at this head: the merge decision is not ours
-            elif last["event"] == "exit" and last.get("verdict") in STOPPED:
+            elif terminal and last.get("verdict") in STOPPED:
                 out["stopped"].append({**row, "exit": last.get("verdict")})
-            elif last["event"] == "exit" and last.get("verdict") == "merged":
+            elif terminal and last.get("verdict") == "merged":
                 out["watched"].append({**row, "exit": "merged"})
-            elif last["event"] == "exit" or not alive(runs[-1]["pid"], repo, n, head):
+            elif last["event"] == "exit" and not terminal:
+                out["errors"].append({**row, "error": "uncorrelated legacy owner exit; not rearmed"})
+            elif not terminal and liveness is None:
+                out["errors"].append({**row, "error": "watcher liveness unknown; not rearmed"})
+            elif terminal or liveness is False:
                 out["dead"].append({**row, "exit": last.get("verdict")} if last["event"] == "exit" else row)
                 if rearm:
-                    out["rearmed"].append(start(repo, n, head, interval, timeout_s, delay, settle_s))
+                    out["rearmed"].append(start(repo, n, head, interval, timeout_s, delay, settle_s, dead_pid=runs[-1].get("pid")))
             elif (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(last["at"])).total_seconds() > SILENT_S:
                 out["silent"].append(row)
             else:
@@ -213,8 +305,8 @@ def main(argv: list[str] | None = None) -> int:
             s.add_argument("--head", required=True)
         else:
             s.add_argument("--rearm", action="store_true")
-        s.add_argument("--interval", type=float, default=45.0)
-        s.add_argument("--timeout-min", type=float, default=45.0)
+        s.add_argument("--interval", type=float, default=120.0)
+        s.add_argument("--timeout-min", type=float, default=90.0)
         s.add_argument("--delay", type=float, default=60.0)
         s.add_argument("--settle-min", type=float, default=5.0)
     args = p.parse_args(argv)
