@@ -206,7 +206,10 @@ function useAttribution(state: StoreState) {
     : { ...(partnerCode.trim() ? { partner_code: partnerCode.trim() } : {}), ...(instructorCode.trim() ? { instructor_code: instructorCode.trim() } : {}), consent: { version: consentVersion, granted: true } };
   const gate: AttributionGate = { ready: decided || empty || (confirmed && consent && Boolean(consentVersion)), input };
   const skip = () => { setPartnerCode(""); setInstructorCode(""); setConsent(false); };
-  return { decided, partnerCode, instructorCode, setPartnerCode, setInstructorCode, confirmed, consent, setConsent, skip, empty, gate };
+  // The consent is to the partner/instructor these codes name: a changed code asks for it again.
+  const changePartner = (v: string) => { setPartnerCode(v); setConsent(false); };
+  const changeInstructor = (v: string) => { setInstructorCode(v); setConsent(false); };
+  return { decided, partnerCode, instructorCode, setPartnerCode: changePartner, setInstructorCode: changeInstructor, confirmed, consent, setConsent, skip, empty, gate };
 }
 
 function AttributionStep({ a, state, busy, send }: { a: ReturnType<typeof useAttribution>; state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {

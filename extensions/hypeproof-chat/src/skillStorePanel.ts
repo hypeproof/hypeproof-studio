@@ -132,7 +132,17 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
   const registerFirst = async (c: StoreClient, attribution: StoreAttributionInput | undefined) => {
     if (state.seller?.attribution?.decided !== false) return;
     if (!attribution) throw new StoreClientError("attribution_required");
-    const view = await c.registerAttribution(attribution);
+    let view;
+    try {
+      view = await c.registerAttribution(attribution);
+    } catch (error) {
+      // The consent text changed version while the panel was open: reload the seller view so the next try sends it.
+      if (error instanceof StoreClientError && error.code === "referral_consent_required") {
+        const seller = await c.seller().catch(() => undefined);
+        if (seller) state = { ...state, seller };
+      }
+      throw error;
+    }
     // Recorded at once: if the publish after it fails, a retry must not register a second time.
     if (state.seller) state = { ...state, seller: { ...state.seller, attribution: view } };
   };
