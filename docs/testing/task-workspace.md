@@ -276,8 +276,9 @@ the personal and classroom seats and presses the controls on the minimal DOM: id
 glyph; the second answer takes over and releases the first (one pressed at a time); the
 pressed control stops its own reading. The same file keeps the unserved markup byte-identical.
 `test/voice-ui.test.tsx` reads `aria-pressed` across play and stop on one answer, and across a
-reading that ends by itself: the last utterance's end event (no press) releases the control to
-`aria-pressed="false"` and `읽어 주기` without a cancel.
+reading that ends by itself. The answer is read in at least two utterances (the test asserts the
+count): an earlier utterance's end keeps it pressed with `그만 읽기`, and the last utterance's end
+event (no press) releases the control to `aria-pressed="false"` and `읽어 주기` without a cancel.
 
 `test/voice-browser.smoke.mjs` drives the real App bundle in headless Chromium at 320px,
 both seats, dark and light, with a recording synthesizer: the pressed control has a fill that

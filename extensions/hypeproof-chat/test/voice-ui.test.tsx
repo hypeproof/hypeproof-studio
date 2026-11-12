@@ -65,7 +65,8 @@ const speechEnv = () => (rig.speechEnvCalls++, {
 });
 const noSpeech = () => (rig.speechEnvCalls++, { synth: undefined, makeUtterance: () => ({}) as never });
 
-function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }: { profile: unknown; scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; insertOk?: boolean }) {
+const ANSWER = "안녕하세요. 답이에요.\n```\ncode()\n```";
+function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true, content = ANSWER }: { profile: unknown; scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; insertOk?: boolean; content?: string }) {
   const controller = useVoiceController(profile as never, scope, true);
   const addon = dictationAddonFor(controller.value.availability);
   const api = { insert: (text: string) => { if (insertOk) rig.inserted.push(text); return insertOk; }, disabled: false };
@@ -74,11 +75,11 @@ function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }:
       createElement(SpeechEnvContext.Provider, { value: speech as never },
         createElement("div", { className: "frame" },
           addon ? createElement(addon.Scope, { api }, createElement("div", { className: "composer" }, createElement(addon.Notice), createElement(addon.Control))) : null,
-          createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content: "안녕하세요. 답이에요.\n```\ncode()\n```" }))))));
+          createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content }))))));
 }
 const profileOn = (extra: Record<string, unknown> = {}) => ({ profile_id: "p", voice: { dictation: true, read_aloud: true, policy_version: V1, ...extra } });
 
-async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean } = {}) {
+async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean; content?: string } = {}) {
   rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], utterances: [], cancels: 0, inserted: [], insertOk: true };
   timers.length = 0; clock = 0; denyMic = false; g.__posted.length = 0;
   await act(() => root.render(createElement(Harness, { profile, ...opts, key: Math.random() })));
@@ -295,15 +296,20 @@ t("read-aloud: speaks the answer in Korean on the device, skips code and says so
 
 // CGP-CHAT-D-009: the control follows real playback. A reading that ends by itself (the synthesizer's
 // end event on the last utterance, not a press) releases the control, without cancelling anything.
+// The answer is long enough to be read in several utterances, so an earlier part ending is exercised too.
+const LONG_ANSWER = Array.from({ length: 8 }, (_, i) => `${i + 1}번째 문장은 고양이 페이지를 만들 때 무엇을 먼저 확인할지 차근차근 설명해요.`).join(" ");
 t("read-aloud: a reading that ends by itself releases the control and offers 읽어 주기 again", async () => {
-  await mount(profileOn(), { acked: true });
+  await mount(profileOn(), { acked: true, content: LONG_ANSWER });
   await act(() => click(byLabel("읽어 주기") as never));
   eq(byLabel("그만 읽기")?.getAttribute("aria-pressed"), "true", "pressed while it reads");
-  ok(rig.utterances.length > 0, "the synthesizer was handed utterances");
+  ok(rig.utterances.length >= 2, `the answer is read in at least two utterances (got ${rig.utterances.length})`);
   const cancelsBefore = rig.cancels;
   for (const u of rig.utterances.slice(0, -1)) {
     await act(() => { u.onend?.(); });
-    eq(byLabel("그만 읽기")?.getAttribute("aria-pressed"), "true", "an earlier part ending does not release it");
+    const stop = byLabel("그만 읽기");
+    ok(stop, "an earlier part ending keeps the stop control");
+    eq(stop.getAttribute("aria-pressed"), "true", "an earlier part ending does not release it");
+    eq(stop.textContent.trim(), "그만 읽기", "the visible label stays 그만 읽기 while later parts remain");
   }
   await act(() => { rig.utterances[rig.utterances.length - 1].onend?.(); });
   ok(!byLabel("그만 읽기"), "no stop control once the reading has ended");
