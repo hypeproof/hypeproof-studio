@@ -4300,6 +4300,14 @@ historical activity remain explicitly unverified.
 
 ## Daily release coordinator (#1757)
 
+`ST-REL-AUTH-01`: a reviewed machine publication policy makes complete signed
+installed-App PASS evidence eligible for the existing publisher without a
+per-candidate manager approval. Missing, FAIL, BLOCKED and NOT_RUN evidence,
+changed identities/bytes or unknown capacity refuse publication. Omitted/default
+manager authority retains signed rotating-manager approval. Policy changes
+require a new candidate; this engine contract alone does not activate the
+workflow or establish actual App acceptance (adapter follow-up #3629).
+
 `REQ-STUDIO-RELEASE-ENGINE`: the [local coordinator](dev/release-engine.md) pins
 existing release-cut inputs, persists idempotent decisions and zero-incremental
 cost reservations, requires every policy-defined artifact/work stage/installed-App

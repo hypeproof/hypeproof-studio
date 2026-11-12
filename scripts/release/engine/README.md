@@ -1,6 +1,6 @@
 # @hypeproof/release-engine-core
 
-Version 0.1.0 packages Studio's existing `core.mjs` without a second engine.
+Version 0.2.0 packages Studio's existing `core.mjs` without a second engine.
 Only `@hypeproof/release-engine-core` and `@hypeproof/release-engine-core/core`
 are public entry points. Local filesystem storage and the CLI are not included.
 No install scripts or runtime dependencies are required. Packaging is local;
@@ -16,6 +16,14 @@ Ed25519 verification through `node:crypto`. Workers require `nodejs_compat` and
 a tested compatibility date. No crypto algorithm or signature encoding changes.
 `canonical(body)` UTF-8 and strict canonical base64 signatures remain the wire
 contract. Existing ledger, policy, evidence and promotion schemas are preserved.
+
+An operator-reviewed policy can opt into `publicationAuthority: "machine"` before
+cutting a candidate. Complete signed installed-App evidence, pinned identities,
+verified bytes and settled included capacity produce `MACHINE_READY` and an
+explicit `hps-machine-publication/1` authority in the intent. No manager signature
+is requested or fabricated. The omitted/default `manager` mode preserves the
+existing approval gate. Authority changes require a new candidate; mixed intents
+are refused. This package does not enroll a product or publish a release.
 
 Storage belongs to the host adapter. Serialize read/apply/commit atomically;
 `applyEvent` returns `{state, result}` without persisting or doing network IO.
