@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChatIcon } from './ChatDetails';
-import { nativeComposing } from './imeGuard';
+import { imeComposing } from './imeGuard';
 import { placeQuote, QUOTE_CUT_NOTE, QUOTE_LABEL, QUOTE_SCOPE_ATTR, quoteChipText, quoteFromSelection, type AnswerQuote, type QuoteBox, type QuotePlacement, type QuoteRangeRects, type QuoteSelection } from './quoteReply';
 import type { DraftPart } from './pastedDraft';
 import './quoteAction.css';
@@ -60,7 +60,9 @@ const box = (r: Rect): QuoteBox => ({ top: r.top, bottom: r.bottom, left: r.left
  * range: its line boxes inside the answer body, the visible part of the conversation and the row.
  * Null when there is nothing to measure (no range, or no layout), so the last place stays.
  */
-function measure(pop: HTMLElement, range: QuoteRangeRects | undefined): QuotePlacement | null {
+type Place = { side: QuotePlacement['side']; top: number; start: number };
+
+function measure(pop: HTMLElement, range: QuoteRangeRects | undefined): Place | null {
   const row = pop.parentElement, body = row?.querySelector(`[${QUOTE_SCOPE_ATTR}]`);
   if (!range || !row || !body) return null;
   const limit = body.getBoundingClientRect();
@@ -76,7 +78,12 @@ function measure(pop: HTMLElement, range: QuoteRangeRects | undefined): QuotePla
   const place = placeQuote(box(first), box(last), view, box(row.getBoundingClientRect()), { width: pop.offsetWidth, height: pop.offsetHeight });
   const parent = (pop.offsetParent as HTMLElement | null) ?? document.documentElement;
   const origin = parent.getBoundingClientRect();
-  return { side: place.side, top: place.top - origin.top - parent.clientTop + parent.scrollTop, left: place.left - origin.left - parent.clientLeft + parent.scrollLeft };
+  // The inline offset is from the containing block's start edge: its left padding edge, or its right one in RTL.
+  const paddingLeft = origin.left + parent.clientLeft, paddingRight = paddingLeft + parent.clientWidth;
+  const start = getComputedStyle(parent).direction === 'rtl'
+    ? paddingRight - parent.scrollLeft - (place.left + pop.offsetWidth)
+    : place.left - paddingLeft + parent.scrollLeft;
+  return { side: place.side, top: place.top - origin.top - parent.clientTop + parent.scrollTop, start };
 }
 
 /**
@@ -90,7 +97,7 @@ export function QuoteAction({ quote, disabled, onQuote, onDismiss }: {
   onDismiss: () => void;
 }) {
   const pop = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState<QuotePlacement | null>(null);
+  const [place, setPlace] = useState<Place | null>(null);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
   useLayoutEffect(() => {
@@ -100,7 +107,9 @@ export function QuoteAction({ quote, disabled, onQuote, onDismiss }: {
     const update = () => {
       frame = undefined;
       const next = measure(node, quote.range);
-      if (next) setPlace(current => current && current.side === next.side && Math.abs(current.top - next.top) < 0.5 && Math.abs(current.left - next.left) < 0.5 ? current : next);
+      // layout-loop-ok: this effect re-runs only for a new quote and re-measures only on scroll or resize events;
+      // moving the out-of-flow popover changes neither, and an unchanged place keeps the same state object.
+      if (next) setPlace(current => current && current.side === next.side && Math.abs(current.top - next.top) < 0.5 && Math.abs(current.start - next.start) < 0.5 ? current : next);
     };
     update();
     const schedule = () => { if (frame === undefined) frame = requestAnimationFrame(update); };
@@ -111,7 +120,8 @@ export function QuoteAction({ quote, disabled, onQuote, onDismiss }: {
   }, [quote]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || nativeComposing(event)) return;
+      if (imeComposing({ nativeEvent: event })) return; // Escape cancels the IME composition, nothing else
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       // An open modal owns Escape.
       if (document.querySelector?.('[aria-modal="true"], dialog[open]')) return;
       event.preventDefault();
@@ -120,7 +130,7 @@ export function QuoteAction({ quote, disabled, onQuote, onDismiss }: {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
-  return <div ref={pop} className="hps-quote-row" data-side={place?.side} style={{ top: place?.top, left: place?.left }}>
+  return <div ref={pop} className="hps-quote-row" data-side={place?.side} style={{ top: place?.top, insetInlineStart: place?.start }}>
     <button
       type="button"
       className="hps-quote-action"
