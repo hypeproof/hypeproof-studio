@@ -103,13 +103,16 @@ export interface StoreAttributionView {
   instructor: { name: string } | null;
   source: "seller" | "operator" | null;
   seller_editable: boolean;
+  /** The referral consent version a code registration must carry, and the one this seller gave (null: none). */
+  consent_version: string;
+  consent_given: string | null;
 }
 /** `due`: the payable balance reached `payout.account_prompt_krw`, so the account is asked for. Never the number itself. */
 export type StorePayoutAccountView =
   | { state: "not_due" | "due"; prompt_at_krw: number; holder: "self" | "linked_adult"; linked_adult_required: boolean }
   | { state: "on_file"; prompt_at_krw: number; holder: "self" | "linked_adult"; linked_adult_required: boolean; masked: string; holder_check: "sandbox_matched" | "not_run" };
 /** What the seller typed at the first publication: codes, or none. */
-export type StoreAttributionInput = { partner_code?: string; instructor_code?: string } | { none: true };
+export type StoreAttributionInput = { partner_code?: string; instructor_code?: string; consent: { version: string; granted: true } } | { none: true };
 /** The names the Service resolved for the typed codes, shown before the seller confirms. */
 export interface StoreAttributionPreview {
   partnerCode: string;

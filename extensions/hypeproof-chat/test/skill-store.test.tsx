@@ -27,7 +27,8 @@ const typeInto = (el: any, value: string) => act(async () => { el.type ??= el.ge
 const byLabel = (host: any, label: string) => host.findAll((e: any) => e.getAttribute?.('aria-label') === label)[0];
 const buttons = (host: any, text: string) => host.querySelectorAll('button').filter((b: any) => b.textContent === text);
 
-const DECIDED = { decided: true, partner: null, instructor: null, source: 'seller' as const, seller_editable: false };
+const CONSENT_V = 'store-referral-2026-11-12';
+const DECIDED = { decided: true, partner: null, instructor: null, source: 'seller' as const, seller_editable: false, consent_version: CONSENT_V, consent_given: null as string | null };
 const NOT_DUE = { state: 'not_due' as const, prompt_at_krw: 10000, holder: 'self' as const, linked_adult_required: false };
 const SELLER = { tier: 'new' as const, cap_krw: 100000, identity_verified: true, attribution: DECIDED, items: [] as { id: string; title: string; price_krw: number; status: string; report_count: number }[], sales: [] as any[], totals: { refund_window: 0, payout_hold: 0, payable: 0, refunded: 0, pending: 0, rolls_over: true, payout_min_krw: 10000 }, payout_account: NOT_DUE as any, payout: 'not_started' as const, policy_version: 'v2' };
 
@@ -94,7 +95,7 @@ async function main() {
   const sale = { order_id: 'sto_' + 'd'.repeat(32), title: PAID.title, gross: 10000, pg_fee: 340, seller: 7728, commission: 1932, partner: 483, instructor: 483, hypeproof: 966, seller_net: 7728, policy_version: 'v1', paid_at: 1, status: 'refund_window' as const, payout_hold_ends: 2 };
   const seller = { ...SELLER, attribution: { ...DECIDED, partner: { name: '세바시' }, instructor: { name: '김강사' } }, sales: [sale], totals: { ...SELLER.totals, refund_window: 7728, pending: 7728 } };
   const adult = html(base({ tab: 'sell', seller }));
-  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>1,932원</td><td>483원</td><td>483원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.', '<li>환불 가능 기간 7,728원</li><li>지급 보류 0원</li><li>정산 대상 0원</li>', '등록한 코드: 파트너 세바시 · 강사 김강사. 바꾸려면 운영팀에 문의해 주세요.'])
+  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>1,932원</td><td>483원</td><td>483원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.', '<th>결제 수수료(예상)</th>', '결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.', '<li>환불 가능 기간 7,728원</li><li>지급 보류 0원</li><li>정산 대상 0원</li>', '등록한 코드: 파트너 세바시 · 강사 김강사. 바꾸려면 운영팀에 문의해 주세요.'])
     assert.ok(adult.includes(cell), cell);
   // Earnings first: no account form while the payable balance is under the prompt amount.
   assert.ok(adult.includes('정산 대상 금액이 10,000원 이상이 되면 받을 계좌를 여쭤볼게요.'));
@@ -187,11 +188,27 @@ async function main() {
   assert.deepEqual(sent.at(-1), { type: 'storeResolveCodes', partnerCode: '', instructorCode: 'I-ABCDE-FGHJK' });
   await act(() => root.render(<SkillStoreView state={base({ tab: 'sell', seller: undecided, questDraft, attributionPreview: { partnerCode: '', instructorCode: 'I-ABCDE-FGHJK', partner: { name: '세바시' }, instructor: { name: '김강사', partner_name: '세바시' } } })} send={m => sent.push(m)} />));
   assert.ok(host.textContent.includes('확인했어요. 파트너: 세바시 (강사 소속으로 함께 등록돼요) · 강사: 김강사. 올리면 이대로 한 번만 등록돼요.'));
+  // Checked names are not enough: sharing the sales record needs the consent.
+  assert.ok(publish().hasAttribute('disabled'), 'checked but not consented');
+  assert.ok(host.textContent.includes('정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 업체·강사에게 제공되는 것에 동의해요.'));
+  const consentBox = byLabel(host, '파트너·강사 코드').querySelector('input[type="checkbox"]');
+  consentBox.type = 'checkbox'; consentBox.checked = true;
+  await act(() => click(consentBox));
   await act(() => click(publish()));
-  assert.deepEqual(sent.at(-1).attribution, { instructor_code: 'I-ABCDE-FGHJK' });
+  assert.deepEqual(sent.at(-1).attribution, { instructor_code: 'I-ABCDE-FGHJK', consent: { version: CONSENT_V, granted: true } });
   // Changing the code after the check needs a new check (negative control).
   await typeInto(byLabel(host, '파트너·강사 코드').querySelectorAll('input')[1], 'I-ZZZZZ-ZZZZZ');
   assert.ok(publish().hasAttribute('disabled'));
+  // Declining: 「코드 없이 진행」 clears the codes and the publish registers none.
+  await act(() => click(buttons(byLabel(host, '파트너·강사 코드'), '코드 없이 진행')[0]));
+  await act(() => click(publish()));
+  assert.deepEqual(sent.at(-1).attribution, { none: true });
+  // The single-step form waits for the same check and consent.
+  await typeInto(byLabel(host, '파트너·강사 코드').querySelectorAll('input')[0], 'P-ABCDE-FGHJK');
+  const form = byLabel(host, '스킬 올리기');
+  const [title, summary] = form.querySelectorAll('input');
+  await typeInto(title, '정리'); await typeInto(summary, '요약'); await typeInto(form.querySelector('textarea'), '지침');
+  assert.ok(buttons(form, '스토어에 올리기')[0].hasAttribute('disabled'), 'single-step publish waits for the code check');
   await act(() => root.unmount());
   // Decided: no code step, and the publish carries no attribution.
   const done = await mounted(base({ tab: 'sell', seller: SELLER, questDraft }));
