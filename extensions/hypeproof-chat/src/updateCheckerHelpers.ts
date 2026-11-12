@@ -271,8 +271,12 @@ export interface InstallerScriptInput {
   oldVersion: string;
   // Where to write the per-run log (full path).
   logPath: string;
-  /** Natural quit must not reopen the app. Explicit restart keeps the default. */
-  relaunch?: boolean;
+  /**
+   * Natural quit must not reopen the app. Explicit restart keeps the default.
+   * "background" (#3411 idle restart) reopens without bringing Studio to the front
+   * (`open -g`), so an automatic update never takes focus from another app.
+   */
+  relaunch?: boolean | "background";
 }
 
 /**
@@ -378,7 +382,7 @@ restore_on_exit() {
   status=$?
   if [[ $status -ne 0 && -d "$BACKUP_PATH" && ! -e "$OLD_APP" ]]; then
     mv "$BACKUP_PATH" "$OLD_APP" || { echo "[RECOVERY] previous app retained at $BACKUP_PATH"; exit 1; }
-    ${input.relaunch === false ? ": # stay closed after a user quit" : 'open "$OLD_APP" || true'}
+    ${input.relaunch === false ? ": # stay closed after a user quit" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || true`}
   fi
   # Preserve any backup for manual recovery, including a failed relaunch.
   if [[ ! -d "$BACKUP_PATH" ]]; then rm -rf "$STAGE"; fi
@@ -398,7 +402,7 @@ xattr -dr com.apple.quarantine "$OLD_APP" 2>/dev/null || true
 echo "[ok] stripped quarantine"
 
 # Reopen
-${input.relaunch === false ? ": # next launch is user initiated" : 'open "$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"'}
+${input.relaunch === false ? ": # next launch is user initiated" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"`}
 echo "[ok] ${input.relaunch === false ? 'ready for next launch' : 'launched updated app'}"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] update complete"
 exit 0

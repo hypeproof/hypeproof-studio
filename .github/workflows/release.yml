@@ -57,6 +57,13 @@ jobs:
           # Every published release carries its own pinned install-mac.sh + Test Kit.
           grep -q 'install-kit.mjs render' .github/workflows/verify-unified-release.yml
           grep -q 'dist/install-mac.sh' .github/workflows/mirror-release.yml
+          # ... and its pinned Windows update-windows.cmd (2026-11-02); publishing refuses a
+          # release whose platforms lack their install command asset or notes section.
+          grep -q 'install-kit.mjs render-windows' .github/workflows/verify-unified-release.yml
+          grep -q 'install-kit.mjs check' .github/workflows/verify-unified-release.yml
+          grep -q 'install-kit.mjs announce' .github/workflows/notify-release-published.yml
+          grep -q 'dist/update-windows.cmd' .github/workflows/mirror-release.yml
+          test -f scripts/release/templates/update-windows.cmd
           node --test scripts/release/test/install-kit.test.mjs
 
       - name: Summary

@@ -37,6 +37,8 @@ export interface Registration {
    * overwriting it.
    */
   lastPushedSha?: string;
+  /** A site publish (not only a save) went out from the recorded folder: remembersFor may skip the visitor preview. */
+  publishedSite?: true;
 }
 
 export const REGISTRY_KEY = "hps.publish.registrations.v1";
@@ -68,18 +70,32 @@ export class PublishRegistry {
     return this.all()[keyOf(login, repo)];
   }
 
+  /**
+   * Jay 2026-11-04 — this destination was allowed earlier from this same work folder, so a publish goes without
+   * asking again (publishSite `rememberedDestination`), whatever the lesson's approval preset. Another folder,
+   * or a registration that recorded no folder, asks as before. "배포 등록 해제" forgets it.
+   */
+  remembersFor(login: string, repo: string, workspace: string | undefined, same: (a: string, b: string) => boolean, stage: "save" | "publish" = "publish"): boolean {
+    const reg = this.get(login, repo);
+    // Only a destination that already went out from this folder, after its preview and checklist, is remembered
+    // (verify 2026-11-04 M2: a registration followed by a declined preview must ask again); a site publish needs an
+    // earlier site publish, since a save never showed the 인터넷의 누구나 preview.
+    if (!reg || !workspace || !reg.workspace || !same(reg.workspace, workspace) || !reg.lastPushedSha) return false;
+    return stage === "save" || reg.publishedSite === true;
+  }
+
   async register(login: string, repo: string, workspace?: string): Promise<void> {
     if (!login || !repo) return;
     await this.store.update(REGISTRY_KEY, { ...this.all(), [keyOf(login, repo)]: { login, repo, at: this.now(), ...(workspace ? { workspace } : {}) } });
   }
 
   /** Record the commit a successful push created (only for an existing registration). */
-  async recordPush(login: string, repo: string, sha: string, workspace?: string): Promise<void> {
+  async recordPush(login: string, repo: string, sha: string, workspace?: string, stage?: "save" | "publish"): Promise<void> {
     const current = this.all();
     const k = keyOf(login, repo);
     const reg = current[k];
     if (!reg) return;
-    await this.store.update(REGISTRY_KEY, { ...current, [k]: { ...reg, lastPushedSha: sha, ...(workspace ? { workspace } : {}) } });
+    await this.store.update(REGISTRY_KEY, { ...current, [k]: { ...reg, lastPushedSha: sha, ...(workspace ? { workspace } : {}), ...(stage === "publish" ? { publishedSite: true as const } : {}) } });
   }
 
   list(): Registration[] {

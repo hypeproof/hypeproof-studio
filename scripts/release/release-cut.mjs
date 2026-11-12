@@ -18,7 +18,8 @@ import {fileURLToPath} from 'node:url';
 import {classify, fetchPrs, render} from './checklist.mjs';
 import {exitCode, printSmoke, runSmoke} from './smoke/smoke.mjs';
 import {nextRcTag, versionFor} from './version.mjs';
-import {oneLiner} from './install-kit.mjs';
+import {oneLiner, windowsOneLiner} from './install-kit.mjs';
+import {checkoutPlatforms} from './platforms.mjs';
 import {run as selectCases} from './select-cases.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -131,6 +132,9 @@ fs.writeFileSync(path.join(out, 'release-pr.md'), fill('release-pr.md', {
   ...common,
   RC_TAG: rcTag, FINAL_TAG: version,
   INSTALL_ONELINER: oneLiner(rcTag),
+  INSTALL_WINDOWS: checkoutPlatforms(root).includes('win32-x64')
+    ? `\n**rc install (Windows, PowerShell — replaces the installed HypeProof Studio; or double-click \`update-windows.cmd\` on the rc page):**\n\n\`\`\`powershell\n${windowsOneLiner(rcTag)}\n\`\`\`\n`
+    : '',
   BLACKBOX_CASES: cases.markdown, CHANGED_REQUIREMENTS: changedRequirements,
   RC_BUILD_LINK: `https://github.com/${REPO}/releases/tag/${rcTag}`,
   SERVICE_VERSION: smoke.service_version ?? 'unknown',

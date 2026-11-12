@@ -18,8 +18,9 @@ import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
 import { SessionSpool } from '../../extensions/hypeproof-chat/src/sessionSpool.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-roster'); mkdirSync(out, { recursive: true });
-const local = await localOps(); const { default: chalk } = await import('../../chalk/src/index.ts');
+const local = await localOps(); const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'), { setResendFetch } = await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const { lessonStepSignal } = await import('../../extensions/hypeproof-chat/src/chatPanelHelpers.ts');
 const realFetch = globalThis.fetch;
@@ -82,7 +83,7 @@ try {
 
   // ── leg 3: what the instructor sees ──
   const origin = 'http://127.0.0.1:' + chalkServer.address().port, page = await browser.newPage({ viewport: { width: 1440, height: 900 } }); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(origin + '/manage'); await page.locator('#token').fill(local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
+  await page.goto(origin + '/manage'); await signInChalk(page, local.teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-');
   await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat').nth(29).waitFor({ timeout: 8000 }).catch(async (e) => { throw Error('roster did not render: ' + (await page.locator('#ops-state').innerText()) + ' | ' + errors.join(';') + ' | rows=' + (await page.locator('#ops-seats .ops-seat').count()), { cause: e }); });
   assert.equal(await page.locator('#ops-seats .ops-seat').count(), 30); const row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`);
   await row('S01').locator('.seat-open').click(); if (!(await page.locator('.detail-evidence').evaluate(d=>d.open))) await page.locator('.detail-evidence > summary').click(); await page.locator('.ops-tech-fold > summary').click(); assert.match(await page.locator('#ops-tech').innerText(), /build · 제출함/); await page.keyboard.press('Escape'); assert.match(await row('S01').innerText(), /AI 실행 환경 준비 안 됨/); assert.equal(await row('S01').locator('p.blocked').count(), 0, 'a non-blocking fallback is not red');
@@ -107,7 +108,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '결과를 확인했어요' }).isDisabled(), true); assert.match(await page.locator('#ops-evidence').innerText(), /점수·수업 완료·발송 승인이 아닙니다/);
   await page.keyboard.press('Escape'); assert.equal(await page.locator('#ops-detail').isHidden(), true); assert.equal(await page.evaluate(() => document.activeElement?.closest('.ops-seat')?.dataset.seat), 'S01');
   for (const [name, viewport, scale] of [['laptop-1024', { width: 1024, height: 700 }, 1], ['zoom-200', { width: 720, height: 450 }, 2], ['phone-390', { width: 390, height: 800 }, 1]]) {
-    const p = await browser.newPage({ viewport, deviceScaleFactor: scale }); await p.goto(origin + '/manage'); await p.locator('#token').fill(local.teacherToken); await p.locator('#cohort').fill(local.cohort); await p.locator('#connect button').first().click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#refresh').click(); await p.locator('#ops-seats .ops-seat').nth(29).waitFor();
+    const p = await browser.newPage({ viewport, deviceScaleFactor: scale }); await p.goto(origin + '/manage'); await signInChalk(p, local.teacherToken); await p.locator('#cohort').fill(local.cohort); await p.locator('#connect button').first().click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#refresh').click(); await p.locator('#ops-seats .ops-seat').nth(29).waitFor();
     await p.locator('#ops-seats .ops-seat[data-seat="S03"]').locator('.seat-open').click(); await p.locator('#ops-detail').waitFor();
     const d = await p.evaluate(() => { const e = document.getElementById('ops-detail'), r = e.getBoundingClientRect(); return { position: getComputedStyle(e).position, right: Math.round(r.right), top: Math.round(r.top), width: r.width, vw: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth + 1 }; });
     assert.ok(d.position === 'fixed' && d.top === 0 && d.right === d.vw && d.width <= d.vw && !d.overflow, name + ': narrow screens get a drawer over the list, no horizontal scroll: ' + JSON.stringify(d));
@@ -148,7 +149,7 @@ try {
   await page.locator('#ops-pick-retry').click(); await page.locator('#ops-pick-note').filter({ hasText: /다시 선택했습니다/ }).waitFor(); assert.match(await selection(), /선택 1 \/ 전체 30석 .*: S12$/, 'only the seat whose record did not arrive is selected again — not the excluded one, not everybody');
   await page.screenshot({ path: path.join(out, 'selected-collection.png'), fullPage: true }); await page.locator('#ops-select-none').click();
   // An instructor who may collect but not command still gets the selection — and only the collection action.
-  { const p = await browser.newPage({ viewport: { width: 1200, height: 800 } }); await p.goto(origin + '/manage'); await p.locator('#token').fill(await local.teacher('collector', ['observe', 'collect'])); await p.locator('#cohort').fill(local.cohort); await p.locator('#connect button').first().click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#refresh').click(); await p.locator('#ops-seats .ops-seat').nth(29).waitFor();
+  { const p = await browser.newPage({ viewport: { width: 1200, height: 800 } }); await p.goto(origin + '/manage'); await signInChalk(p, await local.teacher('collector', ['observe', 'collect'])); await p.locator('#cohort').fill(local.cohort); await p.locator('#connect button').first().click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#refresh').click(); await p.locator('#ops-seats .ops-seat').nth(29).waitFor();
     await p.locator('#ops-tools > summary').click(); assert.deepEqual([await p.locator('#ops-bulk').isVisible(), await p.locator('#ops-pick-collect').isVisible(), await p.locator('#ops-bulk-diagnose').isVisible()], [true, true, false]); await p.close(); }
   ok('chalk: all / technical-problems / connected / not-connected / manual selection → preview → selected collection through the real host; unselected and excluded learners get nothing; no evaluation');
 

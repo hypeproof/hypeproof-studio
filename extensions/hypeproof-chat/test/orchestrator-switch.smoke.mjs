@@ -160,10 +160,13 @@ function canon(value) {
 }
 
 /** The CLI env as a delta from process.env (which the builder spreads). */
+// REQ-M6 pins the CLI's own title request off on every seat (asserted in observeTurn); the host's
+// ambient value of that key must not decide whether the comparison sees it.
+const PINNED_ENV = new Set(["CLAUDE_CODE_DISABLE_TERMINAL_TITLE"]);
 function envDelta(env) {
   const set = {};
-  for (const k of Object.keys(env)) if (env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
-  const removed = Object.keys(process.env).filter((k) => !(k in env));
+  for (const k of Object.keys(env)) if (!PINNED_ENV.has(k) && env[k] !== process.env[k]) set[k] = normalize(String(env[k]));
+  const removed = Object.keys(process.env).filter((k) => !PINNED_ENV.has(k) && !(k in env));
   return { set, removed };
 }
 
@@ -171,7 +174,7 @@ function envDelta(env) {
  * One run of the real runSdkCoach with a scripted CLI. Returns everything observable: the
  * query input, canUseTool's answers to PROBES, the approvals asked, and the callbacks.
  */
-async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }) {
+async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, emailAutomationHost }) {
   const seen = { approvals: [], deltas: [], activities: [], usage: [], events: [], fetches: [] };
   let decisions = [];
   const sdk = fakeSdk(async ({ options }) => {
@@ -210,6 +213,7 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
       return { approved: true, actor: "policy" };
     },
     ...(browserHost ? { browserHost } : {}),
+    ...(emailAutomationHost ? { emailAutomationHost } : {}),
     ...(host
       ? {
           orchestrator: {
@@ -224,7 +228,22 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
       : {}),
   });
   const call = sdk.calls[0];
+  // DEC-11f (2026-11-05) — auto seats also carry one PreToolUse hook (matcher "Bash") that only records the shell's
+  // folder for the outward approval (sdkCoach.ts). It is not an orchestrator surface: counted here, then left out of the
+  // turn snapshot so the digests below keep measuring the orchestrator (checked in "DEC-11f shell-folder hook").
+  {
+    const hooks = call.options.hooks;
+    const pre = hooks?.PreToolUse ?? [];
+    call.shellCwdHooks = pre.filter((m) => m.matcher === "Bash").length;
+    if (call.shellCwdHooks) {
+      const kept = pre.filter((m) => m.matcher !== "Bash");
+      // Same key order as before (PreToolUse first when the orchestrator registered it).
+      const next = Object.fromEntries(Object.entries(hooks).flatMap(([k, v]) => (k !== "PreToolUse" ? [[k, v]] : kept.length ? [[k, kept]] : [])));
+      if (Object.keys(next).length) call.options.hooks = next; else delete call.options.hooks;
+    }
+  }
   const { env, ...rest } = call.options;
+  assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "REQ-M6: the CLI's paid title request stays disabled");
   return {
     snapshot: canon({
       prompt: call.prompt,
@@ -330,6 +349,15 @@ const ok = (name) => {
   console.log(`✓ ${name}`);
 };
 
+// ── 0. DEC-11f shell-folder hook: on auto seats (adult, no preset) only ──────
+{
+  const auto = Object.entries(observed).filter(([, o]) => o.call.shellCwdHooks).map(([n]) => n.split("/")[0]);
+  for (const [name, o] of Object.entries(observed)) assert.ok(o.call.shellCwdHooks <= 1, `${name}: at most one shell-folder hook`);
+  assert.ok(auto.includes("adultWide"), "control: an adult seat with the shell carries it");
+  for (const p of ["kidsChat", "kidsPolluted", "minorFlagAdultTier"]) assert.ok(!auto.includes(p), `minor seat ${p}: no shell-folder hook`);
+  ok("DEC-11f shell-folder hook: one Bash PreToolUse recorder on auto seats, none on minor seats");
+}
+
 // ── 1. Byte-identity with Studio main ───────────────────────────────────────
 // Taken with HPS_A4_RECORD_BASE=1 on main trees without A4: all ten cases of a profile have
 // the same digest there, because nothing before A4 reads the served `orchestrator` value or
@@ -359,13 +387,16 @@ const ok = (name) => {
 // own browser instead of running Chrome). The six profiles that grant the browser moved. Control: removing
 // page_pdf_save from MCP_BROWSER_TOOLS and the server reproduced every previous digest (a7b8013ce7d9d7d0,
 // cdc79d6719de7555, 3545599d2498467d, e7f98f066d7810de, 610234268befcbb9, f854dfa48639b858).
+// DEC-11 amended (Jay 2026-11-04): an adult seat with no lesson preset runs in auto, so the scripted `rm -rf site`
+// inside the work folder is allowed instead of asked. Only adultWide grants the shell and moved. Control: forcing
+// autoInFolder off in sdkCoach.ts reproduced every previous digest (adultWide 12183dad8d42f3be).
 const BASE = {
   kidsChat: "582e3e0804786f9f",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools.
   kidsPolluted: "5f38949c153d4c13",
   adultRW: "6295e410f05b5f13",
-  adultWide: "12183dad8d42f3be",
+  adultWide: "ebc3069233384a3e",
   adultSubagents: "b995c4fa789f806f",
   adultCR: "06c7bf022016cb15",
   minorFlagAdultTier: "f5e0eea0b4359fcf",
@@ -501,6 +532,27 @@ function surfacesOf({ call, seen }) {
   assert.ok(!matrixLog.some((l) => /roster not used: (absent|served off)/.test(l)));
   assert.equal(fs.existsSync(path.join(WS, ".hypeproof")), false, "no turn above created the archive folder");
   ok(`inventory: ${CASES.filter((x) => !x.on).length} switch-off turns show no orchestrator tool, hook, header, env pin, request, approval kind or event, and deny both tools; the ${CASES.filter((x) => x.on).length} on-turns show every one; the legacy subagents go only with the roster`);
+}
+
+// Combined grant path: the email server stays separate, while an orchestrator
+// without a browser host still gets its own tools. Missing email hosts grant none.
+{
+  const profile = { ...PROFILES.adultRW, automations: { enabled: true, provider: "gmail", appsScript: true, maxRecipients: 20 } };
+  const emailAutomationHost = { isAllowed: () => true, isAppsScriptAllowed: () => true, isSharedRunner: () => true, runtime: {}, confirmSend: async () => false };
+  const { value: both } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null, emailAutomationHost }));
+  const options = both.call.options;
+  assert.deepEqual(Object.keys(options.mcpServers).sort(), ["hypeproof", "hypeproof_email"]);
+  assert.deepEqual(options.mcpServers.hypeproof.tools.map(t => t.name), ["consult", "site_check"]);
+  assert.ok(options.mcpServers.hypeproof_email.tools.some(t => t.name === "apps_script_run"));
+  assert.match(options.systemPrompt, /Installed Studio execution contract: shared Google runner/);
+  assert.deepEqual(both.snapshot.end, { failed: false });
+  const signal = new AbortController().signal;
+  assert.equal((await options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "allow");
+  assert.equal((await options.canUseTool("mcp__hypeproof__browser_read", {}, { signal })).behavior, "deny");
+  const { value: absent } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null }));
+  assert.deepEqual(Object.keys(absent.call.options.mcpServers), ["hypeproof"]);
+  assert.equal((await absent.call.options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "deny");
+  ok("combined email and orchestrator grants: separate servers, shared-runner guidance retained, no borrowed browser or missing-host email grants");
 }
 
 // ── 3. A full consult turn through runSdkCoach against a fake gateway ───────

@@ -10,7 +10,12 @@ on:
       - 'package-lock.json'
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
+      - 'scripts/run-playwright-ci.sh'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'scripts/email-test-participant-auth.mjs'
+      - 'scripts/tests/email-test-participant-auth.test.mjs'
+      - 'scripts/email-test-r2-download.mjs'
+      - 'scripts/tests/email-test-r2-download.test.mjs'
       - 'scripts/service-tooling.mjs'
       - 'scripts/review-pr.sh'
       - 'scripts/test/service-tooling-symlink.test.mjs'
@@ -20,6 +25,9 @@ on:
       - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
+      - 'scripts/check-residual-branding.sh'
+      - 'scripts/verify-branding.sh'
+      - 'scripts/test/residual-branding.test.mjs'
       - '.github/workflows/pr-ci.yml'
 
 permissions:
@@ -99,12 +107,20 @@ jobs:
           node --test scripts/release/test/engine.test.mjs scripts/release/test/engine-package.test.mjs
           node --test e2e/paid-pass-recovery/proxy.test.mjs e2e/paid-pass-recovery/contract.test.mjs e2e/paid-pass-recovery/lifecycle.test.mjs
           node scripts/test-unified-launcher.mjs
+      # Every scripts/release/test/*.test.mjs runs here; promote.test.mjs fails a PR that adds one
+      # without listing it (#3513: promote.test.mjs ran only inside release-promote, and broke unseen).
       - name: Release cut and publish gate controls
         if: ${{ !cancelled() }}
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs scripts/release/test/select-cases.test.mjs scripts/release/test/create.test.mjs scripts/release/test/smoke.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs scripts/release/test/select-cases.test.mjs scripts/release/test/create.test.mjs scripts/release/test/smoke.test.mjs scripts/release/test/escaped-bug-case.test.mjs scripts/release/test/process-notes.test.mjs scripts/release/test/promote.test.mjs scripts/release/test/release-notes-url.test.mjs
+      - name: Release check gate controls (#3568)
+        if: ${{ !cancelled() }}
+        run: python3 scripts/release/test/test_release_check_gate.py
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
+      - name: Private pilot participant and download restrictions
+        if: ${{ !cancelled() }}
+        run: node --test scripts/tests/email-test-participant-auth.test.mjs scripts/tests/email-test-r2-download.test.mjs
       - name: service-tooling path under a symlinked TMPDIR (#2981)
         if: ${{ !cancelled() }}
         run: node --test scripts/test/service-tooling-symlink.test.mjs
@@ -244,9 +260,71 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: npm run typecheck
 
-  extension-test:
-    name: extension / smoke
+  # #3553: the residual "codium"/"VSCodium" rule (REQ-J4) ran only in build-mac on a release tag, so
+  # #3484's `vscodium-base` method comment (esbuild keeps member JSDoc) merged green and broke
+  # v2026.1105.0-rc.2. This bundles the extension and webview the way inject-builtin-extensions.sh
+  # does and runs the SAME script build-mac's verify-branding.sh runs, on the files that ship
+  # (package.json, dist/, media/, webview-ui/dist/). No vendored SDK here; build-mac excludes it anyway.
+  extension-branding:
+    name: extension / shipped branding
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            extensions/hypeproof-chat/package-lock.json
+            extensions/hypeproof-chat/webview-ui/package-lock.json
+      - name: Residual-branding rule controls (planted #3484 comment)
+        run: node --test scripts/test/residual-branding.test.mjs
+      - name: Bootstrap pinned private Service packages
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install extension deps
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --no-audit --no-fund
+      - name: Install webview deps
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat/webview-ui
+        run: npm ci --no-audit --no-fund
+      - name: Bundle extension (dist/extension.js)
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat
+        run: npm run build:extension
+      - name: Build webview (webview-ui/dist)
+        if: ${{ !cancelled() }}
+        working-directory: extensions/hypeproof-chat/webview-ui
+        run: npm run build
+      - name: No residual 'codium' in the shipped extension files
+        if: ${{ !cancelled() }}
+        run: |
+          test -f extensions/hypeproof-chat/dist/extension.js
+          test -f extensions/hypeproof-chat/webview-ui/dist/index.html
+          bash scripts/check-residual-branding.sh \
+            extensions/hypeproof-chat/package.json \
+            extensions/hypeproof-chat/dist \
+            extensions/hypeproof-chat/media \
+            extensions/hypeproof-chat/webview-ui/dist \
+            || { echo "::error title=Residual branding in the shipped extension::'codium'/'VSCodium' would ship (build-mac's verify-branding.sh check 5 would fail the release). Reword the comment or string listed above."; exit 1; }
+
+  # The extension's `npm test` chain, split across six parallel runners (#3417).
+  # One runner took 65-77 min; scripts/run-smoke-shard.mjs reads the same chain
+  # from package.json and splits it by measured duration
+  # (test/smoke-durations.json). Reproduce one shard locally with
+  # `node scripts/run-smoke-shard.mjs --shard 3/6`; `npm test` still runs everything.
+  extension-test-shard:
+    name: extension / smoke (${{ matrix.shard }}/6)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -274,14 +352,29 @@ jobs:
         working-directory: extensions/hypeproof-chat/webview-ui
         run: npm ci
       # U-layer pure smoke tests (test/*.smoke.mjs) — no vscode host needed.
-      - name: Run extension smoke tests
+      - name: Run extension smoke tests (one shard)
         working-directory: extensions/hypeproof-chat
         env:
           # The focus-geometry smoke reads computed styles in the runner's preinstalled Google Chrome
           # (test/lib/headless-chromium.mjs finds it on PATH). With this set, a missing browser fails
           # the job instead of skipping the cascade and contrast checks.
           FOCUS_REQUIRE_BROWSER: "1"
-        run: npm test
+        run: node scripts/run-smoke-shard.mjs --shard ${{ matrix.shard }}/6
+
+  # The single `extension / smoke` result, under the name it has always had, so
+  # anything keyed on that check name keeps working. It fails unless every shard passed.
+  extension-test:
+    name: extension / smoke
+    if: always()
+    needs: extension-test-shard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every smoke shard passed
+        env:
+          SHARDS: ${{ needs.extension-test-shard.result }}
+        run: |
+          echo "smoke shards: $SHARDS"
+          test "$SHARDS" = "success"
 
   # The Windows leg for the extension smokes whose verdict depends on the host
   # (ADR 0011 rollout, WP A1). Every other job here runs on Ubuntu, where a
@@ -350,10 +443,13 @@ jobs:
     # CR-T19 incl. the service-worker and sibling-link cases, CR-T21 one visit, CR-T22, CR-T60,
     # CR-T61). Synthetic: the real Service router over local SQLite and an in-memory R2.
     name: cr-publish / real Chromium
-    runs-on: ubuntu-latest
+    # Playwright 1.60 refuses Chromium on ubuntu-latest (= 26.04 since 2026-11); pin until it supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -369,11 +465,11 @@ jobs:
         run: npm ci
       - name: Install Chromium
         working-directory: e2e
-        run: npx playwright install --with-deps chromium
+        run: bash ../scripts/run-playwright-ci.sh prepare
       - name: Run the published runtime in real Chromium
         working-directory: e2e
-        run: npm run test:cr-publish
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:cr-publish
       # cr-evidence (#1394): participant events from the same runtime (CR-T23, CR-T62, CR-T67, CR-T19 events half).
       - name: Run participant events in real Chromium
         working-directory: e2e
-        run: npm run test:cr-evidence
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:cr-evidence
