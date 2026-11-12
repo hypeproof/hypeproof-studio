@@ -172,9 +172,19 @@ private final class JourneyStore: @unchecked Sendable {
         return result
     }
     private func reflection(acknowledged: String? = nil) -> [String: Any] {
-        let messages: [[String: Any]] = value.accepted.enumerated().flatMap { index, turn in
-            [["id": turn.id, "role": "user", "content": turn.text, "created_at": (index * 2 + 1) * 1000],
-             ["id": "answer-" + turn.id, "role": "assistant", "content": "What small change would make tomorrow better?", "created_at": (index * 2 + 2) * 1000]]
+        var messages: [[String: Any]] = []
+        for (index, turn) in value.accepted.enumerated() {
+            let userMessage: [String: Any] = [
+                "id": turn.id, "role": "user", "content": turn.text,
+                "created_at": (index * 2 + 1) * 1000,
+            ]
+            let assistantMessage: [String: Any] = [
+                "id": "answer-" + turn.id, "role": "assistant",
+                "content": "What small change would make tomorrow better?",
+                "created_at": (index * 2 + 2) * 1000,
+            ]
+            messages.append(userMessage)
+            messages.append(assistantMessage)
         }
         var state: [String: Any] = ["id": "personal-reflection", "revision": value.accepted.count * 2,
                                    "messages": messages, "has_earlier": false, "turn": NSNull()]
