@@ -13,7 +13,7 @@ import unittest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MOCK = r'''#!/usr/bin/env python3
-import json,os,pathlib,signal,sys,time
+import json,os,pathlib,signal,subprocess,sys,time
 s=pathlib.Path(os.environ['MOCK_STATE']); mode=os.environ['MOCK_MODE']
 tool=pathlib.Path(sys.argv[0]).name; args=sys.argv[1:]
 with (s/'calls.jsonl').open('a') as f: f.write(json.dumps([tool,*args])+'\n')
@@ -25,6 +25,11 @@ elif tool=='emulator':
  def stop(*_):
   (s/'stopped').write_text('owned emulator terminated');sys.exit(0)
  signal.signal(signal.SIGTERM,stop)
+ if mode in ['resistant_child','leader_already_exited']:
+  child=subprocess.Popen([sys.executable,'-c',"import signal,time,pathlib,os; signal.signal(signal.SIGTERM,signal.SIG_IGN); pathlib.Path(os.environ['MOCK_STATE'],'child-ready').touch(); time.sleep(60)"])
+  (s/'child-pid').write_text(str(child.pid))
+  while not (s/'child-ready').exists():time.sleep(.01)
+  if mode=='leader_already_exited':sys.exit(7)
  if mode=='child_exit': time.sleep(.1);sys.exit(7)
  while True:time.sleep(.02)
 elif tool=='adb':
@@ -84,6 +89,9 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         for child in self.children:
             if child.poll() is None:
                 child.terminate(); child.wait(timeout=8)
+        if (self.state / "child-pid").exists():
+            try: os.kill(int((self.state / "child-pid").read_text()), signal.SIGKILL)
+            except ProcessLookupError: pass
         self.temp.cleanup()
 
     def start(self, mode, boot=3, test=3):
@@ -194,6 +202,22 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
             code, receipt, _ = self.finish(self.start("ready"))
         self.assertEqual(code, 2); self.assertFalse(receipt["verification_started"])
         self.assertFalse((self.state / "pid").exists())
+
+    def assert_descendant_stopped(self):
+        pid = int((self.state / "child-pid").read_text())
+        status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+        # An orphan may briefly await the OS reaper; it must not remain runnable.
+        self.assertTrue(not status or status.startswith("Z"), status)
+
+    def test_term_resistant_descendant_is_stopped_after_leader_exits(self):
+        code, _, _ = self.finish(self.start("resistant_child"))
+        self.assertEqual(code, 0)
+        self.assert_descendant_stopped()
+
+    def test_already_exited_leader_does_not_skip_group_cleanup(self):
+        code, receipt, _ = self.finish(self.start("leader_already_exited"))
+        self.assertEqual(code, 2); self.assertFalse(receipt["verification_started"])
+        self.assert_descendant_stopped()
 
 
 if __name__ == "__main__":

@@ -25,20 +25,23 @@ class Stopped(Exception):
 
 def stop_owned(process):
     """Only process groups created by this invocation; never adb emu kill/pkill."""
-    if process is not None and process.poll() is None:
+    if process is None:
+        return
+    def signal_group(sig):
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            os.killpg(process.pid, sig)
+            return True
         except ProcessLookupError:
-            process.wait(timeout=5)
-            return
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=5)
+            return False
+    # A shell/launcher can exit while its children remain in the owned group.
+    # Waiting for only the leader would leave those children running indefinitely.
+    signal_group(signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while signal_group(0) and time.monotonic() < deadline:
+        process.poll()
+        time.sleep(.05)
+    signal_group(signal.SIGKILL)
+    process.wait(timeout=5)
 
 
 class Bootstrap:
