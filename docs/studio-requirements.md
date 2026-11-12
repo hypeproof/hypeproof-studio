@@ -6796,9 +6796,8 @@ The block holds the monospace `$ command` and, only where the host knows one, th
 seats open. The block is at most 240px tall and scrolls inside (the command wraps, so the page
 never scrolls sideways). A 44px `명령 복사` button sits beside the command, never over it: it is
 always in the tab order (Tab from the summary reaches it, after the command itself when the
-command scrolls), and it is drawn while the row is hovered or holds keyboard focus, while a copy
-result shows, and always when the primary pointer cannot hover. It has the control boundary as
-its edge (`ButtonText` in forced colours) and no reveal animation. It copies the command as the
+command scrolls), and it is drawn while the row is hovered or holds keyboard focus and while a
+copy result shows. It has the control boundary as its edge (`ButtonText` in forced colours) and no reveal animation. It copies the command as the
 row shows it, without the `$ ` prompt and with its ` ⏎ ` marks and omission marker, never the raw
 model input; success (`명령을 복사했습니다`, 4 s) waits for the clipboard write and a refusal
 (`복사하지 못했습니다. 명령을 선택해 복사해 주세요.`) stays, through the shared copy outlet

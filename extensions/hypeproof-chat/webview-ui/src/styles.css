@@ -2876,8 +2876,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-shell-row details[open] > summary::before { content: "\25BE"; }
 /* CGP-AGENT-D-025 (DES-CGP-AGENT-60): the copy button sits beside the command block, never over it, so no
  * command text is ever covered. The button is always in the tab order; it is drawn while the row is hovered
- * or holds focus, while a copy result is showing, and always where the pointer cannot hover. No transition,
- * so reduced motion needs no rule. */
+ * or holds focus and while a copy result is showing. No transition, so reduced motion needs no rule. */
 .hps-shell-block { display: flex; align-items: flex-start; gap: var(--hp-space-2); min-width: 0; }
 .hps-shell-block > pre { flex: 1 1 auto; min-width: 0; }
 .hps-shell-copy {
@@ -2889,7 +2888,6 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   opacity: 0;
 }
 .hps-shell-row:hover .hps-shell-copy, .hps-shell-row:focus-within .hps-shell-copy, .hps-shell-copy:not([data-copy-state="idle"]) { opacity: 1; }
-@media (hover: none) { .hps-shell-copy { opacity: 1; } }
 .hps-shell-copy:hover { background: var(--hp-bg-control-hover); }
 .hps-shell-copy:active { background: var(--hp-bg-control-pressed); }
 /* Jay 2026-10-29 ("줄 구분도 잘 안 되고"): a section with its own spacing, then one bordered card per

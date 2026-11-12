@@ -281,15 +281,12 @@ reported separately.
   button; the preview server keeps `끄는 중` (negative control).
 - `test/shell-process-layout.smoke.mjs`: the shipped cascade in headless Chromium, personal and
   classroom, dark and light, 320/800/1420px, forced colours and both VS Code high-contrast themes.
-  Chromium is started with a hover-capable fine pointer (`--blink-settings`), because headless has
-  none and Studio runs with a mouse or trackpad; a second browser has a coarse pointer that cannot
-  hover. Measured: monospace command (ten `i` and ten `W` equally wide), a long command block at most
+  Measured: monospace command (ten `i` and ten `W` equally wide), a long command block at most
   240px with `overflow-y: auto` and content to scroll, the copy button 44 × 44 with a visible edge,
   beside the command (no overlap) and inside the row, not drawn at rest, drawn under a forced
-  `:hover` on the row and when Tab from the summary reaches it, always drawn without hover, no
-  opacity transition, the shared 2px focus ring (inset in the transcript scroll scope). Twelve new
+  `:hover` on the row and when Tab from the summary reaches it, no opacity transition, the shared 2px focus ring (inset in the transcript scroll scope). Eleven new
   injected overrides (proportional font, no cap, clipping, never/always drawn, hover only, out of
-  the tab order, over the command, small target, no edge, a fade, hidden on touch) each fail it.
+  the tab order, over the command, small target, no edge, a fade) each fail it.
 - Physical IME is not involved (the button binds no key), and packaged-app, touch-device and
   screen-reader acceptance are separate observations.
 

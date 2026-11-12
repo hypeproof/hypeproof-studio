@@ -1,7 +1,7 @@
 // REQ-CGP-AGENT-60 — shell rows and the "실행 중인 것" list, measured on the shipped cascade.
 // CGP-AGENT-D-025 (DES-CGP-AGENT-60): the command block is monospace and stops at 240px, scrolling inside;
 // its copy button sits beside the command (never over it), is a 44px tab stop right after the summary, and is
-// drawn while the row is hovered or holds focus (always without a hover-capable pointer), with no motion.
+// drawn while the row is hovered or holds focus, with no motion.
 // The stylesheet is the CSS esbuild emits for webview-ui/src/main.tsx (the exact product order:
 // tokens, focusGeometry, component sheets, styles, chatDetails, ...). Nothing is injected: no
 // token, no focus rule. Markup is the real ToolLine / RunningProcessesPanel output.
@@ -103,11 +103,6 @@ const probe = `(() => {
     } };
   }
 })()`;
-// Headless Chromium has no pointer device (hover: none). Studio runs with a mouse or trackpad on macOS and
-// Windows, so the main browser gets a fine, hover-capable pointer; a second one gets a coarse pointer that
-// cannot hover (touch).
-const DESKTOP_POINTER = '--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4';
-const TOUCH_POINTER = '--blink-settings=primaryHoverType=1,availableHoverTypes=1,primaryPointerType=2,availablePointerTypes=2';
 const opacityOf = (sel) => `(() => { const e = document.querySelector('${sel}'); return e ? +getComputedStyle(e).opacity : null; })()`;
 const pause = () => new Promise((r) => setTimeout(r, 30));
 /** The copy button's opacity while the first shell row matches :hover (forced; headless updates no hover state). */
@@ -147,7 +142,6 @@ async function copyChecks(b, at, bad) {
   if (c.fade) bad.push(`${at}: copy reveal animates`);
   if (c.border < 1 || c.borderStyle !== 'solid' || /rgba\(0, 0, 0, 0\)/.test(c.borderColor)) bad.push(`${at}: copy button has no visible edge (${c.border}px ${c.borderStyle} ${c.borderColor})`);
   // At rest (pointer away, focus elsewhere) the button is not drawn; hover and focus draw it.
-  if (!(await b.evaluate(`matchMedia('(hover: hover)').matches`))) { bad.push(`${at}: environment: no hover-capable pointer, the hover checks cannot run`); return; }
   await b.evaluate(`document.activeElement?.blur()`);
   const rest = await b.evaluate(opacityOf('.hps-shell-copy'));
   if (rest !== 0) bad.push(`${at}: copy is drawn at rest (opacity ${rest})`);
@@ -205,25 +199,18 @@ async function check(b, extraCss = '', shots) {
     await b.load(page(t, 'personal', extraCss), { width: 800, height: 900, dark: t.dark });
     await copyChecks(b, tname, bad);
   }
-  // Without a hover-capable pointer (touch) nothing can hover, so the button is always drawn.
-  for (const [tname, t] of Object.entries(THEMES)) {
-    await touch.load(page(t, 'personal', extraCss), { width: 320, height: 900, dark: t.dark });
-    if (!(await touch.evaluate(`matchMedia('(hover: none)').matches`))) bad.push(`touch/${tname}: environment: the touch browser can hover`);
-    else { const o = await touch.evaluate(opacityOf('.hps-shell-copy')); if (o !== 1) bad.push(`touch/${tname}: copy not drawn without hover (opacity ${o})`); }
-  }
   return bad;
 }
 
-let b, touch;
-try { b = await launch(bin, 1, { args: [DESKTOP_POINTER] }); touch = await launch(bin, 1, { args: [TOUCH_POINTER] }); } catch (e) {
-  await b?.close();
+let b;
+try { b = await launch(bin); } catch (e) {
   if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw e;
   console.log(`shell-process-layout NOT RUN: ${e.message}`); process.exit(0);
 }
 try {
   const bad = await check(b, '', process.env.SHELL_PROCESS_SCREENSHOTS);
   assert.deepEqual(bad, [], 'shipped cascade');
-  console.log('  ok   shipped cascade: 2 seats x 2 themes x 3 widths + forced colours + high contrast + touch');
+  console.log('  ok   shipped cascade: 2 seats x 2 themes x 3 widths + forced colours + high contrast');
   // Self-tests: each override must be caught, so the probe is not a no-op.
   const overrides = {
     'focus ring removed': 'html body .hps-shell-row summary:focus-visible { outline: none !important; }',
@@ -249,7 +236,6 @@ try {
     'small copy target': '.hps-shell-copy { min-height: 0; min-width: 0; height: 24px; width: 24px; }',
     'copy has no edge': '.hps-shell-copy { border: 0 !important; }',
     'copy fades in': '.hps-shell-copy { transition: opacity 160ms; }',
-    'copy hidden on touch': '@media (hover: none) { .hps-shell-copy { opacity: 0 !important; } }',
   };
   for (const [name, extra] of Object.entries(overrides)) {
     const caught = await check(b, extra);
@@ -257,4 +243,4 @@ try {
     console.log(`  ok   self-test detects: ${name} (${caught[0]})`);
   }
   console.log('shell-process-layout: PASS');
-} finally { await b.close(); await touch.close(); }
+} finally { await b.close(); }
