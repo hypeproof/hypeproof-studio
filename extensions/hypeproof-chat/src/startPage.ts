@@ -151,6 +151,8 @@ export class StartPage {
   private updateView(): StartState["update"] {
     const offer = this.chat.getAvailableUpdate?.();
     if (!offer?.version) return undefined;
+    // CGP-SHELL-R-003 — the cohort's update freeze hides the notice too, unless the release is security-critical.
+    if (this.chat.isUpdateFrozen?.(offer)) return undefined;
     return { version: offer.version, ...(this.chat.isClassUpdateHeld?.() ? { heldForClass: true } : {}) };
   }
 

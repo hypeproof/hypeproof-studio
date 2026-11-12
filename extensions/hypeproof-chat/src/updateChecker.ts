@@ -724,8 +724,8 @@ export interface SchedulerDeps {
   currentVersion: string;
   /** #3411: stage found updates silently. Absent or false keeps the banner flow. */
   autoUpdate?: () => boolean;
-  /** CGP-SHELL-R-001: a class seat downloads nothing; the banner shows the held line. */
-  classHeld?: () => boolean;
+  /** CGP-SHELL-R-001: a class seat downloads nothing; the banner shows the held line. CGP-SHELL-R-003: gets the found release, so a cohort freeze can hold it unless it is security-critical. */
+  classHeld?: (info?: UpdateInfo) => boolean;
   /** Test seams; default to the real staging. */
   stagedVersion?: () => string | null;
   stage?: (info: UpdateInfo) => Promise<boolean>;
@@ -764,7 +764,7 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
     // #3411: with auto-update on, a found release is downloaded and staged with no prompt;
     // the banner stays the fallback (auto off, class seat, or a failed/impossible staging).
     if (deps.autoUpdate?.() === true) {
-      const classHeld = deps.classHeld?.() === true;
+      const classHeld = deps.classHeld?.(info) === true;
       let stagedVersion: string | null = null;
       try { stagedVersion = (deps.stagedVersion ?? (() => stagedUpdate(deps.context).stagedVersion()))(); } catch { stagedVersion = null; }
       if (stagedVersion === info.version && !classHeld) { deps.pushUpdateBanner(null); return; }

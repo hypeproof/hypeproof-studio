@@ -65,7 +65,7 @@ import {
   registerPublicUpdateSignal,
 } from "./updateChecker";
 import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
-import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
+import { CLASS_UPDATE_HOLD_COPY, updateFreezeCopy } from "./updateCheckerHelpers";
 import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
@@ -831,9 +831,14 @@ export async function activate(context: vscode.ExtensionContext) {
             notes: info.notes,
             releaseUrl: info.releaseUrl,
             sizeBytes: info.sizeBytes,
+            ...(info.securityCritical ? { securityCritical: true } : {}),
           });
+          // CGP-SHELL-R-003 — inside the cohort's freeze the update UI says who decided, not how to install.
+          const freeze = provider.updateFreezeState();
           vscode.window.showInformationMessage(
-            provider.isClassUpdateHeld()
+            freeze && provider.isUpdateFrozen(info)
+              ? updateFreezeCopy(freeze)
+              : provider.isClassUpdateHeld()
               ? `새 버전 v${info.version} 발견. ${CLASS_UPDATE_HOLD_COPY}`
               : `새 버전 v${info.version} 발견. 채팅 패널 상단의 배너에서 설치할 수 있어요.`,
           );
@@ -850,7 +855,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.installUpdate", async () => {
       // CGP-SHELL-R-001: no download, install or restart while a class seat is active.
       if (provider.isClassUpdateHeld()) {
-        void vscode.window.showInformationMessage(CLASS_UPDATE_HOLD_COPY);
+        // CGP-SHELL-R-003: inside the cohort's freeze the answer says who decided (the offer's security marker decides).
+        const freeze = provider.updateFreezeState();
+        void vscode.window.showInformationMessage(freeze && provider.isUpdateFrozen() ? updateFreezeCopy(freeze) : CLASS_UPDATE_HOLD_COPY);
         return;
       }
       // REQ-STUDIO-QUIT-GUARD: the install ends in a quit, which the quit guard would question.
@@ -865,6 +872,12 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!info.available) {
           provider.setAvailableUpdate(null);
           vscode.window.showInformationMessage("최신 버전이라 업데이트 안 해도 됩니다.");
+          return;
+        }
+        // CGP-SHELL-R-003 — the cohort's freeze holds any release that is not security-critical.
+        const freeze = provider.updateFreezeState();
+        if (freeze && provider.isUpdateFrozen(info)) {
+          void vscode.window.showInformationMessage(updateFreezeCopy(freeze));
           return;
         }
         await runUpdate(info, {
@@ -1019,7 +1032,8 @@ export async function activate(context: vscode.ExtensionContext) {
     scheduleUpdateChecks({
       context,
       autoUpdate: autoUpdateEnabled,
-      classHeld: () => provider.isClassUpdateHeld(),
+      // CGP-SHELL-R-003 — the cohort's freeze also holds background staging, unless the release is security-critical.
+      classHeld: (info) => provider.isClassUpdateHeld() || provider.isUpdateFrozen(info ?? null),
       currentVersion: currentBundleVersion(),
       pushUpdateBanner: (info) => {
         if (!info) {
@@ -1031,6 +1045,7 @@ export async function activate(context: vscode.ExtensionContext) {
           notes: info.notes,
           releaseUrl: info.releaseUrl,
           sizeBytes: info.sizeBytes,
+          ...(info.securityCritical ? { securityCritical: true } : {}),
         });
       },
     }),

@@ -1206,6 +1206,14 @@ html, body, #root {
 }
 .hps-update-line-version { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .hps-update-line-verb { flex: 0 0 auto; white-space: nowrap; }
+/* CGP-SHELL-R-003 — the cohort's update freeze in the classroom settings dialog: 16px lock + 14px text in the
+   theme foreground (no tint, no opacity), wrapping at 320px instead of truncating. */
+.hps-update-freeze {
+  display: flex; align-items: flex-start; gap: var(--ds-c-studio-styles-space-15); margin: 0;
+  color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-40));
+  font-size: var(--ds-c-studio-styles-type-17); line-height: var(--ds-c-studio-styles-type-15);
+}
+.hps-update-freeze > svg { flex: none; margin-block-start: var(--ds-c-studio-styles-size-3); }
 
 /* #278 Phase 3 — browser tool action log (auto-run + log, no modal). */
 /* #308 — inline notice for "페이지를 코치에게" (replaces the VS Code toast — a toast freezes the integrated browser) */

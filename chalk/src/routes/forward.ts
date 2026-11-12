@@ -38,7 +38,11 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // Lab registers this batch in the participant distribution board; the Service
   // still authorizes, rosters and signs every student token behind that adapter.
   const distribution = (method === 'POST' || method === 'GET') && url.pathname === '/workshop/boa-tokens';
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution) {
+  // CGP-SHELL-R-003 — the cohort's Studio update freeze (instructor write). The Service admits it in service-contracts
+  // after 0.1.2; until Chalk's pin moves past that, it is named here. Same issuer-from-connection path as every write;
+  // the Service re-checks the issuer and can_start_session on the cohort.
+  const updateFreeze = (method === 'PUT' || method === 'DELETE') && /^\/admin\/cohorts\/[^/]+\/update-freeze$/.test(url.pathname);
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !updateFreeze) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,

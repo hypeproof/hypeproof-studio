@@ -1525,6 +1525,24 @@ collection contract.
 
 **NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu 글꼴로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 배포된 Chalk Worker(Cloudflare)에서의 GitHub 읽기와 그 사용 한도, 운영 배포.
 
+<a id="adm-11-update-freeze-run"></a>
+
+## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
+
+요구: [수업별 Studio 업데이트 고정](../requirements/classroom-admin.md#adm-11-update-freeze), Studio REQ-I21. Service 계약: hypeproof/hypeproof-service#428. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium), Studio base `5c6eb4dab`, Service base `6c7e517`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| Service `worker/test/update-freeze.test.mjs` | 한국 날짜 범위 규칙(마지막 날 자정까지, 지난·거꾸로·60일 초과·없는 날짜 거절) · `can_start_session` 없는 연결·다른 수업·학생 토큰은 쓰기 403 · 저장·풀기 · Chalk 상태 읽기의 `update_freeze` · `/v1/profile`은 그 수업 좌석에만, 강사 이름 없이, 나머지 응답은 그대로 · 지난 범위·깨진 키는 고정 아님 | Service head `bac4d36`: 3/3 통과. base에 lib만 넣으면 경로·profile 시험 2개 실패(빨강) |
+| `extensions/hypeproof-chat/test/cohort-update-freeze.test.tsx` | `updateFreeze`(수업 좌석 + 범위 안만; 개인·체험·이용권·지남·시작 전·깨짐은 아님) · 보안 표시 줄은 단독 줄만, 노트에서 지움 · 고정은 보안 출시를 막지 않음 · 문구 · 설정 창 한 줄(자물쇠 + 글, 버튼 없음) · 고정 중 배너 없음, 보안 출시는 `보안 업데이트 v…` 수업 줄 · 확인·설치 명령, 백그라운드 내려받기, 시작 화면 연결 | head 통과. base에서 빌드 실패(내보내기 없음, 빨강) |
+| `extensions/hypeproof-chat/test/start-update-notice.smoke.mjs` | 고정 중 시작 화면 알림 없음, 보안 출시는 수업 줄로 다시 보임 | head PASS, base `frozen: no notice` 실패(빨강) |
+| `chalk/test/update-freeze-forward.test.mjs` | `PUT`/`DELETE …/update-freeze`만 강사 연결 issuer로 Service에 감, 다른 메서드·경로는 404로 Service에 안 감, Service 판정 유지 | head 통과, base 실패(빨강) |
+| `chalk/test/latest-release.test.mjs` | `security_critical`: 정식 출시의 노트 표시 줄만, rc·실패·모르는 출시는 false, 캐시와 함께 재사용, 시험용 `HPS_STUDIO_LATEST_RELEASE_SECURITY` | head 7/7 통과 |
+| `chalk/test/update-freeze.browser.mjs` (`chalk` `npm test`에 포함) | 실제로 서빙한 `/console`, 1280·390px: 수업 줄 배지 글·자물쇠·`--hp-warn`·1px 테두리·14px·대비, 조회 전용 연결은 배지만, 보안 출시 표시, 이름표 붙은 날짜 입력 2개가 범위 글을 가리킴(`aria-live`), Tab으로 닿고 ↑ 키로 날짜가 바뀌면 범위 글이 따라감, 44px·14px, 가로 넘침 없음, Service 거절 문구, 저장 `PUT {from, until}` 뒤 배지 갱신, 61일 이상은 보내기 전에 막음, 풀기 `DELETE` 뒤 배지 없음 | head PASS. base에서 고정 칸이 없어 실패(빨강) |
+| 전체 | Studio 확장 `npm test`, `chalk` typecheck·`npm test`, 확장·webview typecheck, `next-work.py --check` | RESULTS_PENDING |
+
+**NOT RUN**: 실제 강사 브라우저(macOS·Windows), 실제 화면 읽기 프로그램, 보안 표시가 있는 실제 출시와 회원 미러 복사(`mirror-release.yml`은 출시 때만 돈다), KV 전파 시간, 배포된 Service·Chalk, 실제 학생 기기.
+
 <a id="adm-01-roster-csv-run"></a>
 
 ## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)

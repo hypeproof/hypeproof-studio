@@ -2689,6 +2689,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
+        {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
@@ -3771,6 +3773,17 @@ function renderInlineMd(md: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+// CGP-SHELL-R-003 (REQ-SHELL-03) — the cohort's update freeze in the classroom settings dialog. Icon + text.
+export function UpdateFreezeLine({ until }: { until: string }) {
+  const [, m, d] = until.split('-').map(Number);
+  return (
+    <p className="hps-update-freeze" role="note">
+      <ChatIcon kind="lock" size={16} />
+      <span>선생님이 업데이트 시점을 정했어요. {m}월 {d}일까지 지금 버전을 써요.</span>
+    </p>
+  );
+}
+
 // #72: in-app update banner. Sits between header and message list. Compact
 // (kid-friendly UX shouldn't be dominated by an update card), with the full
 // release notes hidden behind a "자세히" toggle to keep visual noise low.
@@ -3792,7 +3805,7 @@ function UpdateBanner({
     return (
       <div className="hps-update-line" role="status">
         <ChatIcon kind="upload" size={16} />
-        <span className="hps-update-line-version">새 버전 v{offer.version}</span>
+        <span className="hps-update-line-version">{offer.securityCritical ? '보안 업데이트' : '새 버전'} v{offer.version}</span>
         <span className="hps-update-line-verb">수업이 끝나면 설치할 수 있어요.</span>
       </div>
     );
@@ -3803,7 +3816,7 @@ function UpdateBanner({
       <div className="hps-update-banner-icon"><ChatIcon kind="upload" size={24} /></div>
       <div className="hps-update-banner-body">
         <div className="hps-update-banner-title">
-          새 버전 v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
+          {offer.securityCritical ? '보안 업데이트' : '새 버전'} v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
         </div>
         <div className="hps-update-banner-sub">
           업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요.
