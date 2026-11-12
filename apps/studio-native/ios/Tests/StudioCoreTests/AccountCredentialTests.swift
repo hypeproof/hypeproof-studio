@@ -103,6 +103,14 @@ final class AccountCredentialTests: XCTestCase {
             AccountTokens(access_token: "access", refresh_token: String(repeating: "a", count: 64), expires_in: .infinity, session_id: "session-a")
         ] { XCTAssertThrowsError(try value.validate()) }
     }
+    func testTerminalNewlinesAreNotPartOfCredentialIdentity() throws {
+        for suffix in ["\n", "\r\n", "\r"] {
+            XCTAssertThrowsError(try StoredAccount(accountID: "account-a" + suffix, tokens: tokens(), expiresAt: Date()))
+            XCTAssertThrowsError(try tokens(session: "session-a" + suffix).validate())
+            let value = AccountTokens(access_token: "access", refresh_token: String(repeating: "a", count: 64) + suffix, expires_in: 3600, session_id: "session-a")
+            XCTAssertThrowsError(try value.validate())
+        }
+    }
     func testInactiveAccountCannotBeAdopted() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [AccountProtocol.self]

@@ -22,7 +22,10 @@ public struct StoredAccount: Codable, Sendable {
                       refreshPending: value.decodeIfPresent(Bool.self, forKey: .refreshPending) ?? false)
     }
     static func validID(_ value: String) -> Bool {
-        value.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil
+        let bytes = value.utf8
+        guard (1...128).contains(bytes.count), let first = bytes.first else { return false }
+        func alphanumeric(_ byte: UInt8) -> Bool { (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte) }
+        return alphanumeric(first) && bytes.allSatisfy { alphanumeric($0) || [45, 46, 58, 95].contains($0) }
     }
 }
 
@@ -30,7 +33,8 @@ extension AccountTokens {
     public func validate() throws {
         guard !access_token.isEmpty, access_token.utf8.count <= 16_384,
               access_token.unicodeScalars.allSatisfy({ $0.value > 32 && $0.value < 127 }),
-              refresh_token.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+              refresh_token.utf8.count == 64,
+              refresh_token.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
               StoredAccount.validID(session_id), expires_in.isFinite,
               expires_in > 0, expires_in <= 86_400 else { throw SyncFailure.invalidResponse }
     }
