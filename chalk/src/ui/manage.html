@@ -749,7 +749,7 @@ function renderSafety(){safetySignal.render($('ops-safety'),$('ops-safety-list')
 const opsUnavailableDetailMessage='운영 현황을 다시 확인하지 못해 이 좌석의 조치를 잠시 막았습니다. 쓰던 질문은 그대로입니다.';
 // A run the caller is not assigned to draws no operating control: every one of them would only be refused (403).
 function runControls(on){for(const id of ['ops-setup'])if($(id))$(id).hidden=!on;}
-function renderOps(d){opsData=d;runControls(true);if($('ops-detail-status').textContent===opsUnavailableDetailMessage)text('ops-detail-status','');safetySignal.update(d.run.class_run_id,d.seats);renderSafety();if([...ledger.values()].some(e=>e.run!==d.run.class_run_id))ledgerReset(); // another class run: nothing from the previous one is shown against this roster
+function renderOps(d){opsData=d;runControls(true);if(typeof qImpact==='function'&&!$('ops-q-confirm')?.hidden)qImpact();if($('ops-detail-status').textContent===opsUnavailableDetailMessage)text('ops-detail-status','');safetySignal.update(d.run.class_run_id,d.seats);renderSafety();if([...ledger.values()].some(e=>e.run!==d.run.class_run_id))ledgerReset(); // another class run: nothing from the previous one is shown against this roster
  if(finishBatch&&finishRun!==d.run.class_run_id)finishForget();
 reconcileSelection(d);const c=d.counts;text('ops-state','수업 '+d.run.class_run_id+(d.run.lesson?' · 강의 '+d.run.lesson.version:'')+' · 운영 집계(학생 평가 아님) · 명단 '+c.total+'명 중 앱 준비 완료 '+c.runtime_ready+' · 조회 '+new Date(d.now).toLocaleTimeString([],{hour12:false})+(d.run.flags.ops_observe?'':' · 관측이 꺼져 있어 새 신호가 들어오지 않습니다')+(d.control?.paused?' · 새 AI 실행 일시정지 중':'')+(d.instructors?.viewer_role==='override'?' · 관리자 열람 — 기록이 남습니다':''));renderTeam(d);qPoll();
  renderSummary(d);
@@ -1422,11 +1422,13 @@ function qReset(){qDraft=null;qCard=null;qCards=[];qObs++;$('ops-q-confirm').hid
 const qError=(d,status)=>d.reason==='ops_questions_disabled'?'이 수업에서는 질문 카드가 꺼져 있습니다. ‘이번 수업 명단·관측 설정’에서 질문 카드를 켜고 저장하세요. 아무것도 보내지 않았습니다.':d.reason==='content_invalid'?'질문 형식을 서버가 받지 않았습니다 ('+(d.error||'형식')+'). 아무것도 보내지 않았습니다.':distError(d,status);
 for(const id of ['ops-q-body','ops-q-title','ops-q-options'])$(id).addEventListener('input',()=>{qDraft=null;$('ops-q-confirm').hidden=true;text('ops-q-problem','');qPreview();});
 for(const r of document.querySelectorAll('input[name="ops-q-type"],input[name="ops-q-to"]'))r.addEventListener('change',()=>{qDraft=null;$('ops-q-confirm').hidden=true;qPreview();});
+// The connected count must be what the board says now: the confirmation is drawn at once and drawn again after a fresh board
+// read (renderOps → qImpact), so a seat that connected since the last poll is counted (dev host E5 finding).
+function qImpact(){if(!qDraft||!opsData)return;const seats=opsData.seats.filter(s=>qDraft.targets.includes(s.seat_id)),on=seats.filter(s=>s.connection?.state==='active').length;text('ops-q-impact','‘'+qDraft.title+'’ 질문 카드를 '+(qDraft.to==='all'?'명단 전체 ':'선택한 ')+qDraft.targets.length+'석에 보냅니다 — 지금 연결 '+on+'석, 미연결 '+(qDraft.targets.length-on)+'석(연결되면 받습니다). 보낸 뒤 회수할 수 있습니다.');}
 $('ops-q-form').onsubmit=e=>{e.preventDefault();if(!opsData)return;const r=qPreview();if(!r.card){text('ops-q-problem',r.problem);return;}const targets=qTargets();if(!targets.length){text('ops-q-problem','받을 좌석이 없습니다.');return;}
- const seats=opsData.seats.filter(s=>targets.includes(s.seat_id)),on=seats.filter(s=>s.connection?.state==='active').length;
  // Keys are fixed here, so a retry after an unanswered request is the same request, never a second card.
  qDraft={...r.card,targets,to:qTo(),roster:opsData.run.roster_revision,keys:[crypto.randomUUID(),crypto.randomUUID()]};
- text('ops-q-impact','‘'+r.card.title+'’ 질문 카드를 '+(qDraft.to==='all'?'명단 전체 ':'선택한 ')+targets.length+'석에 보냅니다 — 지금 연결 '+on+'석, 미연결 '+(targets.length-on)+'석(연결되면 받습니다). 보낸 뒤 회수할 수 있습니다.');$('ops-q-confirm').hidden=false;$('ops-q-go').focus();};
+ qImpact();$('ops-q-confirm').hidden=false;$('ops-q-go').focus();void opsRefresh();};
 $('ops-q-cancel').onclick=()=>{qDraft=null;$('ops-q-confirm').hidden=true;$('ops-q-send').focus();};
 $('ops-q-go').onclick=async()=>{const q=qDraft,g=generation;if(!q)return;const button=$('ops-q-go');button.disabled=true;text('ops-q-state','보내는 중…');
  try{let r=await distFetch('/contents',{method:'POST',body:JSON.stringify({idempotency_key:q.keys[0],kind:'question',title:q.title,body:q.body,question:q.question})}),c=await r.json();if(g!==generation)return;if(!r.ok){text('ops-q-state',qError(c,r.status));return;}
