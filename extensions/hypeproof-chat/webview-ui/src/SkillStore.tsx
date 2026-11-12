@@ -306,6 +306,11 @@ function Sell({ state, busy, send, draftBody }: { state: StoreState; busy: boole
   const ready = draft.title.trim() && draft.summary.trim() && draft.body.trim();
   const a = useAttribution(state);
   const bound = s?.attribution;
+  // A course that does not sell: no code step, no listing forms; the settlement history stays visible.
+  if (s?.course_blocked) return <>
+    <section className="record-policy" aria-label="판매할 수 없음"><p>{STORE_COPY.courseBlocked}</p></section>
+    {s && <Settlement s={s} busy={busy} send={send} />}
+  </>;
   return <>
     {!a.decided && <AttributionStep a={a} state={state} busy={busy} send={send} />}
     {state.questDraft && <QuestPublish draft={state.questDraft} cap={s?.cap_krw} busy={busy} send={send} gate={a.gate} />}

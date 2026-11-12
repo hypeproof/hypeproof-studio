@@ -87,6 +87,8 @@ export interface StoreSellerView {
   tier: "none" | "new" | "standard" | "verified" | "minor";
   cap_krw: number;
   identity_verified: boolean;
+  /** A course that does not sell (every youth course) keeps this account from listing or selling (#3772). */
+  course_blocked?: boolean;
   /** The partner and instructor the seller registered at their first publication (names only; policy v2 `attribution.*`). */
   attribution: StoreAttributionView;
   items: { id: string; title: string; price_krw: number; status: string; report_count: number }[];

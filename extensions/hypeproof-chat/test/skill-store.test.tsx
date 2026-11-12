@@ -262,6 +262,14 @@ async function main() {
   assert.equal(html(base({ tab: 'sell', seller: SELLER })).includes('휴대폰 본인인증'), false, 'a verified seller is not asked again');
 }
 
+// #3772: a course that does not sell shows why and offers no listing.
+{
+  const blocked = html(base({ tab: 'sell', seller: { ...SELLER, course_blocked: true, attribution: { ...DECIDED, decided: false } }, questDraft: { title: 'x', summary: 'y', steps: [] } }));
+  assert.ok(blocked.includes('이 과정에서는 스킬을 팔 수 없어요. 청소년 과정 수강생은 스토어에 스킬을 올리거나 팔 수 없고'));
+  for (const hidden of ['스킬 올리기', '스토어에 등록', '파트너·강사 코드', '휴대폰 본인인증']) assert.equal(blocked.includes(hidden), false, hidden);
+  assert.ok(blocked.includes('정산 내역'), 'the settlement history stays');
+}
+
 // The age question appears before buying or selling when the Service does not know the age.
 assert.ok(html(base({ tab: 'mine', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'));
 assert.ok(html(base({ tab: 'browse', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'), 'asked where the buy button is');
