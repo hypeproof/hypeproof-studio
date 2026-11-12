@@ -489,7 +489,7 @@ function renderShares(data){shareRows=data.shares;shareLimit=data.limit;shareNex
  // An open record leaves only when a COMPLETE list no longer has it. Absence from one page is not withdrawal; a withdrawn,
  // expired or no-longer-authorized record is still refused by the Service when it is saved (404).
  if(selected&&data.complete&&!data.shares.some(r=>r.id===selected.id))clearDetail();}
-async function refresh(){if(!connected||busy)return;busy=true;const g=generation;text('status','갱신 중…');const results=await Promise.allSettled([api(base()+'/board?seat_prefix='+encodeURIComponent(prefix)),readShares({},shareWin)]);if(g!==generation)return;const errors=[];if(results[0].status==='fulfilled'){renderBoard(results[0].value);if(!document.body.classList.contains('is-connected')){setConnected(true);
+async function refresh(){if(!connected||busy)return;readLatest();busy=true;const g=generation;text('status','갱신 중…');const results=await Promise.allSettled([api(base()+'/board?seat_prefix='+encodeURIComponent(prefix)),readShares({},shareWin)]);if(g!==generation)return;const errors=[];if(results[0].status==='fulfilled'){renderBoard(results[0].value);if(!document.body.classList.contains('is-connected')){setConnected(true);
 // Connected means the instructor token answered, not that every learner is fine. The roster is read right away with the same
 // token and generation (opsRefresh below), and the panel says it is loading until that answer arrives.
 opsOn=true;if(!opsData)text('ops-state','강사 연결 확인됨 · 이번 수업 명단과 학생별 상태를 불러오는 중… (연결 확인은 학생 상태가 아닙니다)');}}else{board=null;legacyStateFilter='all';$('legacy-state-filters').replaceChildren();const denied=/인증이 거부/.test(results[0].reason.message);if(denied)setConnected(false);text('seats','조회 실패 · 이전 현황은 표시하지 않습니다.');errors.push(results[0].reason.message);if(!opsOn)document.querySelector('.class-status').open=true;if(!opsOn)text('ops-state',denied?'강사 인증이 거부돼 이번 수업 명단을 불러오지 않았습니다. 강사 연결을 확인하세요.':'수업 현황을 불러오지 못해 이번 수업 명단도 불러오지 않았습니다.');}if(results[1].status==='fulfilled')renderShares(results[1].value);else{shareRows=[];shareNext=null;shareState='failed';if(selected)text('detail-status',SHARE_STALE);text('shares','공유 기록을 불러오지 못했습니다 · 10초마다 다시 확인합니다.');errors.push(results[1].reason.message);}
@@ -647,14 +647,18 @@ function lessonLine(s){if(!(s.lesson&&(s.lesson.state==='unknown'||s.lesson.sour
 function commandShort(c){const coach=!!actionLabelsCoach[c.action];return '조치: '+(actionLabels[c.action]||c.action)+(coach?' — '+describeTarget(c):' → '+(c.outcome?outcomeLabels[c.outcome.verdict]||'결과 미확인':'해결 여부 구분 불가'));}
 // CGP-SHELL-R-034 / CGP-SHELL-D-033: each seat's Studio version. Studio sends it with every 45 s heartbeat (x-hps-client-version)
 // and the board read already returns it per seat (`client_version`, null when the heartbeat is missing or older than 15 minutes).
-// The table joins it on student_id, as the detail's "활동 (기존 보드)" line does. No cohort minimum exists yet (DEC-24, CGP-SHELL-R-003),
-// so verMinimum() is null and no seat is marked "업데이트 필요"; a version the board does not know reads "확인 불가", never a guess.
+// The table joins it on student_id, as the detail's "활동 (기존 보드)" line does. A version the board does not know reads "확인 불가",
+// never a guess. DEC-24 (Jay, 2026-11-12): a seat below the latest published formal Studio release is marked "업데이트 필요".
 const VER_RE=/^(\d{1,4})\.(\d{1,4})\.(\d{1,5})(?:-([0-9A-Za-z.]{1,16}))?$/;
 const verClean=v=>typeof v==='string'&&/^[A-Za-z0-9._+-]{1,64}$/.test(v)?v:null;
 // Release order for x.y.z[-pre], the same as Studio's compareVersions (freeStart.ts): a prerelease sorts before its release; null when either side is not a release version.
 function verCompare(a,b){const x=VER_RE.exec(a),y=VER_RE.exec(b);if(!x||!y)return null;for(let i=1;i<=3;i++){const d=Number(x[i])-Number(y[i]);if(d)return Math.sign(d);}if(x[4]===y[4])return 0;if(!x[4])return 1;if(!y[4])return -1;return x[4]<y[4]?-1:1;}
-// The cohort's minimum Studio version. CGP-SHELL-R-003 (instructor freeze) and DEC-24 own it; until one exists nothing is below it.
-const verMinimum=()=>null;
+// The floor is the latest formal release, read from Chalk's GET /studio/latest-release (public release, cached there) at most every
+// 5 minutes. Unknown (not read yet, feed down, rate limited, anything but a plain x.y.z) is null, and then nobody is flagged.
+// A version above it (a newer build) or one that is not a release version is never flagged; an rc of the floor is below it.
+let verLatest=null,verLatestAt=0;
+const verMinimum=()=>verLatest;
+async function readLatest(force){if(!force&&Date.now()-verLatestAt<300000)return;verLatestAt=Date.now();let v=null;try{const r=await fetch('/studio/latest-release',{cache:'no-store'});const d=r.ok?await r.json():null;v=d&&typeof d.version==='string'&&/^\d{1,4}\.\d{1,4}\.\d{1,5}$/.test(d.version)?d.version:null;}catch{v=null;}if(v===verLatest)return;verLatest=v;if(opsData)renderSeats(opsData);if(board)renderBoard(board);}
 function verInfo(raw,min=verMinimum()){const v=verClean(raw),c=v&&min?verCompare(v,min):null;return {version:v,outdated:c!==null&&c<0};}
 const seatVersion=s=>verInfo((board?.seats||[]).find(x=>x.user_id===s.student_id)?.client_version);
 // The legacy activity list (seats outside this class's roster, or every seat when remote operations are off) says it in its usage line.

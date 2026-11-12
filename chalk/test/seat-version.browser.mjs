@@ -5,9 +5,9 @@
 //   (a) a 버전 column sits in the dense G1 table, between 지금 상태 and 근거·조치, at most 96px wide;
 //   (b) a known version reads as itself; a seat the board does not list, a null version or a malformed one reads 확인 불가,
 //       an icon + words mark, never a guess;
-//   (c) no cohort minimum exists yet (DEC-24 / CGP-SHELL-R-003), so no seat says 업데이트 필요; the D-033 look for a seat
-//       below a minimum (amber icon + 업데이트 필요, version kept in the accessible text) is drawn by the page's own cell
-//       renderer and measured here, so R-003 only has to supply the minimum;
+//   (c) while the latest formal release is unknown (here: the page has not read it) no seat says 업데이트 필요; the D-033
+//       look for a seat below the floor (amber icon + 업데이트 필요, version kept in the accessible text) is drawn by the
+//       page's own cell renderer and measured;
 //   (d) every seat row stays the 44px target (ops-g1), nothing in the cell is clipped, text is 14px or more, 확인 불가 reads on
 //       one line, a version and 업데이트 필요 on at most two, a release version wraps only after its first dot (forced with
 //       letter spacing so it does not depend on the machine's fonts), and the marks have no chip box;
@@ -17,7 +17,11 @@
 //       8 rows at 1280x720), on its own row above the table when the class has no remote action and so no such row;
 //   (g) at 800, 600 and 390px (card rows, also the list beside the open detail at 1280) the version is labelled 버전 at the
 //       end of the seat line, inside its row, overlapping nothing, and the card is no taller than without it;
-//   (h) the legacy activity list says 버전 <version> / 버전 확인 불가 in its usage line.
+//   (h) the legacy activity list says 버전 <version> / 버전 확인 불가 in its usage line;
+//   (i) DEC-24 (Jay, 2026-11-12): through the page's own readLatest() and GET /studio/latest-release, a seat below the latest
+//       formal release is flagged (an older release, an rc of the latest), a seat at it, above it (a newer release or rc) or
+//       not on a release version is not, an unknown version stays 확인 불가; a feed that is down, answers 503, null or an rc
+//       flags nobody and clears earlier flags; the page reads the feed at most every 5 minutes, from its refresh.
 // Without a browser this prints NOT RUN; with FOCUS_REQUIRE_BROWSER=1 (CI) a missing browser fails.
 import assert from 'node:assert/strict';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
@@ -70,7 +74,7 @@ try {
   const byId = Object.fromEntries(cells.map((c) => [c.seat, c.ver]));
   check(byId.S1 === '2026.1111.0' && byId.S2 === '2026.1109.0' && byId.S4 === '2026.1111.0-rc.1' && byId.S5 === 'dev-build', 'known versions read as themselves: ' + JSON.stringify(byId));
   for (const id of ['S3', 'S6', 'S7']) check(byId[id] === '확인 불가', id + ' unknown reads 확인 불가: ' + byId[id]);
-  check(!cells.some((c) => c.ver.includes('업데이트')), 'no cohort minimum: nobody is marked 업데이트 필요');
+  check(!cells.some((c) => c.ver.includes('업데이트')), 'latest formal release unknown: nobody is marked 업데이트 필요');
   const unknownMark = await b.evaluate(`(() => { const c = document.querySelector('#ops-rows .ops-seat[data-seat="S6"] td.c-ver .cgp-state'); return { intent: c.dataset.intent, icon: c.querySelector('svg').getAttribute('data-icon'), hidden: c.querySelector('svg').getAttribute('aria-hidden') }; })()`);
   check(unknownMark.intent === 'neutral' && unknownMark.icon === 'help' && unknownMark.hidden === 'true', 'unknown is the neutral help mark: ' + JSON.stringify(unknownMark));
   const malformed = await b.evaluate(`[verInfo('2026.1111.0 <b>'), verInfo(''), verInfo(42), verInfo('x'.repeat(65))].map((i) => i.version)`);
@@ -229,5 +233,46 @@ try {
   const legacy = await b.evaluate(`Object.fromEntries([...document.querySelectorAll('#seats .seat')].map((r) => [r.dataset.user, r.querySelector('p.muted').textContent]))`);
   check(legacy['student-S1'].endsWith(' · 버전 2026.1111.0'), 'legacy row: ' + legacy['student-S1']);
   check(legacy['student-S3'].endsWith(' · 버전 확인 불가'), 'legacy unknown row: ' + legacy['student-S3']);
+
+  // (i) DEC-24: the floor is the latest formal release, read by the page from GET /studio/latest-release.
+  const FLOOR = { F1: '2026.1109.0', F2: '2026.1111.0-rc.1', F3: '2026.1111.0', F4: '2026.1112.0', F5: '2026.1111.1-rc.1', F6: 'dev-build', F7: null };
+  // The helper's evaluate does not await a promise; readLatest() is async, so this one does.
+  const evalAsync = async (expression) => { const r = await b.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'evaluate failed'); return r.result.value; };
+  const floor = (answer, force = true) => evalAsync(`(async () => {
+    window.__latest = 0;
+    window.fetch = async (url) => { if (String(url) !== '/studio/latest-release') return new Response('{}'); window.__latest++; ${answer} };
+    const versions = ${JSON.stringify(FLOOR)};
+    board = { session: { session_id: 'K2' }, roster: { rendered: 7 }, now: new Date().toISOString(),
+      seats: Object.entries(versions).map(([id, v]) => ({ user_id: 'student-' + id, state: 'ok', idle_ms: 60000, calls_in_session: 3, failures_in_session: 0, heartbeat: 'alive', client_version: v })) };
+    opsData = { seats: Object.keys(versions).map((id) => ({ seat_id: id, student_id: 'student-' + id, attention: 'ok', signal: 'fresh' })), counts: { total: 7, runtime_ready: 7 }, run: { class_run_id: 'R2', roster_revision: 1, flags: {} }, actions: [] };
+    renderSeats(opsData); renderBoard(board);
+    await readLatest(${force});
+    const rows = [...document.querySelectorAll('#ops-rows .ops-seat')];
+    return { calls: window.__latest, floor: verLatest,
+      flagged: rows.filter((r) => r.querySelector('td.c-ver .ver-flag')).map((r) => r.dataset.seat).join(','),
+      unknown: rows.filter((r) => r.querySelector('td.c-ver .ver-unknown')).map((r) => r.dataset.seat).join(','),
+      text: Object.fromEntries(rows.map((r) => [r.dataset.seat, r.querySelector('td.c-ver').textContent])),
+      legacy: Object.fromEntries([...document.querySelectorAll('#seats .seat')].map((r) => [r.dataset.user, r.querySelector('p.muted').textContent])) };
+  })()`);
+  const up = await floor(`return Response.json({ version: '2026.1111.0', checked_at: null, source: 'test' });`);
+  check(up.calls === 1 && up.floor === '2026.1111.0', 'the page reads the floor from /studio/latest-release: ' + JSON.stringify(up));
+  check(up.flagged === 'F1,F2', 'below the latest formal (an older release, an rc of it) is flagged; equal, newer, a newer rc and dev-build are not: ' + up.flagged);
+  check(up.unknown === 'F7', 'an unknown version stays 확인 불가, never flagged: ' + up.unknown);
+  check(up.text.F1 === '2026.1109.0 · 업데이트 필요' && up.text.F3 === '2026.1111.0' && up.text.F4 === '2026.1112.0', 'flagged cells keep the version in the accessible text: ' + JSON.stringify(up.text));
+  check(up.legacy['student-F1'].endsWith(' · 버전 2026.1109.0 · 업데이트 필요') && up.legacy['student-F3'].endsWith(' · 버전 2026.1111.0'), 'the legacy line says it too: ' + JSON.stringify(up.legacy));
+  const gated = await floor(`return Response.json({ version: '2026.1112.0' });`, false);
+  check(gated.calls === 0 && gated.floor === '2026.1111.0' && gated.flagged === 'F1,F2', 'within 5 minutes the page does not read the feed again: ' + JSON.stringify(gated));
+  for (const [name, answer] of [
+    ['feed down', `throw new TypeError('fetch failed');`],
+    ['503', `return new Response('', { status: 503 });`],
+    ['unknown (null)', `return Response.json({ version: null });`],
+    ['an rc as latest', `return Response.json({ version: '2026.1111.0-rc.1' });`],
+    ['junk', `return new Response('<html>', { status: 200 });`],
+  ]) {
+    await floor(`return Response.json({ version: '2026.1111.0' });`);
+    const down = await floor(answer);
+    check(down.calls === 1 && down.floor === null && down.flagged === '' && !Object.values(down.legacy).some((l) => l.includes('업데이트')), name + ': the floor is unknown and nobody is flagged (earlier flags cleared): ' + JSON.stringify(down));
+  }
+  check(await b.evaluate(`String(refresh).includes('readLatest()')`), 'the page refresh reads the floor (gated to every 5 minutes)');
 } finally { await b.close(); }
-console.log(`seat-version.browser: ${checks} checks PASS (버전 column ≤96px, 44px rows, 확인 불가 for unknown, no minimum → no 업데이트 필요, sort by version, card rows, legacy line)`);
+console.log(`seat-version.browser: ${checks} checks PASS (버전 column ≤96px, 44px rows, 확인 불가 for unknown, 업데이트 필요 below the latest formal release only when it is known, sort by version, card rows, legacy line)`);
