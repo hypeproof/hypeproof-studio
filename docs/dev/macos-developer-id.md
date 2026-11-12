@@ -141,6 +141,25 @@ stapling changes the app before the final ZIP is made. Consumers must verify
 the final artifact digest/length/name and expected source/team/bundle against
 trusted run provenance before publishing, mirroring or updating. Transfer the
 same ZIP bytes; do not rezip or strip quarantine as a substitute for validation.
+
+### Initial installation
+
+The current authenticated `scripts/install-mac.sh` bootstrap accepts only the
+fixed Developer ID Application team `RZBNT9ZB67` and bundle
+`ai.hypeproof.studio`, with deep/strict signature verification and Gatekeeper's
+`Notarized Developer ID` result. It checks the extracted app and the final staged
+copy before moving the existing installation; a failed swap restores the old app.
+It uses the existing mirror access and SHA-256 checks, without Node or Xcode on
+the learner's Mac. It does not remove quarantine attributes.
+
+Per-tag installers bake the same requirement from the candidate source's
+`config/macos-distribution.json` using `signingPolicy(sourceSha)`. Missing Git
+source is an error. A readable historical candidate without that policy retains
+its legacy classification; already-published tagged installers are unchanged.
+The current bootstrap intentionally refuses those unsigned legacy packages.
+The tagged installer preserves SDK seeding, profile/layout selection and rollback.
+Portable installer fixtures exercise refusal, staged-copy tampering and rollback;
+they do not establish actual Apple signing or installed-app acceptance.
 Existing updater rollback and release freeze/approval policy still apply.
 
 Checkpoints are exclusive-create files. A wait timeout resumes with the same

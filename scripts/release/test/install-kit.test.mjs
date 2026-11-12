@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, {after} from 'node:test';
 import {
   KIT_ZIP_RE, isFreeStart, kitDirName, kitZipName, notesSection, oneLiner, renderInstaller, renderReadme,
   renderStart, withInstallSection, writeKit, verifyMacArchive,
@@ -19,7 +19,28 @@ import {
 import {expectedAppVersion, buildTagMessage} from '../build-contract.mjs';
 import {isAppPackage} from '../../../e2e/unified-release/artifact.mjs';
 
-const SRC = 'd37a2d7b5ad08101a745f7d351b065018f89b20d';
+// Candidate-policy fixtures must work in CI's shallow checkout without remote refs.
+const policyRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'installer-policy-git-'));
+const policyGit = (...args) => execFileSync('git', ['-C', policyRepo, ...args], {encoding:'utf8', stdio:['ignore','pipe','pipe']}).trim();
+policyGit('init', '-q');
+policyGit('config', 'user.name', 'Installer fixture');
+policyGit('config', 'user.email', 'installer-fixture@example.invalid');
+policyGit('commit', '--allow-empty', '-qm', 'legacy candidate');
+const SRC = policyGit('rev-parse', 'HEAD');
+fs.mkdirSync(path.join(policyRepo, 'config'));
+fs.copyFileSync(new URL('../../../config/macos-distribution.json', import.meta.url), path.join(policyRepo, 'config/macos-distribution.json'));
+policyGit('add', 'config/macos-distribution.json');
+policyGit('commit', '-qm', 'official candidate');
+const officialSource = policyGit('rev-parse', 'HEAD');
+const savedGitEnv = {GIT_DIR:process.env.GIT_DIR, GIT_WORK_TREE:process.env.GIT_WORK_TREE};
+process.env.GIT_DIR = path.join(policyRepo, '.git');
+process.env.GIT_WORK_TREE = policyRepo;
+after(() => {
+  for (const [key,value] of Object.entries(savedGitEnv)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  fs.rmSync(policyRepo, {recursive:true, force:true});
+});
 const H = c => c.repeat(64);
 const tmp = prefix => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -622,3 +643,128 @@ test('release workflows render, check and announce the Windows command', () => {
   assert.match(read('notify-release-published.yml'), /install-kit\.mjs announce --tag "\$TAG"/);
   assert.match(read('mirror-release.yml'), /dist\/update-windows\.cmd/);
 });
+
+// Real Bash/filesystem controls with explicit Apple/transport fixture doubles.
+// These prove refusal/placement, never actual signed-app acceptance.
+const root = new URL('../../../', import.meta.url);
+const sourceSha = officialSource;
+const legacySha = SRC;
+const version = '2026.1112.0';
+const opts = {tag:`v${version}`, sourceSha, zipSha256:'a'.repeat(64)};
+
+test('candidate policy is baked in, cannot be disabled by options, and unreadable source fails closed', () => {
+  assert.match(renderInstaller({...opts, officialSigning:false}), /^HPS_OFFICIAL_SIGNING="1"$/m);
+  assert.match(renderInstaller({...opts, sourceSha:legacySha}), /^HPS_OFFICIAL_SIGNING="0"$/m);
+  assert.throws(() => renderInstaller({...opts, sourceSha:'f'.repeat(40)}));
+  for (const script of [renderInstaller(opts), fs.readFileSync(new URL('scripts/install-mac.sh',root),'utf8')]) {
+    assert.doesNotMatch(script, /xattr\s+-[a-z]*d/);
+    assert.equal(spawnSync('bash',['-n'],{input:script}).status,0);
+  }
+});
+
+const tool = String.raw`#!/usr/bin/env python3
+import hashlib,json,os,pathlib,plistlib,shutil,subprocess,sys,zipfile
+name=pathlib.Path(sys.argv[0]).name; a=sys.argv[1:]; base=pathlib.Path(os.environ['FIXTURE'])
+def event(s):
+ with (base/'events').open('a') as f: f.write(s+'\n')
+def trust(app): return json.loads((pathlib.Path(app)/'Contents/trust.json').read_text())
+def corrupt(dest):
+ p=pathlib.Path(dest)
+ if os.environ.get('TAMPER_STAGE')=='1' and '.hps-install' in str(p):
+  j=p/'Contents/trust.json'
+  if j.exists(): d=json.loads(j.read_text());d['signature']=False;j.write_text(json.dumps(d))
+if name=='uname': print('Darwin' if '-s' in a else 'arm64')
+elif name=='id': print('1000')
+elif name=='pgrep': sys.exit(1)
+elif name=='PlistBuddy':
+ d=plistlib.loads(pathlib.Path(a[-1]).read_bytes());print(d[a[1].split()[-1].lstrip(':')])
+elif name=='plutil': print(json.loads(pathlib.Path(a[-1]).read_text())[a[1]])
+elif name=='codesign':
+ event('codesign '+a[-1]);d=trust(a[-1]);ok=d.get('signature',True)
+ if any(v.startswith('-R=') for v in a):
+  req=next(v for v in a if v.startswith('-R='))
+  ok=ok and all(v in req for v in ['ai.hypeproof.studio','RZBNT9ZB67','anchor apple generic','1.2.840.113635.100.6.2.6','1.2.840.113635.100.6.1.13']) and d['team']=='RZBNT9ZB67' and d['developer_id']
+ assert '--strict' in a and '--all-architectures' in a
+ sys.exit(0 if ok else 1)
+elif name=='spctl':
+ event('spctl '+a[-1]);mode=trust(a[-1]).get('assessment','notarized')
+ if mode=='rejected': print('rejected',file=sys.stderr);sys.exit(1)
+ if mode=='notarized': print('accepted\nsource=Notarized Developer ID',file=sys.stderr)
+ elif mode=='spoof': print('source=Notarized Developer ID\nsource=Developer ID',file=sys.stderr)
+ elif mode=='disabled': print('assessments disabled',file=sys.stderr)
+ else: print('accepted\nsource=Developer ID',file=sys.stderr)
+elif name=='ditto':
+ if a[0]=='-xk':
+  with zipfile.ZipFile(a[1]) as z:z.extractall(a[2])
+ else: shutil.copytree(a[0],a[1]);corrupt(a[1])
+elif name=='cp':
+ r=subprocess.run(['/bin/cp',*a]);
+ if r.returncode:sys.exit(r.returncode)
+ corrupt(a[-1])
+elif name=='mv':
+ event('mv '+a[0]+' -> '+a[1])
+ if os.environ.get('FAIL_SWAP')=='1' and '.hps-install' in a[0] and not a[0].endswith('/previous.app') and a[1].endswith('/HypeProof Studio.app'):sys.exit(1)
+ sys.exit(subprocess.run(['/bin/mv',*a]).returncode)
+elif name=='gh':
+ if a[0]=='api':
+  if '.tag_name' in a: print('v2026.1112.0')
+  else:
+   z=base/'assets/HypeProof-Studio-darwin-arm64.zip';print(z.name+'\tsha256:'+hashlib.sha256(z.read_bytes()).hexdigest())
+ else:shutil.copy(base/'assets/HypeProof-Studio-darwin-arm64.zip',a[a.index('--dir')+1])
+elif name=='open':event('open '+a[0])
+elif name=='xattr':event('QUARANTINE MODIFIED');sys.exit(99)
+else:raise RuntimeError(name)
+`;
+
+function scenario(kind, change={}, env={}) {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mac-installer-signing-'));
+  try {
+    const home=path.join(dir,'home'), bin=path.join(dir,'bin'), assets=path.join(dir,'assets');
+    for(const p of [home,bin,assets])fs.mkdirSync(p,{recursive:true});
+    const payload={bundle:'ai.hypeproof.studio',signature:true,team:'RZBNT9ZB67',developer_id:true,assessment:'notarized',...change};
+    const zip=path.join(assets,'HypeProof-Studio-darwin-arm64.zip');
+    execFileSync('python3',['-c',String.raw`
+import json,plistlib,sys,zipfile
+p=json.loads(sys.argv[2]);v=sys.argv[3];sha=sys.argv[4];prefix='HypeProof Studio.app/Contents/'
+with zipfile.ZipFile(sys.argv[1],'w') as z:
+ z.writestr(prefix+'Info.plist',plistlib.dumps({'CFBundleIdentifier':p['bundle'],'CFBundleShortVersionString':v}))
+ z.writestr(prefix+'Resources/app/product.json',json.dumps({'version':v,'commit':sha}))
+ z.writestr(prefix+'trust.json',json.dumps(p));z.writestr(prefix+'new.txt','new payload')
+`,zip,JSON.stringify(payload),version,sourceSha]);
+    for(const name of ['uname','id','pgrep','PlistBuddy','plutil','codesign','spctl','ditto','cp','mv','gh','open','xattr'])fs.writeFileSync(path.join(bin,name),tool,{mode:0o755});
+    const system=path.join(dir,'Applications');fs.mkdirSync(system);
+    const target=path.join(kind==='bootstrap'?system:path.join(home,'Applications'),'HypeProof Studio.app');
+    fs.mkdirSync(path.join(target,'Contents'),{recursive:true});
+    fs.writeFileSync(path.join(target,'old.txt'),'preserve old');
+    execFileSync('python3',['-c','import plistlib,sys;open(sys.argv[1],"wb").write(plistlib.dumps({"CFBundleIdentifier":"ai.hypeproof.studio"}))',path.join(target,'Contents/Info.plist')]);
+    const digest=execFileSync('shasum',['-a','256',zip],{encoding:'utf8'}).split(' ')[0];
+    let script=kind==='bootstrap'?fs.readFileSync(new URL('scripts/install-mac.sh',root),'utf8'):renderInstaller({...opts,zipSha256:digest});
+    for(const [original,name] of [['/usr/libexec/PlistBuddy','PlistBuddy'],['/usr/bin/plutil','plutil'],['/usr/bin/codesign','codesign'],['/usr/sbin/spctl','spctl']])script=script.replaceAll(original,path.join(bin,name));
+    if(kind==='bootstrap')script=script.replaceAll('/Applications',system);
+    const entry=path.join(dir,'install.sh');fs.writeFileSync(entry,script);
+    const run=spawnSync('/bin/bash',[entry,...(kind==='bootstrap'?[]:['--no-seed'])],{encoding:'utf8',env:{PATH:bin+':'+process.env.PATH,HOME:home,FIXTURE:dir,HPS_INSTALL_ASSET_DIR:assets,HPS_NO_INSTALL_PING:'1',...env}});
+    const events=fs.existsSync(path.join(dir,'events'))?fs.readFileSync(path.join(dir,'events'),'utf8'):'';
+    assert.doesNotMatch(events,/QUARANTINE MODIFIED/);
+    return {status:run.status,output:run.stdout+run.stderr,old:fs.existsSync(path.join(target,'old.txt')),fresh:fs.existsSync(path.join(target,'Contents/new.txt')),events};
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+}
+
+for(const kind of ['bootstrap','tagged']) {
+  test(`${kind}: only valid official identity reaches replacement; security failures preserve old app`,()=>{
+    const good=scenario(kind);
+    assert.equal(good.status,0,good.output);assert.equal(good.old,false);assert.equal(good.fresh,true);
+    assert.equal((good.events.match(/^spctl /gm)||[]).length,2,'extracted and final staged copy assessed');
+    for(const change of [{signature:false},{team:'OTHERTEAM1'},{developer_id:false},{bundle:'com.other.app'},{assessment:'rejected'},{assessment:'unnotarized'},{assessment:'disabled'},{assessment:'spoof'}]) {
+      const bad=scenario(kind,change);
+      assert.notEqual(bad.status,0,JSON.stringify(change));assert.equal(bad.old,true);assert.equal(bad.fresh,false);
+      assert.doesNotMatch(bad.events,/^mv .*\.app(?: |$)|^open /m);
+    }
+  });
+  test(`${kind}: staged tampering and swap failure preserve old app`,()=>{
+    for(const env of [{TAMPER_STAGE:'1'},{FAIL_SWAP:'1'}]) {
+      const bad=scenario(kind,{},env);
+      assert.notEqual(bad.status,0,bad.output);assert.equal(bad.old,true,bad.output);assert.equal(bad.fresh,false);
+      assert.doesNotMatch(bad.events,/^open /m);
+    }
+  });
+}
