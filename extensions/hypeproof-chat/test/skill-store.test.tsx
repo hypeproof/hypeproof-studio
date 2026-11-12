@@ -272,6 +272,23 @@ async function main() {
   assert.ok(blocked.includes('정산 내역'), 'the settlement history stays');
 }
 
+// #3774: purchase history with receipts, refunded purchases included.
+{
+  const orders = [
+    { order_id: 'sto_' + '1'.repeat(32), item_id: PAID.id, title: PAID.title, amount: 10000, state: 'refunded' as const, paid_at: Date.UTC(2026, 10, 1), refunded_at: Date.UTC(2026, 10, 2) },
+    { order_id: 'sto_' + '2'.repeat(32), item_id: PAID.id, title: PAID.title, amount: 10000, state: 'paid' as const, paid_at: Date.UTC(2026, 10, 3), refunded_at: null },
+  ];
+  const { host, root, sent } = await mounted(base({ tab: 'mine', installs: [], orders }));
+  const list = byLabel(host, '구매 내역');
+  assert.ok(list.textContent.includes('회의록 정리 스킬 · 10,000원 · 환불됨'));
+  assert.ok(list.textContent.includes('회의록 정리 스킬 · 10,000원 · 결제 완료'));
+  assert.equal(buttons(list, '영수증 보기').length, 2);
+  await act(() => click(buttons(list, '영수증 보기')[1]));
+  assert.deepEqual(sent.at(-1), { type: 'storeReceipt', orderId: 'sto_' + '2'.repeat(32) });
+  assert.ok(host.textContent.includes('아직 설치한 스킬이 없어요.'), 'the history shows even with no install left');
+  await act(() => root.unmount());
+}
+
 // The age question appears before buying or selling when the Service does not know the age.
 assert.ok(html(base({ tab: 'mine', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'));
 assert.ok(html(base({ tab: 'browse', ageGroup: 'unknown' })).includes('태어난 해를 한 번만 알려 주세요.'), 'asked where the buy button is');

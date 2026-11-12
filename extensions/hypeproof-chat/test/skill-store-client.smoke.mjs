@@ -140,3 +140,15 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
 assert.equal(s.STORE_COPY.identityDone(undefined), '본인인증을 마쳤어요. 판매 한도는 「내 스토어」를 다시 열면 보여요.');
 assert.equal(s.STORE_COPY.identityDone(100000), '본인인증을 마쳤어요. 이제 한 개당 최대 100,000원까지 올릴 수 있어요.');
 console.log('PASS identity notice without a fresh seller view names no amount');
+// #3774: only an https gateway receipt page is ever opened.
+{
+  const ID = 'sto_' + 'a'.repeat(32);
+  const { c, calls } = client(() => [200, { receipt_url: 'https://dashboard.tosspayments.com/receipt/redirection?transactionId=x' }]);
+  assert.equal(await c.receipt(ID), 'https://dashboard.tosspayments.com/receipt/redirection?transactionId=x');
+  assert.equal(calls[0].url, `https://service.test/v1/store/orders/${ID}/receipt`);
+  for (const receipt_url of ['http://dashboard.tosspayments.com/r', 'javascript:alert(1)', 'https://u:p@x.test/r', undefined]) {
+    const bad = client(() => [200, { receipt_url }]);
+    await assert.rejects(bad.c.receipt(ID), (e) => e.code === 'receipt_unavailable', String(receipt_url));
+  }
+  console.log('PASS receipt opens only an https gateway page');
+}
