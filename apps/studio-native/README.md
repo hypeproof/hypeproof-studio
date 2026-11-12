@@ -76,17 +76,24 @@ The next vertical slice and dependent work are recorded in [mobile growth roadma
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
 
-## Existing desktop and linked conversation
+## Personal reflection and optional desktop task sharing
+
+The primary personal reflection conversation belongs to the account and runs
+through Service with the desktop closed. Signing into the same account on the
+existing desktop opens that conversation; it is not created by pairing a phone
+to a running task. The following host-owned path is optional and applies only
+to a desktop task deliberately shared with the phone.
 
 On the existing desktop, select a personal task and run **iPhone과 이 대화 연결**.
 The disclosure asks before its user/assistant text is uploaded. Sign in to the
-same account on iPhone through the existing device authorization page, then open
-that conversation. Authentication may open the browser; conversation stays native.
+same account on iPhone through the native browser sign-in flow, then open that
+shared task. Authentication may open the browser; conversation stays native.
 
-Desktop remains the execution host. Its selected task, existing history and coach
+For a shared desktop task, desktop remains the execution host. Its selected task, existing history and coach
 are reused. The phone's durable outbox has one stable request ID. Service claims
 are atomic; a reconnect is a status check, never permission to replay a turn.
-When the computer is asleep or another task is selected, the request waits.
+When the computer is asleep or another task is selected, that task's request waits;
+the account-owned personal reflection conversation remains independent.
 The phone explains pending/running/completed/unknown states. Unknown outcomes
 require checking the computer; they are not automatically retried as new turns.
 
