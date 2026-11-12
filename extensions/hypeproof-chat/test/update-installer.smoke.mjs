@@ -7,7 +7,11 @@ import { renderInstallerScript } from '../src/updateCheckerHelpers.ts';
 
 // Run the shipped bash installer on disposable directories. Apple security tools
 // are stubbed at the command boundary; this is not signed-app/device acceptance.
-{
+// Native Windows Node cannot execute /bin/bash or the POSIX paths used here.
+// Its installer is covered separately by update-windows-wrapper.smoke.mjs.
+if (process.platform === 'win32') {
+  console.log('NOT RUN: macOS/POSIX installer fixture requires macOS or Linux; Windows uses the PowerShell wrapper fixture');
+} else {
   const root = mkdtempSync(join(tmpdir(), 'hps-installer-'));
   try {
     for (const scenario of ['success', 'quit-success', 'quit-install-fails', 'running', 'backup-fails', 'install-fails', 'stage-fails', 'wrong-bundle', 'unsigned', 'wrong-team', 'wrong-signing-id', 'bad-notarization', 'non-notarized', 'assessment-disabled', 'spoofed-authority', 'stage-tampered']) {
@@ -59,7 +63,10 @@ case "$SCENARIO" in non-notarized) echo 'source=Developer ID';; assessment-disab
       const hostEnv = { ELECTRON_RUN_AS_NODE: '1', VSCODE_PID: '4242', VSCODE_IPC_HOOK: '/tmp/x.sock', VSCODE_ESM_ENTRYPOINT: 'vs/workbench/api/node/extensionHostProcess', VSCODE_CRASH_REPORTER_PROCESS_TYPE: 'extensionHost' };
       const env = { ...process.env, ...hostEnv, PATH: `${bin}:${process.env.PATH}`, SCENARIO: scenario, OLD_TARGET: oldAppPath, OPEN_LOG: join(dir, 'open.log'), VERIFY_LOG: join(dir, 'verify.log') };
       const run = spawnSync('/bin/bash', [script], { env, encoding: 'utf8', timeout: 10_000 });
-      assert.equal(run.status, ['success', 'quit-success'].includes(scenario) ? 0 : 1, readFileSync(join(dir, 'update.log'), 'utf8'));
+      assert.ifError(run.error); // Report spawn/timeout failures before reading a log that may not exist.
+      const logPath = join(dir, 'update.log');
+      const diagnostics = existsSync(logPath) ? readFileSync(logPath, 'utf8') : (run.stderr || run.stdout || 'Installer produced no log');
+      assert.equal(run.status, ['success', 'quit-success'].includes(scenario) ? 0 : 1, `${scenario}: ${diagnostics}`);
       assert.equal(readFileSync(join(oldAppPath, 'marker'), 'utf8'), ['success', 'quit-success'].includes(scenario) ? 'new' : 'old', scenario);
       const versionPath = join(oldAppPath, 'Contents', 'Resources', 'app', 'extensions', 'hypeproof-chat', 'package.json');
       assert.equal(JSON.parse(readFileSync(versionPath, 'utf8')).version, ['success', 'quit-success'].includes(scenario) ? '0.1.51' : '0.1.50', 'next launch reads replaced manifest version, failures keep old version');
