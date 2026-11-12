@@ -34,6 +34,8 @@ rotating manager approval and recoverable event decisions. It follows
   acceptance. The approved synthetic acceptance **cohort** is allowed for an
   observed App run; mock execution is not.
 
+Official macOS artifacts also follow the [Developer ID and notarization contract](macos-developer-id.md) (#620): full/repack builds produce the same existing ZIP only after Apple signature/notary/Gatekeeper checks, with an immutable source/run/archive receipt. Consumers must verify trusted run provenance and final archive bytes; a local or mocked receipt never authorizes promotion. Existing manager, cost and installed-App acceptance gates remain in force.
+
 ## Design
 
 `scripts/release/engine/core.mjs` makes provider-independent decisions.

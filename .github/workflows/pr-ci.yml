@@ -57,6 +57,9 @@ jobs:
           cache: npm
           cache-dependency-path: packages/measurement/package-lock.json
       - run: pip install --quiet pyyaml
+      - name: Developer ID and notarization release controls
+        if: ${{ !cancelled() }}
+        run: python3 scripts/release/test/test_macos_sign.py
       - name: Portable feedback evidence integrity
         if: ${{ !cancelled() }}
         run: python3 scripts/test-feedback-report.py
