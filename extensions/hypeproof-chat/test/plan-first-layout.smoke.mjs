@@ -4,7 +4,7 @@
 // the card hidden while a turn runs; computed geometry for personal and classroom seats, dark and light, at 320,
 // 480 and 800 px: no horizontal scroll, no overlapping controls, 44px targets, >= 14px text, card above the composer.
 // CGP-CHAT-D-004: the primary action (이대로 진행) is visually distinct (its own fill and weight) but the same size
-// (the same height as every secondary action, >= 44px), in both themes.
+// (the same height and font size as every secondary action, >= 44px), in both themes.
 // Not run without Chromium (FOCUS_REQUIRE_BROWSER=1 makes that a failure).
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -38,7 +38,7 @@ const geometry=()=>b.evaluate(`(()=>{
   const controls=[...document.querySelectorAll('.hps-plan-card button,.hps-plan-card textarea,.hps-selected-plan,.hps-plan-chip,.hps-input button,.hps-input textarea')].filter(vis).map(e=>({name:(e.getAttribute('aria-label')||e.textContent||e.className).trim().slice(0,24),...rect(e)}));
   const texts=[...card.querySelectorAll('h2,li,p,button,textarea')].filter(vis).map(e=>({t:e.textContent.slice(0,20),px:parseFloat(getComputedStyle(e).fontSize)}));
   return {scrollW:document.documentElement.scrollWidth,innerW:innerWidth,card:rect(card),input:rect(input),controls,texts,
-    buttons:[...card.querySelectorAll('button')].filter(vis).map(e=>{const c=getComputedStyle(e);return {name:e.textContent,...rect(e),bg:c.backgroundColor,weight:Number(c.fontWeight),color:c.color};}),
+    buttons:[...card.querySelectorAll('button')].filter(vis).map(e=>{const c=getComputedStyle(e);return {name:e.textContent,...rect(e),px:parseFloat(c.fontSize),bg:c.backgroundColor,weight:Number(c.fontWeight),color:c.color};}),
     chip:(()=>{const c=document.querySelector('.hps-plan-chip');return c&&{...rect(c),px:parseFloat(getComputedStyle(c).fontSize)};})()}})()`);
 const overlap=(a,c)=>a.left<c.right-.5&&c.left<a.right-.5&&a.top<c.bottom-.5&&c.top<a.bottom-.5;
 let cases=0;
@@ -79,6 +79,7 @@ try{
   const [primary,...secondary]=g.buttons;
   for(const x of secondary){
    assert.ok(Math.abs(x.h-primary.h)<=.5,`${label}: ${x.name} is ${x.h}px tall, ${primary.name} ${primary.h}px (same size)`);
+   assert.equal(x.px,primary.px,`${label}: ${x.name} ${x.px}px vs ${primary.name} ${primary.px}px (same size)`);
    assert.notEqual(x.bg,primary.bg,`${label}: ${x.name} has the primary's fill ${primary.bg} (not distinct)`);
    assert.ok(primary.weight>x.weight,`${label}: ${primary.name} weight ${primary.weight} is not heavier than ${x.name} ${x.weight}`);
   }

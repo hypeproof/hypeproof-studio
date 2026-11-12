@@ -240,7 +240,8 @@ seats, dark and light, at 320, 480 and 800px: the classroom chip's `aria-pressed
 personal tools-menu item and pill, the card's numbered steps and four actions, the send
 button reading `계획 승인 기다리는 중` and disabled, and geometry (44px targets, no overlap,
 no horizontal scroll, text at least 14px). D-004 adds: every action has the primary's
-height, and `이대로 진행` has its own fill and a heavier weight than each secondary action.
+height and font size, and `이대로 진행` has its own fill and a heavier weight than each
+secondary action.
 Colours come from tokens only (`test/design-tokens.smoke.mjs` lints every webview sheet).
 Packaged-app and forced-colors acceptance are reported separately.
 
@@ -249,8 +250,12 @@ Packaged-app and forced-colors acceptance are reported separately.
 `test/quote-reply.test.tsx` checks the pure placement rules (above, the 48px flip,
 row and view clamps, a selection scrolled away), the chip's draft parts (typed text
 kept, quote first when sent, one quote at a time, × removes only the quote), Escape
-from the page and during IME composition, nothing during a mouse drag, and the popover
+from the page and during IME composition, an Escape a menu already handled or pressed
+while a modal is open (the popover stays), nothing during a mouse drag, and the popover
 leaving an answer that starts streaming, through ChatPanel on the minimal DOM.
+`test/elevation-computed.smoke.mjs` measures the popover's overlay level in Dark+ and
+Light+ and, in high contrast and forced colors, that it drops the shadow and keeps a 1px
+solid edge (the theme's contrastBorder in high contrast).
 
 `test/quote-popover-layout.smoke.mjs` drives the real App in headless Chromium with CDP
 mouse and key input, personal and classroom, dark and light, at 320 and 1420px: nothing

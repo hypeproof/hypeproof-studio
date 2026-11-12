@@ -579,6 +579,27 @@ t("D-007: Escape anywhere dismisses the popover (focus need not be on it) and re
   await v.unmount();
 });
 
+t("D-007: an Escape a menu already handled, or one pressed while a modal is open, leaves the popover; a plain Escape still dismisses it", async () => {
+  const v = await mount(withDraft(personal, "초안"));
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+  eq(v.buttons().length, 1, "shown");
+  const body = doc.body as unknown as El & { addEventListener(t: string, l: (e: { key?: string; preventDefault(): void }) => void): void; removeEventListener(t: string, l: unknown): void; removeChild(c: unknown): void };
+  // A menu (or any handler nearer the target) takes the Escape first and marks it handled.
+  const menu = (e: { key?: string; preventDefault(): void }) => { if (e.key === "Escape") e.preventDefault(); };
+  body.addEventListener("keydown", menu);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  body.removeEventListener("keydown", menu);
+  eq(v.buttons().length, 1, "an Escape a menu already handled dismissed the popover");
+  const modal = h("div", { role: "dialog", "aria-modal": "true" }, "설정");
+  doc.body.appendChild(modal as never);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  eq(v.buttons().length, 1, "an Escape with a modal open dismissed the popover");
+  body.removeChild(modal);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  eq(v.buttons().length, 0, "positive control: a plain Escape did not dismiss");
+  await v.unmount();
+});
+
 t("D-007: nothing is shown while the mouse button is down (a drag); the release shows it at once; a press on the popover itself keeps it", async () => {
   const v = await mount(personal);
   await act(async () => { fire(doc.body as unknown as El, "pointerdown", { button: 0 }); });
