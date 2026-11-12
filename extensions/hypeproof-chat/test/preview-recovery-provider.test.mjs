@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTaskHarness } from "./task-workspace-harness.mjs";
+import { serveStatic } from "../src/liveServerHelpers.ts";
 
 // A loopback port nothing listens on (bound, then released).
 const deadPort = () => new Promise((resolve) => { const s = http.createServer(); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => resolve(p)); }); });
@@ -34,6 +35,56 @@ async function harness(ownPorts, opts = {}) {
   const states = () => f.posts.filter((m) => m.type === "previewRecovery");
   return { f, tab, calls, states, root };
 }
+
+test("a coach-written report opens at its live URL with its own assets and leaves the home tab and file intact", async t => {
+  const home = '<!doctype html><html><head><title>App</title></head><body>Existing app</body></html>';
+  const report = '<!doctype html><html><head><title>Report</title><link rel="stylesheet" href="report.css"></head><body>New report</body></html>';
+  const rel = 'reports/결과 #1.html';
+  const live = http.createServer((req, res) => {
+    const served = serveStatic(root, req.url);
+    res.writeHead(served.status, { 'content-type': served.contentType });
+    res.end(served.body);
+  });
+  await new Promise(resolve => live.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => live.close(resolve)));
+  const port = live.address().port;
+  const base = `${ORIGIN(port)}/`;
+  const { f, tab, root } = await harness([port], { base });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'reports'));
+  fs.writeFileSync(path.join(root, 'index.html'), home);
+  fs.writeFileSync(path.join(root, rel), report);
+  fs.writeFileSync(path.join(root, 'reports/report.css'), 'body { color: green; }');
+  f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: root } }];
+  f.vscode.Uri.joinPath = (uri, name) => ({ fsPath: path.join(uri.fsPath, name) });
+  f.vscode.workspace.fs.writeFile = (uri, bytes) => fs.promises.writeFile(uri.fsPath, bytes);
+  const homeTab = tab(base);
+  f.h.resolveCoachCwd = () => root;
+  f.h.isLiveServerPreview = () => true;
+  f.h.emitArtifactChanged = () => {};
+  f.h.preview = { show: async () => assert.fail('expected the native live preview') };
+  const snapshots = [];
+  f.h.spool = { recordWorkflow() {}, recordArtifactSnapshot: snapshot => snapshots.push(snapshot) };
+
+  await f.h.revealWrittenHtml(rel);
+  const reportUrl = `${base}reports/${encodeURIComponent('결과 #1.html')}`;
+  assert.deepEqual(f.opened.map(open => open.url), [reportUrl]);
+  assert.match(await (await fetch(reportUrl)).text(), /New report/);
+  assert.equal(await (await fetch(new URL('report.css', reportUrl))).text(), 'body { color: green; }');
+  assert.ok(f.browserState.tabs.includes(homeTab));
+  assert.equal(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), home);
+  assert.deepEqual(snapshots.map(snapshot => [snapshot.path, snapshot.content]), [[rel, report]]);
+
+  await f.h.revealWrittenHtml(path.join(root, rel));
+  assert.equal(f.opened.length, 1, 'editing the same report reuses its tab');
+
+  const changed = home.replace('Existing app', 'Updated app');
+  fs.writeFileSync(path.join(root, 'index.html'), changed);
+  await f.h.revealWrittenHtml('index.html');
+  assert.equal(f.opened.length, 1, 'an explicit home edit reuses the home tab');
+  assert.equal(f.h.mcpBrowser.currentTab(), homeTab);
+  assert.match(await (await fetch(base)).text(), /Updated app/);
+});
 
 test("a localhost tab Studio never served is not judged: no card (guard at the call site)", async () => {
   const toolPort = await deadPort(), ownPort = await deadPort();

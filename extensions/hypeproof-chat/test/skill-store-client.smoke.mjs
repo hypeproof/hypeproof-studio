@@ -102,3 +102,18 @@ console.log('skill-store-client smoke: list, order headers, checkout origin, sig
   console.log('PASS free-install notice');
 }
 
+
+// Policy v2 (#3761): code lookup sends only the typed codes; registration and the payout account go to their own routes.
+{
+  const { c, calls } = client((url) => [200, url.endsWith('/payout-account') ? { masked: '국민은행 ****9012' } : { partner: null, instructor: { name: '김강사', partner_name: null } }]);
+  await c.resolveCodes('  ', ' I-ABCDE-FGHJK ');
+  assert.deepEqual([calls[0].url, calls[0].method, calls[0].body], ['https://service.test/v1/store/attribution/resolve', 'POST', { instructor_code: 'I-ABCDE-FGHJK' }]);
+  await c.registerAttribution({ none: true });
+  assert.deepEqual([calls[1].url, calls[1].body], ['https://service.test/v1/store/attribution', { none: true }]);
+  await c.savePayoutAccount({ bank_code: '004', account_number: '123456789012', holder_name: '홍길동' });
+  assert.deepEqual([calls[2].url, calls[2].method, calls[2].headers.authorization], ['https://service.test/v1/store/seller/payout-account', 'PUT', 'Bearer acct-token']);
+  // The Service's refusals read as the seller's next step.
+  for (const [code, text] of [['unknown_instructor_code', '강사 코드를 찾을 수 없어요.'], ['attribution_already_set', '운영팀에 문의해 주세요.'], ['payout_account_not_due', '아직 계좌가 필요하지 않아요.'], ['holder_mismatch', '예금주와 계좌가 맞지 않아요.']])
+    assert.ok(s.storeErrorMessage(new s.StoreClientError(code)).includes(text), code);
+  console.log('PASS attribution and payout-account calls');
+}

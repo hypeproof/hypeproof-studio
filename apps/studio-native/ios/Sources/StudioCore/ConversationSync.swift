@@ -218,11 +218,17 @@ public final class ConversationService: @unchecked Sendable {
     }
     public func pollSignIn(_ device: String) async throws -> AccountTokens? {
         let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])
-        return status == 202 ? nil : try JSONDecoder().decode(AccountTokens.self, from: data)
+        if status == 202 { return nil }
+        let tokens = try JSONDecoder().decode(AccountTokens.self, from: data)
+        try tokens.validate(); return tokens
     }
-    public func accountID(_ token: String) async throws -> String {
+    public func accountID(_ token: String, sessionID: String? = nil) async throws -> String {
         let (data, _) = try await request("/v1/me", token: token)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let account = object["account"] as? [String: Any], let id = account["id"] as? String, !id.isEmpty else { throw SyncFailure.invalidResponse }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let account = object["account"] as? [String: Any], let id = account["id"] as? String,
+              StoredAccount.validID(id), account["status"] as? String == "active",
+              let returnedSession = object["session_id"] as? String, StoredAccount.validID(returnedSession),
+              sessionID == nil || sessionID == returnedSession else { throw SyncFailure.invalidResponse }
         return id
     }
     public func refresh(_ refreshToken: String) async throws -> AccountTokens {

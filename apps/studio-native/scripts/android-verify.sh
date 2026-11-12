@@ -22,6 +22,7 @@ capture_failure() {
     adb -s "$ANDROID_SERIAL" shell dumpsys window > "$evidence/failure-window.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" shell dumpsys power > "$evidence/failure-power.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" exec-out screencap -p > "$evidence/failure-screen.png" 2>/dev/null || true
+    python3 "$native_root/scripts/android-environment.py" --window "$evidence/failure-window.txt" --power "$evidence/failure-power.txt" --output "$evidence/failure-environment.json" || true
   fi
   exit "$status"
 }
@@ -39,6 +40,23 @@ adb -s "$ANDROID_SERIAL" shell settings put system screen_off_timeout 1800000
 } > "$evidence/identity.txt"
 adb -s "$ANDROID_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk > "$evidence/install.log"
 adb -s "$ANDROID_SERIAL" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk >> "$evidence/install.log"
+# Observe readiness after installs and before instrumentation. A booted emulator
+# can still have a foreign ANR dialog stealing focus. Preserve each observation;
+# never dismiss a dialog, retry a failed test, or turn a failed run into PASS.
+ready=0
+for attempt in 1 2 3 4 5 6; do
+  adb -s "$ANDROID_SERIAL" shell dumpsys window > "$evidence/readiness-$attempt-window.txt"
+  adb -s "$ANDROID_SERIAL" shell dumpsys power > "$evidence/readiness-$attempt-power.txt"
+  if python3 "$native_root/scripts/android-environment.py" --window "$evidence/readiness-$attempt-window.txt" --power "$evidence/readiness-$attempt-power.txt" --output "$evidence/readiness-$attempt.json"; then
+    ready=1
+    break
+  fi
+  if [[ "$attempt" != 6 ]]; then sleep 2; fi
+done
+if [[ "$ready" != 1 ]]; then
+  echo 'Disposable emulator is not ready; instrumentation was not started. Inspect the retained readiness and failure evidence.' >&2
+  exit 2
+fi
 adb -s "$ANDROID_SERIAL" shell am instrument -w -r ai.hypeproof.studio.mobile.preview.test/androidx.test.runner.AndroidJUnitRunner > "$evidence/native-ui.log" 2>&1
 python3 - "$evidence/native-ui.log" <<'PY'
 import re,sys

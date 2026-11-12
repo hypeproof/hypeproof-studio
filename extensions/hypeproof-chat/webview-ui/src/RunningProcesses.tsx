@@ -1,5 +1,11 @@
 import type { RunningProcess } from '../../src/runningProcesses';
-const labels = { running: '실행 중', stopping: '끄는 중', unknown: '실행 상태 확인 불가', stopped: '멈췄어요', done: '끝남', error: '오류' };
+const labels = { running: '실행 중', stopping: '멈추는 중', unknown: '실행 상태 확인 불가', stopped: '멈췄어요', done: '끝남', error: '오류' };
+/**
+ * The stop control keeps its own verb while the stop is on its way: a shell task 멈추기 → 멈추는 중
+ * (CGP-AGENT-D-025, DES-CGP-AGENT-60), the preview server 끄기 → 끄는 중 (Jay 2026-10-29). The pending word
+ * stays until the host reports the exit; a stop request alone never settles the entry.
+ */
+const stopWords = { shell: { stop: '멈추기', pending: '멈추는 중' }, preview: { stop: '끄기', pending: '끄는 중' } } as const;
 // A preview server says what it is in its title; a background shell keeps its purpose as the title.
 const previewTitle: Record<RunningProcess['state'], string> = {
   running: '미리보기 서버 실행 중', stopping: '미리보기 서버 끄는 중', unknown: '미리보기 서버 상태 확인 불가',
@@ -19,6 +25,7 @@ export function RunningProcessesPanel({ entries, onStop }: { entries: RunningPro
     <ul>{entries.map(e => {
       const preview = e.kind === 'preview';
       const live = e.state === 'running' || e.state === 'stopping';
+      const words = stopWords[preview ? 'preview' : 'shell'];
       return <li key={e.id} className="hps-process-card" data-state={e.state} data-kind={preview ? 'preview' : 'shell'}>
         <div className="hps-process-text">
           <p className="hps-process-title"><span className="hps-process-dot" aria-hidden="true" /><span className="hps-shell-purpose">{preview ? previewTitle[e.state] : e.purpose}</span></p>
@@ -26,9 +33,9 @@ export function RunningProcessesPanel({ entries, onStop }: { entries: RunningPro
           {preview && e.address && <p className="hps-shell-folder">주소: {e.address}</p>}
           {preview && live && <p className="hps-process-note">미리보기 창을 보는 동안 켜 두어요. 다 봤으면 꺼도 돼요.</p>}
         </div>
-        <div className="hps-process-actions"><span role="status" className="hps-process-state">{labels[e.state]}</span>
+        <div className="hps-process-actions"><span role="status" className="hps-process-state">{e.state === 'stopping' ? words.pending : labels[e.state]}</span>
           {live && <button type="button" disabled={e.state === 'stopping'} onClick={() => onStop(e.id)}>
-            {e.state === 'stopping' ? '끄는 중' : preview ? '끄기' : '멈추기'}</button>}</div>
+            {e.state === 'stopping' ? words.pending : words.stop}</button>}</div>
       </li>;
     })}</ul></section>;
 }

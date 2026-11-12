@@ -35,7 +35,7 @@ function fakeVscode() {
       showQuickPick: async (items) => items[v.picks.shift()],
       withProgress: async (_o, task) => { v.progress++; return task(); },
     },
-    workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === "proxyUrl" ? "https://service.invalid/v1" : k === "siteBase" ? "https://site.invalid" : fallback) }), fs: { readFile: async (uri) => require("node:fs").readFileSync(uri.fsPath) } },
+    workspace: { getConfiguration: () => ({ get: (k, fallback) => (k === "proxyUrl" ? v.proxy ?? "https://service.invalid/v1" : k === "siteBase" ? "https://site.invalid" : fallback) }), fs: { readFile: async (uri) => require("node:fs").readFileSync(uri.fsPath) } },
     env: { language: "ko" }, version: "1.0.0-synthetic", ProgressLocation: { Notification: 15 },
     Uri: { file: (fsPath) => ({ fsPath, scheme: "file" }) }, ViewColumn: { One: 1, Two: 2, Beside: 2 },
   };
@@ -134,14 +134,19 @@ try {
     Object.assign(h, {
       context: { secrets: { get: async () => "synthetic-token" }, workspaceState: { get: (k, fallback) => (/world/i.test(k) ? "kq-synthetic" : fallback), update: async () => {} }, globalStorageUri: { fsPath: root } },
       cachedProfile: { publishing: { enabled: true, strategy: "hypeproof_gallery" }, analytics: { upload_session_logs: true } },
-      profileGeneration: 1, resolveCoachCwd: () => work, inlineEngineIfNeeded: async (html) => html,
+      profileGeneration: 1, _instructorMode: { isInstructor: false }, resolveCoachCwd: () => work, inlineEngineIfNeeded: async (html) => html,
       spool: { currentSessionDir: () => sessionDir }, post: async (m) => { posts.push(m); return true; },
       activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
     });
     // CGP-KNOW-R-007: public sends are only ever asked in the panel. `panel` answers each step like the in-panel dialogs:
     // `panel.content` / `panel.public` (true, false or null = no visible panel); `panel.asked` records [step, details].
     const panel = { content: answer === "확인하고 보내기", public: answer === "확인하고 보내기", asked: [], on: null };
-    setOutboundPresenter(async (m, step) => { if (!m.public) return null; panel.asked.push([step, outboundDetails(m)]); panel.on?.(step); return panel[step]; });
+    setOutboundPresenter(async (m, step) => {
+      if (!m.public && !m.items.every(item => item.assessment)) return null;
+      panel.asked.push([step, outboundDetails(m)]);
+      panel.on?.(step, m);
+      return panel[step];
+    });
     return { h, v, calls, posts, panel };
   };
   const settle = () => new Promise((r) => setTimeout(r, 30));
@@ -199,17 +204,29 @@ try {
       assert.match(c.v.dialogs[0]?.options.detail ?? "", /^받는 곳: 이용권을 관리하는 강사 · service\.invalid\n보낼 항목:\n• 추가 사용이 필요한 이유 \(내가 쓴 글\) \(\d+ 바이트\)/);
       assert.equal(c.h.accessState.notice, n ? "강사에게 추가 사용 요청을 보냈습니다." : "보내지 않았습니다.");
     }
-    for (const [answer, n] of [[undefined, 0], ["확인하고 보내기", 1]]) {
-      const c = provider(answer), events = [{ id: "e1", kind: "user", text: "PRIVATE-OBS" }, { id: "e2", kind: "assistant", text: "AI" }];
+    for (const mode of ["approve", "cancel", "hidden", "new record", "new destination"]) {
+      const c = provider("확인하고 보내기"), events = [{ id: "e1", kind: "user", text: "PRIVATE-OBS" }, { id: "e2", kind: "coach", text: "AI" }];
       const batch = { scope: "scope-1", program: "p", events, incomplete: false };
-      c.h.prepareObservation = async () => ({ batch, missing: [], snapshot: () => batch });
-      c.h.ensureProfile = async () => ({}); c.h.nativeObservation = { batch };
+      c.h.nativeObservation = { batch, missing: [], snapshot: () => structuredClone(batch) };
+      c.h.prepareObservation = async () => c.h.nativeObservation;
+      c.h.ensureProfile = async () => ({});
+      if (mode === "cancel") c.panel.content = false;
+      if (mode === "hidden") c.panel.content = null;
+      c.panel.on = (_step, manifest) => {
+        assert.equal(c.calls.filter(x => x.url.endsWith("/observations/assess")).length, 0, "nothing sent before approval");
+        assert.deepEqual(Array.from(manifest.items, item => item.assessment.group), ["learner", "coach"]);
+        if (mode === "new record") batch.events.push({ id: "e3", kind: "user", text: "added after disclosure" });
+        if (mode === "new destination") c.v.proxy = "https://other.invalid/v1";
+      };
       await c.h.handleMessage({ type: "observationAssess", scope: "scope-1", eventIds: ["e1", "e2"] });
-      assert.equal(c.calls.filter((x) => x.url.endsWith("/observations/assess")).length, n, "observation assessment after " + answer);
-      const lines = (c.v.dialogs[0]?.options.detail ?? "").split("\n");
+      const sent = c.calls.filter(x => x.url.endsWith("/observations/assess"));
+      assert.equal(sent.length, Number(mode === "approve"), "observation assessment after " + mode);
+      assert.equal(c.v.dialogs.length, 0, "assessment only asks in the chat panel");
+      const lines = c.panel.asked[0][1].split("\n");
       assert.equal(lines[0], "받는 곳: 관찰 평가 API (원문은 저장하지 않음) · service.invalid");
       assert.deepEqual(lines.slice(2, 4), [`• 기록 1 · 내가 보낸 말 (${Buffer.byteLength(JSON.stringify(events[0]))} 바이트)`, `• 기록 2 · AI의 답 (${Buffer.byteLength(JSON.stringify(events[1]))} 바이트)`]);
-      if (!n) assert.match(c.posts.at(-1)?.error ?? "", /보내지 않았습니다/);
+      if (mode === "approve") assert.deepEqual(JSON.parse(sent[0].body), batch, "the sent body is the disclosed batch");
+      else assert.match(c.posts.at(-1)?.error ?? "", /보내지 않았습니다/);
     }
     ok("H4 budget request and observation assessment: listed and confirmed on the host; Cancel sends nothing");
   }

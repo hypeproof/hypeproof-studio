@@ -60,10 +60,48 @@ The Service needs these keys to enforce the rows above. They were chosen by the 
 | `pg.fee_rate_bps` | 340 (3.4%) | Placeholder estimate of the card fee. The real fee comes from the PG contract (#3419 step 6); until then the ledger's `pg_fee` line is an estimate. |
 | `age.adult_min` / `age.minor_min` | 19 / 14 | Korean civil adulthood and the account minimum. Age is a self-declared birth year until a verified source exists; the ambiguous year at a boundary counts as the younger group. |
 
+## v2
+
+Effective 2026-11-12 00:00 KST (`effective_at` = 2026-11-11T15:00:00Z). Sponsor: TJ, 2026-11-12: the sign-up invitation is designed separately (Jay); the store asks for partner and instructor codes when a seller first publishes, shows earnings first, and asks for the payout account only when a payout is due.
+
+Every v1 key keeps its v1 value. The rows below replace or add to v1.
+
+### Sponsor rows (2026-11-12)
+
+| Key | Value |
+|---|---|
+| `attribution` | **replaces v1.** The partner organisation and the instructor the seller registers by code at their first publication. Both codes are optional; no code means no referral. Codes are issued by HypeProof operators only. |
+| `attribution.seller_editable` | `false`: the seller chooses once (codes or none) at the first publication; afterwards only an operator changes it, with a recorded reason. |
+| `referral.no_origin` | no registered code: HypeProof keeps the whole commission; the seller stays at `split.seller_bps` (unchanged from v1, reworded). |
+| `payout.account_prompt_krw` | 10,000: the payout bank account is asked for only when the payable balance (past the refund window and the payout hold) reaches this amount. Earnings are shown before that. |
+| `minor.payout_account` | a minor seller is asked for a linked adult's account; payout waits for `linked_adult.verification`. |
+
+### Implementation starting values (not sponsor-set)
+
+Chosen by the Delivery Captain on 2026-11-12; they need sponsor confirmation.
+
+| Key | Value | Why |
+|---|---|---|
+| `attribution.instructor_implies_partner` | `true` | An instructor who belongs to a partner organisation teaches for it, so an instructor code alone also registers that partner. A partner code naming a different organisation than the instructor's is refused instead of guessed. |
+| `referral.disabled_keeps_bindings` | `true` | Disabling a partner or instructor stops new registrations. Sellers already registered keep paying the referral until an operator changes their binding, because the v1 attribution was permanent and a contract end is a human decision. |
+| `attribution.lookups_per_hour` | 20 per account | Codes are 50-bit random values; together with this limit they cannot be enumerated. |
+| `attribution.lookups_per_hour_per_address` | 300 per network address | A classroom registers behind one address: about forty learners checking a code twice and registering once fit inside it. |
+
+Code format: a kind letter (`P` partner, `I` instructor) and ten Crockford base32 characters, shown as `P-ABCDE-FGHJK`. The Service stores only a keyed hash of the code (keyed with the Service signing secret, so a rotation of that secret means reissuing every code).
+
+How the rows apply:
+- Registering a code needs the seller's consent (version `store-referral-2026-11-12`, recorded with its time) to provide their display name and sale amounts to that partner and instructor for settlement. Without it the seller registers no code and HypeProof keeps the whole commission. An operator binds a referrer only for a seller whose consent is recorded. Referral statements carry no seller field outside that consent.
+- Referral statements are the settlement document of a partnership (Studio passes were discontinued on 2026-11-12, so store referrals are the only Studio income for partners and instructors). Each carries the period, sales and refunded counts, gross, PG fee, the share earned, reversed and net, confirmed and in-window amounts, and policy versions, and exports as CSV.
+- `pg.fee_rate_bps` is a placeholder: every screen and statement labels the PG fee as an estimate (예상) until the contract rate (#3419 step 6).
+- The binding in force at payment time decides an order's referral lines; a paid sale is never recomputed after a rebind.
+- If an operator binds a seller before their first publication, that binding stands and the seller is not asked again.
+- Referral statements are per payment month (KST). A refund after that month was paid out nets against the next payout (`refund.after_split`), which ships with the payout run after #3419.
+- Deleting an account deletes the sealed payout account and the store profile; ledger lines stay as the record of past sales.
+
 ## Rollout switch (not a policy value)
 
 Who can reach the store is a Service secret, `HPS_STORE_ACCOUNTS`: a comma-separated list of account ids, or `*` for every account. Accounts outside it get the same 404 as a store that is off, so the App draws no entry. Unset in production means closed. Opening the store to everyone is a secret change to `*`; it needs no code change or App release. Live gateway keys are a separate, reviewed code change gated on #3419. Independently of this switch, production has no custody keyring until the external KMS of design v1 F10 exists, so the store answers 404 there.
 
 ## Not yet enforced in the first slice
 
-`updates`, `payout.schedule` (no transfer exists; the ledger only records amounts), `refund.after_split` for already-paid balances, `linked_adult.verification`, and the `tax` handling of referral payouts. They take effect when the work that needs them ships after #3419.
+`updates`, `payout.schedule` (no transfer exists; the ledger only records amounts), `refund.after_split` for already-paid balances, `linked_adult.verification`, account-holder verification (a sandbox check only), and the `tax` handling of referral payouts. They take effect when the work that needs them ships after #3419. Referral statements per partner and instructor and settlement month exist for the operator (`GET /admin/store/statements`); paying them is part of the same gate.

@@ -255,7 +255,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -264,7 +264,7 @@ import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
 import { DOWNLOAD_ACTION_COPY, downloadPolicy, resolveDownloadedFile, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
-import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
+import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, previewPageUrl, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
@@ -6138,16 +6138,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Reveal a freshly-built page. Always persists it to the workspace root
-   * (index.html, GitHub-Pages-ready). Then either:
-   *  - live_server cohorts (#278): serve the workspace root over
-   *    http://127.0.0.1 and open/refresh the native integrated browser — real
-   *    origin, so multi-file, same-origin fetch, storage, and page navigation
-   *    all work; or
-   *  - default: the sandboxed iframe PreviewProvider (existing behavior).
-   * Public so extension.ts (runLastCode) shares the same routing.
-   */
-  /**
    * **Before** a new world is written to index.html, archive the current one as
    * '이전 세상/<title>.html'.
    *
@@ -6473,23 +6463,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * 2026-08-19 — shows the .html the SDK coach saved with Write/Edit in the preview.
-   * It reads the file and hands it to revealBuilt (exactly the same save/reveal
-   * behaviour as the fence path). A missing file, or one that is not HTML, is passed
-   * over silently — so that the coach's next utterance does not stand in for the
-   * screen, a failure leaves only one tool-log line.
-   */
+  /** Preview the page the SDK coach saved. Only an explicit index.html edit takes the home-page build path. */
   private async revealWrittenHtml(filePath: string, streamId?: string): Promise<void> {
     try {
-      const abs = path.isAbsolute(filePath) ? filePath : path.join(this.resolveCoachCwd() ?? "", filePath);
-      const buf = await vscode.workspace.fs.readFile(vscode.Uri.file(abs));
-      const html = Buffer.from(buf).toString("utf8");
-      if (!/<html[\s>]/i.test(html) && !/<!doctype html/i.test(html)) return;
-      await this.revealBuilt(html, { streamId, artifactSource: "assistant_tool" });
-    } catch (e) {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return;
+      const abs = path.resolve(this.resolveCoachCwd() ?? root, filePath);
+      const fromRoot = path.relative(root, abs);
+      // The SDK can return a canonical absolute path even when the folder was opened through a symlink.
+      const rel = (relativeEscapes(fromRoot) ? path.relative(canonicalFolder(root), abs) : fromRoot).split(path.sep).join("/");
+      const page = readPageInFolder(root, rel);
+      if (!page.ok || (!/<html[\s>]/i.test(page.text) && !/<!doctype html/i.test(page.text))) return;
+      await this.revealBuilt(page.text, {
+        streamId,
+        artifactSource: "assistant_tool",
+        writtenPage: rel === "index.html" ? undefined : { path: rel, abs: page.abs },
+      });
+    } catch {
       if (streamId) {
-        this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: `미리보기 열기 실패: ${String(e).slice(0, 80)}`, state: "error" });
+        this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: "미리보기를 열지 못했어요.", state: "error" });
       }
     }
   }
@@ -6523,6 +6515,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Render the build in the live browser or sandbox. Only a home-page build saves to index.html. */
   async revealBuilt(
     html: string,
     opts?: {
@@ -6531,6 +6524,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       spoolTurnId?: string;
       /** Distinguishes a pre-built copy from the student's/AI's edited one, even for identical HTML. */
       artifactSource?: SpoolArtifactSource;
+      /** An existing file already written by the coach. The preview must never save over it or the home page. */
+      writtenPage?: { path: string; abs: string };
       /**
        * The world engine paired with this HTML (#644). When given, it is swapped in
        * **after the archive and just before the save** — reverse the order and the
@@ -6565,12 +6560,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.spool?.recordArtifactSnapshot({
       ...(spoolTurn ? { turnId: spoolTurn } : {}),
       source: opts?.artifactSource ?? (spoolTurn ? "assistant_response" : "manual_preview"),
-      path: "index.html",
+      path: opts?.writtenPage?.path ?? "index.html",
       content: checked.html,
     });
-    // #751 F4 — a real change to the artifact, reported to the class board as digests only (never the HTML).
+    // #751 F4 — the class board follows the approved home page and gets only its digest.
     // CGP-KNOW-R-029 — not for a temporary task's page.
-    if (!this.temporaryWrite?.(spoolTurn)) { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
+    if (!opts?.writtenPage && !this.temporaryWrite?.(spoolTurn)) { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
 
     // 2026-08-17, Windows real device — the screen stayed blank for a long time
     // **even after** the coach said "완성됐어요!". Between the stream ending and the
@@ -6592,6 +6587,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
 
     logReveal("running", "미리보기 여는 중");
+    if (opts?.writtenPage) {
+      const page = opts.writtenPage;
+      const scope = this.turnRequestScope();
+      // If the structural guard repaired the HTML in memory, the disk file still holds the original.
+      if (checked.html !== html || !this.isLiveServerPreview() || !(await this.openInLiveServer(page.path))) {
+        if (scope !== this.turnRequestScope()) return false;
+        await this.preview.show(checked.html, vscode.Uri.file(path.dirname(page.abs)));
+      }
+      logReveal("done", "미리보기를 열었어요");
+      return true;
+    }
     // 2026-08-20 review — the point that actually overwrites the work folder's
     // index.html funnels into this one place (pre-built world · ▶ Run · "보여줘" ·
     // coach fence). With the archive living only inside revealPrebuiltWorld,
@@ -6601,8 +6607,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Kids track only — an '이전 세상' folder appearing in an adult's work folder
     // would be stranger still.
     // When the content is identical, shouldArchiveWorld filters it out so archived
-    // copies do not pile up (the coach's Edit-save path rewrites the file itself, so
-    // it is always filtered here).
+    // copies do not pile up.
     if (isWorldCohort(this.cachedProfile)) {
       this.lastArchivedWorldFile = await this.archiveCurrentWorld(checked.html, opts?.streamId);
     }
@@ -6658,8 +6663,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the native browser at its URL. Returns false on any failure so the caller
    * falls back to the iframe preview.
    */
-  private async openInLiveServer(): Promise<boolean> {
-    return (await this.startLivePreview()) !== null;
+  private async openInLiveServer(pagePath = "index.html"): Promise<boolean> {
+    return (await this.startLivePreview(pagePath)) !== null;
   }
 
   /**
@@ -6713,22 +6718,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }, { address: previewAddress(url) });
   }
 
-  async startLivePreview(): Promise<string | null> {
+  async startLivePreview(pagePath?: string): Promise<string | null> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return null;
     try {
       const base = await this.liveServer.ensure(root);
-      // Avoid stacking preview tabs on the right. The live server binds a fresh
-      // random port on each (re)start (app relaunch, root change), so the URL
-      // can differ from a previously-opened tab — an exact-URL match alone then
-      // fails and every restart opens ANOTHER tab. So we match by "is this a
-      // loopback preview tab" (port-independent): reuse the one already on the
-      // current URL via SSE reload; otherwise close any STALE preview tabs
-      // (dead port from a prior server start) and open exactly one fresh tab.
+      if (root !== vscode.workspace.workspaceFolders?.[0]?.uri.fsPath) return null;
+      const url = pagePath && pagePath !== "index.html"
+        ? previewPageUrl(base, pagePath.split("/").map(encodeURIComponent).join("/"))
+        : base;
+      // Reuse the requested page's tab, or any current preview when no page was requested.
+      // A restarted server gets a new port. Close only stale tabs owned by this session.
       const tabs = this.coachBrowserTabs();
       const isPreviewTab = (u?: string): boolean =>
         !!u && /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(u);
-      const current = tabs.find((t) => t.url?.startsWith(base));
+      const onServer = (t: vscode.BrowserTab) => t.url?.startsWith(base);
+      const current = tabs.find((t) => {
+        if (!onServer(t)) return false;
+        if (!pagePath) return true;
+        const pathname = previewPagePath(t.url).split("?")[0];
+        return pathname === previewPagePath(url) || (pagePath === "index.html" && pathname === "/index.html");
+      });
       // #519 — below, the preview tab is pinned as the coach's drive target. Leaving
       // it as `?.` means that when live_preview_start is the first tool call (no
       // instance yet) the pin is silently lost and the screenshot that follows falls
@@ -6749,7 +6759,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // REQ-STUDIO-PREVIEW-RECOVERY — only tabs on an address this process's own server served are closed; another
         // localhost tool's tab (or one on a port Studio used in an earlier run) is never touched.
         for (const t of tabs) {
-          if (isPreviewTab(t.url) && this.liveServer.servedThisSession(t.url)) {
+          if (!onServer(t) && isPreviewTab(t.url) && this.liveServer.servedThisSession(t.url)) {
             try {
               await t.close();
             } catch {
@@ -6762,13 +6772,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // would open the preview next to that empty group, leaving a blank pane
         // between the chat sidebar and the preview. ViewColumn.One fills the main
         // editor area so the layout is just: chat sidebar | preview.
-        const opened = await vscode.window.openBrowserTab(base, {
+        const opened = await vscode.window.openBrowserTab(url, {
           viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
           preserveFocus: true,
         });
         this.mcpBrowser.setTargetTab(opened);
       }
-      return base;
+      return url;
     } catch {
       return null;
     }
@@ -8483,10 +8493,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(JSON.stringify(msg.eventIds)!==JSON.stringify(snapshot.events.map(e=>e.id))){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'새 작업 기록이 추가됐습니다. 보낼 내용을 다시 확인해 주세요.'});return;}
         const controller=new AbortController();this.observationAssessment=controller;
         try{
+          const scope = this.writeApprovalScope();
+          const frozen = JSON.stringify(snapshot);
           // REQ-KNOW-09: the ticked box in the panel is the learner's choice; the host still lists recipient, items and sizes
           // for exactly this body and sends nothing on Cancel. `snapshot` is a structuredClone and assessmentBatch is pure,
           // so the confirmed items and the body below are the same bytes (CR-10 pins the body expression literally).
           if(!await confirmOutbound({recipient:`관찰 평가 API (원문은 저장하지 않음) · ${new URL(proxy).host}`,items:observationOutboundItems(assessmentBatch(snapshot).events)})||await this.context.secrets.get(TOKEN_KEY)!==token){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'보내지 않았습니다. 기록은 그대로 있습니다.'});return;}
+          if (controller.signal.aborted || scope !== this.writeApprovalScope()
+              || proxy !== vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')
+              || frozen !== JSON.stringify(this.nativeObservation?.snapshot()) || frozen !== JSON.stringify(recorder.snapshot())) {
+            await this.post({ type: 'observationState', learningPath: this.nativeLearningPath, batch: null,
+              error: '보내지 않았습니다. 현재 작업의 기록과 연결을 다시 확인해 주세요.' });
+            return;
+          }
           const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{...observationHeaders(token),'content-type':'application/json'},body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
           if(!response.ok){const failure=await response.json() as {error?:{code?:string}};throw Error(/^[a-z_0-9]{1,80}$/.test(failure.error?.code??'')?failure.error!.code:'assessment_failed');}
           const result=await response.json() as {findings:unknown;capability_model?:unknown};
@@ -10184,9 +10203,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
             if (!a.isError && writeToolIds.has(a.id)) wroteOk = true;
-            // When a tool successfully wrote a .html, read that file and show it in
-            // the preview (the same revealBuilt as the fence path — identical down to
-            // the save, the live server and the native tab).
+            // Preview the file a tool successfully wrote at its own path.
             if (work || line.kind !== "child") showPending();
             if (!a.isError && htmlWrites.has(a.id)) {
               const fp = htmlWrites.get(a.id)!;
@@ -10201,7 +10218,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 if (this.revealTimer) clearTimeout(this.revealTimer);
                 this.revealTimer = setTimeout(() => {
                   this.revealTimer = undefined;
-                  void this.revealWrittenHtml(fp, streamId);
+                  if (!ctrl.signal.aborted && accuracyScope === this.turnRequestScope()) void this.revealWrittenHtml(fp, streamId);
                 }, 900);
               }
             }

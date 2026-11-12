@@ -19,6 +19,8 @@
 /* CGP-KNOW-D-033 — collapsed memory group; the summary is a full-size target. */
 .hps-outbound-memory { margin-top: var(--ds-c-studio-outbounddialog-space-2); border-top: var(--ds-c-studio-outbounddialog-size-3) solid currentColor; }
 .hps-outbound-memory summary { box-sizing: border-box; min-height: var(--ds-c-studio-outbounddialog-size-8); padding: var(--ds-c-studio-outbounddialog-space-2) 0; cursor: pointer; }
+.hps-outbound-assessment-group + .hps-outbound-assessment-group { margin-top: var(--ds-c-studio-outbounddialog-space-2); }
+.hps-outbound-record { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* CGP-KNOW-R-007 / DES-KNOW-10 — the public step names its destination in selectable monospace that wraps at 320px. */
 .hps-outbound-destination { font-family: var(--ds-c-studio-styles-font-5); user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
 /* CGP-KNOW-D-007 — the public step's heading is a header: the learner scale's lead step, not body size. */

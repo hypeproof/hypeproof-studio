@@ -101,7 +101,7 @@ function keyValueHits(text: string): Array<[number, number]> {
 
 export type SkipReason = 'credential' | 'secret_name' | 'too_large' | 'symlink' | 'hardlink' | 'special' | 'unsafe_name' | 'unsafe_path' | 'unreadable';
 export interface WorkExportFile { name: string; bytes: Buffer; mtime: Date }
-export interface WorkExportCollection { files: WorkExportFile[]; skipped: { path: string; reason: SkipReason }[]; skippedDirs: string[] }
+export interface WorkExportCollection { files: WorkExportFile[]; skipped: { path: string; reason: SkipReason; isDirectory?: boolean }[]; skippedDirs: string[] }
 export interface TranscriptMessage { role: string; content: string; createdAt?: number }
 export interface TranscriptTask { title: string; messages: readonly TranscriptMessage[] }
 export class WorkExportTooLarge extends Error { constructor() { super('work_export_too_large'); } }
@@ -301,10 +301,14 @@ export async function collectWorkFolder(root: string, secrets: readonly string[]
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const entry of entries) {
       const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-      if (UNSAFE_NAME.test(entry.name)) { skipped.push({ path: rel, reason: 'unsafe_name' }); continue; }
       // A name that carries a secret is left out (a folder with everything in it) and listed without the name.
-      if (nameCarriesCredential(entry.name, secrets)) { skipped.push({ path: rel, reason: 'secret_name' }); continue; }
-      if (UNSAFE_PATH.test(entry.name)) { skipped.push({ path: rel, reason: 'unsafe_path' }); continue; }
+      const nameReason = UNSAFE_NAME.test(entry.name) ? 'unsafe_name'
+        : nameCarriesCredential(entry.name, secrets) ? 'secret_name'
+        : UNSAFE_PATH.test(entry.name) ? 'unsafe_path' : undefined;
+      if (nameReason) {
+        skipped.push({ path: rel, reason: nameReason, isDirectory: entry.isDirectory() });
+        continue;
+      }
       const full = path.join(base, rel);
       let stat: fs.Stats;
       try { stat = await fs.promises.lstat(full); } catch { skipped.push({ path: rel, reason: 'unreadable' }); continue; }
@@ -490,7 +494,16 @@ export async function writeExclusive(directory: string, name: string, bytes: Buf
   throw new Error('work_export_name_taken');
 }
 
-export interface WorkExportResult { file: string; files: number; tasks: number; skipped: number }
+const HTML_EXTENSION = /\.html?$/i;
+
+export interface WorkExportResult {
+  file: string;
+  files: number;
+  tasks: number;
+  skipped: number;
+  htmlIncluded: number;
+  htmlSkipped: number;
+}
 
 /** Collect, zip and write. `current()` is checked after the slow part, before anything is written. */
 export async function exportWork(input: { root: string; destination: string; secrets: readonly string[]; tasks: readonly TranscriptTask[];
@@ -508,5 +521,12 @@ export async function exportWork(input: { root: string; destination: string; sec
   if (input.current && !input.current()) return 'stale';
   if (await fs.promises.realpath(input.destination) !== destination) return 'stale';
   const file = await writeExclusive(destination, workExportName(root, now, input.secrets), zip);
-  return { file, files: collection.files.length, tasks: input.tasks.length, skipped: collection.skipped.length };
+  return {
+    file,
+    files: collection.files.length,
+    tasks: input.tasks.length,
+    skipped: collection.skipped.length,
+    htmlIncluded: collection.files.filter(({ name }) => HTML_EXTENSION.test(name)).length,
+    htmlSkipped: collection.skipped.filter(item => !item.isDirectory && HTML_EXTENSION.test(item.path)).length,
+  };
 }
