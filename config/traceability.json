@@ -18786,6 +18786,62 @@
           "section": "## Publish responsibility notice (CGP-ART-R-012 / CGP-ART-D-012)"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SHOW-LINK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Show what I made as a link (#3794 slice 2)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHOW-LINK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/showLink.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-SHOW-LINK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-LINK",
+        "ST-IMP-SHOW-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/show-link.smoke.mjs"
+        }
+      ]
     }
   ]
 }
