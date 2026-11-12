@@ -122,11 +122,13 @@ try {
   const provider = (answer) => {
     const v = fakeVscode(), calls = [], posts = [];
     v.answer = answer;
+    v.accessView = { schema: "hps-access-view/1", configured: false, as_of: new Date().toISOString(), choices: [] };
     const { ChatPanelProvider, setOutboundPresenter, outboundDetails } = makeProvider(v, async (url, init = {}) => {
-      calls.push({ url, method: init.method ?? "GET", body: init.body });
+      calls.push({ url, method: init.method ?? "GET", body: init.body, headers: init.headers });
       if (url.endsWith("/api/gallery/publish")) return Response.json({ ok: true, url: "/w/1", displayName: "synthetic" });
       if (url.includes("/logs/")) return Response.json({ key: "k" });
       if (url.endsWith("/access/requests")) return Response.json({ ok: true });
+      if (url.endsWith("/access")) return Response.json(v.accessView);
       if (url.endsWith("/observations/assess")) return Response.json({ findings: [] });
       return Response.json({});
     });
@@ -136,7 +138,7 @@ try {
       cachedProfile: { publishing: { enabled: true, strategy: "hypeproof_gallery" }, analytics: { upload_session_logs: true } },
       profileGeneration: 1, resolveCoachCwd: () => work, inlineEngineIfNeeded: async (html) => html,
       spool: { currentSessionDir: () => sessionDir }, post: async (m) => { posts.push(m); return true; },
-      activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
+      activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {},
     });
     // CGP-KNOW-R-007: public sends are only ever asked in the panel. `panel` answers each step like the in-panel dialogs:
     // `panel.content` / `panel.public` (true, false or null = no visible panel); `panel.asked` records [step, details].
@@ -199,17 +201,42 @@ try {
       assert.match(c.v.dialogs[0]?.options.detail ?? "", /^받는 곳: 이용권을 관리하는 강사 · service\.invalid\n보낼 항목:\n• 추가 사용이 필요한 이유 \(내가 쓴 글\) \(\d+ 바이트\)/);
       assert.equal(c.h.accessState.notice, n ? "강사에게 추가 사용 요청을 보냈습니다." : "보내지 않았습니다.");
     }
-    for (const [answer, n] of [[undefined, 0], ["확인하고 보내기", 1]]) {
+    for (const { answer, n, required, selected, expires, activityChanged, error } of [
+      { answer: undefined, n: 0, required: true, selected: true },
+      { answer: "확인하고 보내기", n: 1, required: true, selected: true },
+      { answer: "확인하고 보내기", n: 1 },
+      { answer: "확인하고 보내기", n: 0, required: true, error: "funding_selection_required" },
+      { answer: "확인하고 보내기", n: 0, selected: true, expires: true, error: "funding_unavailable" },
+      { answer: "확인하고 보내기", n: 0, selected: true, activityChanged: true, error: "funding_selection_required" },
+    ]) {
       const c = provider(answer), events = [{ id: "e1", kind: "user", text: "PRIVATE-OBS" }, { id: "e2", kind: "assistant", text: "AI" }];
       const batch = { scope: "scope-1", program: "p", events, incomplete: false };
       c.h.prepareObservation = async () => ({ batch, missing: [], snapshot: () => batch });
       c.h.ensureProfile = async () => ({}); c.h.nativeObservation = { batch };
+      if (required || selected) {
+        c.v.accessView = { ...c.v.accessView, configured: true, required, choices: [{
+          id: "class:selected", label: "Synthetic classroom", mode: "included", source_kind: "cohort",
+          active: true, available: true, state: "ready", ends_at: Date.now() + 60000, can_request: false,
+          allowed: { models: [], efforts: [], features: [], runtimes: [] }, resources: [],
+        }] };
+        await c.h.loadAccess();
+        if (selected) await c.h.handleMessage({ type: "selectFunding", id: "class:selected" });
+      }
+      if (expires) c.v.onDialog = () => { c.h.accessState.view.choices[0].ends_at = Date.now() - 1; };
+      if (activityChanged) c.v.onDialog = () => { c.h.nativeHistoryScope = "another-activity"; };
       await c.h.handleMessage({ type: "observationAssess", scope: "scope-1", eventIds: ["e1", "e2"] });
-      assert.equal(c.calls.filter((x) => x.url.endsWith("/observations/assess")).length, n, "observation assessment after " + answer);
+      const requests = c.calls.filter((x) => x.url.endsWith("/observations/assess"));
+      assert.equal(requests.length, n, error ?? "observation assessment after " + answer);
+      if (n) assert.equal(requests[0].headers["x-hps-funding-source"], selected ? "class:selected" : undefined);
+      if (error) assert.ok(c.posts.at(-1)?.error?.includes(error), error);
+      if (required && !selected) {
+        assert.equal(c.v.dialogs.length, 0, "choose a funding source before asking to send records");
+        continue;
+      }
       const lines = (c.v.dialogs[0]?.options.detail ?? "").split("\n");
       assert.equal(lines[0], "받는 곳: 관찰 평가 API (원문은 저장하지 않음) · service.invalid");
       assert.deepEqual(lines.slice(2, 4), [`• 기록 1 · 내가 보낸 말 (${Buffer.byteLength(JSON.stringify(events[0]))} 바이트)`, `• 기록 2 · AI의 답 (${Buffer.byteLength(JSON.stringify(events[1]))} 바이트)`]);
-      if (!n) assert.match(c.posts.at(-1)?.error ?? "", /보내지 않았습니다/);
+      if (!answer) assert.match(c.posts.at(-1)?.error ?? "", /보내지 않았습니다/);
     }
     ok("H4 budget request and observation assessment: listed and confirmed on the host; Cancel sends nothing");
   }

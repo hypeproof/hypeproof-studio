@@ -2595,6 +2595,13 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 
 
 
+**Assessment funding (REQ-L8, REQ-L9 and REQ-KNOW-09).** Work-record assessment sends the
+active funding source the student selected for the current activity. The host checks the choice
+again after outbound consent and withholds the records if a required choice is missing, the
+selected choice expires, or the activity changes. A seat that needs no choice can still send
+without a funding header. Service determines entitlement, pricing and admission. Host coverage is
+`extensions/hypeproof-chat/test/outbound-consent-host.smoke.mjs`.
+
 ## M. Agent SDK coach runtime (#282)
 
 다중 공급자 성인 실습과 요청 한도는 [MU-01~08](requirements/model-access-usage.md),
