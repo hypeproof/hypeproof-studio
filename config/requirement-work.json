@@ -484,29 +484,6 @@
       "test": "docs/testing/studio-native-trial-ux.md"
     },
     {
-      "path": "docs/requirements/classroom-design.md",
-      "ids": [
-        "DES-01",
-        "DES-02",
-        "DES-03",
-        "DES-04",
-        "DES-05",
-        "DES-06",
-        "DES-07",
-        "DES-08",
-        "DES-09",
-        "DES-10",
-        "DES-11",
-        "DES-12"
-      ],
-      "inline_prefixes": [],
-      "sha256": "c3c5df496a30e0075d9376e94af12672fbed55dfb44d3b49c48de716ba07e38f",
-      "owner": "jayleekr",
-      "intent": "docs/PRODUCT-INTENT.md",
-      "design": "docs/requirements/classroom-design.md",
-      "test": "docs/testing/classroom-admin.md"
-    },
-    {
       "path": "docs/requirements/capability-model-contract.md",
       "ids": [
         "HC-01",
@@ -917,29 +894,59 @@
     {
       "path": "docs/requirements/mobile-growth-roadmap.md",
       "ids": [
-        "MREF-01",
-        "MREF-02",
-        "MREF-03",
-        "MREF-04",
-        "MREF-05",
-        "MVOICE-01",
-        "MVOICE-02",
-        "MVOICE-03",
-        "MVOICE-04",
-        "MVOICE-05",
+        "MFR-01",
+        "MFR-02",
+        "MFR-03",
+        "MFR-04",
+        "MFR-05",
+        "MFR-06",
+        "MIRS-01",
         "MPER-01",
         "MPER-02",
         "MPER-03",
         "MPER-04",
         "MPER-05",
-        "MIRS-01"
+        "MREF-01",
+        "MREF-02",
+        "MREF-03",
+        "MREF-04",
+        "MREF-05",
+        "MTF-01",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "e6d4c3de8b93220c33257db34861abbde7e21c78922c5966146295d725234955",
+      "sha256": "5539428c1f40bda68f1784d56075ae851c114f7c44849bcb0eaa1d00254e80cc",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
       "test": "docs/testing/native-mobile-growth.md"
+    },
+    {
+      "path": "docs/requirements/classroom-design.md",
+      "ids": [
+        "DES-01",
+        "DES-02",
+        "DES-03",
+        "DES-04",
+        "DES-05",
+        "DES-06",
+        "DES-07",
+        "DES-08",
+        "DES-09",
+        "DES-10",
+        "DES-11",
+        "DES-12"
+      ],
+      "inline_prefixes": [],
+      "sha256": "c3c5df496a30e0075d9376e94af12672fbed55dfb44d3b49c48de716ba07e38f",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/classroom-design.md",
+      "test": "docs/testing/classroom-admin.md"
     }
   ],
   "work_items": [
@@ -4535,7 +4542,7 @@
     },
     {
       "id": "mobile-voice-v1",
-      "title": "Native on-device voice with explicit send and stop boundaries",
+      "title": "Native on-device voice with continuous conversation and stop boundaries",
       "issue": 3687,
       "kind": "implementation",
       "feature_ids": [],
@@ -4552,14 +4559,16 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
-      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
-      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
-      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
-      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
+      "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
+      "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
+      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android alignment and iPhone legacy notebook journey acceptance remain open.",
       "implementation_paths": [
         "apps/studio-native/ios/App/VoiceController.swift",
         "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
         "apps/studio-native/ios/App/HPStudioApp.swift",
         "apps/studio-native/ios/App/StudioModel.swift",
         "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
@@ -4568,6 +4577,7 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
@@ -4645,6 +4655,79 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "native-first-answer-friction-v1",
+      "title": "Code-free iPhone login and continuous voice with full-journey release evidence",
+      "issue": 3771,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MFR-01",
+            "MFR-02",
+            "MFR-03",
+            "MFR-04",
+            "MFR-05",
+            "MFR-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify Service405/Lab1590 native auth and exact-source native journeys; distribute TestFlight then collect live sign-in and physical Korean audio evidence.",
+      "design_delta": "Minimum intervention: same-device sign-in, durable Send through sync, persistent errors, silence endpoints and foreground-only next turn.",
+      "positive_control": "Sign in without codes, dictate then send, and receive an answer with no desktop; conversation continues until stopped.",
+      "negative_control": "Missing or skipped journeys, stale capture, expired login and uncertain requests cannot become acceptance or duplicate submissions.",
+      "evidence_required": "Exact source, simulator case identities, backend/browser proof and physical version/build separately.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/App/NativeBrowserSignIn.swift",
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/NativeAccountAuth.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/NativeAccountAuthTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
+        "apps/studio-native/ios/App/NativeJourneyFixture.swift",
+        "apps/studio-native/scripts/collect-native-journeys.py",
+        "apps/studio-native/tests/test_native_journey_evidence.py"
+      ]
+    },
+    {
+      "id": "native-deployment-receipt-v1",
+      "title": "Bind TestFlight requests and upload receipts to exact source",
+      "issue": 3768,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTF-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the contract and independently inspect an authorized exact-source workflow receipt; Apple processing, tester availability and physical acceptance remain separate.",
+      "design_delta": "Reuse existing native-CI and Apple environment gates; optional all-or-none Harness correlation and credential-free upload observation.",
+      "positive_control": "One complete request carries the same source/operation/digest through the gate and successful command receipt with actual package hash.",
+      "negative_control": "Partial/malformed request, moved source, an older release-attempt gate or failed archive/validation/upload cannot emit a success receipt or claim tester availability.",
+      "evidence_required": "Focused synthetic contract and shell controls, unchanged native-gate regressions, exact trusted workflow/Harness evidence separately.",
+      "implementation_paths": [
+        ".github/workflows/studio-apple-testflight.yml",
+        "apps/studio-native/scripts/verify-native-candidate.py",
+        "apps/studio-native/scripts/apple-upload.sh"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/tests/test_native_deployment_contract.py",
+        "apps/studio-native/tests/test_verify_native_candidate.py"
       ]
     },
     {

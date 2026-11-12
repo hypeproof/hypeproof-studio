@@ -15,11 +15,6 @@ struct SharedConversationView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
-    @State private var consent = false
-    @State private var storageOK = false
-    @State private var voiceConsent = false
-    @State private var voiceConsentAccepted = false
-    @State private var voiceConsentID: String?
     @State private var showContext = false
     @State private var voiceRequestID: String?
     @State private var voiceCompletionWaitStarted: Date?
@@ -65,7 +60,7 @@ struct SharedConversationView: View {
         .onDisappear { voice.stop(); model.setVisible(false) }
         .onChange(of: phase) { _, value in
             model.setVisible(value == .active)
-            if value == .background { voice.stop(); voiceConsentAccepted = false; voiceConsentID = nil; voiceConsent = false }
+            if value == .background { voice.stop() }
             else if value == .inactive, voice.turn.phase != .authorizing { voice.stop() }
             else if value == .active { voice.resumeIfActive() }
         }
@@ -74,7 +69,7 @@ struct SharedConversationView: View {
             if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
         }
-        .onChange(of: model.selected) { _, _ in voice.stop(); voiceConsentAccepted = false; voiceConsentID = nil; voiceConsent = false }
+        .onChange(of: model.selected) { _, _ in voice.stop() }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -87,36 +82,6 @@ struct SharedConversationView: View {
     }
     var body: some View {
         lifecycleContent
-        .sheet(isPresented: $consent) {
-            NavigationStack {
-                Form {
-                    Section("같은 대화를 두 기기에서") {
-                        Text("내가 보낸 글과 AI의 답변을 내 계정의 HypeProof Service에 저장해요. 같은 계정으로 로그인한 기존 데스크톱과 iPhone에서 이 대화를 열 수 있어요. 나이·직업을 꼭 알려주지 않아도 괜찮아요.")
-                        Text("기기 사이 전송은 암호화됩니다. 서버가 대화 글을 저장하므로 종단간 암호화는 아닙니다. 질문 대화의 최근 글은 Service와 AI 제공자에게 전송되고 기존 계정의 AI 이용 한도가 적용돼요. 수업 기록이나 기록 없이 묻기는 공유하지 않아요.").font(.footnote)
-                    }
-                    Section {
-                        Toggle("대화 글의 서버 저장과 연결 방식을 이해했어요", isOn: $storageOK)
-                        Button("같은 계정으로 연결") { consent = false; model.login() }.disabled(!storageOK || !model.accountStorageReady)
-                    }
-                }.navigationTitle("내 이야기 이어가기").toolbar { Button("닫기") { consent = false } }
-            }
-        }
-        .sheet(isPresented: $voiceConsent, onDismiss: {
-            let accepted = voiceConsentAccepted && voiceConsentID == model.selected && phase == .active
-            voiceConsentAccepted = false; voiceConsentID = nil
-            if accepted { beginVoice(.conversation) }
-        }) {
-            NavigationStack {
-                Form {
-                    Section {
-                        Text("말하기를 마치면 인식한 글을 지금 열린 대화로 보내요. 답변을 읽는 동안 마이크는 꺼져 있어요. 다음 차례는 직접 눌러 시작해요.")
-                        Text("전송 전에 고치고 싶으면 ‘말로 적기’를 사용해 주세요. 질문 대화는 컴퓨터 없이도 답변을 받아요. 연결된 제작 작업은 컴퓨터가 필요해요.")
-                    }
-                    Button("말하고 보내기 시작") { voiceConsentAccepted = true; voiceConsent = false }.accessibilityIdentifier("linkedVoiceStart")
-                    Button("나중에", role: .cancel) { voiceConsentAccepted = false; voiceConsent = false }.accessibilityIdentifier("linkedVoiceCancel")
-                }.navigationTitle("음성 대화").navigationBarTitleDisplayMode(.inline)
-            }.presentationDetents([.medium, .large])
-        }
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
@@ -130,24 +95,20 @@ struct SharedConversationView: View {
                 Text("요즘 어떤 일에\n시간을 많이 쓰세요?").font(.largeTitle.bold())
                 Text("일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요. 아직 정리되지 않아도 괜찮아요.").foregroundStyle(.secondary)
                 Text("정답을 정하는 사람은 나예요. 답하기 어려운 질문은 건너뛰어도 괜찮아요.").font(.callout)
-                if let signIn = model.signIn {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Button("계정 로그인 열기") { openURL(signIn.verification_uri_complete) }.buttonStyle(.borderedProminent)
-                        Text("계정 화면에서 로그인을 마친 뒤 돌아오세요. 이야기는 이 앱에서 나눠요.").font(.footnote)
-                        Button("연결 취소") { model.cancelLogin() }
-                    }.padding().background(.background, in: RoundedRectangle(cornerRadius: 18))
+                Text("보낸 글과 AI 답변은 내 계정에 저장되어 같은 계정의 기기에서 이어집니다. 질문에 필요한 최근 글은 AI 제공자에게 전달돼요.").font(.footnote).foregroundStyle(.secondary)
+                if model.busy {
+                    ProgressView(model.loginStatus.isEmpty ? "로그인을 마무리하고 있어요." : model.loginStatus)
+                    Button("로그인 취소") { model.cancelLogin() }.accessibilityIdentifier("accountCancel")
                 } else {
-                    Button("내 계정으로 시작하기") { consent = true }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.busy || !model.accountStorageReady).accessibilityIdentifier("linkDesktop")
+                    Button("내 계정으로 시작하기") { model.login() }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.accountStorageReady).accessibilityIdentifier("linkDesktop")
                     if !model.accountStorageReady {
                         Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage")
-                        Text("iPhone 잠금을 해제한 뒤 다시 확인해 주세요. 기기의 메모는 계속 사용할 수 있어요.").font(.footnote)
                     }
 #if DEBUG
                     if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
 #endif
                 }
                 Text("같은 계정의 HP Studio에서 나눈 이야기를 이어갑니다. 질문 대화에는 컴퓨터를 켜 둘 필요가 없어요. 제작이 필요해지면 기존 데스크톱 앱을 안내해요.").font(.footnote).foregroundStyle(.secondary)
-                if model.busy { ProgressView("연결 확인 중") }
                 status
             }.padding(24).frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
         }
@@ -189,7 +150,7 @@ struct SharedConversationView: View {
                     ForEach(model.cache.messages) { message in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(message.role == "user" ? "나의 생각" : "함께 생각하기").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(message.content).textSelection(.enabled)
+                            Text(message.content).textSelection(.enabled).accessibilityIdentifier(message.role == "assistant" ? "sharedReply" : "sharedMessage")
                         }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
                             .background(message.role == "user" ? Color(uiColor: .secondarySystemGroupedBackground) : .green.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
                     }
@@ -197,7 +158,7 @@ struct SharedConversationView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             if request.status != "completed" { Text(request.text).textSelection(.enabled) }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
-                            if request.status == "local" { Button("같은 요청 다시 전송") { model.retry() }.disabled(model.busy || model.syncing) }
+                            if request.status == "local" { Button("다시 보내기") { model.retry() }.disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry") }
                             if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
                                 Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
@@ -227,16 +188,16 @@ struct SharedConversationView: View {
                 TextField("편하게 말하거나 적어 주세요", text: Binding(get: { model.cache.draft }, set: model.editDraft), axis: .vertical)
                     .lineLimit(1...5).focused($focused).disabled(voice.isCapturing).accessibilityIdentifier("sharedInput")
                 Button { focused = false; voice.stop(); model.send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
-                    .disabled(!model.canSend || model.syncing || (try? SharedRequest.checkedText(model.cache.draft)) == nil || voice.isCapturing).accessibilityLabel("대화 보내기").accessibilityIdentifier("sharedSend")
+                    .disabled(!model.canSend || (try? SharedRequest.checkedText(model.cache.draft)) == nil || voice.isCapturing).accessibilityLabel("대화 보내기").accessibilityIdentifier("sharedSend")
             }
             HStack {
                 if voice.isActive {
-                    if voice.turn.phase == .listening { Button("말하기 끝") { voice.endSpeech() } }
-                    Spacer(); Button("음성 멈춤") { voice.stop() }
+                    Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2")
+                    Spacer(); Button("음성 멈춤") { voice.stop() }.accessibilityIdentifier("sharedVoiceStop")
                 } else {
-                    Button { beginVoice(.dictation) } label: { Label("말로 적기", systemImage: "mic") }
+                    Button { beginVoice(.dictation) } label: { Label("말로 적기", systemImage: "mic") }.accessibilityIdentifier("sharedDictate")
                     Spacer()
-                    Button("음성 대화") { focused = false; voiceConsentAccepted = false; voiceConsentID = model.selected; voiceConsent = true }.disabled(!model.canSend || !model.cache.draft.isEmpty)
+                    Button { beginVoice(.conversation) } label: { Label("대화하기", systemImage: "waveform") }.accessibilityIdentifier("sharedVoice").disabled(!model.canSend || !model.cache.draft.isEmpty)
                 }
             }.buttonStyle(.bordered).disabled(model.busy && !voice.isActive)
             if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
@@ -275,32 +236,39 @@ struct SharedConversationView: View {
     }
     @ViewBuilder private var status: some View {
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
-        if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary) }
-        if model.syncing { ProgressView("대화 확인 중").font(.caption) }
+        if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
+        if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
+#if DEBUG
+        if NativeJourneyFixture.enabled { Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace") }
+#endif
     }
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.cache.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
-        guard let id = model.selected, model.canSend, !model.syncing else { return }
+        guard let id = model.selected, model.canSend else { return }
+        guard mode != .conversation || model.cache.draft.isEmpty else { return }
         focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.cache.draft
-        voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, transcript: { text in
+        voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, nextTurn: {
+            guard phase == .active, model.selected == id, model.canSend, model.cache.draft.isEmpty else { voice.stop(); return }
+            beginVoice(.conversation)
+        }, transcript: { text in
             guard model.selected == id else { return }
             model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
         }, final: { _, mode in
             guard model.selected == id else { return false }
             if mode == .dictation { return true }
-            guard model.canSend, !model.syncing else { return false }
+            guard model.canSend else { return false }
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
         })
     }
     private func reconcileVoiceReply() {
         guard voice.turn.phase == .waiting, let requestID = voiceRequestID, let id = model.selected else { return }
         let completedWaitExpired = voiceCompletionWaitStarted.map { Date().timeIntervalSince($0) >= 30 } ?? false
-        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
+        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.sendingCurrentRequest, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
         case .waiting:
             // Desktop event and request reads are separate. Allow the next poll to deliver its answer.
             if model.cache.request?.status == "completed" && voiceCompletionWaitStarted == nil { voiceCompletionWaitStarted = Date() }
         case .speak(let text): voiceRequestID = nil; voice.reply(text, projectID: id)
-        case .finished: voiceRequestID = nil; voice.stop()
+        case .finished: voiceRequestID = nil; voice.completeReply()
         case .needsAttention:
             voiceRequestID = nil; voice.fail("음성 답변 기다리기를 멈췄어요. 보낸 말과 전송 상태를 대화에서 확인해 주세요.")
         }

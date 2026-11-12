@@ -4406,6 +4406,14 @@ screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 �
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
 
+Studio #3771 extends this same casebook to native iPhone first-use failures.
+Cases declare validated release targets; omission retains the existing desktop
+scope. Selection and the desktop publication P0 list use the same target rule.
+Native login, dictation-to-answer and hands-free recovery remain active cases,
+even when corresponding simulator controls pass. A TestFlight test candidate
+may be distributed to collect physical evidence; that distribution is not a
+physical acceptance result or permission to retire the case.
+
 Verification: `scripts/release/test/select-cases.test.mjs` (YAML subset parser with refusal controls
 and a PyYAML cross-check of the real casebook; selection positive controls and negative controls for an
 untouched P1, a 14-day-old escape, an automated P0 and a touched parent; an end-to-end temporary git
@@ -9153,7 +9161,9 @@ voice changes need their own package/device evidence.
 `ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
 extend expression with project-bound editable dictation and consented final-text
 auto-send/read-aloud. System on-device recognition is required with no cloud
-recognizer fallback. Next-turn recording requires a visible tap; stop, background,
+recognizer fallback. Next-turn recording originally required a visible tap;
+MFR-03 below supersedes that step within a deliberately started foreground voice
+session. Stop, background,
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
@@ -9161,6 +9171,35 @@ physical Korean ASR, five-turn acceptance or a human growth outcome.
 ### Native iPhone credential continuity — MIRS-01
 
 The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
+
+
+### Native first-use and hands-free correction — MFR-01–06
+
+Studio #3771 applies minimum necessary intervention to existing native iPhone:
+code-free same-device login, durable Send during sync, persistent failure reasons,
+automatic voice endpoints and foreground-only next-turn listening. See
+[required behavior](requirements/mobile-growth-roadmap.md#native-login-and-conversation-friction-correction--mfr-0106-studio-3771)
+and [journey verification](testing/native-mobile-growth.md). This is source work;
+actual provider sign-in, physical audio and distributed-package acceptance must
+be reported separately. Existing desktop execution remains unchanged.
+
+Every escaped user failure follows the same delivery loop: retain the observed
+version and failure (or mark the installed version unknown), add its requirement
+and release-casebook scenario, reproduce the failed boundary, fix it, run the
+exact-source native journeys, distribute a verified test candidate, and record
+the installed retest separately. Missing, skipped or failed required journeys
+cannot pass the native gate. Compilation, simulator, uploaded package, tester
+availability and actual device behavior remain distinct states throughout.
+
+### Correlated iPhone testing delivery — MTF-01
+
+`ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
+receipts to the existing exact-source native CI and Apple environment gates.
+Partial inputs/source movement or an older release-attempt gate refuse signing.
+The exact current-attempt gate is checked before signing and receipt emission;
+failed-job-only reruns must not reuse an older successful gate. Successful command completion
+does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
+and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).
 
 ## Show what I made (#3794 slice 1)
 

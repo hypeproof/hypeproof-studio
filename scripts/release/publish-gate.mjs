@@ -20,7 +20,7 @@
 // Any lookup error refuses: a draft is the safe state.
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {parseYaml} from './casebook.mjs';
+import {appliesToTarget, parseYaml, validateTarget} from './casebook.mjs';
 import {SCHEMA, extractRun, validateRun} from './validate-blackbox-run.mjs';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
@@ -43,10 +43,11 @@ const TRUSTED_BOTS = ['hypeproof-agent[bot]', 'hypeproof-org-lab-bot[bot]'];
 const OVERRIDE = /^\s*Release manager override\b[\s:.,;—–-]*([\s\S]*)$/i;
 const MIN_REASON = 10;
 
-// P0 cases a stable release must have run: every P0 of the tag's own casebook that CI does not
-// already run (select-cases.mjs selects each of them with reason p0).
-export function p0CaseIds(cases = []) {
-  return cases.filter(c => c.priority === 'P0' && c.status !== '자동화됨').map(c => c.id);
+// This publisher releases desktop tags. Share target applicability with the selector;
+// native cases do not become desktop requirements merely by being P0 or recently escaped.
+export function p0CaseIds(cases = [], {target = 'desktop'} = {}) {
+  validateTarget(target);
+  return cases.filter(c => appliesToTarget(c, target) && c.priority === 'P0' && c.status !== '자동화됨').map(c => c.id);
 }
 
 // Pure. Has the release PR's casebook been run on its current head, or overridden?

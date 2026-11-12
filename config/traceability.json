@@ -10299,57 +10299,6 @@
       ]
     },
     {
-      "id": "ST-REQ-HOST-THEME-KINDS",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-MAPPING"
-      ],
-      "sources": [
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "## Host theme kinds (CGP-DS-R-004)"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-HOST-THEME-KINDS",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-KINDS",
-        "ST-IMP-HOST-THEME-MAPPING"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-HOST-THEME-KINDS",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-KINDS",
-        "ST-IMP-HOST-THEME-KINDS"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
-        },
-        {
-          "path": "docs/testing/host-theme-kinds.md"
-        }
-      ]
-    },
-    {
       "id": "ST-REQ-TEXT-CONTRAST-TABLE",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -18065,6 +18014,9 @@
         },
         {
           "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceReviewPCMTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift"
         }
       ]
     },
@@ -18234,6 +18186,12 @@
           "path": "apps/studio-native/ios/App/SharedConversationView.swift"
         },
         {
+          "path": "apps/studio-native/ios/Sources/StudioCore/NativeAccountAuth.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/NativeBrowserSignIn.swift"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/startPage.ts"
         },
         {
@@ -18279,6 +18237,18 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/NativeAccountAuthTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/NativeJourneyFixture.swift"
+        },
+        {
+          "path": "apps/studio-native/scripts/collect-native-journeys.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_journey_evidence.py"
         },
         {
           "path": "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx"
@@ -18346,71 +18316,6 @@
         {
           "path": "docs/testing/classroom-admin.md",
           "section": "## 수업 설정 변경 알림 · 2026-11-11 (ADM-11 · CGP-SHELL-R-024 · CGP-SHELL-D-023)"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-CHALK-SEAT-VERSION",
-      "stage": "requirement",
-      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CLASSROOM-ADMIN",
-        "ST-REQ-CLASSROOM-DESIGN"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/classroom-admin.md",
-          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
-        },
-        {
-          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-CHALK-SEAT-VERSION",
-      "stage": "implementation",
-      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-DES-CLASSROOM-ADMIN"
-      ],
-      "sources": [
-        {
-          "path": "chalk/src/ui/manage.html"
-        },
-        {
-          "path": "chalk/src/lib/latest-release.ts"
-        },
-        {
-          "path": "chalk/src/routes/studio-release.ts"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-CHALK-SEAT-VERSION",
-      "stage": "test",
-      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-IMP-CHALK-SEAT-VERSION"
-      ],
-      "sources": [
-        {
-          "path": "chalk/test/seat-version.browser.mjs"
-        },
-        {
-          "path": "chalk/test/latest-release.test.mjs"
-        },
-        {
-          "path": "e2e/classroom/ops-g1-layout.mjs"
-        },
-        {
-          "path": "docs/testing/classroom-admin.md",
-          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
         }
       ]
     },
@@ -18560,6 +18465,184 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## Correlated native deployment — MTF-01"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Correlated iPhone testing delivery — MTF-01"
+        },
+        {
+          "path": "apps/studio-native/README.md",
+          "section": "## Signed iPhone delivery"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "## TestFlight request and receipt — MTF-T01"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-SEAT-VERSION",
+      "stage": "requirement",
+      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-SEAT-VERSION",
+      "stage": "implementation",
+      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-SEAT-VERSION",
+      "stage": "test",
+      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-IMP-CHALK-SEAT-VERSION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/seat-version.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-HOST-THEME-KINDS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Host theme kinds (CGP-DS-R-004)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOST-THEME-KINDS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOST-THEME-KINDS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-KINDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/host-theme-kinds.md"
         }
       ]
     },
