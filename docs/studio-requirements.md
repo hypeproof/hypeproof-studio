@@ -5724,6 +5724,20 @@ separate.
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
 
+## Publish responsibility notice (CGP-ART-R-012)
+
+CGP-ART-R-012 / CGP-ART-D-012 (CGP-ART-013, REQ-ART-12) add a short responsibility notice before
+a learner's first test-version link. It exposes the learner's own responsibility for what they
+publish (Product Intent 2, visible responsibility; OWNERSHIP hypothesis) and makes no
+learning-outcome claim; no capability label appears. This slice is the notice for every seat.
+The minor-cohort instructor confirmation (REQ-ART-12 parts 2 and 3) is not built: it needs a
+Service link state, a Chalk list and the SX-41 policy flag, planned in `decisions.md`
+(DEC-ART-R-012). Until it exists, a minor cohort's link opens as it did before this change.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-PUBLISH-NOTICE | Pressing `공개하고 테스트 시작`, or `링크 하나 더 만들기`, when the signed-in learner has not acknowledged the current notice version opens an inline sheet beside that button: the title `공개하기 전에 확인해요`, three bullets (`링크를 받은 사람은 누구나 이 페이지를 볼 수 있어요.`, `페이지에 담긴 내용은 공개한 내가 책임져요.`, `이름이나 연락처 같은 개인정보를 모으지 않는지 확인해요.`), `알겠어요` and `취소`. Focus moves to `알겠어요`; `취소` and Escape send nothing and return focus to the opener. `알겠어요` sends the pending action with the notice version. The host enforces the gate: `PublishSession` refuses every new link (`submit` and `link`) before any visitor preview, checklist or request unless the learner's acknowledgment of the current version is recorded, answering `공개하기 전에 안내를 먼저 읽어 주세요.`; an acknowledgment for another version is refused and not recorded; an acknowledgment that cannot be saved answers `안내를 읽은 기록을 저장하지 못했어요. 다시 시도해 주세요.` and sends nothing. The record is in machine `globalState`, keyed by the token's owner digest (`crBytesOwner`, never the identity) and the notice version, written once (the first time is kept), bounded, and read as empty when malformed. A token without an owner, or a missing ledger, never passes. Changing the notice copy means a new version, and every learner reads it again. Bullets fit two lines at 320 px, also under a font-independent bound (each Hangul syllable 1 em, other characters 0.6 em); buttons are at least 44 px with text at least 14 px, logical properties and tokens only, a focus ring, and edges in forced colours. | `test/publish-notice.smoke.mjs` (real `PublishSession`, ledger and owner digest; negative and fail-closed controls), `test/publish-notice.test.tsx` (real `PublishPanel`: sheet, 취소, Escape, 알겠어요 for both actions, focus), `test/publish-notice-layout.smoke.mjs` (headless Chromium, 320/800/1420, both themes, personal and classroom, forced colours); CGP-ART-013 / REQ-ART-12 / DES-ART-12; Product Intent 2. |
+
 ## Task activity summary (CGP-ART-R-020)
 
 CGP-ART-R-020 / CGP-ART-D-020 (CGP-ART-021) add one "AI가 한 일" row per task, drawn under the
