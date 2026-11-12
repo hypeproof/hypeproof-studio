@@ -406,15 +406,17 @@ body:not(.has-selection) #ops-help.group{margin-top:var(--ds-c-chalk-manage-spac
 .help-row .help-open{grid-column:2;grid-row:2;min-block-size:var(--ds-c-chalk-manage-size-8);padding-inline:var(--ds-c-chalk-manage-space-1);font-size:var(--ds-c-chalk-manage-type-28);margin-block:0}
 .help-row .help-new{display:inline-flex;align-items:center;gap:var(--ds-c-chalk-manage-space-13);flex:none;font-size:var(--ds-c-chalk-manage-type-28);color:var(--ink-accent);font-weight:var(--ds-c-chalk-manage-typography-7)}
 .help-row .help-new::before{content:'';inline-size:var(--ds-c-chalk-manage-space-2);block-size:var(--ds-c-chalk-manage-space-2);border-radius:var(--ds-c-chalk-manage-radius-15);background:var(--ink-accent)}
-/* CGP-SHELL-R-034 / CGP-SHELL-D-033: the 버전 column, at most 96px with 2px inline padding, so a calendar version (2026.1111.0, tabular
-   figures) or 확인 불가 takes one line and 업데이트 필요 two, and a seat row stays the 44px target (ops-g1). The marks are bare status
-   marks (icon + words, no chip edge or padding): with a chip's edge and padding 확인 불가 wraps and the row grows past 44px. */
+/* CGP-SHELL-R-034 / CGP-SHELL-D-033: the 버전 column, at most 96px with no inline padding (the neighbouring cells keep the gap), so 확인 불가 takes one line, a calendar
+   version (2026.1111.0, tabular figures) one line or, in a wide font, two split after its first dot, and 업데이트 필요 two: a seat row
+   stays the 44px target (ops-g1). The marks are bare status marks (icon + words, no chip edge or padding): with a chip's edge and
+   padding 확인 불가 wraps and the row grows past 44px. */
 col.c-ver{width:var(--ds-c-chalk-manage-size-121)}
-#ops .ops-seat>td.c-ver{padding-inline:var(--ds-c-chalk-manage-space-14);line-height:var(--ds-c-chalk-manage-typography-23);color:var(--ink-text)}
+#ops .ops-seat>td.c-ver{padding-inline:0;line-height:var(--ds-c-chalk-manage-typography-23);color:var(--ink-text)}
 #ops .ops-seat>td.c-ver .cgp-state{border:0;padding:0;background:none;align-items:flex-start;line-height:inherit}
 #ops .ops-seat>td.c-ver .ver-flag{color:var(--ink-warn)}
 #ops .ops-seat>td.c-ver .ver-unknown{color:var(--ink-mute)}
-#ops-table thead th.c-ver{padding-inline:var(--ds-c-chalk-manage-space-14)}
+#ops .ops-seat>td.c-ver .ver-num{overflow-wrap:break-word}
+#ops-table thead th.c-ver{padding-inline:0}
 #ops-table thead th.c-ver[aria-sort="ascending"]::after{content:" ↑" / ""}
 #ops-table thead th.c-ver[aria-sort="descending"]::after{content:" ↓" / ""}
 /* The order control sits on the selection tools' row, already as tall as its 44px controls, so the table keeps 8 rows at 1280x720;
@@ -657,9 +659,10 @@ const seatVersion=s=>verInfo((board?.seats||[]).find(x=>x.user_id===s.student_id
 // The legacy activity list (seats outside this class's roster, or every seat when remote operations are off) says it in its usage line.
 const verText=raw=>{const i=verInfo(raw);return i.version?i.version+(i.outdated?' · 업데이트 필요':''):'확인 불가';};
 // The cell: the version as text; below the minimum, amber icon + "업데이트 필요" (the version stays in the accessible text); unknown, "확인 불가".
+// A release version may break only after its first dot (2026. / 1111.0) when a wide font does not fit it on one line.
 function versionCell(td,info){td.replaceChildren();td.dataset.label='버전';if(!info.version){td.append(boardStatus.intentChip('neutral','help','확인 불가','ver-unknown'));return;}
  if(info.outdated){td.append(element('span',info.version+' · ','sr-only'),boardStatus.intentChip('caution','alert','업데이트 필요','ver-flag'));return;}
- td.append(element('span',info.version,'ver-num'));}
+ const n=element('span','','ver-num'),dot=info.version.indexOf('.');if(VER_RE.test(info.version))n.append(document.createTextNode(info.version.slice(0,dot+1)),document.createElement('wbr'),document.createTextNode(info.version.slice(dot+1)));else n.textContent=info.version;td.append(n);}
 // Sorting by version: release versions low→high (or high→low), then any other version text, then unknown last in both directions;
 // ties keep the Service's order. "기본 순서" is the Service's order.
 let opsSort='none';

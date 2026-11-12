@@ -8,8 +8,9 @@
 //   (c) no cohort minimum exists yet (DEC-24 / CGP-SHELL-R-003), so no seat says 업데이트 필요; the D-033 look for a seat
 //       below a minimum (amber icon + 업데이트 필요, version kept in the accessible text) is drawn by the page's own cell
 //       renderer and measured here, so R-003 only has to supply the minimum;
-//   (d) every seat row stays the 44px target (ops-g1), nothing in the cell is clipped, text is 14px or more, a release version
-//       and 확인 불가 read on one line, 업데이트 필요 on at most two;
+//   (d) every seat row stays the 44px target (ops-g1), nothing in the cell is clipped, text is 14px or more, 확인 불가 reads on
+//       one line, a version and 업데이트 필요 on at most two, a release version wraps only after its first dot (forced with
+//       letter spacing so it does not depend on the machine's fonts), and the marks have no chip box;
 //   (e) 순서 sorts by version, low→high and high→low, unknown last both ways, and back to the Service's order; the header
 //       announces it with aria-sort; arrow keys follow the shown order; the choice survives a refresh and resets on disconnect;
 //   (f) the 순서 control is a native 44px select: on the selection tools' row when that row is shown (adding no height there:
@@ -98,6 +99,7 @@ try {
     await b.send('Emulation.setDeviceMetricsOverride', { width, height: 720, deviceScaleFactor: 1, mobile: false }); await settle();
     const g = await b.evaluate(`(() => {
       const out = { display: getComputedStyle(document.querySelector('.ops-seat')).display, bad: [] };
+      const lineCount = (node) => { const r = document.createRange(); r.selectNodeContents(node); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; };
       for (const row of document.querySelectorAll('#ops-rows .ops-seat')) {
         const td = row.querySelector('td.c-ver'), box = td.getBoundingClientRect(), rr = row.getBoundingClientRect();
         if (box.width > 96.5) out.bad.push(row.dataset.seat + ' cell ' + box.width + 'px');
@@ -105,10 +107,12 @@ try {
         for (const e of td.querySelectorAll('*')) { const b = e.getBoundingClientRect(); if (b.width && (b.left < box.left - 0.5 || b.right > box.right + 0.5 || b.top < rr.top - 0.5 || b.bottom > rr.bottom + 0.5) && !e.classList.contains('sr-only')) out.bad.push(row.dataset.seat + ' ' + e.className + ' escapes'); }
         if (td.scrollWidth > td.clientWidth + 1) out.bad.push(row.dataset.seat + ' clipped');
         for (const e of [td, ...td.querySelectorAll('span')]) if (e.textContent.trim() && !e.classList.contains('sr-only') && parseFloat(getComputedStyle(e).fontSize) < 14) out.bad.push(row.dataset.seat + ' font ' + getComputedStyle(e).fontSize);
-        // A release version without a prerelease part and 확인 불가 read on one line; 업데이트 필요 may take two.
-        const words = td.querySelector('.ver-num, .cgp-state-label'), range = document.createRange(); range.selectNodeContents(words);
-        const lines = new Set([...range.getClientRects()].map((q) => Math.round(q.top))).size, one = /^\\d+\\.\\d+\\.\\d+$/.test(words.textContent) || words.textContent === '확인 불가';
-        if (lines > (one ? 1 : 2)) out.bad.push(row.dataset.seat + ' "' + words.textContent + '" on ' + lines + ' lines');
+        // 확인 불가 reads on one line, a version and 업데이트 필요 on at most two; a release version that wraps breaks only after
+        // its first dot (each of its two text pieces stays on one line), never inside a number.
+        const words = td.querySelector('.ver-num, .cgp-state-label'), lines = lineCount(words);
+        if (lines > (words.textContent === '확인 불가' ? 1 : 2)) out.bad.push(row.dataset.seat + ' "' + words.textContent + '" on ' + lines + ' lines');
+        if (words.classList.contains('ver-num') && /^\\d+\\.\\d+\\.\\d+$/.test(words.textContent) && [...words.childNodes].some((n) => n.nodeType === 3 && lineCount(n) !== 1)) out.bad.push(row.dataset.seat + ' "' + words.textContent + '" breaks inside a number');
+        const mark = td.querySelector('.cgp-state'); if (mark) { const ms = getComputedStyle(mark); if (ms.borderTopWidth !== '0px' || ms.paddingLeft !== '0px' || ms.paddingTop !== '0px') out.bad.push(row.dataset.seat + ' mark has a chip box'); }
       }
       const th = document.getElementById('ops-ver-head').getBoundingClientRect(); out.head = th.width;
       return out;
@@ -117,7 +121,24 @@ try {
     check(g.head <= 96.5, width + ': 버전 header ' + g.head + 'px');
     check(g.bad.length === 0, width + ': ' + g.bad.join('; '));
   }
-  await b.send('Emulation.setDeviceMetricsOverride', { width: 1420, height: 900, deviceScaleFactor: 1, mobile: false });
+  // Which font this machine draws the version in, and its width: one line of evidence for layout reports (CDP, read-only).
+  {
+    const { root } = await b.send('DOM.getDocument', { depth: 0 });
+    const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: '#ops-rows .ops-seat[data-seat="S1"] .ver-num' });
+    const { fonts } = await b.send('CSS.getPlatformFontsForNode', { nodeId });
+    const w = await b.evaluate(`(() => { const n = document.querySelector('#ops-rows .ops-seat[data-seat="S1"] .ver-num'), r = document.createRange(); r.selectNodeContents(n); const td = n.closest('td'), cs = getComputedStyle(td); const by = new Map(); for (const q of r.getClientRects()) by.set(Math.round(q.top), (by.get(Math.round(q.top)) ?? 0) + q.width); return { lines: [...by.values()].map((x) => Math.round(x * 10) / 10), content: td.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) }; })()`);
+    console.log('  version text: ' + fonts.map((f) => f.familyName).join(', ') + ' · line widths ' + w.lines.join(' + ') + 'px in a ' + w.content + 'px cell');
+  }
+  // A wide font, forced with letter spacing so it does not depend on the machine's fonts: the version wraps after its first dot.
+  await b.send('Emulation.setDeviceMetricsOverride', { width: 1420, height: 900, deviceScaleFactor: 1, mobile: false }); await settle();
+  const wide = await b.evaluate(`(() => {
+    const row = document.querySelector('#ops-rows .ops-seat[data-seat="S1"]'), n = row.querySelector('.ver-num'); n.style.letterSpacing = '3px';
+    const tops = (node) => { const r = document.createRange(); r.selectNodeContents(node); return [...new Set([...r.getClientRects()].map((q) => Math.round(q.top)))]; };
+    const parts = [...n.childNodes].filter((x) => x.nodeType === 3), out = { parts: parts.map((x) => x.textContent), tops: parts.map(tops), row: row.getBoundingClientRect().height, clipped: row.querySelector('td.c-ver').scrollWidth > row.querySelector('td.c-ver').clientWidth + 1 };
+    n.style.letterSpacing = ''; return out;
+  })()`);
+  check(JSON.stringify(wide.parts) === JSON.stringify(['2026.', '1111.0']), 'a release version is two text pieces split after its first dot: ' + JSON.stringify(wide.parts));
+  check(wide.tops.every((t) => t.length === 1) && wide.tops[0][0] < wide.tops[1][0] && wide.row <= 44.5 && !wide.clipped, 'wide text wraps as 2026. / 1111.0 inside a 44px row: ' + JSON.stringify(wide));
   await b.evaluate('renderSeats(opsData)'); await settle();
 
   // (e) sorting
