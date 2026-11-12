@@ -5165,7 +5165,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
-  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
+  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null>; inboxAnswer?(objectId: string, revision: number, generation: number, answer: unknown): Promise<void> } | null = null;
   private currentClassNoticeId: string | undefined;
   classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
   async postInbox(): Promise<void> {
@@ -8628,6 +8628,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "checkpointSave": await this.handleCheckpointSave(msg); return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
+      case "inboxAnswer": await this.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
       case "artifactApprove": await this.approveArtifactInteractively(); return;
       case "helpDraft": await this.helpSource?.draft(msg.key, msg.draft); return;

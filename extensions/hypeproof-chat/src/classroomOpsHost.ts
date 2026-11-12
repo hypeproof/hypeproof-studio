@@ -18,7 +18,7 @@ import {
   evidencePayload, runtimePayload, stepPayload, turnObservations, uploadPayload, startOpsSync, tokenIdentityUnverified,
   RECOVERY_FOLLOWUP_CAPABILITY, RecoveryWatch, profileCheckClears, recoveryPayload, turnFailureClass, type OpsSyncLoop, type OutboxState, type RuntimeStatus, type SyncResponse,
 } from "./classroomOps";
-import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, boundSetting, emptyView, inboxPresence, markSettingBound, mayHideInbox, pendingSetting, pointerIsStale, type InboxView, type LessonRef } from "./classroomInbox";
+import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, INBOX_QUESTION_CAPABILITY, LESSON_BINDING_CAPABILITY, answerKey, answerableEntry, boundSetting, emptyView, inboxPresence, markAnswerPending, markAnswerSent, markSettingBound, mayHideInbox, pendingSetting, pointerIsStale, validateAnswer, type InboxView, type LessonRef, type QuestionAnswer } from "./classroomInbox";
 import { InboxSession, InboxStore, inboxDir, inboxView } from "./classroomInboxStore";
 
 export const CREDENTIAL_KEY = "hypeproof.classroomOps.credential";
@@ -48,6 +48,24 @@ interface ConnectionMeta { grant_id: string; class_run_id: string; seat_id: stri
 /** After its normal expiry a connection can only finish an upload that was already authorized, for this long after class. */
 const UPLOAD_GRACE_MS = 24 * 3_600_000;
 const FINAL_CREDENTIAL_REFUSALS = ["ops_credential_invalid", "ops_grant_revoked", "ops_grant_expired"];
+/** E5 (#3776) — what the learner reads under a question card when an answer was NOT recorded. Never a claim that it was. */
+const ANSWER_NOTES: Record<string, string> = {
+  not_connected: "수업 연결이 없어 답을 보내지 않았습니다. ‘수업 연결’로 다시 연결한 뒤 제출하세요.",
+  not_answerable: "이 질문에는 더 답할 수 없습니다. 강사가 회수했거나 새로 고친 질문이 왔습니다.",
+  declined: "동의하지 않아 답을 보내지 않았습니다. 카드는 그대로 있고, 동의하면 다시 제출할 수 있습니다.",
+  consent_failed: "수업 참여 데이터 동의를 기록하지 못해 답을 보내지 않았습니다. 잠시 뒤 다시 제출하세요.",
+  guardian_consent_required: "이 수업은 보호자 동의가 필요해 앱에서 답을 보낼 수 없습니다.",
+  consent_required: "동의가 확인되지 않아 답을 보내지 않았습니다. 잠시 뒤 다시 제출하세요.",
+  withdrawn: "강사가 이 질문을 회수해 답을 보내지 않았습니다.",
+  not_offered: "이 좌석에 보낸 질문이 아니어서 답을 보내지 않았습니다.",
+  content_mismatch: "질문이 바뀌어 답을 보내지 않았습니다. 새로 받은 질문을 확인하세요.",
+  run_ended: "수업이 끝나 답을 보내지 않았습니다.",
+  ops_questions_disabled: "강사가 질문 카드를 꺼 두어 답을 보내지 않았습니다.",
+  answer_invalid: "답 형식이 맞지 않아 보내지 않았습니다. 하나를 고르거나 500자 안으로 적은 뒤 제출하세요.",
+  credential: "수업 연결이 끝나 답을 보내지 않았습니다. 다시 연결한 뒤 제출하세요.",
+  network: "서버에 연결하지 못해 답을 보내지 않았습니다. 인터넷 연결을 확인한 뒤 다시 제출하세요.",
+  failed: "답을 보내지 못했습니다. 잠시 뒤 다시 제출하세요.",
+};
 
 /** The only things a remote command may touch. No shell, no file access, no history, no arbitrary VS Code command. */
 export interface ClassroomOpsActions {
@@ -418,7 +436,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     try {
       res = await fetch(`${this.base()}/classroom/ops/connect`, {
         method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(10000),
-        body: JSON.stringify({ ticket, app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY], app_version: this.version() }),
+        body: JSON.stringify({ ticket, app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY], app_version: this.version() }),
       });
     } catch {
       void vscode.window.showWarningMessage("서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 같은 코드로 다시 시도하세요."); return;
@@ -488,7 +506,10 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     if (!p || p.hidden || !me.u || me.u !== p.student || me.c !== p.cohort) return emptyView(gen);
     const connected = !!this.meta && this.meta.class_run_id === p.run && this.meta.seat_id === p.seat;
     const presence = inboxPresence({ connected, expired: p.expired === true, ends_at: p.ends_at ?? 0, now: Date.now() });
-    try { return await inboxView(new InboxStore(inboxDir(this.context.globalStorageUri.fsPath, p)), { run: p.run, student: p.student, generation: gen, ...presence }); }
+    try {
+      const view = await inboxView(new InboxStore(inboxDir(this.context.globalStorageUri.fsPath, p)), { run: p.run, student: p.student, generation: gen, ...presence });
+      return { ...view, cards: view.cards.map((c) => { const slot = `${c.object_id}:${c.revision}`, note = this.answerNotes.get(slot); return c.kind === "question" && !c.withdrawn ? { ...c, ...(note ? { answer_note: note } : {}), ...(this.answerBusy.has(slot) ? { answer_busy: true } : {}) } : c; }) };
+    }
     catch (err) { this.log(`[inbox] read: ${(err as Error).message}`); return emptyView(gen); }
   }
   /** A callback from a renderer names the generation it was drawn under; one from an ended connection changes nothing. */
@@ -504,6 +525,67 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const card = (await this.inboxView()).cards.find((c) => c.object_id === objectId && !c.withdrawn);
     return card?.links.some((l) => l.url === url) && /^https:\/\//i.test(url) ? url : null;
   }
+  // ── E5 (#3776): the learner's own answer to a question card ──
+  private readonly answerNotes = new Map<string, string>();
+  private readonly answerBusy = new Set<string>();
+  /**
+   * Sent only because the learner pressed 제출 or 건너뛰기 on a card drawn under `generation`. The attempt (with its key) is
+   * written to the device before the POST so a retry of the same answer reuses the key; the answer counts as sent only
+   * after a 2xx. A missing consent shows the class data notice once and retries once; a decline sends nothing.
+   */
+  async inboxAnswer(objectId: string, revision: number, generation: number, raw: unknown): Promise<void> {
+    if (generation !== this.generation || !/^[A-Za-z0-9-]{8,64}$/.test(objectId) || !Number.isSafeInteger(revision) || revision < 1) return;
+    const slot = `${objectId}:${revision}`;
+    if (this.answerBusy.has(slot)) return; // one attempt per card at a time: a double press is not a second answer
+    const store = this.inboxStore, credential = this.credential, gen = this.generation;
+    const live = () => gen === this.generation && credential === this.credential;
+    const done = (code: string | null) => { if (code) this.answerNotes.set(slot, ANSWER_NOTES[code] ?? ANSWER_NOTES.failed); else this.answerNotes.delete(slot); };
+    this.answerBusy.add(slot); this.answerNotes.delete(slot); this.inboxChanged(false);
+    try {
+      if (!store || !credential || !this.meta) return done("not_connected");
+      const { index, cards } = await store.read();
+      const card = cards.find((c) => c.object_id === objectId && c.revision === revision && c.kind === "question" && !c.withdrawn && !c.unreadable);
+      const entry = card?.content_hash ? answerableEntry(index, { object_id: objectId, revision, content_hash: card.content_hash }) : null;
+      const source = entry?.sources.at(-1);
+      if (!card?.question || !entry || !source) return done("not_answerable");
+      const value = validateAnswer(raw, card.question); if (!value) return done("answer_invalid");
+      const target = { object_id: objectId, revision, content_hash: entry.content_hash };
+      const { result: key } = await store.commit((ix) => { const e = answerableEntry(ix, target); if (!e) return { next: null, result: null }; const k = answerKey(e.answer, target, value, randomUUID); return { next: markAnswerPending(ix, target, k, value), result: k }; });
+      if (!key) return done("not_answerable");
+      const send = () => this.postAnswer(credential, { idempotency_key: key, distribution_id: source.distribution_id, object_id: objectId, revision, content_hash: entry.content_hash, answer: value });
+      let r = await send();
+      if (r.reason === "consent_required") {
+        if (!live()) return done("not_connected");
+        const c = await this.consentForAnswer();
+        if (c !== "recorded") return done(c === "declined" ? "declined" : c === "guardian_consent_required" ? c : "consent_failed");
+        if (!live()) return done("not_connected");
+        r = await send();
+      }
+      if (r.ok) {
+        await store.commit((ix) => ({ next: markAnswerSent(ix, target, key, value, r.answered_at ?? Date.now(), r.answer_revision ?? 1), result: null }));
+        return done(null);
+      }
+      return done(FINAL_CREDENTIAL_REFUSALS.includes(r.reason) ? "credential" : r.reason === "not_a_question" ? "not_offered" : r.reason);
+    } catch (err) { this.log(`[inbox] answer: ${(err as Error).message}`); done("failed"); }
+    finally { this.answerBusy.delete(slot); this.inboxChanged(false); }
+  }
+  private async postAnswer(credential: string, body: { idempotency_key: string; distribution_id: string; object_id: string; revision: number; content_hash: string; answer: QuestionAnswer }): Promise<{ ok: boolean; reason: string; answered_at?: number; answer_revision?: number }> {
+    let res: Response;
+    try { res = await fetch(`${this.base()}/classroom/ops/participation/answers`, { method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) }); }
+    catch { return { ok: false, reason: "network" }; }
+    const j = (await res.json().catch(() => null)) as { reason?: string; answered_at?: number; answer_revision?: number } | null;
+    if (res.ok) return { ok: true, reason: "", ...(Number.isSafeInteger(j?.answered_at) ? { answered_at: j!.answered_at } : {}), ...(Number.isSafeInteger(j?.answer_revision) ? { answer_revision: j!.answer_revision } : {}) };
+    return { ok: false, reason: typeof j?.reason === "string" ? j.reason : `http_${res.status}` };
+  }
+  /** The same notice and modal as connecting. True only for the explicit accept AND a consent the Service recorded. */
+  private async consentForAnswer(): Promise<"recorded" | "declined" | "guardian_consent_required" | "failed"> {
+    const got = await this.participationNotice();
+    if (!got.ok || !got.notice) return "failed";
+    if (!(await this.askParticipation(got.notice))) return "declined";
+    const r = await this.recordParticipationConsent(got.notice.version);
+    return r === "recorded" ? "recorded" : r === "guardian_consent_required" ? r : "failed";
+  }
+
   private async inboxExpired(): Promise<void> {
     const p = this.context.globalState.get<InboxPointer>(INBOX_KEY); if (!p || p.hidden || p.expired) return;
     await this.context.globalState.update(INBOX_KEY, { ...p, expired: true }); this.inboxChanged(false);
@@ -597,7 +679,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
-      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
+      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, INBOX_QUESTION_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
       commands: runner as unknown as NonNullable<Parameters<typeof startOpsSync>[0]["commands"]>,
       post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox, appInstanceId: this.appInstanceId,
       sample: () => { const base = this.runtime(); const r = { ...base, status: automationOpsRuntime(live() ? this.refreshAutomation(false) : null, base.status) }; const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },

@@ -429,6 +429,22 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 
 검증: [재직자 수업의 강사 운영](../testing/classroom-admin.md#e5-instructor-ops-run).
 
+### 질문 카드 · 수강생 앱 · 2026-11-12 (E5 #3776 · DEC-030)
+
+강사가 보낸 질문 카드는 공지·자료와 같은 보관함에 들어온다. 이 절은 앱 쪽 계약만 적는다.
+
+| 항목 | 계약 |
+|---|---|
+| 받기 | 앱은 연결과 sync에서 능력 `inbox_question`을 밝힌다. 카드는 `kind:'question'`과 `question:{type:'choice',options}` 또는 `{type:'text'}`를 싣는다. 선택지는 2~6개, 줄바꿈 없는 80자 이하, 서로 달라야 한다. 이 모양이 아니면 받지 않는다 |
+| 해시 | `sha256(JSON [schema, kind, title, body, links, ['choice', options] | ['text']])`. 여섯째 요소는 질문에만 붙고 공지·자료·프롬프트·설정의 해시는 그대로다. 디스크에서 선택지가 바뀐 카드는 읽을 수 없는 카드로 보인다 |
+| 화면 | 질문 글은 글자 그대로 보인다. 선택형은 라디오 목록과 ‘제출’, 서술형은 500자 입력칸과 ‘제출’이다. ‘건너뛰기’는 늘 있다. 고르거나 적는 것만으로는 아무것도 보내지 않는다 |
+| 보내기 | 학생이 누를 때만 `POST /v1/classroom/ops/participation/answers`를 좌석 자격 증명으로 보낸다. 같은 답을 다시 보내면 같은 `idempotency_key`를 쓰고, 바꾼 답은 새 키를 쓴다 |
+| 보냈다는 말 | Service가 2xx로 답한 뒤에만 “답변을 보냈습니다”와 ‘답 바꾸기’를 보인다. 그 답은 (카드, 판) 단위로 이 기기에만 남아 재시작 뒤에도 보인다. 새 판이 오거나 회수되면 지운다 |
+| 동의 없음 | 409 `consent_required`면 연결 때와 같은 안내문 모달을 띄우고, 동의가 기록되면 같은 답을 한 번 다시 보낸다. 거절하거나 닫으면 보내지 않고 카드를 남긴 채 “동의하지 않아 답을 보내지 않았습니다.”라고 말한다 |
+| 거절 응답 | `withdrawn`·`not_offered`·`content_mismatch`·`run_ended`·`ops_questions_disabled`·`answer_invalid`·연결 종료(401)·네트워크 오류마다 “…답을 보내지 않았습니다” 꼴의 짧은 문장을 카드 아래에 보인다 |
+
+검증: 앱 `test/classroom-question-card.test.mjs`(규칙·해시), `test/classroom-question-answer.test.mjs`(호스트), `test/inbox-question-card.test.tsx`(화면), `e2e/classroom/ops-question.mjs`(실제 호스트 + 로컬 Service). Service `worker/test/classroom-question-card.test.mjs`.
+
 ### 신원과 수업 실행 계약
 
 기존 cohort/profile/token/authoring를 정본으로 쓴다. `class_run_id`는 기존 `sessions.session_id`에 1:1 연결한 회차 ID다. 같은 cohort의 누적 roster를 재사용하되 새 `class_run_seats`는 **그 수업 명단의 불변 snapshot + 명시적 변경 revision**이다. 별도 학생 계정을 만들지 않는다. 좌석과 학생의 연결이 바뀌면 이력을 남기고 이전 학생 기록/명령을 새 사용자에게 넘기지 않는다.
