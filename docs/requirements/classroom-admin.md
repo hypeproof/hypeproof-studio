@@ -383,8 +383,8 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 | 연결 전 | 앱은 ‘수업 연결’에서 코드를 묻기 전에 안내문을 모달로 띄운다. 버튼은 “동의하고 수업에 연결”·“동의하지 않음”이다. 닫거나 거절하면 코드를 묻지 않고 연결하지 않으며 “동의하지 않아 이번 수업에는 연결하지 않았습니다. Studio 개인 사용은 그대로 할 수 있습니다.”라고 말한다 |
 | 기록 | 연결이 끝나면 앱이 `POST …/participation/consent {consent:true, notice_version}`을 좌석 자격 증명으로 보낸다. Service는 `classroom_consents`에 `purpose='class_participation'`, `basis='adult_self'`, 버전, 시각을 남긴다. 같은 동의를 다시 보내면 `replay`다 |
 | 거절 응답 | 이전 버전 409 `notice_outdated`(현재 버전 포함), 미성년 프로필 403 `guardian_consent_required`, 닫힌 연결 401 |
-| 기록 실패 | 연결은 유지한다. 앱은 이 연결에 동의가 없다고 기억하고 첫 답변 때 다시 묻는다(#3776) |
-| 철회 | 명령 팔레트 “HypeProof: 수업 참여 데이터 동의·철회”. 철회하면 이 수업에서 더 수집하지 않는다 |
+| 기록 실패 | 앱이 방금 만든 연결을 바로 끊고 “수업 참여 데이터 동의를 기록하지 못해 연결을 끊었습니다. 잠시 뒤 다시 연결하세요.”라고 말한다. 기록된 동의 없이 사용 기록을 보내지 않는다 |
+| 철회 | 명령 팔레트 “HypeProof: 수업 참여 데이터 동의·철회”. Service가 그 좌석의 수업 연결을 닫고(`consent_withdrawn`) 앱도 연결을 놓는다. 이 수업에서 더 수집하지 않는다 |
 | 강사 화면 | `/status`의 좌석마다 `participation_consent: {state: given|missing, notice_version, at?}`. 동의 여부로 좌석을 숨기지 않는다 |
 | 고용주·협력 기관 | 개인 답변·사용 기록·집계에 접근하는 API가 없다. 만들려면 새 결정이 필요하다 |
 | 옛 Service | 안내문 경로가 없으면(404, `ops_disabled` 아님) 예전처럼 연결하고 동의를 주장하지 않는다. 답변 기능은 쓸 수 없다 |

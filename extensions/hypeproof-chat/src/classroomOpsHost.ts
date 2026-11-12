@@ -398,7 +398,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const pick = await vscode.window.showInformationMessage(got.notice.title, { modal: true, detail: got.notice.body }, got.notice.accept, withdraw);
     if (!pick) return;
     const r = await this.recordParticipationConsent(got.notice.version, pick !== withdraw);
-    void vscode.window.showInformationMessage(r === "recorded" ? "수업 참여 데이터 동의를 기록했습니다." : r === "withdrawn" ? "동의를 철회했습니다. 이 수업에서 더 수집하지 않으며 이 수업에서 남긴 답변을 지웠습니다." : r === "guardian_consent_required" ? "이 수업은 보호자 동의가 필요합니다. 앱에서 직접 동의할 수 없습니다." : "동의 상태를 기록하지 못했습니다. 잠시 뒤 다시 시도하세요.");
+    // The Service closed this seat's connection on withdrawal; this window lets it go too.
+    if (r === "withdrawn") await this.forget();
+    void vscode.window.showInformationMessage(r === "recorded" ? "수업 참여 데이터 동의를 기록했습니다." : r === "withdrawn" ? "동의를 철회하고 이번 수업 연결을 끊었습니다. 이 수업에서 더 수집하지 않습니다." : r === "guardian_consent_required" ? "이 수업은 보호자 동의가 필요합니다. 앱에서 직접 동의할 수 없습니다." : "동의 상태를 기록하지 못했습니다. 잠시 뒤 다시 시도하세요.");
   }
 
   /** Learner-initiated: type the one-time code the instructor handed over. */
@@ -433,10 +435,16 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const meta: ConnectionMeta = { grant_id: b.grant_id, class_run_id: b.class_run_id, seat_id: b.seat_id, expires_at: b.expires_at, poll_after_ms: b.poll_after_ms, connected_at: Date.now(), ...(b.student ? { student: b.student } : {}), ...(b.run ? { run: b.run } : {}), lesson: b.lesson ? { course_id: b.lesson.course_id, version: b.lesson.version } : null };
     await this.context.globalState.update(META_KEY, meta);
     await this.start(meta, b.credential);
-    // A failed record is not a refusal: the answer path sees no consent for this grant and asks again (#3776).
+    // The class connection exists only with a recorded consent: if the Service did not record it, this window lets the
+    // connection go at once rather than report usage the learner's consent does not cover yet.
     const recorded = got.notice ? await this.recordParticipationConsent(got.notice.version) : null;
+    if (recorded && recorded !== "recorded") {
+      await this.forget();
+      void vscode.window.showWarningMessage(recorded === "guardian_consent_required" ? "이 수업은 보호자 동의가 필요합니다. 앱에서 직접 동의할 수 없어 연결하지 않았습니다." : "수업 참여 데이터 동의를 기록하지 못해 연결을 끊었습니다. 잠시 뒤 다시 연결하세요.");
+      return;
+    }
     void vscode.window.showInformationMessage(
-      `수업에 연결했습니다 (좌석 ${b.seat_id}). 강사 화면에는 입장·단계·오류 상태만 보입니다. 대화 내용과 파일은 보내지 않으며, 이 연결로는 AI를 쓸 수 없습니다. 명령 팔레트의 ‘수업 연결 끊기’로 언제든 끊을 수 있습니다.${recorded && recorded !== "recorded" ? " 수업 참여 데이터 동의는 아직 기록되지 않았습니다. 첫 답변 때 다시 묻습니다." : ""}`,
+      `수업에 연결했습니다 (좌석 ${b.seat_id}). 강사 화면에는 입장·단계·오류 상태와 수업 참여 데이터 동의 여부가 보이고, 질문 카드에 답하면 그 답도 보입니다. 대화 내용과 파일은 보내지 않으며, 이 연결로는 AI를 쓸 수 없습니다. 명령 팔레트의 ‘수업 연결 끊기’로 언제든 끊을 수 있습니다.`,
     );
   }
 

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const NOTICE = { version: 'class-data-v1', title: '수업 참여 데이터 안내', body: 'HypeProof가 수집합니다.\n회사는 볼 수 없습니다.', accept: '동의하고 수업에 연결', decline: '동의하지 않음' };
 
-async function fixture(t, { notice = 'ok', answer = NOTICE.accept } = {}) {
+async function fixture(t, { notice = 'ok', answer = NOTICE.accept, consentStatus = 201 } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'hps-participation-'));
   const originalFetch = globalThis.fetch, subscriptions = [];
   globalThis.__dialogs = []; globalThis.__answer = answer;
@@ -40,7 +40,7 @@ async function fixture(t, { notice = 'ok', answer = NOTICE.accept } = {}) {
     const path = new URL(url).pathname, body = init.body ? JSON.parse(init.body) : null; requests.push({ path, method: init.method ?? 'GET', body });
     if (path.endsWith('/participation/notice')) return notice === 'ok' ? Response.json({ notice: NOTICE }) : notice === 'disabled' ? Response.json({ reason: 'ops_disabled' }, { status: 404 }) : notice === 'student-router' ? Response.json({ error: 'student Bearer required' }, { status: 401 }) : notice === 'down' ? Response.json({ error: 'x' }, { status: 503 }) : Response.json({ error: 'not_found' }, { status: 404 });
     if (path.endsWith('/classroom/ops/connect')) return Response.json({ credential: 'SYNTHETIC-CRED', grant_id: 'grant-1', class_run_id: 'run-1', seat_id: 'A1', expires_at: Date.now() + 3_600_000, poll_after_ms: 60000, lesson: null }, { status: 201 });
-    if (path.endsWith('/participation/consent')) return Response.json({ consent: body.consent, notice_version: body.notice_version }, { status: 201 });
+    if (path.endsWith('/participation/consent')) return consentStatus === 201 ? Response.json({ consent: body.consent, notice_version: body.notice_version }, { status: 201 }) : Response.json({ reason: 'storage' }, { status: consentStatus });
     return Response.json({ reason: 'unavailable' }, { status: 503 });
   };
   const host = new ClassroomOpsHost(context, () => ({ idleMs: 0, status: 'idle' }), { setHold() {} }, () => {});
@@ -92,4 +92,19 @@ test('a Service that is down connects nothing and says so', async (t) => {
   await f.host.connectInteractively();
   assert.ok(!f.requests.some((r) => r.path.endsWith('/classroom/ops/connect')));
   assert.ok(globalThis.__dialogs.at(-1).message.includes('안내를 불러오지 못해 연결하지 않았습니다'));
+});
+
+test('when the Service does not record the consent, the window lets the new connection go and says so', async (t) => {
+  const f = await fixture(t, { consentStatus: 503 });
+  await f.host.connectInteractively();
+  assert.ok(f.requests.some((r) => r.path.endsWith('/classroom/ops/connect')));
+  assert.equal(f.host.helpConnection(), null, 'no live class connection remains');
+  assert.ok(globalThis.__dialogs.at(-1).message.includes('동의를 기록하지 못해 연결을 끊었습니다'));
+});
+
+test('the connect message does not claim the instructor sees only status', async (t) => {
+  const f = await fixture(t);
+  await f.host.connectInteractively();
+  const msg = globalThis.__dialogs.at(-1).message;
+  assert.ok(msg.includes('동의 여부') && msg.includes('질문 카드') && !msg.includes('상태만 보입니다'), msg);
 });

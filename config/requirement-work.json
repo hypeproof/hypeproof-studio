@@ -388,7 +388,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "e589a0980ac4a421bc9b591602c03e5b65fafb2d1052bd12852239f9fccf19a4",
+      "sha256": "05d9dbf6406f0102b7f714b9d890ac9bfe5e70bbe5db81629eec47eeef22f23b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",

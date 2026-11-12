@@ -29,14 +29,15 @@ Sponsor, 2026-11-12: "재직자 답변은 당연히 하입프루프에 귀속되
 | Retention | HypeProof's data policy; no automatic deletion | `retention: { mode: 'hypeproof_policy', auto_delete: false }` |
 | Consent unit | class run × learner × notice version; a new version needs a new consent | `notice_version: 'class-data-v1'`, `purpose: 'class_participation'` |
 | Minors | Cannot consent in the app | `adult_only: true` |
-| Withdrawal | Any time. Nothing further is collected for that class and that class's answers are removed (answer storage lands with #3776) | consent API `consent:false` |
+| Withdrawal | Any time. The Service closes the seat's class connection (nothing further is collected) and removes that class's answers (answer storage lands with #3776) | consent API `consent:false` |
 
 Consent is asked at two points:
 
 1. Before a learner connects a class seat, the app shows the Service's notice
    (`GET /v1/classroom/ops/participation/notice`). On accept the app connects, then records version and time with
    `POST …/participation/consent`. On decline the code is not used and the seat is not connected; personal Studio use
-   is unaffected.
+   is unaffected. If the Service does not record the consent, the app lets the new connection go at once, so no usage
+   is reported that a recorded consent does not cover.
 2. When a learner first answers without a live consent (older version, withdrawn, recording failed) the Service
    refuses the answer and the app shows the same notice again (#3776).
 
@@ -48,6 +49,13 @@ The instructor status view shows `participation_consent: given | missing` per se
 - Report delivery (`ops_delivery`) is off in production. Under this decision an employer may not be a delivery
   recipient; re-read this ADR before enabling delivery.
 - The connect message "대화 내용과 파일은 보내지 않으며" stays true: an answer is only what the learner typed into a card.
+  The message now says the instructor also sees the consent state and question-card answers.
+
+## Known gap
+
+An app older than this change never shows the notice. Against an operations-enabled Service it can still connect a
+seat with a per-seat ticket, and that seat reports usage without a recorded consent (the board shows the seat as
+`missing`). The enablement step (#3780) ships the new app first and treats `missing` seats as "update the app".
 
 ## Human items (not blockers for development or staging)
 
