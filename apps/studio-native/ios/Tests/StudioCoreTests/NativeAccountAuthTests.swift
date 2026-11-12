@@ -3,6 +3,12 @@ import CryptoKit
 @testable import StudioCore
 
 final class NativeAccountAuthTests: XCTestCase {
+    func testExpiredExchangeRequestsNewLoginWithoutDesktopInstruction() {
+        for code in ["native_signin_expired", "native_signin_not_pending", "invalid_native_signin"] {
+            XCTAssertEqual(SyncFailure.http(400, code).errorDescription, "로그인 요청이 만료됐거나 이미 사용됐어요. 로그인을 다시 시작해 주세요.")
+        }
+        XCTAssertFalse(SyncFailure.http(503, "unavailable").errorDescription?.contains("컴퓨터") == true)
+    }
     func testPKCEAndCallbackBindOneAppLoginWithoutCredentialsInURL() throws {
         let proof = NativeAccountProof(), other = NativeAccountProof()
         XCTAssertEqual(proof.state.count, 64)

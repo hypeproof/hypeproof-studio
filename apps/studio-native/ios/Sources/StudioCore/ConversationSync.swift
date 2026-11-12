@@ -175,6 +175,8 @@ public enum SyncFailure: Error, LocalizedError {
         switch self {
         case .invalidResponse: return "연동 응답을 확인하지 못했어요. 저장된 기록은 유지해요."
         case .http(let status, let code):
+            if ["native_signin_expired", "native_signin_not_pending", "invalid_native_signin"].contains(code) { return "로그인 요청이 만료됐거나 이미 사용됐어요. 로그인을 다시 시작해 주세요." }
+            if ["invalid_code_verifier", "invalid_code_challenge", "invalid_return_uri"].contains(code) { return "이 앱의 로그인 요청을 확인하지 못했어요. 로그인을 다시 시작해 주세요." }
             if code == "reflection_access_required" { return "이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요." }
             if code == "reflection_budget_limit" { return "오늘의 AI 사용 한도에 도달했어요. 기록은 그대로 남아 있어요." }
             if code == "reflection_busy" { return "다른 기기에서 답변을 받고 있어요. 잠시 뒤 같은 대화를 확인해 주세요." }
@@ -185,7 +187,7 @@ public enum SyncFailure: Error, LocalizedError {
             if code == "slow_down" { return "연결 확인 중이에요. 잠시 기다려 주세요." }
             if status == 409 { return "앞선 요청이나 컴퓨터의 상태를 확인해 주세요. 작성한 글은 보존했어요." }
             if status == 429 { return "연동 요청이 많아요. 잠시 뒤 다시 확인해 주세요." }
-            return "연결하지 못했어요. 컴퓨터와 인터넷 상태를 확인해 주세요. 작성한 글은 남아 있어요."
+            return "연결하지 못했어요. 인터넷 상태를 확인하고 다시 시도해 주세요. 작성한 글은 남아 있어요."
         }
     }
 }
