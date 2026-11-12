@@ -271,6 +271,11 @@ AE-17의 예약/정산을 먼저 대조한다. effort/크레딧/예산 UI는 아
 Lab 철학 개정안을 HC 측정 계약과 #800의 수업/구독/기관 이용권·원가·예산으로 연결한다.
 이름 변경이나 사용량 조회만으로 해당 Epic을 완료하지 않는다.
 
+> Status, 2026-11-12: the personal subscription arm is superseded (pass sales stopped
+> 2026-11-11; personal use is an invite grant paid by HypeProof up to a monthly cap). The class
+> and institution budgets stay. See the status note in the
+> [dependency plan](capability-and-pricing-epics.md).
+
 <a id="remote-classroom-delivery"></a>
 
 ## E5 원격 수업 운영 구현 순서 · 2026-09-18

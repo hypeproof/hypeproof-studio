@@ -306,9 +306,10 @@ host results. Learners connect their own Google account/Sheet, review the exact
 messages and explicitly approve sending while their PC is running. They can
 publish the inert recipe inside Studio and another learner reuses it with their
 own identity and data. Instructors see stage, last activity and blockers without
-recipient rows or credentials. The business objective is retained Studio
-subscriptions; KRW50,000/month is the sponsor's quality benchmark, not evidence
-of willingness to pay or a currently implemented commercial offer.
+recipient rows or credentials. The business objective is class and cohort
+conversion, plus Foundry and the skill store as the paid paths. Studio itself is
+free and invite-only (Lab decisions 2026-11-11 pass sales stop and 2026-11-12
+invite-only); there is no Studio subscription price to benchmark against.
 
 For this existing email baseline, default execution is the managed immutable Google
 runner. Learners receive no company IAM or script editing access. Personal script
@@ -316,8 +317,12 @@ export and unattended schedules were deferred in this baseline; DEC-024 now incl
 personal deployment and scheduled data processing in the expanded design.
 Arbitrary generated code, non-Google mail and public seller payouts remain outside
 the bounded email implementation.
-The original skill-sales ambition remains a later product outcome; the current
-cohort-sharing MVP does not implement buying, selling or settlement.
+Skill sales are now built as the public skill store (#3418: purchase, refund,
+ledger, seller identity; `docs/studio-requirements.md` "Public skill store
+(#3418)"). It stays off in production until its launch gates in #3419 clear: the
+mail-order brokerage registration, the PG open-market contract, the payout agency,
+the tax opinion and the external KMS (F10). The email cohort-sharing MVP itself
+still does not buy, sell or settle.
 
 Trial decisions need distinct names: the original request named a seven-day trial;
 the later approved workshop requirement is a dedicated 30-day grant, preserving
@@ -358,7 +363,7 @@ fresh console inspection in this audit.
 | 4 / Service + Ops + instructor UI | Twenty distinct identities/grants, cohort separation, individual and total budget caps, expiry/revocation, stale/disconnected/in-progress/failed/completed states | Unpaid synthetic20-seat failure/concurrency matrix; real local stage receipts match instructor display. Roster/date/aggregate class budget are required before provisioning actual seats |
 | 5 / product site + Google operations | Final runner scopes and branding, public support/privacy/deletion facts, test versus production setup and OAuth review evidence | Accurate reachable pages, operator-configured consent, actual submission/approval receipts. Managed-company blocks produce an actionable stop. Review completion is an external dependency |
 | 6 / Studio release + operations | Fresh Windows installation and credential-preserving update/rollback from a pinned production-intended package; per-seat pre-class checks | Clean install and existing-install upgrade pass;20 actual learners each connect their account and complete no-send preview before class. Pilot exceptions are explicit, never labelled commercial approval |
-| 7 / Service + existing billing + product site | Define trial/paid transition, price, usage entitlement, renewal/cancellation and support; audit existing billing before adding flows | Existing purchase/grant path is mapped, consent and expiry/renewal tested, and a small real pilot measures creation, reuse and paid conversion. No unattended new subscription charging |
+| 7 / Service + class operations + product site | Define how a workshop learner continues after class (invite grant or class/cohort enrolment) and the support path; no Studio price row, since Studio passes stopped selling on 2026-11-11 | Continuation path is mapped and tested, and a small real pilot measures creation, reuse and class/cohort conversion. No unattended charging |
 
 Sequence: integration → final local product gate → bounded Windows gate →
 class readiness/release decision. Prepare Google review materials in parallel
@@ -384,7 +389,7 @@ keep the user-approved USD10 total development/test cap (raised on2026-10-16), i
 Collect setup/authoring token cost, deterministic Google execution/quota, support
 minutes, storage and failed/retried runs separately. Recompute the prior operating
 cost and break-even model using these observations; one successful USD0.057188
-conversation cannot establish the margin of a KRW50,000 monthly subscription.
+conversation cannot establish the cost per learner of a class or an invite grant.
 
 Class date is confirmed as **2026-10-16**. No fixed learner PC or shared filesystem
 path is assumed. Assign seats01–20 and let each learner connect on their own Windows
