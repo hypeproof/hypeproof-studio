@@ -15,6 +15,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import {
   SHOW_COPY, SHOW_TIMING, SHOW_PLAYER_FILE, SHOW_RUNTIME_FILE, SHOW_ANIME_FILE, SHOW_FONT_FILE, SHOW_FOLDER_ASSETS, captureShowPage, showComposition, showDecisionRecord,
@@ -24,7 +25,7 @@ import { showPanelHtml, SHOW_POSTER_SECONDS } from "../src/showWhatIMadeView.ts"
 import { findChromium, launch } from "./lib/headless-chromium.mjs";
 
 const require = createRequire(import.meta.url);
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const extRoot = path.join(here, "..");
 const media = path.join(extRoot, "media", "show");
 
