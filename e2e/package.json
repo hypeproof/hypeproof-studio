@@ -38,6 +38,7 @@
     "test:chalk-simple": "node --experimental-strip-types --experimental-sqlite chalk-authoring/simple.mjs",
     "test:chalk-confirm-diff": "node --experimental-strip-types chalk-authoring/confirm-diff.mjs",
     "test:classroom-ops-distribution": "node --experimental-strip-types --experimental-sqlite classroom/ops-distribution.mjs",
+    "test:classroom-ops-run-team": "node --experimental-strip-types --experimental-sqlite classroom/ops-run-team.mjs",
     "test:classroom-ops-lesson-settings": "node --experimental-strip-types --experimental-sqlite classroom/ops-lesson-settings.mjs",
     "test:classroom-ops-help": "node --experimental-strip-types --experimental-sqlite classroom/ops-help.mjs && node classroom/help-request.mjs",
     "test:classroom-ops-results": "node --experimental-strip-types --experimental-sqlite classroom/ops-results.mjs",
@@ -64,6 +65,6 @@
     "@playwright/test": "^1.49.0",
     "esbuild": "^0.28.2",
     "typescript": "^5.4.0",
-    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.4.tgz"
+    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.7.tgz"
   }
 }

@@ -1541,6 +1541,18 @@ collection contract.
 
 **NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
 
+<a id="e5-instructor-ops-run"></a>
+
+## 재직자 수업의 강사 운영 · 2026-11-12 (E5 · #3775–#3778)
+
+요구: [재직자 수업의 강사 운영](../requirements/classroom-admin.md#e5-instructor-ops). 모든 시험은 실제 Chalk `/manage`와 그 스크립트(Chromium), Chalk worker와 전달 경로, Service testkit의 라우터 + SQLite로 돈다. 공통 준비는 `e2e/classroom/e5-chalk.mjs`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `e2e/classroom/ops-run-team.mjs` (`npm run test:classroom-ops-run-team`, #3775) | 배정 없는 fixture(`ownership: 'strict'`). 담당 강사가 화면에서 명단과 네 가지 기능을 저장(질문 카드 → 학생에게 보내기 자동 켜짐, 보내기 끄면 질문 카드 꺼짐)하고 DB `flags_json`에 네 값이 들어간다. 운영 강사 칸·내 강사 ID 복사(클립보드 값 확인). 배정 안 된 강사 B: 학생 0명, `not_run_instructor` 문구와 담당 강사 ID, 자기 ID. 담당 강사가 B를 추가 → B가 명단을 보고 공동 강사로 표시, 추가 양식 없음·나가기 있음, 낡은 화면의 추가 시도는 `owner_only` 문구. B가 나가고, 담당 강사가 다시 추가한 뒤 뺀다(DB에 removed). override 강사: “관리자 열람 — 기록이 남습니다”와 `instructor_override` 감사. 좌석 A1의 동의를 운영 자격증명으로 기록하면 A1 “동의함”, A2·A3 “동의 전”, 세 좌석 모두 보인다 | 2026-11-12 7/7 PASS |
+
+**NOT RUN**: 실제 Studio 앱, 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
+
 <a id="help-queue-keyboard-triage-run"></a>
 
 ## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)
