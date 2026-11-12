@@ -1505,6 +1505,26 @@ collection contract.
 
 **NOT RUN**: 실제 학생 기기의 도움 요청 전송, 운영 배포. 알림은 10초 갱신 주기라 접수 후 최대 약 10초 뒤(탭이 보일 때)에 뜬다.
 
+<a id="adm-02-seat-version-run"></a>
+
+## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)
+
+요구: [좌석별 Studio 버전](../requirements/classroom-admin.md#adm-02-seat-version). Service 변경 없음. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium, 기본 글꼴 Noto Sans), base `c9e62cd6f`, head `ee798824a` (DEC-24 기준 포함).
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/seat-version.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 페이지의 렌더 함수로(페이지 안에서만, OS 입력·보이는 창 없음): 머리 5칸(`버전`은 4번째)·`col.c-ver` · 보드의 `client_version`이 그대로 보임 · 보드에 없는 좌석·null·형식이 틀린 값은 `확인 불가`(neutral·help 아이콘) · 최소 버전이 없어 `업데이트 필요` 0 · 출시 순서 비교(낮음·같음·높음·`-rc.1`<출시·형식 밖·최소 없음·버전 없음) · 최소 버전을 준 셀은 caution·alert 아이콘 + `업데이트 필요`, 아이콘과 글이 `--ink-warn`, 화면 읽기 글에 버전 · 1420/1280/1024에서 열 96px 이하, 행 44px, 잘림 0, 14px 이상, `확인 불가` 한 줄, 버전과 `업데이트 필요`는 두 줄까지, 표시에 칩 상자 없음 · 글자 간격으로 넓힌 버전은 첫 점 뒤에서만 나뉨(`2026.` / `1111.0`, 숫자 가운데서 끊지 않음, 행 44px) · 실제로 그린 글꼴과 줄 폭을 로그로 남김(snts Noto Sans 85.3px, GitHub runner DejaVu Sans 95.5px, 96px 칸) · `순서`: 낮은 순/높은 순(확인 불가는 양쪽 다 맨 뒤, 같으면 Service 순서), `aria-sort`와 화살표, 다시 그려도 유지, 선택은 그대로, ↓ 키는 보이는 순서로, 선택 상자에 포커스 두고 ↑ 키로 바꿈, `기본 순서`로 복귀, 연결을 끊으면 초기화 · 선택 도구 줄이 있으면 그 줄에(높이 증가 0), 없으면 자기 줄에, 둘 다 44px·14px·화면 안 · 800/600/390 카드 행에서 `버전` 이름표가 좌석 줄 끝, 칸 겹침 0, 카드 높이 증가 0 · 기존 학생 활동 목록에 `· 버전 2026.1111.0`/`· 버전 확인 불가` | head에서 104개 확인 PASS(DEC-24 기준 12개 포함, 아래 줄). 글꼴을 바꿔 다시 돌려도 PASS: DejaVu Sans(CI와 같은 95.5px), Liberation Sans, Ubuntu, NanumGothic. base의 `manage.html`로 돌리면 첫 확인에서 실패(머리에 `버전` 없음). 계측기 확인(각각 실패해야 함, 모두 실패함): 정렬 제거 → 낮은 순 순서, 최소 버전을 `2026.1111.0`으로 → 알려진 버전 값, 열 12rem → 머리 폭, 칩 상자 복원 → 칩 상자 검출, 셀 안쪽 여백 12px → `확인 불가` 두 줄·`-rc.1` 세 줄, `placeSort` 호출 제거 → 순서 선택이 보이지 않음, 카드에서 버전을 셋째 줄로 → 800px 카드가 63→82px, 첫 점 뒤 `<wbr>` 제거 → 두 조각 확인, 카드 칸의 flex 제거 → DejaVu Sans에서 카드가 0.7px 커짐. #3769의 CI가 두 번 실패해서 고쳤다: 첫 실행은 runner의 Chrome에서 `2026.1111.0`이 안쪽 여백 2px의 92px에 들어가지 않아 숫자 가운데서 줄이 바뀌었고(안쪽 여백 0, 첫 점 뒤 줄바꿈), 둘째 실행은 800px 카드에서 라벨·한글 대체 글꼴·아이콘이 한 줄 상자를 나눠 좌석 줄이 0.7px 커졌다(카드 칸을 flex 행으로). 둘 다 snts에서 DejaVu Sans로 재현한 뒤 고쳤다 |
+| `chalk` `npm run typecheck` · `npm test` 전체 | 기존 Chalk 시험 전부(목록 행 44px·아이콘, 고정폭 숫자, 상태 칩, 대비 감사, 도움 요청 등) | head `ee798824a`에서 typecheck 0, `FOCUS_REQUIRE_BROWSER=1 npm test` 0(목록 행 100개 동작 PASS, 고정폭 숫자 396개 PASS, `/manage` 대비 최저 4.81:1) |
+| `e2e/classroom/ops-g1-layout.mjs` (`classroom-ops` 워크플로) | 머리 5칸·행마다 `td` 5개로 갱신. 1280×720 완전한 행 8개, 1024×640 6개, 14px 이상, 가로 넘침 없음 | head에서 PASS: 1280×720 8행, 1024×640 6행(base와 같음, 첫 행 363px). 1280에서 상세를 옆에 연 목록 9행(base와 같음) |
+| `e2e/classroom` ops·g1-wrap·selection·roster·help·results·distribution·lesson-settings·attention-copy | 같은 `/manage`를 쓰는 다른 브라우저 시험이 그대로 | head에서 9개 모두 exit 0 (확장·webview 의존성 설치와 webview 빌드 후, CI `classroom-ops`와 같은 순서) |
+| `chalk/test/seat-version.browser.mjs` (i) DEC-24 기준 | 페이지의 실제 `readLatest()`가 `GET /studio/latest-release`를 읽어: 최신 정식 `2026.1111.0`이면 `2026.1109.0`(이전 출시)·`2026.1111.0-rc.1`(그 출시의 rc)·`0.1.5`(Studio 개발 빌드가 실제로 보내는 package 버전)만 `업데이트 필요`, `2026.1111.0`·`2026.1112.0`·`2026.1111.1-rc.1`·`dev-build`는 아님, 버전 없음은 `확인 불가` · 표시된 칸은 화면 읽기 글에 버전 · 기존 목록 줄에도 `· 업데이트 필요` · 5분 안에는 다시 읽지 않음 · 피드가 끊김·503·null·rc·이상한 답이면 기준을 모름으로 두고 아무도 표시하지 않으며 이전 표시를 지움 · 갱신(`refresh`)이 기준을 읽음 | head에서 PASS. 이전 head `d9fc8044f`의 `manage.html`로 돌리면 실패(`readLatest is not defined`). 계측기 확인(모두 실패함): 기준을 null로, 실패 때 이전 기준 유지, rc를 기준으로 받기, 5분 제한 제거, 갱신에서 읽기 제거 |
+| `chalk/test/latest-release.test.mjs` (`node --test`, `chalk` `npm test`에 포함) | 심은 GitHub 답으로(네트워크 없음): `x.y.z` 정식만 기준(rc 태그·prerelease·draft·플래그 없는 본문·이상한 값은 null) · 요청은 공개 API 주소 하나, 헤더는 accept와 user-agent뿐(자격 증명 없음), 5초 제한, `redirect: error`, edge 캐시 10분 · 성공 10분 재사용 · 403 사용 한도·429·404·503·네트워크 오류·시간 초과·HTML·rc 최신은 null이고 이전 기준을 남기지 않으며 1분 뒤 다시 읽음 · `GET /studio/latest-release`는 연결 없이 `{version, checked_at, source}` · 운영이 아니면 `HPS_STUDIO_LATEST_RELEASE`(`off`·`x.y.z`, rc는 무시)가 GitHub 없이 답하고 두 e2e 묶음 래퍼가 기본 `off`, 운영은 이 값을 무시하고 GitHub를 읽음 | 5개 시험 PASS. 계측기 확인(모두 실패함): prerelease 허용, rc 태그 허용, 실패 때 이전 기준 유지, authorization 헤더 추가 |
+| 실제 읽기 한 번 (snts, 2026-11-12) | `latestFormalRelease()`가 익명으로 공개 출시를 읽음 | `{"version":"2026.1109.0"}` (비공개 미러 `hypeproof-studio-releases`의 latest와 같음) |
+
+**측정해서 정한 것**: 표 머리는 36px이다. 머리에 44px 버튼을 넣으면 8px 이상 커지는데 base의 1280×720은 첫 행 363px, 8번째 행 끝 715px로 여유가 5px뿐이라 정렬은 머리 버튼이 아니라 `순서` 선택이다. 버전을 카드의 셋째 줄에 두었던 첫 시도는 1280에서 상세를 옆에 연 목록(606px, 카드 행)의 보이는 행을 9개에서 7개로 줄여서 좌석 줄 끝으로 옮겼다.
+
+**NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu 글꼴로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 배포된 Chalk Worker(Cloudflare)에서의 GitHub 읽기와 그 사용 한도, 운영 배포.
+
 <a id="adm-01-roster-csv-run"></a>
 
 ## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
