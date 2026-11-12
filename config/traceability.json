@@ -17848,6 +17848,12 @@
         },
         {
           "path": "apps/studio-native/tests/test_android_environment.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_android_emulator.py"
         }
       ]
     },
