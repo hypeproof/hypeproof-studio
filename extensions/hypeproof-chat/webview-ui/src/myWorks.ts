@@ -21,3 +21,10 @@ export function worksName(path: string): { name: string; folder: string } {
 export function thumbnailSrc(value: unknown): string | null {
   return typeof value === 'string' && value.length <= 1024 * 1024 && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : null;
 }
+
+/** Match only paths already present in the provenance inventory, preserving its order and objects. */
+export function filterWorks<T extends { path: string }>(entries: readonly T[], query: string): readonly T[] {
+  const fold = (text: string) => text.normalize('NFC').toLocaleLowerCase('ko-KR');
+  const needle = fold(query.trim());
+  return needle ? entries.filter(entry => fold(entry.path).includes(needle)) : entries;
+}
