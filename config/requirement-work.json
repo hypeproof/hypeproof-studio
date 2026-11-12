@@ -778,7 +778,7 @@
         "CR-84"
       ],
       "inline_prefixes": [],
-      "sha256": "136af3fbc84940769f34ac722544aa4d9b31e3e9dc81524990ff0cd35bf7cc3f",
+      "sha256": "b6cd77418c69da4df7d8e5379daecac879a1c5ddda31e98893d1b287bf3825ac",
       "owner": "jayleekr",
       "intent": "docs/intents/curriculum-runtime.md",
       "design": "docs/plan/curriculum-runtime.md",
