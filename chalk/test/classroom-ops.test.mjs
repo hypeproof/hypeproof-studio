@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs';
 import { Script, runInNewContext } from 'node:vm';
 import { localOps } from '@hypeproof/service-testkit/test/harness/classroom-ops.mjs';
 import { withBearerAsConnection } from './harness/connect.mjs';
-// E5: /manage keeps exactly what these named accessors hold in browser storage — learner names on this device (#3777).
+// E5: /manage keeps exactly what these named accessors hold in browser storage — learner names on this device (#3777)
+// and the class code made in this tab (#3778).
 // Each appears once; with them removed, nothing in the page touches storage, so tickets and tokens still never do.
-const DEVICE_STORES=["const namesStore=()=>{try{return window.localStorage;}catch{return null;}};"];
+const DEVICE_STORES=["const namesStore=()=>{try{return window.localStorage;}catch{return null;}};","const tabStore=()=>{try{return window.sessionStorage;}catch{return null;}};"];
 const withoutStores=(s)=>DEVICE_STORES.reduce((t,a)=>{assert.equal(t.split(a).length-1,1,'one storage accessor: '+a);return t.replace(a,'');},s);
 const f = await localOps(); const chalk = withBearerAsConnection((await import('../src/index.ts')).default); const savedFetch = globalThis.fetch; const calls = [];
 const env = { ...f.env, HPS_SERVICE_ORIGIN: 'https://service.test' };

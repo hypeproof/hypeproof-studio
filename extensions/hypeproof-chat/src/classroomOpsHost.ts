@@ -48,6 +48,22 @@ interface ConnectionMeta { grant_id: string; class_run_id: string; seat_id: stri
 /** After its normal expiry a connection can only finish an upload that was already authorized, for this long after class. */
 const UPLOAD_GRACE_MS = 24 * 3_600_000;
 const FINAL_CREDENTIAL_REFUSALS = ["ops_credential_invalid", "ops_grant_revoked", "ops_grant_expired"];
+/** E5 (#3778): the learning token the learner entered Studio with. Read here only to join a class; never logged or shown. */
+const LEARNING_TOKEN_KEY = "hypeproofChat.workshopToken";
+/** The Service's join-code alphabet: no 0 O 1 I L, so a code read off a projector is typed without guessing. */
+const JOIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+/** What the learner typed: a class join code (8), a seat code (12), or neither. */
+export function connectCodeKind(input: string): "join" | "seat" | null {
+  const v = input.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (v.length === 12) return "seat";
+  return v.length === 8 && [...v].every((ch) => JOIN_ALPHABET.includes(ch)) ? "join" : null;
+}
+const JOIN_REFUSALS: Record<string, string> = {
+  code_invalid: "수업 코드가 맞지 않거나 만료됐습니다. 강사 화면의 코드를 다시 확인하세요.",
+  seat_not_found: "이번 수업 명단에 없습니다. 강사에게 알려 주세요.",
+  class_token_invalid: "학습 토큰을 확인하지 못해 연결하지 않았습니다. 수업 참여 코드로 Studio에 다시 들어온 뒤 연결하세요.",
+  class_token_required: "학습 토큰을 확인하지 못해 연결하지 않았습니다. 수업 참여 코드로 Studio에 다시 들어온 뒤 연결하세요.",
+};
 /** E5 (#3776) — what the learner reads under a question card when an answer was NOT recorded. Never a claim that it was. */
 const ANSWER_NOTES: Record<string, string> = {
   not_connected: "수업 연결이 없어 답을 보내지 않았습니다. ‘수업 연결’로 다시 연결한 뒤 제출하세요.",
@@ -427,24 +443,62 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const got = await this.participationNotice();
     if (!got.ok) { void (got.reason === "ops_disabled" ? vscode.window.showInformationMessage("이 수업 서버에는 수업 연결 기능이 켜져 있지 않습니다. 수업 참여에는 영향이 없습니다.") : vscode.window.showWarningMessage("수업 참여 데이터 안내를 불러오지 못해 연결하지 않았습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.")); return; }
     if (got.notice && !(await this.askParticipation(got.notice))) { void vscode.window.showInformationMessage("동의하지 않아 이번 수업에는 연결하지 않았습니다. Studio 개인 사용은 그대로 할 수 있습니다."); return; }
-    const ticket = await vscode.window.showInputBox({
-      title: "수업 연결", prompt: "강사가 알려준 수업 연결 코드를 입력하세요 (10분 안에 한 번만 쓸 수 있습니다)",
-      placeHolder: "XXXX-XXXX-XXXX", ignoreFocusOut: true, validateInput: (v) => (v.replace(/[^0-9A-Za-z]/g, "").length === 12 ? null : "12자리 코드를 입력하세요"),
+    const code = await vscode.window.showInputBox({
+      title: "수업 연결", prompt: "강사가 화면에 띄운 수업 코드(8자리) 또는 좌석 코드(12자리)를 입력하세요",
+      placeHolder: "XXXX-XXXX 또는 XXXX-XXXX-XXXX", ignoreFocusOut: true, validateInput: (v) => (connectCodeKind(v) ? null : "수업 코드 8자리 또는 좌석 코드 12자리를 입력하세요"),
     });
-    if (!ticket) return;
+    if (!code) return;
+    const device = { app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY], app_version: this.version() };
+    const b = connectCodeKind(code) === "join" ? await this.joinWithClassCode(code, device) : await this.connectWithSeatCode(code, device);
+    if (!b) return;
+    await this.finishConnect(b, got.notice);
+  }
+
+  /** The seat's own one-time code (12): the path every older class uses, unchanged. */
+  private async connectWithSeatCode(ticket: string, device: Record<string, unknown>): Promise<(ConnectionMeta & { credential: string }) | null> {
     let res: Response;
     try {
       res = await fetch(`${this.base()}/classroom/ops/connect`, {
         method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(10000),
-        body: JSON.stringify({ ticket, app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY], app_version: this.version() }),
+        body: JSON.stringify({ ticket, ...device }),
       });
     } catch {
-      void vscode.window.showWarningMessage("서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 같은 코드로 다시 시도하세요."); return;
+      void vscode.window.showWarningMessage("서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 같은 코드로 다시 시도하세요."); return null;
     }
-    if (res.status === 404) { void vscode.window.showInformationMessage("이 수업 서버에는 수업 연결 기능이 켜져 있지 않습니다. 수업 참여에는 영향이 없습니다."); return; }
-    if (res.status === 429) { void vscode.window.showWarningMessage("연결 시도가 너무 많습니다. 1분 뒤 다시 시도하세요."); return; }
-    if (res.status !== 201) { void vscode.window.showWarningMessage("연결 코드가 맞지 않거나 이미 사용됐거나 시간이 지났습니다. 강사에게 새 코드를 요청하세요."); return; }
-    const b = (await res.json()) as ConnectionMeta & { credential: string };
+    if (res.status === 404) { void vscode.window.showInformationMessage("이 수업 서버에는 수업 연결 기능이 켜져 있지 않습니다. 수업 참여에는 영향이 없습니다."); return null; }
+    if (res.status === 429) { void vscode.window.showWarningMessage("연결 시도가 너무 많습니다. 1분 뒤 다시 시도하세요."); return null; }
+    if (res.status !== 201) { void vscode.window.showWarningMessage("연결 코드가 맞지 않거나 이미 사용됐거나 시간이 지났습니다. 강사에게 새 코드를 요청하세요."); return null; }
+    return (await res.json()) as ConnectionMeta & { credential: string };
+  }
+
+  /**
+   * E5 (#3778) — the class code (8) on the projector plus the learning token this learner entered Studio with. The Service
+   * finds the seat by the token's handle. The learner confirms the handle first; without a token nothing is sent.
+   */
+  private async joinWithClassCode(code: string, device: Record<string, unknown>): Promise<(ConnectionMeta & { credential: string }) | null> {
+    const token = await this.context.secrets.get(LEARNING_TOKEN_KEY), handle = token ? tokenIdentityUnverified(token).u : undefined;
+    if (!token || !handle) { void vscode.window.showWarningMessage("먼저 수업 참여 코드로 Studio에 들어온 뒤 다시 연결하세요."); return null; }
+    const go = "연결";
+    if ((await vscode.window.showInformationMessage(`handle ${handle}(으)로 이번 수업에 연결합니다.`, { modal: true }, go)) !== go) return null;
+    let res: Response;
+    try {
+      res = await fetch(`${this.base()}/classroom/ops/join`, {
+        method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ code, ...device }),
+      });
+    } catch {
+      void vscode.window.showWarningMessage("서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 같은 코드로 다시 시도하세요."); return null;
+    }
+    if (res.status === 201) return (await res.json()) as ConnectionMeta & { credential: string };
+    const reason = ((await res.json().catch(() => ({}))) as { reason?: string }).reason ?? "";
+    if (res.status === 404) { void vscode.window.showInformationMessage("이 수업 서버에는 수업 연결 기능이 켜져 있지 않습니다. 수업 참여에는 영향이 없습니다."); return null; }
+    if (res.status === 429) { void vscode.window.showWarningMessage("연결 시도가 너무 많습니다. 1분 뒤 다시 시도하세요."); return null; }
+    void vscode.window.showWarningMessage(JOIN_REFUSALS[reason] ?? "수업에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요.");
+    return null;
+  }
+
+  /** Both codes end here: the same credential storage, start, consent record and message. */
+  private async finishConnect(b: ConnectionMeta & { credential: string }, notice: ParticipationNotice | null): Promise<void> {
     // A new pairing replaces whatever this window was connected to; responses still in flight for it are void.
     const stopped = this.stopConnection(), stopGeneration = this.generation;
     await stopped;
@@ -455,7 +509,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     await this.start(meta, b.credential);
     // The class connection exists only with a recorded consent: if the Service did not record it, this window lets the
     // connection go at once rather than report usage the learner's consent does not cover yet.
-    const recorded = got.notice ? await this.recordParticipationConsent(got.notice.version) : null;
+    const recorded = notice ? await this.recordParticipationConsent(notice.version) : null;
     if (recorded && recorded !== "recorded") {
       await this.forget();
       void vscode.window.showWarningMessage(recorded === "guardian_consent_required" ? "이 수업은 보호자 동의가 필요합니다. 앱에서 직접 동의할 수 없어 연결하지 않았습니다." : "수업 참여 데이터 동의를 기록하지 못해 연결을 끊었습니다. 잠시 뒤 다시 연결하세요.");
