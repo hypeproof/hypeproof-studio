@@ -742,7 +742,7 @@ function renderSummary(d){boardStatus.filters($("ops-state-filters"),d.seats.map
 function renderSafety(){safetySignal.render($('ops-safety'),$('ops-safety-list'),{hasSeat:id=>!!opsData?.seats.find(x=>x.seat_id===id),openSeat,afterAck:()=>($('ops-safety').hidden?$('ops-title'):$('ops-safety-title')).focus()});}
 const opsUnavailableDetailMessage='운영 현황을 다시 확인하지 못해 이 좌석의 조치를 잠시 막았습니다. 쓰던 질문은 그대로입니다.';
 // A run the caller is not assigned to draws no operating control: every one of them would only be refused (403).
-function runControls(on){for(const id of ['ops-setup'])if($(id))$(id).hidden=!on;document.body.toggleAttribute('data-run-denied',!on);}
+function runControls(on){for(const id of ['ops-setup'])if($(id))$(id).hidden=!on;}
 function renderOps(d){opsData=d;runControls(true);if($('ops-detail-status').textContent===opsUnavailableDetailMessage)text('ops-detail-status','');safetySignal.update(d.run.class_run_id,d.seats);renderSafety();if([...ledger.values()].some(e=>e.run!==d.run.class_run_id))ledgerReset(); // another class run: nothing from the previous one is shown against this roster
  if(finishBatch&&finishRun!==d.run.class_run_id)finishForget();
 reconcileSelection(d);const c=d.counts;text('ops-state','수업 '+d.run.class_run_id+(d.run.lesson?' · 강의 '+d.run.lesson.version:'')+' · 운영 집계(학생 평가 아님) · 명단 '+c.total+'명 중 앱 준비 완료 '+c.runtime_ready+' · 조회 '+new Date(d.now).toLocaleTimeString([],{hour12:false})+(d.run.flags.ops_observe?'':' · 관측이 꺼져 있어 새 신호가 들어오지 않습니다')+(d.control?.paused?' · 새 AI 실행 일시정지 중':'')+(d.instructors?.viewer_role==='override'?' · 관리자 열람 — 기록이 남습니다':''));renderTeam(d);
