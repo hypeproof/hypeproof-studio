@@ -43,6 +43,7 @@ let undecided = true;
 let failPublish = 1;
 let identityPolls = 0;
 let sellerUnverified = false;
+let courseBlocked = false;
 const calls = [];
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname.replace('/v1/store', '');
@@ -51,7 +52,7 @@ globalThis.fetch = async (url, init = {}) => {
   const reply = (status, json) => new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json' } });
   if (path === '/items' && (init.method ?? 'GET') === 'GET') return reply(200, { items: [] });
   if (path === '/me') return reply(200, { age_group: 'adult', installs: [], can_buy_paid: true });
-  if (path === '/seller') return reply(200, { tier: sellerUnverified ? 'none' : 'new', cap_krw: sellerUnverified ? 0 : 100000, identity_verified: true, attribution: { decided: !undecided, partner: null, instructor: null, source: undecided ? null : 'seller', seller_editable: false, consent_version: 'store-referral-2026-11-12', consent_given: null }, items: [], sales: [], totals: { refund_window: 0, payout_hold: 0, payable: 15456, refunded: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout_account: { state: 'due', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false }, payout: 'not_started', policy_version: 'v2' });
+  if (path === '/seller') return reply(200, { course_blocked: courseBlocked, tier: sellerUnverified ? 'none' : 'new', cap_krw: sellerUnverified ? 0 : 100000, identity_verified: true, attribution: { decided: !undecided, partner: null, instructor: null, source: undecided ? null : 'seller', seller_editable: false, consent_version: 'store-referral-2026-11-12', consent_given: null }, items: [], sales: [], totals: { refund_window: 0, payout_hold: 0, payable: 15456, refunded: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout_account: { state: 'due', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false }, payout: 'not_started', policy_version: 'v2' });
   if (path === '/attribution/resolve') return reply(200, { partner: { name: '세바시' }, instructor: { name: '김강사', partner_name: '세바시' } });
   if (path === '/attribution') { if (!undecided) return reply(409, { error: 'attribution_already_set' }); undecided = false; return reply(200, { decided: true, partner: { name: '세바시' }, instructor: { name: '김강사' }, source: 'seller', seller_editable: false }); }
   if (path === '/items' && init.method === 'POST') { if (failPublish-- > 0) return reply(503, { error: 'unavailable' }); return reply(201, { id: 'ski_' + 'a'.repeat(32), status: 'listed', tier: 'new', cap_krw: 100000 }); }
@@ -144,4 +145,18 @@ await new Promise((r) => setTimeout(r, 7000));
 assert.ok(identityPolls <= pollsAtClose + 1, `no polling after close (${identityPolls - pollsAtClose} more)`);
 globalThis.fetch = realFetch;
 console.log('PASS identity: one start at a time, no polling after the panel closes');
+
+// #3795: a seller whose course does not sell, arriving from the quest completion card, gets no quest prefill notice.
+courseBlocked = true;
+stubModule.__panels.length = 0;
+await stubModule.__commands.get('hypeproof-chat.skillStore.publishQuest')();
+await settle();
+const panel2 = stubModule.__panels[0];
+await panel2.handler({ type: 'storeLoad' });
+await settle();
+const blockedState = panel2.posted.filter((m) => m.type === 'storeState').at(-1).state;
+assert.equal(blockedState.seller.course_blocked, true);
+assert.equal(blockedState.notice, undefined, 'no 「가격만 정하면 올릴 수 있어요」 next to the block');
+assert.equal(blockedState.questDraft, undefined);
+console.log('PASS course block: no quest prefill offered');
 rmSync(dir, { recursive: true, force: true });
