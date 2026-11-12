@@ -17452,6 +17452,9 @@
           "path": "extensions/hypeproof-chat/test/skill-store-client.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/skill-store-panel.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/quest-skill-store.smoke.mjs"
         },
         {
