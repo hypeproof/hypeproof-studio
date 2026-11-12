@@ -170,3 +170,23 @@ An example path is: install and use the same account → “요즘 어떤 일에
 | MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
+
+### Android personal questions · issue #3733
+
+Extend the existing `apps/studio-native` Android package with the same Service
+reflection conversation. The local notebook remains a separate destination;
+this does not revive the older companion WebView or introduce another product.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| MADR-01 | Launch into an optional everyday question. Account approval opens the existing browser page with its exact code included; no desktop, copied pairing code, age/job form or new account protocol. | Native launcher/consent UI and protocol controls. |
+| MADR-02 | Read/write `reflection-api@1` using the same account as iPhone and existing desktop. Persist an account-scoped outbox before dispatch; retry an uncertain ID/revision, never silently create a second turn. | Real HTTP serialization, state/model controls and two-device acceptance. |
+| MADR-03 | Preserve drafts, original corrupt files and saved words on write/network/refresh failures. Reject stale/account-switched data. Store credentials under Android Keystore encryption in no-backup storage; mark one-use refresh spent before dispatch. | Failure controls and actual emulator Keystore/AtomicFile tests. |
+| MADR-04 | Reuse existing Korean on-device speech and installed local TTS with explicit conversation consent; microphone remains off after an answer until the next tap. Account/navigation/background changes stop voice; only the initiating turn may be read aloud. | Existing VoiceSession controls, new account reply controls, native consent UI and physical Korean voice gate. |
+| MADR-05 | Disclose server/AI processing and existing entitlement/cost limits. Guide making requests to the existing desktop's reviewed unsent task flow. Preserve local notebook and free local drafting. | Native UI, existing desktop handoff controls and installed-device review. |
+
+Dependency: Service #386 / migration 0073 and Harness #557 release contract must
+be released before claiming live Android reflection readiness. Current account
+entitlements apply; this work does not invent a free signed-in AI allowance.
+Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
+separate acceptance gates. Source/build tests are not those observations.

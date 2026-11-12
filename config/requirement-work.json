@@ -919,10 +919,15 @@
         "MPER-02",
         "MPER-03",
         "MPER-04",
-        "MPER-05"
+        "MPER-05",
+        "MADR-01",
+        "MADR-02",
+        "MADR-03",
+        "MADR-04",
+        "MADR-05"
       ],
       "inline_prefixes": [],
-      "sha256": "d30d0f6c947efae33f06e3e72d428c71b734ad0a7d5c9ab1d49f79d5b01a7e3d",
+      "sha256": "1505e99f9e0ae807dccbdd0df482e680a8969561c112313bb39b1eea1395d1b9",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4568,6 +4573,48 @@
         "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs",
         "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "android-personal-reflection-v1",
+      "title": "Same-account questions and voice in the existing native Android app",
+      "issue": 3733,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-01",
+            "MADR-02",
+            "MADR-03",
+            "MADR-04",
+            "MADR-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Implement and verify Android account question parity; preserve Service release and physical two-device/voice acceptance as explicit gates.",
+      "design_delta": "Reuse the existing native Android package, account protocol, reflection API and on-device speech; persist encrypted credentials and account-scoped outbox.",
+      "positive_control": "Android starts with a question and shares exact personal message IDs with iPhone and the existing desktop, even while the desktop is closed.",
+      "negative_control": "Failed persistence, uncertain rotation, stale snapshot, background voice or account switch cannot lose words, replay a paid turn or import another account.",
+      "evidence_required": "Pinned native source/APK, unit/real HTTP and emulator tests, independent review, live Service and physical cross-device acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     }
   ]

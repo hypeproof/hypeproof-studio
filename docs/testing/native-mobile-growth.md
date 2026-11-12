@@ -76,3 +76,33 @@ Use the existing Studio desktop RC plus the native iPhone candidate and deployed
 6. MPER-03 / MPER-04: Read a stale or malformed snapshot, including duplicate IDs: retain original history and draft. Export/erasure includes server-stored personal reflection.
 
 Source checks: `test:personal-reflection`, `test:mobile-conversation`, Swift `ConversationSyncTests`, `StudioShellTests`, Service `test:conversation-sync`. Type/build/fixture success is not a judgment of question quality or installed-device acceptance. Local iOS verification on 2026-11-11 is BLOCKED by missing Xcode; use the repository's native macOS CI and retain that run's exact source identity.
+
+### Android same-account question parity (MADR-01–05, #3733)
+
+Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+:app:assembleDebugAndroidTest` and the existing disposable-emulator
+`scripts/android-verify.sh`. Keep the exact source/tree, APK hash, host and exit.
+
+- `ReflectionStateTest` / `ReflectionModelTest`: persistence-before-send, uncertain
+  retry identity/revision, rejected stale/duplicate history, corrupt-cache
+  read-only behavior, failed-save drafts, account-switch fencing and spent refresh.
+- `NativeDeviceSignInTest` / `DeviceSignInHttpTest` / `NativeHttpDeadlineTest`:
+  actual loopback HTTP serialization/redirect refusal/invalid UTF-8, bounded drip
+  and cancellation; exact browser URL, expiry, throttling and matching `/me`.
+- `QuestionJourneyTest`: real Android launcher and consent UI, account draft
+  recreation and voice consent cancellation, actual Keystore ciphertext roundtrip,
+  spent refresh and tamper rejection. Network is an in-process fixture restricted
+  to a debug app, never a live account or Korean recognition claim.
+- Retain all existing `StudioJourneyTest` notebook/voice checks.
+
+After Service rollout, on a physical Android device sign in through the normal
+browser, send with the desktop closed, then observe identical message IDs on
+existing desktop and iPhone. Interrupt network after submission, reconnect and
+confirm one answer. Confirm Korean recognition/reading, permission denial,
+background/account changes, headphones, offline draft and same-account relaunch.
+Review a making request in the existing desktop. Record real AI cost and any
+entitlement failure rather than bypassing it. Do not publish an APK as live-ready
+before these Service and installed-device checks.
+
+Storage/HTTP design references: Android [Keystore](https://developer.android.com/privacy-and-security/keystore)
+and [AtomicFile](https://developer.android.com/reference/android/util/AtomicFile).
