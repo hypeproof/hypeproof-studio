@@ -5262,6 +5262,9 @@
         },
         {
           "path": "scripts/test/bootstrap-service-packages.test.mjs"
+        },
+        {
+          "path": "scripts/test-installer-version-gate.sh"
         }
       ]
     },
