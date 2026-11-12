@@ -19,7 +19,7 @@ const bundled = await build({ entryPoints: [fileURLToPath(import.meta.resolve('@
 const { profile: sourceProfile } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 // The host's own trial-ending copy (REQ-L12 (13)), so TUX-SP-05 renders what the host sends, not a paraphrase.
 const passCopy = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/passPurchase.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
-const { TRIAL_EXPIRED_FRIENDLY, withTrialPassPointer } = await import(`data:text/javascript;base64,${Buffer.from(passCopy.outputFiles[0].text).toString('base64')}`);
+const { TRIAL_EXPIRED_FRIENDLY } = await import(`data:text/javascript;base64,${Buffer.from(passCopy.outputFiles[0].text).toString('base64')}`);
 const native = {
   ...sourceProfile, profile_id: sourceProfile.id,
   // `assess: true` because this suite OWNS TUX-OBS-01..10, and after ADR 0010 the
@@ -189,23 +189,16 @@ try {
     await startState(p, { profile: course, error: '인증에 실패했습니다.' }); await expect(p.getByRole('alert')).toContainText('기존 활동 연결은 유지됩니다.');
     await btn(p, '기존 활동으로 돌아가기').click(); await expect(btn(p, '이어서 하기')).toBeEnabled();
     await startState(p, { error: '개인 체험 시간이 끝났습니다.' }); await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(p.locator('#course-code')).toBeEnabled();
-    // REQ-L12 (13): after a trial expired the host names the pass entry while passes are sold. It is drawn, and
-    // only the person opens it: the error itself sends no purchase request.
-    const passes = { available: true, products: [{ id: 'pass-basic', label: '기본', recommended: true, amount: 55000, durationDays: 30, requestLimit: 350 }] };
-    const before = emitted(await requests(p), 'purchaseOpen').length;
-    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, true), purchase: passes });
+    // REQ-L12 (13): after a trial expired the host says the files stay. No pass is named or drawn (2026-11-13,
+    // REQ-L12 ①–④ removed), even if a stale state still says `available`.
+    await startState(p, { error: TRIAL_EXPIRED_FRIENDLY, purchase: { available: true } });
     await expect(p.getByRole('alert')).toContainText('만든 파일과 대화는 그대로 있어요');
-    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
-    await expect(p.getByRole('alert')).not.toContainText('코드 발급 담당자');
-    // The code form is still open from the retry above; going back to the start choices shows the named entry.
-    await btn(p, '시작 방법 다시 선택').click();
-    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
-    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
-    assert.equal(emitted(await requests(p), 'purchaseOpen').length, before, 'the trial ending never opens the purchase screen');
-    // Without a catalogue the same ending names no entry that is not drawn.
-    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, false) });
     await expect(p.getByRole('alert')).not.toContainText('이용권');
+    await expect(p.getByRole('alert')).not.toContainText('코드 발급 담당자');
+    // The code form is still open from the retry above; the start choices offer no pass entry.
+    await btn(p, '시작 방법 다시 선택').click();
     await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'nothing sends a purchase request');
   }, { surface: 'start' });
   await test('TUX-SP-06', 'Disconnect delegates host request and disconnected host state replaces course', async p => {
     await startState(p, { profile: course }); await btn(p, '연결 해제').click(); await request(p, { type: 'disconnectCourse' });
@@ -297,7 +290,7 @@ try {
     await host(p, { type: 'config', config: config(native, { taskWorkspace }) });
     await expect(p.getByLabel('현재 활동')).toHaveCount(0);
   }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
-  await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; pass only on press', async p => {
+  await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; no pass offered', async p => {
     await startState(p, { profile: trialSeat(exhausted) });
     await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
     await expect(p.getByText('AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
@@ -305,9 +298,10 @@ try {
     await expect(btn(p, '이어서 하기')).toHaveCount(0);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
     await expect(btn(p, '이어서 하려면 이용권으로 시작하기')).toHaveCount(0);
+    // 2026-11-13 (REQ-L12 ①–④ removed): even a stale `available` draws no pass choice.
     await startState(p, { profile: trialSeat(exhausted), purchase: { available: true } });
-    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'an ended trial never opens the purchase by itself');
-    await btn(p, '이어서 하려면 이용권으로 시작하기').click(); await request(p, { type: 'purchaseOpen' });
+    await expect(btn(p, '이어서 하려면 이용권으로 시작하기')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'an ended trial never opens the purchase');
     await startState(p, { profile: trialSeat(exhausted) });
     await btn(p, '지난 대화 보기').click(); await request(p, { type: 'beginCourse' });
     await expect(btn(p, '다른 활동 선택')).toBeVisible();
@@ -566,149 +560,23 @@ try {
     await host(p, { type: 'history', messages: history }); await expect(p.locator('.hps-chips')).toHaveCount(0);
     await host(p, { type: 'config', config: config({ ...native, observation: undefined }) }); await expect(p.getByText('현재 연결은 작업 관찰을 지원하지 않습니다.', { exact: false })).toBeVisible(); await expect(p.locator('.hps-native-observation')).toHaveCount(0);
   });
-  await test('TUX-COND-07', 'Trial limit ends in an inline card: facts, one Primary, an escape; nothing opens by itself', async p => {
+  // TUX-COND-07/08 — retired 2026-11-13 (REQ-L12 ①–④ removed). The end-of-trial card was a pass offer
+  // (and carried the optional email section). The host no longer builds it, and the chat no longer
+  // draws it: even a card from an older host ends as the ordinary banner, with no pass button, no
+  // email form and nothing sent.
+  await test('TUX-COND-07R', 'Trial limit: no pass card, no "이용권 살펴보기", no email form; nothing opens', async p => {
     await draft(p).fill('마지막 요청');
     await draft(p).press('Enter');
     await request(p, { type: 'sendMessage' });
     await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
-    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
-    const card = p.locator('.hps-trial-end-card');
-    await expect(card).toHaveCount(1);
-    // CONV-ENDCARD-R-002: the title and first line speak about continuing the work, before any pass fact.
-    await expect(card.getByRole('heading')).toHaveText('만든 작업을 그대로 이어서 할 수 있어요');
-    const facts = card.locator('.hps-trial-end-card-fact');
-    await expect(facts).toHaveText([
-      '만든 파일은 작업 폴더에, 대화는 이 채팅에 그대로 있어요. 이용권이 있으면 이 작업을 이어서 할 수 있어요.',
-      // The Service's recommended pass by name, period and price, never a hardcoded price.
-      passOfferLine(endCardPasses[0]),
-      '한 번만 결제하고, 자동으로 다시 결제되지 않아요.',
-      '무료로 쓸 수 있는 AI 요청은 모두 썼어요.',
-    ]);
-    assert.equal(passOfferLine(endCardPasses[0]), '라이트 이용권은 30일 동안 쓸 수 있고 30,000원이에요. AI 요청 200번이 들어 있어요.');
-    // The checker reads what the browser drew: no count, no countdown, no pressure words.
-    assert.deepEqual(endCardCopyProblems({ title: await card.getByRole('heading').innerText(), facts: await facts.allInnerTexts(), primary: await card.locator('.hps-trial-end-card-primary').innerText(), escape: await card.locator('.hps-trial-end-card-escape').innerText() }, endCardPasses[0]), []);
-    // Exactly one Primary and one escape; the error banner (and its report button) is not drawn.
-    await expect(card.getByRole('button')).toHaveCount(2);
-    await expect(card.locator('.hps-trial-end-card-primary')).toHaveText('이용권 살펴보기');
-    await expect(card.locator('.hps-trial-end-card-escape')).toHaveText('오늘은 여기까지');
-    await expect(p.locator('.hps-error-banner')).toHaveCount(0);
-    await expect(p.getByRole('dialog')).toHaveCount(0);
-    await p.screenshot({ path: path.join(out, 'TUX-COND-07-card.png'), fullPage: true });
-    // Dark theme at the two widths the conversion register asks for (1420px, 800px).
-    await p.addStyleTag({ content: endCardDarkTheme });
-    await p.evaluate(() => { document.body.classList.add('vscode-dark'); document.body.dataset.vscodeThemeKind = 'vscode-dark'; });
-    for (const width of [1420, 800]) {
-      await p.setViewportSize({ width, height: 900 });
-      await expect(card).toBeVisible();
-      await p.screenshot({ path: path.join(out, `TUX-COND-07-card-dark-${width}.png`) });
-    }
-    await p.setViewportSize({ width: 390, height: 900 });
-    // No countdown or pressure copy.
-    assert.doesNotMatch(await card.innerText(), /남았|남음|남은|곧|마감|지금 바로|놓치|할인|한정|\d+\s*(초|분)\b/);
-    // Never opens by itself: no purchase request before the person presses the Primary.
-    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
-    await btn(p, '이용권 살펴보기').click();
-    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
-    // The escape closes the card and asks for nothing: its only message is the funnel count
-    // (CONV-FUNNEL-R-003, offer_dismissed end_card), which opens nothing on the host.
-    const before = (await requests(p)).length;
-    await btn(p, '오늘은 여기까지').click();
-    await expect(card).toHaveCount(0);
-    const after = (await requests(p)).slice(before);
-    assert.deepEqual(after.map((m) => m.type), ['trialEndCardDismiss'], 'the escape sends only trialEndCardDismiss');
-    await expect(draft(p)).toBeVisible();
-  }, { cfg: endCardTrialSeat });
-  await test('TUX-COND-07N', 'Card absent mid-work and for ordinary errors (negative control)', async p => {
-    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
-    await host(p, { type: 'streamChunk', streamId: 'work', delta: '페이지를 만들고 있어요' });
-    await expect(p.getByText('페이지를 만들고 있어요')).toBeVisible();
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
-    await host(p, { type: 'streamEnd', streamId: 'work' });
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
-    // An ordinary failure keeps today's banner and never draws the card.
-    await host(p, { type: 'streamStart', streamId: 'fail', messageId: 'a-fail' });
-    await host(p, { type: 'streamError', streamId: 'fail', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
-    await expect(p.locator('.hps-error-banner')).toHaveCount(1);
+    await host(p, { type: 'streamError', streamId: 'limit', error: notifyCard.text, trialEndCard: notifyCard });
     await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
     await expect(btn(p, '이용권 살펴보기')).toHaveCount(0);
-    // A card from an earlier ending does not survive into a later ordinary error.
-    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
-    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
-    await host(p, { type: 'streamStart', streamId: 'fail2', messageId: 'a-fail2' });
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
-    await host(p, { type: 'streamError', streamId: 'fail2', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
-    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
-  }, { cfg: endCardTrialSeat });
-  // TUX-COND-08 — optional "이메일로 소식 받기" below the pass offer (Jay 2026-10-19). The webview's
-  // setState throws in this harness, so a persisted address would fail the case; localStorage is
-  // checked empty after every case too.
-  const SYNTHETIC_EMAIL = 'learner.synthetic@example.com';
-  await test('TUX-COND-08', 'Free end card: optional email section, explicit opt-in, address only to the host, withdraw', async p => {
-    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
-    await host(p, { type: 'streamError', streamId: 'limit', error: notifyCard.text, trialEndCard: notifyCard });
-    const card = p.locator('.hps-trial-end-card');
-    const section = card.getByTestId('notify-optin');
-    await expect(section).toHaveCount(1);
-    await expect(section).toContainText('새 기능과 할인 소식을 이메일로 받아 볼래요? (선택)');
-    await expect(section).toContainText('[수집 항목: 이메일 · 목적: 서비스·할인 소식 안내 · 보관: 수신 거부 또는 1년 뒤 삭제]');
-    // The pass offer stays the one Primary, first in the card; the section comes after it.
-    await expect(card.locator('.hps-trial-end-card-primary')).toHaveCount(1);
-    assert.equal(await card.evaluate(el => {
-      const primary = el.querySelector('.hps-trial-end-card-primary'), s = el.querySelector('[data-testid="notify-optin"]');
-      return !!(primary.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING);
-    }), true, 'the section is below the pass offer');
-    // Explicit opt-in (정보통신망법 §50): no checkbox, nothing pre-checked or pre-filled; 받기 needs an address.
-    await expect(card.locator('input[type="checkbox"], input[type="radio"]')).toHaveCount(0);
-    const input = section.getByRole('textbox', { name: '이메일' });
-    await expect(input).toHaveValue('');
-    await expect(btn(p, '받기')).toBeDisabled();
-    // Nothing is sent by drawing the card.
-    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 0);
-    await p.screenshot({ path: path.join(out, 'TUX-COND-08-form.png'), fullPage: true });
-    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'no overflow at 390px');
-    await input.fill(SYNTHETIC_EMAIL);
-    await btn(p, '받기').click();
-    await request(p, { type: 'notifyOptinSubmit', email: SYNTHETIC_EMAIL });
-    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 1);
-    await expect(btn(p, '받기')).toBeDisabled();
-    // A Service refusal shows its sentence and keeps the form.
-    await host(p, { type: 'notifyOptinResult', state: 'error', message: '이메일 주소를 다시 확인해 주세요.' });
-    await expect(section.getByRole('alert')).toHaveText('이메일 주소를 다시 확인해 주세요.');
-    await btn(p, '받기').click();
-    await host(p, { type: 'notifyOptinResult', state: 'subscribed' });
-    await expect(section).toContainText('소식을 보내 드릴게요.');
-    await expect(section.getByRole('textbox')).toHaveCount(0);
-    assert.ok(!(await p.content()).includes(SYNTHETIC_EMAIL), 'the address is gone from the page after success');
-    await p.screenshot({ path: path.join(out, 'TUX-COND-08-done.png'), fullPage: true });
-    // Withdraw is a small link-style button; it asks the host, which calls the delete route.
-    await btn(p, '그만 받기').click();
-    await request(p, { type: 'notifyOptinWithdraw' });
-    await host(p, { type: 'notifyOptinResult', state: 'withdrawn' });
-    await expect(section).toContainText('이제 소식을 보내지 않을게요.');
-    // The pass Primary still works and the section never opened the purchase view by itself.
-    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
-    await btn(p, '이용권 살펴보기').click();
-    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
-  }, { cfg: endCardTrialSeat });
-  await test('TUX-COND-08N', 'Email section absent when not advertised; an earlier submission shows the done line (controls)', async p => {
-    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
-    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
-    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
     await expect(p.getByTestId('notify-optin')).toHaveCount(0);
-    await expect(p.getByText('이메일로 받아 볼래요', { exact: false })).toHaveCount(0);
-    // Mid-work: no card, no section.
-    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
-    await expect(p.getByTestId('notify-optin')).toHaveCount(0);
-    await host(p, { type: 'streamEnd', streamId: 'work' });
-    // A seat that already submitted: done line and withdraw, no empty form.
-    await host(p, { type: 'streamStart', streamId: 'limit2', messageId: 'a-limit2' });
-    await host(p, { type: 'streamError', streamId: 'limit2', error: notifySubmittedCard.text, trialEndCard: notifySubmittedCard });
-    await expect(p.getByTestId('notify-optin')).toContainText('소식을 보내 드릴게요.');
-    await expect(p.getByTestId('notify-optin').getByRole('textbox')).toHaveCount(0);
-    await expect(btn(p, '그만 받기')).toBeVisible();
-    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length + emitted(await requests(p), 'notifyOptinWithdraw').length, 0);
+    await expect(p.locator('.hps-header-passes')).toHaveCount(0);
+    for (const type of ['trialEndCardPasses', 'notifyOptinSubmit', 'purchaseOpen']) assert.equal(emitted(await requests(p), type).length, 0, type);
+    await expect(draft(p)).toBeVisible();
+    await p.screenshot({ path: path.join(out, 'TUX-COND-07R-no-card.png'), fullPage: true });
   }, { cfg: endCardTrialSeat });
   // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
   // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
@@ -793,7 +661,8 @@ try {
     await expect(p.getByRole('alert')).toHaveCount(0);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
     await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
-    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+    // 2026-11-13 (REQ-L12 ①–④ removed): no pass link, even with a stale `available`.
+    await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0);
     await p.screenshot({ path: path.join(out, 'TUX-SP-16-drained-390.png'), fullPage: true });
     // A newcomer who has not answered the age question sees the same calm state, not the question.
@@ -813,7 +682,7 @@ try {
       await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
       await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
       await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
-      await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+      await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
       assert.doesNotMatch(await cardText(p), /\d+\s*(번|회|초|분|시간)|오류|실패|다시 시도|체험|수업/);
     };
     // The Service advertises the pause (offer path)...
@@ -861,80 +730,33 @@ try {
   await test('TUX-SP-13H', 'Control: a code-issued trial still shows its remaining count in the header', async p => {
     await expect(p.getByLabel('현재 활동')).toContainText('AI 요청 3번 남음');
   }, { cfg: { activity: trialActivity(nearLimit) } });
-  await test('REQ-L12-14', 'Free seat purchase: payer question, then the guardian checkout as link and QR', async p => {
-    const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
-    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true }, ...freeStart({ age: '14+' }) });
-    await btn(p, '이용권으로 시작하기').click();
-    await request(p, { type: 'purchaseOpen' });
-    await expect(p.getByText('결제하는 분이 만 19세 이상인가요?', { exact: true })).toBeVisible();
-    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
-    // POLISH iter4 — leaving the pass list goes back; it is not a "start over" (Jay: 다시 시작 안 어울림).
-    await expect(btn(p, '돌아가기')).toBeVisible();
-    await expect(btn(p, '시작 방법 다시 선택')).toHaveCount(0);
-    await btn(p, '아니요').click();
-    await request(p, { type: 'purchasePayer', adult: false });
-    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: false }, ...freeStart({ age: '14+' }) });
-    await btn(p, '보호자에게 결제 요청하기').click();
-    await request(p, { type: 'purchaseStart', productId: 'pass-lite', guardian: true });
-    await startState(p, { purchase: { available: true, stage: 'waiting', order: { label: '라이트', amount: 30000 }, message: '브라우저에서 결제를 마치면 자동으로 이어져요.', freeSeat: true, payerAdult: false, guardian: { url: 'https://site.test/studio/checkout?order=x', qr: 'data:image/svg+xml;base64,PHN2Zy8+' } }, ...freeStart({ age: '14+' }) });
-    await expect(p.getByRole('img', { name: '보호자 결제 페이지 QR 코드' })).toBeVisible();
-    await expect(p.getByText('결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.', { exact: true })).toBeVisible();
-    // Negative control: an adult payer on the same seat goes to today's checkout button.
-    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
-    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
-  }, { surface: 'start' });
-  await test('TUX-SP-17', 'Google sign-in on first open and before checkout; no anonymous purchase fallback', async p => {
+  // REQ-L12-14 (payer question, guardian QR) and the purchase half of TUX-SP-17 (login before checkout)
+  // retired 2026-11-13 with REQ-L12 ①–④. What stays: Google sign-in on first open, and no purchase UI at
+  // all, whatever a stale state says.
+  await test('TUX-SP-17', 'Google sign-in on first open; no pass list, pay button, payer question or guardian QR', async p => {
     // Selectors follow StartPage.tsx: AccountEntry's signed-out button is `.studio-google` (studio-primary).
     const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
     const signedOut = { status: 'signedOut' };
-    const signedIn = { status: 'signedIn', account: { id: 'acc_1', email: 'learner@example.test', display_name: '학습자' }, passes: [] };
     const google = p.locator('.studio-google');
-    // Control: today's choice list (no free start) draws the account entry, so the checker below can fail.
+    // Control: today's choice list (no free start) draws the account entry.
     await startState(p, { account: signedOut, purchase: { available: true } });
     await expect(google).toHaveCount(1);
     // Existing grants must be reachable on first open without starting checkout (#3385).
-    await startState(p, { account: signedOut, purchase: { available: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    await startState(p, { account: signedOut, purchase: { available: true }, ...freeStart({ age: '14+' }) });
     await expect(p.locator('#connect-title')).toHaveText('내 계정 또는 무료로 시작하기');
     await expect(google).toHaveCount(1);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
     await google.click();
     await request(p, { type: 'accountSignIn' });
-    assert.equal(emitted(await requests(p), 'purchaseStart').length, 0);
-    // The pass list on a free seat while signed out: the Google button is the one Primary, no pay button, no payer question.
-    await btn(p, '이용권으로 시작하기').click();
-    await request(p, { type: 'purchaseOpen' });
-    await startState(p, { account: signedOut, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
-    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.', { exact: true })).toBeVisible();
-    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
-    await expect(google).toHaveCount(1);
-    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
-    await expect(btn(p, '보호자에게 결제 요청하기')).toHaveCount(0);
+    // A stale state from an older host that still lists passes, a payer answer or a guardian checkout draws none of it.
+    await startState(p, { account: signedOut, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: false, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    for (const gone of ['이용권으로 시작하기', '30,000원 결제하러 가기', '보호자에게 결제 요청하기', '이용권을 사려면 Google로 로그인해 주세요.']) await expect(btn(p, gone)).toHaveCount(0);
     await expect(p.getByText('결제하는 분이 만 19세 이상인가요?')).toHaveCount(0);
-    await expect(p.getByRole('radiogroup', { name: '이용권 고르기' })).toBeVisible(); // the passes stay visible to choose from
+    await expect(p.getByRole('radiogroup', { name: '이용권 고르기' })).toHaveCount(0);
+    await expect(p.getByRole('img', { name: '보호자 결제 페이지 QR 코드' })).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length + emitted(await requests(p), 'purchaseStart').length + emitted(await requests(p), 'purchasePayer').length, 0);
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await p.screenshot({ path: path.join(out, 'TUX-SP-17-sign-in-390.png'), fullPage: true });
-    await google.click();
-    await request(p, { type: 'accountSignIn' });
-    assert.equal(emitted(await requests(p), 'purchaseStart').length, 0, 'no checkout before sign-in');
-    // Signed in: the gate is gone and checkout follows (payer question first on a free seat).
-    await startState(p, { account: signedIn, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
-    await expect(google).toHaveCount(0);
-    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.')).toHaveCount(0);
-    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
-    // No account sign-in on this build or Service: a calm notice, no Primary, no checkout, no red alert.
-    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'unavailable' }, ...freeStart({ age: '14+' }) });
-    const notice = p.locator('.studio-purchase .studio-notice');
-    await expect(notice).toHaveText('결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.');
-    await expect(notice).toHaveAttribute('role', 'status');
-    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
-    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
-    await expect(p.getByRole('alert')).toHaveCount(0);
-    await expect(btn(p, '돌아가기')).toBeVisible();
-    await p.screenshot({ path: path.join(out, 'TUX-SP-17-unavailable-390.png'), fullPage: true });
-    // Negative control: a code-issued seat with no gate keeps today's pay button (still on the pass list).
-    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing' } });
-    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
-    await expect(google).toHaveCount(0);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-17-no-purchase-390.png'), fullPage: true });
   }, { surface: 'start' });
   await test('TUX-A11Y-01', 'Visible controls have names and keyboard focus including citation and settings', async p => {
     await expect(p.getByRole('textbox',{name:'코치에게 보낼 메시지'})).toBeVisible();

@@ -1805,9 +1805,6 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" temporary={inTemporaryTask} />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
-        {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
-            end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
-        {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
         {/* An automation conversation shows usage inside its settings disclosure; a second header row would squeeze the chat. */}

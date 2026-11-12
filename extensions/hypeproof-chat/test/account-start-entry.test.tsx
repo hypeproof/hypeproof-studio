@@ -29,10 +29,12 @@ async function main(){
  assert(document.body.textContent?.includes('관리자가 부여한 무제한 이용 권한'));
  await act(async()=>button('무제한으로 시작하기').click());
  assert.deepEqual(posted.at(-1),{type:'accountActivate',passId:'super'});
- await update({...base,purchase:{available:true,focus:1,stage:'choosing',products:[]},account:{status:'signedIn',passes:[{id:'super',product_name:'무제한 이용권',status:'active',requests_remaining:100000,requests_limit:100000,duration_seconds:0}]}});
+ // 2026-11-13 (REQ-L12 ①–④ removed): no pass entry, list or pay button on the start page, whatever the state says.
+ await update({...base,freeStart:undefined,purchase:{available:true},account:{status:'signedIn',passes:[{id:'super',product_name:'무제한 이용권',status:'active',requests_remaining:100000,requests_limit:100000,duration_seconds:0}]}});
  assert(button('무제한으로 시작하기'));
- assert(!document.body.textContent?.includes('어떤 이용권으로 시작할까요?'));
+ for (const gone of ['이용권으로 시작하기','어떤 이용권으로 시작할까요?','결제하러 가기','이용권 살펴보기','결제하는 분이 만 19세 이상인가요?']) assert(!document.body.textContent?.includes(gone),gone);
  assert.equal(document.querySelector('[role="radiogroup"]'),null);
+ assert.equal(document.querySelector('.studio-guardian-pay'),null);
  // Login remains accessible from a saved activity, independently of purchases.
  await update({...base,freeStart:undefined,profile:{name:'Saved',workspace:'/tmp/saved',kind:'trial'}});
  await act(async()=>button('Google 로그인').click());

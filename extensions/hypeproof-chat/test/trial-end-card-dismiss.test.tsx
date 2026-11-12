@@ -114,7 +114,8 @@ t("negative control: closing an ordinary error banner posts no dismissal", async
   eq(dismissals(), 0, "no trialEndCardDismiss");
 });
 
-// ── CONV-ENDCARD-R-003 — after `오늘은 여기까지` the pass list stays one press away ─────────────────
+// ── CONV-ENDCARD-R-003 (retired 2026-11-13) — the header no longer carries an "이용권 살펴보기" link ──
+// REQ-L12 ①–④ were removed: there is no pass list to open, so an ended free seat keeps only the note.
 // A personal-workspace seat whose header is drawn (taskWorkspace present, no lesson). The trial block
 // is what the Service serves after the ending turn; the header is re-read at each turn's end.
 const taskWorkspace = { scope: "s", revision: 1, activeTaskId: "t1", tasks: [{ id: "t1", title: "작업", createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
@@ -126,7 +127,7 @@ const inUse = { state: "active", ends_at: later, request_limit: 10, requests_use
 const PASS = { request_limit: 200, requests_used: 200, expires_at: Date.now() + 86_400_000 };
 const passPresses = () => posted.filter((m) => m.type === "trialEndCardPasses").length;
 
-t("ended free seat: after 오늘은 여기까지 the header keeps one 이용권 살펴보기 link that opens the pass list", async () => {
+t("ended free seat: after 오늘은 여기까지 the header has no 이용권 살펴보기 link", async () => {
   posted.length = 0;
   const h = await harness(card, seat({ free: true, trial: exhausted }));
   ok(h.card(), "card drawn");
@@ -134,26 +135,20 @@ t("ended free seat: after 오늘은 여기까지 the header keeps one 이용권 
   eq(h.endedNote(), undefined, "no composer note while the card is on screen");
   await h.press(h.escape());
   eq(h.card(), undefined, "card closed");
-  const links = h.headerLink();
-  eq(links.length, 1, "one header link after the card is closed");
-  eq(links[0].localName, "button", "a real control");
-  eq(links[0].textContent, "이용권 살펴보기", "label");
-  ok(!/\d/.test(links[0].textContent), "no count in the link");
-  const before = posted.length;
-  await h.press(links[0]);
-  eq(h.calls.passes, 1, "the same handler as the card's Primary");
-  eq(JSON.stringify(posted.slice(before).map((m) => m.type)), JSON.stringify(["trialEndCardPasses"]), "posts only trialEndCardPasses (host: offer_clicked end_card + pass list)");
+  eq(h.headerLink().length, 0, "no header link after the card is closed");
+  ok(!h.text().includes("이용권 살펴보기") || !!h.card(), "the header never names the pass list");
+  eq(passPresses(), 0, "nothing posts trialEndCardPasses");
   eq(dismissals(), 1, "only the escape counted a dismissal");
 });
 
 t("ended free seat: the composer says why the AI no longer answers, with no count", async () => {
   posted.length = 0;
   const h = await harness(null, seat({ free: true, trial: exhausted }));
-  eq(h.headerLink().length, 1, "a reopened chat (no card) also has the link");
+  eq(h.headerLink().length, 0, "a reopened chat (no card) has no pass link");
   eq(h.endedNote()?.textContent, "무료로 쓸 수 있는 AI 요청을 모두 써서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요.", "exhausted note");
   const t2 = await harness(null, seat({ free: true, trial: expired }));
   eq(t2.endedNote()?.textContent, "무료 사용 시간이 끝나서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요.", "expired note");
-  eq(t2.headerLink().length, 1, "expired seat has the link too");
+  eq(t2.headerLink().length, 0, "an expired seat has no pass link either");
   eq(passPresses(), 0, "nothing opens by itself");
 });
 

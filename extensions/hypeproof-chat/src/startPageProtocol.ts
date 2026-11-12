@@ -111,11 +111,7 @@ export type StartRequest =
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }
   | { type: "startUpdateDismiss"; version: string }
-  /**
-   * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
-   * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
-   */
-  | { type: "accountSignIn"; productId?: string }
+  | { type: "accountSignIn" }
   | { type: "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
   | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
@@ -138,13 +134,11 @@ export type StartRequest =
   | { type: "joinLinkDismiss" }
   | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
-  | { type: "purchaseOpen" }
-  | { type: "purchaseStart"; productId: string; guardian?: boolean }
-  | { type: "purchasePayer"; adult: boolean }
   | { type: "freeStartAge"; answer: "14+" | "under14" }
   | { type: "freeStartClaim" }
   | { type: "freeStartGuardian" }
   | { type: "freeStartUpdate" }
+  /** REQ-L12 ⑤ — recovery of an order an older build started. There is no intent that starts an order. */
   | { type: "purchaseReopen" }
   | { type: "purchaseRetry" }
   | { type: "purchaseCancel" }

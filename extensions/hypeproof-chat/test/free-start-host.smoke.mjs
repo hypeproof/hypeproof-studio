@@ -234,123 +234,22 @@ try {
   await h.page.handle({ type: 'freeStartGuardian' });
   assert.deepEqual(h.world.opened, [`${SITE}/studio#guardian`]);
 
-  // ── Login at purchase (Jay 2026-10-19): a free seat signs in with Google before checkout ─────
-  // Negative control first: no account runtime (accounts not enabled on this build) → no anonymous
-  // checkout from a free seat; the view gets the calm notice state and no order is ever sent.
-  reset();
-  h = harness({ current: freeProfile });
-  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  assert.equal(h.state().account, undefined, 'no account runtime');
-  await h.page.handle({ type: 'purchaseOpen' });
-  assert.equal(h.state().purchase.login, 'unavailable', 'free seat without accounts: login unavailable');
-  await h.page.handle({ type: 'purchasePayer', adult: true });
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(orders().length, 0, 'no anonymous order from a free seat');
-  assert.deepEqual(h.world.opened, [], 'no checkout page opened');
-  assert.equal(h.state().purchase.stage, 'choosing');
-  // The first screen never asks for a login: a newcomer under free start sees the free card and no
-  // sign-in starts until the person opens the pass list and presses the Google button.
-  reset();
-  const newcomer = accountStub();
-  h = harness({ accounts: newcomer });
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  assert.ok(h.state().freeStart, 'the free card is drawn');
-  // The host reports the gate ahead of time (so a pay button never flashes); the view draws it only
-  // on the pass list (e2e/trial-ux TUX-SP-17 checks the rendered first screen has no Google button).
-  assert.equal(h.state().purchase.stage, undefined, 'the pass list is not open');
-  assert.equal(newcomer.starts, 0, 'no sign-in started on first open');
-  // A newcomer who opens the pass list from the free card: sign-in first, no order without it.
-  await h.page.handle({ type: 'purchaseOpen' });
-  assert.equal(h.state().purchase.login, 'signIn', 'newcomer under free start: Google sign-in before checkout');
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(orders().length, 0, 'signed out: no order');
-  // Signing in lifts the gate; the order then carries the account bearer.
-  await h.page.handle({ type: 'accountSignIn' }); h.page.accountChanged(); await h.settle();
-  assert.equal(h.state().purchase.login, undefined, 'signed in: checkout offered');
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(orders().length, 1);
-  assert.equal(orders()[0].auth, 'Bearer account-bearer-' + 'd'.repeat(40), 'the order carries the account bearer');
-  assert.equal(orders()[0].free, null, 'no seat yet: no free credential');
-
-  // ── Purchase from a free seat: credential header + payer question; never on another seat ────
-  reset();
-  const payer = new Map();
-  const signedIn = accountStub('signedOut');
-  h = harness({ current: freeProfile, globals: payer, accounts: signedIn });
-  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  assert.equal(h.state().profile.free, true, 'the connected card is labelled as the free seat');
-  await h.page.handle({ type: 'purchaseOpen' });
-  assert.equal(h.state().purchase.login, 'signIn', 'free seat, signed out: the Google sign-in is the Primary');
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d', guardian: true });
-  assert.equal(orders().length, 0, 'free seat, signed out: no order');
-  await h.page.handle({ type: 'accountSignIn' }); h.page.accountChanged(); await h.settle();
-  assert.equal(h.state().purchase.login, undefined);
-  assert.equal(h.state().purchase.freeSeat, true); assert.equal(h.state().purchase.payerAdult, undefined, 'the payer question is asked');
-  await h.page.handle({ type: 'purchasePayer', adult: false });
-  assert.equal(h.state().purchase.payerAdult, false);
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d', guardian: true });
-  const order = svc.requests.find(r => r.path === '/v1/purchase/orders');
-  assert.equal(order.free, TOKEN_FREE, 'the order carries the free credential');
-  // CONV-FUNNEL-R-007: the sign-in from this free seat gets the same credential for its device polls.
-  assert.equal(await h.page.freeSignInCredential(), TOKEN_FREE, 'a sign-in from a free seat links it with the grant token');
-  assert.equal(order.auth, 'Bearer account-bearer-' + 'd'.repeat(40), 'and the account bearer');
-  assert.deepEqual(h.world.opened, [], 'a guardian checkout opens no browser here');
-  const g = h.state().purchase.guardian;
-  assert.match(g.url, /\/studio\/checkout\?order=/); assert.match(g.qr, /^data:image\/svg\+xml;base64,/);
-  assert.ok(!JSON.stringify(h.world.states).includes(TOKEN_FREE), 'the credential never reaches the webview');
-  // Negative control: a code-issued trial seat sends no free credential and gets no payer question.
-  reset();
-  const coded = { ...freeProfile, profile_id: 'studio-native-trial' };
-  h = harness({ current: coded });
-  h.world.secrets.set('hypeproofChat.workshopToken', 'coded-seat-token-' + 'c'.repeat(40));
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  await h.page.handle({ type: 'purchaseOpen' });
-  assert.equal(h.state().purchase.freeSeat, undefined);
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(svc.requests.find(r => r.path === '/v1/purchase/orders').free, null, 'no free credential from a code-issued seat');
-  assert.equal(await h.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: no sign-in link credential from a code-issued seat');
-  // CONV-FUNNEL-R-007 negative controls: a paid (pass) seat on the free profile id, and no seat at all.
-  {
-    const paid = harness({ current: { ...freeProfile, pass: { id: 'ord_paid', status: 'active' } } });
-    paid.world.secrets.set('hypeproofChat.workshopToken', 'paid-seat-token-' + 'p'.repeat(40));
-    await paid.page.handle({ type: 'startReady' }); await paid.settle();
-    assert.equal(await paid.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: a paid seat sends no free credential');
-    const none = harness({ accounts: accountStub() });
-    await none.page.handle({ type: 'startReady' }); await none.settle();
-    assert.equal(await none.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: no seat, no free credential');
+  // ── No purchase from a free seat (2026-11-13, REQ-L12 ①–④ removed) ──────────────────────────
+  // The stand-in Service still lists a pass. A free seat, signed in or not, never reads the catalogue,
+  // never sends an order and never opens a checkout or guardian QR: the old intents are ignored.
+  for (const accounts of [undefined, accountStub(), accountStub('signedIn')]) {
+    reset();
+    h = harness({ current: freeProfile, ...(accounts ? { accounts } : {}) });
+    h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+    await h.page.handle({ type: 'startReady' }); await h.settle();
+    for (const msg of [{ type: 'purchaseOpen' }, { type: 'purchasePayer', adult: false }, { type: 'purchaseStart', productId: 'pass-30d', guardian: true }, { type: 'purchaseStart', productId: 'pass-30d' }])
+      await h.page.handle(msg);
+    assert.equal(svc.requests.filter(r => r.path.startsWith('/v1/purchase')).length, 0, 'no catalogue read and no order');
+    assert.deepEqual(h.world.opened, [], 'no checkout page opened');
+    const view = h.state().purchase;
+    assert.equal(view.available, false);
+    for (const gone of ['login', 'freeSeat', 'payerAdult', 'guardian', 'products', 'selected', 'focus']) assert.equal(view[gone], undefined, gone);
   }
-  assert.equal(h.world.opened.length, 1, 'today: the browser opens');
-  assert.equal(svc.requests.find(r => r.path === '/v1/purchase/orders').auth, null, 'today: a code-issued seat orders anonymously');
-  // ...until the Service says `account_required`: then the same seat gets the gate, nothing is opened.
-  reset();
-  svc.orderReply = { status: 401, body: { error: 'account_required', message: '이용권을 사려면 Google로 로그인해 주세요.' } };
-  h = harness({ current: coded });
-  h.world.secrets.set('hypeproofChat.workshopToken', 'coded-seat-token-' + 'c'.repeat(40));
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  await h.page.handle({ type: 'purchaseOpen' });
-  assert.equal(h.state().purchase.login, undefined, 'code seat: no gate before the Service asks');
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(orders().length, 1);
-  assert.deepEqual(h.world.opened, [], 'account_required: no checkout page opened');
-  assert.equal(h.state().purchase.stage, 'choosing', 'back to the pass list, not a failure');
-  assert.equal(h.state().purchase.login, 'unavailable', 'no account runtime: the calm notice');
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(orders().length, 1, 'no anonymous retry after account_required');
-  // With an account runtime the same answer turns into the sign-in Primary.
-  reset();
-  svc.orderReply = { status: 401, body: { error: 'account_required', message: '이용권을 사려면 Google로 로그인해 주세요.' } };
-  const codedAccount = accountStub('signedIn');
-  h = harness({ current: coded, accounts: codedAccount });
-  h.world.secrets.set('hypeproofChat.workshopToken', 'coded-seat-token-' + 'c'.repeat(40));
-  await h.page.handle({ type: 'startReady' }); await h.settle();
-  await h.page.handle({ type: 'purchaseOpen' });
-  await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
-  assert.equal(codedAccount.refreshes > 0, true, 'a refused bearer re-reads the account');
-  codedAccount.status = 'signedOut'; h.page.accountChanged(); await h.settle();
-  assert.equal(h.state().purchase.login, 'signIn', 'account_required + signed out: the sign-in Primary');
-  assert.equal(h.state().purchase.message, '이용권을 사려면 Google로 로그인해 주세요.');
   // ── e2e D2: relaunch on an expired free seat whose profile the Service refuses ───────────────
   // The real classifier reads the real Service answer (403 trial_expired + the free sentence).
   const { classifyProfileFailure } = await import('../src/proxyClientHelpers.ts');
@@ -454,5 +353,5 @@ try {
   await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
   assert.equal(claims().length, 0, 'code-issued trial: no free re-claim');
   assert.equal(h.state().freeStart.refillsAt, undefined);
-  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, login at purchase (no runtime → no order, newcomer + free seat sign in first, code seat on account_required), purchase header + guardian, expired free seat relaunch (D2), daily refill (re-claim at launch, loop guard, refill ahead, older Service, code seat, no age, refused profile)`);
+  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, no purchase from a free seat (no catalogue, order, checkout or guardian QR), expired free seat relaunch (D2), daily refill (re-claim at launch, loop guard, refill ahead, older Service, code seat, no age, refused profile)`);
 } finally { server.close(); server.closeAllConnections?.(); }

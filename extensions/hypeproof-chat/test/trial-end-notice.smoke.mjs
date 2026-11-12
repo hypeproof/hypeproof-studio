@@ -44,17 +44,16 @@ assert.equal(p.passSpentNotice(new Error(SDK_EXHAUSTED)), null);
 
 // ── What the chat says ──────────────────────────────────────────────────────────────────
 for (const [ending, said] of [['exhausted', /체험에서 쓸 수 있는 AI 요청을 모두 썼어요/], ['expired', /체험 시간이 끝났어요/]]) {
-  const sold = p.trialEndNotice(ending, true);
-  const notSold = p.trialEndNotice(ending, false);
-  assert.match(sold, said); assert.match(notSold, said);
-  // CU-14: the work is still there, in both variants.
-  assert.match(sold, /만든 파일과 대화는 그대로 있어요/); assert.match(notSold, /만든 파일과 대화는 그대로 있어요/);
-  // The way on is named only when the Service sells passes (REQ-L12 (1)).
-  assert.match(sold, /'이용권으로 시작하기'/); assert.doesNotMatch(notSold, /이용권/);
+  const text = p.trialEndNotice(ending);
+  assert.match(text, said);
+  // CU-14: the work is still there.
+  assert.match(text, /만든 파일과 대화는 그대로 있어요/);
+  // 2026-11-13: no pass is sold and the app has no purchase view, so no pass is ever named.
+  assert.doesNotMatch(text, /이용권/);
   // Not the classroom or operator voice, not a retry invitation.
-  for (const text of [sold, notSold]) assert.doesNotMatch(text, /코드 발급 담당자|강사|운영 담당자|다시 시도|API Error/);
+  assert.doesNotMatch(text, /코드 발급 담당자|강사|운영 담당자|다시 시도|API Error/);
   // The banner frames it as the trial ending, not a fault, a network drop or a spent pass.
-  for (const text of [sold, notSold]) assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '체험이 끝났어요' });
+  assert.deepEqual(errorBannerPresentation(text), { icon: '⏳', title: '체험이 끝났어요' });
 }
 // Banner controls: the existing pass and network banners are unchanged.
 assert.equal(errorBannerPresentation(p.PASS_SPENT_FRIENDLY).title, '이용권을 더 쓸 수 없어요');
@@ -69,29 +68,7 @@ assert.doesNotMatch(expired.friendly, /코드 발급 담당자|새 체험을 요
 assert.equal(classifyProfileFailure(403, JSON.stringify({ error: { code: 'trial_expired' } })).friendly, p.TRIAL_EXPIRED_FRIENDLY);
 // A bought pass past its window keeps the Service's own pass sentence.
 assert.equal(classifyProfileFailure(403, JSON.stringify({ error: { code: 'trial_expired', message: '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.' } })).friendly, '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.');
-// The start page adds the pointer only when passes are on sale, and only to the trial ending.
-assert.equal(p.withTrialPassPointer(p.TRIAL_EXPIRED_FRIENDLY, true), `${p.TRIAL_EXPIRED_FRIENDLY} ${p.TRIAL_PASS_POINTER_START}`);
-assert.match(p.withTrialPassPointer(p.TRIAL_EXPIRED_FRIENDLY, true), /'이용권으로 시작하기'/);
-assert.equal(p.withTrialPassPointer(p.TRIAL_EXPIRED_FRIENDLY, false), p.TRIAL_EXPIRED_FRIENDLY);
-assert.equal(p.withTrialPassPointer('인증에 실패했습니다.', true), '인증에 실패했습니다.');
-assert.equal(p.withTrialPassPointer(undefined, true), undefined);
+// 2026-11-13: the start page adds no pass pointer, and the module no longer reads whether passes are sold.
+for (const gone of ['withTrialPassPointer', 'passesOnSale', 'TRIAL_PASS_POINTER_CHAT', 'TRIAL_PASS_POINTER_START']) assert.equal(p[gone], undefined, gone);
 
-// ── Passes on sale: one unauthenticated catalogue read, bounded, never an order ──────────
-const realFetch = globalThis.fetch;
-const calls = [];
-try {
-  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), method: init?.method ?? 'GET' }); return new Response(JSON.stringify({ products: [{ id: 'pass-basic', label: '기본', amount: 55000, currency: 'KRW', duration_hours: 720, request_limit: 350 }] }), { status: 200 }); };
-  assert.equal(await p.passesOnSale('https://service.test/v1/'), true);
-  assert.deepEqual(calls, [{ url: 'https://service.test/v1/purchase/products', method: 'GET' }]);
-  globalThis.fetch = async () => new Response('{"products":[]}', { status: 200 });
-  assert.equal(await p.passesOnSale('https://service.test/v1'), false);
-  globalThis.fetch = async () => { throw new Error('offline'); };
-  assert.equal(await p.passesOnSale('https://service.test/v1'), false);
-  // A Service that never answers does not hold the notice back.
-  globalThis.fetch = (_url, init) => new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
-  const started = Date.now();
-  assert.equal(await p.passesOnSale('https://service.test/v1', 50), false);
-  assert.ok(Date.now() - started < 1000);
-} finally { globalThis.fetch = realFetch; }
-
-console.log('trial-end-notice.smoke.mjs — trial exhausted/expired notices, pass pointer, negatives');
+console.log('trial-end-notice.smoke.mjs — trial exhausted/expired notices, no pass pointer, negatives');
