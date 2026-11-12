@@ -93,7 +93,7 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         extra = { ...extra, questDraft: undefined };
         if ((extra.notice ?? state.notice) === STORE_COPY.questPrefill) extra = { ...extra, notice: undefined };
       }
-      await push({ access: "ready", tab, items, ageGroup: me.age_group, installs: me.installs, seller, busy: false, ...extra });
+      await push({ access: "ready", tab, items, ageGroup: me.age_group, installs: me.installs, orders: me.orders ?? [], seller, busy: false, ...extra });
     } catch (error) {
       const signedOut = error instanceof StoreClientError && error.code === "account_required";
       await push({ access: signedOut ? "signedOut" : "ready", tab, items, busy: false, error: storeErrorMessage(error), ...extra });
@@ -185,6 +185,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         await fn();
       } catch (error) {
         const checks = error instanceof StoreClientError && Array.isArray(error.detail.messages) ? (error.detail.messages as string[]) : undefined;
+        // The course stopped selling while the panel was open: show the block view itself, not a stale form.
+        if (error instanceof StoreClientError && error.code === "course_store_blocked") return void (await load("sell", { busy: false }));
         await push({ busy: false, error: storeErrorMessage(error), checks });
       }
     };
@@ -240,6 +242,11 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         return run(async () => {
           const names = await c.resolveCodes(msg.partnerCode, msg.instructorCode);
           await push({ busy: false, attributionPreview: { partnerCode: msg.partnerCode, instructorCode: msg.instructorCode, partner: names.partner, instructor: names.instructor } });
+        });
+      case "storeReceipt":
+        return run(async () => {
+          await vscode.env.openExternal(vscode.Uri.parse(await c.receipt(msg.orderId)));
+          await push({ busy: false });
         });
       case "storeVerifyIdentity":
         // One verification at a time: a second start (a double click) would open the browser twice.

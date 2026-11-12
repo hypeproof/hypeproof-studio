@@ -55,6 +55,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (path === '/seller') return reply(200, { course_blocked: courseBlocked, tier: sellerUnverified ? 'none' : 'new', cap_krw: sellerUnverified ? 0 : 100000, identity_verified: true, attribution: { decided: !undecided, partner: null, instructor: null, source: undecided ? null : 'seller', seller_editable: false, consent_version: 'store-referral-2026-11-12', consent_given: null }, items: [], sales: [], totals: { refund_window: 0, payout_hold: 0, payable: 15456, refunded: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout_account: { state: 'due', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false }, payout: 'not_started', policy_version: 'v2' });
   if (path === '/attribution/resolve') return reply(200, { partner: { name: '세바시' }, instructor: { name: '김강사', partner_name: '세바시' } });
   if (path === '/attribution') { if (!undecided) return reply(409, { error: 'attribution_already_set' }); undecided = false; return reply(200, { decided: true, partner: { name: '세바시' }, instructor: { name: '김강사' }, source: 'seller', seller_editable: false }); }
+  if (path === '/items' && init.method === 'POST' && courseBlocked) return reply(403, { error: 'course_store_blocked' });
   if (path === '/items' && init.method === 'POST') { if (failPublish-- > 0) return reply(503, { error: 'unavailable' }); return reply(201, { id: 'ski_' + 'a'.repeat(32), status: 'listed', tier: 'new', cap_krw: 100000 }); }
   if (path === '/identity/start') return reply(201, { session_id: 'idv_' + 'd'.repeat(32), verify_url: 'https://service.test/v1/store/identity/verify?session=idv_' + 'd'.repeat(32), sandbox: true });
   if (path.startsWith('/identity/idv_')) { identityPolls++; if (identityPolls >= 2) sellerUnverified = false; return reply(200, { state: identityPolls >= 2 ? 'verified' : 'pending' }); }
@@ -159,4 +160,14 @@ assert.equal(blockedState.seller.course_blocked, true);
 assert.equal(blockedState.notice, undefined, 'no 「가격만 정하면 올릴 수 있어요」 next to the block');
 assert.equal(blockedState.questDraft, undefined);
 console.log('PASS course block: no quest prefill offered');
+
+// A publish refused because the course stopped selling while the panel was open reloads into the block view:
+// no stale form and no second, older message next to it.
+await panel2.handler({ type: 'storePublish', draft: { title: '정리', summary: '요약', body: '지침', tools: [], price_krw: 0 } });
+await settle();
+const refused = panel2.posted.filter((m) => m.type === 'storeState').at(-1).state;
+assert.equal(refused.seller.course_blocked, true);
+assert.equal(refused.error, undefined);
+assert.equal(refused.busy, false);
+console.log('PASS course block: a refused publish shows the block view');
 rmSync(dir, { recursive: true, force: true });

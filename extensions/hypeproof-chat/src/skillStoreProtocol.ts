@@ -67,6 +67,16 @@ export interface StoreInstallView {
   refundable: boolean;
   refund_until: number | null;
 }
+/** One of the buyer's own purchases, refunded ones included (#3774). */
+export interface StoreBuyerOrderView {
+  order_id: string;
+  item_id: string;
+  title: string;
+  amount: number;
+  state: "paid" | "refunding" | "refunded";
+  paid_at: number;
+  refunded_at: number | null;
+}
 export interface StoreSaleView {
   order_id: string;
   title: string;
@@ -130,6 +140,8 @@ export interface StoreState {
   items: StoreItemView[];
   ageGroup: "adult" | "minor" | "unknown";
   installs: StoreInstallView[];
+  /** The buyer's purchase history with receipts. */
+  orders?: StoreBuyerOrderView[];
   seller?: StoreSellerView;
   /** The order the buyer is paying for in the browser. */
   checkout?: { itemId: string; title: string; amount: number };
@@ -173,6 +185,7 @@ export type StoreRequest =
   | { type: "storePublishQuest"; title: string; summary: string; price_krw: number; attribution?: StoreAttributionInput }
   | { type: "storeResolveCodes"; partnerCode: string; instructorCode: string }
   | { type: "storeVerifyIdentity" }
+  | { type: "storeReceipt"; orderId: string }
   | { type: "storeCancelIdentity" }
   | { type: "storeSavePayoutAccount"; bankCode: string; accountNumber: string; holderName: string }
   | { type: "storeRun"; itemId: string }

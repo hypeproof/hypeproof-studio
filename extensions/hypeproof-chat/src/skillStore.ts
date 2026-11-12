@@ -3,7 +3,7 @@
 // decides every rule (price caps, age, refund window, fraud block); the App only shows the result
 // and the Service's reason. Custody (design v1 D1): the App receives the public layer of a skill
 // only. A run is composed by the Service on the buyer's chat turn; no call returns the seller's text.
-import type { StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
+import type { StoreBuyerOrderView, StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
 
 export class StoreClientError extends Error {
   readonly code: string;
@@ -80,7 +80,7 @@ export class StoreClient {
     return Array.isArray(r?.items) ? r.items : [];
   }
   me() {
-    return this.call<{ age_group: "adult" | "minor" | "unknown"; installs: StoreInstallView[]; can_buy_paid: boolean }>("/me");
+    return this.call<{ age_group: "adult" | "minor" | "unknown"; installs: StoreInstallView[]; can_buy_paid: boolean; orders?: StoreBuyerOrderView[] }>("/me");
   }
   seller() {
     return this.call<StoreSellerView>("/seller");
@@ -102,6 +102,14 @@ export class StoreClient {
    */
   savePayoutAccount(input: { bank_code: string; account_number: string; holder_name: string }) {
     return this.call<Omit<Extract<StorePayoutAccountView, { state: "on_file" }>, "state" | "prompt_at_krw">>("/seller/payout-account", { method: "PUT", body: input });
+  }
+  /** The gateway's receipt page for one of the buyer's purchases; only an https page is ever opened. */
+  async receipt(orderId: string): Promise<string> {
+    const r = await this.call<{ receipt_url: string }>(`/orders/${encodeURIComponent(orderId)}/receipt`);
+    let url: URL | null = null;
+    try { url = new URL(r?.receipt_url); } catch { /* malformed */ }
+    if (!url || url.protocol !== "https:" || url.username || url.password) throw new StoreClientError("receipt_unavailable");
+    return url.toString();
   }
   /** Starts a mobile identity verification; only the Service's own verification page is ever opened. */
   async startIdentity(): Promise<{ session_id: string; verify_url: string; sandbox: boolean }> {
@@ -287,7 +295,9 @@ const ERRORS: Record<string, string> = {
   payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
   invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
   holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
-  course_store_blocked: "이 과정에서는 스킬을 팔 수 없어요. 청소년 과정 수강생은 스토어에 스킬을 올리거나 팔 수 없어요.",
+  course_store_blocked: STORE_COPY.courseBlocked,
+  receipt_unavailable: "지금은 영수증을 불러올 수 없어요. 잠시 뒤 다시 시도해 주세요.",
+  order_not_found: "이 결제 내역을 찾을 수 없어요.",
   identity_failed: "본인인증을 하지 못했어요. 정보를 확인한 뒤 다시 시도해 주세요.",
   identity_expired: "본인인증 시간이 지났어요. 다시 시작해 주세요.",
   identity_in_use: "이미 다른 계정에서 판매자 인증을 한 정보예요. 한 사람은 한 계정에서만 판매할 수 있어요.",

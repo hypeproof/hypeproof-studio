@@ -110,7 +110,20 @@ function Browse({ state, busy, send }: { state: StoreState; busy: boolean; send:
   </section>;
 }
 
+/** The buyer's purchases with the gateway's receipt; a refund removes the install but not this row (#3774). */
+function Orders({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
+  if (!state.orders?.length) return null;
+  const label = { paid: "결제 완료", refunding: "환불 처리 중", refunded: "환불됨" } as const;
+  return <section aria-label="구매 내역"><h2>구매 내역</h2><ul>{state.orders.map(o => <li key={o.order_id}>
+    {o.title} · {won(o.amount)} · {label[o.state]} · {day(o.refunded_at ?? o.paid_at)}{" "}
+    <button disabled={busy} onClick={() => send({ type: "storeReceipt", orderId: o.order_id })}>영수증 보기</button>
+  </li>)}</ul></section>;
+}
+
 function Mine({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
+  return <><MineInstalls state={state} busy={busy} send={send} /><Orders state={state} busy={busy} send={send} /></>;
+}
+function MineInstalls({ state, busy, send }: { state: StoreState; busy: boolean; send: (m: StoreRequest) => void }) {
   const [reporting, setReporting] = useState<string | undefined>();
   const [reason, setReason] = useState("");
   if (!state.installs.length) return <p>아직 설치한 스킬이 없어요.</p>;
