@@ -251,6 +251,8 @@
         "CH-06",
         "CH-07",
         "CH-08",
+        "CH-09",
+        "CH-10",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -292,7 +294,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "27d18cb7a6512730c11afbc46b550cf91b93374fa036bcf5fda09c2967b680aa",
+      "sha256": "9727acfd579ace0bf221f7cab3bde02384b68a563d6abf3c1c241885610453d2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -386,7 +388,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "bea279a4ecc66363548ffa11dd85680af21300779535f4710c8cb30b962747ab",
+      "sha256": "fe4bdcaba96059fa9f15e4f4cd05169af63ed68d78655ae33d0d56ab0a8fb4ff",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -899,6 +901,33 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
       "test": "docs/testing/desktop-mobile-companion.md"
+    },
+    {
+      "path": "docs/requirements/mobile-growth-roadmap.md",
+      "ids": [
+        "MREF-01",
+        "MREF-02",
+        "MREF-03",
+        "MREF-04",
+        "MREF-05",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05",
+        "MPER-01",
+        "MPER-02",
+        "MPER-03",
+        "MPER-04",
+        "MPER-05",
+        "MIRS-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/mobile-growth-roadmap.md",
+      "test": "docs/testing/native-mobile-growth.md"
     }
   ],
   "work_items": [
@@ -1294,7 +1323,9 @@
             "ENV-03",
             "ENV-04",
             "ENV-07",
-            "CH-08"
+            "CH-08",
+            "CH-09",
+            "CH-10"
           ]
         }
       ],
@@ -4419,6 +4450,158 @@
         "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
         "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
         "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+      ]
+    },
+    {
+      "id": "mobile-reflection-v1",
+      "title": "Native reflection and searchable project library",
+      "issue": 3688,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MREF-01",
+            "MREF-02",
+            "MREF-03",
+            "MREF-04",
+            "MREF-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Implement iOS/Android reflection, verify old data and failed-save recovery, run native CI, then promote a verified testing candidate. Source and simulator evidence are partial; physical acceptance remains open.",
+      "design_delta": "Five optional local human-owned notes. Library title/search derives from notes without modifying confirmed intent. No new AI policy or runtime.",
+      "positive_control": "A returning user finds a reflection-only thought, adds a learning note, restarts and recovers all saved fields.",
+      "negative_control": "A failed observation save followed by another successful save never drops visible observation text. Notes from this or another project are never silently sent to AI.",
+      "evidence_required": "Exact-source native tests, independent review and installed-device observation. Source edits alone do not fulfill the complete requirement.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/ios/Sources/StudioCore/Intent.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioState.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "mobile-voice-v1",
+      "title": "Native on-device voice with explicit send and stop boundaries",
+      "issue": 3687,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MVOICE-01",
+            "MVOICE-02",
+            "MVOICE-03",
+            "MVOICE-04",
+            "MVOICE-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
+      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
+      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
+      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
+      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/App/StudioModel.swift",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/VoiceSession.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/MainActivity.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "personal-reflection-v1",
+      "title": "Account-owned first question on iPhone and existing desktop",
+      "issue": 3725,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-01",
+            "MPER-02",
+            "MPER-03",
+            "MPER-04",
+            "MPER-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Complete independent verification, native CI and release-pinned installed-device acceptance. No physical or question-quality pass is inferred from source tests.",
+      "design_delta": "Reuse account sessions, server conversations and the existing desktop task store; add cloud-owned personal reflection separate from host-owned build tasks.",
+      "positive_control": "A phone user receives a question with the desktop closed and later opens the exact conversation in existing Studio.",
+      "negative_control": "An uncertain response, account switch, stale snapshot or cancellation preserves words and cannot execute an extra paid turn or desktop tools.",
+      "evidence_required": "Pinned Service and Studio source, independent review, native CI, existing desktop and physical iPhone evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/personalReflection.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/accountSession.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection.test.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs",
+        "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "ios-credential-continuity-v1",
+      "title": "Preserve iPhone account identity through interrupted refresh",
+      "issue": 3736,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MIRS-01"
+          ]
+        }
+      ],
+      "depends_on": [
+        "personal-reflection-v1"
+      ],
+      "next_action": "Verify credential intent persistence, identity checks and actual simulator Keychain, then signed same-account continuity. Parent #3729 remains the release prerequisite.",
+      "design_delta": "Persist refresh intent in the existing credential item; validate active same-account/session before adopting rotation.",
+      "positive_control": "Valid rotation preserves the account and existing question conversation.",
+      "negative_control": "Interruption, failed storage or mismatched account cannot replay or adopt a credential; drafts remain.",
+      "evidence_required": "Pinned Swift controls, actual Keychain simulator evidence and separately reported physical/live authentication.",
+      "implementation_paths": [
+        "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     }
   ]

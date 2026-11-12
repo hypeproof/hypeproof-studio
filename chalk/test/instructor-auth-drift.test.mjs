@@ -3,6 +3,8 @@
 // their original status and error prose. Chalk has no token verifier, signing key
 // or participant store; only the public routing predicate is shared code.
 // Administrator Basic remains a direct Service capability and is refused here.
+// On the Chalk side each fixture token is the Lab-connected session's issuer
+// (harness/connect.mjs); Chalk itself refuses any Authorization a request brings.
 
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -10,11 +12,12 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootApp, createMockEnv, makeCtx, TEST_SECRET } from "@hypeproof/service-testkit/test/harness/index.mjs";
+import { withBearerAsConnection } from './harness/connect.mjs';
 
 const service = await bootApp();                                   // worker/src/index.ts
 const { default: localChalk } = await import("../src/index.ts");
 const { bridgeStateToService } = await import("./harness/service-state.mjs");
-const chalk = bridgeStateToService(localChalk);        // chalk/src/index.ts
+const chalk = bridgeStateToService(withBearerAsConnection(localChalk));        // chalk/src/index.ts
 const tokens = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
 const auth = await import("@hypeproof/service-testkit/src/lib/instructor-auth.ts");
 const shared = await import("../src/shared.ts");

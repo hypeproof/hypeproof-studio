@@ -101,14 +101,13 @@
   <div class="sub">모든 좌석이 항상 한 줄씩. 조용한 좌석이 먼저 보입니다. 10초마다 갱신.</div>
 
   <fieldset id="setup">
-    <legend>① 강사 issuer 토큰 · cohort</legend>
-    <textarea id="issuer" rows="3" placeholder="eyJjIgi… (강사 토큰)"></textarea>
+    <legend>① 강사 연결 · cohort</legend>
+    <!--@chalk-connect-->
     <label for="cohort">cohort id</label>
     <input id="cohort" placeholder="kids-workshop-2026-a" autocapitalize="off" spellcheck="false">
     <label for="prefix">좌석 prefix (비우면 <em>접속한 좌석만</em> 보입니다)</label>
     <input id="prefix" placeholder="KW34-CM6YPX-" autocapitalize="off" spellcheck="false">
     <button id="go">보드 열기 →</button>
-    <button class="ghost" id="forget" type="button">토큰 지우기</button>
   </fieldset>
 
   <div id="banners"></div>
@@ -123,17 +122,6 @@
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 10000;   // §4: polling. No SSE, no Durable Objects.
 
-// Paste normalization — same rule as /console and /issuer (issue #65).
-function sanitizeToken(raw) {
-  if (typeof raw !== "string") return "";
-  let s = raw.replace(/\s+/g, "").replace(/[​-‍﻿⁠]/g, "");
-  for (let i = 0; i < 8; i++) {
-    const before = s;
-    s = s.replace(/^["'`,\[\]\{\}\s]+/, "").replace(/["'`,\[\]\{\}\s]+$/, "");
-    if (s === before) break;
-  }
-  return s;
-}
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -150,21 +138,19 @@ function dur(ms) {
 }
 const unk = '<span class="u">—</span>';
 
-const KEY = "hps_issuer_token";
+// Cohort and prefix are not credentials; the instructor issuer stays in the
+// httpOnly Lab login session and never reaches this page.
 const CKEY = "hps_board_cohort";
 const PKEY = "hps_board_prefix";
 (function () {
-  const m = /[#&]t=([^&]+)/.exec(location.hash || "");
-  if (m) { $("issuer").value = sanitizeToken(decodeURIComponent(m[1])); history.replaceState(null, "", location.pathname + location.search); }
   const q = new URLSearchParams(location.search);
-  if (!$("issuer").value && sessionStorage.getItem(KEY)) $("issuer").value = sessionStorage.getItem(KEY);
   $("cohort").value = q.get("cohort") || sessionStorage.getItem(CKEY) || "";
   $("prefix").value = q.get("seat_prefix") || sessionStorage.getItem(PKEY) || "";
 })();
-$("forget").onclick = () => {
-  sessionStorage.removeItem(KEY); $("issuer").value = "";
+globalThis.chalkConnection?.onChange((c) => {
+  if (c.connected) return;
   stop(); $("banners").innerHTML = $("summary").innerHTML = $("tbl").innerHTML = $("foot").innerHTML = "";
-};
+});
 
 let timer = null, readGeneration = 0;
 function stop() {
@@ -173,22 +159,24 @@ function stop() {
 
 function mapServerError(raw) {
   const e = String(raw || "").toLowerCase();
-  if (e.includes("expired")) return "issuer 토큰이 만료됐어요. 재발급 받아주세요.";
-  if (e.includes("revoked")) return "이 토큰은 무효화됐어요.";
-  if (e.includes("not an issuer")) return "학생 토큰이 붙여넣어졌어요. 강사(issuer) 토큰이 필요해요.";
-  if (e.includes("not scoped")) return "이 토큰의 권한 범위 밖 cohort예요.";
-  if (e.includes("invalid signature") || e.includes("malformed")) return "토큰이 손상됐어요. 공백·따옴표 없이 다시 붙여넣어 주세요.";
+  // Chalk's own connection refusals are already Korean and actionable.
+  if (/연결/.test(e)) return String(raw);
+  if (e.includes("expired")) return "강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.";
+  if (e.includes("revoked")) return "이 강사 연결은 무효화됐어요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("not an issuer")) return "강사 권한이 아닌 연결이에요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("not scoped")) return "연결할 때 고르지 않은 cohort예요. ‘다시 연결’에서 이 수업을 골라주세요.";
+  if (e.includes("invalid signature") || e.includes("malformed")) return "강사 연결 정보를 확인하지 못했어요. ‘다시 연결’을 눌러주세요.";
   return "오류: " + raw;
 }
 
 async function load() {
   const generation=++readGeneration;
-  const token = sanitizeToken($("issuer").value);
   const cohort = $("cohort").value.trim();
   const prefix = $("prefix").value.trim();
-  const current=()=>generation===readGeneration && token===sanitizeToken($("issuer").value) && cohort===$("cohort").value.trim() && prefix===$("prefix").value.trim();
-  if (!token || !cohort) { stop(); $("banners").innerHTML = '<div class="banner err">토큰과 cohort id를 채워주세요.</div>'; return; }
-  sessionStorage.setItem(KEY, token);
+  const current=()=>generation===readGeneration && cohort===$("cohort").value.trim() && prefix===$("prefix").value.trim();
+  const conn = globalThis.chalkConnection?.current;
+  if (!conn || !conn.connected) { stop(); $("banners").innerHTML = '<div class="banner err">위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.</div>'; return; }
+  if (!cohort) { stop(); $("banners").innerHTML = '<div class="banner err">cohort id를 채워주세요.</div>'; return; }
   sessionStorage.setItem(CKEY, cohort);
   sessionStorage.setItem(PKEY, prefix);
 
@@ -196,7 +184,7 @@ async function load() {
   if (prefix) url += "?seat_prefix=" + encodeURIComponent(prefix);
   let body;
   try {
-    const res = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    const res = await fetch(url, { cache: "no-store" });
     body = await res.json();
     if (!current()) return;
     if (!res.ok) {
@@ -258,7 +246,7 @@ function render(b) {
 }
 
 $("go").onclick = () => { stop(); load(); timer = setInterval(load, POLL_MS); };
-if ($("issuer").value && $("cohort").value) $("go").click();
+globalThis.chalkConnection?.ready.then((c) => { if (c.connected && $("cohort").value) $("go").click(); });
 </script>
 </body>
 </html>

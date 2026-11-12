@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-const { default: chalk } = await import('../src/index.ts');
+import { withBearerAsConnection } from './harness/connect.mjs';
+const chalk = withBearerAsConnection((await import('../src/index.ts')).default);
 
 const batch = { cohort: 'workshop-a', profile: 'workshop-a-activity', users: ['first', 'second'], hours: 12 };
 const result = { results: [{ handle: 'first', token: 'student-only' }], board: { code: 'NAMED2', total: 1 } };

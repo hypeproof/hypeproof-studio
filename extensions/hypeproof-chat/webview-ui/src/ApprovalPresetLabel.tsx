@@ -4,7 +4,7 @@
 // (`approval_preset`, approvalPreset.ts) and changes only at a turn boundary.
 import { useEffect, useRef } from "react";
 import { ChatIcon } from "./ChatDetails";
-import type { ServedApprovalPreset } from "../../src/approvalPreset";
+import { APPROVAL_PRESET_NAME, type ServedApprovalPreset } from "../../src/approvalPreset";
 
 /**
  * What the label shows: while a turn runs it keeps the preset the turn started under; between
@@ -38,7 +38,7 @@ export function ApprovalPresetLabel({ preset }: { preset: ServedApprovalPreset |
     data-approval-preset={preset.id}
     tabIndex={0}
     role="note"
-    aria-label={`승인 방식: ${preset.label}. ${tooltip}`}
+    aria-label={`${APPROVAL_PRESET_NAME}: ${preset.label}. ${tooltip}`}
     data-hp-tooltip={`${preset.label} — ${tooltip}`}
   >
     <ChatIcon kind="lock" size={16} />

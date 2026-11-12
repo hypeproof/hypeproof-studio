@@ -1,5 +1,6 @@
-/** View-only paste segments. Persistence, queueing and sending always use fullDraft(). */
-export type DraftPart = { text: string; id?: number };
+/** View-only paste segments. Persistence, queueing and sending always use fullDraft(). A `quote` part is the
+ * CGP-CHAT-D-007 quote chip (quoteReply.ts `withQuote`): hidden from the editor like a folded paste, drawn as its own chip. */
+export type DraftPart = { text: string; id?: number; quote?: true };
 export const pasteLines = (text: string): number => text.split(/\r\n|\r|\n/).length;
 export const longPaste = (text: string): boolean => [...text].length > 2000 || pasteLines(text) > 40;
 export const fullDraft = (parts: DraftPart[]): string => parts.map(p => p.text).join('');

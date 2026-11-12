@@ -12,11 +12,12 @@
 import assert from "node:assert/strict";
 // The public development artifact loads real Service modules and Chalk HTML.
 import "@hypeproof/service-testkit/test/harness/loader.mjs";
+import { withBearerAsConnection } from './harness/connect.mjs';
 
 const SECRET = "test-secret-" + "x".repeat(20);
 const { default: localChalk } = await import("../src/index.ts");
 const { bridgeStateToService } = await import("./harness/service-state.mjs");
-const chalk = bridgeStateToService(localChalk);
+const chalk = bridgeStateToService(withBearerAsConnection(localChalk));
 // Test-side minting only. Chalk itself imports NO signing code (src/shared.ts).
 const { issue, issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
 const { startSession } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
@@ -157,10 +158,11 @@ await check("state: reflects a session the Service wrote into the shared KV", as
 
 // --- 3. state read: auth boundaries -----------------------------------------
 
-await check("state: no Authorization → 401 (Chalk has no admin path)", async () => {
+await check("state: no Lab connection → 401 (Chalk has no admin path)", async () => {
   const { status, json } = await fetchOnce(`/admin/cohorts/${COHORT}/state`);
   assert.equal(status, 401);
-  assert.match(json.error, /issuer token required/);
+  assert.equal(json.reason, "not_connected");
+  assert.match(json.error, /Lab 로그인으로 연결/);
 });
 
 await check("state: admin Basic is NOT an auth path on Chalk → 401", async () => {

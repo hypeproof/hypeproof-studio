@@ -18,11 +18,12 @@
 
 import assert from "node:assert/strict";
 import "@hypeproof/service-testkit/test/harness/loader.mjs";
+import { withBearerAsConnection } from './harness/connect.mjs';
 
 const SECRET = "test-secret-" + "x".repeat(20);
 const { default: localChalk } = await import("../src/index.ts");
 const { bridgeStateToService } = await import("./harness/service-state.mjs");
-const chalk = bridgeStateToService(localChalk);
+const chalk = bridgeStateToService(withBearerAsConnection(localChalk));
 const { issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
 const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
 const { setRoster, startSession, pauseCohort } = await import("@hypeproof/service-testkit/src/lib/kv.ts");

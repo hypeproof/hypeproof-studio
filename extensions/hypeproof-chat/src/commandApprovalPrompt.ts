@@ -27,9 +27,9 @@ export interface CommandApprovalPrompt { id: string; purpose: CommandApprovalPur
 export type CommandApprovalChoice = 'allow' | 'deny' | 'remember';
 export class CommandApprovalRequest {
   private pending?: { prompt: CommandApprovalPrompt; scope: string; finish(choice: CommandApprovalChoice): void };
-  private readonly ports: { scope(): string; present(prompt: CommandApprovalPrompt | null): Promise<boolean | void>; expired?(id: string): void };
+  private readonly ports: { scope(): string; present(prompt: CommandApprovalPrompt | null): Promise<boolean | void>; expired?(id: string): void; refused?(id: string): void };
   private readonly timeoutMs: number;
-  constructor(ports: { scope(): string; present(prompt: CommandApprovalPrompt | null): Promise<boolean | void>; expired?(id: string): void }, timeoutMs = 180_000) { this.ports=ports; this.timeoutMs=timeoutMs; }
+  constructor(ports: { scope(): string; present(prompt: CommandApprovalPrompt | null): Promise<boolean | void>; expired?(id: string): void; refused?(id: string): void }, timeoutMs = 180_000) { this.ports=ports; this.timeoutMs=timeoutMs; }
   confirm(prompt: CommandApprovalPrompt): Promise<CommandApprovalChoice> {
     this.invalidate();
     if (this.pending || !prompt.id) return Promise.resolve('deny');
@@ -44,6 +44,8 @@ export class CommandApprovalRequest {
     const pending = this.pending;
     if (!pending || id !== pending.prompt.id) return;
     if (pending.scope !== this.ports.scope()) { this.cancel(); return; }
+    // #3594 — a learner's refusal is recorded once; a cancel (turn end) never reaches here.
+    if (choice === 'deny') this.ports.refused?.(pending.prompt.id);
     if (choice === 'deny' || choice === 'allow') pending.finish(choice);
     else if (choice === 'remember' && pending.prompt.rememberAllowed && !pending.prompt.destructive) pending.finish('remember');
   }

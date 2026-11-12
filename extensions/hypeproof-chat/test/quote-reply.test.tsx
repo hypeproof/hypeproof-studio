@@ -1,5 +1,5 @@
 import { staticTokens } from "./lib/expand-design-tokens.mjs";
-// CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY) — quote part of one answer into the next message.
+// CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY) / CGP-CHAT-D-007 — quote part of one answer into the next message.
 // Bundled with esbuild and run with plain Node, like code-block-tools.test.tsx. The pure part
 // (quoteReply.ts) is checked directly; the interactive part mounts ChatPanel with react-dom/client
 // on the minimal DOM (fixtures/mini-dom.mjs, loaded first), stubs document.getSelection with a
@@ -12,7 +12,9 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { mergeQuoteIntoDraft, quoteFromSelection, toQuoteBlock, QUOTE_CUT_NOTE, QUOTE_LABEL, QUOTE_MAX, QUOTE_SCOPE_ATTR } from "../webview-ui/src/quoteReply";
+import { placeQuote, quoteChipText, quoteFromSelection, toQuoteBlock, withQuote, QUOTE_CUT_NOTE, QUOTE_FLIP_MIN, QUOTE_GAP, QUOTE_LABEL, QUOTE_MAX, QUOTE_SCOPE_ATTR } from "../webview-ui/src/quoteReply";
+import { QUOTE_CHIP_LABEL, QUOTE_REMOVE_LABEL } from "../webview-ui/src/QuoteAction";
+import { changePaste, fullDraft, visibleDraft } from "../webview-ui/src/pastedDraft";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -265,12 +267,44 @@ t("selectionchange is read at most once per animation frame (a drag fires it on 
   await v.unmount();
 });
 
-t("mergeQuoteIntoDraft: keeps the draft as the exact prefix, one blank line before and after the quote", () => {
-  eq(mergeQuoteIntoDraft("", "> q"), "> q\n\n", "empty draft");
-  eq(mergeQuoteIntoDraft("안녕", "> q"), "안녕\n\n> q\n\n", "draft without newline");
-  eq(mergeQuoteIntoDraft("안녕\n", "> q"), "안녕\n\n> q\n\n", "draft with one newline");
-  eq(mergeQuoteIntoDraft("안녕\n\n", "> q"), "안녕\n\n> q\n\n", "draft with a blank line");
-  ok(mergeQuoteIntoDraft("  첫 생각  ", "> q").startsWith("  첫 생각  "), "draft text changed");
+t("withQuote: the quote is the draft's first part, hidden from the editor; the typed text is kept byte for byte; a new quote replaces it", () => {
+  const typed = [{ text: "  첫 생각  " }];
+  const one = withQuote(typed, "> q", 1);
+  eq(fullDraft(one), "> q\n\n  첫 생각  ", "full draft (what is sent and saved)");
+  eq(visibleDraft(one), "  첫 생각  ", "editor text");
+  eq(one.filter((p) => p.quote).length, 1, "one quote part");
+  const two = withQuote(one, "> 둘째", 2);
+  eq(fullDraft(two), "> 둘째\n\n  첫 생각  ", "second quote replaces the first");
+  eq(two.filter((p) => p.quote).length, 1, "still one quote part");
+  const folded = withQuote([{ text: "앞 " }, { text: "긴 글", id: 7 }, { text: " 뒤" }], "> q", 3);
+  eq(fullDraft(folded), "> q\n\n앞 긴 글 뒤", "a folded paste stays where it was");
+  eq(fullDraft(changePaste(folded, 3, null)), "앞 긴 글 뒤", "× removes only the quote");
+  eq(fullDraft(withQuote([{ text: "" }], "> q", 4)), "> q\n\n", "empty draft");
+});
+
+t("quoteChipText: no `> ` marks, lines joined by a space", () => {
+  eq(quoteChipText({ text: "> 첫 줄\n>\n> 둘째 줄\n\n", id: 1, quote: true }), "첫 줄 둘째 줄", "chip text");
+});
+
+t(`placeQuote: above the first line, centred; below the last line when the top is under ${QUOTE_FLIP_MIN}px from the conversation's top`, () => {
+  const view = { top: 100, bottom: 700, left: 0, right: 400 }, row = { top: 0, bottom: 2000, left: 20, right: 380 }, size = { width: 80, height: 46 };
+  const line = (top: number, left = 100, right = 200) => ({ top, bottom: top + 20, left, right });
+  const above = placeQuote(line(300), line(340), view, row, size);
+  eq(above.side, "above", "room above");
+  eq(above.top, 300 - QUOTE_GAP - 46, "bottom edge sits the gap above the first line");
+  eq(above.left, 110, "centred on the first line");
+  eq(placeQuote(line(100 + QUOTE_FLIP_MIN), line(300), view, row, size).side, "above", `exactly ${QUOTE_FLIP_MIN}px: still above`);
+  const below = placeQuote(line(100 + QUOTE_FLIP_MIN - 1), line(300, 250, 330), view, row, size);
+  eq(below.side, "below", `${QUOTE_FLIP_MIN - 1}px: flips`);
+  eq(below.top, 320 + QUOTE_GAP, "top edge sits the gap below the last line");
+  eq(below.left, 250, "centred on the last line");
+  eq(placeQuote(line(400), line(400), view, row, { width: 80, height: 60 }).side, "above", "a taller popover still fits above");
+  eq(placeQuote(line(150), line(160), view, row, { width: 80, height: 60 }).side, "below", "a popover taller than the 48px floor flips earlier, never under the header");
+  eq(placeQuote(line(300, 0, 30), line(300), view, row, size).left, 20, "kept inside the row on the left");
+  eq(placeQuote(line(300, 360, 380), line(300), view, row, size).left, 300, "kept inside the row on the right");
+  const tall = placeQuote(line(90), line(900), view, row, size);
+  eq(tall.top, 700 - 46, "a selection taller than the view keeps the popover inside it");
+  eq(placeQuote(line(-400), line(-200), view, row, size).top, -180 + QUOTE_GAP, "a selection scrolled out of view takes the popover with it");
 });
 
 t("CSS: 44px target, tokens only for motion, no score or capability wording in the slice", () => {
@@ -278,6 +312,10 @@ t("CSS: 44px target, tokens only for motion, no score or capability wording in t
   const btn = /\.hps-quote-action \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height: 44px/.test(btn) && /min-width: 44px/.test(btn), "44px");
   ok(/var\(--hp-dur-/.test(css) && !/\d+m?s\b/.test(css.replace(/var\([^)]*\)/g, "")), "literal duration");
+  const row = /\.hps-quote-row \{([^}]*)\}/.exec(css)?.[1] ?? "";
+  ok(/position: absolute/.test(row) && !/animation/.test(row), "D-007: the popover is out of flow and drawn at once (no fade)");
+  const chip = /\.hps-quote-chip-text \{([^}]*)\}/.exec(css)?.[1] ?? "";
+  ok(/-webkit-line-clamp: 2/.test(chip) && /text-overflow: ellipsis/.test(chip) && /overflow: hidden/.test(chip), "D-007: the chip text is two lines with an ellipsis");
   const src = readFileSync("webview-ui/src/quoteReply.ts", "utf8") + readFileSync("webview-ui/src/QuoteAction.tsx", "utf8");
   ok(!/FRAMING|JUDGMENT|ORCHESTRATE|VERIFY|OWNERSHIP|점수|역량/.test(src), "capability/score label");
   eq(QUOTE_LABEL, "인용하기", "label");
@@ -298,18 +336,26 @@ const press = (el: El) => act(async () => { click(el); });
 const cls = (e: El) => (e.getAttribute("class") ?? "").split(" ");
 
 const mounted: Root[] = [];
-async function mount(config: ChatConfig, messages: ChatMessage[] = CONVO, extra: object = {}) {
+async function mount(config: ChatConfig, messages: ChatMessage[] = CONVO, extra: { onSend?: (text: string) => void; streaming?: boolean; streamingId?: string | null } = {}) {
   current = null;
   const host = mountPoint() as unknown as El;
   const root = createRoot(host as unknown as HTMLElement);
   mounted.push(root);
-  await act(async () => { root.render(<ChatPanel {...PROPS} {...extra} config={config} instructor={false} messages={messages} />); });
+  const sent: string[] = [];
+  const props = { ...PROPS, ...extra, onSend: (text: string) => { sent.push(text); extra.onSend?.(text); } };
+  const render = (next: object = {}) => act(async () => { root.render(<ChatPanel {...props} {...next} config={config} instructor={false} messages={messages} />); });
+  await render();
   const body = (id: string) => host.findAll((e) => e.getAttribute(QUOTE_SCOPE_ATTR) === id)[0];
   const buttons = () => host.findAll((e) => e.localName === "button" && e.textContent === QUOTE_LABEL);
   const textarea = () => host.findAll((e) => e.localName === "textarea")[0];
+  const chips = () => host.findAll((e) => e.getAttribute("role") === "group" && e.getAttribute("aria-label") === QUOTE_CHIP_LABEL);
+  const chipText = () => chips()[0]?.findAll((e) => cls(e).includes("hps-quote-chip-text"))[0]?.textContent;
+  const removeChip = () => press(chips()[0].findAll((e) => e.localName === "button" && e.getAttribute("aria-label") === QUOTE_REMOVE_LABEL)[0]);
+  const send = async () => { const button = host.findAll((e) => e.localName === "button" && cls(e).includes("hps-btn-send"))[0]; ok(button && !button.hasAttribute("disabled"), "send button missing or disabled"); await press(button); await settle(); return sent.at(-1) ?? ""; };
   const select = async (s: Pt, e: Pt) => { current = sel(s, e); await selectionChange(); };
-  const quote = async () => { eq(buttons().length, 1, "quote buttons"); await press(buttons()[0]); await settle(); return textarea().value; };
-  return { host, body, buttons, textarea, select, quote, unmount: () => act(async () => root.unmount()) };
+  /** Press 인용하기, check that it became the composer chip, then send: the text that goes out. */
+  const quote = async () => { eq(buttons().length, 1, "quote buttons"); await press(buttons()[0]); await settle(); eq(chips().length, 1, "quote chips"); return send(); };
+  return { host, body, buttons, textarea, chips, chipText, removeChip, send, sent, select, quote, render, unmount: () => act(async () => root.unmount()) };
 }
 /** The answer text (not the speaker label) of the last or first assistant row, whatever its marking. */
 const answerBody = (host: El, which: "first" | "last") => {
@@ -322,22 +368,27 @@ const rowOf = (e: El) => { let n: El | null = e.nodeType === 1 ? e : e.parentNod
 const RICH = "첫 문단입니다.\n\n```js\nconst x = 1;\nconsole.log(x);\n```\n\n중간 문단.\n\n~~~\nnpm test\n~~~\n\n마지막 문단입니다.";
 
 for (const [mode, config] of [["personal", personal], ["classroom", classroom]] as const) {
-  t(`${mode}: select inside an answer → 인용하기 under that answer → press → draft is the > block, focus at its end, nothing sent`, async () => {
-    let sent = 0;
-    const v = await mount(config, CONVO, { onSend: () => { sent++; } });
+  t(`${mode}: select inside an answer → 인용하기 on that answer → press → the quote chip, the typed draft untouched, focus at its end, nothing sent; send → the > block first`, async () => {
+    const v = await mount(config);
     ok(v.body("a1") && v.body("a2"), "answers not marked quotable");
     ok(!v.host.findAll((e) => e.getAttribute(QUOTE_SCOPE_ATTR) === "u1").length, "a user line is quotable");
     eq(v.buttons().length, 0, "button before any selection");
     await v.select(at(v.body("a1"), "100도"), at(v.body("a1"), "끓어요", "end"));
     eq(v.buttons().length, 1, "button count after selecting");
-    ok(rowOf(v.buttons()[0]) === rowOf(v.body("a1")), "button is not under the selected answer");
+    ok(rowOf(v.buttons()[0]) === rowOf(v.body("a1")), "button is not on the selected answer");
     eq(rowOf(v.body("a1")).getAttribute("data-quote-row"), "a1", "row not marked for the same-message clamp");
-    eq(await v.quote(), "> 100도에서 끓어요\n\n", "draft");
+    await press(v.buttons()[0]); await settle();
+    eq(v.chips().length, 1, "quote chip in the composer");
+    eq(v.chipText(), "100도에서 끓어요", "chip text");
+    ok(cls(v.chips()[0].parentNode!).includes("hps-file-context-stack") && cls(v.chips()[0].parentNode!.parentNode!).includes("hps-input"), "chip is not inside the composer card");
+    eq(v.textarea().value, "", "the quote went into the editor text");
     ok(doc.activeElement === (v.textarea() as unknown), "composer not focused");
     eq(v.textarea().selectionStart, v.textarea().value.length, "caret not at the end");
     eq(v.buttons().length, 0, "button still shown after quoting");
     eq(current, null, "selection not cleared");
-    eq(sent, 0, "quoting sent a message");
+    eq(v.sent.length, 0, "quoting sent a message");
+    eq(await v.send(), "> 100도에서 끓어요", "sent text");
+    eq(v.chips().length, 0, "chip left after sending");
     await v.unmount();
   });
 
@@ -348,14 +399,14 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     ok(b().textContent.includes(label) && b().textContent.includes("줄 바꿈"), `fixture: labels not rendered inside the body: ${b().textContent}`);
     await v.select(textStart(b()), at(b(), "마지막 문단입니다.", "end"));
     ok(current!.toString().includes("복사"), "fixture: toString() should carry the labels");
-    eq(await v.quote(), "> 첫 문단입니다.\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.\n\n", "closed pill");
+    eq(await v.quote(), "> 첫 문단입니다.\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.", "closed pill");
     const toggle = v.host.findAll((e) => cls(e).includes("hps-codepill-toggle"))[0];
     await press(toggle);
     await v.select(textStart(b()), at(b(), "마지막 문단입니다.", "end"));
     const tools = v.host.findAll((e) => cls(e).includes("hps-codeblock-tools"));
     ok(tools.length === 2 && tools.every((e) => e.getAttribute("data-quote-skip") === ""), "code-block tool rows not marked data-quote-skip");
     const draft = await v.quote();
-    eq(draft.slice(draft.indexOf("> 첫 문단입니다.", 2)), "> 첫 문단입니다.\n>\n> const x = 1;\n> console.log(x);\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.\n\n", "open pill");
+    eq(draft, "> 첫 문단입니다.\n>\n> const x = 1;\n> console.log(x);\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.", "open pill");
     ok(!/복사|줄 바꿈|코드 숨기기|코드 보기/.test(draft), `labels leaked: ${JSON.stringify(draft)}`);
     await v.unmount();
   });
@@ -376,18 +427,29 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     const v = await mount(config);
     const next = rowOf(at(v.host, "더 알려줘").node);
     await v.select(textStart(v.body("a1")), { node: next, offset: 0 });
-    eq(await v.quote(), "> 물은 100도에서 끓어요.\n\n", "quote");
+    eq(await v.quote(), "> 물은 100도에서 끓어요.", "quote");
     await v.unmount();
   });
 
-  t(`${mode}: an existing draft is kept and the quote follows it`, async () => {
+  t(`${mode}: an existing draft is kept as typed; the quote goes first when sent; a second quote replaces the chip; × removes it`, async () => {
     const v = await mount(withDraft(config, "내 생각은"));
     eq(v.textarea().value, "내 생각은", "draft restored");
     await v.select(at(v.body("a2"), "높은 산에서는"), at(v.body("a2"), "낮은 온도", "end"));
-    eq(await v.quote(), "내 생각은\n\n> 높은 산에서는 더 낮은 온도\n\n", "merged draft");
-    // A second quote also keeps everything that is there.
+    await press(v.buttons()[0]); await settle();
+    eq(v.textarea().value, "내 생각은", "typed draft changed");
+    eq(v.chipText(), "높은 산에서는 더 낮은 온도", "first chip");
     await v.select(at(v.body("a1"), "100도"), at(v.body("a1"), "100도", "end"));
-    eq(await v.quote(), "내 생각은\n\n> 높은 산에서는 더 낮은 온도\n\n> 100도\n\n", "second quote");
+    await press(v.buttons()[0]); await settle();
+    eq(v.chips().length, 1, "one chip after a second quote");
+    eq(v.chipText(), "100도", "second quote replaced the chip");
+    eq(await v.send(), "> 100도\n\n내 생각은", "sent text");
+    await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+    await press(v.buttons()[0]); await settle();
+    (v.textarea() as unknown as { setSelectionRange(a: number, b: number): void }).setSelectionRange?.(0, 0);
+    await v.removeChip();
+    eq(v.chips().length, 0, "× did not remove the chip");
+    eq(v.textarea().value, "", "× changed the typed draft");
+    ok(doc.activeElement === (v.textarea() as unknown), "focus after × is not the composer");
     await v.unmount();
   });
 }
@@ -403,7 +465,7 @@ t("personal: triple-click on the last paragraph ends in the citation rack or the
   const copy = row.findAll((e) => e.getAttribute("aria-label") === "답변 복사")[0];
   ok(copy, "copy action not rendered");
   await v.select(at(v.body("a1"), "마지막 문단."), { node: allText(copy)[0], offset: 0 });
-  eq(await v.quote(), "> 마지막 문단.\n\n", "quote");
+  eq(await v.quote(), "> 마지막 문단.", "quote");
   await v.unmount();
 });
 
@@ -417,7 +479,7 @@ t("reply-choice answers: the choice buttons and help line never enter the quote"
   await v.select(textStart(b), at(b, "뒤의 설명.", "end"));
   const draft = await v.quote();
   ok(!/설치가 먼저|실행이 먼저|직접 입력|선택하면/.test(draft), `controls leaked: ${JSON.stringify(draft)}`);
-  ok(draft.startsWith("> 설명 글이에요.") && draft.endsWith("> 뒤의 설명.\n\n"), `draft ${JSON.stringify(draft)}`);
+  ok(draft!.startsWith("> 설명 글이에요.") && draft!.endsWith("> 뒤의 설명."), `draft ${JSON.stringify(draft)}`);
   await v.unmount();
 });
 
@@ -455,7 +517,7 @@ t("keyboard: the button stays while it has focus even if the selection collapses
   btn.focus();
   current = null; await selectionChange();
   eq(v.buttons().length, 1, "button vanished when focus moved to it");
-  eq(await v.quote(), "> 물은\n\n", "draft from the stored quote");
+  eq(await v.quote(), "> 물은", "sent from the stored quote");
   await v.unmount();
 });
 
@@ -463,7 +525,7 @@ t(`longer than ${QUOTE_MAX} characters: the button says so and the draft ends wi
   const v = await mount(personal, [u("u1", "길게"), a("a1", "가".repeat(QUOTE_MAX + 10))]);
   await v.select(textStart(v.body("a1")), at(v.body("a1"), "가".repeat(QUOTE_MAX + 10), "end"));
   ok(v.host.findAll((e) => e.textContent === QUOTE_CUT_NOTE).length === 1, "cut note missing");
-  eq(await v.quote(), `> ${"가".repeat(QUOTE_MAX)}…\n\n`, "cut draft");
+  eq(await v.quote(), `> ${"가".repeat(QUOTE_MAX)}…`, "cut quote");
   await v.unmount();
   const short = await mount(personal);
   await short.select(at(short.body("a1"), "물은"), at(short.body("a1"), "물은", "end"));
@@ -501,6 +563,66 @@ t("IME guard: while a composition is open the button is disabled and pressing it
   eq(v.textarea().value, "한", "draft changed during composition");
   await act(async () => { fire(v.textarea(), "compositionend", { data: "한" }); });
   ok(!v.buttons()[0].hasAttribute("disabled"), "still disabled after composition ended");
+  await v.unmount();
+});
+
+t("D-007: Escape anywhere dismisses the popover (focus need not be on it) and returns focus to the composer; not while an IME composition is open", async () => {
+  const v = await mount(withDraft(personal, "초안"));
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+  eq(v.buttons().length, 1, "shown");
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", isComposing: true, keyCode: 229 }); });
+  eq(v.buttons().length, 1, "an IME Escape dismissed it");
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  eq(v.buttons().length, 0, "Escape from the page did not dismiss");
+  eq(v.textarea().value, "초안", "Escape changed the draft");
+  ok(doc.activeElement === (v.textarea() as unknown), "focus after Escape is not the composer");
+  await v.unmount();
+});
+
+t("D-007: an Escape a menu already handled, or one pressed while a modal is open, leaves the popover; a plain Escape still dismisses it", async () => {
+  const v = await mount(withDraft(personal, "초안"));
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+  eq(v.buttons().length, 1, "shown");
+  const body = doc.body as unknown as El & { addEventListener(t: string, l: (e: { key?: string; preventDefault(): void }) => void): void; removeEventListener(t: string, l: unknown): void; removeChild(c: unknown): void };
+  // A menu (or any handler nearer the target) takes the Escape first and marks it handled.
+  const menu = (e: { key?: string; preventDefault(): void }) => { if (e.key === "Escape") e.preventDefault(); };
+  body.addEventListener("keydown", menu);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  body.removeEventListener("keydown", menu);
+  eq(v.buttons().length, 1, "an Escape a menu already handled dismissed the popover");
+  const modal = h("div", { role: "dialog", "aria-modal": "true" }, "설정");
+  doc.body.appendChild(modal as never);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  eq(v.buttons().length, 1, "an Escape with a modal open dismissed the popover");
+  body.removeChild(modal);
+  await act(async () => { fire(doc.body as unknown as El, "keydown", { key: "Escape", keyCode: 27 }); });
+  eq(v.buttons().length, 0, "positive control: a plain Escape did not dismiss");
+  await v.unmount();
+});
+
+t("D-007: nothing is shown while the mouse button is down (a drag); the release shows it at once; a press on the popover itself keeps it", async () => {
+  const v = await mount(personal);
+  await act(async () => { fire(doc.body as unknown as El, "pointerdown", { button: 0 }); });
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+  eq(v.buttons().length, 0, "shown mid-drag");
+  await act(async () => { fire(doc.body as unknown as El, "pointerup", { button: 0 }); });
+  eq(v.buttons().length, 1, "not shown on release (without waiting for a frame)");
+  await act(async () => { fire(v.buttons()[0], "pointerdown", { button: 0 }); });
+  eq(v.buttons().length, 1, "a press on the popover hid it");
+  await act(async () => { fire(v.buttons()[0], "pointerup", { button: 0 }); });
+  await act(async () => { fire(doc.body as unknown as El, "pointerdown", { button: 2 }); });
+  eq(v.buttons().length, 1, "a right press hid it");
+  await act(async () => { fire(doc.body as unknown as El, "pointerdown", { button: 0 }); });
+  eq(v.buttons().length, 0, "a press elsewhere did not hide it");
+  await v.unmount();
+});
+
+t("D-007: the popover goes away when its answer starts streaming, even with the selection unchanged", async () => {
+  const v = await mount(personal);
+  await v.select(at(v.body("a2"), "높은 산"), at(v.body("a2"), "높은 산", "end"));
+  eq(v.buttons().length, 1, "shown on the finished answer");
+  await v.render({ streaming: true, streamingId: "a2" });
+  eq(v.buttons().length, 0, "shown while that answer streams");
   await v.unmount();
 });
 

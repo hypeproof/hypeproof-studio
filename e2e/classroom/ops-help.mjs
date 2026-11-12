@@ -18,9 +18,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-help'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -48,7 +49,7 @@ try {
   await share('student-e', 'submission');
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + server.address().port, page = await browser.newPage({ viewport: { width: 1280, height: 900 } }); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  const connect = async (token) => { await page.locator('#conn-edit').isVisible() && await page.locator('#conn-edit').click(); await page.locator('#token').fill(token); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect-go').click(); };
+  const connect = async (token) => { await page.locator('#conn-edit').isVisible() && await page.locator('#conn-edit').click(); await signInChalk(page, token); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect-go').click(); };
   const opsState = () => page.locator('#ops-state').innerText(), row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`), primaries = () => page.locator('.primary:visible');
   await page.goto(origin + '/manage');
 
