@@ -108,12 +108,15 @@ try {
     await guidance("parent is a dangling link", path.join(home, "plink", "Class"));
     const protectedDir = path.join(home, "pro"); fs.mkdirSync(protectedDir);
     if (process.platform === "win32") {
-      // chmod does not deny directory creation on Windows. Deny writes only on this owned fixture,
-      // then restore the ACL even when the guidance assertion fails.
-      const account = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`;
-      run("icacls.exe", [protectedDir, "/deny", `${account}:(WD,AD)`]);
-      try { await guidance("ACL read-only parent", path.join(protectedDir, "Class")); }
-      finally { run("icacls.exe", [protectedDir, "/remove:d", account]); }
+      // Windows chmod cannot model a read-only directory, and the hosted runner is privileged.
+      // Inject the filesystem denial for the guidance contract; this is not a native ACL acceptance test.
+      const mkdir = fs.mkdirSync;
+      fs.mkdirSync = (target, ...args) => {
+        if (String(target).startsWith(protectedDir + path.sep)) throw Object.assign(new Error("fixture access denied"), { code: "EACCES" });
+        return mkdir(target, ...args);
+      };
+      try { await guidance("injected write denial", path.join(protectedDir, "Class")); }
+      finally { fs.mkdirSync = mkdir; }
     } else {
       fs.chmodSync(protectedDir, 0o500);
       try { if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(protectedDir, "Class")); }

@@ -209,8 +209,10 @@ try {
     put(r, 'utf16-shape.txt', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('key ' + ANT, 'utf16le')]));
     for (const [i, pre] of ['', 'a', 'ab'].entries()) put(r, `b64-${i}.txt`, 'data:' + Buffer.from(pre + KNOWN + 'tail').toString('base64'));
     put(r, 'b64url.txt', Buffer.from('~~' + KNOWN + '??>>').toString('base64url'));
-    put(r, '..\\..\\evil.txt', 'zip-slip-for-windows');
-    put(r, 'C:evil.txt', 'drive-letter-name');
+    // These are ordinary POSIX filenames, but on Windows they mean traversal or an ADS.
+    // Never create them on Windows; the buildZip negative controls below still reject both shapes.
+    const hostileNames = process.platform === 'win32' ? [] : ['..\\..\\evil.txt', 'C:evil.txt'];
+    for (const name of hostileNames) put(r, name, 'zip-slip-drive-letter-name');
     put(base, 'probe-outside/real-secret.txt', 'outside-hardlinked-content');
     fs.linkSync(path.join(base, 'probe-outside/real-secret.txt'), path.join(r, 'hard.txt'));
     // Positive controls: ordinary code and data stay.
@@ -246,10 +248,10 @@ try {
       'ok risk-assessment-for-the-project-2026 hps_request_id max_tokens: 4096 type="password"', 'positive control: ordinary text is untouched');
     const notice = z.get('내보내기-안내.txt').toString('utf8');
     for (const listed of ['"raw-ant.txt"', '"ant-nodigit.txt"', '"notes.md"', '"more.md"', '"oai.txt"', '"jwt.txt"', '"token-only.json"', '"account.json"', '"cfg.yaml"', '"headers.txt"', '"ssh.txt"',
-      '"utf8-known.txt"', '"utf16le.txt"', '"utf16be.txt"', '"utf16-shape.txt"', '"b64-0.txt"', '"b64-1.txt"', '"b64-2.txt"', '"b64url.txt"', JSON.stringify('..\\..\\evil.txt'), '"C:evil.txt"', '"hard.txt"'])
+      '"utf8-known.txt"', '"utf16le.txt"', '"utf16be.txt"', '"utf16-shape.txt"', '"b64-0.txt"', '"b64-1.txt"', '"b64-2.txt"', '"b64url.txt"', ...hostileNames.map(name => JSON.stringify(name)), '"hard.txt"'])
       assert.ok(notice.includes(listed), 'notice lists ' + listed);
     assert.match(notice, /"hard.txt": 작업 폴더 밖의 파일과 이어진 파일이에요/);
-    assert.match(notice, /"C:evil.txt": 이름에 \\ 또는 : 가 있어서/);
+    if (hostileNames.length) assert.match(notice, /"C:evil.txt": 이름에 \\ 또는 : 가 있어서/);
     // The zip writer refuses an escaping name even if a caller hands one in.
     for (const bad of ['../x', 'a/../../x', '/abs', 'a\\b', 'C:x', 'a//b', './x', ''])
       await assert.rejects(buildZip([{ name: bad, bytes: Buffer.from('x'), mtime: now }]), /work_export_unsafe_name/, 'refused: ' + JSON.stringify(bad));
