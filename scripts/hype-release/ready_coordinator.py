@@ -16,6 +16,7 @@ import publication_service as publication
 import publisher
 import routing
 import routing_service
+import macos_signing
 
 
 def read(path): return json.loads(Path(path).read_text(encoding='utf-8'))
@@ -183,7 +184,7 @@ class Coordinator:
         require(sum(a['size'] for a in event['release']['assets']) <= 2 * 1024**3, 'RC download exceeds bounded local capacity')
         # Fixed accepted RC assets; no source or mutable PR body supplies bytes.
         for asset in event['release']['assets']:
-            if asset['name'].endswith('.zip') or asset['name'] == 'unified-acceptance.json':
+            if asset['name'].endswith('.zip') or asset['name'] in {'unified-acceptance.json', macos_signing.RECEIPT}:
                 github.download(candidate['repository'], asset, packages / safe_name(asset['name']))
         registry = routing.Registry(GitHubStore(github, candidate['repository'], routing.registry_candidate(candidate)))
         shared, _ = registry.store.read()
@@ -191,6 +192,9 @@ class Coordinator:
         sequence = journal.get('sequence') or (shared or {}).get('channelSequence', 0) + 1
         product = self.product('prepare', {'pr': event['releasePr'], 'packages': str(packages), 'sequence': sequence})
         require(product['contract']['candidate'] == candidate['sourceSha'] and product['contract']['releaseHead'] == event['releaseHead'], 'prepared product changed')
+        mac_packages = [a for a in product['contract']['artifacts'] if a['name'] == macos_signing.PACKAGE]
+        require(len(mac_packages) == 1, 'official Mac package missing from prepared contract')
+        signing = macos_signing.collect(github, candidate, event['release']['assets'], mac_packages[0], packages)
         hosts, probes = {}, {}
         for target in product['contract']['platforms']:
             require(target in self.config.get('hosts', {}), target + ' native host is not onboarded')
@@ -202,12 +206,13 @@ class Coordinator:
                     import shutil
                     shutil.copyfile(src, dst)
                 require(file_hash(dst) == artifact['sha256'], 'native shared package differs')
-            receipt = packages / 'unified-acceptance.json'
-            if receipt.exists():
-                import shutil
-                target_receipt = host.root / 'packages/unified-acceptance.json'
-                if not target_receipt.exists(): shutil.copyfile(receipt, target_receipt)
-                require(file_hash(target_receipt) == file_hash(receipt), 'native accepted receipt changed')
+            for receipt_name in ('unified-acceptance.json', macos_signing.RECEIPT):
+                receipt = packages / receipt_name
+                if receipt.exists():
+                    import shutil
+                    target_receipt = host.root / 'packages' / receipt_name
+                    if not target_receipt.exists(): shutil.copyfile(receipt, target_receipt)
+                    require(file_hash(target_receipt) == file_hash(receipt), 'native accepted receipt changed')
             hosts[target], probes[target] = host, host.call('probe')
         base_policy = read(self.config['policy'])
         policy = required_policy(base_policy, product, probes)
@@ -216,8 +221,10 @@ class Coordinator:
         if not session.state:
             state = initial(candidate, policy, actor)
             state['artifacts'] = [{k: a[k] for k in ('name', 'sha256', 'size')} for a in product['contract']['artifacts']]
+            state['macSigning'] = signing
             session.save(state)
         session.own()
+        require(session.state.get('macSigning') == signing, 'candidate signing evidence changed; preserve existing state')
         activated = registry.activate(session.state, policy)
         require(activated['channelSequence'] == sequence, 'concurrent channel activation; rediscover before native effects')
         registry.update(session.state, policy)
