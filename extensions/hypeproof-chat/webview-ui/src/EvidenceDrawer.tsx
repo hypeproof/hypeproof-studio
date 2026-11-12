@@ -1,6 +1,7 @@
 import { compareTurnText } from "../../src/turnReviewView";
+import { DECISION_TEXT_LIMIT, decisionChange } from "../../src/learningStateHelpers";
 import { DiffLines } from "./DiffLines";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusChip } from "./StatusChip";
 import {
   EVIDENCE_TYPE_LABELS,
@@ -20,6 +21,19 @@ import {
   type EvidenceRowView,
 } from "./evidenceDrawerLogic";
 import type { SourceKind } from "@hypeproof/measurement-core/learning-events";
+
+type DecisionDraft = {
+  kind: "decision_revised";
+  student_text: string;
+  decision: { from: string; to: string };
+  evidence_refs: string[];
+};
+
+type DecisionCapture = {
+  scope: string;
+  submit: (draft: DecisionDraft) => string;
+  result: { requestId: string; error?: string } | null;
+};
 
 /**
  * Area D — Evidence drawer (SX-17·18·20·22·23).
@@ -46,20 +60,11 @@ export interface EvidenceDrawerProps {
   /** Form submit. The host's `learningEventRequest` fills in actor and context. */
   onSubmit: (draft: { kind: string } & Record<string, unknown>) => void;
   onToggle: (open: boolean) => void;
-  /**
-   * The state where the coach offered alternatives and the student picked one (SX-23).
-   *
-   * Without it the reason form is **not drawn.** In the `/2` schema `decision_revised`
-   * requires `decision{from,to}` and a non-empty `evidence_refs[]`, so taking only a
-   * reason with nothing picked builds an event that cannot be stored. Better to draw no
-   * form at all than one that fails when pressed.
-   */
-  pendingDecision?: { from: string; to: string; evidenceRefs: string[] } | null;
+  decisionCapture?: DecisionCapture;
 }
 
-export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, pendingDecision = null }: EvidenceDrawerProps) {
+export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, decisionCapture }: EvidenceDrawerProps) {
   const [criterion, setCriterion] = useState("");
-  const [reason, setReason] = useState("");
   const [quote, setQuote] = useState("");
   const [sourceKind, setSourceKind] = useState<SourceKind>("interview");
   const [provenance, setProvenance] = useState<{ who: string; when: string; where: string }>({ who: "", when: "", where: "" });
@@ -141,31 +146,7 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
         <button type="submit" disabled={!criterion.trim()}>기대 조건 남기기</button>
       </form>
 
-      {pendingDecision && (
-        <form
-          className="hp-evidence-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!reason.trim()) return;
-            onSubmit({
-              kind: "decision_revised",
-              student_text: reason,
-              decision: { from: pendingDecision.from, to: pendingDecision.to },
-              evidence_refs: pendingDecision.evidenceRefs,
-            });
-            setReason("");
-          }}
-        >
-          <label htmlFor="hp-reason">이걸 고른 이유 (한 줄이면 충분해요)</label>
-          <input
-            id="hp-reason"
-            value={reason}
-            maxLength={200}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <button type="submit" disabled={!reason.trim()}>이유 남기기</button>
-        </form>
-      )}
+      {decisionCapture && <DecisionReasonForm key={decisionCapture.scope} rows={rows} capture={decisionCapture} />}
 
       <form
         className="hp-evidence-form"
@@ -248,11 +229,11 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
           return (
             <section key={group.type ?? "untyped"} className="hp-evidence-group">
               <h4>{group.label}</h4>
-              {real.length > 0 && <ol>{real.map(renderRow)}</ol>}
+              {real.length > 0 && <ol>{real.map((row) => renderRow(row, rows))}</ol>}
               {aside.length > 0 && (
                 <div className="hp-evidence-aside">
                   <h5>아직 실제로 확인되지 않은 것</h5>
-                  <ol>{aside.map(renderRow)}</ol>
+                  <ol>{aside.map((row) => renderRow(row, rows))}</ol>
                 </div>
               )}
             </section>
@@ -263,12 +244,75 @@ export function EvidenceDrawer({ open, rows, verification, onSubmit, onToggle, p
   );
 }
 
+function DecisionReasonForm({ rows, capture }: { rows: EvidenceRowView[]; capture: DecisionCapture }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [evidenceId, setEvidenceId] = useState("");
+  const [reason, setReason] = useState("");
+  const [requestId, setRequestId] = useState("");
+  const [notice, setNotice] = useState("");
+  const decision = decisionChange(from, to);
+  const evidence = rows.find(row => row.id === evidenceId);
+  const result = capture.result;
+  const saving = !!requestId;
+
+  useEffect(() => {
+    if (!result || result.requestId !== requestId) return;
+    setRequestId("");
+    setNotice(result.error ?? "바뀐 선택과 이유를 저장했어요.");
+    if (result.error) return;
+    setFrom("");
+    setTo("");
+    setEvidenceId("");
+    setReason("");
+  }, [requestId, result]);
+
+  return (
+    <details className="hp-evidence-diff">
+      <summary>바뀐 선택 남기기</summary>
+      <form className="hp-evidence-form" onSubmit={(e) => {
+        e.preventDefault();
+        if (!decision || !evidence || !reason.trim() || saving) return;
+        setNotice("");
+        setRequestId(capture.submit({
+          kind: "decision_revised",
+          student_text: reason,
+          decision,
+          evidence_refs: [evidence.id],
+        }));
+      }}>
+        <label htmlFor="hp-decision-from">바꾸기 전 선택</label>
+        <input id="hp-decision-from" value={from} maxLength={DECISION_TEXT_LIMIT} disabled={saving}
+          onChange={(e) => setFrom(e.target.value)} />
+        <label htmlFor="hp-decision-to">바꾼 뒤 선택</label>
+        <input id="hp-decision-to" value={to} maxLength={DECISION_TEXT_LIMIT} disabled={saving}
+          onChange={(e) => setTo(e.target.value)} />
+        <label htmlFor="hp-decision-evidence">선택을 바꾼 근거</label>
+        <select id="hp-decision-evidence" value={evidence?.id ?? ""} disabled={saving || !rows.length}
+          onChange={(e) => setEvidenceId(e.target.value)}>
+          <option value="">{rows.length ? "이 과제에서 남긴 근거 선택" : "기대 조건이나 들은 말을 먼저 남겨 주세요"}</option>
+          {rows.map(row => <option key={row.id} value={row.id}>{rowTitle(row).text.slice(0, 100)}</option>)}
+        </select>
+        {decision && evidence && (
+          <>
+            <label htmlFor="hp-reason">이걸 고른 이유 (한 줄이면 충분해요)</label>
+            <input id="hp-reason" value={reason} maxLength={DECISION_TEXT_LIMIT} disabled={saving}
+              onChange={(e) => setReason(e.target.value)} />
+            <button type="submit" disabled={saving || !reason.trim()}>{saving ? "저장 중…" : "이유 남기기"}</button>
+          </>
+        )}
+        {notice && <p className="hp-evidence-verify" role="status">{notice}</p>}
+      </form>
+    </details>
+  );
+}
+
 /**
  * One evidence row. The real column and the everything-else column are drawn by the
  * **same function** — writing two copies means dropping the label on one side, and that
  * is the "unlabeled external reaction" SX-21 forbids.
  */
-function renderRow(row: EvidenceRowView) {
+function renderRow(row: EvidenceRowView, rows: EvidenceRowView[]) {
   // **Normalize once and let all three use that value.** Originally `amber` and
   // `data-source-state` used the raw value and only the label used the normalized one.
   // If a path that skips the host appears and an unknown string comes in, the markup says
@@ -291,6 +335,16 @@ function renderRow(row: EvidenceRowView) {
           return title.student ? title.text : <span className="hp-evidence-kindonly">{title.text}</span>;
         })()}
       </p>
+      {row.decision && (
+        <>
+          <p className="hp-evidence-meta">바꾸기 전: {row.decision.from}</p>
+          <p className="hp-evidence-meta">바꾼 뒤: {row.decision.to}</p>
+          {row.evidence_refs?.map((id) => {
+            const evidence = rows.find(candidate => candidate.id === id);
+            return <p key={id} className="hp-evidence-meta">근거: {evidence ? rowTitle(evidence).text : id}</p>;
+          })}
+        </>
+      )}
       <p className="hp-evidence-meta">
         <span>{SOURCE_KIND_LABELS[row.source_kind] ?? SOURCE_KIND_LABELS.none}</span>
         <span>{provenanceLine(row)}</span>

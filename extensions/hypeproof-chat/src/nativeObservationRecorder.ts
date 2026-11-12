@@ -88,6 +88,12 @@ export class NativeObservationRecorder {
     }
     const { kind, student_text, ...rest } = draft;
     const safe = typeof student_text === "string" ? scrubSecrets(student_text).slice(0, 2000) : undefined;
+    if (kind === "decision_revised") {
+      const choice = rest.decision as { from: string; to: string };
+      const from = scrubSecrets(choice.from), to = scrubSecrets(choice.to);
+      if (from === to) throw Error("invalid_decision");
+      rest.decision = { from, to };
+    }
     const event = {
       ...rest,
       ...(safe === undefined ? {} : { student_text: safe }),

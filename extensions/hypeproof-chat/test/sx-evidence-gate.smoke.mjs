@@ -376,7 +376,7 @@ const COMPLETION = [
   for (const { name, body, prefix = [] } of FORM_DRAFTS) {
     // The evidence_type of `external_feedback_received` is not set by the kind table but by
     // **the step's `evidence`** (design table). The host is what passes it in.
-    const made = learningEventRequest(body, { ...CTX, sender: "webview-form", stepEvidenceType: "intent" });
+    const made = learningEventRequest(body, { ...CTX, sender: "webview-form", stepEvidenceType: "intent", decisionEvents: batchOf(prefix).events });
     assert.equal(made.ok, true, `${name} 의 초안이 호스트에서 막혔다: ${JSON.stringify(made)}`);
     // The validator does not put a bad event into `missing` — it **throws**. This line was first
     // written as `checked.missing.length === 0`, but `missing` means a seq hole, so it was green
@@ -407,6 +407,36 @@ const COMPLETION = [
   );
   assert.equal(noDecision.ok, false, "고른 것이 없는 이유가 통과했다");
   assert.equal(noDecision.code, "missing_decision");
+
+  const { NativeObservationRecorder } = await import("../src/nativeObservationRecorder.ts");
+  const recorderContext = { format: "hps-observation/2", scope: "student-a", session: "session", program: "program" };
+  const recorder = new NativeObservationRecorder(recorderContext);
+  const evidence = recorder.recordLearningEvent(criterion());
+  const otherTask = recorder.recordLearningEvent(criterion({ context: { ...CTX, task: "task-other" } }));
+  const requestContext = { ...CTX, sender: "webview-form", decisionEvents: recorder.batch.events };
+  const reason = "  중복 신청을 막으려고  ";
+  const decision = { from: "클릭할 때마다 저장", to: "같은 신청은 한 번만 저장" };
+  const decisionDraft = { kind: "decision_revised", student_text: reason, decision, evidence_refs: [evidence.id] };
+  assert.equal(learningEventRequest({ ...decisionDraft, decision: { from: "같은 선택", to: "같은 선택 " } }, requestContext).code, "invalid_decision");
+  for (const invalidRef of [otherTask.id, "unrecorded"]) {
+    assert.equal(learningEventRequest({ ...decisionDraft, evidence_refs: [invalidRef] }, requestContext).code, "invalid_decision_evidence");
+  }
+  const authored = learningEventRequest({
+    ...decisionDraft,
+    actor: "ai",
+    source_state: "real",
+    context: { ...CTX, task: "task-other" },
+  }, requestContext);
+  assert.equal(authored.ok, true);
+  recorder.recordLearningEvent(authored.event);
+  const reopened = new NativeObservationRecorder(recorderContext, recorder.snapshot());
+  const decisionRow = learningState({ task: TASK, events: reopened.batch.events, completion: [] }).evidence.find(row => row.kind === "decision_revised");
+  assert.equal(decisionRow.actor, "user");
+  assert.equal(decisionRow.source_state, "self_reported");
+  assert.equal(decisionRow.text, reason);
+  assert.deepEqual(decisionRow.decision, decision);
+  assert.deepEqual(decisionRow.evidence_refs, [evidence.id]);
+  assert.throws(() => new NativeObservationRecorder({ ...recorderContext, scope: "student-b" }, recorder.snapshot()), /observation_scope_changed/);
 
   // When the step does not set the evidence kind, we reject instead of picking one of the six.
   const noType = learningEventRequest(

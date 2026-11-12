@@ -643,7 +643,7 @@ export type WebviewMessage = (
    * receives this message, and never from a coach stream callback. The webview does
    * not send `actor` or `context` — and if it does, the host throws them away.
    */
-  | { type: 'learningEvent'; draft: { kind: string } & Record<string, unknown>; stepId?: string }
+  | { type: 'learningEvent'; draft: { kind: string } & Record<string, unknown>; stepId?: string; decision?: { task: string; requestId: string } }
   /** The open state of drawer D. A view state, so the webview owns it and the host only records it. */
   | { type: 'learningDrawer'; open: boolean }
   /**
@@ -983,6 +983,7 @@ export type HostMessage = (
    * stored, so this message always carries a freshly computed value.
    */
   | { type: 'learningState'; state: import('./learningStateHelpers').LearningStatePayload }
+  | { type: 'learningDecisionResult'; requestId: string; error?: string }
   | StartResponse
   | { type: "config"; config: ChatConfig }
   /** #751 G2 — the learner's saved work-surface entries for the lesson `sha256` (read from this device), and the rehearsal result. */
