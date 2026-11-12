@@ -1505,6 +1505,23 @@ collection contract.
 
 **NOT RUN**: 실제 학생 기기의 도움 요청 전송, 운영 배포. 알림은 10초 갱신 주기라 접수 후 최대 약 10초 뒤(탭이 보일 때)에 뜬다.
 
+<a id="adm-02-seat-version-run"></a>
+
+## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)
+
+요구: [좌석별 Studio 버전](../requirements/classroom-admin.md#adm-02-seat-version). Service 변경 없음. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium), base `c9e62cd6f`, head `8d12558af`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/seat-version.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 페이지의 렌더 함수로(페이지 안에서만, OS 입력·보이는 창 없음): 머리 5칸(`버전`은 4번째)·`col.c-ver` · 보드의 `client_version`이 그대로 보임 · 보드에 없는 좌석·null·형식이 틀린 값은 `확인 불가`(neutral·help 아이콘) · 최소 버전이 없어 `업데이트 필요` 0 · 출시 순서 비교(낮음·같음·높음·`-rc.1`<출시·형식 밖·최소 없음·버전 없음) · 최소 버전을 준 셀은 caution·alert 아이콘 + `업데이트 필요`, 아이콘과 글이 `--ink-warn`, 화면 읽기 글에 버전 · 1420/1280/1024에서 열 96px 이하, 행 44px, 잘림 0, 14px 이상, `2026.1111.0`·`확인 불가` 한 줄 · `순서`: 낮은 순/높은 순(확인 불가는 양쪽 다 맨 뒤, 같으면 Service 순서), `aria-sort`와 화살표, 다시 그려도 유지, 선택은 그대로, ↓ 키는 보이는 순서로, 선택 상자에 포커스 두고 ↑ 키로 바꿈, `기본 순서`로 복귀, 연결을 끊으면 초기화 · 선택 도구 줄이 있으면 그 줄에(높이 증가 0), 없으면 자기 줄에, 둘 다 44px·14px·화면 안 · 800/600/390 카드 행에서 `버전` 이름표가 좌석 줄 끝, 칸 겹침 0, 카드 높이 증가 0 · 기존 학생 활동 목록에 `· 버전 2026.1111.0`/`· 버전 확인 불가` | head에서 90개 확인 PASS. base의 `manage.html`로 돌리면 첫 확인에서 실패(머리에 `버전` 없음). 계측기 확인(각각 실패해야 함, 모두 실패함): 정렬 제거 → 낮은 순 순서, 최소 버전을 `2026.1111.0`으로 → 알려진 버전 값, 열 12rem → 머리 폭, 칩 상자 복원 → `확인 불가` 두 줄, 셀 안쪽 여백 12px → `2026.1111.0` 두 줄, `placeSort` 호출 제거 → 순서 선택이 보이지 않음, 카드에서 버전을 셋째 줄로 → 800px 카드가 63→82px |
+| `chalk` `npm run typecheck` · `npm test` 전체 | 기존 Chalk 시험 전부(목록 행 44px·아이콘, 고정폭 숫자, 상태 칩, 대비 감사, 도움 요청 등) | head `8d12558af`에서 typecheck 0, `FOCUS_REQUIRE_BROWSER=1 npm test` 0(목록 행 100개 동작 PASS, 고정폭 숫자 396개 PASS, `/manage` 대비 최저 4.81:1) |
+| `e2e/classroom/ops-g1-layout.mjs` (`classroom-ops` 워크플로) | 머리 5칸·행마다 `td` 5개로 갱신. 1280×720 완전한 행 8개, 1024×640 6개, 14px 이상, 가로 넘침 없음 | head에서 PASS: 1280×720 8행, 1024×640 6행(base와 같음, 첫 행 363px). 1280에서 상세를 옆에 연 목록 9행(base와 같음) |
+| `e2e/classroom` ops·g1-wrap·selection·roster·help·results·distribution·lesson-settings·attention-copy | 같은 `/manage`를 쓰는 다른 브라우저 시험이 그대로 | head에서 9개 모두 exit 0 (확장·webview 의존성 설치와 webview 빌드 후, CI `classroom-ops`와 같은 순서) |
+
+**측정해서 정한 것**: 표 머리는 36px이다. 머리에 44px 버튼을 넣으면 8px 이상 커지는데 base의 1280×720은 첫 행 363px, 8번째 행 끝 715px로 여유가 5px뿐이라 정렬은 머리 버튼이 아니라 `순서` 선택이다. 버전을 카드의 셋째 줄에 두었던 첫 시도는 1280에서 상세를 옆에 연 목록(606px, 카드 행)의 보이는 행을 9개에서 7개로 줄여서 좌석 줄 끝으로 옮겼다.
+
+**NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu Noto Sans로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 운영 배포. 최소 버전에 따른 `업데이트 필요`는 데이터가 없어(DEC-24, CGP-SHELL-R-003) 운영에서 아직 나타나지 않는다.
+
 <a id="adm-01-roster-csv-run"></a>
 
 ## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
