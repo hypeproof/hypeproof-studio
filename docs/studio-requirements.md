@@ -706,7 +706,7 @@ and it refuses a native `cancel` that follows a composing key. Surfaces:
 | Capability-change card | inline, shown by the system (no opener; the element focused when it appeared is deliberately not used) | 알겠어요 | the composer |
 | Verify panel (내 제품 테스트) | inline, opened by the host | 테스트 창 닫기 | the element focused before it opened, else the composer; it takes focus on open only when nothing holds it |
 | Publish, evidence, memory, skills and review panels (curriculum runtime) | inline, opened by the host | 닫기 | as the verify panel |
-| Quote action (인용하기) | transient button over a selection | Escape | the composer (REQ-STUDIO-QUOTE-REPLY) |
+| Quote action (인용하기) | transient popover over a selection | Escape, from anywhere while it is shown | the composer (REQ-STUDIO-QUOTE-REPLY) |
 
 Two browser facts shape the module. First, React puts focus back on an element that is still in the
 document after its commit, so a surface that stays mounted (the native dialog, the rail) is handed
@@ -867,7 +867,9 @@ runtime that runs tools (Agent SDK: nothing advertised or registered and `canUse
 refuses; proxy browser loop: the call returns an error result before `browser.execute`), and a planning turn also skips the app shortcuts,
 the fenced-HTML preview write and the `agent.md` save. A prompt line asks for the plan, but it is never what stops a tool. When the planning turn
 ends with an answer, the answer becomes a plan card above the composer (region "이렇게 해 볼까요?", numbered steps, "승인하기 전에는 아무것도 실행하지
-않아요") with four 44px actions: `이대로 진행`, `수정` (inline edit), `다시 계획`, `그만두기`. While the plan waits the send button reads
+않아요") with four 44px actions: `이대로 진행`, `수정` (inline edit), `다시 계획`, `그만두기`. CGP-CHAT-D-004: `이대로 진행` is the primary
+action, distinct (accent fill and strong weight) but the same height as the three secondary actions, in dark and light (before
+2026-11-12 the action row's shared `font: inherit` reset the primary's weight, so only the fill set it apart). While the plan waits the send button reads
 `계획 승인 기다리는 중` and is disabled, and the host treats any other send as superseding the plan. `이대로 진행` mints a one-time approval bound to
 exactly the send the host then makes ("계획대로 진행해 주세요." + the plan text as approved or edited); that turn is an ordinary turn under the
 profile grants and the lesson's approval preset, so every approval modal still fires. `다시 계획` runs another planning turn (an edit is passed as
@@ -924,10 +926,11 @@ opening a pill in personal and classroom chat.
 Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
 shown on failure, text-keyed memory, and others) fails it.
 
-`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20, adapted
-by the audit note: the quote is draft text, not a chip): the learner can quote part of one answer into
+`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20; the first
+slice kept the quote as draft text under an audit note, and CGP-CHAT-D-007 (2026-11-12, below) restores the
+register's removable chip and puts the action over the selection): the learner can quote part of one answer into
 the next message, in personal and classroom chat. When the selection starts inside the body of one
-finished answer, a `인용하기` button appears under that answer. If the selection ends past the body
+finished answer, a `인용하기` popover appears over the selection, on that answer's row (CGP-CHAT-D-007). If the selection ends past the body
 but still in the same message row (a triple-click on the last paragraph ends in the citations or the
 answer's actions), or at the very start of the element right after that row (a triple-click ends at
 the start of the next block), the end is clamped to the body. A selection that starts outside an answer, reaches
@@ -943,20 +946,22 @@ cells are joined with ` | `, and a Markdown soft break (drawn as a space) is a s
 read at most once per animation frame, the clamp only looks up the end's ancestors and the text walk
 stays inside the start answer's body, so the cost of a selectionchange does not grow with the
 conversation (a 300-answer test reads no node of any other answer). Pressing
-the button appends the quote to the composer draft as a `> ` quoted block (blank lines inside become
-`>`) followed by a blank line; an existing draft is kept byte for byte as the prefix, with one blank
-line before the quote. Focus then goes to the composer with the caret at the end, the selection is
-cleared and the button goes away. Nothing is sent: the quote is ordinary draft text the learner can
-edit or delete, saved with the draft like any other text. A selection longer than 1,000 characters
+the button puts the quote in the composer as the quote chip (CGP-CHAT-D-007): a `> ` quoted block (blank lines
+inside become `>`) followed by a blank line, kept as the draft's first part and drawn as the chip instead of in the
+editor. What the learner typed stays in the editor byte for byte; the message that goes out (sent, or parked
+while a turn runs) is the block, a blank line, then the typed text. One quote at a time: a second quote replaces
+the chip, never the typed text; × removes it. Focus then goes to the composer with the caret at the end, the
+selection is cleared and the button goes away. Nothing is sent. The saved draft carries the quote as text, so after
+a reload it comes back inline as ordinary `> ` draft text the learner can edit or delete. A selection longer than 1,000 characters
 (grapheme clusters, so a composed emoji or an NFD Hangul syllable is never split) is cut and ends
 with `…`, and the button shows `앞 1,000자만 들어가요` before it is pressed. The button is a 44px target
 reachable by Tab (it stays while it has focus even if the selection collapses); Escape dismisses it
-and returns focus to the composer without touching the draft; while an IME composition is open
+(from anywhere on the page while it is shown, not only from the button; not while an IME composition is open
+or a modal is open) and returns focus to the composer without touching the draft; while an IME composition is open
 (#1880, `imeGuard.ts`) it is disabled. It carries no capability or score label. The logic is in
 `webview-ui/src/quoteReply.ts` (range to answer text, quote block, merge with the draft), the button
-and selection tracking in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to
-make the selection (answers are not caret-browsable), a removable quote chip, positioning the button
-over the selection (it sits under the answer), list numbers in the quote (rendered `1. 사과` quotes as
+and selection tracking, the popover and the chip in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to
+make the selection (answers are not caret-browsable), the chip after a reload (the quote returns as draft text), list numbers in the quote (rendered `1. 사과` quotes as
 `사과`), and excluding code blocks (the research row offers only copy there; this slice quotes the
 code text). The offline send gate (`sendWhenOnline`, #2076) does not apply: quoting never sends,
 so it works offline and the gate still holds the later send. Test: `test/quote-reply.test.tsx`. Its selection stub is a range over real
@@ -964,13 +969,36 @@ mini-dom nodes whose `toString()` serialises every text node in it, buttons incl
 does. Pure checks cover the block format, the grapheme-safe cap, the scope and clamp rules (same-row
 citation and action ends, next-row start, negative controls for text in the next message) and the
 skipped UI, tables, lists and soft breaks, and instrument a 30- and a 300-answer conversation so any
-read of another answer's nodes fails. Through `ChatPanel` in both modes it presses the real button (draft, focus, caret,
-nothing sent) over answers with closed and open code pills, a prose code block, reply choices,
+read of another answer's nodes fails. Through `ChatPanel` in both modes it presses the real button (the chip, the typed draft untouched, focus, caret,
+nothing sent, then the text the send button sends) over answers with closed and open code pills, a prose code block, reply choices,
 citations and a one-paragraph answer, with negative controls for cross-message, user-line, composer,
 streaming, read-only and IME cases, plus an existing draft kept, Escape focus, Tab focus and the cut
 note, and the once-per-frame read. The same test fails 10 cases against the first version
 (`toString()`, no clamp) and 4 against the second (whole-document walk, no frame debounce, tables and
 lists). Each of 40 reverted behaviours fails it.
+
+CGP-CHAT-D-007 (selection action popover and quote chip, 2026-11-12, design row CGP-CHAT-D72): the action is a
+popover, not a row under the answer. It is out of flow on the answer's row and placed from the selected range's
+line boxes inside the answer body: above the first selected line (its bottom edge 2px above it), centred on that
+line; below the last selected line (2px under it) when the first line's top is less than 48px below the top of the
+visible conversation, or less than the popover's own height plus the gap. Horizontally it stays inside the answer's
+row; while the selection is in view it is kept inside the visible conversation (so it never sits under a header or
+the composer), and a selection scrolled out of view takes it along. It follows scrolling and window resizes from
+the range kept with the quote, so placing it never reads the selection again. It is 46px tall: one 44px action
+button in a 1px border, with the `앞 1,000자만 들어가요` note beside it when the quote is cut. It has no entry
+animation, so it is in the page within one animation frame of a selection made without the mouse, and at once on
+the release of a mouse drag; while the primary mouse button is down (a drag in progress) nothing is shown, and a
+press on the popover itself does not hide it. Escape anywhere dismisses it (above). It is never shown on the answer
+that is streaming, also when that answer starts streaming while the popover is open. The quote chip sits inside
+the composer card in the context row the file chip uses (same chip family, an accent bar at the start): the quote
+text without its `> ` marks on at most two lines with an ellipsis (body size, at least 14px), and a 44px `×`
+named `인용 빼기` that removes it and returns focus to the composer, keeping the typed draft and caret; removal has
+no undo toast (the learner can quote again; CGP-CHAT-R-029 already left the quote chip out). Tests:
+`test/quote-reply.test.tsx` (pure placement rules, chip draft parts, Escape from the page, IME Escape, drag,
+streaming) and `test/quote-popover-layout.smoke.mjs` (the real App in headless Chromium with real mouse and key
+input, personal and classroom, dark and light, 320 and 1420px: nothing mid-drag, in the page within 150ms of the
+release and of a script selection, above with a 2px gap, below at under 48px, 44px action not covered, Escape,
+streaming, the two-line chip with an ellipsis and a 44px ×, no horizontal scroll added).
 
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
@@ -8926,7 +8954,9 @@ Custody follows the Epic's design v1 (comment on #3418): the seller's private la
 | REQ-STORE-MAIL | A store skill that declares `mail_draft` runs from the buyer's own roster, never as a chat turn and never with its template on the buyer's device (design v1 D10, F7). 「실행」 reads the sheet set up in the buyer's automation, maps columns by the skill's public parameter labels, sends only the rows (address + parameter cells, at most the activity's recipient cap) to the Service's render route, and refuses the result unless it has one message per row with exactly that row's address. The preview is built only from addresses in the recipient column of the sheet as last read on this device under the same Google connection (no duplicates, no header injection; an address in another column is not a recipient; a newer preview clears the older one), shown in full (every recipient, subject and body) and sent through the buyer's own Gmail connection only after the buyer approves that exact preview; every send is approved, so the first send of an installed or updated version always is. No model takes part, so none can choose or add a recipient; the Service refuses minors and age-unknown buyers (F14) and ends the refund right at the first render (F1). The run never reaches the Apps Script project generator or the shared runner, so no store recipe is embedded in or sent to either. | `storeMail.ts`, `automationHost.ts` `runStoreMail`, `googleAutomation.ts` `previewRendered`, `skillStore.ts` `render`, `skillStorePanel.ts` · `store-mail-custody.smoke.mjs` · Service `store.test.mjs` render tests |
 | REQ-STORE-LOCAL-SEAL | The creator's automation draft in `globalState` (`hps.automation.recipe.<namespace>`) is stored as AES-256-GCM ciphertext under a per-device key kept in SecretStorage (design v1 D7); the AAD binds it to its namespace, so a copied value opens neither in another activity's slot nor with another device's key. A plaintext draft written before this is sealed in place when the automation next opens. The key is created only when a draft is first written. | `automationDraftSeal.ts`, `automationHost.ts` · `store-mail-custody.smoke.mjs`, `automation-conversation-host.smoke.mjs` |
 | REQ-STORE-REFUND | Within `refund.window_days` of payment and before the first run, a refund cancels the whole payment at the gateway, removes the install and reverses every ledger line under the sale's own `policy_version` (`refund.after_split`, unsettled case). After the first run or past the window the refund button is absent and the reason is shown. A gateway cancel failure leaves the sale, install and ledger unchanged. | W `skill-store.test.tsx` · Service `store.test.mjs` refund tests |
-| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the seller's first-lecture origin, `attribution`), policy version and status (refund window, payout hold by `tier.*` hold days, payable). Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale and no-origin tests |
+| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the partner and instructor the seller registered, `attribution.*`), policy version and status (refund window, refund in progress, payout hold by `tier.*` hold days, payable, refunded). Totals for refund window, payout hold, payable and refunded are shown before any payout account exists. Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale, no-code and earnings tests |
+| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. The choice is registered once (`attribution.seller_editable`); afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
+| REQ-STORE-PAYOUT-ACCOUNT | The payout account is asked for only once the payable balance reaches `payout.account_prompt_krw`; before that the view says when it will be asked. The form takes bank, account number and holder; a minor seller is asked for a linked adult's account and sees that payout waits for the adult's verification (`linked_adult.verification`). After saving, only the bank and last four digits are shown; the panel keeps no copy of the number. Holder verification is a sandbox check until the payout agency contract (#3419). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · Service `store.test.mjs` payout-account and minor tests |
 | REQ-STORE-MINOR | A self-declared 14–18 account may install free items only (`minor.buy`), may sell within `tier.minor`, sees its own ledger, and its payout is marked linked adult required (`minor.sell`). The age question appears before the first purchase or sale. | W `skill-store.test.tsx` · Service `store.test.mjs` minors test |
 | REQ-STORE-FRAUD | An order is refused when buyer and seller share a recorded device or network address, and a payment made with a card the seller used is cancelled and never recorded as a sale (`fraud.shared_signal`). A seller's monthly paid total cannot exceed `fraud.seller_monthly_cap_krw`. Reports from `reports.auto_unlist` distinct buyers unlist an item. | Service `store.test.mjs` fraud and report tests |
 
@@ -8977,3 +9007,7 @@ recognizer fallback. Next-turn recording requires a visible tap; stop, backgroun
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
+
+### Native iPhone credential continuity — MIRS-01
+
+The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.

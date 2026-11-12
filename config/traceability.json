@@ -6875,6 +6875,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/PlanFirst.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/planFirst.css"
         }
       ]
     },
@@ -6967,6 +6970,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/quote-reply.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quote-popover-layout.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
@@ -17446,6 +17452,9 @@
           "path": "extensions/hypeproof-chat/test/skill-store-client.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/skill-store-panel.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/quest-skill-store.smoke.mjs"
         },
         {
@@ -18399,6 +18408,62 @@
         },
         {
           "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## iPhone credential continuity (MIRS-01, Studio #3736)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-IOS-CREDENTIAL-CONTINUITY"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/SharedConversationModel.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/HPStudio.xcodeproj/project.pbxproj"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-IOS-CREDENTIAL-CONTINUITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-IOS-CREDENTIAL-CONTINUITY",
+        "ST-IMP-IOS-CREDENTIAL-CONTINUITY"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
         }
       ]
     }

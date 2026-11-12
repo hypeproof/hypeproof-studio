@@ -190,3 +190,13 @@ be released before claiming live Android reflection readiness. Current account
 entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
+
+## iPhone credential continuity (MIRS-01, Studio #3736)
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| MIRS-01 | Preserve account identity and prevent one-use credential replay across interrupted iPhone refresh. | Swift credential controls, actual Keychain simulator probe and separate signed-device acceptance. |
+
+MIRS-01 refines MPER-03 for the existing native iPhone account path: before a one-use refresh token is dispatched, atomically persist a refresh-pending state in the same Keychain item. A failed write sends no request. Restoring a pending item requires fresh login, while conversation files and drafts remain unchanged. Only active `/v1/me` identity matching both the prior account and the acquired session may install rotated credentials. A mismatched or uncertain result cannot be adopted; acquired unusable credentials receive best-effort logout. Legacy items without the new flag decode as idle and retain their account-owned records.
+
+This is a client recovery correction, not an authentication provider, entitlement, retention or account-policy change. Studio #3263 / PR #3298 remains the separate experimental iOS foundation; this slice changes only the current `apps/studio-native/ios` product. Exact approval-URL validation, redirect/stream-size enforcement and sleep-inclusive challenge expiry remain transport follow-up work and are not claimed by this slice.
