@@ -10296,6 +10296,57 @@
       ]
     },
     {
+      "id": "ST-REQ-HOST-THEME-KINDS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Host theme kinds (CGP-DS-R-004)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOST-THEME-KINDS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOST-THEME-KINDS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-KINDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/host-theme-kinds.md"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-TEXT-CONTRAST-TABLE",
       "stage": "requirement",
       "owner": "jayleekr",

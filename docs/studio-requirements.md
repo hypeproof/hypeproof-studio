@@ -5096,6 +5096,48 @@ Test: `extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs` (recorded th
 re-derived from `theme-defaults` when `vscodium-base` is checked out, and 14 negative controls).
 Decision: DEC-DS-D-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
+## Host theme kinds (CGP-DS-R-004)
+
+`REQ-STUDIO-HOST-THEME-KINDS` adopts REQ-CGP-DS-03 ("Webview follows the host theme kind
+(light/dark/high-contrast)"). Product Intent PI#1: a learner who runs VS Code in a light or a
+high-contrast theme reads every Studio screen in that theme, and the HypeProof Studio theme still
+draws the HP palette (dark + lime). No scored outcome. Builds on the host theme mapping above
+(CGP-DS-D-002) and the elevation levels (CGP-DS-R-012).
+
+- Scope: every webview this extension creates. The chat view and the four panels that load the
+  same bundle (start page, automation, local review, skill store) take their colours from
+  `tokens.css`; the seven panels that draw their own HTML (artifact history, the image-edit
+  comparison, personal continuation, slide studio, visitor preview, work takeaway, the preview
+  shell) read the `--vscode-*` theme variables directly.
+- Each of `body.vscode-dark`, `body.vscode-light`, `body.vscode-high-contrast` and
+  `body.vscode-high-contrast vscode-high-contrast-light` maps to its own token set on the chat:
+  the text, app surface, focus ring and CTA roles resolve to that theme's `foreground`,
+  `editor.background`, `focusBorder` and `button.background`; elevation is the dark level on
+  dark kinds, the light level on light kinds and flat in both high-contrast kinds; the four kinds
+  give four different token sets. Under the HypeProof Studio theme the roles equal the forest
+  palette.
+- The branded start and disconnected screens stay forest in every kind (DEC-27, CGP-DS-D-002).
+- Every panel that draws its own HTML paints the theme's `editor.background` as its page.
+- Text: every visible element with its own text is at least 4.5:1 against what is painted under
+  it, with its colour's alpha and every ancestor's opacity applied, in all four kinds and at
+  320, 390 and 1280px. Secondary text on light kinds is the description colour pulled 20%
+  toward the foreground (as in `tokens.css`), never the foreground dimmed with `opacity`.
+- High-contrast kinds: no element casts an outer shadow unless it also draws a solid, opaque,
+  at least 1px border on every side.
+- Changed by CGP-DS-R-004: the preview shell's page was a fixed `#1b1b2a` with `#ddd` text in
+  every theme; it now paints the editor surface and the theme's text, and its placeholder and
+  review notice use the description colour instead of the text at 70% and 85% opacity (3.2:1
+  and 4.4:1 on Light+). The slide studio's secondary text (`--muted`) takes the light-kind mix
+  (Light+ `#717171` on its `#F3F3F3` card was 4.4:1).
+
+Test: `extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs` (headless Chromium,
+nine surfaces, four kinds plus the HypeProof Studio theme, three widths, one screenshot per
+surface, kind and width with `HOST_THEME_KINDS_EVIDENCE=<dir>`, seven negative controls; it
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Colours are read from the computed
+cascade, never sampled from glyphs, so the result does not depend on installed fonts.
+Verification: `docs/testing/host-theme-kinds.md`. Decision: CGP-DS-R-004 in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
 ## Text contrast table (CGP-DS-D-028)
 
 DES-CGP-DS-42, traces to CGP-DS-R-034 (REQ-CGP-DS-42, "no text token below 4.5:1 is used for
