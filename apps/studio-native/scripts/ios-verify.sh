@@ -14,7 +14,69 @@ if [ "$build_status" -ne 0 ]; then
 fi
 runtime=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys; sdk=sys.argv[1]; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and ".iOS-" in x["identifier"] and x["version"].split(".")[:2]==sdk.split(".")[:2]]; print(r[-1]["identifier"])' "$sdk")
 device=$(xcrun simctl create "HP-Studio-${GITHUB_RUN_ID:-local}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro "$runtime")
-trap 'xcrun simctl shutdown "$device" >/dev/null 2>&1 || true; xcrun simctl delete "$device" >/dev/null 2>&1 || true' EXIT
+cleanup_simulator() {
+  local original_status=$1 cleanup_status=0
+  trap - EXIT
+  # Only the simulator this invocation created; neither cleanup may consume the job's
+  # remaining time indefinitely or replace the build/test result.
+  python3 - "$device" <<'PY' || cleanup_status=$?
+import os
+import signal
+import subprocess
+import sys
+import uuid
+
+device = sys.argv[1]
+def interrupted(signum, _frame):
+    print(f"simulator cleanup: interrupted by signal {signum}", flush=True)
+    raise SystemExit(128 + signum)
+
+for signum in (signal.SIGTERM, signal.SIGINT):
+    signal.signal(signum, interrupted)
+
+with open("../evidence/simulator-cleanup.log", "w", buffering=1) as evidence:
+    def log(message):
+        print(f"simulator cleanup: {message}", flush=True)
+        print(f"simulator cleanup: {message}", file=evidence, flush=True)
+
+    def stop_owned(child):
+        # start_new_session gives this command its own process group. Stop any remaining
+        # descendants too; they must not hold an output pipe or outlive this cleanup.
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            child.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            log("owned child did not reap within 2s after SIGKILL")
+
+    try:
+        if str(uuid.UUID(device)).lower() != device.lower():
+            raise ValueError("noncanonical UUID")
+    except ValueError:
+        log("skipped invalid owned device UUID")
+    else:
+        for action in ("shutdown", "delete"):
+            log(f"{action} {device} started (limit 30s)")
+            try:
+                child = subprocess.Popen(["xcrun", "simctl", action, device],
+                                         start_new_session=True, stdout=evidence, stderr=subprocess.STDOUT)
+                try:
+                    result = child.wait(timeout=30)
+                    log(f"{action} completed exit={result}")
+                except subprocess.TimeoutExpired:
+                    log(f"{action} timed out after 30s; stopping owned process group")
+                finally:
+                    stop_owned(child)
+            except OSError as error:
+                log(f"{action} cleanup error: {error}")
+PY
+  printf 'simulator cleanup: helper exit=%s; preserving original exit=%s\n' "$cleanup_status" "$original_status" || true
+  printf 'simulator cleanup: helper exit=%s; preserving original exit=%s\n' "$cleanup_status" "$original_status" >> ../evidence/simulator-cleanup.log || true
+  exit "$original_status"
+}
+trap 'cleanup_simulator "$?"' EXIT
 xcrun simctl boot "$device"
 xcrun simctl bootstatus "$device" -b
 test_status=0
