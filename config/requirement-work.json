@@ -923,7 +923,7 @@
         "MIRS-01"
       ],
       "inline_prefixes": [],
-      "sha256": "af3d2e1ab1b24381c84590b43dffa77f2433a3693550e821d99cf51dd7dd3fba",
+      "sha256": "e6d4c3de8b93220c33257db34861abbde7e21c78922c5966146295d725234955",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4602,6 +4602,47 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "personal-reflection-desktop-entry",
+      "title": "Visible first-screen and restored personal question entry",
+      "issue": 3798,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-02",
+            "MPER-04"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Independently verify exact source and the unseeded first-entry/reload journey; then record separately authorized desktop candidate evidence. No installed/live acceptance inferred from source controls.",
+      "design_delta": "Connect visible existing StartPage and personal task navigation to existing account/pass/activity/store preparation, with one-shot account/session-bound workspace continuation.",
+      "positive_control": "An unseeded signed-out first screen reaches the existing reflection task through actual login/admission; a normal pass chooser and real folder reload retain only the explicit question intent.",
+      "negative_control": "Canceled or denied login/admission, account/task/activity change, duplicate entry, draft/stream and failed marker persistence cannot redirect late, lose work or dispatch a model/tool turn.",
+      "evidence_required": "Pinned source, focused rendered UI/host/disk evidence, independent review and separately identified actual desktop/Service evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/src/startPageProtocol.ts",
+        "extensions/hypeproof-chat/src/studioNavigation.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx",
+        "extensions/hypeproof-chat/test/personal-entry-harness.mjs",
+        "extensions/hypeproof-chat/test/initial-surface.smoke.mjs",
+        "extensions/hypeproof-chat/test/activity-resume.test.mjs",
+        "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
       ]
     }
   ]

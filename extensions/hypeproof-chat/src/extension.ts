@@ -118,7 +118,8 @@ export async function activate(context: vscode.ExtensionContext) {
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
-  const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
+  let reflectionResume: ActivityResume['personalReflection'];
+  const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot, intent => { reflectionResume = intent; }).catch(() => {
     void vscode.window.showWarningMessage('저장된 입력과 대화 복원을 완료하지 못했습니다. 원래 폴더의 기록은 보존됩니다. 앱을 다시 열어 복구를 시도해 주세요.');
     return 'mismatch' as const;
   });
@@ -306,7 +307,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try{await provider.beginPersonalMaking();}catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'제작 초안을 열지 못했어요.');}finally{showMaking();}
   }));
   context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
-    try { await provider.openPersonalReflection(); showMaking(); }
+    try { await initialSurfaceReady; await startPage.openPersonalReflectionEntry(); showMaking(); }
     catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
   }));
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
@@ -336,8 +337,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // A mail skill runs from the buyer's roster (no chat task), and still shows the buyer's quest first.
     showQuest: (skill) => showStoreQuest(skill),
   });
-  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
-    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
+  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory, reflection, validateEntry) => {
+    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory, reflection, validateEntry);
   }, provider.githubContinueSource(), accounts);
   // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
   // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
@@ -1047,6 +1048,9 @@ export async function activate(context: vscode.ExtensionContext) {
     showStart: options => startPage.show(options),
     ensureProfile: () => provider.ensureProfile(true),
     openChat: () => startPage.openChat(),
+  }).then(async () => {
+    const intent = reflectionResume; reflectionResume = undefined;
+    if (intent) await startPage.resumePersonalReflection(intent);
   });
 
   // E2E backdoor for REQ-E1/E2 manual-approve modal. Fires a synthetic
@@ -1209,6 +1213,8 @@ export async function ensureWorkspace(
   isTestRun = false,
   commit: (directory?: string) => Promise<void> = async () => {},
   selectedDirectory?: string,
+  reflection?: ActivityResume['personalReflection'],
+  validateEntry?: () => Promise<void>,
 ): Promise<boolean> {
   const desiredRoot = selectedDirectory ? resolveWorkspaceRoot(selectedDirectory)
     : profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
@@ -1258,7 +1264,7 @@ export async function ensureWorkspace(
     console.warn(`[workspace] cohort folder differs — switching ${decision.from} → ${decision.to}`);
     // Record BEFORE the reload: if the open fails we must not try again.
     await context?.globalState.update(WORKSPACE_SWITCH_ATTEMPT_KEY, decision.to);
-    try { return await openWorkspaceFolder(decision.to, profile, commit, context); }
+    try { return await openWorkspaceFolder(decision.to, profile, commit, context, reflection, validateEntry); }
     catch (error) { await clearWorkspaceSwitchAttempt(context); throw error; }
   }
 
@@ -1266,7 +1272,7 @@ export async function ensureWorkspace(
   // and guarantees an absolute path (a relative workspace_root resolves to null).
   const resolved = desiredRoot;
   const dir = resolved ?? path.join(os.homedir(), LEGACY_WORKSPACE_DIRNAME);
-  return await openWorkspaceFolder(dir, profile, commit, context);
+  return await openWorkspaceFolder(dir, profile, commit, context, reflection, validateEntry);
 }
 
 /**
@@ -1283,6 +1289,8 @@ async function openWorkspaceFolder(
   profile: ResolvedProfile | null | undefined,
   commit: (directory?: string) => Promise<void>,
   context?: vscode.ExtensionContext,
+  reflection?: ActivityResume['personalReflection'],
+  validateEntry?: () => Promise<void>,
 ): Promise<boolean> {
   // REQ-STUDIO-TRUST-OWN-FOLDERS - only a leaf folder this call makes (non-recursive mkdir) is recorded.
   let createdFolder: StudioFolder | undefined;
@@ -1306,16 +1314,18 @@ async function openWorkspaceFolder(
     ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
   if (context) await syncStudioFolderRecord(context.globalState, createdFolder);
+  await validateEntry?.();
 
   // Binding is committed first; the marker grants no authority and contains no credential.
   const record = context && activityConnections(context)?.current;
   const key = context && record ? resumeKey(dir) : undefined;
   if (context && key && record) {
     await context.globalState.update(key, {
-      version: 1, id: record.serverId, service: record.service, workspace: fs.realpathSync(dir), ref: record.ref, at: Date.now(), ...(checkpoint ? { state: checkpoint } : {}),
+      version: 1, id: record.serverId, service: record.service, workspace: fs.realpathSync(dir), ref: record.ref, at: Date.now(), ...(checkpoint ? { state: checkpoint } : {}), ...(reflection ? { personalReflection: reflection } : {}),
     } satisfies ActivityResume);
   }
   try {
+    await validateEntry?.();
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceReuseWindow: true });
   } catch (error) {
     if (context && key) await context.globalState.update(key, undefined);

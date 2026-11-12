@@ -15,6 +15,7 @@ export interface ActivitySummary {
 export interface StartState {
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
+  personalReflectionPending?: boolean;
   /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
   skillStore?: boolean;
   activities?: ActivitySummary[];
@@ -104,6 +105,9 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  /** MPER-02/04: explicit personal-question intent, never an AI turn. */
+  | { type: "openPersonalReflection" }
+  | { type: "cancelPersonalReflection" }
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }
   | { type: "startUpdateDismiss"; version: string }

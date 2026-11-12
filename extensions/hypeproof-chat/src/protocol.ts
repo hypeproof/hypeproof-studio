@@ -597,6 +597,8 @@ export type WebviewMessage = (
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
+  /** MPER-02/04: use the same account/admission entry as the start page. */
+  | { type: 'openPersonalReflection' }
   /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
   | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }

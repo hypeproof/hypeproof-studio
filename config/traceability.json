@@ -18130,6 +18130,10 @@
       "sources": [
         {
           "path": "docs/requirements/mobile-growth-roadmap.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Personal question entry (#3798)"
         }
       ]
     },
@@ -18174,6 +18178,27 @@
         },
         {
           "path": "apps/studio-native/ios/App/SharedConversationView.swift"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
         }
       ]
     },
@@ -18200,6 +18225,12 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-entry-harness.mjs"
         }
       ]
     },
