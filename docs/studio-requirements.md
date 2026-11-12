@@ -307,7 +307,11 @@ while a chat surface is visible (host `view.visible` / editor panel `visible`), 
 the next panel open. A change observed during a running turn or image edit waits for that work to
 end, then the config is posted again (the turn keeps its start-of-turn profile); a U3 switch adopted by
 the turn-start preflight is told at once, placed before the starting turn. The line holds no live
-region; its text is announced once through the panel's always-mounted `role="status"` region. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
+region; its text is announced once through the panel's always-mounted `role="status"` region. Known limit: the baseline keeps the capability
+rows already evaluated under the learner's inputs, so an instructor capability change that the current
+inputs hide and the learner's next runtime or access change reveals is not told; the follow-up is to
+persist the served capability fields (classroom-admin.md, 기준선 row). A runtime-setting change posts
+the config at once, so the coincident case is told outside a running turn. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
 agent choices: decisions.md "CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line".
 Code: `src/lessonSettingsChange.ts` (pure), `observeLessonSettings` in `chatPanelProvider.ts`,
 `webview-ui/src/LessonSettingsChange.tsx`. Tests: `test/lesson-settings-change-host.smoke.mjs`
