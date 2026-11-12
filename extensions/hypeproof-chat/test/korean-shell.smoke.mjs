@@ -16,10 +16,32 @@ const ast = text => ts.createSourceFile('input.ts', text, ts.ScriptTarget.Latest
 const nodes = (tree, predicate) => { const found=[]; const visit=n=>{if(predicate(n)) found.push(n); ts.forEachChild(n,visit);}; visit(tree); return found; };
 const compile = text => ts.transpileModule(text, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 try {
-  for (const [fixture, rel] of [['settingsTreeModels.ts','src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts'],['main.ts','src/main.ts'],['nls.ts','src/vs/base/node/nls.ts'],['menubar.ts','src/vs/platform/menubar/electron-main/menubar.ts']]) {
+  for (const [fixture, rel] of [['settingsTreeModels.ts','src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts'],['main.ts','src/main.ts'],['nls.ts','src/vs/base/node/nls.ts'],['menubar.ts','src/vs/platform/menubar/electron-main/menubar.ts'],['extHostLocalizationService.ts','src/vs/workbench/api/common/extHostLocalizationService.ts']]) {
     const dst=path.join(tmp,rel); fs.mkdirSync(path.dirname(dst),{recursive:true}); fs.copyFileSync(path.join(core,'korean/upstream',fixture),dst);
   }
   execFileSync('git',['apply',path.join(core,'hps-korean-shell.patch')],{cwd:tmp});
+  // #3437: a built-in extension string with no Korean bundle entry returns its English default
+  // and logs at trace, not warning (542 warning lines in one member's exthost.log). Run the
+  // patched getMessage itself, with a recording log service.
+  {
+    const l10nAst=ast(read(path.join(tmp,'src/vs/workbench/api/common/extHostLocalizationService.ts')));
+    const getMessage=nodes(l10nAst,n=>ts.isMethodDeclaration(n)&&n.name.getText(l10nAst)==='getMessage')[0];
+    assert.ok(getMessage,'upstream getMessage present');
+    const logged=[];
+    const logService=Object.fromEntries(['trace','debug','info','warn','error'].map(level=>[level,msg=>logged.push([level,msg])]));
+    const run=(contents,details)=>vm.runInNewContext(compile(`function getMessage(extensionId, details) ${getMessage.body.getText(l10nAst)}; getMessage.call(target, 'vscode.git', details);`),
+      {details,format2:(m,a)=>m.replace(/\{(\w+)\}/g,(_,k)=>a[k]??`{${k}}`),target:{isDefaultLanguage:false,logService,bundleCache:new Map([['vscode.git',{contents}]])}});
+    assert.equal(run({},{message:'Commit {0}',args:['x']}),'Commit x','missing key keeps the English default');
+    assert.deepEqual(logged.map(([level])=>level),['trace'],'missing-bundle fallback is not logged at warning level');
+    assert.match(logged[0][1],/Using default string since no string found in i18n bundle that has the key: Commit \{0\}/);
+    logged.length=0;
+    assert.equal(run({'Commit {0}':'커밋 {0}'},{message:'Commit {0}',args:['x']}),'커밋 x','a shipped translation still wins');
+    assert.deepEqual(logged,[],'a found translation logs nothing');
+    // Only the log level moved; error paths (missing bundle location, unreadable bundle) keep their level.
+    const upstreamL10n=read(path.join(core,'korean/upstream/extHostLocalizationService.ts'));
+    assert.equal(read(path.join(tmp,'src/vs/workbench/api/common/extHostLocalizationService.ts')),
+      upstreamL10n.replace('this.logService.warn(`Using default string','this.logService.trace(`Using default string'),'no other change to the localization service');
+  }
   const startup=ast(read(path.join(tmp,'src/main.ts')));
   // Evaluate the exact startup statements, not a second locale policy in the test.
   const statements=startup.statements.filter(n=>ts.isVariableStatement(n) && n.declarationList.declarations.some(d=>['osLocale','userLocale','nlsConfigurationPromise'].includes(d.name.getText(startup))) || ts.isIfStatement(n) && (n.expression.getText(startup)==='userLocale' || n.getText(startup).includes("appendSwitch('lang'")));
@@ -185,12 +207,16 @@ try {
     // explorer/context, any menu) must carry such a gate as its `when`.
     const baseCommands=new Set((baseManifest.contributes?.commands??[]).map(x=>x.command));
     const baseMenuKeys=new Set(Object.keys(baseManifest.contributes?.menus??{}));
+    const CHALK_PALETTE_GATE=new Set(['hypeproof-chat.chalk.checkPlan','hypeproof-chat.chalk.openCourse','hypeproof-chat.chalk.savePlan']);
+    const CHALK_PALETTE_GATE_WHEN="config.hypeproofChat.instructorRuntime != 'chalk-extension'";
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
       if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&(k.startsWith('workbench.')||k==='update.showReleaseNotes'))delete d[k];
       if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
       for(const [k,list] of Object.entries(c.contributes?.menus??{}))if(Array.isArray(list)){
-        c.contributes.menus[k]=list.filter(x=>!x.command||baseCommands.has(x.command));
+        // #3563 — the three Studio Chalk commands are hidden while the Chalk runtime is selected. Only these exact
+        // palette entries are outside the copy-only rule; any other new menu entry still fails the comparison.
+        c.contributes.menus[k]=list.filter(x=>(!x.command||baseCommands.has(x.command))&&!(k==='commandPalette'&&CHALK_PALETTE_GATE.has(x.command)&&x.when===CHALK_PALETTE_GATE_WHEN));
         if(!c.contributes.menus[k].length&&!baseMenuKeys.has(k))delete c.contributes.menus[k];}
       return c;};
     const featureClause=w=>typeof w==='string'&&/^!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+)(\s*&&\s*!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+))*$/.test(w.trim());
@@ -200,9 +226,14 @@ try {
     // is reviewed with the branch and may gate its own new command: config.hypeproofChat.<key> with type boolean, default false.
     for(const [key,prop] of Object.entries(manifest.contributes.configuration?.properties??{}))
       if(!baseKeys.has(key)&&key.startsWith('hypeproofChat.')&&prop?.type==='boolean'&&prop?.default===false)functionGates.add(`config.${key}`);
+    // REQ-STUDIO-DOCTOR (Jay 2026-11-03 "전부다 켜"): 「진단 실행」 is read-only support for every seat. It changes nothing
+    // until a learner presses a fix, and every fix reuses an existing action, so it has no feature switch to reuse.
+    // Only this id is exempt from the gate rule; its palette entry must still exist and carry no `when`.
+    const ALWAYS_ON_SUPPORT=new Set(['hypeproof-chat.runDoctor']);
     for(const c of manifest.contributes.commands.filter(x=>!baseCommands.has(x.command))){
       const entries=Object.entries(manifest.contributes.menus??{}).flatMap(([menu,list])=>(Array.isArray(list)?list:[]).filter(x=>x.command===c.command||x.alt===c.command).map(x=>[menu,x]));
       assert.ok(entries.some(([menu])=>menu==='commandPalette'),`new command ${c.command}: has a palette entry`);
+      if(ALWAYS_ON_SUPPORT.has(c.command)){assert.equal(c.enablement,undefined);assert.deepEqual(entries.map(([menu,x])=>[menu,x.when]),[['commandPalette',undefined]],`${c.command}: palette only, no gate`);continue;}
       // An ungated new command is allowed only when it is hidden from every menu (when: "false"), e.g. a status-bar-only stop.
       if(c.enablement===undefined){
         for(const [menu,x] of entries)assert.equal(x.when,'false',`new ungated command ${c.command} in ${menu}: hidden (when "false")`);
@@ -211,10 +242,21 @@ try {
       assert.ok(functionGates.has(c.enablement),`new command ${c.command}: enablement ${c.enablement} reuses a function gate of a main command or is its own new default-off switch`);
       for(const [menu,x] of entries)assert.ok(functionGates.has(x.when),`new command ${c.command} in ${menu}: when ${x.when} reuses a function gate of a main command or is its own new default-off switch`);
     }
+    // A default an owner decision changed on purpose: the new default must be exactly the decided one, and nothing
+    // else about the setting may move. Jay 2026-11-04 (CGP-ART-D-008 follow-up): the served profile decides the minor
+    // safe-link block, so this switch defaults true and only an explicit false is the support override.
+    const DECIDED_DEFAULTS={'hypeproofChat.safeLinkAllowlistEnabled':true};
+    const compared=structuredClone(manifest);
+    for(const [key,to] of Object.entries(DECIDED_DEFAULTS)){
+      const head=compared.contributes?.configuration?.properties?.[key],was=baseManifest.contributes?.configuration?.properties?.[key];
+      if(!head||!was)continue;
+      assert.equal(head.default,to,`${key}: the decided default`);
+      head.default=was.default;
+    }
     const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
-    assert.equal(only(manifest),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
+    assert.equal(only(compared),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
     // Defaults, scopes, enums and ids come through stripping untouched; spot-check the security-relevant ones too.
-    const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
+    const props=compared.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
     for(const key of Object.keys(baseProps)){assert.deepEqual({...props[key],description:0,enumItemLabels:0},{...baseProps[key],description:0,enumItemLabels:0},`setting ${key}: default/scope/enum unchanged`);}
     assert.deepEqual(manifest.contributes.keybindings,baseManifest.contributes.keybindings,'keybindings unchanged');
     assert.deepEqual(manifest.contributes.commands.filter(c=>baseCommands.has(c.command)).map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');

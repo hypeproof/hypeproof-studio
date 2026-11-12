@@ -38,6 +38,8 @@ const GLYPH_ICONS: Record<string, IconKind> = {
   '⏳': 'clock',
   '🔒': 'lock',
   '📖': 'book', '📄': 'file',
+  // CGP-KNOW-D-027: a memory write line.
+  '🔖': 'bookmark',
   '📦': 'package',
   '🗂': 'folder',
   '📏': 'ruler',

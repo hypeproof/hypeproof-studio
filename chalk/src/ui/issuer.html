@@ -88,10 +88,8 @@ label small{color:var(--hp-mute)}
   <div class="sub">학생이 앱에 입력할 참여 코드를 발급합니다.</div>
 
   <fieldset>
-    <legend>강사 연결 코드</legend>
-    <label>운영자에게 받은 강사 코드를 입력하세요.</label>
-    <textarea id="issuer" rows="3" placeholder="eyJjIjoi…"></textarea>
-    <div class="help">잊어버렸으면 단톡방에 Jay에게 재발급 요청.</div>
+    <legend>강사 연결</legend>
+    <!--@chalk-connect-->
   </fieldset>
 
   <fieldset>
@@ -106,7 +104,6 @@ label small{color:var(--hp-mute)}
     <input id="hours" type="number" min="1" max="1440" value="12">
     <div class="help">로컬 데모: 6시간. 1회차 + 디버깅 여유까지: 12-24시간.</div>
     <button id="mint">발급 →</button>
-    <button class="reset" id="forget" type="button">강사 코드 지우기</button>
   </fieldset>
 
   <div id="result"></div>
@@ -115,57 +112,32 @@ label small{color:var(--hp-mute)}
 <script>
 const $ = (id) => document.getElementById(id);
 
-// --- token paste normalization (issue #65) ----------------------------------
-// People paste from JSON dumps, Discord mobile, KakaoTalk — all of which leak
-// surrounding `"..."`, trailing `,`, embedded `\n`/`\r`, or zero-width chars.
-// Tokens are unbroken base64url payloads (`A-Z a-z 0-9 _ -`) with a single
-// `.` separator. We strip everything else BEFORE talking to the server, so
-// a near-miss paste doesn't burn a network round-trip into a confusing 401.
-const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-function sanitizeToken(raw) {
-  if (typeof raw !== "string") return "";
-  let s = raw;
-  // Strip ALL whitespace (incl. embedded \n\r\t and unicode space variants).
-  s = s.replace(/\s+/g, "");
-  // Strip zero-width / BOM / formatting chars that some clipboards inject.
-  s = s.replace(/[​-‍﻿⁠]/g, "");
-  // Trim surrounding JSON-ish syntax chars repeatedly until none remain.
-  // Handles: `"eyJ..."`, `"eyJ...",`, `{"eyJ..."}`, `[ "eyJ..." ]`, etc.
-  for (let i = 0; i < 8; i++) {
-    const before = s;
-    s = s.replace(/^["'`,\[\]\{\}\s]+/, "").replace(/["'`,\[\]\{\}\s]+$/, "");
-    if (s === before) break;
-  }
-  return s;
-}
-
 // Server errors come back as one human-ish string. Map known phrases to
 // actionable Korean. Unknown errors pass through as `알 수 없는 오류: <raw>`.
 function mapServerError(raw) {
   const e = String(raw || "").toLowerCase();
-  if (e.includes("invalid signature") || e.includes("signature mismatch")) {
-    return "토큰이 손상되었거나 잘못 복사된 것 같아요. 양 끝에 따옴표(\") · 콤마(,) · 공백이 없는지 확인해주세요. 그래도 안 되면 Jay에게 재발급 요청.";
+  // Chalk's own connection refusals are already Korean and actionable.
+  if (/연결/.test(e)) return String(raw);
+  if (e.includes("invalid signature") || e.includes("signature mismatch") || e.includes("malformed")) {
+    return "강사 연결 정보를 확인하지 못했어요. 위의 ‘다시 연결’을 눌러주세요.";
   }
-  if (e.includes("malformed") || e.includes("missing required fields")) {
-    return "토큰 형식이 잘못됐어요. eyJj... 로 시작하는 한 줄 문자열이어야 합니다. (가운데 점 1개 포함)";
-  }
-  if (e.includes("expired")) {
-    return "토큰 유효기간이 만료됐어요. Jay에게 재발급 요청해주세요.";
+  if (e.includes("expired") || e.includes("connection_expired")) {
+    return "강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.";
   }
   if (e.includes("revoked")) {
-    return "이 토큰은 무효화됐어요. Jay에게 새 토큰 요청해주세요.";
+    return "이 강사 연결은 무효화됐어요. ‘다시 연결’을 눌러주세요.";
   }
   if (e.includes("not an issuer")) {
-    return "본인 토큰이 issuer 토큰이 아니에요. 학생 토큰을 잘못 붙여넣으신 듯해요. Jay에게 받은 강사 토큰을 사용해주세요.";
+    return "강사 권한이 아닌 연결이에요. ‘다시 연결’을 눌러주세요.";
   }
   if (e.includes("not scoped")) {
-    return "본인이 발급 권한 없는 cohort/profile 조합이에요. cohort/profile 이름 오타가 없는지 확인하고, 그래도 안 되면 단톡방 문의.";
+    return "연결할 때 고르지 않은 cohort/profile 조합이에요. 이름 오타가 없는지 확인하고, 필요하면 ‘다시 연결’에서 이 수업을 골라주세요.";
   }
   if (e.includes("exceeds scope max")) {
     return "본인 최대 발급 시간을 초과했어요. 위의 hours 칸을 줄여주세요 (보통 12시간 이하).";
   }
   if (e.includes("unsupported token version")) {
-    return "토큰 버전이 안 맞아요. 오래된 토큰일 수 있어요 — Jay에게 재발급 요청.";
+    return "강사 연결의 버전이 안 맞아요. ‘다시 연결’을 눌러주세요.";
   }
   if (e.includes("u (user handle) required") || e.includes("c (cohort) required") || e.includes("p (profile) required")) {
     return "학생 정보(handle/cohort/profile)를 다시 확인해주세요.";
@@ -173,7 +145,7 @@ function mapServerError(raw) {
   if (e.includes("hours must be")) {
     return "hours 는 1 이상 1440 (60일) 이하 숫자여야 해요.";
   }
-  return "알 수 없는 오류: " + raw + " — 같은 오류 반복되면 Jay에게 신고 부탁드려요.";
+  return "알 수 없는 오류: " + raw + " — 같은 오류가 반복되면 운영진에게 알려주세요.";
 }
 
 // Minimal HTML escape — error strings can echo user input.
@@ -186,32 +158,19 @@ function esc(s) {
     .replace(/'/g, "&#39;");
 }
 
-// Persist issuer in sessionStorage (cleared on tab close). NEVER localStorage.
-const ISSUER_KEY = "hps_issuer_token";
-const saved = sessionStorage.getItem(ISSUER_KEY);
-if (saved) $("issuer").value = saved;
-
-// Auto-sanitize on paste/blur so users see the cleaned-up value immediately.
-$("issuer").addEventListener("blur", () => {
-  const cleaned = sanitizeToken($("issuer").value);
-  if (cleaned !== $("issuer").value) $("issuer").value = cleaned;
-});
-$("issuer").addEventListener("paste", () => {
-  // setTimeout 0 — let the paste land first, then sanitize.
-  setTimeout(() => {
-    $("issuer").value = sanitizeToken($("issuer").value);
-  }, 0);
-});
-
-$("forget").onclick = () => {
-  sessionStorage.removeItem(ISSUER_KEY);
-  $("issuer").value = "";
+// The page holds no instructor token: Chalk takes the issuer from the Lab login
+// session. Disconnecting is local to this browser: an already issued student token
+// is not revoked. It discards this generation's late UI updates and frees the button.
+let mintGeneration = 0;
+globalThis.chalkConnection?.onChange((c) => {
+  if (c.connected) return;
+  mintGeneration++;
   $("result").innerHTML = "";
-};
+  $("mint").disabled = false;
+  $("mint").textContent = "발급 →";
+});
 
 $("mint").onclick = async () => {
-  const issuer = sanitizeToken($("issuer").value);
-  $("issuer").value = issuer; // reflect cleaned value back to the user
   const u = $("u").value.trim();
   const c = $("c").value.trim();
   const p = $("p").value.trim();
@@ -219,15 +178,9 @@ $("mint").onclick = async () => {
   const result = $("result");
   result.innerHTML = "";
 
-  // Pre-flight: catch obvious paste corruption BEFORE network — server's
-  // "invalid signature" is unhelpful for users who can't read the cause.
-  if (!issuer) {
-    return (result.innerHTML = '<div class="err">issuer 토큰을 입력해주세요.</div>');
-  }
-  if (!TOKEN_SHAPE.test(issuer)) {
-    return (result.innerHTML =
-      '<div class="err">토큰 형식이 잘못됐어요. eyJj... 로 시작하고 가운데 점(.)이 1개 있는 한 줄 문자열이어야 합니다.<br>' +
-      '받으신 메시지에서 따옴표나 콤마 같은 글자 없이 토큰만 정확히 복사했는지 확인해주세요.</div>');
+  const conn = globalThis.chalkConnection?.current;
+  if (!conn || !conn.connected) {
+    return (result.innerHTML = '<div class="err">위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.</div>');
   }
   if (!u || !c || !p) {
     return (result.innerHTML = '<div class="err">student handle / cohort / profile 모두 필요합니다.</div>');
@@ -236,18 +189,17 @@ $("mint").onclick = async () => {
     return (result.innerHTML = '<div class="err">hours 는 1..1440 사이여야 합니다.</div>');
   }
 
+  const generation = ++mintGeneration;
   $("mint").disabled = true;
   $("mint").textContent = "발급 중…";
   try {
     const res = await fetch("/admin/tokens/issue", {
       method: "POST",
-      headers: {
-        "Authorization": "Bearer " + issuer,
-        "content-type": "application/json",
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ u, c, p, hours }),
     });
     const body = await res.json().catch(() => ({}));
+    if (generation !== mintGeneration) return;
     if (!res.ok) {
       const e = body.error;
       const rawError = (typeof e === "string" ? e : e && e.message) || ("HTTP " + res.status);
@@ -258,8 +210,6 @@ $("mint").onclick = async () => {
         '</div>';
       return;
     }
-    // Save issuer for the rest of the session
-    sessionStorage.setItem(ISSUER_KEY, issuer);
     const expISO = new Date(body.exp * 1000).toLocaleString();
     result.innerHTML =
       '<div class="out">' +
@@ -270,10 +220,14 @@ $("mint").onclick = async () => {
       '</div>';
     $('copy-token').onclick=()=>window.chalkCopyFeedback($('copy-token'),()=>document.getElementById('tok')?.textContent??'');
   } catch (err) {
-    result.innerHTML = '<div class="err">네트워크 오류: ' + esc(String(err)) + '</div>';
+    if (generation === mintGeneration) {
+      result.innerHTML = '<div class="err">네트워크 오류: ' + esc(String(err)) + '</div>';
+    }
   } finally {
-    $("mint").disabled = false;
-    $("mint").textContent = "발급 →";
+    if (generation === mintGeneration) {
+      $("mint").disabled = false;
+      $("mint").textContent = "발급 →";
+    }
   }
 };
 
@@ -281,7 +235,7 @@ $("mint").onclick = async () => {
 // undefined there).
 if (typeof window === "undefined") {
   // eslint-disable-next-line no-undef
-  (globalThis).__issuerPageHelpers = { sanitizeToken, mapServerError, TOKEN_SHAPE };
+  (globalThis).__issuerPageHelpers = { mapServerError };
 }
 </script>
 <style>

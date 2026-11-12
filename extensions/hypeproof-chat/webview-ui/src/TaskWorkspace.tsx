@@ -23,6 +23,9 @@ import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, markTitleMatches, railSearchFolded, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
+import { TEMPORARY_TASK_COPY } from '../../src/temporaryTask';
+import { MemoryUseList } from './MemoryUseChip';
+import { MEMORY_USE_COPY } from '../../src/memoryUseView';
 import { ActivityHomeContext, activityTitleText, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
 import { TaskAppearanceContext, TaskAppearanceDialog, TaskMark } from './TaskAppearance';
 import { TaskMenu } from './TaskMenu';
@@ -54,6 +57,11 @@ export function TaskWorkspaceFrame(props: Omit<Props, 'view'> & { view?: TaskWor
 }
 
 interface PreviewSelection { url: string; messageId?: string; scopeKey: string }
+interface MemorySelection { messageId: string; count: number; scopeKey: string }
+type ShelfTab = 'sources' | 'memory';
+const SHELF_TABS: readonly ShelfTab[] = ['sources', 'memory'];
+const nextShelfTab = (tab: ShelfTab, key: string): ShelfTab | null =>
+  key === 'Home' ? 'sources' : key === 'End' ? 'memory' : key === 'ArrowLeft' || key === 'ArrowRight' ? (tab === 'sources' ? 'memory' : 'sources') : null;
 interface SourceRequest {
   requestId: string;
   url: string;
@@ -153,6 +161,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   // REQ-STUDIO-ARTIFACT-PROVENANCE — undefined until the host answers for this scope.
   const [artifacts, setArtifacts] = useState<ArtifactProvenanceView | null | undefined>(undefined);
   const [preview, setPreview] = useState<PreviewSelection | null>(null);
+  // CGP-KNOW-D-026 — the answer whose "기억 사용 N" opened the shelf, and the shelf's tab (출처 / 기억).
+  const [memoryShelf, setMemoryShelf] = useState<MemorySelection | null>(null);
+  const [shelfTab, setShelfTab] = useState<ShelfTab>('sources');
   const [headingSlot, setHeadingSlot] = useState<HTMLDivElement | null>(null);
   const [sourceRequest, setSourceRequest] = useState<SourceRequest | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -203,6 +214,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const pinnedSource = view.sourceSelection?.pinned ? sources.find(source => source.url === view.sourceSelection?.url) : undefined;
   const selected = previewSourceValue || pinnedSource || sources[0];
   const pinned = !!selected && pinnedSource?.url === selected.url;
+  // The 기억 tab exists only for an answer of this task that is still on screen.
+  const memoryAnswer = memoryShelf?.scopeKey === scopeKey && messages.some(message => message.id === memoryShelf.messageId) ? memoryShelf : null;
+  const tab: ShelfTab = memoryAnswer ? shelfTab : 'sources';
   const request = sourceRequest?.scopeKey === scopeKey ? sourceRequest : null;
   const selectedRequest = request?.url === selected?.url ? request : null;
   const sourceDisplay = useRef({ open: sourcesOpen, url: selected?.url });
@@ -281,9 +295,27 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     pendingFocus.current = 'source-title';
     closingFocus.current = null;
     setPreview({ url: citation.url, messageId, scopeKey });
+    setShelfTab('sources');
     setRailOpen(false);
     setSourcesOpen(true);
   }, [messages, sources, view.error, view.activeTaskId, scopeKey, rememberReadingPosition]);
+  // CGP-KNOW-D-026 — the same opening as a citation: focus goes to the tab's heading and closing returns to the chip.
+  const previewMemory = useCallback((messageId: string, count: number, trigger: HTMLElement) => {
+    if (!messages.some(message => message.id === messageId) || view.error || !view.activeTaskId) return;
+    rememberReadingPosition(trigger);
+    sourceTrigger.current = trigger;
+    pendingFocus.current = 'source-title';
+    closingFocus.current = null;
+    setPreview(null);
+    setMemoryShelf({ messageId, count, scopeKey });
+    setShelfTab('memory');
+    setRailOpen(false);
+    setSourcesOpen(true);
+  }, [messages, view.error, view.activeTaskId, scopeKey, rememberReadingPosition]);
+  const chooseShelfTab = (next: ShelfTab, focus = false) => {
+    setShelfTab(next);
+    if (focus) sourcePanel.current?.querySelector<HTMLElement>(`#tw-shelf-tab-${next}`)?.focus({ preventScroll: true });
+  };
   const awaitSourceResult = useCallback((requestId: string) => {
     clearRequestTimer();
     requestTimer.current = setTimeout(() => {
@@ -333,6 +365,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     }
   }), [clearRequestTimer, updateRequest, closeSources]);
   useLayoutEffect(() => {
+    // layout-loop-ok: resets panel state when the task scope changes; it measures nothing.
     clearRequestTimer();
     updateRequest(null);
     sourceTrigger.current = null;
@@ -340,6 +373,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     closingFocus.current = null;
     readingPosition.current = null;
     setPreview(null);
+    setMemoryShelf(null);
+    setShelfTab('sources');
     setSourcesOpen(false);
     setRenaming(false);
     renameRequest.current = null;
@@ -421,8 +456,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       const unchangedFocus = document.activeElement === focusOrigin || document.activeElement === document.body;
       if (target.isConnected && current.current.scopeKey === scopeKey && sourceDisplay.current.open === sourcesOpen && unchangedFocus) target.focus({ preventScroll: true });
     });
-  }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
+  }, [sourcesOpen, preview, memoryShelf, scopeKey, sourceRequest?.requestId]);
   useLayoutEffect(() => {
+    // layout-loop-ok: reads two CSS tokens once on mount (no dependencies), so it cannot re-run on its own result.
     const style = workspaceEl.current ? getComputedStyle(workspaceEl.current) : null;
     const read = (name: string, panel: PanelName) => { const px = parseFloat(style?.getPropertyValue(name) ?? ''); return Number.isFinite(px) ? px : PANEL_LIMITS[panel].min; };
     setTokenWidths({ rail: read('--tw-rail-default', 'rail'), sources: read('--tw-source-default', 'sources') });
@@ -439,6 +475,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   }, []);
   // Release inert before the queued focus restoration runs on the next animation frame.
   useLayoutEffect(() => {
+    // layout-loop-ok: setRailOpen runs only from an Escape key handler, never from a measurement.
     const dialog = sourceDialog ? sourcePanel.current : railDialog ? rail.current : null;
     if (!dialog) return;
     const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -553,6 +590,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       pendingFocus.current = 'source-title';
       closingFocus.current = null;
       setPreview(null);
+      setShelfTab('sources');
       setSourcesOpen(true);
       setRailOpen(false);
     }
@@ -564,7 +602,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     if (citation && trigger) previewSource(citation, trigger);
   };
 
-  return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div ref={workspaceEl} className="tw-workspace" style={{ '--tw-rail-width': sizes.rail ? `${sizes.rail}px` : undefined, '--tw-source-width': sizes.sources ? `${sizes.sources}px` : undefined } as CSSProperties} data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
+  return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && tab === 'sources' && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null, previewMemory, memory: sourcesOpen && tab === 'memory' && memoryAnswer ? { messageId: memoryAnswer.messageId } : null }}><div ref={workspaceEl} className="tw-workspace" style={{ '--tw-rail-width': sizes.rail ? `${sizes.rail}px` : undefined, '--tw-source-width': sizes.sources ? `${sizes.sources}px` : undefined } as CSSProperties} data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
     // D019: a local current-conversation shortcut, never a claim to navigate native approvals.
     if (event.code === 'KeyJ' && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.repeat && !event.defaultPrevented && !imeComposing(event) && !(event.target as HTMLElement).closest?.('dialog[open], [aria-modal="true"]')) {
       event.preventDefault();
@@ -676,6 +714,13 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     </nav>
     {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
     <section ref={main} className="tw-main" aria-label="작업 공간">
+      {/* CGP-KNOW-R-029 (DES-KNOW-47) — always across the top while the temporary task is open. It promises only what this
+          computer does (no record here, chat only) and says the request still goes to the Service. */}
+      {view.temporaryTaskId && view.activeTaskId === view.temporaryTaskId && <div className="tw-temporary-band" role="note" aria-labelledby="tw-temporary-band-title" data-testid="temporary-band">
+        <p id="tw-temporary-band-title" className="tw-temporary-band-title"><ChatIcon kind="lock" size={16} /><span>{TEMPORARY_TASK_COPY.bandTitle}</span></p>
+        <p>{TEMPORARY_TASK_COPY.device}</p>
+        <p>{TEMPORARY_TASK_COPY.chatOnly} {TEMPORARY_TASK_COPY.service}</p>
+      </div>}
       <header className="tw-heading">
         <button ref={railToggle} className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
         {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
@@ -714,7 +759,25 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <header><h2>작업 자료</h2><button type="button" className="tw-quiet tw-source-close" aria-label="자료 닫기" onClick={() => closeSources()}><SourceIcon kind="close" /></button></header>
       {request?.error && request.url !== selected?.url && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       {request?.phase === 'opening' && request.url !== selected?.url && <p className="cp-other-source-status" role="status">출처 여는 중: {citationAddress(request.url)?.hostname}</p>}
+      {/* CGP-KNOW-D-026 — 출처 / 기억: one tab stop, arrow keys move between the two (automatic activation). */}
+      {memoryAnswer && <div className="tw-shelf-tabs" role="tablist" aria-label={MEMORY_USE_COPY.tabsLabel} onKeyDown={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented || imeComposing(event)) return;
+        const next = nextShelfTab(tab, event.key);
+        if (!next) return;
+        event.preventDefault();
+        chooseShelfTab(next, true);
+      }}>
+        {SHELF_TABS.map(option => <button key={option} type="button" role="tab" id={`tw-shelf-tab-${option}`} className="tw-shelf-tab" aria-selected={tab === option} aria-controls={`tw-shelf-panel-${option}`} tabIndex={tab === option ? 0 : -1} onClick={() => chooseShelfTab(option)}>
+          {option === 'memory' && <ChatIcon kind="bookmark" size={16} />}<span>{option === 'memory' ? MEMORY_USE_COPY.tabMemory : MEMORY_USE_COPY.tabSources}</span>
+        </button>)}
+      </div>}
       <PanelBoundary panel="task-sources">{() => <>
+      {memoryAnswer && tab === 'memory' && <div id="tw-shelf-panel-memory" className="tw-shelf-memory" role="tabpanel" aria-labelledby="tw-shelf-tab-memory">
+        {/* Mounted per opening, so every opening reads the items as the files hold them now. */}
+        {sourcesOpen && <MemoryUseList key={memoryAnswer.messageId} messageId={memoryAnswer.messageId}
+          heading={<h3 id="task-source-title" tabIndex={-1}>{MEMORY_USE_COPY.listLabel} {memoryAnswer.count}개</h3>} />}
+      </div>}
+      <div id="tw-shelf-panel-sources" className="tw-shelf-sources" role={memoryAnswer ? 'tabpanel' : undefined} aria-labelledby={memoryAnswer ? 'tw-shelf-tab-sources' : undefined} hidden={tab !== 'sources'}>
       {selected ? <>
         <CitationPreview citation={selected} pinned={pinned} otherPinned={!!pinnedSource && !pinned} ephemeral={!!previewSourceValue}
           opening={selectedRequest?.phase === 'opening'} blocked={request?.phase === 'opening' || request?.phase === 'returning'} opened={selectedRequest?.phase === 'opened' || selectedRequest?.phase === 'returning'} returning={selectedRequest?.phase === 'returning'} error={selectedRequest?.error}
@@ -736,9 +799,16 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
         setRevealTick(tick => tick + 1);
       }} />}
+      </div>
       </>}</PanelBoundary>
     </aside>
-    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} scopeKey={scopeKey} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}
+    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} scopeKey={scopeKey} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)}
+      onOpenTask={taskId => {
+        // REQ-STUDIO-MEMORY-MANAGER — a memory file's 남긴 작업 link: leave the drawer and open that task (while a turn
+        // runs the host refuses the switch with its own error line).
+        setWorksOpen(false);
+        if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
+      }} />}
     {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

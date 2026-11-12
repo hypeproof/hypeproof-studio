@@ -13,7 +13,8 @@ export function ShortcutSheet({ open, onClose, opener }: { open: boolean; onClos
   const platform = shortcutPlatform(typeof navigator === 'undefined' ? undefined : navigator.platform || navigator.userAgent);
   // Read when the sheet opens: the personal task layout (and its Alt+Shift+J) may come and go.
   const taskWorkspace = typeof document !== 'undefined' && !!document.querySelector('.tw-workspace');
-  const rows = chatShortcuts(platform, { taskWorkspace });
+  const dictation = typeof document !== 'undefined' && !!document.querySelector('.hps-voice-mic:not(:disabled)');
+  const rows = chatShortcuts(platform, { taskWorkspace, dictation });
   return <ChatPreferences open={open} onClose={onClose} title="키보드 단축키" closeLabel="키보드 단축키 닫기" className="hps-shortcuts" {...(opener ? { opener } : {})}>
     {/* CGP-CHAT-D-030: a two-column table, keys then what they do. */}
     <table className="hps-shortcut-list">

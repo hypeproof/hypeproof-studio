@@ -378,7 +378,7 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-primary { background: var(--ds-c-studio-start-surface-17); color: var(--ds-c-studio-start-ink-13); }
 .studio-primary:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .studio-primary:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
-.studio-nav { display: flex; gap: var(--ds-c-studio-start-space-7); }
+.studio-nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-c-studio-start-space-7); }
 .studio-nav button { font: inherit; font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); min-height: var(--hp-control-min); cursor: pointer; }
 .studio-nav button:hover { background-color: var(--hp-bg-control-hover); border-color: var(--ds-c-studio-start-boundary-6); color: var(--ds-c-studio-start-ink-12); }
 .studio-nav button:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
@@ -454,7 +454,8 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 /* width 0 + min-width 100%: the one-line workspace must not set the card's minimum width (the card is a grid item
    with min-width auto), or a long folder name widens the page at 320 px instead of ending in an ellipsis. */
 .studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
-.hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--ds-c-studio-start-type-19); overflow-wrap: anywhere; }
+/* CGP-DS-R-008 (DEC-29b): the naming screen's activity line (ChatPanel only, outside any shell) reads at the 14px caption step in both seats. */
+.hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */
 .hp-inbox-quiet { margin-top: var(--ds-c-studio-start-space-20); text-align: left; font-size: var(--ds-c-studio-start-type-17); }

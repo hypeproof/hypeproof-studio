@@ -10,6 +10,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProblemReportDialog, ProblemReportOffer } from "../webview-ui/src/ProblemReportDialog";
 import { problemDetailRows, problemDiagnostic } from "../src/problemReport";
+import { ChatErrorBoundary } from "../webview-ui/src/ChatErrorBoundary";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined };
 
@@ -19,7 +20,7 @@ const noop = () => {};
 const d = problemDiagnostic({ status: 409, code: "trial_model_unpriced", step: "agent", requestId: "a1b2c3d4" }, { appVersion: "0.1.60", platform: "darwin", arch: "arm64" });
 const form = (recentTurns: number) => ({
   id: "f1", reason: "error" as const, details: problemDetailRows(d, "0.1.60", "macos-arm64"),
-  contactPrompt: "답을 받을 연락처", contactPlaceholder: "예: 이메일", recentTurns, autoReport: false,
+  contactPrompt: "답을 받을 연락처", contactPlaceholder: "예: 이메일", recentTurns, autoReport: false, logs: { available: true, checked: false, errorCount: 0 },
 });
 
 t("form: dialog with description, contact, unchecked opt-in and the diagnostic", () => {
@@ -57,6 +58,28 @@ t("offer: repeat and frustration copy, status role, two choices", () => {
     if (!html.includes('role="status"') || html.includes('role="alert"')) throw new Error("offer must be a calm status");
     if (!html.includes(">문제 보내기</button>") || !html.includes(">괜찮아요</button>")) throw new Error("offer buttons");
   }
+});
+
+t("logs: ticked after a crash, unticked otherwise, hidden without log files; crash records named", () => {
+  const box = (html: string) => /<input[^>]*data-problem-logs[^>]*>/.exec(html)?.[0];
+  const crashed = renderToStaticMarkup(<ProblemReportDialog form={{ ...form(0), reason: "crash", logs: { available: true, checked: true, errorCount: 2 } }} onAnswer={noop} />);
+  if (!box(crashed) || !/checked/.test(box(crashed)!)) throw new Error("after a crash the logs box starts ticked");
+  if (!crashed.includes("앱 기록 파일 첨부 (화면·확장 로그 마지막 부분)") || !crashed.includes("토큰·이메일·내 컴퓨터 사용자 이름을 지워요")) throw new Error("logs label or redaction note missing");
+  if (!crashed.includes("최근 화면 오류 기록 2건")) throw new Error("crash records not named");
+  if (!crashed.includes("화면이 멈춘 문제를")) throw new Error("crash lead missing");
+  const calm = renderToStaticMarkup(<ProblemReportDialog form={form(0)} onAnswer={noop} />);
+  if (!box(calm) || /checked/.test(box(calm)!)) throw new Error("without a crash the logs box starts unticked");
+  if (calm.includes("최근 화면 오류 기록")) throw new Error("no crash records, no line");
+  const none = renderToStaticMarkup(<ProblemReportDialog form={{ ...form(0), logs: { available: false, checked: true, errorCount: 0 } }} onAnswer={noop} />);
+  if (box(none)) throw new Error("no log files: no box");
+});
+
+t("crash card: offers 문제 신고하기 next to 다시 열기", () => {
+  const b = new ChatErrorBoundary({ children: null });
+  b.state = { err: new Error("Minified React error #185") };
+  const html = renderToStaticMarkup(<>{b.render()}</>);
+  if (!html.includes("화면을 그리다가 멈췄어요") || !html.includes("다시 열기")) throw new Error("crash card not rendered (control)");
+  if (!/data-crash-report[^>]*>문제 신고하기<\/button>/.test(html)) throw new Error("crash card lacks 문제 신고하기");
 });
 
 if (fail) { console.error(`problem-report-dialog: ${fail} failed`); process.exit(1); }

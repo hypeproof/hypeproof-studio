@@ -1,0 +1,9 @@
+{
+  "name": "@hypeproof/studio-native-preview",
+  "private": true,
+  "scripts": {
+    "test:ios": "test -f ios/Tests/StudioCoreTests/IntentTests.swift && swift test --package-path ios",
+    "test:ios-contract": "swift test --package-path ios --filter ServiceTests",
+    "test:android": "test -f android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java && cd android && gradle --no-daemon :app:testDebugUnitTest --tests ai.hypeproof.studio.StudioStateTest"
+  }
+}

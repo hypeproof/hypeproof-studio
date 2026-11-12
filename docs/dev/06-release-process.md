@@ -67,8 +67,8 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-2
 |---|---|---|
 | Release cut: range, smoke, release PR body (dry-run) | In `main` | #1608, #1609 |
 | Release cut: rc tag, rc builds, release PR (`mode=create`) | In `main`, not run on Actions yet | #1687, #1689 |
-| Release check section in PRs and issues | In `main`, not enforced | #1680, #1682 |
-| `hype-pr` checks the Release check section | In `main`, not enforced in Studio | hypeproof-harness#324 |
+| Release check section in PRs and issues | In `main`, enforced on PR bodies by CI (`process / release-check`) | #1680, #1682, #3568 |
+| `hype-pr` checks the Release check section | In `main`, enforced in Studio (`release_check.enforced: true`) | hypeproof-harness#324 |
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
 | Publish gate (rule 5) | In `main` (merged 2026-10-18) | #1683, #1684 |
 | Approval workflow: approval → `v` tag, promotion without a rebuild, merge, publish | Merged with #3172, not run on Actions yet | #3170, #3172 |
@@ -181,8 +181,10 @@ Smoke check: <scripts/release/smoke/checks/sN-*.mjs or #issue, only for yes>
   `Smoke differs from issue: <reason>`.
 - The rule applies to PRs opened after it is enforced. Earlier PRs are not changed.
 
-`hype-pr` checks the section when it creates a PR. The check is on only when
-`config/pr-body-contract.json` sets `release_check.enforced` to `true`.
+`hype-pr` checks the section when it creates a PR. CI checks it on every PR body edit:
+the check `process / release-check` (`scripts/release/release-check-gate.py`, #3568). Both read
+`config/pr-body-contract.json`. Its exemptions are logged, not silent: dependabot PRs, release bot
+PRs on `release/*`, and the harness sync PR `chore/harness-sync`.
 
 Issue bodies are not checked. An issue is written before the code, so the smoke answer
 in an issue is only an estimate.

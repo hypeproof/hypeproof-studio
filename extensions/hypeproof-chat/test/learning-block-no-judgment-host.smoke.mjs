@@ -96,7 +96,8 @@ const BLOCK = path.join(extension, "webview-ui/src/LessonStepPanel.tsx");
 const CANVAS = [
   "webview-ui/src/StartPage.tsx", "webview-ui/src/LocalReview.tsx",
   "src/previewProvider.ts", "src/previewHtml.ts", "src/workTakeawayPanel.ts", "src/slideStudioHost.ts", "src/visitorPreviewHost.ts",
-  "src/artifactHistoryPanel.ts", "src/imageEditCommands.ts", "src/localReviewPanel.ts", "src/startPage.ts", "src/personalContinuationHost.ts",
+  "src/artifactHistoryPanel.ts", "src/imageEditCommands.ts", "src/localReviewPanel.ts", "src/startPage.ts", "src/personalContinuationHost.ts", "src/automationHost.ts",
+  "webview-ui/src/SkillStore.tsx", "src/skillStorePanel.ts",
 ];
 async function graph(entry) {
   const r = await build({

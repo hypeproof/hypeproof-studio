@@ -5,6 +5,7 @@
 import type { ResolvedProfile } from "../protocol";
 import { runLocalCoach } from "../localRuntime/index.ts";
 import type { LocalRuntimeConfig, BrowserToolsForLocal } from "../localRuntime/index.ts";
+import type { HumanWait } from "../localRuntime/humanWait.ts";
 import { chalkExtraTools, type ChalkToolContext } from "./tools.ts";
 import type { SdkActivity, CoachToolAction } from "../sdkCoachHelpers";
 
@@ -48,6 +49,9 @@ export async function runInstructorTurn(args: {
   chalkCtx: ChalkToolContext | undefined;
   /** live_preview_start + browser_open handlers from chatPanelProvider. */
   browserTools?: BrowserToolsForLocal;
+  /** Counts waits for a person (#3582). Forwarded only; the chalk tools are unchanged. */
+  humanWait?: HumanWait;
+  planGate?: import("../planFirst.ts").PlanFirstGate;
   signal: AbortSignal;
   onDelta: (text: string) => void;
   onRefusal?: () => void;
@@ -68,6 +72,8 @@ export async function runInstructorTurn(args: {
     systemPrompt: args.brief,
     extraTools: chalkExtraTools(args.chalkCtx),
     browserTools: args.browserTools,
+    humanWait: args.humanWait,
+    planGate: args.planGate,
     signal: args.signal,
     onDelta: args.onDelta,
     onRefusal: args.onRefusal,

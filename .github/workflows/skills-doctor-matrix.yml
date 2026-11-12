@@ -7,7 +7,7 @@
 #   runtime path could merge unseen. This job runs the fail-closed doctor plus
 #   a shell-assumption smoke on windows-2022 for pull requests that touch the
 #   installers, testing the Windows path pre-merge, and on BOTH windows-2022
-#   and macos-14 after merge.
+#   and macos-15 after merge.
 #
 # Grounded in the installer plan (hypeproof-deps.yaml is the single source of
 # truth; scripts/hps-doctor.sh re-verifies that same manifest, fail-closed).
@@ -48,7 +48,7 @@ concurrency:
 defaults:
   run:
     # On windows-2022 this resolves to Git Bash — exactly the POSIX bash the
-    # bundled skills rely on. On macos-14 it is the system bash. Same script,
+    # bundled skills rely on. On macos-15 it is the system bash. Same script,
     # both runtimes.
     shell: bash
 
@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-2022"]' || '["windows-2022", "macos-14"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-2022"]' || '["windows-2022", "macos-15"]') }}
 
     steps:
       - name: Checkout

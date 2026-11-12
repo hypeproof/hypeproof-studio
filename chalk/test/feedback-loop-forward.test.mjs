@@ -3,7 +3,8 @@
 // below is what an instructor Bearer may reach; anything else stops here with 404 and never reaches the Service.
 import assert from 'node:assert/strict';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-const { default: chalk } = await import('../src/index.ts');
+import { withBearerAsConnection } from './harness/connect.mjs';
+const chalk = withBearerAsConnection((await import('../src/index.ts')).default);
 const env = { HPS_SIGNING_SECRET: 'test-secret-0123456789abcdef', ENVIRONMENT: 'dev', HPS_SERVICE_ORIGIN: 'https://service.test' };
 const retros = '/admin/cohorts/test-cohort/authoring/course-1/retrospectives', rt = retros + '/rt-0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
 const original = globalThis.fetch; const calls = [];

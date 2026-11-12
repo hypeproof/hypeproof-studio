@@ -1,4 +1,6 @@
+import { withoutTools } from './planFirst';
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
+import { approvalModeFor, approvalPresetBlockServed, servedApprovalPreset } from "./approvalPreset";
 import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
@@ -42,6 +44,8 @@ import {
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
+import { buildMemoryMcpServer, MCP_MEMORY_REMEMBER, MEMORY_MCP_SERVER, type MemoryRememberHost } from "./memoryRememberTool";
+import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
 import {
   resolveOrchestrator,
   startOrchestratorTurn,
@@ -122,6 +126,7 @@ export class CoachStallError extends Error {
   }
 }
 
+export type SdkDiagnosticPhase = 'starting' | 'binary_ready' | 'sdk_ready' | 'tools_loading' | 'tools_ready' | 'config_ready' | 'query_options_ready' | 'query_created' | 'first_event' | 'stalled';
 /**
  * The Agent SDK exposes a rejected gateway request as status-only `api_retry`.
  * The host may use this marker to re-read `/profile`; the error itself stays
@@ -136,6 +141,10 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 }
 
 export interface SdkCoachArgs {
+  /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
+  onDiagnostic?: (phase: SdkDiagnosticPhase) => void;
+  /** #3640 — set only by a Dev app (devSdkConfigRoot); the CLI config dir goes under it. */
+  sdkConfigRoot?: string;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -144,6 +153,11 @@ export interface SdkCoachArgs {
   /** #751 G2 — the lesson step on screen and the learner's help mode for this turn. Teaching pointers the Service re-checks; never grants. */
   lessonStep?: string;
   helpMode?: string;
+  /**
+   * Epic #3418 D2/D8 — the installed store skill this turn runs, as `<item_id>@<version>`. The Service composes the
+   * seller's private layer server-side; this turn runs with an ephemeral SDK session and without the orchestrator.
+   */
+  storeRun?: string;
   /**
    * The extension's proxyUrl setting (OpenAI-compat base ending in /v1).
    * ANTHROPIC_BASE_URL is DERIVED from it (the /v1 suffix stripped — the SDK
@@ -164,6 +178,8 @@ export interface SdkCoachArgs {
   history: { role: string; content: string }[];
   userText: string;
   toolMode?: TurnToolMode;
+  /** CGP-CHAT-R-004 — set on a "먼저 계획 보기" planning turn: no tool is advertised, registered or run. */
+  planGate?: import('./planFirst').PlanFirstGate;
   /** Actual current-turn pixels, including explicit workspace reference re-reads. */
   images?: string[];
   signal: AbortSignal;
@@ -208,6 +224,9 @@ export interface SdkCoachArgs {
    * browser-less. Implemented by chatPanelProvider (it has the vscode API).
    */
   browserHost?: BrowserMcpHost;
+  emailAutomationHost?: GoogleAutomationMcpHost;
+  /** REQ-STUDIO-MEMORY-REMEMBER-TOOL — present only on a personal activity (the host decides); absent, no `remember` tool exists. */
+  memoryRememberHost?: MemoryRememberHost;
   /**
    * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
    * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
@@ -238,6 +257,22 @@ export interface SdkCoachArgs {
   stallTimeoutMs?: number;
   /** Test seam: inject a pre-computed binary resolution (skip fs probes). */
   binaryResolution?: SdkBinaryResolution;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — this turn's prompt carries the learner's memory, which lives only in the
+   * activity folder (DEC-01). The CLI otherwise writes the whole prompt (and the system prompt) into a session transcript
+   * under the seat's config dir, where no memory delete reaches it, so the turn runs with `persistSession: false`.
+   * Measured 2026-11-01 on SDK 0.3.299: default → both in `projects/<cwd>/<session>.jsonl`; false → neither anywhere
+   * under CLAUDE_CONFIG_DIR. Nothing resumes a session: every turn passes its history in the prompt.
+   */
+  ephemeralSession?: boolean;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — the learner's memory for this turn, kept out of the prompt. The Service takes the
+   * last user message's text as the turn's prompt (`lastUserMessageText`), screens it and, on cohorts with
+   * `analytics.log_user_messages`, stores it; memory must not ride there (DEC-01). It goes in as the UserPromptSubmit
+   * hook's additionalContext, which the CLI sends as its own `role: "system"` message (measured on SDK 0.3.299); the
+   * gateway hands that to the model as `<system-context>` (normalizeSystemRoleMessages) and does not store it.
+   */
+  memoryContext?: string;
   /** Test seam: inject a fake SDK module instead of importing the real one. */
   sdk?: AgentSdkModule;
   /** Test seam: inject a fake zod instead of importing the real one. */
@@ -530,6 +565,8 @@ function abortError(): Error {
  * both runtimes and the fallback inside one guard.
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
+  const diagnostic = (phase: SdkDiagnosticPhase) => { try { args.onDiagnostic?.(phase); } catch { /* Diagnostics cannot break a turn. */ } };
+  diagnostic('starting');
   const mode = turnToolMode(args.toolMode);
   requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
@@ -559,12 +596,14 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     console.info(`[coach] claude binary via ${binary.source}: ${binary.path}`);
   }
 
+  diagnostic('binary_ready');
   const sdk = args.sdk ?? (await loadSdk());
+  diagnostic('sdk_ready');
   // A4 — the front-line orchestrator (ADR 0011). On only with the host's arguments, an
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = mode === 'auto' ? args.orchestrator : undefined;
+  const orchestratorHost = mode === 'auto' && !args.storeRun && !args.planGate ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -574,12 +613,14 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A roster was served and refused here: "configured but inert" must leave a trace.
     console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
   }
-  const opts = toolsForTurn(profileToAgentOptions(
+  const toolsOpts = toolsForTurn(profileToAgentOptions(
     args.profile,
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
   ), mode, profileAudience(args.profile));
+  // CGP-CHAT-R-004 — a planning turn advertises and registers nothing; canUseTool below refuses anything that still arrives.
+  const opts = args.planGate ? withoutTools(toolsOpts) : toolsOpts;
   const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
@@ -629,65 +670,117 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
-  // A4 — since A2 the permitted list can hold consult/site_check without the browser
-  // grant, so each part registers from its own names: the server's own tools (browser,
-  // CR, publish_site) with their grants and a host, as before; the orchestrator tools
-  // only on an orchestrator turn. Without a roster the first part is the whole list and
-  // nothing else changes.
-  const orchestratorNames = MCP_ORCHESTRATOR_TOOLS as readonly string[];
-  const serverGrant = opts.permittedMcpTools.filter((t) => !orchestratorNames.includes(t));
-  const orchestratorGrant = opts.permittedMcpTools.filter((t) => orchestratorNames.includes(t));
-  const registerServer = serverGrant.length > 0 && !!args.browserHost;
-  if (registerServer || (orchestratorTurn && orchestratorGrant.length > 0)) {
-    const hasFactory =
-      typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
+  diagnostic('tools_loading');
+  // Each server registers only its own granted tools; absent hosts cannot borrow
+  // capabilities from the email, browser/publishing or orchestrator path.
+  const emailNames: readonly string[] = ALL_AUTOMATION_MCP_TOOLS;
+  const orchestratorNames: readonly string[] = MCP_ORCHESTRATOR_TOOLS;
+  const emailGrants = opts.permittedMcpTools.filter(name => emailNames.includes(name));
+  const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name) && !orchestratorNames.includes(name));
+  const orchestratorGrants = opts.permittedMcpTools.filter(name => orchestratorNames.includes(name));
+  const registerBrowser = !!args.browserHost && browserGrants.length > 0;
+  const registerEmail = !!args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => emailGrants.includes(name));
+  const registerMemory = !!args.memoryRememberHost && mode === 'auto' && !args.storeRun && !args.planGate;
+  if (registerBrowser || registerEmail || registerMemory || (orchestratorTurn && orchestratorGrants.length > 0)) {
+    const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
       const factory: SdkMcpFactory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
-      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrant) : { tools: [], names: [] };
-      const server = registerServer
-        ? buildHypeproofMcpServer(
-            withServerTools(factory, extra.tools),
-            z,
-            args.browserHost!,
-            // CR-02 — register the Experiment Browser tools only where they were granted; the
-            // browser and publish_site parts likewise follow their own grants, so a cohort with
-            // only the publish grant gets a server carrying publish_site alone.
-            { ...crMcpRegistration(opts.permittedMcpTools), ...hypeproofMcpRegistration(opts.permittedMcpTools) },
-          )
-        : extra.tools.length > 0
-          ? buildHypeproofToolsOnlyServer(factory, extra.tools)
-          : null;
+      const servers: NonNullable<Options["mcpServers"]> = {};
+      const grants: string[] = [];
+      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrants) : { tools: [], names: [] };
+      const server = registerBrowser
+        ? buildHypeproofMcpServer(withServerTools(factory, extra.tools), z, args.browserHost!,
+          { ...crMcpRegistration(browserGrants), ...hypeproofMcpRegistration(browserGrants) })
+        : extra.tools.length > 0 ? buildHypeproofToolsOnlyServer(factory, extra.tools) : null;
       if (server) {
-        mcpServers = {
-          [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
-        };
-        grantedMcpTools = [...(registerServer ? serverGrant : []), ...extra.names];
+        servers[HYPEPROOF_MCP_SERVER_NAME] = server as NonNullable<Options["mcpServers"]>[string];
+        grants.push(...(registerBrowser ? browserGrants : []), ...extra.names);
       }
+      if (args.emailAutomationHost && registerEmail) {
+        const host = args.emailAutomationHost;
+        const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
+          awaitingUser++;
+          const cancel = () => host.cancelPendingQuestion?.();
+          args.signal.addEventListener('abort', cancel, { once: true });
+          try {
+            if (args.signal.aborted) throw abortError();
+            return await work();
+          } finally { args.signal.removeEventListener('abort', cancel); awaitingUser--; }
+        };
+        const server = buildGoogleAutomationMcpServer(factory, z, {
+          ...host,
+          isAllowed: () => !args.signal.aborted && host.isAllowed(),
+          refreshAuthorization: host.refreshAuthorization ? () => host.refreshAuthorization!() : undefined,
+          isAppsScriptAllowed: () => !args.signal.aborted && host.isAppsScriptAllowed?.() === true && emailGrants.includes('mcp__hypeproof_email__apps_script_run'),
+          appsScriptUpload: host.appsScriptUpload ? () => humanWait(() => host.appsScriptUpload!()) : undefined,
+          appsScriptSetup: host.appsScriptSetup ? () => humanWait(() => host.appsScriptSetup!()) : undefined,
+          appsScriptDeploy: host.appsScriptDeploy ? () => humanWait(() => host.appsScriptDeploy!()) : undefined,
+          appsScriptRun: host.appsScriptRun ? mode => humanWait(() => host.appsScriptRun!(mode)) : undefined,
+          confirmSend: preview => humanWait(() => host.confirmSend(preview)),
+          askUser: host.askUser ? input => humanWait(() => host.askUser!(input)) : undefined,
+          connectGoogle: host.connectGoogle ? mode => humanWait(() => host.connectGoogle!(mode)) : undefined,
+          configureSheet: host.configureSheet ? mode => humanWait(() => host.configureSheet!(mode)) : undefined,
+          publishSkill: host.publishSkill ? parentId => humanWait(() => host.publishSkill!(parentId)) : undefined,
+          installSkill: host.installSkill ? id => humanWait(() => host.installSkill!(id)) : undefined,
+        });
+        if (server) {
+          servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
+          grants.push(...emailGrants.filter(name => (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(name) || host.isAppsScriptAllowed?.() === true));
+        }
+      }
+      if (registerMemory) {
+        servers[MEMORY_MCP_SERVER] = buildMemoryMcpServer(factory, z, args.memoryRememberHost!) as NonNullable<Options["mcpServers"]>[string];
+        grants.push(MCP_MEMORY_REMEMBER);
+      }
+      if (grants.length) mcpServers = servers;
+      grantedMcpTools = grants;
     } else {
-      console.warn(
-        "[coach] profile grants browser MCP tools but the SDK/zod factory is unavailable — running browser-less",
-      );
+      console.warn("[coach] managed MCP factory unavailable; capabilities remain disabled");
     }
   }
 
+  // Installed host capabilities take precedence over stale lesson text. Attach
+  // this guide only after the permitted shared tools were actually registered.
+  if (args.emailAutomationHost?.isSharedRunner?.() === true
+      && args.emailAutomationHost.isAppsScriptAllowed?.() === true
+      && grantedMcpTools.includes('mcp__hypeproof_email__apps_script_run')) {
+    opts.systemPrompt += '\n\n' + [
+      'Installed Studio execution contract: shared Google runner. This host contract supersedes earlier personal Apps Script upload/deployment instructions for this activity; it grants no additional tools or permissions.',
+      'Understand the learner’s work through one necessary question at a time using mcp__hypeproof_email__ask_user. Reuse known answers and saved skills. Never ask for JSON, account addresses or Sheet URLs in public conversation. Save the portable recipe with skill_save; use google_connect and sheet_configure mode:"reuse" for private setup. Then call apps_script_prepare followed by apps_script_run mode:"preview". All tool names use the mcp__hypeproof_email__ prefix.',
+      'A recipe edit is not persisted by describing it or repeating JSON. Call skill_save with the intended complete recipe and require its saved:true result before claiming a save or opening publication review. Change only requested fields; recipe title/description are distinct from the email subject/body. A cancelled:true tool result is not evidence of a connection failure or a card failing to open. Briefly report that the action was not completed and wait for a new request, without automatic retry or invented diagnosis. Explain outcomes in plain Korean without internal receipt fields or publication IDs.',
+      'The installed recipe store is restricted to this cohort. Describe visibility:cohort as 우리 반 공유, never public publication or an internet-wide store. Resolve a title through skill_list without id before selecting an ID returned by the store; never invent an ID or ask the learner for one. List responses contain metadata, not compared recipe bodies: contentsCompared:false cannot establish that two versions have the same content. Keep IDs in tool calls, not learner-facing tables or summaries.',
+      'Show the actual workflow in workflow_plan: goal → skill and goal → connect → sheet; prepare depends on skill and connect, preview on prepare and sheet. Send and publish are optional independent branches after preview. Omit upload and deploy nodes. The host alone advances steps from observed results; no planned, ready or compatibility response proves execution.',
+      'Studio manages the common Google execution code; each learner runs with their own Google identity and private data. Do not create personal scripts or ask learners to upload, deploy, change Cloud projects, grant IAM or enable Apps Script API access. apps_script_upload/deploy exist only for compatibility; ready:true with uploaded:false/deployed:false is not an upload or deployment. On recoveryRequired follow the safe host reason and nextTool, using apps_script_setup for private reconnect, retry or an operator blocker. Respect cancellation.',
+      'A successful preview is not send approval. On nextAction:wait_for_user, report the safe result briefly and end the turn. Neither reviewed:true nor dismissal allows sending or sharing. Call mode:"send" only after a new explicit learner request and let the host obtain exact recipient/content approval. Never retry uncertain sends. A changed skill or account requires a fresh preview. Sharing requires separate host approval and includes only the portable recipe, never private account data or execution credentials.',
+    ].join('\n');
+  }
+
+  diagnostic('tools_ready');
   // REQ-M13 — the coach's CLI gets a config dir of its own so stored Claude
   // Code / Claude Desktop credentials can't outrank the workshop token. The
   // path is derived purely (sdkConfigDirFor); creating it is the host's job.
   // A failure here is not fatal: the CLI creates it itself, and pointing the
   // env at a not-yet-existing dir still keeps ~/.claude out of the picture.
-  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args));
+  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args), args.sdkConfigRoot);
   try {
     fs.mkdirSync(sdkConfigDir, { recursive: true });
   } catch (err) {
     console.warn(`[coach] could not create SDK config dir ${sdkConfigDir}:`, err);
   }
+  diagnostic('config_ready');
 
   // Pure option/env construction (allowedTools/settingSources pinned to [],
   // ANTHROPIC_BASE_URL derived from proxyUrl, ANTHROPIC_API_KEY scrubbed) is
   // locked by unit tests via buildSdkQueryOptions (REQ-M5/M6/M13); the two
   // host-bound fields are attached here. `Options` is the REAL SDK type.
   let delegationStop: DelegationStop | undefined;
+  // DEC-11f (Jay 2026-11-05) — the folder the agent's shell is in when each Bash call starts, by tool use id. The
+  // Bash tool keeps its folder between commands, so the host needs it to tell which repository a `git push` runs
+  // in (chatPanelProvider approveOutwardCommand). Filled by the PreToolUse hook below (hooks run before canUseTool);
+  // a call without an entry is resolved as before (work folder only).
+  const autoSeat = approvalModeFor(servedApprovalPreset(args.profile)?.id ?? null, isMinorProfile(args.profile), approvalPresetBlockServed(args.profile)) === "auto";
+  const shellCwds = new Map<string, string>();
   const options: Options = {
     ...buildSdkQueryOptions(opts, {
       proxyUrl: args.gatewayUrl,
@@ -697,6 +790,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,
       helpMode: args.helpMode,
+      storeRun: args.storeRun,
       token: args.token,
       cwd: args.cwd,
       baseEnv: process.env,
@@ -733,6 +827,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       };
       if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       lastToolCallAt = Date.now();
+      // CGP-CHAT-R-004 — host-side refusal while the plan waits for the learner; nothing below can widen it.
+      if (args.planGate) { decision(false); return { behavior: "deny" as const, message: args.planGate.refusal(name) }; }
       // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
       // a preview, or a delegated task. The existing capability/approval gates still run.
       if (args.browserHost?.generalBrowserRequest &&
@@ -775,6 +871,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         accessRemoved: accessRemovedFeatures(args.profile),
         // REQ-STUDIO-FOLDER-CONSENT — what the learner's folder choice removed: 폴더 권한.
         folderRemoved: folderRemovedFeatures(args.profile),
+        // CGP-AGENT-R-001 — the lesson's approval preset may only add asks (approvalPreset.ts).
+        approvalPreset: servedApprovalPreset(args.profile)?.id ?? null,
+        // DEC-11 amended (Jay 2026-11-04) — personal and adult seats with no preset run in auto.
+        autoInFolder: approvalModeFor(servedApprovalPreset(args.profile)?.id ?? null, isMinorProfile(args.profile), approvalPresetBlockServed(args.profile)) === "auto",
       });
       if (verdict.decision === "deny") {
         if (verdict.drift) {
@@ -826,7 +926,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
       const writeScope = isWriteToolName(name) ? writeScopeKeys(name, input, args.cwd) : null;
       try {
+        const shellCwd = shellCwds.get(options.toolUseID);
+        shellCwds.delete(options.toolUseID);
         const approval = await args.requestApproval({
+          ...(shellCwd ? { shellCwd } : {}),
           toolName: name,
           // A JSON copy: tool inputs are JSON, and some hosts (vm-bundled tests) have no structuredClone.
           input: writeScope ? (JSON.parse(JSON.stringify(input)) as typeof input) : input,
@@ -854,14 +957,45 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };
     },
     abortController,
+    ...(args.ephemeralSession || args.storeRun ? { persistSession: false } : {}),
   };
+  if (args.memoryContext) {
+    const additionalContext = args.memoryContext;
+    options.hooks = {
+      ...options.hooks,
+      UserPromptSubmit: [...(options.hooks?.UserPromptSubmit ?? []), { hooks: [async () => ({ hookSpecificOutput: { hookEventName: "UserPromptSubmit" as const, additionalContext } })] }],
+    };
+  }
 
+  if (autoSeat) {
+    // DEC-11f — reports nothing and decides nothing: it only records the shell's folder for the approval host.
+    const recordShellCwd = async (input: import("@anthropic-ai/claude-agent-sdk").HookInput, toolUseID: string | undefined) => {
+      const id = (input as { tool_use_id?: unknown }).tool_use_id;
+      const key = typeof id === "string" && id ? id : toolUseID;
+      if (input.hook_event_name === "PreToolUse" && key && typeof input.cwd === "string" && input.cwd) {
+        shellCwds.set(key, input.cwd);
+        if (shellCwds.size > 200) shellCwds.delete(shellCwds.keys().next().value as string);
+      }
+      return {};
+    };
+    options.hooks = { ...options.hooks, PreToolUse: [...(options.hooks?.PreToolUse ?? []), { matcher: "Bash", hooks: [recordShellCwd] }] };
+  }
+
+  diagnostic('query_options_ready');
   const stream = sdk.query({ prompt, options });
   delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
   if(stream.stopTask)args.onDelegationControl?.(()=>delegationStop?.request());
   // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
   // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
-  const tapped = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  diagnostic('query_created');
+  const diagnosedStream = (async function* () {
+    let first = true;
+    for await (const event of stream) {
+      if (first) { first = false; diagnostic('first_event'); }
+      yield event;
+    }
+  })();
+  const tapped = orchestratorTurn ? orchestratorTurn.tap(diagnosedStream) : diagnosedStream;
   const processes = args.processes ? new SdkProcesses(args.processes.registry, args.processes.prefix, stream.stopTask?.bind(stream)) : undefined;
   const observed = (async function* () {
     try { for await (const event of tapped) {
@@ -894,8 +1028,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   //   both statuses here: the workshop token is the only credential on this
   //   path, so a 400/401 means that token is unusable — replacing it is the
   //   recovery, retrying is not.
+  // - 429 or a synthetic assistant API failure → immediate safe error notice;
+  //   the learner can fix funding/concurrency before explicitly retrying.
   // - stall watchdog → CoachStallError (#403, REQ-M26): everything the 4xx
-  //   fast-fail does NOT cover (429/529/5xx/connection retries, or a first turn
+  //   fast-fail does NOT cover (529/5xx/connection retries, or a first turn
   //   that simply never produces a token) left the student on "생각하는 중… ✨"
   //   with no error and no way out. After stallTimeoutMs of no progress we
   //   abort the query and surface a retry-me message.
@@ -928,6 +1064,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,
     makeStallError: (status) => {
+      diagnostic('stalled');
       // Developer-side signal — the student only ever sees the Korean line.
       console.warn(
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
@@ -940,8 +1077,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // ~2 budgets total before the watchdog calls it wedged, a never-returning
     // one still ends in a message rather than a hang).
     // A4 — a running consult or site check is host work, not a stall.
-    isTurnBlocked: () => awaitingUser > 0 || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
+    isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
     ...(busy ? { busy } : {}),
+    ...(args.emailAutomationHost ? { failFast: true } : {}),
   }).then(
     // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
     // The value and the error pass through as they are.

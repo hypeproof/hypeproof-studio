@@ -108,7 +108,7 @@ await t("level 2: recent messages only with the opt-in (negative control: ticked
 });
 
 await t("level 2: the webview answer is validated; malformed is a cancel", () => {
-  assert.deepEqual(parseProblemAnswer({ description: "  두 줄\n설명  ", contact: " a@b.c ", includeRecentTurns: false }), { description: "두 줄 설명", contact: "a@b.c", includeRecentTurns: false });
+  assert.deepEqual(parseProblemAnswer({ description: "  두 줄\n설명  ", contact: " a@b.c ", includeRecentTurns: false }), { description: "두 줄 설명", contact: "a@b.c", includeRecentTurns: false, includeLogs: false });
   for (const bad of [null, {}, { description: "x", contact: "", includeRecentTurns: "yes" }, { description: "x".repeat(201), contact: "", includeRecentTurns: false }])
     assert.equal(parseProblemAnswer(bad), null, JSON.stringify(bad));
 });

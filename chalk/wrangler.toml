@@ -22,6 +22,10 @@ HPS_SERVICE_ORIGIN = "https://api.hypeproof-ai.xyz"
 # the Service. Configure the same value on both servers during an approved
 # rollout. It is not a token signing key and never belongs in App/browser code.
 # Without it Access-only retrieval fails closed; the operator-secret path stays.
+# Secret HPS_CHALK_CONNECT_SECRET (>=32 chars, `wrangler secret put`, never here)
+# is shared with the Lab: it proves the connect-code exchange and Chalk's two Lab
+# workshop calls, and keys the sealed session cookie. Unset = Lab login connection
+# off and instructor calls refused (README "Lab login connection").
 
 [env.dev]
 name = "hypeproof-chalk-dev"
