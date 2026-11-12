@@ -17,9 +17,30 @@ export const CASEBOOK_DIR = fileURLToPath(new URL('../../docs/operations/release
 export const PRIORITIES = ['P0', 'P1', 'P2'];
 export const ORIGINS = ['design', 'escaped-bug'];
 export const STATUSES = ['active', '자동화됨'];
+export const TARGETS = ['desktop', 'ios', 'android'];
+
+export function validateTarget(target) {
+  if (!TARGETS.includes(target)) throw new Error(`target must be one of ${TARGETS.join('/')}`);
+  return target;
+}
+
+// Legacy cases belong to desktop. Explicit invalid scopes never become an empty gate.
+export function caseTargets(c) {
+  if (c.targets === undefined) return ['desktop'];
+  if (!Array.isArray(c.targets) || c.targets.length === 0
+      || c.targets.some(t => !TARGETS.includes(t)) || new Set(c.targets).size !== c.targets.length) {
+    throw new Error(`case ${c.id}: targets must be a non-empty, unique list of ${TARGETS.join('/')}`);
+  }
+  return c.targets;
+}
+
+export function appliesToTarget(c, target = 'desktop') {
+  validateTarget(target);
+  return caseTargets(c).includes(target);
+}
 // Requirement id families a case may link (REQ-, TUX-, US-, PRA- plus NAT-, AB- and CGP- from the
 // requirement docs). select-cases.mjs extracts touched ids with the same pattern.
-export const REQ_ID = /\b(?:REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*|TUX-[A-Z0-9]+(?:-[A-Z0-9]+)*|US-\d{2,}|PRA-\d{2,}|NAT-\d{2,}|AB-\d{2,}|CGP-[A-Z]+-R-\d{3})\b/g;
+export const REQ_ID = /\b(?:REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*|TUX-[A-Z0-9]+(?:-[A-Z0-9]+)*|US-\d{2,}|PRA-\d{2,}|NAT-\d{2,}|AB-\d{2,}|MFR-\d{2}|CGP-[A-Z]+-R-\d{3})\b/g;
 
 function scalar(raw, where) {
   const s = raw.trim();
@@ -201,6 +222,7 @@ export function validateCasebook({journeys, cases}) {
     caseIds.add(c.id);
     if (!journeyIds.has(c.journey)) problems.push(`${at}: unknown journey ${c.journey}`);
     if (!PRIORITIES.includes(c.priority)) problems.push(`${at}: priority must be one of ${PRIORITIES.join('/')}`);
+    try { caseTargets(c); } catch (error) { problems.push(error.message); }
     if (!c.title) problems.push(`${at}: missing title`);
     if (!Array.isArray(c.requirements) || c.requirements.length === 0) problems.push(`${at}: requirements must list at least one id`);
     for (const r of c.requirements ?? []) {

@@ -4354,6 +4354,14 @@ screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 �
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
 
+Studio #3771 extends this same casebook to native iPhone first-use failures.
+Cases declare validated release targets; omission retains the existing desktop
+scope. Selection and the desktop publication P0 list use the same target rule.
+Native login, dictation-to-answer and hands-free recovery remain active cases,
+even when corresponding simulator controls pass. A TestFlight test candidate
+may be distributed to collect physical evidence; that distribution is not a
+physical acceptance result or permission to retire the case.
+
 Verification: `scripts/release/test/select-cases.test.mjs` (YAML subset parser with refusal controls
 and a PyYAML cross-check of the real casebook; selection positive controls and negative controls for an
 untouched P1, a 14-day-old escape, an automated P0 and a touched parent; an end-to-end temporary git
@@ -9019,7 +9027,9 @@ voice changes need their own package/device evidence.
 `ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
 extend expression with project-bound editable dictation and consented final-text
 auto-send/read-aloud. System on-device recognition is required with no cloud
-recognizer fallback. Next-turn recording requires a visible tap; stop, background,
+recognizer fallback. Next-turn recording originally required a visible tap;
+MFR-03 below supersedes that step within a deliberately started foreground voice
+session. Stop, background,
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
@@ -9038,3 +9048,11 @@ automatic voice endpoints and foreground-only next-turn listening. See
 and [journey verification](testing/native-mobile-growth.md). This is source work;
 actual provider sign-in, physical audio and distributed-package acceptance must
 be reported separately. Existing desktop execution remains unchanged.
+
+Every escaped user failure follows the same delivery loop: retain the observed
+version and failure (or mark the installed version unknown), add its requirement
+and release-casebook scenario, reproduce the failed boundary, fix it, run the
+exact-source native journeys, distribute a verified test candidate, and record
+the installed retest separately. Missing, skipped or failed required journeys
+cannot pass the native gate. Compilation, simulator, uploaded package, tester
+availability and actual device behavior remain distinct states throughout.
