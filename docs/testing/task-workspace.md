@@ -268,6 +268,31 @@ personal header already scrolls by 11px before any popover in this fixture; the 
 prints that as a note). Packaged-app, physical IME and screen-reader acceptance are
 reported separately.
 
+## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
+
+- `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell
+  presentation draws the row through ToolLine; the block is open on a detailed seat and has one
+  `명령 복사` button (a real `type="button"`, no tabindex or aria-hidden, after the summary and the
+  command in document order, inside the `<details>`). A click writes the command exactly as shown
+  (no `$ `, the ` ⏎ ` mark kept); `명령을 복사했습니다` only after the write resolves, the refusal
+  wording on a rejected write. A summary-seat row and a row restored from its stored label start
+  collapsed with the button inside. In 실행 중인 것 a shell task reads `멈추기`, then `멈추는 중` in
+  the status and the disabled button until the host reports the exit, then `멈췄어요` and no
+  button; the preview server keeps `끄는 중` (negative control).
+- `test/shell-process-layout.smoke.mjs`: the shipped cascade in headless Chromium, personal and
+  classroom, dark and light, 320/800/1420px, forced colours and both VS Code high-contrast themes.
+  Chromium is started with a hover-capable fine pointer (`--blink-settings`), because headless has
+  none and Studio runs with a mouse or trackpad; a second browser has a coarse pointer that cannot
+  hover. Measured: monospace command (ten `i` and ten `W` equally wide), a long command block at most
+  240px with `overflow-y: auto` and content to scroll, the copy button 44 × 44 with a visible edge,
+  beside the command (no overlap) and inside the row, not drawn at rest, drawn under a forced
+  `:hover` on the row and when Tab from the summary reaches it, always drawn without hover, no
+  opacity transition, the shared 2px focus ring (inset in the transcript scroll scope). Twelve new
+  injected overrides (proportional font, no cap, clipping, never/always drawn, hover only, out of
+  the tab order, over the command, small target, no edge, a fade, hidden on touch) each fail it.
+- Physical IME is not involved (the button binds no key), and packaged-app, touch-device and
+  screen-reader acceptance are separate observations.
+
 ## Activity trash in 내 작품 (CGP-KNOW-D-013)
 
 - `test/activity-trash-panel.smoke.mjs`: the real provider routes the panel's requests into the

@@ -20,6 +20,7 @@ import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
 import { StyleTweakPanel } from "./StyleTweakPanel";
 import { storedShell } from "../../src/shellDisplay";
+import { ShellRow } from "./ShellRow";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
@@ -3198,12 +3199,7 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;
   const shell = t.shell ?? storedShell(t.label);
-  if (shell) return <div className={`hps-shell-row hps-tool-${t.state}`}>
-    <p className="hps-shell-purpose">{shell.purpose}</p>
-    <details open={!shell.collapsed}><summary>실행 명령 · {t.state === 'running' ? '처리 중' : t.state === 'error' ? '실패' : '완료'}</summary>
-      <pre><code>{`$ ${shell.command}`}</code></pre>{shell.folder !== undefined && <p className="hps-shell-folder">폴더: {shell.folder}</p>}
-    </details>
-  </div>;
+  if (shell) return <ShellRow shell={shell} state={t.state} />;
   const thinking = /^think-\d+$/.test(message.id);
   if (thinking && t.state === 'done') {
     return (
