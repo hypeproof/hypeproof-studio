@@ -1833,8 +1833,19 @@ Jay decided that availability follows the class: a per-class switch is added (th
 
 - Engine: the OS voice through `speechSynthesis`, Korean `ko-KR`, no Service call (policy D1). Only an on-device Korean voice is chosen; with none the default voice of the platform speaks (the Electron webview has no streaming voices). Unmeasured: voice quality on macOS and Windows.
 - Per answer: personal seats in the answer action row, classroom seats beside the speaker's name (they have no action row). Plays on a press only; one at a time; the same button stops it; fenced code skipped and announced (`코드는 건너뛰었어요`, REQ-CGPV-24).
-- Label `소리로 듣기` is the register's proposed copy, agent-chosen.
+- Label `소리로 듣기` is the register's proposed copy, agent-chosen. Superseded 2026-11-12 by `읽어 주기` / `그만 읽기` (CGP-CHAT-D-009 below).
 - Confirmed by Jay: yes (2026-11-09) for the engine; no for the label and placement.
+
+## CGP-CHAT-D-009: read-aloud control (CGP-CHAT-D67, 2026-11-12)
+
+Audit of main (f9754fdf7) against the design row; only the gaps changed. Already met: the speaker glyph on the control, `aria-pressed` bound to the playing state, one reading in the window (one shared hub, so starting a second answer stops the first) and the control drawing nothing unless the Service serves read-aloud. Gaps: the labels were `소리로 듣기` / `읽기 멈추기`; the only playing cue was a swap to the stop square, with no pressed styling; no test pressed two answers or read `aria-pressed`.
+- Labels (agent choice): `읽어 주기` and, while reading, `그만 읽기`, the row's own copy (CGP-CHAT-R67 uses the same two). They replace the voice register's `소리로 듣기` (REQ-CGPV-24, recorded above as agent-chosen, never confirmed). The settings-change line (CGP-SHELL-R-024) names the class switch by the same constant, so it now says `읽어 주기 꺼짐 → 켜짐`. The Jay-confirmed disclosure sentence (`답을 소리로 읽어 줘요. ...`) is unchanged.
+- Indicator (agent choice): while its answer is read the button draws a level glyph (three bars, new `level` icon, stroked like the set) in the speaker's place and a fill: the verdict's selection fill in the personal action row, the pressed state layer beside the classroom speaker's name. The state is glyph, words, fill and `aria-pressed`, never colour alone. The glyph is in the speaker's slot, so the button does not grow; the two labels have the same number of syllables.
+- Motion (agent choice): the indicator never animates, in any motion mode. The row only asks that it is still under reduced motion; a looping animation would last as long as a reading (minutes) and the motion rules allow loops only for bounded pending indicators. Still everywhere meets the clause without a second code path. `voice.css` also sets `animation: none; transition: none` on the pressed glyph.
+- Forced colours: no new rule; the global `[aria-pressed="true"]` rule (CGP-DS-R-016) draws the pressed control in the system selection pair.
+- Not changed: when voice is not served nothing is drawn (byte-identical markup, `voice-mount.test.tsx`), no flag or policy, minors follow the served block, nothing is stored or logged, and no message goes to the host. Classroom seats keep the control beside the speaker's name (they have no action row, 2026-11-09 placement). Not part of this row and not changed: the voice register's loading and replay states (DES-CGPV-24) and CGP-CHAT-R67's "starting a new send stops playback" (on main a reading stops on a press, another answer, the answer unmounting or voice going off; no send hook was found in `ReadAloudButton.tsx` or `VoiceProvider.tsx`).
+- Not covered: a real Korean voice, a screen reader announcing the pressed state, and the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
 
 ## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
 

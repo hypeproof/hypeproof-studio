@@ -63,7 +63,7 @@ test('tracker: silent first load, one line per change, same id on repost, replac
   const more = seatProfile({ plan_first: { available: false }, voice: { read_aloud: true, policy_version: 'hps-voice-policy/1' } });
   const replaced = (await observe(t, more)).notices;
   assert.equal(replaced.length, 1, 'still one line');
-  assert.equal(replaced[0].text, '선생님이 도움 방식을 바꿨어요: 계획 먼저 켜짐 → 꺼짐 · 소리로 듣기 꺼짐 → 켜짐', 'listed from the old baseline');
+  assert.equal(replaced[0].text, '선생님이 도움 방식을 바꿨어요: 계획 먼저 켜짐 → 꺼짐 · 읽어 주기 꺼짐 → 켜짐', 'listed from the old baseline');
   assert.deepEqual((await observe(t, seatProfile())).notices, [], 'undone before seen');
 });
 
