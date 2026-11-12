@@ -8,8 +8,9 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
-const { default: chalk } = await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const ORIGIN = 'https://service.stub';
 const out = process.env.HPS_CHALK_CONFIRM_DIFF_OUT || 'test-results/chalk-confirm-diff';
 mkdirSync(out, { recursive: true });
@@ -63,7 +64,7 @@ async function open(width = 1280, colorScheme = 'light') {
   const errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.on('dialog', (d) => d.accept());
   await page.goto(origin + '/authoring');
   await page.locator('details').evaluateAll((es) => es.forEach((e) => (e.open = true)));
-  await page.locator('#token').fill('instructor-token');
+  await signInChalk(page, 'instructor-token');
   await page.locator('#cohort').fill('cohort-1'); await page.locator('#profile').fill('profile-1'); await page.locator('#course').fill('course-1');
   await page.evaluate(() => { candidateVersion = 'v2'; bound = identity(); controls(); }); // the state a freeze leaves behind
   await page.locator('#readiness-load').click();

@@ -7,7 +7,7 @@ import { click, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { ACTIVITY_CAUSE_COPY, type ActivityCause, type ActivityUnavailable } from "../src/activityAvailability";
+import { ACTIVITY_CAUSE_COPY, ACTIVITY_CAUSE_HEADLINE, type ActivityCause, type ActivityUnavailable } from "../src/activityAvailability";
 import type { ChatConfig, TrialEndCardView } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -38,7 +38,7 @@ const personal = {
 const card: TrialEndCardView = { ending: "exhausted", title: "무료 사용량을 모두 썼습니다", facts: ["사실 하나"], primary: "이용권 보기", escape: "닫기", productId: "pass-lite", text: "무료 사용량을 모두 썼습니다" };
 
 type El = {
-  getAttribute(n: string): string | null; textContent: string; value: string; localName: string;
+  getAttribute(n: string): string | null; hasAttribute(n: string): boolean; textContent: string; value: string; localName: string; parentElement: El | null;
   findAll(test: (e: El) => boolean): El[]; dispatchEvent(e: unknown): boolean;
 };
 const ev = (type: string, extra: Record<string, unknown> = {}) => ({
@@ -72,6 +72,8 @@ async function harness(config: ChatConfig, extra: Record<string, unknown> = {}) 
   return {
     sent, calls, button,
     status: () => host.findAll((e) => e.getAttribute("aria-label") === "AI 이용 상태")[0],
+    announcer: () => host.findAll((e) => e.getAttribute("data-testid") === "activity-status-announcer")[0],
+    inputCard: () => host.findAll((e) => (e.getAttribute("class") ?? "").split(" ").includes("hps-input"))[0],
     cardTitle: () => host.findAll((e) => e.textContent === card.title && e.localName === "h3")[0],
     type: async (text: string) => { const ta = textarea(); await act(async () => { ta.value = text; ta.dispatchEvent(ev("input")); }); },
     enter: async () => act(async () => { textarea().dispatchEvent(ev("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, shiftKey: false, isComposing: false })); }),
@@ -95,7 +97,7 @@ t("every cause is shown with its own sentence, the composer is held and the draf
   for (const cause of causes) {
     const h = await harness(personal, { activityUnavailable: status(cause), error: "x" });
     ok(h.status(), `status drawn for ${cause}`);
-    eq(h.status().getAttribute("role"), "status", "announced");
+    eq(h.announcer()?.getAttribute("role"), "status", "announced");
     ok(h.text().includes(ACTIVITY_CAUSE_COPY[cause]), `the ${cause} sentence`);
     ok(h.text().includes("내 파일을 계속") || h.text().includes("저장된 내 파일"), "files stay");
     await h.type("고양이 그려 줘");
@@ -183,6 +185,51 @@ t("takeaway is not offered for outage, limited, auth or other non-end causes", a
       eq(on.button("내 작업 가져가기"), undefined, cause + " must not offer the takeaway");
       ok(on.button("상태 다시 확인"), "positive control: status card renders for " + cause);
     }
+  }
+});
+
+
+// CGP-KNOW-D-036 — the status is a screen in the composer's place, not a banner in the message list.
+const ancestors = (el: El) => { const out: El[] = []; for (let n = el.parentElement; n; n = n.parentElement) out.push(n); return out; };
+const cls = (el: El) => (el.getAttribute("class") ?? "").split(" ");
+t("D-036: the status screen takes the composer area; the input card is hidden and the draft survives", async () => {
+  for (const config of [personal, classroom]) {
+    const h = await harness(config, { activityUnavailable: status("ended"), error: "x" });
+    const up = ancestors(h.status());
+    ok(up.some((e) => e.localName === "footer" && cls(e).includes("hps-input-area")), "status sits in the composer footer");
+    ok(!up.some((e) => cls(e).includes("hps-messages")), "not inside the message list");
+    ok(h.inputCard().hasAttribute("hidden"), "the composer card is hidden while the screen shows");
+    await h.type("남길 초안"); eq(h.draft(), "남길 초안", "the hidden draft keeps its text");
+    const control = await harness(config);
+    eq(control.inputCard().hasAttribute("hidden"), false, "negative control: no status, composer card shown");
+  }
+});
+
+t("D-036: cause headline, 아직 할 수 있는 것 list with enabled own-file buttons, 다시 쓰려면 contact, announced", async () => {
+  const causes: ActivityCause[] = ["auth", "expired", "ended", "paused", "exhausted", "forbidden", "not_started", "outage", "limited", "unknown", "revoked"];
+  ok(new Set(causes.map((c) => ACTIVITY_CAUSE_HEADLINE[c])).size === causes.length, "one headline per cause");
+  for (const cause of causes) for (const config of [personal, classroom]) {
+    const h = await harness(config, { activityUnavailable: status(cause, config === classroom ? "classroom" : "solo"), error: "x", trialEndCard: card, onTrialEndCardPasses: noop });
+    eq(h.announcer().textContent, "", `${cause}: the live region starts empty so its later text is announced`);
+    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
+    const headline = h.status().findAll((e) => e.localName === "h3")[0];
+    eq(headline?.textContent, ACTIVITY_CAUSE_HEADLINE[cause], `${cause}: headline names the cause`);
+    ok([...headline.textContent].length <= 20, `${cause}: headline fits one line at 740px (<= 20 characters)`);
+    eq(h.status().getAttribute("aria-describedby"), headline.getAttribute("id"), `${cause}: the region is described by its headline`);
+    const sub = h.status().findAll((e) => e.localName === "h4")[0];
+    eq(sub?.textContent, "아직 할 수 있는 것", `${cause}: list heading`);
+    const items = h.status().findAll((e) => e.localName === "li");
+    for (const label of ["내 파일 열기", "내 파일 내보내기"]) {
+      const li = items.find((e) => e.findAll((b) => b.localName === "button" && b.textContent === label).length === 1);
+      ok(li, `${cause}: ${label} is a list item with its button`);
+      ok(!li!.findAll((b) => b.localName === "button")[0].hasAttribute("disabled"), `${cause}: ${label} enabled`);
+    }
+    const contact = h.status().findAll((e) => cls(e).includes("hps-activity-status-contact"))[0];
+    ok(contact && contact.textContent.startsWith("다시 쓰려면"), `${cause}: contact line`);
+    ok(contact.textContent.includes(config === classroom ? "강사" : "HypeProof 지원팀"), `${cause}: contact names the right person`);
+    ok(h.announcer().textContent.includes(ACTIVITY_CAUSE_HEADLINE[cause]), `${cause}: the live region announces the headline`);
+    if (config === classroom) ok(!/구매|결제|이용권 보기/.test(h.status().textContent), `${cause}: no payment on class seats, even with a card sent`);
+    else ok(h.status().textContent.includes("이용권 보기"), `${cause}: positive control, the solo trial card sits in the screen`);
   }
 });
 

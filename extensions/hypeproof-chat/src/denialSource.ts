@@ -25,7 +25,7 @@
 
 import type { SeatAudience } from "./seatVocabulary.ts";
 
-export type DenialSource = "lesson" | "safety" | "runtime" | "access" | "folder" | "unknown";
+export type DenialSource = "lesson" | "safety" | "runtime" | "access" | "folder" | "unknown" | "timeout" | "declined";
 
 /** The learner-facing label of each source, also the tag in coach-facing tool results. */
 export const DENIAL_SOURCE_LABEL: Readonly<Record<DenialSource, string>> = {
@@ -35,6 +35,9 @@ export const DENIAL_SOURCE_LABEL: Readonly<Record<DenialSource, string>> = {
   access: "이용권 선택",
   folder: "폴더 권한",
   unknown: "확인 안 됨",
+  // #3586 — an approval window ran out of time. Nobody decided; this is not a policy and not a learner refusal.
+  timeout: "시간 초과",
+  declined: "거절함",
 };
 
 /**
@@ -134,6 +137,12 @@ export function denialCopy(d: Denial, audience: DenialAudience = "classroom"): s
       return `이 폴더에서는 ${object(feature)} 쓰지 않기로 골랐어요. ${next("바꾸려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요")}`;
     case "runtime":
       return `이 기능은 지금 앱에서 쓸 수 없어요 — ${clause(d.reason, "이 앱이 아직 지원하지 않아요")}. ${next(`앱을 업데이트하거나 ${solo ? SOLO_REPORT : "선생님께 알려 주세요"}`)}`;
+    case "timeout":
+      // #3586 — a window ran out of time: nobody decided, so no policy wording and no next step to report.
+      return "확인 창을 오래 고르지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.";
+    case "declined":
+      // #3594 — the learner refused in a window: their own choice, so the notice names no policy and offers no report.
+      return "허용하지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요.";
     default:
       return `지금은 ${object(feature)} 쓸 수 없어요 — ${clause(d.reason, "왜 막혔는지 Studio가 확인하지 못했어요")}. ${next(`계속되면 ${solo ? SOLO_REPORT : "선생님께 알려 주세요"}`)}`;
   }

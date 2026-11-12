@@ -36,6 +36,7 @@ html body :is(
   .hps-shell[data-chat-detail="personal"] .hps-input textarea,
   .hps-shell .hps-input[data-file-context] > textarea,
   .hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > textarea,
+  .automation-panel, .automation-share-preview, .hps-conversation-support, .hps-conversation-settings, .hps-shell-automation > .hps-input-area,
   .scroll, #ops-seats, #confirm-diff-lines, #confirm-groups-list, .ri-table-wrap, .side, #ops-detail
 ) {
   --hp-focus-offset: var(--ds-c-focus-inset);

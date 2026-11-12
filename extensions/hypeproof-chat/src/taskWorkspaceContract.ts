@@ -41,6 +41,8 @@ export interface TaskWorkspaceView {
   archived?: ArchivedTaskSummary[];
   sourceSelection: TaskSurfaceSelection | null;
   error?: TaskWorkspaceError;
+  /** CGP-KNOW-R-029 — the open task is a "기록 없이 묻기" task held in memory only (never in the task file). */
+  temporaryTaskId?: string;
 }
 
 /** A delayed navigation request must not switch away from a newer task/view. */

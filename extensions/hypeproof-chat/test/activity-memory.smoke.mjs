@@ -43,9 +43,9 @@ try {
     assert.equal(fs.readFileSync(path.join(memDir(root), a), 'utf8'), '좋아하는 색은 초록이에요.\n');
     assert.equal(fs.readFileSync(path.join(memDir(root), b), 'utf8'), '발표는 금요일이에요.\n');
     assert.deepEqual((await store.contextItems()).map(i => i.text.trim()).sort(), ['발표는 금요일이에요.', '좋아하는 색은 초록이에요.'].sort());
-    // The store has no edit path: its only writes are append (exclusive create) and remove.
+    // The store has no edit path: its only writes are append and restore (both exclusive create, REQ-STUDIO-MEMORY-WRITE-LINE) and remove.
     const methods = Object.getOwnPropertyNames(ActivityMemory.prototype).filter(n => n !== 'constructor');
-    assert.deepEqual(methods.sort(), ['append', 'contextItems', 'folder', 'identify', 'list', 'pathOf', 'readFile', 'remove'].sort());
+    assert.deepEqual(methods.sort(), ['append', 'contextItems', 'folder', 'identify', 'list', 'pathOf', 'readFile', 'readRaw', 'remove', 'restore'].sort());
     // An existing name is never overwritten: force a collision and the write fails, bytes intact.
     const crypto = require('node:crypto');
     const real = crypto.randomBytes;

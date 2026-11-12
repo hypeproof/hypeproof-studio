@@ -28,7 +28,7 @@ result = await notify(
     event_type="deploy.success",
     routes_path="config/notify_routes.yaml",
     payload={"sha": "abc1234", "branch": "main", "url": "..."},
-    tenant_slug="hypeproof-lab",
+    tenant_slug="example-tenant",
 )
 ```
 
@@ -63,7 +63,7 @@ channels:
 routes:
   "*":                                      # applies unless tenant override
     deploy.success: { channels: [sediment], template: deploy_success }
-  hypeproof-lab:                            # per-tenant override
+  example-tenant:                           # per-tenant override
     new_decision:
       channels: [sediment, meeting-notes]
       template: new_decision

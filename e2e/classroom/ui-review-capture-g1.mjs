@@ -14,6 +14,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), pre = path.join(repo, 'e2e/test-results/ui-review-preview');
 const info = JSON.parse(readFileSync(path.join(pre, 'preview.json'), 'utf8')), token = readFileSync(info.token_file, 'utf8').trim(), origin = new URL(info.url).origin;
@@ -31,7 +32,7 @@ async function shot(p, name, caption, made = [], extra = {}) {
   const vp = p.viewportSize(), file = name + '.png'; await p.screenshot({ path: path.join(out, file) });
   shots.push({ file, route: '/manage', viewport: `${vp.width}x${vp.height}`, browser_zoom: '100%', caption, made_here: made, scope: 'synthetic', source_head: source.head, dirty_product: source.dirty_product, primary_ctas: m.primaries, horizontal_overflow: m.overflow, token_on_page: m.tokenOnPage, ...extra });
 }
-async function connect(p) { await p.goto(origin + '/manage'); await p.fill('#token', token); await p.fill('#cohort', info.cohort); await p.fill('#prefix', info.seat_prefix); await p.click('#connect-go'); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(info.seats - 1).waitFor(); await p.waitForTimeout(800); }
+async function connect(p) { await p.goto(origin + '/manage'); await signInChalk(p, token); await p.fill('#cohort', info.cohort); await p.fill('#prefix', info.seat_prefix); await p.click('#connect-go'); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(info.seats - 1).waitFor(); await p.waitForTimeout(800); }
 const seat = (p, id) => p.locator(`#ops-seats .ops-seat[data-seat="${id}"]`);
 const top = (p, sel) => p.evaluate((s) => { const e = document.querySelector(s); window.scrollBy(0, e.getBoundingClientRect().top - 8); }, sel);
 try {

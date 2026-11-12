@@ -1,3 +1,4 @@
+import { FEEDBACK_ENTRY_LABEL } from "../../src/problemReport";
 import { useEffect, useRef, useState } from "react";
 import type { StartState } from "../../src/startPageProtocol";
 import { onHostMessage, postToHost } from "./vscode";
@@ -27,7 +28,7 @@ export function StartPage() {
   const [state, setState] = useState<StartState>({ checking: true, version: "" });
   const [token, setToken] = useState("");
   const [editing, setEditing] = useState(false);
-  const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | null>(null);
+  const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | "account" | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   // CGP-SHELL-R-014 — "설정" opens the learner sheet here; the VS Code editor only via its "고급 설정".
@@ -37,9 +38,13 @@ export function StartPage() {
     const off = onHostMessage(msg => {
       if (msg.type !== "startState") return;
       setState(msg.state);
+      // Restored checkout or browser return keeps payment recovery above account navigation.
+      if (msg.state.purchase?.stage && msg.state.purchase.stage !== "choosing") {
+        setEntry("purchase"); setEditing(true);
+      }
       // REQ-L12 — a purchase in progress keeps its own view; the connected card must not take the screen back mid-payment.
       // REQ-STUDIO-JOIN-LINK — while a join link holds the code form open, a refresh does not close it.
-      if (!msg.state.checking && !msg.state.error && msg.state.profile && !msg.state.purchase?.stage && !msg.state.joinLink) { setToken(""); setEditing(false); setEntry(e => e === "purchase" ? null : e); }
+      if (!msg.state.checking && !msg.state.error && msg.state.profile && !msg.state.purchase?.stage && !msg.state.joinLink) { setToken(""); setEditing(false); setEntry(e => e === "purchase" || (e === "account" && msg.state.candidate) ? null : e); }
     });
     postToHost({ type: "startReady" });
     return off;
@@ -85,6 +90,8 @@ export function StartPage() {
   const freeEntering = !!free?.claiming;
   const showProfile = !!state.profile && !editing && !purchaseHeld && !freeEntering;
   const buying = !showProfile && (entry === "purchase" || purchaseHeld);
+  const grantedEntry = buying && !purchase?.order && (!purchase?.stage || purchase.stage === "choosing") && state.account?.status === "signedIn" && state.account.passes?.some(pass => pass.id === "super" && pass.status === "active" && pass.requests_remaining > 0);
+  const accountEntry = entry === "account" || grantedEntry;
   const freeCard = !!free && !showProfile && !buying && (entry === null || freeEntering);
   const freeBlocked = free?.age === "under14";
   // e2e D2 — a saved free seat whose window is over: the card names the end, never a fresh start.
@@ -122,32 +129,32 @@ export function StartPage() {
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && <button onClick={() => postToHost({type:"accountManage"})}>{state.account.account?.display_name} · 내 계정 <ChatIcon kind="external" size={16} /></button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.automationsEnabled && <button onClick={() => postToHost({ type: "openEmailAutomation" })}>메일 자동화 열기</button>}<button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button>{state.skillStore && state.profile?.kind !== "classroom" && <button onClick={() => postToHost({ type: "openSkillStore" })}>스킬 스토어</button>}<button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "reportProblem" })}>{FEEDBACK_ENTRY_LABEL}</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
     <StartUpdateNotice update={state.update} />
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
         <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>
-        <h1 id="start-title">생각을 현실로.<br/><span>완성은 내 손으로.</span></h1>
-        <p className="studio-lead">목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</p>
+        <h1 id="start-title">{state.automationsEnabled ? <>어떤 업무를<br/><span>자동화할까요?</span></> : <>생각을 현실로.<br/><span>완성은 내 손으로.</span></>}</h1>
+        <p className="studio-lead">{state.automationsEnabled ? <>평소 하던 일을 코치에게 설명해 주세요.<br className="studio-wide"/> 함께 스킬을 만들고, 하나씩 연결해 실행해요.</> : <>목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</>}</p>
         <div className="studio-process" aria-label="목표 정하기, 함께 만들기, 직접 검토하기">
-          <div><span>01</span><strong>목표 정하기</strong><p>무엇을 바꾸고 싶은가요?</p></div>
-          <div><span>02</span><strong>함께 만들기</strong><p>{copy.stepTwo}</p></div>
-          <div><span>03</span><strong>직접 검토하기</strong><p>결과를 확인하고 내 것으로.</p></div>
+          <div><span>01</span><strong>{state.automationsEnabled ? "업무 설명하기" : "목표 정하기"}</strong><p>{state.automationsEnabled ? "매번 어떤 일을 반복하나요?" : "무엇을 바꾸고 싶은가요?"}</p></div>
+          <div><span>02</span><strong>{state.automationsEnabled ? "AI와 스킬 만들기" : "함께 만들기"}</strong><p>{state.automationsEnabled ? "필요한 것만 하나씩 물어봐요." : copy.stepTwo}</p></div>
+          <div><span>03</span><strong>{state.automationsEnabled ? "확인하고 실행하기" : "직접 검토하기"}</strong><p>{state.automationsEnabled ? "내용을 확인한 뒤 직접 승인해요." : "결과를 확인하고 내 것으로."}</p></div>
         </div>
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
         <div className="studio-card-top"><span className="studio-step">시작하기</span><span className="studio-dot"/></div>
-        <h2 id="connect-title">{freeCard ? freeTitle : showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? (free ? "참여 코드로 시작하기" : "수업에 참여하기") : "어떻게 시작할까요?"}</h2>
-        <p className="studio-card-description">{freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : FREE_START_COPY.readyBody) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
-        {freeCard ? <FreeStartCard free={free!} checking={state.checking} calm={freeCalm} error={freeError} purchase={!!purchase?.available} onCode={openCode} onPurchase={openPurchase} onBack={state.profile && !freeEntering ? () => setEditing(false) : undefined} />
+        <h2 id="connect-title">{accountEntry ? "내 계정으로 시작하기" : freeCard ? (state.account ? "내 계정 또는 무료로 시작하기" : freeTitle) : showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? (free ? "참여 코드로 시작하기" : "수업에 참여하기") : "어떻게 시작할까요?"}</h2>
+        <p className="studio-card-description">{accountEntry ? "무제한 권한이 있으면 로그인 후 바로 시작합니다. 그 외 받은 이용권도 여기서 사용할 수 있어요." : freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : (state.account ? "받은 이용권이 있다면 Google로 로그인하세요." : FREE_START_COPY.readyBody)) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
+        {accountEntry && state.account ? <><AccountEntry account={state.account} checking={state.checking} post={postToHost} /><button className="studio-text-button" onClick={() => { setEntry(null); setEditing(false); }}>돌아가기</button></> : freeCard ? <>{state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}<FreeStartCard accountAvailable={!!state.account} free={free!} checking={state.checking} calm={freeCalm} error={freeError} purchase={!!purchase?.available} onCode={openCode} onPurchase={openPurchase} onBack={state.profile && !freeEntering ? () => setEditing(false) : undefined} /></>
         : state.profile && !editing ? <>
           <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}{ended ? <div><dt>{freeSeat ? "무료 사용" : "체험"}</dt><dd>{ended.row}</dd></div> : trialLeft && <div><dt>{state.candidate ? (freeSeat ? "무료 사용량" : "체험 한도") : (freeSeat ? "남은 무료 사용" : "남은 체험")}</dt><dd>{trialLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
           {/* TUX-SP-13 — an ended trial has no "이어서 하기": peer choices only (SX-04), and the pass is opened only by the person (REQ-L12 ①). */}
           {ended ? (purchase?.available || (ended.reason === "exhausted" && !state.candidate)) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "체험 이후 고르기"}>
             {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이어서 하려면 이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
             {ended.reason === "exhausted" && !state.candidate && <button className="studio-choice" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : "지난 대화 보기"} <span aria-hidden="true">→</span></button>}
-          </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
+          </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: state.automationsEnabled ? "openEmailAutomation" : "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.automationsEnabled ? "메일 자동화 열기" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
           {!ended && gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
           {!ended && gh?.status === "unavailable" && <p className="studio-help">GitHub에 올린 홈페이지를 확인하지 못했어요. 새로 시작해도 돼요.</p>}
           {/* #751 U2 — a quiet line under the one Primary (SX-02/04): the same list, from the same host read, as the work screen. */}
@@ -155,7 +162,7 @@ export function StartPage() {
           {state.candidate && !ghChoice && !ended && <button className="studio-text-button" disabled={state.checking || ghBusy} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
-          {/* SPEC iteration 4 §2.5 — with free start the Google sign-in sits at purchase, never on first open. */}
+          {/* Checkout also exposes the shared account entry; granted access is available on first open. */}
           {/* Login at purchase (2026-10-19): while an account is needed, the entry below the list is the Primary instead. */}
           {free && state.account && !purchase?.login && (!purchase?.stage || purchase.stage === "choosing") && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
@@ -233,7 +240,7 @@ export function StartPage() {
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
         <div aria-live="polite" role="status" className="studio-status">{status}</div>
         {state.error && <div className="studio-error" id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>}
-        <div className="studio-card-footer">{freeCard ? FREE_START_COPY.footer : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? FREE_START_COPY.footer : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
+        <div className="studio-card-footer">{freeCard ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : free && entry === "classroom" && !showProfile ? FREE_START_COPY.codeFooter : buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : showProfile && freeSeat ? "만든 파일과 대화는 이 컴퓨터에 남습니다. 받은 이용권은 Google 로그인 후 사용할 수 있어요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
     <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <ChatIcon kind="external" size={16} /></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">만들기 · 검토하기 · 내 것으로</span></footer>
@@ -245,7 +252,7 @@ export function StartPage() {
  * Primary. No 체험/수업 choice: a code is a small secondary link, the pass list another. The host
  * owns the claim; this view sends intents only and never sees the install id or the issued token.
  */
-function FreeStartCard({ free, checking, calm, error, purchase, onCode, onPurchase, onBack }: { free: NonNullable<StartState["freeStart"]>; checking: boolean; calm: string | null; error: string | null; purchase: boolean; onCode: () => void; onPurchase: () => void; onBack?: () => void }) {
+function FreeStartCard({ accountAvailable, free, checking, calm, error, purchase, onCode, onPurchase, onBack }: { accountAvailable?: boolean; free: NonNullable<StartState["freeStart"]>; checking: boolean; calm: string | null; error: string | null; purchase: boolean; onCode: () => void; onPurchase: () => void; onBack?: () => void }) {
   const busy = checking || !!free.claiming;
   const links = <div className="studio-free-links">
     <button className="studio-text-button" disabled={busy} onClick={onCode}>{FREE_START_COPY.codeLink}</button>
@@ -267,9 +274,9 @@ function FreeStartCard({ free, checking, calm, error, purchase, onCode, onPurcha
     {calm ? null : !free.age ? <div className="studio-entry-options" role="group" aria-labelledby="free-age-question">
       <p id="free-age-question" className="studio-question">{FREE_START_COPY.ageQuestion}</p>
       {/* SX-04 — one Primary; the other answer is a peer choice, not a second emphasized button. */}
-      <button className="studio-primary" disabled={busy || tooOld} onClick={() => postToHost({ type: "freeStartAge", answer: "14+" })}>{FREE_START_COPY.ageYes} <span aria-hidden="true">→</span></button>
+      <button className={accountAvailable ? "studio-choice" : "studio-primary"} disabled={busy || tooOld} onClick={() => postToHost({ type: "freeStartAge", answer: "14+" })}>{FREE_START_COPY.ageYes} <span aria-hidden="true">→</span></button>
       <button className="studio-choice" disabled={busy} onClick={() => postToHost({ type: "freeStartAge", answer: "under14" })}>{FREE_START_COPY.ageNo} <span aria-hidden="true">→</span></button>
-    </div> : !tooOld && <button className="studio-primary" disabled={busy} onClick={() => postToHost({ type: "freeStartClaim" })}>{free.claiming ? "준비하는 중…" : FREE_START_COPY.start} <span aria-hidden="true">→</span></button>}
+    </div> : !tooOld && <button className={accountAvailable ? "studio-choice" : "studio-primary"} disabled={busy} onClick={() => postToHost({ type: "freeStartClaim" })}>{free.claiming ? "준비하는 중…" : "로그인 없이 무료로 시작하기"} <span aria-hidden="true">→</span></button>}
     {calm && <p className="studio-notice" role="status">{calm}</p>}
     {tooOld && <div className="studio-error" role="alert">{free.refusal?.code === "app_too_old" ? free.refusal.message : "이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요."}<p><button className="studio-text-button" onClick={() => postToHost({ type: "freeStartUpdate" })}>{FREE_START_COPY.update}</button></p></div>}
     {error && !tooOld && <div className="studio-error" role="alert">{error}</div>}

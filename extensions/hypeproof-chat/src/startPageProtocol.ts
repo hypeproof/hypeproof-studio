@@ -13,7 +13,10 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
+  /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
+  skillStore?: boolean;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -110,7 +113,12 @@ export type StartRequest =
   | { type: "selectActivity"; ref: string }
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
+  | { type: "openEmailAutomation" }
   | { type: "openStudioFiles" }
+  /** REQ-STUDIO-FEEDBACK-ENTRY — 의견·문제 보내기: runs `hypeproof-chat.reportProblem` (the chat panel's form). */
+  | { type: "reportProblem" }
+  /** Epic #3418 REQ-STORE-ENTRY — opens the skill store panel (`hypeproof-chat.skillStore`). Not offered on a classroom seat. */
+  | { type: "openSkillStore" }
   | { type: "openAdvancedSettings" }
   | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */

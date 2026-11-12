@@ -27,6 +27,9 @@ export function claudeStatus(executable = "claude") {
   };
 }
 
+// A human may leave a workshop question open; Stop and the active-time budget still cancel.
+const HUMAN_QUESTION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 export async function runClaude({
   executable = "claude",
   cwd,
@@ -36,12 +39,16 @@ export async function runClaude({
   onDelta,
   onRefusal,
   toolServer,
+  timeout,
+  onProgress,
 }) {
   claudeStatus(executable);
   const config = {
     mcpServers: {
       studio: {
         type: "http",
+        // Human questions can outlast the HTTP transport default of 60 seconds.
+        timeout: HUMAN_QUESTION_TIMEOUT_MS,
         url: toolServer.url,
         headers: { Authorization: "Bearer " + toolServer.token },
       },
@@ -83,8 +90,11 @@ export async function runClaude({
     ],
     {
       cwd,
+      env: { ...subscriptionEnv(), CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS: "0" },
       input: JSON.stringify(messages.filter((m) => m.role !== "system")),
       signal,
+      ...(timeout === undefined ? {} : { timeout }),
+      onProgress,
       onEvent: (event) => {
         if ((event.type === "result" && event.stop_reason === "refusal") ||
             (event.type === "system" && event.subtype === "model_refusal_no_fallback")) onRefusal?.();

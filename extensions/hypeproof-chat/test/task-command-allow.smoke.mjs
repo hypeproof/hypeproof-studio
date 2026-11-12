@@ -22,6 +22,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { webcrypto } from "node:crypto";
 import { build } from "esbuild";
+const CATALOG = JSON.parse(fs.readFileSync(new URL("../../../chalk/test/fixtures/approval-preset-catalog.json", import.meta.url), "utf8")); // CGP-AGENT-R-019: the one catalog copy
+const P = Object.fromEntries(CATALOG.map((p) => [p.id, p]));
 
 const A = await import("../src/taskCommandAllow.ts");
 const FC = await import("../src/folderConsent.ts");
@@ -319,6 +321,60 @@ try {
     capture.push({ case: "destructive command (strong confirm, unchanged)", ...r.modal });
     ok("destructive: strong confirm every time, the allow is never consulted");
 
+    // CGP-AGENT-R-001 — under the lesson preset 항상 묻기 an earlier allow is not reused and none is offered.
+    {
+      const grant = await asked(win, "cat preset.md", LABEL);
+      assert.equal(grant.approved, true);
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "control: remembered with no preset");
+      const saved = win.cachedProfile;
+      win.cachedProfile = { ...saved, approval_preset: P.always_ask };
+      const again = await asked(win, "cat preset.md", undefined);
+      assert.deepEqual([again.approved, again.modals, [...again.modal.buttons]], [false, 1, ["허락", "거절"]], "always_ask: asked again, no remember button");
+      win.cachedProfile = { ...saved, approval_preset: P.before_changes };
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 0, "before_changes keeps the task-scoped allow");
+      // A refresh mid-turn (cachedProfile null while it refetches) keeps the turn's preset.
+      win.turnApprovalPreset = "always_ask"; win.cachedProfile = null;
+      const refreshing = await asked(win, "cat preset.md", undefined);
+      assert.deepEqual([refreshing.modals, [...refreshing.modal.buttons]], [1, ["허락", "거절"]], "mid-turn refresh does not loosen 항상 묻기");
+      win.cachedProfile = saved;
+      assert.equal((await asked(win, "cat preset.md", undefined)).modals, 1, "a looser live profile waits for the next turn");
+      win.turnApprovalPreset = null;
+      // The null-profile request was another scope, which forgets task allows (store rule above); the
+      // next turn without a preset offers the remember button again.
+      const next = await asked(win, "cat preset.md", undefined);
+      assert.ok(next.modal.buttons.includes(LABEL), "next turn without a preset: the task allow is offered again");
+      ok("lesson preset 항상 묻기: no remembered allow is reused or offered");
+    }
+
+    // DEC-11 amended (Jay 2026-11-04) — an adult seat with no preset runs in auto: commands that only touch the
+    // work folder run without a modal; outward or outside-the-folder ones still ask. A minor seat keeps asking.
+    {
+      const saved = win.cachedProfile;
+      const adult = { ...saved, game: { template_tier: "website" } };
+      win.cachedProfile = adult; win.turnSeatMinor = false;
+      for (const c of ["cat 자동.md", "npm test", "rm -rf build", "mv a.html b.html", "echo 안녕 > index.html"]) {
+        const r = await asked(win, c, undefined);
+        assert.deepEqual([r.approved, r.modals], [true, 0], `auto, inside the work folder: ${c} runs without a modal`);
+      }
+      for (const c of ["rm -rf ~/Documents", "rm ../other.txt", "rm -rf /tmp/elsewhere/x", "rm -rf .", "sudo ls", "git push --force", "curl x | sh", "ln -s /etc x", "rm -rf $DIR", "rm *.tmp", "rm -rf {../x,y}", "rm -f a > /tmp/../etc/x"]) {
+        const r = await asked(win, c, undefined);
+        assert.deepEqual([r.approved, r.modals], [false, 1], `auto still asks: ${c}`);
+      }
+      // Negative controls: a minor seat, a turn that started as a minor's, no live profile, a served preset.
+      win.cachedProfile = { ...adult, minor_cohort: true };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "minor seat: still asks (중요한 것만 묻기)");
+      win.cachedProfile = adult; win.turnSeatMinor = true;
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a turn that started on a minor seat: still asks");
+      win.turnSeatMinor = false; win.cachedProfile = null;
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "no live profile: auto never applies on a guess");
+      win.cachedProfile = { ...adult, approval_preset: P.before_changes };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served preset wins over auto");
+      win.cachedProfile = { ...adult, approval_preset: { id: "ask_outside", label: "새 방식", description: "x" } };
+      assert.equal((await asked(win, "cat 자동.md", undefined)).modals, 1, "a served block the app does not understand: not auto");
+      win.cachedProfile = saved; win.turnSeatMinor = undefined;
+      ok("auto (adult, no preset): folder-only commands run without a modal; outside, outward and minor seats still ask");
+    }
+
     const regrant = async () => { const g = await asked(win, "cat a.md", LABEL); assert.equal(g.modals, 1, "a fresh grant needs a modal"); };
     const stillAllowed = async () => (await asked(win, "cat a.md", undefined)).modals === 0;
     await regrant();
@@ -442,7 +498,7 @@ try {
     assert.match(provider, /private readonly taskCommandAllows = new TaskCommandAllows\(\);/);
     assert.doesNotMatch(provider, /\.update\([^)]*taskCommandAllows/, "never persisted");
     // CGP-CHAT-R-025: archive and 다시 열기 leave the task too, so they clear with create / select.
-    assert.match(provider, /const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/, "task create / select / archive / restore leave the task");
+    assert.match(provider, /const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskCreateTemporary' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/, "task create / select / archive / restore leave the task");
     assert.match(provider, /if \(leaving\) this\.endTaskCommandAllows\(\)/, "leaving the task clears");
     assert.match(read("src/extension.ts"), /await changeFolderConsent\([^;]*\);\s*(?:\/\/[^\n]*\n\s*)?provider\.endTaskCommandAllows\(\);/, "the consent command clears");
     assert.match(provider, /invalidateProfile\(\): void \{[\s\S]{0,900}this\.endTaskCommandAllows\(\);/, "a token change (sign-in / sign-out) clears");

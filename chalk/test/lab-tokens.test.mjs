@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-import {labTokens} from '../src/routes/lab-tokens.ts';
+import {labTokens as labTokensRoute} from '../src/routes/lab-tokens.ts';
+import { TEST_CONNECT_SECRET, withBearerAsConnection } from './harness/connect.mjs';
+// The request's Bearer stands for the instructor's Lab-connected issuer (harness/connect.mjs).
+const labTokens = withBearerAsConnection(labTokensRoute);
 const request = (auth = 'Bearer synthetic-issuer') => new Request('https://chalk.test/cohorts/class-one/lab-tokens', {
   headers: {authorization: auth, cookie: 'not-forwarded', 'cf-access-authenticated-user-email': 'forged@example.test'},
 });
@@ -14,7 +17,8 @@ test('production uses only the fixed Lab origin, Bearer and bounded read; failur
     for (const status of [200, 401, 403, 502]) {
       globalThis.fetch = async (url, init) => {
         assert.equal(url, 'https://hypeproof-ai.xyz/api/workshop/boa-room/instructor?cohort=class-one');
-        assert.deepEqual(init.headers, {authorization: 'Bearer synthetic-issuer'});
+        // The Lab takes the Bearer only with the shared secret; nothing else is forwarded.
+        assert.deepEqual(init.headers, {authorization: 'Bearer synthetic-issuer', 'x-hps-chalk-connect-secret': TEST_CONNECT_SECRET});
         assert.equal(init.redirect, 'manual'); assert.ok(init.signal instanceof AbortSignal);
         return Response.json(status === 200 ? fixture : {error: 'denied'}, {status});
       };

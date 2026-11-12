@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TurnReviewView, TurnFileReview, CheckpointView } from "../../src/turnReviewView";
 import { DiffLines } from "./DiffLines";
-import { turnReviewCount, CHECKPOINT_MESSAGE_MAX } from "../../src/turnReviewView";
+import { turnReviewCount, CHECKPOINT_MESSAGE_MAX, TRACKED_ONLY_NOTE } from "../../src/turnReviewView";
 
 export interface TurnReviewBarProps {
   view: TurnReviewView;
@@ -211,7 +211,8 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose, onCheckpointSav
       <Group title="바뀜" kind="changed" items={view.changed} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
       <Group title="지움" kind="deleted" items={view.deleted} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
     </details>
-    <p className="hps-turn-review-note">AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요.</p>
+    {/* #3427 — a tracked point compares only the files the AI's file tools wrote, not the whole folder. */}
+    <p className="hps-turn-review-note">{view.trackedOnly ? TRACKED_ONLY_NOTE : "AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요."}</p>
     <NotCovered items={view.notCovered} />
     <p className="hps-turn-review-note">되돌리면 이번 요청 전 상태로 돌아가요. 지금 상태도 따로 보관해 둬요. {EXTERNAL_NOTE}</p>
     {view.notice && <p className="hps-turn-review-note" role="status">{view.notice}</p>}

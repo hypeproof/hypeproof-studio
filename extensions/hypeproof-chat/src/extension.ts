@@ -1,3 +1,6 @@
+import { registerMobileConversation } from "./mobileConversationHost";
+import type { MobileConversation } from "./mobileConversation";
+import { registerAutomationHost } from "./automationHost";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
@@ -14,6 +17,7 @@ import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
 import { ClassroomOpsHost } from './classroomOpsHost';
 import { prepareWorkspaceDirectory } from './workspacePreparation';
+import { createStudioFolder, discardStudioFolderAfterFailure, syncStudioFolderRecord, type StudioFolder } from './studioFolderTrust';
 import { imageAttachPrompt } from "./coachIdentity.ts";
 import * as vscode from "vscode";
 import * as fs from "fs";
@@ -38,7 +42,7 @@ import {
   LEGACY_HISTORY_KEY,
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
-import { ChalkContractHost } from "./chalkContract";
+import { ChalkContractHost, applyInstructorRuntimeSetting } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
@@ -50,6 +54,10 @@ import {
   checkForUpdates,
   runUpdate,
   installStagedUpdate,
+  autoUpdateEnabled,
+  announceAutoUpdate,
+  scheduleIdleApply,
+  windowPresence,
   dismissVersion,
   currentBundleVersion,
   reportManualUpdateCheckFailure,
@@ -61,6 +69,10 @@ import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
 import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
+import { registerSkillStore } from "./skillStorePanel";
+import { storeQuestSnapshot } from "./questSkill";
+import { renderQuestHtml } from "./automationQuest";
+import { isMinorProfile } from "./sdkCoachHelpers";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
@@ -118,7 +130,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // a more reliable fallback.
   const backdoors = await applyTestBackdoors(context);
 
-  const preview = new PreviewProvider(context);
+  const preview: PreviewProvider = new PreviewProvider(context, () => {
+    startPage.closeForAutomationPreview();
+    return provider.automationPreviewColumn();
+  });
   // REQ-STUDIO-PREVIEW-RECOVERY — remember the preview server's addresses (max 20, 7 days) so a tab restored on an old port is known.
   const liveServer = new LiveServer({
     get: () => context.globalState.get<unknown[]>("hypeproof.previewServedOrigins.v2", []),
@@ -227,6 +242,7 @@ export async function activate(context: vscode.ExtensionContext) {
       executeCommand: (id, ...args) => vscode.commands.executeCommand(id, ...args),
     },
     provider.chalkRunner(),
+    provider.chalkOps(),
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
@@ -249,27 +265,77 @@ export async function activate(context: vscode.ExtensionContext) {
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
+  const automationHost = registerAutomationHost(context, provider, preview);
+  provider.setEmailAutomationHost(() => automationHost.getMcpHost());
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const accountConfig = vscode.workspace.getConfiguration('hypeproofChat');
   const accountService = accountConfig.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
   const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
     || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', ACCOUNTS_ENABLED_DEFAULT), accountService, accountSite);
+  let mobileConversations: MobileConversation | undefined;
   const accounts = accountEnabled ? new AccountSession({
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
     openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
     createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(true),
     returned: async () => { await startPage.show(); },
+    signedIn: async () => { await startPage.finishAccountSignIn(); },
     changed: () => startPage.accountChanged(),
     lock: accountLock(context.globalStorageUri.fsPath),
     freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),
     invalidated: async sessionId => {
+      mobileConversations?.invalidate();
       if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
       if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
     },
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
+  mobileConversations = registerMobileConversation(context, provider, accounts);
+  provider.setReflectionAccount(accounts);
+  const reflectionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,66);
+  reflectionStatus.text = '$(comment-discussion) 나의 질문';
+  reflectionStatus.tooltip = '같은 계정의 휴대전화와 나를 알아가는 대화';
+  reflectionStatus.command = 'hypeproof-chat.personalReflection';
+  if(accounts)reflectionStatus.show();
+  const makingStatus=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,65);
+  makingStatus.text='$(add) 만들기로 이어가기';makingStatus.tooltip='확인한 의도를 기존 제작 작업의 초안으로 옮기기';makingStatus.command='hypeproof-chat.reflectionMaking';
+  const showMaking=()=>{if(provider.isPersonalReflection())makingStatus.show();else makingStatus.hide();};
+  const reflectionTimer=setInterval(()=>{showMaking();void provider.refreshPersonalReflection().catch(()=>{});},6000);
+  context.subscriptions.push(makingStatus,vscode.commands.registerCommand('hypeproof-chat.reflectionMaking',async()=>{
+    try{await provider.beginPersonalMaking();}catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'제작 초안을 열지 못했어요.');}finally{showMaking();}
+  }));
+  context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
+    try { await provider.openPersonalReflection(); showMaking(); }
+    catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
+  }));
+  // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
+  const showStoreQuest = async (skill: { title: string; steps: import("./skillStoreProtocol").StoreStepView[]; connections?: import("./skillStoreProtocol").StoreLocalConnections }) => {
+    const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
+    if (!snapshot) return;
+    preview.setLabels({ title: "스토어 스킬", placeholder: "대화에서 요청을 입력하세요", emoji: "◇" });
+    await preview.showAutomation(renderQuestHtml(snapshot));
+  };
+  registerSkillStore(context, {
+    render: (webview, dist) => provider.renderHtml(webview, dist),
+    accountToken: async () => accounts?.accessToken(),
+    seat: async () => {
+      if (!(await activityConnections(context)?.token())) return "none";
+      const profile = await provider.ensureProfile();
+      if (!profile) return "none";
+      return profile.activity_kind === "classroom" || isMinorProfile(profile) ? "classroom" : "personal";
+    },
+    localConnections: () => automationHost.storeConnections(),
+    runMailSkill: (skill, render) => automationHost.runStoreMail(skill, render),
+    questOffer: () => automationHost.storeQuestOffer(),
+    // Scene 3: the installed skill opens as the buyer's quest (public layer only) beside a new chat task the Service composes.
+    runSkill: async (skill) => {
+      await provider.beginStoreRun(skill);
+      await showStoreQuest(skill);
+    },
+    // A mail skill runs from the buyer's roster (no chat task), and still shows the buyer's quest first.
+    showQuest: (skill) => showStoreQuest(skill),
+  });
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);
@@ -355,9 +421,11 @@ export async function activate(context: vscode.ExtensionContext) {
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
   }));
-  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks }));
+  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks, tasks: () => provider.activityMemoryTasks }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
+  // CGP-ART-D-002 — the preview's review bar presses go to the chat's turn review (one undo).
+  context.subscriptions.push(preview.onReviewAction((a) => void provider.handlePreviewReviewAction(a)));
 
   const classroomOps = new ClassroomOpsHost(context, () => provider.opsRuntime(), {
     hasActiveRun: () => provider.hasActiveStream(),
@@ -379,6 +447,8 @@ export async function activate(context: vscode.ExtensionContext) {
     readCollection: (sinceMs, identity) => provider.opsReadCollection(sinceMs, identity),
     recoverPreview: () => provider.opsRecoverPreview(),
   }, (line) => console.log(line));
+  classroomOps.setAutomationSource(() => automationHost.observation());
+  automationHost.setProgressListener(() => { classroomOps.refreshAutomation(); });
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
   provider.classWindowSource = () => classroomOps.helpConnection();
@@ -397,12 +467,25 @@ export async function activate(context: vscode.ExtensionContext) {
     post: (view) => provider.postHelp(view),
     log: (line) => console.log(line),
   });
-  context.subscriptions.push(classroomOps.onInboxChanged(() => { void provider.postInbox(); startPage.inboxChanged(); }));
+  context.subscriptions.push(classroomOps.onInboxChanged(() => { void provider.postInbox(); void chalkContract.pushInbox(); startPage.inboxChanged(); }));
   // CGP-DS-R-015: a reduce-motion change reaches the open chat panel without a reload.
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();
     // CGP-AGENT-D-002: the card must follow the policy used by the next action.
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
+    // CGP-SHELL-R-024: the learner's runtime choice is observed on its own post, so an instructor capability change read
+    // later is compared under the same inputs and told, not absorbed into the same observation.
+    if (event.affectsConfiguration("hypeproofChat.coachRuntime")) void provider.refreshConfig();
+    // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
+    if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
+    // #3578: the instructor runtime switch takes effect without a reload. The Chalk session ends first, so a
+    // failing or slow refresh (profile, whoami) cannot keep it alive; this path does not depend on the chat view.
+    if (event.affectsConfiguration("hypeproofChat.instructorRuntime")) {
+      void applyInstructorRuntimeSetting(vscode.workspace.getConfiguration("hypeproofChat").get("instructorRuntime"), {
+        endSession: () => provider.endChalkSessionForRuntime(),
+        refresh: () => provider.refreshConfig(),
+      }).catch(() => undefined);
+    }
   }));
   void classroomOps.resume();
   context.subscriptions.push(
@@ -584,9 +667,12 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
     { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
-    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
+    // REQ-STUDIO-DOCTOR — 「HypeProof Chat: 진단 실행」: the full check list for support (automatic runs stay quiet).
+    vscode.commands.registerCommand("hypeproof-chat.runDoctor", async () => { await provider.doctor?.showList(); }),
+    vscode.commands.registerCommand("hypeproof-chat.reportProblem", async (entry?: unknown) => {
       // REQ-STUDIO-PROBLEM-REPORT — the in-panel form first; the input boxes only when no chat panel can show it.
-      if (await provider.openProblemReport("manual")) return;
+      // #3426: the start page passes "start_page" so a report with no description still says where it came from.
+      if (await provider.openProblemReport("manual", entry === "start_page" ? "start_page" : "command")) return;
       await runReportProblemCommand({
         context,
         getLastRequestId: () => provider.getLastRequestId(),
@@ -912,9 +998,25 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // #72: kick off background update checks. Scheduler is disposable so we
   // attach it to the extension lifecycle.
+  // #3411: Chrome-style updates. Found releases are staged silently (when the setting is
+  // on and no class seat holds them), installed on the next quit or an idle restart, and
+  // announced once when the new version starts.
+  void announceAutoUpdate(context, currentBundleVersion()).catch(() => {});
+  context.subscriptions.push(
+    scheduleIdleApply({
+      context,
+      autoUpdate: autoUpdateEnabled,
+      activity: () => provider.autoUpdateActivity(),
+      windowFocused: () => vscode.window.state.focused,
+      onFocusChange: listener => vscode.window.onDidChangeWindowState(state => listener(state.focused)),
+      presence: windowPresence(context),
+    }),
+  );
   context.subscriptions.push(
     scheduleUpdateChecks({
       context,
+      autoUpdate: autoUpdateEnabled,
+      classHeld: () => provider.isClassUpdateHeld(),
       currentVersion: currentBundleVersion(),
       pushUpdateBanner: (info) => {
         if (!info) {
@@ -1181,12 +1283,19 @@ async function openWorkspaceFolder(
   commit: (directory?: string) => Promise<void>,
   context?: vscode.ExtensionContext,
 ): Promise<boolean> {
+  // REQ-STUDIO-TRUST-OWN-FOLDERS - only a leaf folder this call makes (non-recursive mkdir) is recorded.
+  let createdFolder: StudioFolder | undefined;
   try {
+    // ActivityConnections.prepare makes the folder itself, so the leaf is created here first.
+    // A failure here (parent is a file, dangling link, read-only) must not hide the guidance prepare gives for it.
+    try { createdFolder = createStudioFolder(dir); } catch { createdFolder = undefined; }
     const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
     // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
+    // Busy or taken means another window/activity owns the folder (maybe opening it right now): leave it alone.
+    discardStudioFolderAfterFailure(createdFolder, error); // a folder this call made and never prepared stays out of the way (and is never half-trusted)
     if(error instanceof ActivityConnectionError)throw error;
     noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
@@ -1195,6 +1304,7 @@ async function openWorkspaceFolder(
   const checkpoint = context && previousRecord && previousRecord.serverId === profile?.activity_id && activityConnections(context)?.matchesService
     ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
+  if (context) await syncStudioFolderRecord(context.globalState, createdFolder);
 
   // Binding is committed first; the marker grants no authority and contains no credential.
   const record = context && activityConnections(context)?.current;
