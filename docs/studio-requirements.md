@@ -9027,3 +9027,14 @@ physical Korean ASR, five-turn acceptance or a human growth outcome.
 ### Native iPhone credential continuity — MIRS-01
 
 The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
+
+
+### Native first-use and hands-free correction — MFR-01–06
+
+Studio #3771 applies minimum necessary intervention to existing native iPhone:
+code-free same-device login, durable Send during sync, persistent failure reasons,
+automatic voice endpoints and foreground-only next-turn listening. See
+[required behavior](requirements/mobile-growth-roadmap.md#native-login-and-conversation-friction-correction--mfr-0106-studio-3771)
+and [journey verification](testing/native-mobile-growth.md). This is source work;
+actual provider sign-in, physical audio and distributed-package acceptance must
+be reported separately. Existing desktop execution remains unchanged.

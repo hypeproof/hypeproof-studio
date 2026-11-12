@@ -180,3 +180,28 @@ Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690
 MIRS-01 refines MPER-03 for the existing native iPhone account path: before a one-use refresh token is dispatched, atomically persist a refresh-pending state in the same Keychain item. A failed write sends no request. Restoring a pending item requires fresh login, while conversation files and drafts remain unchanged. Only active `/v1/me` identity matching both the prior account and the acquired session may install rotated credentials. A mismatched or uncertain result cannot be adopted; acquired unusable credentials receive best-effort logout. Legacy items without the new flag decode as idle and retain their account-owned records.
 
 This is a client recovery correction, not an authentication provider, entitlement, retention or account-policy change. Studio #3263 / PR #3298 remains the separate experimental iOS foundation; this slice changes only the current `apps/studio-native/ios` product. Exact approval-URL validation, redirect/stream-size enforcement and sleep-inclusive challenge expiry remain transport follow-up work and are not claimed by this slice.
+
+
+## Native login and conversation friction correction — MFR-01–06 (Studio #3771)
+
+The 2026-11-12 owner feedback supersedes the earlier manual end-speech and
+per-conversation confirmation-sheet design for iPhone. Product Intent: minimum
+necessary intervention and useful work first. A person should explore their own
+thought, not operate an agent protocol. This change does not assert a learning
+outcome or change account eligibility, financial limits or desktop tool authority.
+
+| ID | Required behavior | Evidence |
+|---|---|---|
+| MFR-01 | One account-login entry opens the OS authentication session, preserves existing sign-up/invitation rules and returns to the initiating app without manual codes. Random state, S256 PKCE, short-lived one-use exchange, fixed destination and durable Keychain identity remain mandatory. A cancelled/expired exchange exits waiting and cannot automatically replay. | MFR-T01; real browser/provider separately. |
+| MFR-02 | Typed/dictated Send persists exactly one outbox request even during background synchronization. An AI admission/network failure stays visible after successful history refresh and app restart. Personal reflection remains independent of desktop availability. Old local-only notebooks visibly say they only save. | MFR-T02 / MFR-T05. |
+| MFR-03 | A deliberate conversation-microphone action starts capture after required OS permissions; stable transcript plus acoustic silence finalizes once, receives its own reply, and resumes listening while the foreground conversation is still active. No repeated app confirmation, end-speech or next-turn button is required. Dictation remains a draft until Send. | MFR-T03; five-turn Korean physical audio separately. |
+| MFR-04 | Stop, navigation, background, account/conversation change and interruption invalidate old callbacks, stop microphone/playback and prevent late sends. Silence without words cannot send; capture remains bounded to 30 seconds. | MFR-T04; actual microphone indicator separately. |
+| MFR-05 | Tests cover the full visible login-to-answer path with a deterministic transport, including desktop-off, denied access, offline/uncertain send and restart. Fixtures cannot replace app identity/outbox logic or reach live providers. | MFR-T05. |
+| MFR-06 | Release evidence lists required simulator journeys by exact name and marks absent/skipped/failed cases honestly. Package availability, simulator evidence, live sign-in and physical-device acceptance are separate. Unverified TestFlight candidates may be distributed for testing but cannot be reported as accepted. | MFR-T06; existing Foundry and Harness receipts. |
+
+Cost: no new hosted ASR/TTS calls. Existing Service money limits and routing apply
+to each automatically submitted conversation turn. Device energy, CI minutes and
+human time remain costs. Endpoint thresholds require physical Korean/noisy-room
+validation; synthetic silence controls are not speech-quality evidence. Speech
+recognition and microphone OS permissions may both be required by iOS; app-level
+repeat approvals are removed, OS consent is not bypassed.

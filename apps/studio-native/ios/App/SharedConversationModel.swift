@@ -1,8 +1,15 @@
 import SwiftUI
 import Security
+import AuthenticationServices
 
 private enum AccountKeychain {
-    static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ai.hypeproof.studio.mobile.account", kSecAttrAccount as String: "device-session"]
+    static var query: [String: Any] {
+        var value: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ai.hypeproof.studio.mobile.account", kSecAttrAccount as String: "device-session"]
+#if DEBUG
+        if NativeJourneyFixture.enabled { value[kSecAttrService as String] = "ai.hypeproof.studio.mobile.journey." + NativeJourneyFixture.namespace }
+#endif
+        return value
+    }
     private static func failure(_ operation: String, _ status: OSStatus, _ message: String) -> StudioError {
         // Never log a query, account identifier, credential or stored bytes.
         NSLog("HP Studio account storage %@ failed (%d)", operation, status)
@@ -89,13 +96,23 @@ private struct SharedCacheFile: Codable {
     private var epoch = UUID()
     private var visible = true
     private var cacheReadable = true
-    private let service = ConversationService()
+    private let service: ConversationService
+    private let browser = NativeBrowserSignIn()
+    @Published private(set) var loginStatus = ""
+    private var queuedSend: (id: String, requestID: String)?
     private let directory: URL
     var cache: ConversationCache { overlay(entries[selected ?? ""] ?? ConversationCache(), id: selected ?? "") }
     var title: String { conversations.first { $0.id == selected }?.title ?? "대화 이어가기" }
     var canSend: Bool { signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
     init() {
-        directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("shared-conversations", isDirectory: true)
+#if DEBUG
+        service = NativeJourneyFixture.service ?? ConversationService()
+        let cacheName = NativeJourneyFixture.enabled ? "native-journey-" + NativeJourneyFixture.namespace : "shared-conversations"
+#else
+        service = ConversationService()
+        let cacheName = "shared-conversations"
+#endif
+        directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent(cacheName, isDirectory: true)
         restoreAccount()
     }
     func restoreAccount() {
@@ -192,34 +209,46 @@ private struct SharedCacheFile: Codable {
     }
     func login() {
         guard !busy, !syncing else { return }
-        guard accountStorageReady else { error = "계정 저장소를 먼저 다시 확인해 주세요. 로그인 요청은 보내지 않았어요."; return }
-        busy = true; error = nil; let attempt = epoch
+        guard accountStorageReady else { error = "계정 저장소를 먼저 다시 확인해 주세요."; return }
+        busy = true; error = nil; loginStatus = "계정 로그인 화면을 열고 있어요."; let attempt = epoch
         operation = Task {
+            var acquired: AccountTokens?
             do {
-                let device = try await service.startSignIn()
-                guard epoch == attempt else { return }; signIn = device
-                let end = Date().addingTimeInterval(device.expires_in)
-                while Date() < end {
-                    try await Task.sleep(nanoseconds: UInt64(max(3, device.interval)) * 1_000_000_000)
-                    guard epoch == attempt else { return }
-                    if let tokens = try await service.pollSignIn(device.device_code) {
-                        let id: String
-                        do { id = try await service.accountID(tokens.access_token, sessionID: tokens.session_id) }
-                        catch { try? await service.logout(tokens.access_token); throw error }
-                        guard epoch == attempt else { try? await service.logout(tokens.access_token); return }
-                        let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
-                        do { try AccountKeychain.save(value) }
-                        catch { accountStorageReady = false; try? await service.logout(tokens.access_token); throw error }
-                        account = value; signedIn = true; signIn = nil
-                        try load(id); break
-                    }
+                let proof = NativeAccountProof()
+                let start = try await service.startNativeSignIn(proof)
+                guard epoch == attempt else { return }
+                loginStatus = "계정 로그인을 마치면 자동으로 돌아와요."
+                let callback = try await browser.authenticate(start.authorization_uri, expiresIn: start.expires_in)
+                try Task.checkCancellation()
+                guard epoch == attempt else { return }
+                let code = try proof.authorizationCode(from: callback)
+                loginStatus = "로그인을 마무리하고 있어요."
+                // The code is single-use. Never retry an ambiguous exchange.
+                let tokens = try await service.exchangeNativeSignIn(code: code, proof: proof)
+                acquired = tokens
+                let id = try await service.accountID(tokens.access_token, sessionID: tokens.session_id)
+                try Task.checkCancellation()
+                guard epoch == attempt else { try? await service.logout(tokens.access_token); return }
+                let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
+                do { try AccountKeychain.save(value) }
+                catch { accountStorageReady = false; throw error }
+                account = value; signedIn = true; acquired = nil
+                try load(id)
+            } catch {
+                if let acquired { try? await service.logout(acquired.access_token) }
+                if epoch == attempt {
+                    if error is CancellationError || (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
+                        notice = "로그인을 취소했어요. 준비되면 다시 시작해 주세요."
+                    } else { self.error = error.localizedDescription }
                 }
-                if !signedIn { signIn = nil; error = "로그인 시간이 지났어요. 다시 시작해 주세요." }
-            } catch { if epoch == attempt { self.error = error.localizedDescription; signIn = nil } }
-            if epoch == attempt { busy = false; await synchronize() }
+            }
+            if epoch == attempt { busy = false; loginStatus = ""; await synchronize() }
         }
     }
-    func cancelLogin() { epoch = UUID(); operation?.cancel(); operation = nil; signIn = nil; busy = false }
+    func cancelLogin() {
+        epoch = UUID(); browser.cancel(); operation?.cancel(); operation = nil
+        signIn = nil; busy = false; loginStatus = ""; notice = "로그인을 취소했어요."
+    }
     private func token() async throws -> String {
         guard accountStorageReady, let old = account else { throw SyncFailure.http(401, "account_required") }
         if old.expiresAt > Date().addingTimeInterval(90) { return old.tokens.access_token }
@@ -246,17 +275,29 @@ private struct SharedCacheFile: Codable {
     private func synchronize() async {
         guard signedIn, cacheReadable, visible, !busy, !syncing else { return }
         syncing = true; let attempt = epoch; let current = selected
-        defer { syncing = false }
+        defer {
+            syncing = false
+            // Only this session's explicit Send can start a queued request. Reads,
+            // restart and ambiguous network failures never schedule a replay.
+            if let queued = queuedSend {
+                queuedSend = nil
+                if epoch == attempt, visible, selected == queued.id,
+                   entries[queued.id]?.request?.id == queued.requestID { retry() }
+            }
+        }
         do {
             let credential = try await token()
             let personal = try await service.reflection(credential)
             guard epoch == attempt else { return }
             try applyReflection(personal)
+            let personalItem = SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0)
+            // A desktop-list outage must not hide an already available personal conversation.
+            try persist(entries: entries, conversations: [personalItem] + conversations.filter { $0.id != Self.personalID })
+            if selectPersonalOnLoad { selected = Self.personalID; selectPersonalOnLoad = false }
             var list = try await service.list(credential)
-            list.insert(SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0), at: 0)
+            list.insert(personalItem, at: 0)
             guard epoch == attempt else { return }
             try persist(entries: entries, conversations: list)
-            if selectPersonalOnLoad { selected = Self.personalID; selectPersonalOnLoad = false }
             if let id = current, id != Self.personalID, list.contains(where: { $0.id == id }) {
                 // Read completion before events: an observed completion must include its final answer.
                 let requests = try await service.requests(id, token: credential)
@@ -275,7 +316,8 @@ private struct SharedCacheFile: Codable {
                     try edit(id) { $0.request = active }
                 }
             }
-            error = nil; notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
+            error = cache.requestFailure
+            notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
         } catch { if epoch == attempt { failure(error) } }
     }
     private func applyReflection(_ value: PersonalReflection) throws {
@@ -289,9 +331,11 @@ private struct SharedCacheFile: Codable {
         }
     }
     func send() {
-        guard canSend, !syncing, let id = selected else { return }
+        guard canSend, let id = selected else { return }
         do { try edit(id) { try $0.enqueue(reflection: id == Self.personalID) } } catch { self.error = error.localizedDescription; return }
-        retry()
+        if syncing, let request = entries[id]?.request {
+            queuedSend = (id, request.id); notice = "보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요."
+        } else { retry() }
     }
     func retry() {
         guard !busy, !syncing, let id = selected, let request = entries[id]?.request, request.status == "local" else { return }
@@ -311,6 +355,9 @@ private struct SharedCacheFile: Codable {
                 }
             } catch {
                 if epoch == attempt {
+                    // Successful history reads cannot erase a failed send (for
+                    // example missing AI access, a budget limit or network loss).
+                    try? edit(id) { $0.requestFailure = error.localizedDescription }
                     if case SyncFailure.http(let status, _) = error, status == 400 || (id == Self.personalID && status == 409) {
                         try? edit(id) { value in
                             value.draft = value.draft.isEmpty ? request.text : value.draft + "\n" + request.text

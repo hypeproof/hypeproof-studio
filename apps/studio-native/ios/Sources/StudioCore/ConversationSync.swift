@@ -84,6 +84,7 @@ public struct ConversationCache: Codable, Sendable {
     public var cursor = 0
     public var draft = ""
     public var request: SharedRequest?
+    public var requestFailure: String?
     public var context: [String: String]?
     public init() {}
     public func applyingEdits(_ edits: [String: String]) -> ConversationCache {
@@ -130,10 +131,12 @@ public struct ConversationCache: Codable, Sendable {
         messages = state.messages; cursor = state.revision
         let acknowledged = request.map { pending in value.acknowledged_id == pending.id || state.messages.contains(where: { $0.id == pending.id && $0.role == "user" && $0.content == pending.text }) } ?? false
         if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
+        if request?.status == "completed" { requestFailure = nil }
     }
     public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
         request = try .pending(draft)
+        requestFailure = nil
         if reflection { request?.expectedRevision = cursor }
         draft = ""
     }
@@ -215,6 +218,16 @@ public final class ConversationService: @unchecked Sendable {
         let value = try JSONDecoder().decode(DeviceSignIn.self, from: data)
         guard value.verification_uri_complete.scheme == "https", value.verification_uri_complete.host == "hypeproof-ai.xyz" else { throw SyncFailure.invalidResponse }
         return value
+    }
+    public func startNativeSignIn(_ proof: NativeAccountProof) async throws -> NativeAccountStart {
+        let (data, _) = try await request("/v1/auth/native/start", method: "POST", body: ["state": proof.state, "code_challenge": proof.challenge, "code_challenge_method": "S256", "redirect_uri": NativeAccountProof.redirectURI, "label": "HP Studio iPhone"])
+        let value = try JSONDecoder().decode(NativeAccountStart.self, from: data)
+        try value.validate(); return value
+    }
+    public func exchangeNativeSignIn(code: String, proof: NativeAccountProof) async throws -> AccountTokens {
+        let (data, _) = try await request("/v1/auth/native/exchange", method: "POST", body: ["code": code, "code_verifier": proof.verifier, "redirect_uri": NativeAccountProof.redirectURI])
+        let value = try JSONDecoder().decode(AccountTokens.self, from: data)
+        try value.validate(); return value
     }
     public func pollSignIn(_ device: String) async throws -> AccountTokens? {
         let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])

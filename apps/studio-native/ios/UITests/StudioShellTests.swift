@@ -1,6 +1,6 @@
 import XCTest
 final class StudioShellTests: XCTestCase {
-    @MainActor func testLinkedHomeRequiresExplicitStorageDisclosure() {
+    @MainActor func testFirstInstallExplainsAccountStorageWithoutASeparateForm() {
         let app = XCUIApplication(); app.launchArguments = ["--verify-account-storage"]; app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["accountStorageVerified"].exists, "The app must create, read, update and delete an isolated Keychain item before account readiness passes.")
@@ -8,11 +8,10 @@ final class StudioShellTests: XCTestCase {
         XCTAssertTrue(app.buttons["linkDesktop"].isEnabled)
         XCTAssertTrue(app.staticTexts["요즘 어떤 일에\n시간을 많이 쓰세요?"].exists)
         XCTAssertFalse(app.textFields["나이"].exists)
-        app.buttons["linkDesktop"].tap()
-        XCTAssertTrue(app.navigationBars["내 이야기 이어가기"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["같은 계정으로 연결"].isEnabled)
-        app.buttons["닫기"].tap()
-        XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 5))
+        // Account/AI storage disclosure is inline. This storage probe must not
+        // start real authentication; the journeys below exercise that boundary
+        // through the same production login continuation with fixture transport.
+        XCTAssertFalse(app.buttons["같은 계정으로 연결"].exists)
         XCTAssertEqual(app.webViews.count, 0)
     }
     @MainActor private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
@@ -93,5 +92,163 @@ final class StudioShellTests: XCTestCase {
         XCTAssertFalse(app.buttons["stopVoice"].exists)
         XCTAssertEqual(app.webViews.count, 0)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "native-iphone-intent"; shot.lifetime = .keepAlways; add(shot)
+    }
+}
+
+/// Required user journeys. The external Service/browser/speech transports are
+/// synthetic; account adoption, persistence, view actions and VoiceTurn are real.
+/// These cases are never physical authentication or microphone evidence.
+final class StudioJourneyTests: XCTestCase {
+    @MainActor private func launch(_ scenario: String) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = scenario
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launch()
+        return app
+    }
+    @MainActor private func field(_ app: XCUIApplication) -> XCUIElement {
+        let field = app.textFields["sharedInput"]
+        if field.waitForExistence(timeout: 2) { return field }
+        let text = app.textViews["sharedInput"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "The personal conversation must be usable without a desktop.")
+        return text
+    }
+    @MainActor private func enabled(_ element: XCUIElement, timeout: TimeInterval = 10) {
+        XCTAssertTrue(element.waitForExistence(timeout: timeout))
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
+    }
+    @MainActor private func valueContains(_ element: XCUIElement, _ text: String) {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", text), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
+    }
+    @MainActor private func signIn(_ app: XCUIApplication) {
+        let start = app.buttons["linkDesktop"]; enabled(start); start.tap()
+        _ = field(app)
+        XCTAssertTrue(app.staticTexts["reflectionOpening"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["accountCancel"].exists, "Successful account adoption must finish the login state.")
+    }
+    @MainActor private func trace(_ app: XCUIApplication) throws -> [String: Any] {
+        let element = app.staticTexts["nativeJourneyTrace"]
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
+        let data = try XCTUnwrap(element.label.data(using: .utf8))
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(result["physical_device"] as? String, "NOT_RUN")
+        XCTAssertEqual(result["live_asr"] as? String, "NOT_RUN")
+        XCTAssertEqual(result["desktop_requests"] as? Int, 0, "Personal questions must not dispatch desktop work.")
+        return result
+    }
+    @MainActor private func answer(_ app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["sharedReply"].firstMatch.waitForExistence(timeout: 10), "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
+        XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "What small change would make tomorrow better?")
+    }
+    @MainActor private func evidence(_ name: String, app: XCUIApplication) throws {
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
+        let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: trace(app), options: [.sortedKeys]), encoding: .utf8)!)
+        observation.name = name + "-synthetic-trace"; observation.lifetime = .keepAlways; add(observation)
+    }
+    @MainActor func testFirstInstallSignInToFirstAnswerWithoutDesktop() throws {
+        let app = launch("first-answer"); signIn(app)
+        let input = field(app); input.tap(); input.typeText("I want to make time for learning")
+        let send = app.buttons["sharedSend"]; enabled(send); send.tap(); answer(app)
+        let result = try trace(app)
+        let paths = try XCTUnwrap(result["paths"] as? [String])
+        for route in ["POST /v1/auth/native/start", "POST /v1/auth/native/exchange", "GET /v1/me", "POST /v1/me/reflection/turns"] { XCTAssertTrue(paths.contains(route), route) }
+        XCTAssertFalse(paths.contains(where: { $0.contains("/auth/device/") }), "The same phone must not poll a pairing-code flow.")
+        XCTAssertEqual(result["browser_callbacks"] as? Int, 1)
+        XCTAssertEqual(result["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(result["submitted_texts"] as? [String], ["I want to make time for learning"])
+        try evidence("journey-first-answer", app: app)
+    }
+    @MainActor func testDictationEditsDraftThenSendGetsReplyWithoutDesktop() throws {
+        let app = launch("first-answer"); signIn(app)
+        let input = field(app); input.tap(); input.typeText("My existing thought")
+        app.buttons["sharedDictate"].tap()
+        valueContains(field(app), "I want to understand my next step")
+        enabled(app.buttons["sharedSend"])
+        XCTAssertTrue((field(app).value as? String)?.contains("My existing thought") == true)
+        XCTAssertFalse(app.staticTexts["sharedReply"].exists, "Dictation may edit a draft, never silently send it.")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        app.buttons["sharedSend"].tap(); answer(app)
+        XCTAssertEqual(try trace(app)["submitted_texts"] as? [String], ["My existing thought\nI want to understand my next step"])
+        try evidence("journey-dictation-send", app: app)
+    }
+    @MainActor func testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend() throws {
+        let app = launch("voice-answer"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        // No recurring consent sheet or manual end-of-speech button is pressed.
+        XCTAssertFalse(app.buttons["linkedVoiceStart"].exists)
+        answer(app)
+        valueContains(field(app), "Keep this spoken draft without sending")
+        let stop = app.buttons["sharedVoiceStop"]; enabled(stop); stop.tap()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 5))
+        let result = try trace(app)
+        XCTAssertGreaterThanOrEqual(result["speech_captures"] as? Int ?? 0, 2)
+        XCTAssertEqual(result["accepted_turns"] as? Int, 1)
+        XCTAssertEqual((result["submitted_ids"] as? [String])?.count, 1)
+        XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
+        try evidence("journey-voice-stop", app: app)
+    }
+    @MainActor func testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch() throws {
+        let app = launch("voice-hold"); signIn(app)
+        app.buttons["sharedDictate"].tap(); valueContains(field(app), "Keep this spoken draft without sending")
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertTrue(app.buttons["sharedVoiceStop"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch()
+        valueContains(field(app), "Keep this spoken draft without sending")
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists, "A relaunch must not restart the microphone.")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        app.buttons["sharedSend"].tap(); answer(app)
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 1)
+        try evidence("journey-background-draft", app: app)
+    }
+    @MainActor func testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch() throws {
+        let app = launch("retry-once"); signIn(app)
+        let input = field(app); input.tap(); input.typeText("Keep my unfinished question")
+        app.buttons["sharedSend"].tap()
+        enabled(app.buttons["sharedRetry"])
+        XCTAssertFalse(app.staticTexts["sharedReply"].exists)
+        let before = try trace(app)
+        let firstIDs = try XCTUnwrap(before["submitted_ids"] as? [String]); XCTAssertEqual(firstIDs.count, 1)
+        XCTAssertEqual(before["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch(); _ = field(app)
+        let retry = app.buttons["sharedRetry"]; enabled(retry); retry.tap(); answer(app)
+        let after = try trace(app)
+        XCTAssertEqual(after["submitted_ids"] as? [String], [firstIDs[0], firstIDs[0]], "Retry must preserve the durable request ID.")
+        XCTAssertEqual(after["submitted_texts"] as? [String], ["Keep my unfinished question", "Keep my unfinished question"])
+        XCTAssertEqual(after["accepted_turns"] as? Int, 1)
+        try evidence("journey-retry-outbox", app: app)
+    }
+    @MainActor func testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch() throws {
+        let app = launch("access-denied"); signIn(app)
+        let input = field(app); input.tap(); input.typeText("Do not lose the reason this cannot send")
+        app.buttons["sharedSend"].tap()
+        let error = app.staticTexts["sharedError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10)); enabled(app.buttons["sharedRetry"])
+        XCTAssertTrue(error.label.contains("AI 이용 권한"))
+        XCTAssertFalse(app.staticTexts["sharedReply"].exists)
+        let before = try trace(app)
+        let paths = try XCTUnwrap(before["paths"] as? [String])
+        let post = try XCTUnwrap(paths.lastIndex(of: "POST /v1/me/reflection/turns"))
+        XCTAssertTrue(paths.dropFirst(post + 1).contains("GET /v1/me/reflection"), "A successful history refresh must not erase the failed turn's reason.")
+        app.terminate(); app.launch(); _ = field(app)
+        XCTAssertTrue(error.waitForExistence(timeout: 10)); XCTAssertTrue(error.label.contains("AI 이용 권한"))
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        XCTAssertEqual((try trace(app)["submitted_ids"] as? [String])?.count, 1, "Relaunch must not auto-retry or invent free access.")
+        try evidence("journey-admission-denied", app: app)
+    }
+    @MainActor func testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking() throws {
+        let app = launch("sign-in-expired")
+        let start = app.buttons["linkDesktop"]; enabled(start); start.tap()
+        XCTAssertTrue(app.staticTexts["sharedError"].waitForExistence(timeout: 10))
+        enabled(start); XCTAssertFalse(app.buttons["accountCancel"].exists)
+        XCTAssertFalse(app.textFields["sharedInput"].exists)
+        let result = try trace(app)
+        XCTAssertEqual(result["accepted_turns"] as? Int, 0)
+        XCTAssertFalse((result["paths"] as? [String] ?? []).contains("POST /v1/auth/native/exchange"))
+        try evidence("journey-login-failure", app: app)
     }
 }

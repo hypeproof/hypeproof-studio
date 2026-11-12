@@ -88,3 +88,60 @@ Signed acceptance: open the existing iPhone personal conversation, preserve a dr
 Run43137056162/1 failed all9 Android UI tests while the captured foreground was `Application Not Responding: com.google.android.apps.nexuslauncher`; the original PNG showed the Pixel Launcher ANR dialog, with the emulator awake and unlocked. This evidence identifies the foreground obstruction, not a passing app test or a proven emulator root cause. Preserve that failed run.
 
 The native Android script now records bounded read-only window/power observations after installation and before instrumentation. Missing state, sleep, keyguard or a foreground ANR/error dialog cannot start UI tests. Failure capture adds a machine-readable diagnosis and input hashes while retaining the original nonzero exit code, logs and screenshot. Studio ANRs remain distinct from foreign ANRs. No dialogs are dismissed, failed tests skipped, or acceptance rules relaxed. Readiness permits starting tests only; full native test completion is still required. Actual Foundry profile adoption remains separately NOT RUN.
+
+## Required first-person iPhone journeys — MFR-T01–T06 / Studio #3771
+
+The reported installed-app failures were indefinite account checking, dictated
+words producing no reply, and repeated voice consent/end-of-speech controls.
+A build and the previous Keychain/local-notebook tests did not cover those
+journeys. Preserve those failures as the regression baseline; do not describe
+the new fixtures as a successful physical retest.
+
+| Contract | Required observation | Failure that must remain visible |
+| --- | --- | --- |
+| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the unsent request intact and no free-access fallback. |
+| MFR-T02 | Dictation appends to an existing draft without sending; explicit Send creates one personal-reflection request and displays its answer without a running desktop. | A cleared composer or locally recorded text is not an AI answer. |
+| MFR-T03 | Start voice once, receive a reply and resume capture for the next turn without a recurring consent sheet or pressing an end-of-speech button. | Silence/no transcript cannot create an empty send. Stop cancels the held next capture and retains its partial draft; no second request. |
+| MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
+| MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T06 | Collect actual native build/test exits and exact log hashes. All seven named simulator cases execute once and pass. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+
+`StudioJourneyTests` in the existing Xcode-wired `StudioShellTests.swift` covers
+these cases. `NativeJourneyFixture` replaces only external transport and supplies
+structured trace plus screenshot attachments; account adoption, persistence,
+UI actions and voice-turn handling remain real. Its empty desktop list and
+rejected desktop request routes prove that these simulated personal turns do
+not depend on desktop work. Its eligible account is synthetic; current Service
+admission policy is not changed or accepted by a successful login fixture.
+
+After the actual native commands finish, the iOS script invokes:
+
+```sh
+python3 apps/studio-native/scripts/collect-native-journeys.py \
+  --source-sha FULL_SOURCE_SHA \
+  --build-log apps/studio-native/evidence/device-build.log --build-exit 0 \
+  --simulator-log apps/studio-native/evidence/simulator-test.log --test-exit 0 \
+  --output apps/studio-native/evidence/native-journeys.json
+```
+
+Replace both exit arguments with the observed command statuses, including
+failures. The collector's unit tests validate refusal and evidence retention;
+they do not execute simulator journeys. Run through the existing resource
+wrapper. Keep native CI/Foundry provenance and source binding outside the
+collector; it cannot invent trusted execution from a supplied log.
+
+Evidence has four distinct levels: compile/build, simulator journeys, signed
+upload/Apple processing, and installed-device observations. The simulator
+receipt always records physical device, real authentication and live ASR as
+NOT_RUN. That absence does not block distribution of a test candidate. It does
+not permit a claim that the user experience works on an installed iPhone.
+
+For a physical test candidate, record source, exact TestFlight build, iPhone/iOS,
+account admission state (no token or personal transcript), and the outcome of
+first login → first question, desktop-off dictation → answer, hands-free next
+turn, Stop, background/relaunch and one recoverable failure/retry. Attach bounded
+redacted observations. When a user reports a failure, preserve the original
+build and observation, add a reproducing journey or state control, fix the
+smallest boundary, run exact-source simulator/native checks, distribute a test
+candidate, then ask for the specific installed retest. Do not close physical or
+live-provider acceptance from mocked transport, CI or upload success alone.
