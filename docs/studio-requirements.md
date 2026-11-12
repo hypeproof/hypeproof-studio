@@ -1930,6 +1930,9 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   and saved-draft callback; same-scope refreshes keep duplicate-submit protection.
   A late old request reply must not unlock or show an error for a newer request.
 
+- **URL drafts (#3313).** An unsaved address belongs to the displayed material scope.
+  Another activity/task starts with an empty address and disabled add action. Same-scope
+  refresh and refused additions preserve the address for correction; navigation never submits it.
 - **URL save context (#3315).** After asynchronous materials loading, URL additions
   recheck the original task scope, folder and current seat permission before persistence.
   A changed context is refused; no address is written to either folder.
