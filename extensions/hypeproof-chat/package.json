@@ -182,6 +182,10 @@
         "title": "HypeProof: 강사가 보낸 질문·확인 지점 보기"
       },
       {
+        "command": "hypeproof-chat.classroomParticipationConsent",
+        "title": "HypeProof: 수업 참여 데이터 동의·철회"
+      },
+      {
         "command": "hypeproof-chat.classroomCollectionConsent",
         "title": "HypeProof: 수업 기록 보내기 동의·철회"
       },
@@ -758,7 +762,7 @@
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "cd webview-ui && npm run dev",
     "package": "vsce package --no-dependencies",
-    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs",
+    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
     "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",
