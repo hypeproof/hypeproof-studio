@@ -6172,6 +6172,15 @@
         },
         {
           "path": ".github/workflows/build-mac.yml"
+        },
+        {
+          "path": "config/macos-distribution.json"
+        },
+        {
+          "path": "scripts/release/macos-signing-receipt.mjs"
+        },
+        {
+          "path": "scripts/check-unified-release.mjs"
         }
       ]
     },
@@ -6199,6 +6208,9 @@
         {
           "path": "docs/dev/macos-developer-id.md",
           "section": "## Acceptance and current evidence boundary"
+        },
+        {
+          "path": "scripts/release/test/macos-signing-receipt.test.mjs"
         }
       ]
     },

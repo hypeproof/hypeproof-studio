@@ -67,7 +67,7 @@ the mock controls cannot establish runtime compatibility.
 
 ## Credentials: provisioned by the release owner
 
-The workflow uses **new** names and never overwrites/reuses the old
+The workflow uses the `macos-direct-release` GitHub Environment, restricted to main and v* release tags. It uses **new** names and never overwrites/reuses the old
 `MACOS_CERT_P12` self-signed secret. The certificate/private key must belong to
 the same Apple Developer team used by notarization. A Mac Installer or App
 Store Distribution certificate cannot replace Developer ID Application.
@@ -174,3 +174,22 @@ Primary references: [Apple notarization](https://developer.apple.com/documentati
 [TN3127 requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements),
 [hardened runtime](https://developer.apple.com/documentation/security/hardened-runtime),
 and [Electron notarize](https://github.com/electron/notarize).
+
+## Promotion and download consumers
+
+The small `hypeproof-studio-macos-signing-receipt` Actions artifact contains only
+the final signing JSON. It is uploaded immutably with 90-day retention; missing
+or expired proof is unqualified, never silently trusted. Harness and Lab compare
+its exact bytes with the release receipt and verify the actual successful workflow
+run/attempt, source, artifact digest and final ZIP identity.
+
+`config/macos-distribution.json` at the candidate commit declares the official
+requirement. Older source commits remain explicitly legacy. New candidates fail
+publication when proof is missing, local-only, stale or mismatched. Unified Mac
+acceptance verifies this proof and OS signature/Gatekeeper before launching the
+app. Promotion retains the signing JSON byte for byte with the accepted ZIP;
+publication and mirroring recheck it through `check-unified-release.mjs`.
+
+The first Developer ID certificate was provisioned by the Account Holder; secret
+material is outside Git. Actual candidate signing, notarization and installed
+N-1 to N behavior are still separate release evidence, not inferred from issuance.

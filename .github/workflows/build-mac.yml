@@ -68,6 +68,7 @@ concurrency:
 jobs:
   build-mac:
     runs-on: macos-15 # arm64 on GitHub-hosted macos-14+
+    environment: macos-direct-release
     timeout-minutes: 180 # full build is 1–2 h; headroom under the 6 h cap
 
     env:
@@ -399,6 +400,17 @@ jobs:
           path: ${{ runner.temp }}/hps-macos-signing-evidence/*.json
           if-no-files-found: ignore
           retention-days: 14
+
+      # Small immutable proof for Harness/Lab. Consumers compare these bytes
+      # with the release receipt and independently verify this run's identity.
+      - name: Preserve final signing receipt
+        if: steps.package.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypeproof-studio-macos-signing-receipt
+          path: dist/HypeProof-Studio-darwin-arm64.signing.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Remove this run's isolated signing keychain
         if: ${{ always() }}
