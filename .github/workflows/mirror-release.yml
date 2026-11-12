@@ -53,6 +53,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # verify the source build's immutable Mac signing receipt
 
 concurrency:
   group: mirror-release-${{ inputs.tag || github.event.release.tag_name }}

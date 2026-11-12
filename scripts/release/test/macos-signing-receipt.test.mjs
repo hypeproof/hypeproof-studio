@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import {fileURLToPath} from 'node:url';
 import {assertMacReceipt, assertMacRun, assertReceiptArchive, verifyMacDistribution,
   MAC_RECEIPT, MAC_RECEIPT_ARTIFACT, MAC_ZIP} from '../macos-signing-receipt.mjs';
 
@@ -14,6 +15,11 @@ const policy = {team_id: 'RZBNT9ZB67', bundle_id: 'ai.hypeproof.studio'};
 const bytes = Buffer.from('synthetic final ZIP, not a signed app');
 const artifact = {sha256: digest(bytes), bytes: bytes.length};
 const context = {sha, version, policy, artifact};
+test('mirror verifier can read immutable source Actions artifacts without write permission', () => {
+  const workflow = fs.readFileSync(fileURLToPath(new URL('../../../.github/workflows/mirror-release.yml', import.meta.url)), 'utf8');
+  assert.match(workflow, /permissions:\n  contents: read\n  actions: read/);
+  assert.match(workflow, /GH_TOKEN="\$GITHUB_TOKEN_SOURCE" node scripts\/check-unified-release\.mjs/);
+});
 const good = () => ({schema: 'hps-macos-release-signing/v1', repository: 'hypeproof/hypeproof-studio',
   release_eligible: true, source_sha: sha, platform: 'darwin-arm64', ...policy, bundle_version: version,
   certificate_sha1: 'A'.repeat(40), signing: {type: 'Developer ID Application', hardened_runtime: true, secure_timestamp: true},
