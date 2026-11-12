@@ -3,7 +3,7 @@
 // decides every rule (price caps, age, refund window, fraud block); the App only shows the result
 // and the Service's reason. Custody (design v1 D1): the App receives the public layer of a skill
 // only. A run is composed by the Service on the buyer's chat turn; no call returns the seller's text.
-import type { StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
+import type { StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
 
 export class StoreClientError extends Error {
   readonly code: string;
@@ -84,6 +84,24 @@ export class StoreClient {
   }
   seller() {
     return this.call<StoreSellerView>("/seller");
+  }
+  /** Names for the typed partner/instructor codes, before the seller confirms. Rate-limited by the Service. */
+  resolveCodes(partnerCode: string, instructorCode: string) {
+    const body: Record<string, string> = {};
+    if (partnerCode.trim()) body.partner_code = partnerCode.trim();
+    if (instructorCode.trim()) body.instructor_code = instructorCode.trim();
+    return this.call<Pick<StoreAttributionPreview, "partner" | "instructor">>("/attribution/resolve", { body });
+  }
+  /** The seller's one registration at their first publication: codes, or `{ none: true }`. */
+  registerAttribution(input: StoreAttributionInput) {
+    return this.call<StoreAttributionView>("/attribution", { body: input });
+  }
+  /**
+   * The payout account, once the Service says it is due. The answer is masked; the App never gets the number back
+   * and keeps no copy of it.
+   */
+  savePayoutAccount(input: { bank_code: string; account_number: string; holder_name: string }) {
+    return this.call<Omit<Extract<StorePayoutAccountView, { state: "on_file" }>, "state" | "prompt_at_krw">>("/seller/payout-account", { method: "PUT", body: input });
   }
   declareAge(birthYear: number) {
     return this.call<{ age_group: "adult" | "minor" }>("/me/age", { body: { birth_year: birthYear } });
@@ -171,6 +189,20 @@ export const STORE_COPY = {
   inReview: "운영팀이 검토한 뒤에 올라가요. 50만 원을 넘는 스킬과 만 19세 미만 판매자의 스킬은 검토를 거쳐요.",
   reported: "신고했어요. 운영팀이 확인할게요.",
   payoutNotStarted: "정산은 기록만 되고 있어요. 실제 지급은 결제사 계약이 끝난 뒤 시작돼요.",
+  codesTitle: "파트너·강사 코드 (선택)",
+  codesHelp: "HypeProof 교육 파트너나 강사에게 받은 코드가 있으면 입력하세요. 처음 올릴 때 한 번만 정하고, 그 뒤에는 운영팀만 바꿀 수 있어요.",
+  codesNone: "코드가 없으면 비워 두고 올리면 돼요. 나중에 직접 추가할 수는 없어요.",
+  codesCheck: "코드를 확인한 뒤에 올릴 수 있어요.",
+  codesFixed: "바꾸려면 운영팀에 문의해 주세요.",
+  codesEmpty: "등록한 파트너·강사 코드가 없어요.",
+  payoutNotDue: (krw: number) => `정산 대상 금액이 ${won(krw)} 이상이 되면 받을 계좌를 여쭤볼게요.`,
+  payoutDue: "정산 대상 금액이 쌓였어요. 정산금을 받을 계좌를 알려 주세요.",
+  payoutDueMinor: "만 19세 미만 판매자는 보호자 명의 계좌로만 받을 수 있어요. 보호자 계좌를 알려 주세요.",
+  payoutSealed: "계좌번호와 예금주는 암호화해 보관해요. 저장한 뒤에는 은행과 끝 네 자리만 보여요.",
+  payoutSaved: "지급 계좌를 저장했어요.",
+  payoutHolderSandbox: "예금주 확인: 테스트 확인만 했어요. 실제 확인은 결제사 계약 뒤에 해요.",
+  payoutHolderNotRun: "예금주 확인 전이에요. 결제사 계약 뒤에 확인해요.",
+  payoutLinkedAdultPending: "보호자 확인이 끝나야 지급돼요.",
   payoutLinkedAdult: "만 19세 미만 판매자의 정산금은 연결된 보호자 계정으로만 지급돼요. 보호자 연결이 필요해요.",
   listed: "판매 중",
   connected: "이미 연결됨",
@@ -218,7 +250,23 @@ const ERRORS: Record<string, string> = {
   minor_google_send: "만 19세 미만은 메일을 보내는 스토어 스킬을 실행할 수 없어요.",
   store_version_mismatch: "스킬이 업데이트됐어요. 스토어에서 다시 열어 주세요.",
   store_audit_unavailable: "지금은 스토어 스킬을 실행할 수 없어요. 잠시 뒤 다시 시도해 주세요.",
+  attribution_required: "처음 올리기 전에 파트너·강사 코드를 정해 주세요. 코드가 없으면 비워 두면 돼요.",
+  attribution_already_set: "파트너·강사 코드는 이미 정했어요. 바꾸려면 운영팀에 문의해 주세요.",
+  attribution_mismatch: "강사 코드의 소속 파트너와 입력한 파트너 코드가 달라요. 강사 코드만 입력해 보세요.",
+  unknown_partner_code: "파트너 코드를 찾을 수 없어요. 받은 코드를 다시 확인해 주세요.",
+  unknown_instructor_code: "강사 코드를 찾을 수 없어요. 받은 코드를 다시 확인해 주세요.",
+  invalid_attribution: "파트너 코드나 강사 코드를 입력해 주세요.",
+  payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
+  invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
+  holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
 };
+/** Korean bank codes (금융결제원 표준 코드) the Service accepts for a payout account. */
+export const PAYOUT_BANKS: readonly (readonly [code: string, name: string])[] = [
+  ["004", "국민은행"], ["088", "신한은행"], ["020", "우리은행"], ["081", "하나은행"], ["011", "농협은행"], ["003", "기업은행"],
+  ["090", "카카오뱅크"], ["092", "토스뱅크"], ["089", "케이뱅크"], ["023", "SC제일은행"], ["027", "씨티은행"], ["002", "산업은행"],
+  ["007", "수협은행"], ["031", "아이엠뱅크"], ["032", "부산은행"], ["034", "광주은행"], ["035", "제주은행"], ["037", "전북은행"],
+  ["039", "경남은행"], ["045", "새마을금고"], ["048", "신협"], ["071", "우체국"],
+];
 export function storeErrorMessage(error: unknown): string {
   if (error instanceof StoreClientError) {
     if (error.code === "over_tier_cap" && typeof error.detail.cap_krw === "number") return `판매자 등급의 가격 한도(${won(error.detail.cap_krw)})를 넘었어요.`;

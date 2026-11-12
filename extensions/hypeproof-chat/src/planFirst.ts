@@ -12,6 +12,9 @@
 //
 // Pure module (no VS Code): the state machine and the gate are unit tested in test/plan-first.test.mjs.
 
+/** The classroom chip's label (PlanFirst.tsx), also the setting's name in the CGP-SHELL-R-024 change line. */
+export const PLAN_FIRST_LABEL = '계획 먼저';
+
 /** What the host does with one turn. `approved` is an ordinary turn that consumed a learner approval. */
 export type PlanFirstTurn = 'off' | 'planning' | 'approved';
 

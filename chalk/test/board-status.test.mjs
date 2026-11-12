@@ -83,14 +83,16 @@ const nodes=new Map();
 const element=id=>{if(!nodes.has(id))nodes.set(id,doc.createElement('div'));return nodes.get(id);};
 const requests=[];
 const pageDoc={getElementById:element,createElement:doc.createElement.bind(doc),createElementNS:doc.createElementNS.bind(doc),createTextNode:doc.createTextNode.bind(doc),activeElement:doc.activeElement};
-const ctx=vm.createContext({document:pageDoc,location:{hash:'',search:'',pathname:'/board'},history:{replaceState(){}},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},URLSearchParams,setInterval(){return 1;},clearInterval(){},console,fetch:()=>new Promise((resolve,reject)=>requests.push({resolve,reject}))});
+// The page holds no token: a connected Lab login session stands behind its reads.
+const chalkConnection={current:{connected:true},ready:new Promise(()=>{}),onChange(){}};
+const ctx=vm.createContext({document:pageDoc,location:{hash:'',search:'',pathname:'/board'},history:{replaceState(){}},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},URLSearchParams,setInterval(){return 1;},clearInterval(){},console,chalkConnection,fetch:()=>new Promise((resolve,reject)=>requests.push({resolve,reject}))});
 const shipped=renderBoardStatusPage(readFileSync(new URL('../src/ui/board.html',import.meta.url),'utf8')).match(/<script>([\s\S]*?)<\/script>/)[1];
 vm.runInContext(shipped,ctx);
 const payload={seats:[],degraded:[],thresholds:{},roster:{},now:1};
 const load=()=>vm.runInContext('load()',ctx);
 const stop=()=>vm.runInContext('stop()',ctx);
 const answer=req=>req.resolve({ok:true,json:async()=>payload});
-element('issuer').value='synthetic';element('cohort').value='class-a';
+element('cohort').value='class-a';
 let pending=load();stop();answer(requests.shift());await pending;
 assert.equal(element('summary').children.length,0,'late response after stop ignored');
 pending=load();element('cohort').value='class-b';answer(requests.shift());await pending;

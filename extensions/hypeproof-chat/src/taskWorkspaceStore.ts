@@ -479,12 +479,15 @@ export class TaskWorkspaceStore {
     return Promise.resolve(this.getView());
   }
 
-  create(title: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+  create(title: string, expected: TaskWorkspaceExpected, initialDraft?: ActivityDraft): Promise<TaskWorkspaceView> {
+    if (initialDraft && !validDraft(initialDraft)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 초안 형식이 올바르지 않습니다.'));
+    const draft = initialDraft ? clone(initialDraft) : undefined;
     expected = this.leaveTemporary(expected);
     return this.mutate(data => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
       const task = this.newTask(normalizedTitle(title), Date.now());
+      if (draft) task.draft = draft;
       current.tasks.push(task);
       current.activeTaskId = task.id;
       return current;

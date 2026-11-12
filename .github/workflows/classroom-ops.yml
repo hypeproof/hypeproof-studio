@@ -14,6 +14,7 @@ on:
       - '.github/workflows/classroom-ops.yml'
       - 'scripts/check-artifact-budget.py'
       - 'scripts/test-artifact-budget.py'
+      - 'scripts/run-playwright-ci.sh'
 permissions:
   contents: read
 
@@ -29,6 +30,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -49,43 +52,43 @@ jobs:
       - run: npm ci
         working-directory: e2e
       - run: node --test e2e/classroom/mac-devhost.test.mjs
-      - run: npx playwright install --with-deps chromium
+      - run: bash ../scripts/run-playwright-ci.sh prepare
         working-directory: e2e
       - name: Conversational automation approval and layout
-        run: node --experimental-strip-types test/automation-conversation-ui.browser.mjs
+        run: bash ../../scripts/run-playwright-ci.sh run node --experimental-strip-types test/automation-conversation-ui.browser.mjs
         working-directory: extensions/hypeproof-chat
       - name: Automation quest graph rendering
-        run: node --experimental-strip-types test/automation-quest.browser.mjs
+        run: bash ../../scripts/run-playwright-ci.sh run node --experimental-strip-types test/automation-quest.browser.mjs
         working-directory: extensions/hypeproof-chat
-      - run: npm run test:classroom
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom
         working-directory: e2e
-      - run: npm run test:classroom-ops
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops
         working-directory: e2e
-      - run: npm run test:classroom-ops-roster
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-roster
         working-directory: e2e
-      - run: npm run test:classroom-ops-selection
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-selection
         working-directory: e2e
-      - run: npm run test:classroom-ops-distribution
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-distribution
         working-directory: e2e
-      - run: npm run test:classroom-ops-lesson-settings
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-lesson-settings
         working-directory: e2e
-      - run: npm run test:classroom-ops-help
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-help
         working-directory: e2e
-      - run: npm run test:classroom-ops-results
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-results
         working-directory: e2e
-      - run: npm run test:classroom-ops-g1
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-g1
         working-directory: e2e
-      - run: npm run test:classroom-ops-g1-wrap
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-ops-g1-wrap
         working-directory: e2e
-      - run: npm run test:classroom-authoring-g2
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-authoring-g2
         working-directory: e2e
-      - run: npm run test:classroom-roster-csv
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-roster-csv
         working-directory: e2e
-      - run: npm run test:classroom-authoring-mission
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-authoring-mission
         working-directory: e2e
-      - run: npm run test:classroom-feedback-loop
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-feedback-loop
         working-directory: e2e
-      - run: npm run test:classroom-report
+      - run: bash ../scripts/run-playwright-ci.sh run npm run test:classroom-report
         working-directory: e2e
       - name: Bound evidence upload (128 MiB, 14 days)
         id: evidence-budget

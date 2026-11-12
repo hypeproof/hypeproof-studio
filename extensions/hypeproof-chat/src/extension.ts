@@ -1,3 +1,5 @@
+import { registerMobileConversation } from "./mobileConversationHost";
+import type { MobileConversation } from "./mobileConversation";
 import { registerAutomationHost } from "./automationHost";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
@@ -271,6 +273,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
   const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
     || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', ACCOUNTS_ENABLED_DEFAULT), accountService, accountSite);
+  let mobileConversations: MobileConversation | undefined;
   const accounts = accountEnabled ? new AccountSession({
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
@@ -282,11 +285,30 @@ export async function activate(context: vscode.ExtensionContext) {
     lock: accountLock(context.globalStorageUri.fsPath),
     freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),
     invalidated: async sessionId => {
+      mobileConversations?.invalidate();
       if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
       if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
     },
   }) : undefined;
   connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
+  mobileConversations = registerMobileConversation(context, provider, accounts);
+  provider.setReflectionAccount(accounts);
+  const reflectionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,66);
+  reflectionStatus.text = '$(comment-discussion) 나의 질문';
+  reflectionStatus.tooltip = '같은 계정의 휴대전화와 나를 알아가는 대화';
+  reflectionStatus.command = 'hypeproof-chat.personalReflection';
+  if(accounts)reflectionStatus.show();
+  const makingStatus=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,65);
+  makingStatus.text='$(add) 만들기로 이어가기';makingStatus.tooltip='확인한 의도를 기존 제작 작업의 초안으로 옮기기';makingStatus.command='hypeproof-chat.reflectionMaking';
+  const showMaking=()=>{if(provider.isPersonalReflection())makingStatus.show();else makingStatus.hide();};
+  const reflectionTimer=setInterval(()=>{showMaking();void provider.refreshPersonalReflection().catch(()=>{});},6000);
+  context.subscriptions.push(makingStatus,vscode.commands.registerCommand('hypeproof-chat.reflectionMaking',async()=>{
+    try{await provider.beginPersonalMaking();}catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'제작 초안을 열지 못했어요.');}finally{showMaking();}
+  }));
+  context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
+    try { await provider.openPersonalReflection(); showMaking(); }
+    catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
+  }));
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
   const showStoreQuest = async (skill: { title: string; steps: import("./skillStoreProtocol").StoreStepView[]; connections?: import("./skillStoreProtocol").StoreLocalConnections }) => {
     const snapshot = storeQuestSnapshot(skill.title, skill.steps, skill.connections);
@@ -451,6 +473,9 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();
     // CGP-AGENT-D-002: the card must follow the policy used by the next action.
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
+    // CGP-SHELL-R-024: the learner's runtime choice is observed on its own post, so an instructor capability change read
+    // later is compared under the same inputs and told, not absorbed into the same observation.
+    if (event.affectsConfiguration("hypeproofChat.coachRuntime")) void provider.refreshConfig();
     // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
     if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
     // #3578: the instructor runtime switch takes effect without a reload. The Chalk session ends first, so a

@@ -18,8 +18,8 @@ export async function runConsoleDurationBrowser() {
   const requests = [], errors = [], cases = [], sockets = new Set();
   const cohorts = ['duration-two', 'duration-six'];
   const scopes = cohorts.map((cohort, i) => ({ cohort, profiles: ['track-' + i], can_start_session: true, max_session_hours: i ? 6 : 2, max_hours: 2 }));
-  // The page decodes this display-only fixture; no Service authentication is claimed.
-  const issuer = Buffer.from(JSON.stringify({ role: 'issuer', u: 'Synthetic instructor', exp: Math.floor(Date.now() / 1000) + 3600, scopes })).toString('base64url') + '.synthetic';
+  // The page reads these scopes from the Lab connection status; no Service authentication is claimed.
+  const status = { connected: true, configured: true, member: { name: 'Synthetic instructor', handle: 'synthetic' }, expires_at: new Date(Date.now() + 3600e3).toISOString(), scopes };
   const server = createServer(async (req, res) => {
     requests.push({ method: req.method, path: req.url });
     try {
@@ -27,6 +27,8 @@ export async function runConsoleDurationBrowser() {
       let response;
       if (req.url === '/console') {
         response = await app.fetch(new Request('http://127.0.0.1/console'), { ENVIRONMENT: 'test' });
+      } else if (req.url === '/connect/status') {
+        response = Response.json(status);
       } else if (req.url === '/workshop/boa-tokens') {
         response = Response.json({ targets: [] });
       } else if (req.url === '/favicon.ico') {
@@ -69,14 +71,9 @@ export async function runConsoleDurationBrowser() {
   }
   async function capture(name) {
     if (!evidence) return;
-    const previous = await browser.evaluate("document.getElementById('issuer').getAttribute('style')");
-    await browser.evaluate("document.getElementById('issuer').style.cssText+=';color:transparent!important;background:magenta!important;caret-color:transparent!important'");
-    try {
-      const shot = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-      writeFileSync(resolve(evidence, name + '.png'), Buffer.from(shot.data, 'base64'));
-    } finally {
-      await browser.evaluate(`(()=>{const e=document.getElementById('issuer');const old=${JSON.stringify(previous)};if(old===null)e.removeAttribute('style');else e.setAttribute('style',old)})()`);
-    }
+    // The page holds no instructor token, so there is nothing to mask in the screenshot.
+    const shot = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    writeFileSync(resolve(evidence, name + '.png'), Buffer.from(shot.data, 'base64'));
   }
   const measure = () => browser.evaluate(`(() => {
     const zoom=Number(getComputedStyle(document.documentElement).zoom)||1;
@@ -113,14 +110,8 @@ export async function runConsoleDurationBrowser() {
       const loaded = browser.waitForEvent(event => event.method === 'Page.loadEventFired', 'console navigation');
       await browser.send('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/console` });
       await loaded;
-      await until("document.readyState==='complete'&&!!document.querySelector('#issuer')", 'console page');
-      await click('#issuer');
-      // Select existing tab-scoped fixture text before entering it again, on Mac too.
-      const modifiers = process.platform === 'darwin' ? 4 : 2;
-      await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers });
-      await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers });
-      await browser.send('Input.insertText', { text: issuer });
-      await click('#load');
+      // Connected through the Lab login: the page loads its scoped tracks by itself, with no token field.
+      await until("document.readyState==='complete'&&!document.querySelector('#issuer')&&window.chalkConnection?.current?.connected===true", 'console page');
       await until("document.querySelectorAll('[data-hours]').length===2&&document.fonts.status==='loaded'", 'closed tracks');
       await browser.evaluate(`document.documentElement.style.zoom=${JSON.stringify(String(zoom))}`);
       await browser.evaluate("window.durationInputEvents=[];for(const t of ['pointerdown','keydown','input','change'])document.addEventListener(t,e=>{if(e.target.matches('[data-hours]'))window.durationInputEvents.push({type:e.type,key:e.key??null,value:e.target.value,trusted:e.isTrusted})},true)");
@@ -133,8 +124,9 @@ export async function runConsoleDurationBrowser() {
       const pointer = await measure(); assertLayout(pointer, name + '/pointer');
       assert.ok(pointer.events.some(e => e.type === 'pointerdown' && e.trusted), name + ': trusted pointer');
       assert.ok(pointer.events.some(e => e.type === 'change' && e.trusted && e.value === '1'), name + ': trusted native selection');
-      await click('#issuer');
-      for (let n = 0; n < 10 && !await browser.evaluate("document.activeElement.matches('[data-hours]')"); n++) await press('Tab', 9);
+      // Start keyboard navigation from the heading, above the connection panel and the load button.
+      await click('h1');
+      for (let n = 0; n < 20 && !await browser.evaluate("document.activeElement.matches('[data-hours]')"); n++) await press('Tab', 9);
       assert.ok(await browser.evaluate("document.activeElement.matches('[data-hours]')"), name + ': Tab reaches duration');
       await press('End', 35); await press('Enter', 13);
       const keyboard = await measure(); assertLayout(keyboard, name + '/keyboard');

@@ -23,10 +23,11 @@ import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, markSettingBound, pendingSetting } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir, inboxView } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
 import { tokenLessonSha } from '../../extensions/hypeproof-chat/src/lessonBinding.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-lesson-settings'); mkdirSync(out, { recursive: true });
 const dist = path.join(repo, 'extensions/hypeproof-chat/webview-ui/dist'); assert.ok(existsSync(path.join(dist, 'index.html')), 'build the webview first: npm --prefix extensions/hypeproof-chat/webview-ui run build');
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts'), { issue } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts'), { issue } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_LESSON_BINDINGS = 'enforce'; local.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }); globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);
 const serve = async (handler) => { const s = createServer(handler); s.listen(0, '127.0.0.1'); await once(s, 'listening'); return s; };
@@ -77,7 +78,7 @@ try {
     return r; }
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + chalkServer.address().port, page = await browser.newPage({ viewport: { width: 1440, height: 1300 } }); const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  const connect = async (t) => { await page.goto(origin + '/manage'); await page.locator('#token').fill(t); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A4"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
+  const connect = async (t) => { await page.goto(origin + '/manage'); await signInChalk(page, t); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill('student-'); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A4"]').waitFor(); await page.locator('#ops-tools > summary').click(); };
   const box = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`).getByLabel('선택'), T = (id) => page.locator('#' + id).innerText(), Ls = async (id) => (await T(id)).split('\n').filter(Boolean);
   const compose = async () => { if (!(await page.locator('#ops-dist').evaluate((d) => d.open))) await page.locator('#ops-dist-summary').click(); await page.locator('#ops-dist-title').waitFor(); };
   const saveForm = async () => { await page.locator('#ops-dist-save').click(); await page.locator('#ops-dist-saved').filter({ hasText: '저장했습니다' }).waitFor(); };
@@ -88,7 +89,7 @@ try {
   // ── E1: what is offered — a prompt to anyone who may distribute; a setting only to who holds it, where it can be enforced ──
   await connect(X); await compose();
   assert.deepEqual(await page.locator('#ops-dist-kind option').evaluateAll((os) => os.filter((o) => !o.hidden && !o.disabled).map((o) => o.value)), ['notice', 'material', 'prompt'], 'this instructor may distribute, not change lesson settings');
-  await page.locator('#ops-dist-kind').selectOption('prompt'); assert.match(await T('ops-dist-kind-help'), /초안에 가져오기.*수업 설정은 지금 쓸 수 없습니다: 이 강사 토큰에는 수업 설정 권한/s);
+  await page.locator('#ops-dist-kind').selectOption('prompt'); assert.match(await T('ops-dist-kind-help'), /초안에 가져오기.*수업 설정은 지금 쓸 수 없습니다: 이 강사 연결에는 수업 설정 권한/s);
   await connect(L); await compose();
   assert.match(await page.locator('#ops-dist-preview').innerText(), /^보내기 — 먼저 확인$/, 'G1: the button sits under ‘선택한 학생에게’; the composer entry below names everything it can send'); assert.match(await T('ops-dist-summary'), /^공지·자료·프롬프트·수업 설정 작성/);
   assert.deepEqual(await page.locator('#ops-dist-kind option').evaluateAll((os) => os.filter((o) => !o.hidden && !o.disabled).map((o) => o.value)), ['notice', 'material', 'prompt', 'setting']);

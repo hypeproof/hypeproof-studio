@@ -143,6 +143,8 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 export interface SdkCoachArgs {
   /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
   onDiagnostic?: (phase: SdkDiagnosticPhase) => void;
+  /** #3640 — set only by a Dev app (devSdkConfigRoot); the CLI config dir goes under it. */
+  sdkConfigRoot?: string;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -760,7 +762,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // path is derived purely (sdkConfigDirFor); creating it is the host's job.
   // A failure here is not fatal: the CLI creates it itself, and pointing the
   // env at a not-yet-existing dir still keeps ~/.claude out of the picture.
-  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args));
+  const sdkConfigDir = sdkConfigDirFor(process.env, coachSeatKeyFor(args), args.sdkConfigRoot);
   try {
     fs.mkdirSync(sdkConfigDir, { recursive: true });
   } catch (err) {
