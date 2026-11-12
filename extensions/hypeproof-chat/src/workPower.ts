@@ -70,6 +70,12 @@ export class WorkPower {
     };
   }
 
+  /** REQ-STUDIO-QUIT-GUARD — true while any lease for this kind of work is held on this host. */
+  isHeld(work: PowerWork): boolean {
+    for (const lease of this.leases) if (lease.description === work) return true;
+    return false;
+  }
+
   private stop(): void {
     const child = this.child;
     this.child = undefined;

@@ -9,7 +9,10 @@ export function runClaude(args: {
   model?: string;
   messages: Array<{ role: string; content: string }>;
   signal: AbortSignal;
+  timeout?: number;
   onDelta: (text: string) => void;
   onRefusal?: () => void;
+  /** #3601: every parsed stream line (progress for the stall watch). */
+  onProgress?: () => void;
   toolServer: { url: string; token: string };
 }): Promise<{ model: string; usage: unknown }>;

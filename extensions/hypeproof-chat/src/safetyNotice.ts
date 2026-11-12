@@ -49,7 +49,8 @@ const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u206
 
 function cleanMessage(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const text = value.normalize("NFC").replace(UNSAFE_CHARS, " ").replace(/\s+/g, " ").trim();
+  // `[hps:<code>]` is the Service's machine tag for the SDK CLI, never learner copy.
+  const text = value.normalize("NFC").replace(UNSAFE_CHARS, " ").replace(/\[hps:[a-z_]+\]/g, " ").replace(/\s+/g, " ").trim();
   if (!text || text.length > MESSAGE_MAX) return null;
   // Only Korean learner copy is shown verbatim; anything else (raw JSON, English internals) is not ours to show.
   if (!/[가-힣]/.test(text) || /[{}<>]/.test(text)) return null;
@@ -65,7 +66,8 @@ function knownCategory(value: unknown): ModerationCategory | undefined {
 /**
  * Read a gateway response as a moderation block. Both Service shapes are accepted:
  * `/v1/chat/completions` → `{error:{type,message,category,request_id}}`,
- * `/v1/messages` → `{type:"error",error:{type,message},request_id}` (no category today).
+ * `/v1/messages` → `{type:"error",error:{type,message,category},request_id}` (category since the
+ * Service's moderation-block-category change; an older Service sends none, and then no help lines).
  * Anything that is not a 400 with `error.type === "moderation_block"` is null.
  */
 export function parseModerationBlock(status: number | undefined, bodyText: string): ModerationBlock | null {
@@ -78,6 +80,13 @@ export function parseModerationBlock(status: number | undefined, bodyText: strin
   const category = knownCategory(e.category);
   return { message: cleanMessage(e.message) ?? MODERATION_BLOCK_FALLBACK, ...(category ? { category } : {}) };
 }
+
+/**
+ * The Service's machine tag on a `/v1/messages` block message: `[hps:moderation_help]` for a self_harm
+ * block, `[hps:moderation_block]` for any other. Neutral on purpose (an old build prints the raw line).
+ * Anchored at the end: the Service appends it as the last token, so a tag quoted mid-line is not one.
+ */
+const MODERATION_TAG = /\[hps:moderation_(help|block)\]\s*$/;
 
 /** Thrown by the proxy runtime for a moderation block, so the turn handler can draw the calm notice. */
 export class ModerationBlockError extends Error {
@@ -93,8 +102,11 @@ export class ModerationBlockError extends Error {
 
 /**
  * The block behind a failed turn, from either runtime. The agent-sdk runtime surfaces the CLI's
- * error text with a JSON body (sdkCoachHelpers `cliRefusal` keeps it as `sdkErrorLine`/message);
- * that path carries no category today, so it never yields help lines.
+ * error text (sdkCoachHelpers `cliRefusal` keeps it as `sdkErrorLine`/message). The pinned CLI
+ * unwraps the body to `API Error: 400 <error.message>` (test/fixtures/sdk-gateway-errors.json), so the
+ * Service tags that message (`MODERATION_TAG`, CGP-LEARN-R-013); only a tagged line
+ * counts, because an untagged 400 sentence cannot be told from any other 400. A line that still
+ * carries the JSON body is read as before.
  */
 export function moderationBlockOf(err: unknown): ModerationBlock | null {
   if (err instanceof ModerationBlockError) return err.block;
@@ -108,10 +120,17 @@ export function moderationBlockOf(err: unknown): ModerationBlock | null {
     const m = /API Error:\s*(?:Request rejected\s*)?\(?(\d{3})\)?/.exec(text);
     if (!m) continue;
     const status = typeof own === "number" ? own : Number(m[1]);
-    const at = text.indexOf("{", m.index);
-    if (at < 0) continue;
-    const block = parseModerationBlock(status, text.slice(at));
+    if (status !== 400) continue;
+    const rest = text.slice(m.index + m[0].length);
+    const at = rest.indexOf("{");
+    const block = at < 0 ? null : parseModerationBlock(status, rest.slice(at));
     if (block) return block;
+    const tag = MODERATION_TAG.exec(rest);
+    if (tag) {
+      const sentence = rest.replace(/^\s*[·:-]?\s*/, "");
+      const message = cleanMessage(sentence) ?? MODERATION_BLOCK_FALLBACK;
+      return tag[1] === "help" ? { message, category: "self_harm" } : { message };
+    }
   }
   return null;
 }

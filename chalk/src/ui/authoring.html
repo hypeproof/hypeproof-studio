@@ -48,9 +48,9 @@ label small{color:var(--hp-mute)}
 <div class="fr-add"><label>목록에 없는 과목<input id="fr-subject-new" maxlength="20" autocomplete="off"></label><button id="fr-subject-add" type="button" class="ghost">과목 목록에 추가</button></div><small>직접 추가한 과목은 ‘빼기’로 목록에서 지울 수 있습니다.</small></fieldset>
 <div class="fr-actions"><button id="fr-save" type="button">저장</button><button id="fr-later" type="button" class="ghost">나중에</button></div><p id="fr-status" role="status"></p></section>
 <fieldset><legend>01 · 강사 연결</legend>
-<label>강사 연결 코드<input id="token" type="password" autocomplete="off"></label><small>이 화면 메모리에서만 사용합니다. URL이나 수업 파일에는 포함하지 않습니다.</small>
-<button id="connect">수업 설정 불러오기</button><p id="connection-status" role="status">강사 토큰을 연결하면 선택 가능한 수업 설정이 나옵니다.</p><label id="setting-label" hidden>수업 설정<select id="setting"><option value="">선택하세요</option></select></label><details><summary>연결 정보 직접 입력</summary><div class="row"><label>코호트 ID<input id="cohort" autocomplete="off"></label><label>프로필 ID<input id="profile" autocomplete="off"></label></div>
-</details><button id="forget">연결 해제</button>
+<!--@chalk-connect-->
+<button id="connect">수업 설정 불러오기</button><p id="connection-status" role="status">Lab 로그인으로 연결하면 선택 가능한 수업 설정이 나옵니다.</p><label id="setting-label" hidden>수업 설정<select id="setting"><option value="">선택하세요</option></select></label><details><summary>연결 정보 직접 입력</summary><div class="row"><label>코호트 ID<input id="cohort" autocomplete="off"></label><label>프로필 ID<input id="profile" autocomplete="off"></label></div>
+</details><button id="forget" type="button">수업 설정 비우기</button>
 </fieldset>
 <section class="draft-actions"><button id="new">새 강의 만들기</button><small>기존 수업에는 영향을 주지 않습니다.</small><small id="fr-summary"></small><button id="fr-open" type="button" class="ghost">기본 대상 바꾸기</button></section>
 <details class="tools"><summary>저장한 강의 열기 · 파일 가져오기</summary><fieldset><legend>기존 강의</legend>
@@ -65,7 +65,7 @@ label small{color:var(--hp-mute)}
 <label>대상 단계<select id="audience_tier"><option value="">정하지 않음</option><option value="lv1">초등 (lv1)</option><option value="lv2">중·고 (lv2)</option><option value="adult">성인 (adult)</option></select></label><small>수업 검사가 이 단계 기준으로 강의를 봅니다. 기본 대상에서 미리 채워져도 강의마다 바꿀 수 있습니다. 유아는 맞는 단계가 없어 비워 둡니다.</small>
 <label>시간(분)<input id="duration_minutes" type="number" min="1" max="480" value="120"></label>
 <label>목표<textarea id="objective"></textarea></label>
-<label>시작 예제·자료<textarea id="starter" placeholder="학생이 처음 열어볼 예제나 사용할 자료를 적어주세요."></textarea></label>
+<label>시작 예제·자료<textarea id="starter" placeholder="학생이 처음 열어볼 예제나 사용할 자료를 적어주세요."></textarea></label><small id="starter-disclosure">학생은 AI에게 물어 이 자료의 내용을 끌어낼 수 있습니다. 학생에게 보여 주면 안 되는 내용은 넣지 마세요.</small>
 <fieldset id="learning"><legend>이번 주 미션 · 완료 조건 — 학생 Studio 맨 위에 보입니다</legend>
 <label class="inline"><input id="learning-on" type="checkbox">이 수업에 미션을 둡니다</label>
 <small id="learning-off-note">미션을 두지 않으면 학생 화면에는 ‘미션이 정해지지 않았습니다.’가 그대로 보입니다. 제목이나 목표로 미션을 대신 만들지 않습니다.</small>
@@ -75,9 +75,37 @@ label small{color:var(--hp-mute)}
 <h3>완료 조건 (선택 · 10개까지)</h3><small>무엇을 만들면 끝인지 한 문장으로 적습니다. 점수나 등급은 넣지 않습니다. 학생 화면에는 모두 ‘확인 전(☐)’으로 보입니다. 학생이 실제로 남긴 기록이 생기기 전에는 완료로 표시하지 않습니다. 기록 종류는 어떤 기록이 이 조건의 근거가 되는지입니다.</small>
 <ol id="learning-completion"></ol><button id="completion-add" type="button">완료 조건 추가</button>
 <p id="learning-advanced" class="muted"></p>
-</div></fieldset><details><summary>추가 자료 · AI 설정</summary><label>선수 조건<textarea id="prerequisites"></textarea></label>
-
+</div></fieldset><label>선수 조건<textarea id="prerequisites"></textarea></label></fieldset>
+<fieldset id="ai-settings" class="ai-settings"><legend>수업 AI 설정</legend>
+<p class="muted">이 수업에서 AI가 어떻게 보이고 움직일지 한 곳에서 정합니다. 위에서 아래로 정체성, 지시문, 모델·처리 수준, 기능·승인, 시작 문장을 정하고 맨 아래 미리보기로 학생이 받을 모습을 확인하세요. 저장하면 기존 초안 필드에 그대로 기록되고, 고정한 버전은 바뀌지 않습니다.</p>
+<div id="assist" class="assist" hidden>
+<label for="assist-text">AI에게 설정 부탁하기</label>
+<textarea id="assist-text" rows="2" maxlength="300" autocomplete="off" placeholder="예: 말투를 차분하게 바꿔 주세요" aria-describedby="assist-hint assist-count"></textarea>
+<div class="assist-bar"><small id="assist-count">0/300</small><button id="assist-send" type="button" disabled>제안 받기</button></div>
+<p id="assist-hint" class="muted" role="status"></p>
+<p id="assist-note" role="status" aria-live="polite"></p>
+<div id="assist-card" class="assist-card" hidden>
+<h3 id="assist-card-title">AI 제안 — 적용하기 전에는 아무것도 바뀌지 않아요</h3>
+<table id="assist-table" aria-labelledby="assist-card-title"><thead><tr><th scope="col">항목</th><th scope="col">이전</th><th scope="col">새 값</th></tr></thead><tbody></tbody></table>
+<div class="assist-actions"><button id="assist-apply" type="button" class="primary">적용</button><button id="assist-discard" type="button" class="ghost">버리기</button></div>
+</div></div>
+<nav id="ai-nav" aria-label="수업 AI 설정 구역"><ol><li><a href="#ai-identity">정체성</a></li><li><a href="#ai-instructions">지시문</a></li><li><a href="#ai-model">모델·처리 수준</a></li><li><a href="#ai-features">기능·승인</a></li><li id="ai-nav-starters"><a href="#ai-starters">시작 문장</a></li><li><a href="#ai-preview">미리보기</a></li></ol></nav>
+<details id="ai-identity" class="ai-section" open><summary>정체성</summary>
 <label>이 수업의 AI 이름<input id="assistant_name" maxlength="40" autocomplete="off" placeholder="예: 제작 파트너"></label><small>학생 Studio의 헤더와 답변 이름에 그대로 표시됩니다(40자 이내, 한 줄). 비우면 코호트 기본 규칙(고정 이름 또는 학생이 직접 짓기)을 따르고, 이름을 넣으면 학생이 지은 이름 대신 이 이름이 고정됩니다. 이름은 도구 권한·모델·AI 고지를 바꾸지 않습니다. 버전을 고정한 뒤의 편집은 새 버전에만 적용됩니다.</small>
+<div id="style-identity">
+<label>이 수업의 AI 역할<input id="assistant_role" maxlength="80" autocomplete="off" placeholder="예: 글쓰기 코치" aria-describedby="assistant_role-help assistant_role-count"></label><small id="assistant_role-help">AI가 이 수업에서 맡는 역할을 한 줄로 적습니다(80자 이내). 비우면 정하지 않습니다. 역할은 도구 권한·모델·AI 고지를 바꾸지 않습니다.</small> <small id="assistant_role-count" class="counter">0/80</small>
+<fieldset id="tone-fields" disabled aria-describedby="tone-help"><legend>AI 말투 — 이 수업 버전에 하나</legend>
+<div id="tone-choices"></div>
+<small id="tone-help">고르지 않으면 코호트 기본 말투를 따르고 아무 값도 저장하지 않습니다. 말투 이름은 Service가 정한 목록에서 가져옵니다. 말투는 도구 권한·모델·안전 규칙을 바꾸지 않습니다.</small>
+<p id="tone-status" role="status">‘수업 기능 목록 불러오기’를 누르면 고를 수 있습니다.</p>
+</fieldset>
+</div>
+</details>
+<details id="ai-instructions" class="ai-section" open><summary>지시문</summary>
+<p class="muted">AI가 단계마다 따르는 안내입니다. 단계별 ‘안내·실습’, 힌트, 완료 기준을 여기서 고칩니다.</p>
+<h2>수업 진행 순서</h2><p class="muted">각 활동에서 무엇을 하고, 무엇을 확인할지 적어주세요.</p><div id="steps"></div><button id="add" type="button">단계 추가</button>
+</details>
+<details id="ai-model" class="ai-section" open><summary>모델·처리 수준</summary>
 <div class="card">
 <button id="models-load" type="button">수업 모델 목록 불러오기</button>
 <p id="models-status">코호트가 허용한 모델 안에서 선택합니다. 설정은 새 확정 버전부터 적용됩니다.</p>
@@ -93,16 +121,36 @@ label small{color:var(--hp-mute)}
 <div id="effort-allowed" aria-label="학생이 선택할 수 있는 Effort"></div>
 <small id="effort-help">먼저 수업 모델 목록을 불러오고 모델 사용 방식을 정하세요. 지원 모델에만 적용되며, 같은 설정이라도 모델마다 속도와 사용량이 다릅니다.</small>
 </fieldset>
+</div></details>
+<details id="ai-features" class="ai-section" open><summary>기능·승인</summary>
 <button id="features-load" type="button">수업 기능 목록 불러오기</button>
 <p id="features-status">코호트가 이미 가진 기능 중에서 <strong>줄이기만</strong> 합니다. 여기서 새 권한이 생기지는 않습니다.</p>
 <fieldset id="features-fields" disabled>
 <label>기능 사용 방식<select id="feature-mode"><option value="inherit">코호트 기본값 사용</option><option value="narrow">이 수업에서 쓸 기능만 고르기</option></select></label>
 <div id="feature-allowed" aria-label="이 수업에서 사용할 기능"></div>
 <small>고른 기능만 이 수업에서 켜집니다. 나머지는 꺼집니다. 여기서 코호트에 없는 기능이 생기지는 않습니다. 브라우저는 실행 경로와 무관하게 하나로 묶여 있습니다.</small>
-</fieldset></div>
-
-</details><h2>수업 진행 순서</h2><p class="muted">각 활동에서 무엇을 하고, 무엇을 확인할지 적어주세요.</p><div id="steps"></div><button id="add" type="button">단계 추가</button>
-</fieldset><button id="save" type="submit" disabled>초안 저장</button><button id="export" type="button">편집 내용 내보내기</button></form>
+</fieldset>
+<fieldset id="approval-fields" disabled aria-describedby="approval-help"><legend>AI가 묻는 방식 — 이 수업 버전에 하나</legend>
+<div id="approval-choices"></div>
+<small id="approval-help">고르지 않으면 학습자 앱의 기본값을 따릅니다. 미성년자 수업(초등·중·고)의 기본은 ‘중요한 것만 묻기’입니다. 후보로 고정하면 그 버전의 방식은 바뀌지 않고, 바꾸려면 새 버전을 만듭니다.</small>
+<p id="approval-status" role="status">‘수업 기능 목록 불러오기’를 누르면 고를 수 있습니다.</p>
+</fieldset></details>
+<details id="ai-starters" class="ai-section" open><summary>시작 문장</summary>
+<div id="starters-body">
+<p class="muted">학생이 첫 질문으로 누를 수 있는 문장입니다. 학생 Studio에서 고칠 수 있는 제안으로 보이며, 자동으로 보내지지 않습니다. 최대 4개, 한 줄 80자 이내이고 빈 칸은 저장되지 않습니다.</p>
+<ol id="starters-list"><li><label>시작 문장 1<input id="ai-starter-1" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-1-count"></label> <small id="ai-starter-1-count" class="counter">0/80</small></li><li><label>시작 문장 2<input id="ai-starter-2" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-2-count"></label> <small id="ai-starter-2-count" class="counter">0/80</small></li><li><label>시작 문장 3<input id="ai-starter-3" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-3-count"></label> <small id="ai-starter-3-count" class="counter">0/80</small></li><li><label>시작 문장 4<input id="ai-starter-4" class="ai-starter" maxlength="80" autocomplete="off" aria-describedby="ai-starter-4-count"></label> <small id="ai-starter-4-count" class="counter">0/80</small></li></ol>
+<p id="starters-warning" role="status"></p>
+<small id="starters-disclosure">학생은 시작 문장으로 이 수업의 자료 내용을 끌어낼 수 있습니다. 학생에게 보여 주면 안 되는 내용은 시작 문장과 ‘시작 예제·자료’에 넣지 마세요.</small>
+</div>
+</details>
+<details id="ai-preview" class="ai-section" open><summary>미리보기</summary>
+<p class="muted">학생이 받게 될 설정을 읽기만 하는 요약입니다. 여기서는 고칠 수 없습니다.</p>
+<h3 id="ai-preview-draft-title">지금 편집 중인 초안</h3><dl id="ai-preview-draft" aria-labelledby="ai-preview-draft-title"></dl>
+<div id="ai-preview-frozen" hidden><h3 id="ai-preview-frozen-title"></h3><dl id="ai-preview-frozen-list" aria-labelledby="ai-preview-frozen-title"></dl></div>
+<p><a href="#rehearsal">학생으로 미리보기 — 리허설로 이동</a></p>
+</details>
+</fieldset>
+<button id="save" type="submit" disabled>초안 저장</button><button id="export" type="button">편집 내용 내보내기</button></form>
 <fieldset id="review"><legend>03 · 바뀌는 내용 확인 · 확정 버전 다시 쓰기</legend>
 <p>저장한 초안이 확정된 버전과 비교해 학생에게 무엇이 달라지는지 봅니다. 확정된 버전의 내용이나 단계 하나를 가져와 새 초안으로 고칠 수도 있습니다. 학생 기록·명단·참여 코드·사용량은 가져오지 않습니다.</p>
 <button id="versions-load" type="button">이 강의의 버전 불러오기</button>
@@ -114,7 +162,7 @@ label small{color:var(--hp-mute)}
 <fieldset id="rehearsal"><legend>04 · 학생 조건 리허설</legend>
 <p>저장한 초안을 바꿀 수 없는 <strong>리허설 후보</strong>로 고정한 뒤, 강사 권한이 아닌 학생 코드로 Studio에서 실제로 실행해 봅니다. 후보를 고정하거나 코드를 발급한 것만으로는 준비가 끝나지 않습니다.</p>
 <details><summary>버전 정보</summary><label>버전 이름<input id="version" placeholder="자동 생성"></label>
-<button id="version-load">버전 확인</button><pre id="version-view" aria-live="polite"></pre></details><button id="freeze" disabled>저장한 초안을 리허설 후보로 고정</button><p id="completion" role="status"></p>
+<button id="version-load">버전 확인</button><p id="version-approval"></p><pre id="version-view" aria-live="polite"></pre></details><button id="freeze" disabled>저장한 초안을 리허설 후보로 고정</button><p id="completion" role="status"></p>
 <label>리허설 학생 ID<input id="rehearsal-learner" autocomplete="off" placeholder="예: rehearsal-t1"></label><small>세션 콘솔에서 연습 세션을 열고 이 ID를 명단에 등록한 뒤 발급하세요. 실제 학생 ID 대신 리허설 전용 ID를 쓰세요.</small>
 <button id="rehearsal-issue" type="button" disabled>이 후보로 리허설 코드 발급</button>
 <label>리허설 코드<input id="rehearsal-token" type="password" readonly autocomplete="off"></label><button id="rehearsal-copy" type="button">리허설 코드 복사</button>
@@ -161,6 +209,32 @@ label small{color:var(--hp-mute)}
 <label>재현·실제 오류·임시 대안<textarea id="repro"></textarea></label>
 <button id="request">GitHub 요청 초안 준비</button><p id="request-status">미접수 — 내용을 준비한 뒤 GitHub에서 직접 제출하세요. 참가자 정보와 인증정보를 넣지 마세요.</p><a id="request-link" hidden target="_blank" rel="noopener noreferrer">GitHub에서 확인하고 제출</a>
 </fieldset></details>
+<style>/* CGP-AGENT-D-013 — 수업 AI 설정: sticky section nav from 1024px, collapsible sections everywhere, 44px targets, tokens only. */
+.ai-settings>nav ol{list-style:none;margin:0 0 var(--ds-c-chalk-authoring-space-5);padding:0;display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-authoring-space-2)}
+.ai-settings>nav a{display:inline-flex;align-items:center;min-height:var(--ds-c-chalk-authoring-size-8);padding:0 var(--ds-c-chalk-authoring-space-5);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-control-line);border-radius:var(--ds-c-chalk-authoring-radius-3);text-decoration:none;color:var(--hp-text-2)}
+.ai-settings>nav a:hover{background:var(--hp-state-hover)}.ai-settings>nav a:active{background:var(--hp-state-pressed)}
+.ai-section{margin:0 0 var(--ds-c-chalk-authoring-space-5);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-line);border-radius:var(--ds-c-chalk-authoring-radius-9);padding:0 var(--ds-c-chalk-authoring-space-19) var(--ds-c-chalk-authoring-space-5);scroll-margin-top:var(--ds-c-chalk-authoring-size-8)}
+.ai-section>summary{display:flex;align-items:center;min-height:var(--ds-c-chalk-authoring-size-8);font-weight:var(--ds-c-chalk-authoring-typography-7);color:var(--hp-text)}
+.ai-section dl{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr);gap:var(--ds-c-chalk-authoring-space-2) var(--ds-c-chalk-authoring-space-5);margin:0}
+.ai-section dt{color:var(--hp-mute)}.ai-section dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:480px){.ai-section dl{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:1024px){.ai-settings>nav{position:sticky;top:0;z-index:1;background:var(--hp-panel)}}
+</style>
+<style>/* CGP-AGENT-D-012 — AI에게 설정 부탁하기: one field, a proposal card (field / 이전 / 새 값), tokens only. */
+.assist{margin:0 0 var(--ds-c-chalk-authoring-space-5);padding:var(--ds-c-chalk-authoring-space-19);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-line);border-radius:var(--ds-c-chalk-authoring-radius-9)}
+.assist textarea{min-height:var(--ds-c-chalk-authoring-size-8);resize:vertical}
+.assist-bar,.assist-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--ds-c-chalk-authoring-space-2)}
+.assist-actions{justify-content:flex-start}
+.assist button{min-height:var(--ds-c-chalk-authoring-size-8)}
+.assist p{margin:var(--ds-c-chalk-authoring-space-2) 0}
+.assist-card{margin-top:var(--ds-c-chalk-authoring-space-5)}
+.assist-card h3{margin:0 0 var(--ds-c-chalk-authoring-space-2)}
+.assist-card table{width:100%;border-collapse:collapse;table-layout:fixed}
+.assist-card th,.assist-card td{text-align:start;vertical-align:top;padding-block:var(--ds-c-chalk-authoring-space-2);padding-inline:0 var(--ds-c-chalk-authoring-space-5);border-bottom:var(--ds-c-chalk-authoring-size-3) solid var(--hp-line);overflow-wrap:anywhere;white-space:pre-wrap}
+.assist-card th{color:var(--hp-mute);font-weight:var(--ds-c-chalk-authoring-typography-7)}
+.assist-card tbody th{color:var(--hp-text)}
+@media(max-width:480px){.assist-card thead{display:none}.assist-card table,.assist-card tbody,.assist-card tr,.assist-card th,.assist-card td{display:block;width:auto}.assist-card tr{padding:var(--ds-c-chalk-authoring-space-2) 0;border-bottom:var(--ds-c-chalk-authoring-size-3) solid var(--hp-line)}.assist-card th,.assist-card td{border-bottom:0;padding:var(--ds-c-chalk-authoring-space-14) 0}.assist-card td::before{content:attr(data-label) " · ";color:var(--hp-mute)}}
+</style>
 <script>
 const $=id=>document.getElementById(id);
 const fields=['title','audience','duration_minutes','objective','prerequisites','starter'];
@@ -168,7 +242,7 @@ const fields=['title','audience','duration_minutes','objective','prerequisites',
 // 여기 없는 키(steps[].help, learning, 앞으로 생길 칸)는 다음 저장에서 조용히 사라진다.
 // 그래서 render() 가 연 초안의 미확인 키를 들고 있다가 content() 에서 되돌려 깐다.
 // 보존만 한다 — 편집 UI 는 이 변경의 범위가 아니다.
-const formKeys=['schema',...fields,'audience_tier','steps','assistant','model','features','learning'];
+const formKeys=['schema',...fields,'audience_tier','steps','assistant','starters','model','features','approval_preset','learning'];
 const stepFormKeys=['id','title','instructions','hint','acceptance','help','ui'];
 let carriedTop={},carriedStep=new Map(),carriedLearning={};
 let revision=null,bound=null,dirty=false,busy=false,pending=null,batch=[];
@@ -177,31 +251,37 @@ let confirmDiff=null;
 let candidateVersion='',versionList=[],readiness=null,readinessTimer=null,rehearsalPending=null,confirmPending=null;
 let lessonModel, modelCatalogue, modelCatalogueScope;
 let lessonFeatures, featureCatalogue, featureCatalogueScope;
+let lessonApprovalPreset;
+// CGP-AGENT-R-014 / D-012 — the assistant box: a proposal is held here and changes nothing until 적용.
+let assistProposal=null,assistApplying=false;const assistAvail=new Map();
 const identity=()=>JSON.stringify(['cohort','profile','course'].map(k=>$(k).value.trim()));
 const status=text=>{$('status').textContent=text;};
-function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','token','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion||confirmDiff?.candidate!==readiness?.version||confirmDiff?.state!=='ready';document.querySelector('#editor fieldset').disabled=busy;retroControls();}
+function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;$('approval-fields').disabled=busy||!approvalCatalog();$('tone-fields').disabled=busy||!toneCatalog();styleSync();const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion||confirmDiff?.candidate!==readiness?.version||confirmDiff?.state!=='ready';for(const f of document.querySelectorAll('#editor>fieldset'))f.disabled=busy;aiPreview();assistControls();retroControls();}
 function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
-function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!$('token').value.trim())throw Error('강사 토큰을 입력하세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
+function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!globalThis.chalkConnection?.current?.connected)throw Error('위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
 function step(data={id:'step-'+crypto.randomUUID().slice(0,8),title:'',instructions:'',hint:'',acceptance:''}){const f=document.createElement('fieldset');f.className='step';for(const [key,label] of Object.entries({id:'단계 ID',title:'단계 제목',instructions:'안내·실습',hint:'힌트',acceptance:'완료 기준'})){const l=document.createElement('label');l.textContent=label;const e=document.createElement(key==='id'||key==='title'?'input':'textarea');e.dataset.field=key;e.value=data[key]??'';l.append(e);if(key==='id')l.hidden=true;f.append(l);}stepTeaching(f,data);for(const [label,action] of [['위로',()=>f.previousElementSibling?.before(f)],['아래로',()=>f.nextElementSibling?.after(f)],['삭제',()=>f.remove()]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();changed();};f.append(b);}$('steps').append(f);}
-function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));return {...carriedStep.get(own.id),...own,...stepTeachingValue(f)};}),...(name?{assistant:{display_name:name}}:{}),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...learningValue()};}
+function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));return {...carriedStep.get(own.id),...own,...stepTeachingValue(f)};}),...assistantValue(name),...startersField(),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...(lessonApprovalPreset?{approval_preset:lessonApprovalPreset}:{}),...learningValue()};}
 function carry(c){carriedTop=Object.fromEntries(Object.entries(c).filter(([k])=>!formKeys.includes(k)));carriedStep=new Map((c.steps||[]).map(s=>[s.id,Object.fromEntries(Object.entries(s).filter(([k])=>!stepFormKeys.includes(k)))]));}
-function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
-async function call(path,method='GET',body){const r=await fetch(path,{method,redirect:'error',headers:{authorization:'Bearer '+$('token').value.trim(),'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json();if(!r.ok){const detail=typeof j.error==='string'?j.error:j.error?.type==='validation'&&typeof j.error.message==='string'?j.error.message:JSON.stringify(j.error||j);const learningHint=r.status===400&&/learning/.test(detail)?' — 미션·주차·완료 조건을 확인하세요(점수·등급은 넣을 수 없습니다). 편집은 보존됐습니다.':'';const nameHint=r.status===400&&detail==='invalid session-design fields'&&$('assistant_name').value.trim()?' — 이 Service 버전은 수업별 AI 이름을 아직 받지 않습니다. 이름을 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':'';throw Error(`HTTP ${r.status}: ${detail}`+(r.status===409?' — 편집은 보존됐습니다. 내보낸 뒤 저장본을 다시 열어 비교하세요.':'')+learningHint+nameHint);}return j;}
+function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();lessonApprovalPreset=typeof c.approval_preset==='string'&&c.approval_preset?c.approval_preset:undefined;renderApproval();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';$('assistant_role').value=typeof c.assistant?.role==='string'?c.assistant.role:'';lessonTone=typeof c.assistant?.tone==='string'&&c.assistant.tone?c.assistant.tone:undefined;renderTone();setStarters(c.starters);styleSync();renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
+async function call(path,method='GET',body,draftSave=false){let r,j;
+try{r=await fetch(path,{method,redirect:'error',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});j=await r.json();}
+catch(e){if(draftSave)throw Error('저장 결과를 확인하지 못했습니다. 입력한 내용은 이 화면에 남아 있습니다. 내용을 바꾸지 말고 ‘초안 저장’을 다시 눌러 주세요.');throw e;}
+if(!r.ok){const detail=typeof j.error==='string'?j.error:j.error?.type==='validation'&&typeof j.error.message==='string'?j.error.message:JSON.stringify(j.error||j);const learningHint=r.status===400&&/learning/.test(detail)?' — 미션·주차·완료 조건을 확인하세요(점수·등급은 넣을 수 없습니다). 편집은 보존됐습니다.':'';const approvalHint=r.status===400&&/approval_preset/.test(detail)?' — 이 수업의 AI가 묻는 방식은 지금 고를 수 없는 값입니다. ‘AI가 묻는 방식’에서 다른 방식이나 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':'';const nameHint=r.status===400&&detail==='invalid session-design fields'&&$('assistant_name').value.trim()?' — 이 Service 버전은 수업별 AI 이름을 아직 받지 않습니다. 이름을 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':'';const styleUsed=!!($('assistant_role').value.trim()||lessonTone||[...document.querySelectorAll('.ai-starter')].some(e=>e.value.trim()));const styleOld=r.status===400&&styleUsed&&/^invalid (session-design|assistant) fields$/.test(detail);const styleHint=styleOld?' — 이 Service 버전은 AI 역할·말투·시작 문장을 아직 받지 않습니다. 세 가지를 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':r.status===400&&/assistant[.]role/.test(detail)?' — AI 역할을 확인하세요(한 줄, 80자 이내, 보이지 않는 문자·줄바꿈 불가). 편집은 보존됐습니다.':r.status===400&&/assistant[.]tone/.test(detail)?' — 이 수업의 AI 말투는 지금 고를 수 없는 값입니다. ‘AI 말투’에서 다른 말투나 코호트 기본을 고른 뒤 저장하세요. 편집은 보존됐습니다.':r.status===400&&/starters/.test(detail)?' — 시작 문장을 확인하세요(최대 4개, 한 줄 80자 이내, 같은 문장 중복 불가, 빈 칸은 저장되지 않습니다). 편집은 보존됐습니다.':'';throw Object.assign(Error(`HTTP ${r.status}: ${detail}`+(r.status===409?' — 편집은 보존됐습니다. 내보낸 뒤 저장본을 다시 열어 비교하세요.':'')+learningHint+approvalHint+(styleOld?'':nameHint)+styleHint),{status:r.status,data:j});}return j;}
 // The page lock disables the editor, which drops focus; a check that names a field hands it back once the lock is released.
 const fix=(el,msg)=>Object.assign(Error(msg),{field:el});
 async function run(fn){if(busy)return;busy=true;controls();let field=null;try{await fn();}catch(e){status(e.message);field=e.field??null;}finally{busy=false;controls();field?.focus();}}
 $('deliver').onclick=()=>run(async()=>{const path=scope();window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';const d=await call(path+'/versions/'+encodeURIComponent($('version').value.trim())+'/participants','POST',{user:$('student').value.trim(),hours:Number($('hours').value)});$('student-token').value=d.token;$('delivery-status').textContent=d.user+' · '+d.lesson.version+' · 코드 만료 '+new Date(d.expires_at*1000).toLocaleString()+' · AI 세션 종료 '+new Date(d.session_ends_at).toLocaleString()+' · 리허설: '+(REHEARSAL_WORDS[d.rehearsal]||d.rehearsal||'확인 불가');status('참여 코드를 발급했습니다. 학생 화면과 Studio에서 확인하세요.');});
 $('copy-student').onclick=()=>window.chalkCopyFeedback($('copy-student'),()=>$('student-token').value);
 $('clear-student').onclick=()=>{window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('delivery-status').textContent='화면에서 지웠습니다. 이미 발급한 코드의 권한은 만료까지 유지됩니다.';};
-$('token').oninput=()=>{clearConnection();};
+globalThis.chalkConnection?.onChange(c=>{if(!c.connected)clearConnection();});
 $('editor').oninput=changed;
-for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
-$('forget').onclick=()=>{$('token').value='';clearConnection();status('연결을 해제했습니다. 편집 내용은 남아 있습니다.');};
+for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';renderApproval();renderTone();controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
+$('forget').onclick=()=>{clearConnection();status('수업 설정을 비웠습니다. 편집 내용은 남아 있습니다.');};
 $('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});const filled=frPrefill();step();revision=0;bound=identity();pending=null;dirty=true;status(filled?'새 강의 — 기본 대상으로 ‘대상’과 ‘대상 단계’를 채웠습니다. 이 강의에 맞게 고치고 저장하세요.':'새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
 $('import').onchange=()=>run(async()=>{const f=$('import').files[0];if(!f)return;if(f.size>1024*1024)throw Error('파일은 1 MiB 이하여야 합니다.');const j=JSON.parse(await f.text());const items=j.schema==='hps-authoring-batch/1'?j.courses:[j];if(!Array.isArray(items)||!items.length||items.some(x=>!x.course_id||x.content?.schema!=='hps-session-design/1'||!Array.isArray(x.content.steps)))throw Error('지원하는 강의 초안 파일이 아닙니다.');batch=items;$('courses').replaceChildren(new Option('가져올 강의를 선택하세요',''),...items.map((c,i)=>new Option(c.content.title,String(i))));status('강의를 선택한 뒤 편집하고 저장하세요.');});
 $('courses').onchange=()=>{if($('courses').value===''||!discard())return;const c=batch[Number($('courses').value)];$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('course').value=c.course_id;render(c.content);revision=0;bound=identity();pending=null;dirty=true;status('가져온 초안 — 새 수업으로만 저장합니다. 기존 ID가 있으면 충돌로 보호합니다.');controls();};
-$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);});
+$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);frozenAi(null);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);assistProbe();});
 function renderModels(){
   const available=modelCatalogueScope===identity()&&modelCatalogue;
   $('models-fields').disabled=!available;
@@ -268,11 +348,252 @@ function featureChanged(){
   featureModeVisibility();changed();
 }
 for(const id of ['feature-mode','feature-allowed'])$(id).onchange=featureChanged;
-$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
+// CGP-AGENT-R-001 — one approval preset per lesson version (DEC-11). The choices are the Service's closed catalog, served on
+// the same features read (`approval_presets`); Chalk adds only the unset choice, which sends no key so the learner app's own
+// default applies (minors: 중요한 것만 묻기). APPROVAL_FALLBACK names a saved or frozen preset before that read; the catalog
+// wins once loaded. It is also the closed id set: a catalog entry outside it (say a full-access id) is never offered.
+// A saved string id this page does not know is kept as loaded; the Service refuses it at save and the save error says what to do.
+const APPROVAL_DEFAULT='기본(학습자 앱 기본값)';
+const APPROVAL_FALLBACK={always_ask:'항상 묻기',before_changes:'바꾸기 전에 묻기',important_only:'중요한 것만 묻기'};
+function approvalCatalog(){return featureCatalogueScope===identity()&&Array.isArray(featureCatalogue?.approval_presets)?featureCatalogue.approval_presets:null;}
+const approvalWords=id=>!id?APPROVAL_DEFAULT:(approvalCatalog()?.find(p=>p.id===id)?.label||(Object.hasOwn(APPROVAL_FALLBACK,id)?APPROVAL_FALLBACK[id]:id));
+function renderApproval(){
+  const presets=approvalCatalog(),now=lessonApprovalPreset??'';
+  const choice=(value,label,description)=>{const row=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='approval-preset';input.value=value;input.checked=now===value;const name=document.createElement('span');name.textContent=label;row.append(input,name);if(description){const d=document.createElement('small');d.id='approval-desc-'+(value||'default');d.textContent=description;input.setAttribute('aria-describedby',d.id);row.append(d);}return row;};
+  const rows=[choice('',APPROVAL_DEFAULT,'선생님이 고르지 않으면 학습자 앱이 정한 방식으로 물어봅니다.')];
+  for(const p of presets||[])if(typeof p?.id==='string'&&Object.hasOwn(APPROVAL_FALLBACK,p.id))rows.push(choice(p.id,typeof p.label==='string'&&p.label.trim()?p.label:APPROVAL_FALLBACK[p.id],typeof p.description==='string'?p.description:''));
+  if(now&&!rows.some(r=>r.querySelector('input').value===now))rows.push(choice(now,(presets?'지금은 고를 수 없는 값(그대로 둠): ':'저장된 값: ')+approvalWords(now)));
+  $('approval-choices').replaceChildren(...rows);
+  $('approval-status').textContent=presets?'지금: '+approvalWords(now):featureCatalogueScope===identity()&&featureCatalogue?'이 Service는 아직 승인 방식을 받지 않습니다. 기본으로 둡니다.':'‘수업 기능 목록 불러오기’를 누르면 고를 수 있습니다.';
+}
+$('approval-choices').onchange=e=>{if(e.target?.name!=='approval-preset')return;lessonApprovalPreset=e.target.value||undefined;$('approval-status').textContent='지금: '+approvalWords(lessonApprovalPreset);changed();};
+renderApproval();
+// DEC-30 (CGP-AGENT-R-015 remainder, CGP-AGENT-D-013 시작 문장, CGP-KNOW-R-037/D-037) — AI role, AI tone and starter prompts.
+// The Service owns the contract (hypeproof-service worker/src/lib/lesson-assistant-style.ts): assistant.role is one line of at most 80
+// units, assistant.tone is one id of a closed catalog served on the features read (`assistant_tones`: id, label, minor_safe), and
+// `starters` is up to four one-line strings of at most 80 units, no duplicates (NFKC, case-insensitive). All three are omit-when-empty:
+// unset sends no key, so an old lesson keeps its bytes and digest. Chalk renders the served labels; TONE_FALLBACK only names a
+// saved or frozen tone before that read (a drift test pins it to the catalog fixture). An older Service has no `assistant_tones`:
+// once the features read shows that, the three inputs hide and are not sent (before the read they are shown, and a 400 gets a hint).
+const ROLE_MAX=80,STARTER_MAX=80,TONE_DEFAULT='코호트 기본';
+const TONE_FALLBACK={friendly:'친근하게',calm:'차분하게',playful:'장난스럽게',formal:'격식 있게'};
+const STYLE_UNSAFE={test:t=>[...t].some(ch=>{const c=ch.codePointAt(0);return c<32||(c>=127&&c<=159)||c===173||c===1564||(c>=8203&&c<=8207)||(c>=8232&&c<=8238)||(c>=8288&&c<=8303)||c===65279;})};
+let lessonTone;
+const toneCatalog=()=>featureCatalogueScope===identity()&&Array.isArray(featureCatalogue?.assistant_tones)?featureCatalogue.assistant_tones.filter(t=>typeof t?.id==='string'&&t.id):null;
+const styleServed=()=>!(featureCatalogueScope===identity()&&featureCatalogue&&!Array.isArray(featureCatalogue.assistant_tones));
+const toneEntry=id=>toneCatalog()?.find(t=>t.id===id);
+const toneWords=id=>!id?TONE_DEFAULT:(typeof toneEntry(id)?.label==='string'&&toneEntry(id).label.trim()?toneEntry(id).label:(Object.hasOwn(TONE_FALLBACK,id)?TONE_FALLBACK[id]:id));
+const minorTier=()=>['lv1','lv2'].includes($('audience_tier').value);
+const MINOR_ROW='미성년자 수업(초등·중·고)에서는 적용되지 않고 기본 말투로 나갑니다.';
+const cleanLine=v=>String(v??'').replace(/[​-‍﻿]/g,'').trim();
+function renderTone(){
+  const cat=toneCatalog(),now=lessonTone??'';
+  const choice=(value,label,description)=>{const row=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assistant-tone';input.value=value;input.checked=now===value;const name=document.createElement('span');name.textContent=label;row.append(input,name);if(description){const d=document.createElement('small');d.id='tone-desc-'+(value||'default');d.textContent=description;input.setAttribute('aria-describedby',d.id);row.append(d);}return row;};
+  const rows=[choice('',TONE_DEFAULT,'고르지 않으면 코호트 기본 말투를 따르고, 이 수업에는 말투 값을 저장하지 않습니다.')];
+  for(const t of cat||[])rows.push(choice(t.id,toneWords(t.id),t.minor_safe===false?MINOR_ROW:''));
+  if(now&&!rows.some(r=>r.querySelector('input').value===now))rows.push(choice(now,(cat?'지금은 고를 수 없는 값(그대로 둠): ':'저장된 값: ')+toneWords(now)));
+  $('tone-choices').replaceChildren(...rows);toneStatus();
+}
+function toneStatus(){
+  const cat=toneCatalog(),e=toneEntry(lessonTone);
+  $('tone-status').textContent=cat?'지금: '+toneWords(lessonTone)+(minorTier()&&e&&e.minor_safe===false?' — 이 수업은 미성년자 대상이라 이 말투는 학생에게 적용되지 않고 기본 말투로 나갑니다.':''):featureCatalogueScope===identity()&&featureCatalogue?'이 Service는 아직 말투를 받지 않습니다.':'‘수업 기능 목록 불러오기’를 누르면 고를 수 있습니다.';
+}
+$('tone-choices').onchange=e=>{if(e.target?.name!=='assistant-tone')return;lessonTone=e.target.value||undefined;toneStatus();changed();};
+const starterInputs=()=>[...document.querySelectorAll('.ai-starter')];
+const starterKey=t=>t.normalize('NFKC').toLowerCase();
+function setStarters(list){const a=Array.isArray(list)?list:[];starterInputs().forEach((e,i)=>{e.value=typeof a[i]==='string'?a[i]:'';});}
+function startersValue(){return starterInputs().map(e=>cleanLine(e.value)).filter(Boolean);}
+function startersField(){const a=startersValue();return styleServed()&&a.length?{starters:a}:{};}
+function assistantValue(name){const role=cleanLine($('assistant_role').value),on=styleServed();const a={...(name?{display_name:name}:{}),...(on&&role?{role}:{}),...(on&&lessonTone?{tone:lessonTone}:{})};return Object.keys(a).length?{assistant:a}:{};}
+// Later rows that repeat an earlier one (same key rule as the Service), as 1-based row numbers.
+function starterDuplicates(){const seen=new Set(),out=[];starterInputs().forEach((e,i)=>{const v=cleanLine(e.value);if(!v)return;const k=starterKey(v);if(seen.has(k))out.push(i+1);else seen.add(k);});return out;}
+function styleSync(){
+  const on=styleServed();$('style-identity').hidden=!on;$('ai-starters').hidden=!on;$('ai-nav-starters').hidden=!on;
+  $('assistant_role-count').textContent=$('assistant_role').value.length+'/'+ROLE_MAX;
+  starterInputs().forEach((e,i)=>{$('ai-starter-'+(i+1)+'-count').textContent=e.value.length+'/'+STARTER_MAX;});
+  const d=starterDuplicates();$('starters-warning').textContent=d.length?'같은 문장이 있습니다: 시작 문장 '+d.join(', ')+'번이 앞의 문장과 같습니다. 저장하기 전에 하나를 바꾸거나 지우세요.':'';
+  toneStatus();
+}
+function styleCheck(){
+  if(!styleServed())return;
+  const role=cleanLine($('assistant_role').value);
+  if(role.length>ROLE_MAX||STYLE_UNSAFE.test(role))throw fix($('assistant_role'),'AI 역할은 줄바꿈·보이지 않는 문자 없이 '+ROLE_MAX+'자 이내 한 줄로 적어 주세요.');
+  if((role||lessonTone)&&!cleanLine($('assistant_name').value))throw fix($('assistant_name'),'AI 역할이나 말투를 쓰려면 AI 이름도 함께 적어 주세요. 이름 없이는 저장되지 않습니다.');
+  for(const [i,e] of starterInputs().entries()){const v=cleanLine(e.value);if(v.length>STARTER_MAX||STYLE_UNSAFE.test(v))throw fix(e,'시작 문장 '+(i+1)+'번은 줄바꿈·보이지 않는 문자 없이 '+STARTER_MAX+'자 이내 한 줄로 적어 주세요.');}
+  const d=starterDuplicates();if(d.length)throw fix(starterInputs()[d[0]-1],'시작 문장 '+d[0]+'번이 앞의 문장과 같습니다. 하나를 바꾸거나 지운 뒤 저장하세요.');
+}
+const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join(' / '):'없음';
+renderTone();
+$('features-load').onclick=()=>run(async()=>{const catalog=await call(scope()+'/features/'+encodeURIComponent($('profile').value.trim()));featureCatalogue=catalog;featureCatalogueScope=identity();renderFeatures();renderApproval();renderTone();$('features-status').textContent='이 코호트가 가진 기능 '+catalog.choices.length+'개 · 고른 기능만 남고 나머지는 이 수업에서 꺼집니다. 새 권한은 생기지 않습니다.';});
 $('add').onclick=()=>{step();changed();};
-$('editor').onsubmit=e=>{e.preventDefault();run(async()=>{if(bound!==identity()||revision===null)throw Error('먼저 초안을 선택하세요.');learningCheck();const path=scope();const b={expected_revision:revision,profile_id:$('profile').value.trim(),content:content()};const signature=JSON.stringify([path,b]);if(pending?.signature!==signature)pending={signature,id:crypto.randomUUID()};const d=await call(path,'PUT',{...b,request_id:pending.id});revision=d.revision;dirty=false;pending=null;$('version').value='';$('completion').textContent='';status('저장했습니다. revision '+revision);if(candidateVersion)await loadReadiness();});};
-$('freeze').onclick=()=>run(async()=>{if(dirty||revision<1||bound!==identity())throw Error('편집을 먼저 저장하세요.');learningCheck();for(const [id,label] of [['title','제목'],['audience','대상'],['objective','목표'],['starter','시작 예제·자료']])if(!$(id).value.trim())throw fix($(id),label+'를 작성하고 초안을 저장해주세요.');if(!confirm('저장한 커리큘럼을 바꿀 수 없는 리허설 후보로 고정할까요? 진행 중인 수업은 바뀌지 않습니다.'))return;if(!$('version').value)$('version').value='m'+new Date().toISOString().slice(0,10).replaceAll('-','.')+'-'+revision;const d=await call(scope()+'/versions/'+encodeURIComponent($('version').value.trim()),'PUT',{expected_revision:revision});$('version-view').textContent=JSON.stringify(d,null,2);candidateVersion=$('version').value.trim();status('리허설 후보를 고정했습니다 · 리허설 전 · 수업에는 아직 쓰이지 않습니다');$('completion').textContent='리허설 후보 '+$('version').value.trim()+'을(를) 고정했습니다. 아직 확정이 아닙니다 — 학생 조건으로 리허설하고 통과하면 확정하세요.';await loadReadiness();});
-$('version-load').onclick=()=>run(async()=>{$('version-view').textContent=JSON.stringify(await call(scope()+'/versions/'+encodeURIComponent($('version').value.trim())),null,2);status('저장된 불변 버전을 확인했습니다. 초안 편집은 유지됩니다.');});
+async function saveDraft(expected=revision){if(bound!==identity()||revision===null)throw Error('먼저 초안을 선택하세요.');learningCheck();styleCheck();const path=scope();const b={expected_revision:expected,profile_id:$('profile').value.trim(),content:content()};const signature=JSON.stringify([path,b]);if(pending?.signature!==signature)pending={signature,id:crypto.randomUUID()};const d=await call(path,'PUT',{...b,request_id:pending.id},true);revision=d.revision;dirty=false;pending=null;$('version').value='';$('completion').textContent='';status('저장했습니다. revision '+revision);if(candidateVersion)await loadReadiness();assistProbe();}
+$('editor').onsubmit=e=>{e.preventDefault();run(()=>saveDraft());};
+// CGP-AGENT-R-014 / CGP-AGENT-D-012 — 설정 부탁하기. The Service (flag HPS_AUTHORING_ASSISTANT, default off → 404) returns allow-listed
+// {key, before, after} proposals validated like a manual save; it never writes. This page shows them as a card (values as TEXT only),
+// and 적용 fills the form and saves through saveDraft with expected_revision = the revision the proposal was based on, so a stale
+// draft is refused with 409. 버리기 and closing the card write nothing.
+const ASSIST_MAX=300;
+const ASSIST_ROW={'assistant.display_name':'AI 이름','assistant.role':'AI 역할','assistant.tone':'AI 말투',starters:'시작 문장',model:'모델',features:'쓸 수 있는 기능',approval_preset:'AI가 묻는 방식'};
+const ASSIST_STEP=/^steps\.([a-zA-Z0-9_-]{1,64})\.(title|instructions|hint|acceptance)$/;
+const ASSIST_MSG={
+  stale:'설정이 바뀌어서 다시 제안을 받아 주세요.',
+  cap:'오늘 AI 제안 한도를 다 썼어요. 내일 다시 부탁해 주세요.',
+  empty:'이번 부탁으로 바꿀 만한 설정을 찾지 못했어요. 바꾸고 싶은 설정을 조금 더 구체적으로 적어 주세요.',
+  failed:'AI 제안을 받지 못했어요. 아무것도 바뀌지 않았어요. 잠시 뒤에 다시 해 주세요.',
+  invalid:'지금 초안에 고쳐야 할 곳이 있어서 제안을 받을 수 없어요. 먼저 초안을 저장해 주세요.',
+  auth:'강사 연결을 확인해 주세요. 아무것도 바뀌지 않았어요.',
+  notApplied:'적용하지 못했어요. 설정은 그대로예요.'
+};
+const assistFrozenOpen=()=>!$('ai-preview-frozen').hidden;
+const assistReady=()=>bound===identity()&&revision!==null&&revision>=1&&!dirty&&!assistFrozenOpen();
+const assistNote=t=>{$('assist-note').textContent=t||'';};
+function assistClear(){assistProposal=null;$('assist-card').hidden=true;$('assist-table').tBodies[0].replaceChildren();}
+// Labels are the page's own: the preview row names, and the step form's own label text for a step field.
+function assistStepInfo(id,field){
+  const steps=[...document.querySelectorAll('.step')];
+  const n=steps.findIndex(f=>f.querySelector('[data-field="id"]')?.value===id);
+  if(n<0)return null;
+  const el=steps[n].querySelector('[data-field="'+field+'"]');
+  return {el,label:'단계 '+(n+1)+' · '+(el?.closest('label')?.firstChild?.textContent.trim()||field)};
+}
+function assistLabel(key){const m=ASSIST_STEP.exec(key);if(m)return assistStepInfo(m[1],m[2])?.label??null;return Object.hasOwn(ASSIST_ROW,key)?ASSIST_ROW[key]:null;}
+const assistPlain=v=>v===null||v===undefined||v===''?'비어 있음':typeof v==='string'?v:JSON.stringify(v);
+// Same words as the 미리보기 list: put the value into a copy of the current content and read that row back.
+function assistShow(key,val){
+  if(ASSIST_STEP.test(key))return assistPlain(val);
+  try{
+    const c=structuredClone(content());
+    if(key.startsWith('assistant.')){c.assistant={...(c.assistant||{})};if(val===null||val===undefined)delete c.assistant[key.slice(10)];else c.assistant[key.slice(10)]=val;}
+    else if(val===null||val===undefined)delete c[key];else c[key]=val;
+    const row=aiRows(c,aiLabels()).find(r=>r[0]===ASSIST_ROW[key]);
+    if(row&&typeof row[1]==='string')return row[1];
+  }catch{}
+  return assistPlain(val);
+}
+function assistFill(key,val){
+  const m=ASSIST_STEP.exec(key);
+  if(m){const info=assistStepInfo(m[1],m[2]);if(!info?.el)throw Error('단계를 찾지 못했습니다.');info.el.value=String(val);return;}
+  if(key==='assistant.display_name')$('assistant_name').value=String(val);
+  else if(key==='assistant.role')$('assistant_role').value=String(val);
+  else if(key==='assistant.tone'){lessonTone=String(val);renderTone();}
+  else if(key==='starters'){setStarters(val);}
+  else if(key==='model'){lessonModel=structuredClone(val);renderModels();}
+  else if(key==='features'){lessonFeatures=structuredClone(val);renderFeatures();}
+  else if(key==='approval_preset'){lessonApprovalPreset=String(val);renderApproval();}
+  else throw Error('이 설정은 적용할 수 없습니다.');
+  styleSync();
+}
+function assistControls(){
+  const on=assistAvail.get(identity())==='on';
+  $('assist').hidden=!on;
+  if(!on){if(assistProposal&&!assistApplying)assistClear();return;}
+  const ready=assistReady();
+  if(assistProposal&&!assistApplying&&(!ready||assistProposal.revision!==revision||assistProposal.identity!==identity())){assistClear();}
+  const n=$('assist-text').value.length;
+  $('assist-count').textContent=n+'/'+ASSIST_MAX;
+  $('assist-text').disabled=busy||!ready;
+  $('assist-send').disabled=busy||!ready||!$('assist-text').value.trim();
+  $('assist-apply').disabled=busy||!assistProposal;
+  $('assist-discard').disabled=busy||!assistProposal;
+  $('assist-hint').textContent=assistFrozenOpen()?'고정된 버전을 보는 중에는 쓸 수 없어요. 저장된 초안을 다시 열어 주세요.':bound!==identity()||revision===null||revision<1?'초안을 저장한 뒤에 부탁할 수 있어요.':dirty?'저장하지 않은 편집이 있어요. 먼저 저장한 뒤에 부탁해 주세요.':'AI가 제안만 하고, 적용을 누르기 전에는 아무것도 바뀌지 않아요.';
+}
+// A POST with an empty body is refused by the Service with 400 when the assistant is on and with 404 when it is off, before any model
+// call or charge, so it tells whether to show the box without sending anything. Nothing else (5xx, network) shows it.
+async function assistProbe(){
+  let path,id;try{path=scope();id=identity();}catch{return;}
+  if(assistAvail.has(id))return;
+  try{
+    const r=await fetch(path+'/proposal',{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:'{}'});
+    if(r.status===404)assistAvail.set(id,'off');else if(r.status===400||r.ok)assistAvail.set(id,'on');
+  }catch{}
+  controls();
+}
+function assistShowCard(list){
+  const body=$('assist-table').tBodies[0];body.replaceChildren();
+  for(const p of list){
+    const tr=document.createElement('tr'),th=document.createElement('th'),b=document.createElement('td'),a=document.createElement('td');
+    th.scope='row';th.textContent=assistLabel(p.key);
+    b.dataset.label='이전';b.textContent=assistShow(p.key,p.before);
+    a.dataset.label='새 값';a.textContent=assistShow(p.key,p.after);
+    tr.append(th,b,a);body.append(tr);
+  }
+  $('assist-card').hidden=false;
+}
+function assistError(e){
+  if(e.status===429)return ASSIST_MSG.cap;
+  if(e.status===409)return e.data?.reason==='draft_invalid'?ASSIST_MSG.invalid:ASSIST_MSG.stale;
+  if(e.status===401||e.status===403)return ASSIST_MSG.auth;
+  return ASSIST_MSG.failed;
+}
+$('assist').addEventListener('input',e=>{e.stopPropagation();controls();});
+$('assist-send').onclick=()=>run(async()=>{
+  const text=$('assist-text').value.trim();
+  if(!text||!assistReady())return;
+  assistClear();assistNote('AI가 제안을 만들고 있어요…');
+  const id=identity(),rev=revision;let d;
+  try{d=await call(scope()+'/proposal','POST',{request:text,expected_revision:rev});}
+  catch(e){assistNote(assistError(e));if(e.status===404){assistAvail.set(id,'off');}return;}
+  if(identity()!==id||revision!==rev||d?.revision!==rev){assistNote(ASSIST_MSG.stale);return;}
+  const list=(Array.isArray(d.proposals)?d.proposals:[]).filter(p=>p&&typeof p.key==='string'&&assistLabel(p.key)!==null&&p.after!==undefined&&p.after!==null);
+  if(!list.length){assistNote(ASSIST_MSG.empty);return;}
+  assistProposal={revision:rev,identity:id,proposals:list};
+  assistShowCard(list);assistNote('제안 '+list.length+'개를 가져왔어요. 확인하고 적용하거나 버려 주세요.');
+});
+$('assist-discard').onclick=()=>{assistClear();assistNote('제안을 버렸어요. 아무것도 바뀌지 않았어요.');controls();};
+$('assist-apply').onclick=()=>run(async()=>{
+  const ap=assistProposal;
+  if(!ap||!assistReady()||ap.revision!==revision||ap.identity!==identity()){assistClear();assistNote(ASSIST_MSG.stale);return;}
+  const snap=structuredClone(content());
+  assistApplying=true;
+  try{
+    for(const p of ap.proposals)assistFill(p.key,p.after);
+    dirty=true;
+    await saveDraft(ap.revision);
+    assistClear();$('assist-text').value='';assistNote('적용하고 저장했어요 · revision '+revision);
+  }catch(e){
+    render(snap);dirty=false;
+    if(e.status===409){assistClear();assistNote(ASSIST_MSG.stale);}
+    else assistNote(ASSIST_MSG.notApplied);
+    status(e.status===409?ASSIST_MSG.stale:e.message);
+  }finally{assistApplying=false;}
+});
+$('freeze').onclick=()=>run(async()=>{if(dirty||revision<1||bound!==identity())throw Error('편집을 먼저 저장하세요.');learningCheck();for(const [id,label] of [['title','제목'],['audience','대상'],['objective','목표'],['starter','시작 예제·자료']])if(!$(id).value.trim())throw fix($(id),label+'를 작성하고 초안을 저장해주세요.');if(!confirm('저장한 커리큘럼을 바꿀 수 없는 리허설 후보로 고정할까요? 진행 중인 수업은 바뀌지 않습니다.'))return;if(!$('version').value)$('version').value='m'+new Date().toISOString().slice(0,10).replaceAll('-','.')+'-'+revision;const d=await call(scope()+'/versions/'+encodeURIComponent($('version').value.trim()),'PUT',{expected_revision:revision});$('version-view').textContent=JSON.stringify(d,null,2);versionApproval(d);candidateVersion=$('version').value.trim();status('리허설 후보를 고정했습니다 · 리허설 전 · 수업에는 아직 쓰이지 않습니다');$('completion').textContent='리허설 후보 '+$('version').value.trim()+'을(를) 고정했습니다. 아직 확정이 아닙니다 — 학생 조건으로 리허설하고 통과하면 확정하세요.';await loadReadiness();});
+// CGP-AGENT-R-015 / D-013 — one "수업 AI 설정" page. Sections only regroup the fields this form already saves
+// (assistant.display_name, steps[].instructions, model, model.effort, features, approval_preset); the preview is a read-only
+// summary built from the same content() the save sends, so it cannot drift from what learners get. DEC-30 adds assistant.role,
+// assistant.tone and starters to the same rows.
+function aiRows(c,labels){
+  const model=c.model,effort=model?.effort,feats=c.features,name=c.assistant?.display_name,steps=c.steps||[];const minorOf=['lv1','lv2'].includes(c.audience_tier);
+  const mlabel=a=>labels?.model?.get(a)||a,flabel=k=>labels?.feature?.get(k)||k,elabel=v=>effortLabels[v]||v;
+  return [
+    ['AI 이름',name||'코호트 기본 규칙을 따릅니다'],
+    ...(styleServed()?[['AI 역할',c.assistant?.role||'정하지 않음'],['AI 말투',toneWords(c.assistant?.tone)+(minorOf&&toneEntry(c.assistant?.tone)?.minor_safe===false?' (미성년자 수업에서는 적용되지 않음)':'')]]:[]),
+    ['지시문','단계 '+steps.length+'개 · 안내를 쓴 단계 '+steps.filter(x=>String(x.instructions||'').trim()).length+'개'],
+    ['모델',!model?'코호트 기본값':model.allowed.length===1?mlabel(model.default)+' (고정)':mlabel(model.default)+' 기본 · 학생이 '+model.allowed.map(mlabel).join(', ')+' 중 선택'],
+    ['처리 수준(Effort)',!effort?'코호트 기본값':effort.allowed.length===1?elabel(effort.default)+' (고정)':elabel(effort.default)+' 기본 · 학생이 '+effort.allowed.map(elabel).join(', ')+' 중 선택'],
+    ['쓸 수 있는 기능',!feats?'코호트 기본값 그대로':feats.allowed.length?feats.allowed.map(flabel).join(', '):'채팅만 사용'],
+    ['AI가 묻는 방식',approvalWords(c.approval_preset)],
+    ...(styleServed()?[['시작 문장',startersLine(c.starters)]]:[])
+  ];
+}
+function aiList(el,rows){el.replaceChildren(...rows.flatMap(([k,v])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;return [dt,dd];}));}
+function aiLabels(){return {model:new Map((modelCatalogueScope===identity()&&modelCatalogue?.choices||[]).map(m=>[m.alias,m.label])),feature:new Map((featureCatalogueScope===identity()&&featureCatalogue?.choices||[]).map(f=>[f.key,f.label]))};}
+function aiPreview(){
+  let rows;
+  try{rows=aiRows(content(),aiLabels());}
+  catch{rows=[['미리보기','입력을 확인하면 여기에 요약이 나옵니다.']];}
+  aiList($('ai-preview-draft'),rows);
+}
+// A frozen version is shown as text only: the controls above edit the next draft, never this version.
+function frozenAi(d){
+  const c=d?.module?.content,box=$('ai-preview-frozen');
+  if(!c||typeof c!=='object'){box.hidden=true;return;}
+  $('ai-preview-frozen-title').textContent='고정된 버전 '+($('version').value.trim()||'')+' — 읽기 전용';
+  aiList($('ai-preview-frozen-list'),aiRows(c,aiLabels()));box.hidden=false;
+}
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+function versionApproval(d){frozenAi(d);$('version-approval').textContent=d?.module?'이 버전의 AI가 묻는 방식: '+approvalWords(d.module.content?.approval_preset)+' (고정됨)':'';}
+$('version-load').onclick=()=>run(async()=>{const d=await call(scope()+'/versions/'+encodeURIComponent($('version').value.trim()));$('version-view').textContent=JSON.stringify(d,null,2);versionApproval(d);status('저장된 불변 버전을 확인했습니다. 초안 편집은 유지됩니다.');});
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify({course_id:$('course').value.trim(),content:content()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='course-draft.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
 $('request').onclick=()=>{const url=new URL('https://github.com/hypeproof/hypeproof-studio/issues/new');url.searchParams.set('title','[강의 지원] '+$('course').value.trim());url.searchParams.set('body',`강의 ID: ${$('course').value.trim()}\n목적: ${$('need').value}\n필요 날짜: ${$('needed').value||'미정'}\n참고: ${$('reference').value}\n재현·오류·대안: ${$('repro').value}\n\n담당자: 미정 (접수 후 지정)\n다음 조치: 재현 확인 및 분류\n예상 일정: 미정 (범위 검토 필요)`);$('request-link').href=url.href;$('request-link').hidden=false;$('request-status').textContent='초안 준비됨 · 아직 미접수. GitHub에서 내용을 확인하고 제출한 뒤 해당 이슈에서 상태를 확인하세요.';};
 
@@ -366,13 +687,16 @@ function impactLines(i){const out=[];const st=i.steps;
  for(const t of i.text||[])out.push((FIELD_WORDS[t.field]||t.field)+': ‘'+t.from+'’ → ‘'+t.to+'’');
  for(const c of i.step_changes||[]){const parts=[];if(c.text.length)parts.push(c.text.map(k=>STEP_TEXT_WORDS[k]||k).join('·')+' 문구');if(c.help)parts.push('도움 방식 '+helpWords(c.help.from)+' → '+helpWords(c.help.to));if(c.surface)parts.push('작업 화면 '+surfaceWords(c.surface.from)+' → '+surfaceWords(c.surface.to));out.push('단계 '+c.id+': '+parts.join(' / '));}
  if(i.title)out.push('강의 제목: ‘'+i.title.from+'’ → ‘'+i.title.to+'’');if(i.assistant_name)out.push('AI 이름: '+(i.assistant_name.from||'기본')+' → '+(i.assistant_name.to||'기본')+' (이름만 바뀌며 가르치는 방식은 위 도움 방식·단계로 바뀝니다)');
+ if(i.assistant_role)out.push('AI 역할: '+(i.assistant_role.from||'없음')+' → '+(i.assistant_role.to||'없음'));if(i.assistant_tone)out.push('AI 말투: '+toneWords(i.assistant_tone.from)+' → '+toneWords(i.assistant_tone.to));if(i.starters)out.push('시작 문장: '+startersLine(i.starters.from)+' → '+startersLine(i.starters.to));
  if(i.learning){const L=i.learning,m=x=>x?x.week+'주차 ‘'+x.mission+'’':'미션 없음',cs=x=>x?.completion?.length?x.completion.map(c=>'‘'+c.text+'’('+(EVENT_LABELS[c.event]||c.event)+')').join(', '):'없음';if(L.week||L.mission)out.push('학생 미션: '+m(L.from)+' → '+m(L.to));if(L.completion)out.push('완료 조건: '+cs(L.from)+' → '+cs(L.to));if(L.advanced.length)out.push('보존 중인 학습 설계 항목 바뀜: '+L.advanced.map(k=>ADVANCED_WORDS[k]||k).join(', '));}
- if(i.model)out.push('모델 허용 범위가 바뀝니다');if(i.features)out.push('허용 기능: '+(i.features.from?i.features.from.join(', '):'코호트 기본')+' → '+(i.features.to?i.features.to.join(', '):'코호트 기본'));
+ if(i.model)out.push('모델 허용 범위가 바뀝니다');if(i.features)out.push('허용 기능: '+(i.features.from?i.features.from.join(', '):'코호트 기본')+' → '+(i.features.to?i.features.to.join(', '):'코호트 기본'));if(i.approval_preset)out.push('AI가 묻는 방식: '+approvalWords(i.approval_preset.from)+' → '+approvalWords(i.approval_preset.to));
  return out.length?out:['학생에게 달라지는 내용이 없습니다'];}
 function renderReadiness(){const box=$('readiness');box.replaceChildren();if(!readiness){box.append(Object.assign(document.createElement('p'),{textContent:'후보를 고정하면 리허설 상태가 여기 나옵니다.'}));controls();return;}
  const r=readiness,line=(t,cls)=>{const p=document.createElement('p');p.textContent=t;if(cls)p.className=cls;box.append(p);};
  line('후보 '+r.version+' · '+(REHEARSAL_WORDS[r.state]||r.state)+(r.rehearsal?.reasons?.length?' — '+r.rehearsal.reasons.map(x=>REASON_WORDS[x]||x).join(', '):''),'state-'+r.state);
  line('이 후보의 학생 미션: '+missionLine(r.content?.learning));
+ line('이 후보의 AI가 묻는 방식: '+approvalWords(r.content?.approval_preset)+' — 고정된 버전이라 바뀌지 않습니다','approval-frozen');
+ if(styleServed()){line('이 후보의 AI 역할·말투: '+(r.content?.assistant?.role||'역할 없음')+' · '+toneWords(r.content?.assistant?.tone)+' — 고정된 버전이라 바뀌지 않습니다','style-frozen');line('이 후보의 시작 문장: '+startersLine(r.content?.starters),'starters-frozen');}
  const mc=r.rehearsal?.checks?.mission;if(mc)line({match:'리허설 학생 화면의 미션: 이 후보와 같았습니다',mismatch:'리허설 학생 화면의 미션: 이 후보와 달랐습니다 — ‘'+(mc.observed?.sentence??'')+'’',not_reported:'리허설 학생 화면의 미션: 확인하지 못했습니다',none:'미션이 없는 후보 — 미션 관련 준비 판정은 하지 않습니다'}[mc.result]||mc.result);
  if(r.draft_changed_since)line('이 후보를 고정한 뒤 초안이 바뀌었습니다. 확정하는 것은 이 후보이며, 바뀐 초안은 새 후보로 고정해 다시 리허설해야 합니다.');
  if(r.confirmed)line('확정됨 — '+new Date(r.confirmed.at).toLocaleString()+(r.confirmation_current?'':' · 확정 뒤 수업 설정이 바뀌어 다시 리허설이 필요합니다'));
@@ -453,18 +777,17 @@ $('reuse-step-add').onclick=()=>run(async()=>{const {v,content}=await versionCon
 let settings=[];
 function clearConnection(){
  $('completion').textContent='';settings=[];$('setting').replaceChildren(new Option('선택하세요',''));$('setting-label').hidden=true;
- $('cohort').value='';$('profile').value='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('version-view').textContent='';
- $('connection-status').textContent='강사 토큰을 연결하면 선택 가능한 수업 설정이 나옵니다.';
- modelCatalogue=undefined;featureCatalogue=undefined;controls();
+ $('cohort').value='';$('profile').value='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('version-view').textContent='';$('version-approval').textContent='';
+ $('connection-status').textContent='Lab 로그인으로 연결하면 선택 가능한 수업 설정이 나옵니다.';
+ modelCatalogue=undefined;featureCatalogue=undefined;renderApproval();controls();
 }
-// Payload only discovers candidate cohort IDs. The existing server endpoint verifies
+// The connection status only lists candidate cohort IDs. The existing server endpoint verifies
 // the signature, revocation and scope; only its returned profiles become choices.
 $('connect').onclick=()=>run(async()=>{
- clearConnection();const token=$('token').value.trim();
- let payload;try{const b=token.split('.')[0].replace(/-/g,'+').replace(/_/g,'/');payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b.padEnd(Math.ceil(b.length/4)*4,'=')),c=>c.charCodeAt(0))));}catch{throw Error('이슈어 토큰 형식을 확인하세요.');}
- if(payload.role!=='issuer'||!Array.isArray(payload.scopes))throw Error('강사용 이슈어 토큰을 입력하세요.');
- const ids=[...new Set(payload.scopes.map(s=>s.cohort))];
- if(!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(id)))throw Error('토큰의 수업 범위를 확인하세요.');
+ clearConnection();const conn=await (globalThis.chalkConnection?.refresh() ?? { connected: false });
+ if(!conn.connected)throw Error(conn.expired?'강사 연결이 만료됐습니다. 위의 ‘다시 연결’을 눌러주세요.':'위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.');
+ const ids=[...new Set((conn.scopes||[]).map(s=>s.cohort))];
+ if(!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(id)))throw Error('연결한 강사 권한의 수업 범위를 확인하세요.');
  const found=[];for(const id of ids){const d=await call('/admin/cohorts/'+encodeURIComponent(id)+'/state');for(const p of d.profiles||[])found.push({cohort:id,profile:p.id,label:p.display_name});}
  if(!found.length)throw Error('선택 가능한 수업 설정이 없습니다. 발급 담당자에게 확인하세요.');
  settings=found;$('setting').replaceChildren(new Option('수업 설정을 선택하세요',''),...settings.map((s,i)=>new Option(s.label,String(i))));$('setting-label').hidden=false;
@@ -472,7 +795,7 @@ $('connect').onclick=()=>run(async()=>{
  await retroProbe(found[0].cohort);
  if(settings.length===1){$('setting').value='0';applySetting();}
 });
-function applySetting(){const value=$('setting').value,s=value===''?undefined:settings[Number(value)];window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('completion').textContent='';$('version').value='';clearReadiness();$('version-view').textContent='';if(!s){$('cohort').value='';$('profile').value='';controls();status('수업 설정을 비웠습니다. 설정을 다시 선택하거나 연결 정보를 직접 입력하세요. 현재 편집은 보존됩니다.');return;}$('cohort').value=s.cohort;$('profile').value=s.profile;controls();status('수업 설정을 선택했습니다. 새 강의를 만들거나 저장된 강의를 여세요.');}
+function applySetting(){const value=$('setting').value,s=value===''?undefined:settings[Number(value)];window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('completion').textContent='';$('version').value='';clearReadiness();$('version-view').textContent='';$('version-approval').textContent='';if(!s){$('cohort').value='';$('profile').value='';controls();status('수업 설정을 비웠습니다. 설정을 다시 선택하거나 연결 정보를 직접 입력하세요. 현재 편집은 보존됩니다.');return;}$('cohort').value=s.cohort;$('profile').value=s.profile;controls();status('수업 설정을 선택했습니다. 새 강의를 만들거나 저장된 강의를 여세요.');}
 $('setting').onchange=applySetting;
 
 // #1013 feedback-loop — 07 · the instructor's retrospective of a version that ran, and the next draft it starts. The page sends
@@ -492,12 +815,12 @@ const KIND_WORDS={help:'도움 요청',submission:'결과물 제출'},ACTION_WOR
 const UNOBS_WORDS={no_source:'근거로 고른 기록이 없습니다',sources_unavailable:'근거였던 공유가 철회되었거나 만료되어 볼 수 없습니다',no_person_source:'학생이 쓴 말이 근거에 없습니다 — AI 응답·실행 기록·결과물 주소나 강사 피드백만으로는 학생을 관찰한 것이 되지 않습니다'};
 const RETRO_REASONS={feedback_loop_unavailable:'이 서버에서는 수업 돌아보기를 아직 쓰지 않습니다.',source_before_version:'고른 공유 기록 중 이 버전을 고정하기 전에 온 것이 있습니다 — 이 버전 수업의 근거가 될 수 없습니다. 그 근거를 빼고 저장하세요.',source_other_lesson:'고른 공유 기록 중 다른 강의나 다른 버전 수업에서 보낸 것이 있습니다. 그 근거를 빼고 저장하세요.',learner_response_stale:'학생의 결정이 지금의 강사 피드백에 대한 것이 아닙니다(피드백이 바뀌었거나 지워졌습니다). 학생이 새 피드백에 결정을 남긴 뒤 고르세요.',too_large:'돌아보기가 너무 큽니다. 관찰·결정 수나 길이를 줄여 저장하세요.',source_unavailable:'근거로 고른 공유 기록 중 지금 볼 수 없는 것이 있습니다 — 철회·만료됐거나 이 수업에 온 기록이 아닙니다. 그 근거를 빼고 저장하세요.',no_human_feedback:'아직 사람의 피드백이 없는 공유입니다. ‘강사 피드백’ 대신 다른 부분을 고르세요.',no_learner_response:'학생이 아직 결정을 남기지 않은 공유입니다.',source_part_empty:'그 공유에는 고른 부분의 내용이 없습니다.',unsupported_assistance:'‘도움을 받음’은 도움 요청 공유나, 도움을 받았다고 적은 독립 과제 기록을 근거로 고를 때만 적을 수 있습니다.',record_not_opened:'근거로 고른 독립 과제 기록을 아직 열어 보지 않았습니다. 위 목록의 ‘내용 보기’로 먼저 여세요 — 연 기록은 학생의 열람 기록에 남습니다.',unsupported_independence:'공유 기록으로는 혼자 해냈는지 알 수 없어 적을 수 없습니다. 학생이 도움 없이 했다고 적은 기록도 자기 보고입니다.',unknown_step:'결정의 대상 단계가 이 버전에 없습니다.',unknown_finding:'결정이 가리키는 관찰이 없습니다.',invalid_hypothesis:'가설을 적으세요.',invalid_findings:'관찰을 하나 이상 적으세요.',invalid_finding:'비어 있는 관찰이 있습니다.',invalid_decisions:'결정을 하나 이상 적으세요.',invalid_decision:'결정마다 대상·결정·이유를 적으세요.',unsupported_score:'점수·등급은 넣을 수 없습니다.',revision_conflict:'다른 곳에서 이 돌아보기가 바뀌었습니다. 편집은 화면에 남아 있습니다 — 다시 열어 비교하세요.',retrospective_applied:'다음 초안을 시작한 돌아보기는 고칠 수 없습니다. 새 돌아보기를 쓰세요.',already_applied:'이 돌아보기로 이미 다음 초안을 시작했습니다.',draft_changed:'초안이 바뀌었습니다. ‘저장된 초안 열기’로 다시 연 뒤 시작하세요.',profile_changed:'이 강의의 수업 설정이 그 버전과 달라졌습니다.',base_not_reusable:'그 버전은 지금 수업 설정으로는 초안이 될 수 없습니다.',lesson_unavailable:'그 버전을 지금 수업 설정으로 열 수 없습니다.',version_not_found:'그 버전을 찾을 수 없습니다.',request_id_conflict:'같은 요청이 다른 내용으로 이미 저장됐습니다. 다시 불러오세요.',limit_reached:'이 버전에 대한 돌아보기는 50개까지 쓸 수 있습니다. 이미 쓴 돌아보기를 고치거나 다음 버전에서 쓰세요.'};
 const retroPath=()=>scope()+'/retrospectives';
-async function retroCall(path,method='GET',body){const r=await fetch(path,{method,redirect:'error',headers:{authorization:'Bearer '+$('token').value.trim(),'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error((RETRO_REASONS[j.reason]||(typeof j.error==='string'?j.error:'요청에 실패했습니다'))+' (HTTP '+r.status+')'),{reason:j.reason});return j;}
+async function retroCall(path,method='GET',body){const r=await fetch(path,{method,redirect:'error',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error((RETRO_REASONS[j.reason]||(typeof j.error==='string'?j.error:'요청에 실패했습니다'))+' (HTTP '+r.status+')'),{reason:j.reason});return j;}
 const retroRun=fn=>run(async()=>{try{await fn();}catch(e){$('retro-status').textContent=e.message;if(e.reason==='feedback_loop_unavailable')retroShown(false);if(e.field)throw e;}});
 // Section 07 is shown only where the Service has the feedback loop on. While it is off, every retrospective route answers
 // 404 `feedback_loop_unavailable` before any other check, so one read on connect tells; any other answer leaves it shown.
 function retroShown(on){$('retro').hidden=!on;for(const a of document.querySelectorAll('a[href="#retro"]'))a.hidden=!on;}
-async function retroProbe(cohort){try{const r=await fetch('/admin/cohorts/'+encodeURIComponent(cohort)+'/authoring/retrospective-probe/retrospectives',{redirect:'error',headers:{authorization:'Bearer '+$('token').value.trim()}});const j=await r.json().catch(()=>({}));retroShown(!(r.status===404&&j.reason==='feedback_loop_unavailable'));}catch{}}
+async function retroProbe(cohort){try{const r=await fetch('/admin/cohorts/'+encodeURIComponent(cohort)+'/authoring/retrospective-probe/retrospectives',{redirect:'error',headers:{}});const j=await r.json().catch(()=>({}));retroShown(!(r.status===404&&j.reason==='feedback_loop_unavailable'));}catch{}}
 function retroFresh(){if(retroScope&&retroScope!==identity()){retroView=null;retroSources=[];retroScope='';$('retro-body').hidden=true;throw Error('강의나 수업 설정이 바뀌었습니다. 돌아보기를 다시 불러오세요.');}}
 // `lesson` (sources list only): the version recorded when the share was sent; null = not recorded, never assumed.
 const sourceName=s=>s.student_id+' · '+(KIND_WORDS[s.kind]||s.kind)+' · '+new Date(s.created_at*1000).toLocaleString()+(!('lesson' in s)?'':s.lesson?' · 버전 '+s.lesson.version:' · 보낸 수업의 버전 기록 없음');
@@ -612,4 +935,13 @@ body{max-width:var(--ds-c-chalk-authoring-size-97);margin:0 auto!important;paddi
 #first-run button,#fr-open{min-height:var(--ds-c-chalk-authoring-size-8)}
 /* CGP-LEARN-D-014: 나중에 is a text button, quieter than the outlined ghost buttons: no fill and no visible border; the border box stays so the 44px height does not change. */
 #first-run #fr-later{border-color:transparent!important}
+/* CGP-AGENT-R-001: approval preset rows — native radio (state is not colour alone), 44px row, the description under the name. */
+#approval-choices,#tone-choices{display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
+#approval-choices label,#tone-choices label{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:var(--ds-c-chalk-authoring-space-2);align-items:center;box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);margin:0;cursor:pointer}
+#approval-choices input,#tone-choices input{width:auto;margin:0}
+#approval-choices small,#tone-choices small{grid-column:2}
+/* DEC-30: role and starter inputs are single lines at the 44px target; the counter sits under its field and wraps, never beside it. */
+#assistant_role,.ai-starter{box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);width:100%}
+#starters-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
+.counter{color:var(--hp-mute)}
 </style></html>

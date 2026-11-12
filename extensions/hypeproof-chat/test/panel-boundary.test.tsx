@@ -289,6 +289,10 @@ const PANELS: Row[] = [
     { type: "userSent", text: "더 해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
     { type: "streamError", streamId: "s1", error: "체험이 끝났어요", trialEndCard: { kind: "ended" } }] },
   { panel: "settings", key: "AccessControl.tsx:AccessControl", mode: "personal" },
+  // REQ-STUDIO-REPORT-LOGS: the report form sits beside ChatErrorBoundary (reachable from the crash card) in its own boundary.
+  { panel: "report", key: "ProblemReportDialog.tsx:ProblemReportDialog", mode: "personal", msgs: () => [{ type: "problemReportForm", form: {
+    id: "f1", reason: "crash", details: [{ label: "앱 버전", value: "0.1.70" }], contactPrompt: "연락처", contactPlaceholder: "", recentTurns: 0,
+    autoReport: false, logs: { available: true, checked: true, errorCount: 1 } } }] },
   { panel: "ai-can-do", key: "ChatPanel.tsx:AiCanDo", mode: "personal", config: { aiCapabilities: [] } },
   { panel: "lesson-capability-entry", key: "ChatPanel.tsx:AiCanDo", mode: "personal", config: { aiCapabilities: [], lessonCapabilityEntry: { id: "e1", seen: false } } },
   { panel: "capability-change", key: "ChatPanel.tsx:CapabilityChangeCard", mode: "personal", config: { capabilityChange: { id: "c1" } } },

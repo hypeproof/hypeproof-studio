@@ -3,12 +3,17 @@
 // items render as text, every control (고치기, the correction field, 저장, 취소) is a 44px target with a focus ring, text is at
 // least 14px at 4.5:1, nothing overflows; 고치기 opens a labelled field holding the item, 저장 asks the host once with the
 // learner's words, and the host's no-op answer reads "바뀐 기억이 없어요". A view without an overview (minor cohort) draws none.
+// CGP-KNOW-D-025 (DES-KNOW-43): the correction field is one field at the overview's bottom (after the last task group),
+// quoting the item it replaces; 취소 returns focus to that 고치기; a real IME composition's Enter and a plain Enter never
+// submit; and an overview built by the real host code from planted capability, score and judgment sentences renders no
+// capability key or label, no score and no badge in the DOM.
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { THEMES } from './lib/vscode-default-themes.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
+import { CAPABILITY_KEYS, CAPABILITY_LABELS, buildMemoryOverview } from '../src/memoryOverview.ts';
 const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER)throw Error('Chromium required');console.log('NOT RUN memory overview: no Chromium');process.exit(0);}
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
@@ -23,6 +28,12 @@ const color=value=>value.match(/[\d.]+/g).map(Number);
 const contrast=(a,b)=>{const x=luminance(color(a)),y=luminance(color(b));return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
 const evidence=process.env.MEMORY_OVERVIEW_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Planted for the DOM absence check: the host's own builder decides what reaches the overview.
+const planted=[['p1.md','발표 자료는 학급 신문 폴더에 있어요.','t1'],['p2.md','FRAMING 점수가 3점이에요.','t1'],['p3.md','검증 역량이 높아요.','t1'],['p4.md','Ownership score 3','t2'],
+ ['p5.md','판단력이 부족해요.','t2'],['p6.md','발표 실력은 상위 10%예요.','t2'],['p8.md','좋아하는 색은 초록이에요.','t2']].map(([name,text,task],i)=>({name,at:Date.UTC(2026,9,20,i),text,task}));
+const plantedOverview=buildMemoryOverview(planted,[{id:'t1',title:'학급 신문'},{id:'t2',title:'OWNERSHIP 기르기'}]);
+const plantedView={...{scope:'["a","t"]',folder:'.hypeproof/memory/',other:0,unsafe:false},entries:planted.map(({name,at,text})=>({name,at,text})),overview:plantedOverview};
+const key=async(k,extra={})=>{for(const type of ['rawKeyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:k,code:k,windowsVirtualKeyCode:{Enter:13}[k],...extra});await sleep(40);};
 const b=await launch(bin);
 try{for(const seat of ['personal','classroom'])for(const dark of [true,false])for(const width of [800,1420])for(const forcedColors of [false,true]){
  const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
@@ -58,7 +69,11 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  const form=await b.evaluate(`(()=>{const area=document.querySelector('.tw-memory-correct textarea');const label=document.querySelector('label[for="'+area.id+'"]');return {value:area.value,label:label?.textContent,focused:document.activeElement===area}})()`);
  assert.deepEqual(form,{value:'발표는 금요일이에요.',label:'바르게 고친 문장',focused:true});
  const fm=await measure();check(fm,'form');
- assert.equal(fm.controls.filter(x=>x.tag==='button').length,3,'저장 and 취소 for the open item, 고치기 for the other');
+ assert.equal(fm.controls.filter(x=>x.tag==='button').length,4,'고치기 per item, then 저장 and 취소 in the one field');
+ // D-025: one field, at the overview's bottom, quoting the item; the item's 고치기 says it is open.
+ const place=await b.evaluate(`(()=>{const o=document.querySelector('[data-testid=memory-overview]');const f=o.querySelector('.tw-memory-correct');const groups=[...o.querySelectorAll('.tw-memory-group')];const k=o.querySelector('.tw-memory-actions button');
+  return {fields:o.querySelectorAll('textarea').length,last:o.lastElementChild===f,below:f.getBoundingClientRect().top>=groups.at(-1).getBoundingClientRect().bottom-0.5,quote:f.querySelector('.tw-memory-correct-quote')?.textContent,expanded:k.getAttribute('aria-expanded'),controls:k.getAttribute('aria-controls')===f.id}})()`);
+ assert.deepEqual(place,{fields:1,last:true,below:true,quote:'발표는 금요일이에요.',expanded:'true',controls:true},`correction field at the bottom ${JSON.stringify(place)}`);
  const areaRing=await b.focusVisibleStyle('.tw-memory-correct textarea',['outline-width','outline-style']);
  assert.ok(parseFloat(areaRing['outline-width'])>=1&&areaRing['outline-style']!=='none','correction field focus ring');
  if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/${seat}-${dark?'dark':'light'}-${width}-${forcedColors?'forced':'normal'}.png`,Buffer.from(shot.data,'base64'));}
@@ -75,7 +90,27 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  await b.evaluate(`document.querySelector('[data-testid=memory-overview] .tw-memory-actions button').click()`);await sleep(40);
  await b.evaluate(`[...document.querySelectorAll('.tw-memory-correct button')].find(e=>e.textContent==='취소').click()`);await sleep(40);
  assert.equal(await b.evaluate(`!!document.querySelector('.tw-memory-correct')`),false);
- assert.equal(await b.evaluate(`document.activeElement===document.body`),false,'focus stays in the panel after 취소');
+ assert.equal(await b.evaluate(`document.activeElement===document.querySelector('[data-testid=memory-overview] .tw-memory-actions button')`),true,'취소 returns focus to that 고치기');
+ // IME: a composition's Enter, then a plain Enter, in the field: nothing is sent and the field stays open.
+ await b.evaluate(`document.querySelector('[data-testid=memory-overview] .tw-memory-actions button').click()`);await sleep(40);
+ await b.evaluate(`(()=>{const a=document.querySelector('.tw-memory-correct textarea');a.focus();a.setSelectionRange(a.value.length,a.value.length)})()`);
+ await b.send('Input.imeSetComposition',{text:'ㅅ',selectionStart:1,selectionEnd:1});await b.send('Input.imeSetComposition',{text:'새',selectionStart:1,selectionEnd:1});
+ await key('Enter',{windowsVirtualKeyCode:229,nativeVirtualKeyCode:229});
+ await b.send('Input.insertText',{text:'새'});await sleep(40);
+ await key('Enter');
+ const ime=await b.evaluate(`({open:!!document.querySelector('.tw-memory-correct'),value:document.querySelector('.tw-memory-correct textarea')?.value,sent:window.__posted.filter(m=>m.type==='activityMemoryAction').length})`);
+ assert.equal(ime.open,true,'Enter in the field never submits');assert.equal(ime.sent,1,'nothing more was sent');assert.ok(ime.value.includes('새'),`the composed text is in the field (${JSON.stringify(ime.value)})`);
+ await b.evaluate(`[...document.querySelectorAll('.tw-memory-correct button')].find(e=>e.textContent==='취소').click()`);await sleep(40);
+ // DOM absence: the overview the real host code builds from planted capability, score and judgment sentences.
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify(plantedView)}},'*')`);await sleep(60);
+ const dom=await b.evaluate(`(()=>{const o=document.querySelector('[data-testid=memory-overview]');return {text:o.textContent,badges:o.querySelectorAll('[class*=badge],[class*=chip],[class*=score],[role=img],svg,meter,progress,img').length,items:[...o.querySelectorAll('.tw-memory-group .tw-memory-text')].map(e=>e.textContent)}})()`);
+ assert.deepEqual(dom.items,['좋아하는 색은 초록이에요.','발표 자료는 학급 신문 폴더에 있어요.'],`only plain sentences reach the overview ${JSON.stringify(dom.items)}`);
+ const lower=dom.text.toLowerCase();
+ for(const k of CAPABILITY_KEYS)assert.ok(!lower.includes(k.toLowerCase()),`no capability key "${k}" in the overview DOM`);
+ for(const l of CAPABILITY_LABELS)assert.ok(!dom.text.includes(l),`no capability label "${l}" in the overview DOM`);
+ assert.doesNotMatch(dom.text,/\d\s*점|점수|score|상위\s*\d/i,'no score in the overview DOM');
+ assert.equal(dom.badges,0,'no badge, chip, meter or icon in the overview DOM');
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify(view)}},'*')`);await sleep(40);
  assert.equal(await b.evaluate(`window.__posted.filter(m=>m.type==='activityMemoryAction').length`),1,'취소 sends nothing');
  console.log(`PASS memory overview ${seat} ${dark?'dark':'light'} ${width} ${forcedColors?'forced':'normal'}`);
 }}finally{await b.close();}

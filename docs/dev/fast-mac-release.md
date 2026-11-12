@@ -119,6 +119,26 @@ curl -fsSL .../install-mac.sh | bash -s -- --system     # stable: /Applications 
 curl -fsSL .../install-mac.sh | bash -s -- --layout kit # stable: side-by-side test install
 ```
 
+When the release ships `win32-x64`, the same step adds `update-windows.cmd` (rendered by
+`install-kit.mjs render-windows` from `scripts/release/templates/update-windows.cmd`). It is
+pinned to the tag and to the SHA-256 of the accepted `HypeProof.StudioUserSetup-x64-*.exe`,
+closes Studio and runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+/MERGETASKS=!runcode` (per user, no admin, chats and settings kept). Double-click it, or in
+PowerShell:
+
+```powershell
+irm https://github.com/hypeproof/hypeproof-studio/releases/download/<tag>/update-windows.cmd -OutFile "$env:TEMP\hps-update.cmd"; & "$env:TEMP\hps-update.cmd"
+```
+
+`https://github.com/hypeproof/hypeproof-studio/releases/latest/download/update-windows.cmd`
+always fetches the newest stable release's copy. An rc's copy installs over the main App
+(Windows has no side-by-side install). Before `--draft=false` the publish step runs
+`install-kit.mjs check --platforms <release platforms>`: a missing `install-mac.sh` /
+`update-windows.cmd` asset or notes section stops publication. `notify-release-published.yml`
+puts both commands at the top of the Discord announcement (`install-kit.mjs announce`).
+Test seams: `HPS_INSTALL_ASSET_DIR` (local exe), `HPS_INSTALL_DRY_RUN=1` (verify only),
+`HPS_NO_PAUSE=1` (no final pause in the .cmd).
+
 Why curl: the zip is ad-hoc signed and not notarized. A browser download gets
 `com.apple.quarantine` and Gatekeeper refuses the app; curl adds no quarantine flag.
 

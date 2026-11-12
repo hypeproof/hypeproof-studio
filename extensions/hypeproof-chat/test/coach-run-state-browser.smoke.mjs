@@ -114,5 +114,35 @@ try {
       await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     }
   }
+  // CGP-KNOW-D-005: at 480px and below the run state (band start) and the memory state with its scope (band end) share the
+  // band under the heading. With every run state, the longest words included, the two never overlap, the scope words are
+  // whole on one line each, the memory state stays inside the heading and nothing in it is covered.
+  const memoryConfig = { ...seats.personal.config, memoryState: { folder: '.hypeproof/memory/' } };
+  let shared = 0;
+  for (const dark of [false, true]) for (const width of [320, 360, 390, 420, 450, 480]) {
+    const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k2, v]) => typeof v === 'string' && !['kind', 'file'].includes(k2)).map(([k2, v]) => `--vscode-${k2.replaceAll('.', '-')}:${v}`).join(';');
+    await browser.load(`<html lang="ko" style="${vars}"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}" style="margin:0"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`, { width, height: 900, dark });
+    for (const [key, s] of Object.entries(STATES)) {
+      const t = `memory band ${dark ? 'dark' : 'light'} ${width} ${key}`;
+      await browser.evaluate(`mount(${JSON.stringify(memoryConfig)},${JSON.stringify(s.messages)},${JSON.stringify(view)},${JSON.stringify(s.extra)})`);
+      await waitFor(`document.querySelector('.hps-run-state')?.dataset.runState===${JSON.stringify(key)}&&document.querySelector('.tw-heading .hps-memory-now-state')`, t);
+      const m = await browser.evaluate(`(()=>{const run=document.querySelector('.tw-heading .hps-run-state');const g=document.createRange();g.selectNodeContents(run);const rr=g.getBoundingClientRect();
+        const st=document.querySelector('.tw-heading .hps-memory-now-state');const h=document.querySelector('.tw-heading').getBoundingClientRect();
+        const parts=[...st.querySelectorAll('.hps-memory-now-on, .hps-memory-now-scope')].flatMap(e=>{const q=document.createRange();q.selectNodeContents(e);return [...q.getClientRects()]}).filter(q=>q.width>0);
+        const hitOk=parts.every(q=>{const hit=document.elementFromPoint((q.left+q.right)/2,(q.top+q.bottom)/2);return !!hit&&st.contains(hit)});
+        const overlap=parts.some(q=>q.left<rr.right-.5&&q.right>rr.left+.5&&q.top<rr.bottom-.5&&q.bottom>rr.top+.5);
+        const scope=st.querySelector('.hps-memory-now-scope');const words=[];for(const node of scope.childNodes){if(node.nodeType!==3)continue;const text=node.textContent;const re=/\\S+/g;let x;while((x=re.exec(text))){const q=document.createRange();q.setStart(node,x.index);q.setEnd(node,x.index+x[0].length);const rs=[...q.getClientRects()].filter(z=>z.width>0);words.push({w:x[0],lines:new Set(rs.map(z=>Math.round(z.top))).size})}}
+        const others=[...document.querySelectorAll('.tw-heading button, .tw-heading h1, .tw-heading .hps-activity-now')].map(e=>e.getBoundingClientRect()).filter(q=>q.width>2&&q.height>2);
+        const covers=parts.some(p=>others.some(q=>p.left<q.right-.5&&p.right>q.left+.5&&p.top<q.bottom-.5&&p.bottom>q.top+.5));
+        return {overlap,covers,hitOk,words,inside:parts.every(q=>q.top>=h.top-.5&&q.bottom<=h.bottom+.5&&q.left>=h.left-.5&&q.right<=h.right+.5),label:run.textContent}})()`);
+      assert.equal(m.overlap, false, `${t}: the run state "${m.label}" and the memory state do not overlap`);
+      assert.equal(m.covers, false, `${t}: no heading control or title overlaps the memory state`);
+      assert.ok(m.inside && m.hitOk, `${t}: the memory state is inside the heading and uncovered ${JSON.stringify(m)}`);
+      assert.deepEqual(m.words.map(w => w.w), ['·', '이', '작업', '공간', '안에서만'], `${t}: scope words`);
+      for (const w of m.words) assert.equal(w.lines, 1, `${t}: scope word "${w.w}" on one line`);
+      shared++;
+    }
+  }
+  console.log(`PASS coach-run-state-browser memory band: ${shared} width/theme/state cases, run state and memory scope share the narrow band without overlap`);
   console.log(`PASS coach-run-state-browser: ${cases} seat/theme/width/state cases, one state in the header, 20px icon + words >= 14px, one live region changed in place, visible, static, forced colours`);
 } finally { await browser.close(); }

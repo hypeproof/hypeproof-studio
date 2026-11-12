@@ -1,5 +1,6 @@
+import { StoreClient } from "./skillStore";
 import * as vscode from "vscode";
-import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
+import { AccountError, accountProductionEnabled, ACCOUNTS_ENABLED_DEFAULT, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, FOLDER_TAKEN_MESSAGE, activityConnections, passTakesOver } from "./activityConnections";
 import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
@@ -121,6 +122,9 @@ export class StartPage {
   private passListShown = false;
   /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
   private purchaseSignIn?: PassSurface;
+  private useGrantAfterSignIn = false;
+  private enteringAccountGrant = false;
+  private accountEntryRevision = 0;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -151,6 +155,38 @@ export class StartPage {
     // anywhere else (waiting, stopped, list closed): nothing is restored later.
     if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
+    void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
+  }
+
+  /** Explicit login resumes granted personal use; background refresh never changes activities. */
+  async finishAccountSignIn(): Promise<void> {
+    if (!this.useGrantAfterSignIn) return;
+    this.useGrantAfterSignIn = false;
+    const account = this.accounts?.view();
+    const current = activityConnections(this.context)?.current;
+    if (account?.status !== "signedIn" || this.order || (current && !current.free)) return;
+    const grant = account.passes?.find(pass => pass.id === "super" && pass.status === "active" && pass.requests_remaining > 0);
+    if (!grant) return;
+    await this.enterGrantedAccountPass();
+  }
+
+  private async enterGrantedAccountPass(): Promise<void> {
+    if (this.enteringAccountGrant) return;
+    this.enteringAccountGrant = true;
+    const freeSeat = this.freeSeatInWindow();
+    const revision = this.accountEntryRevision;
+    const panel = this.panel;
+    const current = activityConnections(this.context)?.current;
+    try {
+      await this.activateAccountPass("super", () => this.accountEntryRevision === revision && this.panel === panel && activityConnections(this.context)?.current === current);
+      if (freeSeat) await this.switchSeatInPlace(freeSeat);
+      else await this.handle({ type: "beginCourse" });
+    } catch (error) {
+      this.error = error instanceof AccountError ? error.message : "로그인됐지만 무제한 이용권을 연결하지 못했어요. 다시 눌러 주세요.";
+    } finally {
+      this.enteringAccountGrant = false;
+      await this.refresh();
+    }
   }
 
   /** The look that belongs to the candidate on screen, if any. */
@@ -273,6 +309,17 @@ export class StartPage {
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
 
+  /** Release only the entry panel we own; never close user editors or the chat. */
+  closeForAutomationPreview(): vscode.ViewColumn | undefined {
+    const entry = this.panel;
+    if (!entry) return undefined;
+    const column = entry.viewColumn;
+    this.panel = undefined;
+    this.candidate = undefined;
+    entry.dispose();
+    return column;
+  }
+
   /** A focus request during restore must not create a second sidebar chat. */
   async focusAfterRestore(restore: Promise<void>): Promise<void> {
     this.chat.focusDiagnostic('command_enter');
@@ -309,7 +356,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
       // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
       // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
       this.passListShown = true; this.accounts?.cancel(false); } });
@@ -525,6 +572,22 @@ export class StartPage {
     await this.handlePurchase({ type: "purchaseOpen" });
     this.purchaseFocus = Date.now();
     await this.refresh();
+  }
+  /**
+   * Epic #3418 — one read per window and account: the store entry is drawn only when the Service
+   * answers the store for this account (a rollout may open it to listed accounts only).
+   */
+  private storeOn?: boolean;
+  private storeFor?: string;
+  private async loadStore(): Promise<boolean> {
+    const view = this.accounts?.view();
+    const key = view?.status === "signedIn" ? `in:${view.account?.id ?? ""}` : "out";
+    if (this.storeFor === key) return false;
+    this.storeFor = key;
+    const token = key === "out" ? undefined : await this.accounts?.accessToken().catch(() => undefined);
+    const before = this.storeOn;
+    this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => token }).items().then(() => true, () => false);
+    return before !== this.storeOn;
   }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
@@ -742,15 +805,24 @@ export class StartPage {
     catch { /* An offer that could not be saved is simply not shown; entry must not fail for it. */ }
   }
 
-  private async activateAccountPass(passId: string): Promise<void> {
+  private async activateAccountPass(passId: string, stillWanted?: () => boolean): Promise<void> {
     if (!this.accounts) throw new Error('account disabled');
     const settings = this.settings();
     if (!this.accounts.matches(settings.proxyUrl, settings.siteBase)) throw new AccountError('settings_changed', '서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.');
     if (this.chat.hasActiveStream()) throw new AccountError('active_stream', '진행 중인 작업을 마치거나 중지한 후 이용권을 선택해 주세요.');
     const activated = await this.accounts.activate(passId);
-    await this.handle({type:"connectCourse",token:activated.token});
+    if (stillWanted && !stillWanted()) throw new AccountError("entry_changed", "다른 활동을 선택했어요. 필요할 때 무제한으로 시작하기를 눌러 주세요.");
+    await this.handle({type:"connectCourse",token:activated.token}, stillWanted);
+    if (stillWanted && !stillWanted()) throw new AccountError("entry_changed", "활동 연결을 취소했어요. 선택한 활동을 계속 사용하세요.");
     if (!this.candidate || this.candidate.token !== activated.token) throw new AccountError('pass_profile_unavailable', '이용권 정보를 확인하지 못했어요. 새로고침 후 다시 선택해 주세요.');
     this.candidate.accountPass = activated.binding;
+    // An existing grant is not a checkout. Reveal its confirmation card after activation.
+    // A real order being claimed keeps its own connecting/error recovery lifecycle.
+    if (this.purchaseStage === "choosing" && !this.order) {
+      this.purchaseStage = undefined;
+      this.purchaseMessage = undefined;
+      this.purchasePick = undefined;
+    }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -765,6 +837,7 @@ export class StartPage {
     this.freeNewcomer = !p && this.freeStartOn();
     const freeStart = this.freeStartView(running);
     const state: StartState = {
+      automationsEnabled: !this.candidate && p?.automations?.enabled === true,
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
       legacyHistory,
       activities,
@@ -779,6 +852,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
+      ...(this.storeOn ? { skillStore: true } : {}),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
@@ -826,10 +900,48 @@ export class StartPage {
     } finally { await this.chat.setConnectionChanging(false); }
   }
 
-  private async handle(msg: StartRequest): Promise<void> {
+  private async handle(msg: StartRequest, continuation?: () => boolean): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (!continuation && !["startReady", "accountRefresh", "accountReopen", "accountCopyLink"].includes(msg.type)) this.accountEntryRevision++;
+    if (!["startReady", "accountSignIn", "accountReopen", "accountCopyLink", "accountRefresh"].includes(msg.type)) this.useGrantAfterSignIn = false;
     if (msg.type.startsWith("account")) {
-      if (!this.accounts) return;
+      if (!this.accounts) {
+        if (msg.type !== "accountSignIn") return;
+        if (this.chat.hasActiveStream()) {
+          this.error = "진행 중인 작업을 마치거나 중지한 후 로그인해 주세요.";
+          await this.refresh(); return;
+        }
+        try {
+          const config = vscode.workspace.getConfiguration("hypeproofChat");
+          const { proxyUrl, siteBase } = this.settings();
+          if (!accountProductionEnabled(true, proxyUrl, siteBase)) {
+            this.error = "현재 서버 설정에서는 Google 로그인을 사용할 수 없어요. 공식 서비스 주소인지 확인해 주세요.";
+            await this.refresh(); return;
+          }
+          const disabled = !config.get<boolean>("accountsEnabled", ACCOUNTS_ENABLED_DEFAULT);
+          const action = disabled ? "켜고 다시 열기" : "다시 열기";
+          const choice = await vscode.window.showInformationMessage(
+            disabled ? "이 기기에서 개인 계정 사용이 꺼져 있어요. 켜고 Studio 창을 다시 열까요? 작업 파일은 그대로 남아요."
+              : "계정 기능을 불러오려면 Studio 창을 다시 열어야 해요. 작업 파일은 그대로 남아요.",
+            { modal: true }, action);
+          if (choice === action) {
+            if (this.chat.hasActiveStream()) {
+              this.error = "진행 중인 작업을 마치거나 중지한 후 로그인해 주세요.";
+              await this.refresh(); return;
+            }
+            if (disabled) await config.update("accountsEnabled", true, vscode.ConfigurationTarget.Global);
+            if (this.chat.hasActiveStream()) {
+              this.error = "개인 계정 사용은 켜졌어요. 진행 중인 작업을 마친 뒤 다시 로그인해 주세요.";
+              await this.refresh(); return;
+            }
+            await vscode.commands.executeCommand("workbench.action.reloadWindow");
+          }
+        } catch {
+          this.error = "계정 기능을 다시 열지 못했어요. 잠시 뒤 다시 눌러 주세요.";
+          await this.refresh();
+        }
+        return;
+      }
       this.error = undefined;
       try {
         if (msg.type === "accountSignIn") {
@@ -838,20 +950,27 @@ export class StartPage {
             // CONV-FUNNEL-R-006 — the purchase-time sign-in begins from the pass list.
             if (this.purchaseStage === "choosing" && !this.order && this.freeSeatNow) { this.purchaseSignIn = this.passListSurface; this.purchasePathEvent("sign_in_started"); }
           }
+          this.useGrantAfterSignIn = true;
           await this.accounts.start();
+          if (this.accounts.view().status === "signedIn") await this.finishAccountSignIn();
+          else if (this.accounts.view().status === "signedOut" && !this.accounts.view().busy) this.useGrantAfterSignIn = false;
         }
-        else if (msg.type === "accountCancel") this.accounts.cancel();
+        else if (msg.type === "accountCancel") { this.useGrantAfterSignIn = false; this.accounts.cancel(); }
         else if (msg.type === "accountReopen") await this.accounts.reopen();
         else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));
         else if (msg.type === "accountRefresh") await this.accounts.refreshView();
         else if (msg.type === "accountManage") await this.accounts.openAccount();
-        else if (msg.type === "accountSignOut") { this.candidate = undefined; await this.accounts.signOut(); }
-        else if (msg.type === "accountActivate") await this.activateAccountPass(msg.passId);
+        else if (msg.type === "accountSignOut") { this.useGrantAfterSignIn = false; this.candidate = undefined; await this.accounts.signOut(); }
+        else if (msg.type === "accountActivate") {
+          if (msg.passId === "super") await this.enterGrantedAccountPass();
+          else await this.activateAccountPass(msg.passId);
+        }
       } catch (e) { this.error = e instanceof AccountError ? e.message : "계정을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요."; }
       await this.refresh(); return;
     }
 
     if (!msg || typeof msg !== "object") return;
+    if (msg.type === "openEmailAutomation") { await vscode.commands.executeCommand("hypeproof-chat.emailAutomation"); return; }
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") {
       void this.accounts?.refreshView();
@@ -863,7 +982,7 @@ export class StartPage {
         const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
         await Promise.race([this.loadTrialOffer(), bound]);
       }
-      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
     if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
     if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
@@ -877,6 +996,8 @@ export class StartPage {
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
+    if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start_page"); return; }
+    if (msg.type === "openSkillStore") { await vscode.commands.executeCommand("hypeproof-chat.skillStore"); return; }
     // CGP-SHELL-R-014 — the start page "설정" opens the learner sheet (webview-side); the VS Code settings
     // editor is reached only through the sheet's "고급 설정", re-checked here: a minor seat never gets it.
     if (msg.type === "openAdvancedSettings") {
@@ -1093,6 +1214,7 @@ export class StartPage {
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
+      if (continuation && !continuation()) return;
       this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
       this.joinLink = undefined; // the code is confirmed; the preview card takes over
       // GitHub first (user requirement 2026-10-13): the served profile names the class folder.

@@ -10,6 +10,8 @@ export class CodexLocalClient {
     messages: Array<{ role: string; content: string }>;
     signal?: AbortSignal;
     onDelta?: (text: string) => void;
+    /** #3601: every protocol message from Codex (progress for the stall watch). */
+    onProgress?: () => void;
     maxOutputBytes?: number;
     tools?: Array<{ name: string; description: string; inputSchema: unknown }>;
     onToolCall?: (name: string, args: unknown) => Promise<string>;

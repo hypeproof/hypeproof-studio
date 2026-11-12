@@ -20,6 +20,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-attention-copy'); mkdirSync(out, { recursive: true });
 const html = readFileSync(path.join(repo, 'chalk/src/ui/manage.html'), 'utf8');
@@ -29,7 +30,7 @@ const REASONS = Object.keys(labels);
 // an upload retry, blocked for the rest. Only the tag colour depends on it; the copy under test does not.
 const attentionOf = (r) => ['no_signal', 'stale_signal', 'not_connected'].includes(r) ? 'unknown' : r === 'waiting_approval' ? 'ok' : r === 'upload_failed' ? 'caution' : 'blocked';
 
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -53,7 +54,7 @@ try {
       await route.fulfill({ response: r, json: d });
     });
     await p.goto(origin + '/manage');
-    await p.locator('#token').fill(teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click();
+    await signInChalk(p, teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click();
     await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(seats.length - 1).waitFor();
     return p;
   };

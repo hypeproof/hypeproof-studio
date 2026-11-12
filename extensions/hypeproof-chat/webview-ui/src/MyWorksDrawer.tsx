@@ -25,7 +25,7 @@ const thumbKey = (entry: Pick<ArtifactProvenanceEntry, 'path' | 'at'>) => `${ent
 
 export type WorksFilter = 'files' | 'memory';
 
-export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onClose }: {
+export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onClose, onOpenTask }: {
   files: ArtifactProvenanceView | null | undefined;
   /** The task and activity the drawer was opened for; the memory list binds to it. */
   scopeKey: string;
@@ -34,6 +34,8 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
   opener: () => HTMLElement | null;
   fallback: () => HTMLElement | null;
   onClose: () => void;
+  /** REQ-STUDIO-MEMORY-MANAGER — a memory file's source link: the drawer closes and that task opens. */
+  onOpenTask?: (taskId: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -110,7 +112,7 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
       <button type="button" className="tw-quiet tw-works-close" aria-label="내 작품 닫기" data-hp-tooltip="내 작품 닫기" onClick={close}><ChatIcon kind="close" size={20} /></button>
     </header>
     <div ref={body} id="tw-works-body" className="tw-works-body" tabIndex={0} role="region" aria-label={filter === 'memory' ? 'AI 기억 파일 목록' : '내 작품 목록'}>
-      {filter === 'memory' ? <ActivityMemoryList scopeKey={scopeKey} fallback={() => memoryButton.current} />
+      {filter === 'memory' ? <ActivityMemoryList scopeKey={scopeKey} fallback={() => memoryButton.current} onOpenTask={onOpenTask} />
         : files === undefined ? note('파일 기록을 불러오는 중…', true)
         : files === null ? note('작업 폴더가 열려 있지 않아서 보여 줄 파일이 없어요.')
         : files.unobserved ? note('아직 기록이 없어요. 이 목록을 열거나 AI에게 요청을 보내면 그때부터 기록해요.')

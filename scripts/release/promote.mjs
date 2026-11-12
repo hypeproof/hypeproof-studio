@@ -7,6 +7,9 @@
 //       the final version, then: v tag on the rc commit, v draft with the rc's packages and
 //       acceptance receipts (same bytes), squash-merge of the release PR, verify-unified-release
 //       dispatched for the v tag. Every step is idempotent, so a rerun continues a failed run.
+//       The release PR runs studio-pr-ci like any PR, and main's protection requires its checks,
+//       `extension / smoke` included (#3512). A release PR that main would refuse is refused here,
+//       before the v tag, instead of failing at the merge after tagging.
 //   node scripts/release/promote.mjs reuse-acceptance --tag T --sha S --version V --dir D
 //       (verify-unified-release.yml) prints accepted=true when D, the downloaded v draft, holds the
 //       acceptance receipts of a published rc at the same commit and they still hold for these bytes
@@ -21,7 +24,8 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {isAppPackage, sha256} from '../../e2e/unified-release/artifact.mjs';
-import {decide} from './publish-gate.mjs';
+import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
+import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
@@ -40,12 +44,19 @@ export function recordedRcTag(message, version) {
   return tag && tag.startsWith(`${version}-rc.`) ? tag : null;
 }
 
+// GitHub's mergeStateStatus values under which main's protection accepts the squash-merge.
+// BLOCKED: a required check (e.g. `extension / smoke`, about 14 min) is pending, failed or absent.
+const MERGEABLE_STATES = new Set(['CLEAN', 'UNSTABLE', 'HAS_HOOKS']);
+
 // Pure decision. Every input is already fetched.
-//   pr:      {number, state, merged, labels, base, headRef, head, reviews: [{user, state, commit}]}
+//   pr:      {number, state, merged, labels, base, headRef, head, headDate, reviews: [{user, state, commit}],
+//            comments: [{user, association, created_at, body, url}]}
+//   p0:      P0 case ids of the candidate's casebook (publish-gate p0CaseIds); undefined refuses
+//   mergeState: the release PR's mergeStateStatus ('' when unread); ignored once it is merged
 //   commit:  the PR head commit {sha, parents: [sha], message, files: [path]}
 //   rcTags:  [{name, sha}] for <version>-rc.*; vTagSha: the v tag's commit, or '' when absent
 //   rcRelease: {isDraft, assets: [{name, digest}]} of the recorded rc, or null
-export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), vTagSha = '', rcRelease = null}) {
+export function promotionDecision({pr, commit, rcTags = [], writers = new Set(), p0, vTagSha = '', rcRelease = null, mergeState = ''}) {
   const refuse = reason => ({allow: false, reasons: [reason]});
   const version = branchVersion(pr.headRef);
   if (!version) return refuse(`#${pr.number}: head ${pr.headRef} is not release/vX.Y.Z`);
@@ -53,6 +64,11 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   if (!pr.labels.includes('release')) return refuse(`#${pr.number}: no release label`);
   if (pr.state !== 'open' && !pr.merged) return refuse(`#${pr.number}: closed without merge`);
   if (commit.sha !== pr.head) return refuse(`#${pr.number}: head commit lookup returned another commit`);
+  if (!pr.merged && !MERGEABLE_STATES.has(mergeState)) {
+    return refuse(mergeState === 'BLOCKED'
+      ? `#${pr.number}: a required check on the release PR head is not green yet (extension / smoke takes about 14 min). Wait for it, or rerun the failed check, then rerun release-promote`
+      : `#${pr.number}: main would not accept the merge (mergeStateStatus ${mergeState || 'unread'}). Rerun release-promote once the PR is mergeable`);
+  }
   // The release branch is the candidate plus one commit that adds the release record. Anything
   // else on it would ship code the rc never built.
   if (commit.parents.length !== 1) return refuse(`#${pr.number}: head is not a single commit on the candidate`);
@@ -65,9 +81,11 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   if (!rc) return refuse(`${rcTag} does not exist`);
   if (rc.sha !== candidate) return refuse(`${rcTag} is on ${rc.sha.slice(0, 8)}, the release branch on ${candidate.slice(0, 8)}`);
   if (vTagSha && vTagSha !== candidate) return refuse(`${version} already exists on ${vTagSha.slice(0, 8)}, not on the rc commit ${candidate.slice(0, 8)}`);
-  // The same rule the publish gate applies later: a writer's approval on the PR's current head.
-  const gate = decide({tag: version, tagSha: candidate, rcTags, writers,
-    releasePrs: [{number: pr.number, labels: pr.labels, head: pr.head, reviews: pr.reviews}]});
+  // The same rule the publish gate applies later: a writer's approval on the PR's current head, and
+  // the casebook run (or a release manager override) on that head (#3429). Without p0, the comments
+  // and the head date the gate refuses every approval (#3513), so pass exactly what it reads.
+  const gate = decide({tag: version, tagSha: candidate, rcTags, writers, p0,
+    releasePrs: [{number: pr.number, labels: pr.labels, head: pr.head, headDate: pr.headDate, comments: pr.comments ?? [], reviews: pr.reviews}]});
   if (gate.route !== 'approval') return {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
   if (!rcRelease) return refuse(`${rcTag} has no release: its builds have not uploaded`);
   if (rcRelease.isDraft) return refuse(`${rcTag} is still a draft: its acceptance has not passed yet. Rerun release-promote after it publishes`);
@@ -130,7 +148,10 @@ export function gatherPromotion(number, repo) {
   const pr = {number: p.number, state: p.state, merged: Boolean(p.merged_at), labels: p.labels.map(l => l.name),
     base: p.base.ref, headRef: p.head.ref, head: p.head.sha,
     reviews: ghJson(`repos/${repo}/pulls/${number}/reviews?per_page=100`).map(r => ({user: r.user?.login, state: r.state, commit: r.commit_id}))};
+  pr.comments = ghJson(`repos/${repo}/issues/${number}/comments?per_page=100`)
+    .map(x => ({user: x.user?.login, association: x.author_association, created_at: x.created_at, body: x.body ?? '', url: x.html_url}));
   const c = JSON.parse(gh('api', `repos/${repo}/commits/${pr.head}`));
+  pr.headDate = c.commit.committer.date;
   const commit = {sha: c.sha, parents: c.parents.map(x => x.sha), message: c.commit.message, files: (c.files ?? []).map(f => f.filename)};
   const writers = new Set();
   for (const login of new Set(pr.reviews.map(r => r.user).filter(Boolean))) {
@@ -139,7 +160,19 @@ export function gatherPromotion(number, repo) {
   }
   const version = branchVersion(pr.headRef);
   const rcTag = version ? recordedRcTag(commit.message, version) : null;
-  return {pr, commit, writers, rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
+  // GitHub computes mergeStateStatus lazily: UNKNOWN right after a push or review settles in seconds.
+  let mergeState = '';
+  for (let i = 0; !pr.merged && i < 5; i++) {
+    mergeState = gh('pr', 'view', String(number), '--repo', repo, '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus');
+    if (mergeState !== 'UNKNOWN') break;
+    execFileSync('sleep', ['3']);
+  }
+  // The candidate's own casebook, as the publish gate reads it at the v tag (the same commit).
+  const candidate = commit.parents.length === 1 ? commit.parents[0] : null;
+  // Unreadable leaves p0 undefined, which the gate refuses with "the casebook P0 list was not read".
+  let p0;
+  try { if (candidate) p0 = p0CaseIds(parseYaml(git('show', `${candidate}:${CASEBOOK}`), CASEBOOK)?.cases ?? []); } catch { p0 = undefined; }
+  return {pr, commit, writers, p0, mergeState, rcTags: version ? rcTagsOf(version) : [], vTagSha: version ? remoteTagSha(version) : '',
     rcRelease: rcTag ? releaseOf(rcTag) : null};
 }
 
@@ -153,7 +186,13 @@ function draftAssets(repo, tag) {
   }
   if (pick.action === 'create') {
     gh('release', 'create', tag, '--draft', '--title', `HypeProof Studio ${tag}`, '--generate-notes', '--verify-tag');
-    pick = pickRelease(list(), tag); // two concurrent runs leave two drafts: stop here
+    // The listing can lag the create by a few seconds (v2026.1102.2, 2026-11-02: releases/undefined).
+    for (let i = 0; i < 10; i++) {
+      pick = pickRelease(list(), tag); // two concurrent runs leave two drafts: stop here
+      if (pick.action !== 'create') break;
+      execFileSync('sleep', ['3']);
+    }
+    if (pick.action === 'create') throw new Error(`The ${tag} draft was created but is not listed yet; rerun.`);
   }
   return {published: false, assets: JSON.parse(gh('api', `repos/${repo}/releases/${pick.id}`)).assets.map(a => ({name: a.name, digest: a.digest ?? null}))};
 }
