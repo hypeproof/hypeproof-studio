@@ -914,10 +914,15 @@
         "MVOICE-02",
         "MVOICE-03",
         "MVOICE-04",
-        "MVOICE-05"
+        "MVOICE-05",
+        "MPER-01",
+        "MPER-02",
+        "MPER-03",
+        "MPER-04",
+        "MPER-05"
       ],
       "inline_prefixes": [],
-      "sha256": "b195365d17a0f83abcd0e5a1ab927717688534a15d9382b72ebc65cc236a29de",
+      "sha256": "d30d0f6c947efae33f06e3e72d428c71b734ad0a7d5c9ab1d49f79d5b01a7e3d",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4522,6 +4527,47 @@
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
+      ]
+    },
+    {
+      "id": "personal-reflection-v1",
+      "title": "Account-owned first question on iPhone and existing desktop",
+      "issue": 3725,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-01",
+            "MPER-02",
+            "MPER-03",
+            "MPER-04",
+            "MPER-05"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Complete independent verification, native CI and release-pinned installed-device acceptance. No physical or question-quality pass is inferred from source tests.",
+      "design_delta": "Reuse account sessions, server conversations and the existing desktop task store; add cloud-owned personal reflection separate from host-owned build tasks.",
+      "positive_control": "A phone user receives a question with the desktop closed and later opens the exact conversation in existing Studio.",
+      "negative_control": "An uncertain response, account switch, stale snapshot or cancellation preserves words and cannot execute an extra paid turn or desktop tools.",
+      "evidence_required": "Pinned Service and Studio source, independent review, native CI, existing desktop and physical iPhone evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/personalReflection.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/accountSession.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection.test.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs",
+        "apps/studio-native/ios/Tests/StudioCoreTests/ConversationSyncTests.swift",
+        "apps/studio-native/ios/UITests/StudioShellTests.swift"
       ]
     }
   ]

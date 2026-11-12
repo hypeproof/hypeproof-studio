@@ -62,6 +62,12 @@ private struct SharedCacheFile: Codable {
 }
 
 @MainActor final class SharedConversationModel: ObservableObject {
+    static let personalID = "personal-reflection"
+    @Published private(set) var opening = "요즘 어떤 일에 시간을 많이 쓰세요?"
+    @Published private(set) var openingHint = "일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요."
+    @Published private(set) var hasEarlierReflection = false
+    var isReflection: Bool { selected == Self.personalID }
+    private var selectPersonalOnLoad = true
     @Published private(set) var signedIn = false
     @Published private(set) var conversations: [SharedConversation] = []
     @Published private(set) var entries: [String: ConversationCache] = [:]
@@ -114,7 +120,7 @@ private struct SharedCacheFile: Codable {
         directory.appendingPathComponent(Data(accountID.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_") + ".json")
     }
     private func load(_ id: String) throws {
-        entries = [:]; conversations = []; selected = nil; cacheReadable = true
+        entries = [:]; conversations = []; selected = nil; cacheReadable = true; selectPersonalOnLoad = true
         guard FileManager.default.fileExists(atPath: file(id).path) else { return }
         do {
             let value = try JSONDecoder().decode(SharedCacheFile.self, from: Data(contentsOf: file(id)))
@@ -231,27 +237,38 @@ private struct SharedCacheFile: Codable {
         defer { syncing = false }
         do {
             let credential = try await token()
-            let list = try await service.list(credential)
+            let personal = try await service.reflection(credential)
+            guard epoch == attempt else { return }
+            try applyReflection(personal)
+            var list = try await service.list(credential)
+            list.insert(SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0), at: 0)
             guard epoch == attempt else { return }
             try persist(entries: entries, conversations: list)
-            if let id = current, list.contains(where: { $0.id == id }) {
+            if selectPersonalOnLoad { selected = Self.personalID; selectPersonalOnLoad = false }
+            if let id = current, id != Self.personalID, list.contains(where: { $0.id == id }) {
+                // Read completion before events: an observed completion must include its final answer.
+                let requests = try await service.requests(id, token: credential)
+                guard epoch == attempt else { return }
+                var caughtUp = false
                 // Page repeatedly with a bound; the next polling cycle continues if more remain.
                 for _ in 0..<10 {
                     let page = try await service.events(id, after: entries[id]?.cursor ?? 0, token: credential)
                     guard epoch == attempt else { return }
                     try edit(id) { try $0.apply(page) }
-                    if !page.has_more { break }
+                    if !page.has_more { caughtUp = true; break }
                 }
-                let requests = try await service.requests(id, token: credential)
-                guard epoch == attempt else { return }
                 if let own = entries[id]?.request, let found = requests.first(where: { $0.id == own.id }) {
-                    try edit(id) { $0.request = found }
+                    if found.status != "completed" || caughtUp { try edit(id) { $0.request = found } }
                 } else if entries[id]?.request?.outstanding != true, let active = requests.first(where: { $0.outstanding }) {
                     try edit(id) { $0.request = active }
                 }
             }
-            error = nil; notice = "동기화됨 · 원본 작업과 실행은 데스크톱에 있어요"
+            error = nil; notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
         } catch { if epoch == attempt { failure(error) } }
+    }
+    private func applyReflection(_ value: PersonalReflection) throws {
+        try edit(Self.personalID) { try $0.applyReflection(value) }
+        opening = value.opening; openingHint = value.hint; hasEarlierReflection = value.state.has_earlier
     }
     private func failure(_ error: Error) {
         self.error = error.localizedDescription
@@ -261,7 +278,7 @@ private struct SharedCacheFile: Codable {
     }
     func send() {
         guard canSend, !syncing, let id = selected else { return }
-        do { try edit(id) { try $0.enqueue() } } catch { self.error = error.localizedDescription; return }
+        do { try edit(id) { try $0.enqueue(reflection: id == Self.personalID) } } catch { self.error = error.localizedDescription; return }
         retry()
     }
     func retry() {
@@ -270,13 +287,19 @@ private struct SharedCacheFile: Codable {
         operation = Task {
             do {
                 let credential = try await token()
+                if id == Self.personalID {
+                    let result = try await service.reflect(request, token: credential)
+                    guard epoch == attempt else { return }
+                    try applyReflection(result)
+                } else {
                 let result = try await service.submit(id, request: request, token: credential)
                 guard epoch == attempt else { return }
                 guard result.id == request.id, result.text == request.text else { throw SyncFailure.invalidResponse }
                 try edit(id) { $0.request = result }
+                }
             } catch {
                 if epoch == attempt {
-                    if case SyncFailure.http(400, _) = error {
+                    if case SyncFailure.http(let status, _) = error, status == 400 || (id == Self.personalID && status == 409) {
                         try? edit(id) { value in
                             value.draft = value.draft.isEmpty ? request.text : value.draft + "\n" + request.text
                             value.request = nil
@@ -286,6 +309,18 @@ private struct SharedCacheFile: Codable {
                 }
             }
             if epoch == attempt { busy = false; await synchronize() }
+        }
+    }
+    func recoverReflection() {
+        guard isReflection, !busy, !syncing, let request = cache.request, request.status == "running" else { return }
+        busy = true; let attempt = epoch
+        operation = Task {
+            do {
+                let credential = try await token()
+                let result = try await service.abandonReflection(request.id, token: credential)
+                guard epoch == attempt else { return }; try applyReflection(result)
+            } catch { if epoch == attempt { failure(error) } }
+            if epoch == attempt { busy = false }
         }
     }
     func cancelPending() {

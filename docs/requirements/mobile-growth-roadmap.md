@@ -154,3 +154,19 @@ read only after the matching request and original user message are identified.
 
 Shared source tests and CI do not prove physical Korean voice quality, genuine
 growth, installed desktop/iPhone interoperability or deployed Service readiness.
+
+## Account-owned personal reflection — first experience
+
+The first mobile experience is an independent conversation that helps a person understand their own direction. The existing Studio desktop opens the same conversation within its task UI. No new Mac application is introduced, and a running desktop is not required for this conversation. Existing host-owned build tasks keep their explicit sharing/execution boundary.
+
+An example path is: install and use the same account → “요즘 어떤 일에 시간을 많이 쓰세요?” → describe a recent moment → explore why it mattered → consider a desired change → choose one small action. This is a flexible conversational example, not a questionnaire or required ladder. A person may begin with a concrete problem, decline a question, change topic or stop. Age and occupation are optional contextual facts, not mandatory identity fields. Philosophical reflection informs the questions; the UI does not lecture on doctrines, infer destiny or score human worth.
+
+| ID | Requirement | Verification |
+|---|---|---|
+| MPER-01 | iPhone starts with an optional everyday question and existing voice/text composer. No desktop pairing code or running desktop is required for the personal conversation. Existing account browser authentication remains. | Native UI shell and real installed-device flow. |
+| MPER-02 | Same-account personal messages appear in the existing desktop task store; selecting another task does not create a new reflection identity or turn this conversation into a tool runner. | Host/store tests and two-device acceptance. |
+| MPER-03 | Preserve drafts and submitted words on failure; retry the same uncertain ID without repeating AI. Stale/account-switched snapshots and reserved message-ID collisions are refused. | Native cache, host, account and Service negative controls. |
+| MPER-04 | Account/AI storage disclosure precedes first use; existing entitlement and monetary ceiling apply; cancellation cannot promise a dispatched provider call is unbilled. | Account tests, Service gate evidence and release smoke. |
+| MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
+
+Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.

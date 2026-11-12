@@ -4,8 +4,8 @@ import AVFoundation
 struct StudioRoot: View {
     var body: some View {
         TabView {
-            SharedConversationView().tabItem { Label("이어가기", systemImage: "laptopcomputer.and.iphone") }
-            StudioHome().tabItem { Label("기기 메모", systemImage: "book.closed") }
+            SharedConversationView().tabItem { Label("질문", systemImage: "bubble.left.and.bubble.right") }
+            StudioHome().tabItem { Label("기기 기록", systemImage: "book.closed") }
         }.tint(.green)
     }
 }
@@ -22,6 +22,7 @@ struct SharedConversationView: View {
     @State private var voiceConsentID: String?
     @State private var showContext = false
     @State private var voiceRequestID: String?
+    @State private var voiceCompletionWaitStarted: Date?
     @State private var speakAnswers = true
     @State private var reviewRecording = false
     @State private var exportURL: URL?
@@ -74,12 +75,13 @@ struct SharedConversationView: View {
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
         }
         .onChange(of: model.selected) { _, _ in voice.stop(); voiceConsentAccepted = false; voiceConsentID = nil; voiceConsent = false }
-        .onChange(of: model.cache.request?.status) { _, status in
-            if ["failed", "unknown", "cancelled"].contains(status ?? ""), voice.turn.phase == .waiting { voice.fail("음성 답변을 기다리는 것을 멈췄어요. 대화의 요청 상태를 확인해 주세요.") }
-            if status == "completed" { speakCompletedReply() }
-        }
-        .onChange(of: model.cache.messages.last) { _, _ in
-            if model.cache.request?.status == "completed" { speakCompletedReply() }
+        .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
+        .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
+        .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
+        .onChange(of: model.cache.messages.last) { _, _ in reconcileVoiceReply() }
+        .onChange(of: speakAnswers) { _, enabled in
+            if !enabled && voice.turn.phase == .speaking { voice.stop(); voiceRequestID = nil }
+            else { reconcileVoiceReply() }
         }
         .onChange(of: reviewRecording) { _, enabled in if !enabled { voice.stop() } }
     }
@@ -89,14 +91,14 @@ struct SharedConversationView: View {
             NavigationStack {
                 Form {
                     Section("같은 대화를 두 기기에서") {
-                        Text("컴퓨터에서 ‘iPhone과 이 대화 연결’을 선택하면 그 대화의 글이 HypeProof Service에 저장돼요. 같은 계정의 iPhone에서 읽고 질문할 수 있어요. 작업 파일과 실행은 컴퓨터에 남아요.")
-                        Text("기기 사이 전송은 암호화됩니다. 서버가 대화 글을 저장하므로 종단간 암호화는 아닙니다. 연결한 대화의 글은 데스크톱의 기존 AI 처리 경로로 전달돼요. 수업 기록이나 기록 없이 묻기는 공유하지 않아요.").font(.footnote)
+                        Text("내가 보낸 글과 AI의 답변을 내 계정의 HypeProof Service에 저장해요. 같은 계정으로 로그인한 기존 데스크톱과 iPhone에서 이 대화를 열 수 있어요. 나이·직업을 꼭 알려주지 않아도 괜찮아요.")
+                        Text("기기 사이 전송은 암호화됩니다. 서버가 대화 글을 저장하므로 종단간 암호화는 아닙니다. 질문 대화의 최근 글은 Service와 AI 제공자에게 전송되고 기존 계정의 AI 이용 한도가 적용돼요. 수업 기록이나 기록 없이 묻기는 공유하지 않아요.").font(.footnote)
                     }
                     Section {
                         Toggle("대화 글의 서버 저장과 연결 방식을 이해했어요", isOn: $storageOK)
                         Button("같은 계정으로 연결") { consent = false; model.login() }.disabled(!storageOK || !model.accountStorageReady)
                     }
-                }.navigationTitle("데스크톱과 연결").toolbar { Button("닫기") { consent = false } }
+                }.navigationTitle("내 이야기 이어가기").toolbar { Button("닫기") { consent = false } }
             }
         }
         .sheet(isPresented: $voiceConsent, onDismiss: {
@@ -107,8 +109,8 @@ struct SharedConversationView: View {
             NavigationStack {
                 Form {
                     Section {
-                        Text("말하기를 마치면 인식한 글을 같은 데스크톱 대화로 보내요. 답변을 읽는 동안 마이크는 꺼져 있어요. 다음 차례는 직접 눌러 시작해요.")
-                        Text("전송 전에 고치고 싶으면 ‘말로 적기’를 사용해 주세요. 컴퓨터가 꺼져 있으면 요청은 기다려요.")
+                        Text("말하기를 마치면 인식한 글을 지금 열린 대화로 보내요. 답변을 읽는 동안 마이크는 꺼져 있어요. 다음 차례는 직접 눌러 시작해요.")
+                        Text("전송 전에 고치고 싶으면 ‘말로 적기’를 사용해 주세요. 질문 대화는 컴퓨터 없이도 답변을 받아요. 연결된 제작 작업은 컴퓨터가 필요해요.")
                     }
                     Button("말하고 보내기 시작") { voiceConsentAccepted = true; voiceConsent = false }.accessibilityIdentifier("linkedVoiceStart")
                     Button("나중에", role: .cancel) { voiceConsentAccepted = false; voiceConsent = false }.accessibilityIdentifier("linkedVoiceCancel")
@@ -119,25 +121,23 @@ struct SharedConversationView: View {
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
             Button("이 기기의 사본 삭제", role: .destructive) { voice.stop(); model.clearCache() }
-        } message: { Text("서버 기록과 데스크톱 원본은 남아요. 서버 공유를 끝내려면 데스크톱에서 연결을 해제해 주세요.") }
+        } message: { Text("서버의 계정 대화와 데스크톱의 기록은 남아요. 서버 기록은 계정의 데이터 관리 대상입니다.") }
     }
     private var welcome: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Image(systemName: "laptopcomputer.and.iphone").font(.system(size: 44)).foregroundStyle(.green).accessibilityHidden(true)
-                Text("컴퓨터에서 시작한 생각,\n여기서 이어가요.").font(.largeTitle.bold())
-                Text("관찰하고, 다른 관점으로 묻고, 작게 실천하고, 다시 돌아봅니다. 동양철학의 성찰과 배움을 일상의 대화로 이어가요.").foregroundStyle(.secondary)
+                Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 44)).foregroundStyle(.green).accessibilityHidden(true)
+                Text("요즘 어떤 일에\n시간을 많이 쓰세요?").font(.largeTitle.bold())
+                Text("일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요. 아직 정리되지 않아도 괜찮아요.").foregroundStyle(.secondary)
                 Text("정답을 정하는 사람은 나예요. 답하기 어려운 질문은 건너뛰어도 괜찮아요.").font(.callout)
                 if let signIn = model.signIn {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("연결 코드").font(.caption)
-                        Text(signIn.user_code).font(.title.monospaced().bold()).textSelection(.enabled)
                         Button("계정 로그인 열기") { openURL(signIn.verification_uri_complete) }.buttonStyle(.borderedProminent)
-                        Text("브라우저에서 코드를 확인하고 허용한 뒤 이 앱으로 돌아오세요. 채팅은 이 앱 안에서 이어져요.").font(.footnote)
+                        Text("계정 화면에서 로그인을 마친 뒤 돌아오세요. 이야기는 이 앱에서 나눠요.").font(.footnote)
                         Button("연결 취소") { model.cancelLogin() }
                     }.padding().background(.background, in: RoundedRectangle(cornerRadius: 18))
                 } else {
-                    Button("데스크톱 대화 연결하기") { consent = true }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.busy || !model.accountStorageReady).accessibilityIdentifier("linkDesktop")
+                    Button("내 계정으로 시작하기") { consent = true }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.busy || !model.accountStorageReady).accessibilityIdentifier("linkDesktop")
                     if !model.accountStorageReady {
                         Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage")
                         Text("iPhone 잠금을 해제한 뒤 다시 확인해 주세요. 기기의 메모는 계속 사용할 수 있어요.").font(.footnote)
@@ -146,7 +146,7 @@ struct SharedConversationView: View {
                     if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
 #endif
                 }
-                Text("기존 HP Studio 데스크톱에서 같은 계정으로 로그인한 뒤 연결할 대화를 선택해 주세요. 컴퓨터가 켜져 있고 그 대화가 열려 있어야 답변을 만들 수 있어요.").font(.footnote).foregroundStyle(.secondary)
+                Text("같은 계정의 HP Studio에서 나눈 이야기를 이어갑니다. 질문 대화에는 컴퓨터를 켜 둘 필요가 없어요. 제작이 필요해지면 기존 데스크톱 앱을 안내해요.").font(.footnote).foregroundStyle(.secondary)
                 if model.busy { ProgressView("연결 확인 중") }
                 status
             }.padding(24).frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
@@ -156,7 +156,7 @@ struct SharedConversationView: View {
         List {
             Section {
                 Text("하나의 작업, 하나의 대화").font(.headline)
-                Text("기존 데스크톱에서 연결한 개인 대화만 표시해요. 새 Mac 앱을 설치할 필요가 없어요.").font(.subheadline).foregroundStyle(.secondary)
+                Text("나를 알아가는 대화와 기존 데스크톱에서 연결한 작업을 함께 볼 수 있어요.").font(.subheadline).foregroundStyle(.secondary)
             }
             if model.conversations.isEmpty {
                 Section {
@@ -169,7 +169,7 @@ struct SharedConversationView: View {
                 Button { model.choose(item.id) } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.title).font(.headline).foregroundStyle(.primary)
-                        Text("컴퓨터에서 이어지는 대화").font(.caption).foregroundStyle(.secondary)
+                        Text(item.id == SharedConversationModel.personalID ? "어느 기기에서든 나누는 이야기" : "컴퓨터에서 이어지는 작업").font(.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 8)
                 }
             }
@@ -180,7 +180,12 @@ struct SharedConversationView: View {
         ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    Text("관찰 → 질문 → 실천 → 성찰").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    if model.isReflection && model.cache.messages.isEmpty {
+                        Text(model.opening).font(.largeTitle.bold()).accessibilityIdentifier("reflectionOpening")
+                        Text(model.openingHint).foregroundStyle(.secondary)
+                        Text("답하기 어려우면 다른 이야기부터 해도 좋아요.").font(.callout)
+                    }
+                    if model.isReflection && model.hasEarlierReflection { Text("최근 대화를 보여줘요. 이전 기록은 계정 내보내기에 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
                     ForEach(model.cache.messages) { message in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(message.role == "user" ? "나의 생각" : "함께 생각하기").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -191,9 +196,12 @@ struct SharedConversationView: View {
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
                             if request.status != "completed" { Text(request.text).textSelection(.enabled) }
-                            Text(request.statusLabel).font(.caption).foregroundStyle(.secondary)
+                            Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
                             if request.status == "local" { Button("같은 요청 다시 전송") { model.retry() }.disabled(model.busy || model.syncing) }
-                            if request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
+                            if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
+                        if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
+                                Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
+                            }
                         }.padding().background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
                     }
                     status
@@ -254,7 +262,7 @@ struct SharedConversationView: View {
                 contextField("style", title: "예시, 짧은 질문, 천천히 설명 중 무엇이 편한가요?")
                 Section {
                     Button("대화에 공유할 글 만들기") { if model.shareContextDraft() { showContext = false; focused = true } }
-                    Text("만들 준비가 되면 같은 대화를 컴퓨터에서 열어 작은 MVP로 이어가세요. 파일 변경이나 배포에 필요한 확인은 컴퓨터에서 해요.").font(.footnote).foregroundStyle(.secondary)
+                    Text("만들 준비가 되면 컴퓨터의 기존 HP Studio에서 ‘나의 질문’을 열고 ‘만들기로 이어가기’를 선택하세요. 확인한 의도만 새 제작 작업의 초안으로 옮겨요. 보내기와 파일 변경·배포 확인은 컴퓨터에서 해요.").font(.footnote).foregroundStyle(.secondary)
                 }
                 status
             }.navigationTitle("내 상황과 의도").navigationBarTitleDisplayMode(.inline).toolbar { Button("닫기") { showContext = false } }
@@ -270,10 +278,10 @@ struct SharedConversationView: View {
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary) }
         if model.syncing { ProgressView("대화 확인 중").font(.caption) }
     }
-    private func insert(_ text: String) { voice.stop(); model.editDraft(text); focused = true }
+    private func insert(_ text: String) { voice.stop(); focused = true; guard model.cache.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
         guard let id = model.selected, model.canSend, !model.syncing else { return }
-        focused = false; voiceRequestID = nil; let prefix = model.cache.draft
+        focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.cache.draft
         voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, transcript: { text in
             guard model.selected == id else { return }
             model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
@@ -284,12 +292,17 @@ struct SharedConversationView: View {
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
         })
     }
-    private func speakCompletedReply() {
-        guard let requestID = voiceRequestID, model.cache.request?.id == requestID,
-              let id = model.selected, speakAnswers,
-              let userIndex = model.cache.messages.firstIndex(where: { $0.id == requestID && $0.role == "user" }) else { return }
-        let following = model.cache.messages.dropFirst(userIndex + 1).prefix(while: { $0.role != "user" })
-        guard let answer = following.last(where: { $0.role == "assistant" }) else { return }
-        voiceRequestID = nil; voice.reply(answer.content, projectID: id)
+    private func reconcileVoiceReply() {
+        guard voice.turn.phase == .waiting, let requestID = voiceRequestID, let id = model.selected else { return }
+        let completedWaitExpired = voiceCompletionWaitStarted.map { Date().timeIntervalSince($0) >= 30 } ?? false
+        switch ConversationVoiceReply.resolve(id: requestID, request: model.cache.request, messages: model.cache.messages, sending: model.busy, readAloud: speakAnswers, completedWaitExpired: completedWaitExpired) {
+        case .waiting:
+            // Desktop event and request reads are separate. Allow the next poll to deliver its answer.
+            if model.cache.request?.status == "completed" && voiceCompletionWaitStarted == nil { voiceCompletionWaitStarted = Date() }
+        case .speak(let text): voiceRequestID = nil; voice.reply(text, projectID: id)
+        case .finished: voiceRequestID = nil; voice.stop()
+        case .needsAttention:
+            voiceRequestID = nil; voice.fail("음성 답변 기다리기를 멈췄어요. 보낸 말과 전송 상태를 대화에서 확인해 주세요.")
+        }
     }
 }

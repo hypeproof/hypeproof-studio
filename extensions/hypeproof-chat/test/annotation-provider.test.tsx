@@ -267,7 +267,9 @@ async function main() {
   {
     const { chatPanelReducer, chatPanelInitialState } = await import('../webview-ui/src/App');
     let active = 'task-a';
-    const store = { getView: () => ({ activeTaskId: active, revision: 1, tasks: [] }), getHistory: () => [], select: async (id: string) => { active = id; }, create: async () => { active = 'task-new'; } };
+    const getView = () => ({ activeTaskId: active, revision: 1, tasks: [] });
+    // Match TaskWorkspaceStore.create's view result, also used by reviewed-intention handoff.
+    const store = { getView, getHistory: () => [], select: async (id: string) => { active = id; return getView(); }, create: async () => { active = 'task-new'; return getView(); } };
     const h = host({
       context: { secrets: { get: async () => undefined }, globalState: { get: () => undefined, update: async () => {} }, workspaceState: { get: (_k: string, f: unknown) => f } },
       currentTaskStore: () => store, setConnectionChanging: async () => {}, retryInterruptedHistory: async () => {}, postHistory: async () => {}, endTaskCommandAllows() {},

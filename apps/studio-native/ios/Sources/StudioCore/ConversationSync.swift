@@ -10,6 +10,19 @@ public struct SharedConversation: Codable, Identifiable, Sendable {
     public let revision: Int
     public let updated_at: Double
 }
+public struct PersonalReflection: Decodable, Sendable {
+    public struct State: Decodable, Sendable {
+        public let id: String
+        public let revision: Int
+        public let messages: [SharedMessage]
+        public let has_earlier: Bool
+        public let turn: SharedRequest?
+    }
+    public let state: State
+    public let opening: String
+    public let hint: String
+    public let acknowledged_id: String?
+}
 public struct SharedMessage: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let role: String
@@ -32,6 +45,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
     public var status: String
     public var created_at: Double
     public var updated_at: Double
+    public var expectedRevision: Int?
     public static func pending(_ text: String) throws -> SharedRequest {
         let checked = try checkedText(text)
         let now = Date().timeIntervalSince1970 * 1000
@@ -41,6 +55,15 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, value.utf16.count <= 4000, !value.contains("\0") else { throw StudioError.message("4,000자 이내로 적어 주세요. 이모지는 길이에 따라 여러 글자로 셀 수 있어요.") }
         return value
+    }
+    public var reflectionStatusLabel: String {
+        switch status {
+        case "local": return "이 기기에 저장됨 · 전송 대기"
+        case "running", "pending": return "질문을 이어가고 있어요"
+        case "completed": return "같은 계정의 대화에 저장됨"
+        case "unknown": return "완료 여부를 확인하지 못했어요. 자동으로 다시 실행하지 않아요."
+        default: return "답변을 받지 못했어요. 보낸 이야기는 남아 있어요."
+        }
     }
     public var outstanding: Bool { ["local", "pending", "running"].contains(status) }
     public var statusLabel: String {
@@ -55,7 +78,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
         }
     }
 }
-/// Only a cache of the original desktop conversation. No model execution or local task ownership.
+/// Account-scoped transcript cache and durable outbox; execution remains in Service or the desktop host.
 public struct ConversationCache: Codable, Sendable {
     public var messages: [SharedMessage] = []
     public var cursor = 0
@@ -91,9 +114,43 @@ public struct ConversationCache: Codable, Sendable {
         guard page.cursor == last else { throw SyncFailure.invalidResponse }
         messages = next; cursor = page.cursor
     }
-    public mutating func enqueue() throws {
+    public mutating func applyReflection(_ value: PersonalReflection) throws {
+        let state = value.state
+        func validID(_ id: String) -> Bool { id.range(of: "^[A-Za-z0-9._:-]{1,128}$", options: .regularExpression) != nil }
+        guard state.id == "personal-reflection", state.revision >= cursor, state.messages.count <= 80,
+              value.opening.utf16.count <= 500, value.hint.utf16.count <= 1000,
+              Set(state.messages.map(\.id)).count == state.messages.count,
+              state.messages.allSatisfy({ validID($0.id) && ["user", "assistant"].contains($0.role) && $0.content.utf16.count <= 32000 && $0.created_at.isFinite })
+        else { throw SyncFailure.invalidResponse }
+        if let turn = state.turn {
+            guard validID(turn.id), turn.text.utf16.count <= 4000,
+                  ["running", "pending", "completed", "failed", "unknown", "cancelled"].contains(turn.status), turn.updated_at.isFinite
+            else { throw SyncFailure.invalidResponse }
+        }
+        messages = state.messages; cursor = state.revision
+        let acknowledged = request.map { pending in value.acknowledged_id == pending.id || state.messages.contains(where: { $0.id == pending.id && $0.role == "user" && $0.content == pending.text }) } ?? false
+        if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
+    }
+    public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
-        request = try .pending(draft); draft = ""
+        request = try .pending(draft)
+        if reflection { request?.expectedRevision = cursor }
+        draft = ""
+    }
+}
+/// A voice turn follows its own request, never a newer turn from another device.
+public enum ConversationVoiceReply: Equatable {
+    case waiting, speak(String), finished, needsAttention
+    public static func resolve(id: String, request: SharedRequest?, messages: [SharedMessage], sending: Bool, readAloud: Bool, completedWaitExpired: Bool = false) -> Self {
+        guard let request, request.id == id else { return .needsAttention }
+        if request.status == "completed" {
+            if !readAloud { return .finished }
+            guard let index = messages.firstIndex(where: { $0.id == id && $0.role == "user" }),
+                  let answer = messages.dropFirst(index + 1).prefix(while: { $0.role != "user" }).last(where: { $0.role == "assistant" }) else { return completedWaitExpired ? .needsAttention : .waiting }
+            return .speak(answer.content)
+        }
+        if ["pending", "running"].contains(request.status) || (request.status == "local" && sending) { return .waiting }
+        return .needsAttention
     }
 }
 public struct DeviceSignIn: Decodable, Sendable {
@@ -115,6 +172,11 @@ public enum SyncFailure: Error, LocalizedError {
         switch self {
         case .invalidResponse: return "연동 응답을 확인하지 못했어요. 저장된 기록은 유지해요."
         case .http(let status, let code):
+            if code == "reflection_access_required" { return "이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요." }
+            if code == "reflection_budget_limit" { return "오늘의 AI 사용 한도에 도달했어요. 기록은 그대로 남아 있어요." }
+            if code == "reflection_busy" { return "다른 기기에서 답변을 받고 있어요. 잠시 뒤 같은 대화를 확인해 주세요." }
+            if code == "reflection_changed" { return "다른 기기에서 대화가 바뀌었어요. 새 내용을 확인한 뒤 보내 주세요." }
+            if code == "reflection_not_ready" { return "새 질문 대화를 준비하고 있어요. 기존 기록은 그대로 남아 있어요." }
             if status == 401 || status == 403 { return "이 기기의 연결 권한을 확인해 주세요. 다시 로그인하면 이어갈 수 있어요." }
             if status == 404 { return "이 대화의 연결이 해제됐거나 서버 연동이 아직 준비되지 않았어요." }
             if code == "slow_down" { return "연결 확인 중이에요. 잠시 기다려 주세요." }
@@ -134,7 +196,7 @@ public final class ConversationService: @unchecked Sendable {
     }
     private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil) async throws -> (Data, Int) {
         guard let url = URL(string: path, relativeTo: base)?.absoluteURL, url.host == base.host else { throw SyncFailure.invalidResponse }
-        var req = URLRequest(url: url, timeoutInterval: 25)
+        var req = URLRequest(url: url, timeoutInterval: path == "/v1/me/reflection/turns" ? 120 : 25)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
@@ -172,6 +234,20 @@ public final class ConversationService: @unchecked Sendable {
         struct List: Decodable { let conversations: [SharedConversation] }
         let (data, _) = try await request("/v1/me/conversations", token: token)
         return try JSONDecoder().decode(List.self, from: data).conversations
+    }
+    public func reflection(_ token: String) async throws -> PersonalReflection {
+        let (data, _) = try await request("/v1/me/reflection", token: token)
+        return try JSONDecoder().decode(PersonalReflection.self, from: data)
+    }
+    public func reflect(_ value: SharedRequest, token: String) async throws -> PersonalReflection {
+        guard let revision = value.expectedRevision, revision >= 0 else { throw SyncFailure.http(409, "reflection_changed") }
+        let (data, _) = try await request("/v1/me/reflection/turns", method: "POST", body: ["id": value.id, "text": value.text, "revision": revision], token: token)
+        return try JSONDecoder().decode(PersonalReflection.self, from: data)
+    }
+    public func abandonReflection(_ id: String, token: String) async throws -> PersonalReflection {
+        _ = try path(id)
+        let (data, _) = try await request("/v1/me/reflection/turns/" + id + "/abandon", method: "POST", body: [:], token: token)
+        return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
     public func events(_ id: String, after: Int, token: String) async throws -> ConversationPage {
         let (data, _) = try await request(try path(id) + "/events?after=\(after)", token: token)
