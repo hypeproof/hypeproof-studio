@@ -84,9 +84,16 @@ Chosen by the Delivery Captain on 2026-11-12; they need sponsor confirmation.
 |---|---|---|
 | `attribution.instructor_implies_partner` | `true` | An instructor who belongs to a partner organisation teaches for it, so an instructor code alone also registers that partner. A partner code naming a different organisation than the instructor's is refused instead of guessed. |
 | `referral.disabled_keeps_bindings` | `true` | Disabling a partner or instructor stops new registrations. Sellers already registered keep paying the referral until an operator changes their binding, because the v1 attribution was permanent and a contract end is a human decision. |
-| `attribution.lookups_per_hour` | 20 per account (and three times that per network address) | Codes are 50-bit random values; together with this limit they cannot be enumerated. |
+| `attribution.lookups_per_hour` | 20 per account | Codes are 50-bit random values; together with this limit they cannot be enumerated. |
+| `attribution.lookups_per_hour_per_address` | 300 per network address | A classroom registers behind one address: about forty learners checking a code twice and registering once fit inside it. |
 
-Code format: a kind letter (`P` partner, `I` instructor) and ten Crockford base32 characters, shown as `P-ABCDE-FGHJK`. The Service stores only a keyed hash of the code.
+Code format: a kind letter (`P` partner, `I` instructor) and ten Crockford base32 characters, shown as `P-ABCDE-FGHJK`. The Service stores only a keyed hash of the code (keyed with the Service signing secret, so a rotation of that secret means reissuing every code).
+
+How the rows apply:
+- The binding in force at payment time decides an order's referral lines; a paid sale is never recomputed after a rebind.
+- If an operator binds a seller before their first publication, that binding stands and the seller is not asked again.
+- Referral statements are per payment month (KST). A refund after that month was paid out nets against the next payout (`refund.after_split`), which ships with the payout run after #3419.
+- Deleting an account deletes the sealed payout account and the store profile; ledger lines stay as the record of past sales.
 
 ## Rollout switch (not a policy value)
 
