@@ -1,8 +1,9 @@
 // DES-SHELL-04 (CGP-SHELL-D-004; REQ-SHELL-05 / REQ-STUDIO-JOIN-LINK): the join screen a class link
 // opens shows the class above an empty, focused code field; the field is a 44px learner control with
 // 14px text that keeps the Korean IME out (type=password) and never blocks paste; a refused code is
-// said directly under the field, in the flow, not in a toast and not at the card's end. The same
-// field serves the ordinary start page (체험 and 수업 forms), so both paths are measured.
+// said directly under the field, in the flow, not in a toast and not at the card's end; if an IME
+// composition is open anyway, Enter belongs to it and never submits the code. The same field serves
+// the ordinary start page (체험 and 수업 forms), so both paths are measured.
 //
 // Mounts the real webview bundle on the start surface in headless Chromium (CDP, no window, no
 // clipboard) and measures it at 320 and 1280 px, dark and light host themes, and forced colours.
@@ -126,6 +127,27 @@ try{for(const run of runs){
   await waitFor(`!document.getElementById('course-code')`,'the choices');
   m=await measure();label=`${label0} choices after a refusal: ${JSON.stringify(m)}`;
   ok(m.errors===1&&m.alerts===1,'the refusal is still shown once after leaving the form: '+label);
+
+  // ── 5. An open IME composition owns Enter (CGP-DS-R-027) ─────────────────────────────────────
+  // The password type keeps the OS IME out on the shipped platforms; if a composition is open anyway,
+  // Enter commits the syllable and must not submit the half-typed code. Forced through CDP here.
+  ok(await click('AI 체험하기'),'the trial form opens again: '+label0);
+  await waitFor(`document.activeElement?.id==='course-code'&&document.getElementById('course-code').value===''`,'the empty trial code field');
+  const enter=async()=>{for(const type of ['keyDown','keyUp'])await b.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,...(type==='keyDown'?{text:'\r',unmodifiedText:'\r'}:{})});};
+  const submits=()=>ev(`window.sent.filter(m=>m.type==='connectCourse').length`);
+  const before=await submits();
+  await b.send('Input.insertText',{text:'ABC'});
+  await b.send('Input.imeSetComposition',{text:'하',selectionStart:1,selectionEnd:1});
+  await waitFor(`document.getElementById('course-code').value==='ABC하'`,'the open composition');
+  await enter();
+  await new Promise(r=>setTimeout(r,100));
+  ok(await submits()===before,'Enter during an open composition does not submit the code: '+label0);
+  // Positive control: once the composition is gone, Enter submits what the field holds.
+  await b.send('Input.imeSetComposition',{text:'',selectionStart:0,selectionEnd:0});
+  await waitFor(`document.getElementById('course-code').value==='ABC'`,'the composition cancelled');
+  await enter();
+  await waitFor(`window.sent.filter(m=>m.type==='connectCourse').length===${before+1}`,'the Enter submission');
+  ok((await ev(`window.sent.filter(m=>m.type==='connectCourse').at(-1).token`))==='ABC','Enter without a composition submits the field: '+label0);
 }
-console.log(`PASS join code field: ${checks} checks; class above an empty focused 44px password field, paste, refusal under the field (320/1280 px, dark/light, forced colours)`);
+console.log(`PASS join code field: ${checks} checks; class above an empty focused 44px password field, paste, refusal under the field, Enter held during an IME composition (320/1280 px, dark/light, forced colours)`);
 }finally{await b.close();}

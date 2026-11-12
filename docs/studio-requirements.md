@@ -2246,7 +2246,9 @@ explicit entry).
   password field to ASCII-capable input sources on macOS and turns the IME off on Windows and
   Linux. No other attribute does this on a desktop: `inputmode` has no `latin` value and only steers
   on-screen keyboards, and `lang` and `autocapitalize` do not switch an IME; `autocomplete="off"`
-  and `spellcheck=false` stay. Paste is never cancelled (neither the paste event nor Ctrl/Cmd+V).
+  and `spellcheck=false` stay. If a composition is open anyway (an IME that ignores the field
+  type), Enter belongs to it (CGP-DS-R-027, the shared `imeComposing` guard) and never submits the
+  half-typed code. Paste is never cancelled (neither the paste event nor Ctrl/Cmd+V).
   A refused code is said directly under the field, before the help line and 코드 확인하기, in the
   flow (`role="alert"`, 14px, never a toast), and the field takes `aria-invalid="true"`: the host
   marks every refusal of a submitted code (`errorAt: "code"`: empty, 강사용 code, another class's
@@ -2287,6 +2289,7 @@ carrying no class). DES-SHELL-04: `extensions/hypeproof-chat/test/join-code-fiel
 (the real webview bundle in headless Chromium at 320 and 1280 px, dark and light host themes and
 forced colours: the class line above the empty, focused field; 44px and 14px; a password field
 without autocomplete or spellcheck; paste and Ctrl/Cmd+V not cancelled and pasted text submitted;
+Enter during a composition forced open through CDP not submitting, and submitting once it is gone;
 the refusal under the field, before the help line and the button, in the flow, 14px, the field
 `aria-invalid`, the code not in the page; another error and a refusal after leaving the form in the
 card's error area; the 체험 form measured the same way) and the host half of `join-link.smoke.mjs`

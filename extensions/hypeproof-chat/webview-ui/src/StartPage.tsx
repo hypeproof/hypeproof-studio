@@ -16,6 +16,7 @@ import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice, freeEndedBody } from "../../src/freeStart";
 import { PURCHASE_COPY } from "../../src/passPurchase";
 import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
+import { imeComposing } from "./imeGuard";
 
 /** The last two segments of a workspace path ("…/local-trial-744/workspace"); the full path stays in the title and accessible name. */
 export function shortWorkspace(path: string): string {
@@ -237,8 +238,9 @@ export function StartPage() {
           {/* DES-SHELL-04 — type=password is what keeps the Korean IME out of the code: Chromium (Electron, the
               VS Code webview) gives password fields ASCII-only input on macOS and no IME on Windows and Linux.
               inputmode has no "latin" value and only steers on-screen keyboards; lang and autocapitalize do
-              not switch a desktop IME. Paste is never blocked. */}
-          <input ref={input} id="course-code" type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="받은 코드를 여기에 붙여넣으세요" autoComplete="off" spellCheck={false} disabled={state.checking} aria-invalid={fieldError || undefined} aria-describedby={joinClass ? "join-link-note code-help connection-error" : "code-help connection-error"}/>
+              not switch a desktop IME. Paste is never blocked. If a composition is open anyway (an IME
+              that ignores the field type), Enter belongs to it (CGP-DS-R-027) and never submits the code. */}
+          <input ref={input} id="course-code" type="password" value={token} onChange={e => setToken(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && imeComposing(e)) e.preventDefault(); }} placeholder="받은 코드를 여기에 붙여넣으세요" autoComplete="off" spellCheck={false} disabled={state.checking} aria-invalid={fieldError || undefined} aria-describedby={joinClass ? "join-link-note code-help connection-error" : "code-help connection-error"}/>
           {fieldError && errorLine("studio-error studio-field-error")}
           <p id="code-help" className="studio-help">코드는 이 기기에 안전하게 저장됩니다.</p>
           <button className="studio-primary" disabled={state.checking || !token.trim()} type="submit">{state.checking ? "코드 확인 중…" : "코드 확인하기"}<span aria-hidden="true">→</span></button>
