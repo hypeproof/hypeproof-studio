@@ -42,6 +42,7 @@
     "test:classroom-ops-question": "node --experimental-strip-types --experimental-sqlite classroom/ops-question.mjs",
 
     "test:classroom-ops-question-card": "node --experimental-strip-types --experimental-sqlite classroom/ops-question-card.mjs",
+    "test:classroom-ops-names": "node --experimental-strip-types --experimental-sqlite classroom/ops-names.mjs",
     "test:classroom-ops-lesson-settings": "node --experimental-strip-types --experimental-sqlite classroom/ops-lesson-settings.mjs",
     "test:classroom-ops-help": "node --experimental-strip-types --experimental-sqlite classroom/ops-help.mjs && node classroom/help-request.mjs",
     "test:classroom-ops-results": "node --experimental-strip-types --experimental-sqlite classroom/ops-results.mjs",
