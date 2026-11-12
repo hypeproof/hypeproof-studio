@@ -55,6 +55,7 @@ try {
   assert.equal(await T(b, 'ops-state'), '이 수업은 배정된 강사만 운영합니다. 담당 강사(owner)에게 공동 강사 추가를 요청하세요. 담당 강사: teacher-a');
   assert.equal(await b.locator('#ops-seats .ops-seat').count(), 0, 'no learner is shown to an unassigned instructor');
   assert.equal(await b.locator('#ops-team-denied').isVisible(), true); assert.equal(await T(b, 'ops-team-me'), 'teacher-b', 'the refused instructor still sees the id to hand over');
+  assert.equal(await b.locator('#ops-setup').isVisible(), false, 'no run setup form is drawn for a run the caller cannot operate (dev host E5 finding)');
   ok('an unassigned instructor sees the not_run_instructor copy, the owner and their own id — and no learner');
 
   // ── the owner adds the colleague; the colleague operates as co-instructor ──
