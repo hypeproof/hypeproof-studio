@@ -185,6 +185,8 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         await fn();
       } catch (error) {
         const checks = error instanceof StoreClientError && Array.isArray(error.detail.messages) ? (error.detail.messages as string[]) : undefined;
+        // The course stopped selling while the panel was open: show the block view itself, not a stale form.
+        if (error instanceof StoreClientError && error.code === "course_store_blocked") return void (await load("sell", { busy: false }));
         await push({ busy: false, error: storeErrorMessage(error), checks });
       }
     };

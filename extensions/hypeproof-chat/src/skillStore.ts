@@ -295,7 +295,7 @@ const ERRORS: Record<string, string> = {
   payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
   invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
   holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
-  course_store_blocked: "이 과정에서는 스킬을 팔 수 없어요. 청소년 과정 수강생은 스토어에 스킬을 올리거나 팔 수 없어요.",
+  course_store_blocked: STORE_COPY.courseBlocked,
   receipt_unavailable: "지금은 영수증을 불러올 수 없어요. 잠시 뒤 다시 시도해 주세요.",
   order_not_found: "이 결제 내역을 찾을 수 없어요.",
   identity_failed: "본인인증을 하지 못했어요. 정보를 확인한 뒤 다시 시도해 주세요.",
