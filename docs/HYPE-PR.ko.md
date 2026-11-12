@@ -77,6 +77,10 @@ App 토큰을 요청한다. `--repo` 또는 `origin`을 사용하고 필요하�
 멤버별 신규 App은 해결 경로가 아니다. workflow 쓰기는
 `HYPEPROOF_AGENT_WORKFLOWS=1`와 사용자 OAuth `workflow` scope가 함께 필요하다.
 기본 토큰에 organization Projects·관리·멤버·Actions·배포 권한을 추가하지 않는다.
+이미 허가된 workflow 실행은 `HYPEPROOF_AGENT_ACTIONS=1`로 별도 선택한다.
+이때 기본 토큰 대신 저장소 하나의 `metadata:read`, `contents:read`,
+`actions:write`만 요청한다. workflow 파일 수정과 동시에 선택할 수 없으며
+실행 대상의 기존 승인·environment gate를 그대로 따른다.
 
 팀원은 자연어로 연결과 개발을 요청한다. 에이전트가 `ensure --repo ... --json`으로
 진단하고 최초 동의가 필요한 때만 설명과 질문을 제공한다. 동의 전에는 인증 정보를
@@ -93,11 +97,49 @@ App 토큰을 요청한다. `--repo` 또는 `origin`을 사용하고 필요하�
 명시적 동의와 철회, 저장소 제한, workflow opt-in, 인증 실패 시 사람 신원으로
 실행하지 않음을 검증한다. 클라이언트 테스트 PASS는 브로커 배포·실발급·GitHub
 쓰기 성공의 증거가 아니다. 운영 활성화는 별도 실증 결과로 기록한다.
+Actions 프로필은 기본 scope 보존, 실행 전용 scope, 과도한 grant 거부,
+workflow 수정과 동시 선택 거부, 기존 동의 재사용과 진단 토큰 폐기를 검증한다.
 `ensure`의 `ready`는 실제 발급과 진단 토큰 폐기까지 성공했을 때만 반환한다.
 새 기기·동의 재사용·미로그인·권한 거부·서비스 장애·잘못된 설정·철회·비밀 출력
 금지를 `tests/hype_pr/test_agent_auth_ensure.py`로 검증한다. 서비스/머지 정책은
 변경하지 않는다.
 실제 사람이 작성한 커밋은 보존하고 에이전트가 작성한 커밋만 신원을 교정한다.
+
+`write_guard.py`는 로컬 적용 경로의 실제 `viewer.login`을 GitHub에 조회해
+`hypeproof-agent[bot]`인지 확인한다. wrapper 표시나 `--author`만으로 허용하지
+않는다. 기존 board-sync CI는 App 발급 단계의 토큰과 표시를 전달하되 동일한
+실제 신원 검사를 거친다. 토큰 부재·잘못된 신원·조회 실패는 변경 전에 차단하며 원문 인증 오류나
+토큰을 출력하지 않는다. 읽기와 dry-run은 이 검사를 요구하지 않는다.
+Work 전송 경로는 기존 `work_host.js`의 연결된 작성자 검사를 유지한다.
+`tests/hype_pr/test_write_guard.py`는 CLI 부정 대조와 정상 봇 대조를 검증한다.
+실패의 `recovery`는 GitHub 쓰기와 제품 개발을 분리하고, 보드 실패에는 생성된
+PR URL과 `replay_create: false`를 제공한다. 공통 가이드의 실패 범위 규칙에 따라
+독립적인 개발·검증을 계속하며 리뷰·배포 승인이나 비용 제한을 우회하지 않는다.
+
+### Board-scoped token and definite board results (#548, #565)
+
+The ordinary single-repository token has no `organization_projects`, so it cannot see
+the private boards. Board writes therefore request a separate, explicit profile through
+`scripts/agent-identity/board_token.py`: `organization_projects: write` plus only
+`metadata`, `issues` and `pull_requests` read, for the placed item's own repository.
+`create --apply` mints it after the PR exists, runs `board.py set` with it for the PR
+and its issue, and revokes it. Other board callers use
+`HYPEPROOF_AGENT_BOARD=1 with-agent-identity.sh ...`; the wrapper declares
+`HYPEPROOF_AGENT_TOKEN_PROFILE` and never authenticates git with the board profile.
+An enrolled member asks the broker with `"board": true` and never falls back to the
+custodian key; a broker that does not issue the profile yet returns a definite block.
+The custodian path reads the live installation permission before minting.
+
+The board result is `placed` or `blocked`, never a raw GitHub string. A block carries
+`reason` (for example `broker_board_profile_unavailable`, `board_token_not_requested`,
+`app_projects_permission_missing`, `board_project_not_found`, `board_rate_limited`),
+`token.had` versus `token.needed`, `app_installation` (live when GitHub answered,
+otherwise the 2026-11-10 record), `tracking_issue`, and `recovery.command`, which
+reruns only the board step: `pr.py board --repo R --pr N --issue M --apply`. The PR
+URL is kept and `replay_create` is false. Agents relay `reason`, `message` and
+`recovery.instruction` as given; GitHub's text is redacted supporting `detail`.
+`tests/hype_pr/test_board_token.py`, `tests/hype_pr/test_board_hook.py` and
+`tests/hype_loop/test_board.py` cover both paths with mocked GitHub.
 
 ## Agent가 PR을 만드는 흐름
 
@@ -163,6 +205,27 @@ stderr에 낸다. 확인한 경로, 이유, 고치는 명령(`gh repo clone hype
 clone을 추가해도 준비가 낡지 않는다. clone은 작업 repo의 main checkout 옆,
 `HYPEPROOF_HARNESS` 옆, 엔진을 만든 정본 checkout 옆, 실행 중인 Harness checkout 옆 순서로 찾는다. 일부러 API로만 읽으려면
 `HYPEPROOF_NO_LOCAL_SOURCES=1`을 설정한다. 그러면 안내도 나오지 않는다.
+
+## Preview before approval (Lab, #566)
+
+```bash
+python3 scripts/hype-pr/pr.py preview --repo hypeproof/hypeprooflab --pr N \
+  [--json out.json] [--markdown out.md] [--comment [--apply]]
+```
+
+`preview` (`scripts/preview/preview.py`) maps the PR diff to the public routes it
+affects (changed `web/src/app/**/page.*`, pages and layouts importing a changed module
+through the `@/` alias or relative imports), finds the Vercel Preview deployment of the
+exact head commit through GitHub deployments, and fetches each route on that preview and
+on production. It compares the pages with the text the diff adds and removes. Results:
+`shown` (new text found, absent from production), `partly`, `old_text`, `variant`
+(neither old nor new text on the preview while production shows the old text: a
+different build variant, usually a flag), `already_live`, `not_visible`, `no_text`,
+`members_only` (checked only on https://preview.hypeproof-ai.xyz), `dynamic`,
+`unreachable`. It reads only git objects in the local Lab checkout and changes no
+settings. `--comment --apply` posts or updates one marked bot comment and needs
+`with-agent-identity.sh`. Exit 0 = every checked route shows the change, 3 = attention
+needed, 4 = preview not deployed yet. Tests: `tests/hype_pr/test_preview.py`.
 
 ## Work GitHub transport
 

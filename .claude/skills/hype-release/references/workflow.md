@@ -192,3 +192,90 @@ Previous copies are kept beside the installation as hidden backups. Receipts bin
 source revision, dirty-working-tree status and every installed file hash. A local
 install or fixture pass does not mean teammates have installed it, main merged,
 or remote provider operations have been exercised.
+
+## Native TestFlight operation (Harness #579)
+
+This adapter uses the existing Studio native candidate gate and Apple workflow;
+Harness does not implement signing, provisioning or a second approval engine.
+Copy `examples/native-candidate.json` and replace its source/PR/change placeholders.
+There is no RC tag or desktop version in this candidate. The first supported target
+is Studio iOS, `studio-apple-testflight.yml`, `apple-native-preview`, ref `main`.
+The exact source must still be that ref's tip immediately before dispatch.
+Malformed native workflow/source identity is refused before account attribution,
+broker loading or coordination-store access, as well as at the existing state gate.
+Preparation also requires the workflow's `workflow_dispatch` to declare the three
+string inputs `expected_sha`, `operation_id` and `request_digest` (Studio #3768).
+An older workflow is refused before any execution reservation or Actions dispatch;
+Studio's independent legacy/manual invocation remains unchanged.
+
+Use a trusted Harness checkout containing the canonical Actions broker client from
+Harness #553. Native operations run that checkout's `scripts/hype-release/release.py`
+and load its sibling `scripts/agent-identity/agent-auth.py`. Installed skill callers
+invoke the same canonical command below; a copied release runtime without that
+broker refuses native operations. No CLI or candidate field selects an alternative
+authentication module, and the broker is never copied into the skill runtime. An old
+client, failed broker or incorrect grant blocks execution without credential fallback.
+The authenticated human identity is read only (`GET /user`); ordinary bot grants
+write the state branch and read source PRs, while a separate Actions grant reads CI
+and dispatches this one workflow. No token enters arguments, state or the report.
+
+```bash
+native=(python3 /trusted/hypeproof-harness/scripts/hype-release/release.py \
+  --candidate /tmp/native-candidate.json --policy /tmp/release-policy.json \
+  --state-repo hypeproof/hypeproof-harness)
+"${native[@]}" init
+"${native[@]}" prepare --checkout /path/to/exact/studio/apps/studio-native
+"${native[@]}" testflight --checkout /path/to/exact/studio \
+  --operation ios-upload-1 --quote /tmp/native-quote.json --plan
+# Confirm kind, candidateDigest, requestDigest, provider cost and expiry in the quote.
+"${native[@]}" testflight --checkout /path/to/exact/studio \
+  --operation ios-upload-1 --quote /tmp/native-quote.json
+"${native[@]}" reconcile --operation ios-upload-1
+"${native[@]}" status
+```
+
+The product Git root is normalized from `--checkout`, independently of the shell
+cwd. `prepare` and first execution reuse that exact product revision's
+`verify-native-candidate.py` gate with Actions reads and source-PR inclusion.
+If native CI changes between preparation and execution, prepare and quote again.
+No dispatch occurs before the shared CAS reservation. Even an accepted dispatch
+returns BLOCKED/UNKNOWN until reconciliation can observe the upload; this is
+intentional and is not an instruction to retry. A lost response stays UNKNOWN.
+There is no native rerun/unlock command. A missing, failed, ambiguous or incomplete
+run requires owner investigation through the existing policy, not a new operation.
+
+Reconciliation scans only this workflow and exact source (at most 1,000 runs),
+requires the exact `studio-testflight:<operation_id>:<request_digest>` run name,
+and validates the current run attempt. It reads the matching gate artifact and
+`upload-receipt.json`, checks their embedded request, source and run identities,
+checks the native CI is still successful at its prepared attempt, and hashes the
+IPA against the receipt. A run or CI rerun during collection prevents completion.
+Only then does the operation become DONE with `state: uploaded`. Apple processing
+and tester availability remain `NOT_OBSERVED`; signed-in device acceptance remains
+`NOT_RUN`. A workflow's success or a dispatch response alone cannot establish them.
+
+The same CAS write registers the verified IPA in `state.artifacts`, with its SHA-256,
+size, version/build, source, operation/request digest, release run/attempt and
+Actions artifact provenance. This enables package and installed-app observations
+through `check`; registration itself creates no passing check. Later distinct
+uploads append their own package identities and preserve earlier packages/checks.
+Conflicting bytes or provenance for an existing run/attempt are refused rather
+than replacing prior evidence. A failed CAS leaves both collection and completion
+uncommitted; reread and reconcile the same operation instead of dispatching again.
+
+The native operation uses the same owner, budget, attempt limit, cost observations,
+UNKNOWN fence and CAS state store as desktop RCs. Existing desktop state branch
+keys and commands retain their behavior. Desktop collect/report/promote commands
+are intentionally unavailable for native candidates; `status` is the native
+handoff record until separate Apple/device observations exist.
+
+Upload, simulator journey, signed-in journey and physical-device acceptance are
+separate evidence boundaries. Native results explicitly retain `simulatorJourney`,
+`signedInJourney` and `deviceAcceptance: NOT_RUN`, with `readiness: NOT_ESTABLISHED`;
+a successful build is not a working conversation, login or voice journey. These
+missing observations do not block test distribution, which is needed to obtain
+physical evidence. Reusable product journey coverage is tracked in
+[Studio #3771](https://github.com/hypeproof/hypeproof-studio/issues/3771). Record
+observed checks through the existing `check` command with exact source/package and
+host identity; do not relabel a receipt as user acceptance. Apple processing and
+tester availability must be observed before describing the candidate as available.

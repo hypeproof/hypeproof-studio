@@ -14,6 +14,8 @@ from transport import ApiError, file_hash, safe_name
 
 def product_checkout(path, candidate):
     path = Path(path).resolve()
+    # A caller may point at an app subdirectory from any working directory.
+    path = Path(subprocess.check_output(["git", "-C", str(path), "rev-parse", "--show-toplevel"], text=True).strip())
     def git(*args):
         return subprocess.check_output(["git", "-C", str(path), *args], text=True).strip()
     require(git("rev-parse", "HEAD") == candidate["sourceSha"], "product checkout must be at exact candidate SHA")

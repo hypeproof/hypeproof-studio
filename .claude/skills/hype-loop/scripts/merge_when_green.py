@@ -27,7 +27,7 @@ died with that shell, and three green PRs sat unmerged. So:
 
 After a merge the watcher moves the PR and every issue it closes (its
 closingIssuesReferences) to Done with scripts/board/board.py, through the same
-wrapper (#397). The PR is merged by then, so a board failure never changes the exit
+wrapper with HYPEPROOF_AGENT_BOARD=1, the board-scoped token (#397, #565). The PR is merged by then, so a board failure never changes the exit
 code: it is printed on stderr and logged in the exit event's `board`.
 """
 from __future__ import annotations
@@ -102,9 +102,16 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
     """The watcher's verdict for one read, or None to keep waiting."""
     if stopped():
         return "stopped"
-    got = gh("pr", "view", str(pr), "--repo", repo, "--json",
-             "state,number,author,baseRefName,headRefOid,isDraft,labels,latestReviews,reviews,"
-             "mergeStateStatus,mergeable,reviewDecision,statusCheckRollup")
+    try:
+        rule = monitor.load_release_delegations().get(repo)
+    except Exception as exc:
+        log(repo, pr, "poll", policy_error=type(exc).__name__)
+        return "policy_blocked"
+    fields = ("state,number,author,baseRefName,headRefOid,isDraft,labels,latestReviews,reviews,"
+              "mergeStateStatus,mergeable,reviewDecision,statusCheckRollup")
+    if rule:
+        fields += ",headRefName,files,commits,changedFiles,isCrossRepository"
+    got = gh("pr", "view", str(pr), "--repo", repo, "--json", fields)
     if got.returncode != 0:
         log(repo, pr, "poll", error=(got.stderr or got.stdout).strip()[:200])
         return None
@@ -115,6 +122,8 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
         if repo not in monitor.load_auto_merge_policy_repos():
             log(repo, pr, "poll", blockers=["policy_forbids_machine_merge"])
             return "policy_blocked"
+        monitor.enrich_check_origins(repo, [state])
+        monitor.enrich_release_enrollment(repo, [state], rule)
         assessment = monitor.build_queue([state])[0]
     except Exception as exc:
         log(repo, pr, "poll", policy_error=type(exc).__name__)
@@ -133,6 +142,8 @@ def poll(repo: str, pr: int, head: str, settling: bool) -> str | None:
         return "policy_blocked"
     if not checks:
         return None  # no check run yet: never merge before CI has started
+    if state.get("_checkSnapshotUnavailable"):
+        return None  # Unknown current origin is not a final failed-check verdict.
     if any(name != monitor.CONTROL_PLANE_GATE for name in bad) and not pending:
         return "check_failed"
     if merge_state == "DIRTY":
@@ -186,8 +197,10 @@ def board_done(repo: str, pr: int) -> dict:
         else:
             error = f"closing issues not read: {(got.stderr or got.stdout).strip()[:200]}"
         for url in urls:
+            # Board writes need the board-scoped bot token, not the repository one (harness#565).
             done = subprocess.run(["bash", str(WRAPPER), sys.executable, str(BOARD), "set", url, "--state", "done"],
-                                  capture_output=True, text=True, timeout=300)
+                                  capture_output=True, text=True, timeout=300,
+                                  env={**os.environ, "HYPEPROOF_AGENT_BOARD": "1"})
             items.append({"url": url, "returncode": done.returncode, "detail": (done.stdout or done.stderr).strip()[-300:]})
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         error = f"{type(exc).__name__}: {str(exc)[:200]}"
