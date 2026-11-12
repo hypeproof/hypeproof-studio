@@ -18063,6 +18063,9 @@
         },
         {
           "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceReviewPCMTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift"
         }
       ]
     },
@@ -18232,6 +18235,12 @@
           "path": "apps/studio-native/ios/App/SharedConversationView.swift"
         },
         {
+          "path": "apps/studio-native/ios/Sources/StudioCore/NativeAccountAuth.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/NativeBrowserSignIn.swift"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/startPage.ts"
         },
         {
@@ -18277,6 +18286,18 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/NativeAccountAuthTests.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/NativeJourneyFixture.swift"
+        },
+        {
+          "path": "apps/studio-native/scripts/collect-native-journeys.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_journey_evidence.py"
         },
         {
           "path": "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx"
@@ -18750,6 +18771,68 @@
         {
           "path": "docs/testing/curriculum-runtime.md",
           "section": "## Publish responsibility notice (CGP-ART-R-012 / CGP-ART-D-012)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## Correlated native deployment — MTF-01"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Correlated iPhone testing delivery — MTF-01"
+        },
+        {
+          "path": "apps/studio-native/README.md",
+          "section": "## Signed iPhone delivery"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "## TestFlight request and receipt — MTF-T01"
         }
       ]
     }
