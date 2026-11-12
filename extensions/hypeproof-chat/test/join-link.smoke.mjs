@@ -189,12 +189,15 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';", resolveDir: extRoot, loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
   const profile = { activity_kind: "classroom", profile_id: "dental", display_name: "Dental class", ux: { coach: { naming_mode: "fixed", fallback_name: "Coach" } }, welcome: {}, series_index: 1, series_total: 5 };
   let stored = "stored-old", fetches = 0, writes = 0, starts = 0, shows = 0;
-  const states = [], commands = [], externals = [];
+  const states = [], commands = [], externals = [], toasts = [];
+  // DES-SHELL-04 — what the Service answers can be swapped for a refusal; toasts are recorded, never shown.
+  let respond = () => new Response(JSON.stringify(profile), { status: 200 });
+  let turnRunning = false;
   const ctx = { workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} }, globalState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => stored, store: async (_k, v) => { stored = v; writes++; }, delete: async () => { stored = undefined; writes++; } }, extension: { packageJSON: { version: "test" } }, extensionUri: {}, subscriptions: [] };
-  const chat = { openInEditor: async () => { starts++; }, ensureProfile: async () => null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => "Coach", coachNameIsChosen: () => true, renderHtml: () => "<html></html>" };
-  const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (_k, d) => d }) }, window: { createWebviewPanel: () => { throw Error("panel is attached by the test"); } }, commands: { executeCommand: async (id) => commands.push(id) }, env: { openExternal: async (u) => externals.push(u) }, Uri: { joinPath: () => ({}), parse: (u) => u }, ViewColumn: { One: 1 } };
+  const chat = { openInEditor: async () => { starts++; }, ensureProfile: async () => null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => turnRunning, setConnectionChanging() {}, coachDisplayName: () => "Coach", coachNameIsChosen: () => true, renderHtml: () => "<html></html>" };
+  const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (_k, d) => d }) }, window: { createWebviewPanel: () => { throw Error("panel is attached by the test"); }, showErrorMessage: async (m) => { toasts.push(m); }, showWarningMessage: async (m) => { toasts.push(m); }, showInformationMessage: async (m) => { toasts.push(m); } }, commands: { executeCommand: async (id) => commands.push(id) }, env: { openExternal: async (u) => externals.push(u) }, Uri: { joinPath: () => ({}), parse: (u) => u }, ViewColumn: { One: 1 } };
   const mod = { exports: {} };
-  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, AbortSignal, URL, URLSearchParams, process, TextEncoder, setTimeout, clearTimeout, fetch: async () => { fetches++; return new Response(JSON.stringify(profile), { status: 200 }); } });
+  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, AbortSignal, URL, URLSearchParams, process, TextEncoder, setTimeout, clearTimeout, fetch: async () => { fetches++; return respond(); } });
   const page = new mod.exports.StartPage(ctx, chat, async (_p, commit) => { await commit(); return false; });
   page.panel = { reveal() { shows++; }, webview: { postMessage: async (m) => states.push(m) } };
   page.offerWaited = true; page.trialOffer = null; page.products = null;
@@ -225,11 +228,13 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   await page.handle({ type: "connectCourse", token: code("other-class"), joinClass: "dental-0729" });
   assert.equal(fetches, 0, "a code for another class is not sent anywhere");
   assert.equal(last().error, J.JOIN_LINK_COPY.mismatch);
+  assert.equal(last().errorAt, "code", "DES-SHELL-04: the refusal is drawn under the code field");
+  assert.deepEqual(toasts, [], "DES-SHELL-04: a refused code is never a toast");
   assert.equal(last().joinLink.classId, "dental-0729"); assert.equal(page.candidate, undefined);
   assert.ok(!JSON.stringify(states).includes(code("other-class")), "the code never goes back to the webview");
   // Positive control: the right class's code takes the ordinary path (preview only).
   await page.handle({ type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
-  assert.equal(fetches, 1); assert.equal(last().candidate, true); assert.equal(last().error, undefined);
+  assert.equal(fetches, 1); assert.equal(last().candidate, true); assert.equal(last().error, undefined); assert.equal(last().errorAt, undefined);
   assert.equal(last().joinLink, undefined, "the link has done its job once the code is confirmed");
   assert.equal(stored, "stored-old"); assert.equal(writes, 0); assert.equal(starts, 0, "still a preview: the learner presses 시작 themselves");
   await page.handle({ type: "cancelCandidate" });
@@ -265,6 +270,45 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   await page.handle({ type: "selectActivity", ref: "missing" });
   assert.equal(page.joinLink, undefined, "choosing a saved activity drops the link");
   ok("StartPage: leaving the link's form by any path drops the link; only the link's form is constrained");
+
+  // DES-SHELL-04 — every refusal of a submitted code is marked for the field (errorAt "code") and none
+  // is a toast; an error from anything else is not marked, even right after a code refusal.
+  const refusals = [];
+  const refused = async (what, msg) => {
+    toasts.length = 0;
+    await page.handle(msg);
+    assert.ok(last().error, `${what}: an error is shown`); assert.equal(last().errorAt, "code", `${what}: under the code field`);
+    assert.deepEqual(toasts, [], `${what}: not a toast`); assert.equal(page.candidate, undefined);
+    assert.ok(!JSON.stringify(last()).includes(msg.token.trim() || "\u0000"), `${what}: the code is not echoed back`);
+    refusals.push(what);
+  };
+  await page.openJoinLink("dental-0729");
+  await refused("empty code", { type: "connectCourse", token: "   ", joinClass: "dental-0729" });
+  const issuer = Buffer.from(JSON.stringify({ c: "__issuer__", role: "issuer" })).toString("base64url") + ".sig";
+  await refused("issuer code", { type: "connectCourse", token: issuer, joinClass: "dental-0729" });
+  await refused("another class", { type: "connectCourse", token: code("other-class"), joinClass: "dental-0729" });
+  respond = () => new Response(JSON.stringify({ error: "invalid_token" }), { status: 401 });
+  await refused("Service refusal", { type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
+  respond = () => { throw new TypeError("network down"); };
+  await refused("network failure", { type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
+  respond = () => new Response(JSON.stringify({ profile_id: "x" }), { status: 200 });
+  await refused("unreadable profile", { type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
+  turnRunning = true;
+  await refused("turn running", { type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
+  // Negative control: the same running-turn guard for another action is the card's error, not the field's.
+  await page.handle({ type: "selectActivity", ref: "missing" });
+  assert.ok(last().error); assert.equal(last().errorAt, undefined, "an error from another action is not marked for the code field");
+  turnRunning = false;
+  respond = () => new Response(JSON.stringify(profile), { status: 200 });
+  // A code refusal followed by any other error assignment loses the mark (the setter clears it).
+  await page.openJoinLink("dental-0729");
+  await refused("another class again", { type: "connectCourse", token: code("other-class"), joinClass: "dental-0729" });
+  page.error = "다른 오류"; await page.refresh();
+  assert.equal(last().error, "다른 오류"); assert.equal(last().errorAt, undefined);
+  page.error = undefined; await page.handle({ type: "joinLinkDismiss" });
+  assert.equal(last().errorAt, undefined);
+  assert.equal(refusals.length, 8);
+  ok("StartPage: every code refusal is marked for the code field and is never a toast; other errors are not");
 
   stored = code("stored-class");
   assert.equal(await page.currentClassId(), "stored-class");

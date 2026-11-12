@@ -2239,6 +2239,20 @@ explicit entry).
 - **Same class**: a link for the class already stored only says "이미 이 수업에 참여하고 있어요."
 - **Join form**: "참여 링크로 연 수업 <id>" and "링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은
   코드를 직접 입력해 주세요." above the empty code field (type password, focused; 14px+ text).
+  DES-SHELL-04 (CGP-SHELL-D-004, 2026-11-12), on every start-page code form (link, 수업, 체험,
+  무료 code): the field is one 44px learner control (`--hp-control-min`, no block padding, so the
+  height does not follow font metrics) with 14px text. The Korean IME stays out of the code because
+  the field is `type="password"`: Chromium (Electron and the VS Code webview) limits a focused
+  password field to ASCII-capable input sources on macOS and turns the IME off on Windows and
+  Linux. No other attribute does this on a desktop: `inputmode` has no `latin` value and only steers
+  on-screen keyboards, and `lang` and `autocapitalize` do not switch an IME; `autocomplete="off"`
+  and `spellcheck=false` stay. Paste is never cancelled (neither the paste event nor Ctrl/Cmd+V).
+  A refused code is said directly under the field, before the help line and 코드 확인하기, in the
+  flow (`role="alert"`, 14px, never a toast), and the field takes `aria-invalid="true"`: the host
+  marks every refusal of a submitted code (`errorAt: "code"`: empty, 강사용 code, another class's
+  code on the link form, a Service refusal, an unreadable profile, a connection failure, a turn in
+  progress). Any other error, and a refusal after the learner has left the form, stays in the
+  card's error area, so the page still shows one error line. The code is never echoed in an error.
   A later refresh of the start page does not close the form; 링크 닫기 drops the link. Each press
   of a link refocuses the form. Leaving the form by any path (시작 방법 다시 선택, 기존 활동으로
   돌아가기, choosing a saved activity, a code submitted from any other form) drops the link, so it
@@ -2260,8 +2274,8 @@ REQ-SHELL-05 says a token-looking link is "rejected"; here the link is opened fo
 token-looking parameters are ignored and logged by name, which keeps one rule (only `class` is
 read) and loses nothing a learner sees. Not built: the class *name* (no credential-free class
 lookup exists, so the id is shown); "unknown class → neutral start screen" (Studio cannot tell an
-unknown class from a real one without a code); IME-off for the code field; the code error is
-shown in the card's error area, not directly under the field. Tests:
+unknown class from a real one without a code). The code field's height, IME, paste and error
+placement are built by DES-SHELL-04 (above). Tests:
 `extensions/hypeproof-chat/test/join-link.smoke.mjs` (parse with code=/token=/password=/identity
 ignored and neither values nor names leaving the parser or the log, 13 malformed links, decision,
 the URI host with ask/decline, ten links in a row giving one dialog, the real StartPage: class preselected, no fetch, no write, no entry, another
@@ -2269,7 +2283,16 @@ class's code refused before any Service call, a code from a form without the lin
 the stale link dropped, wiring) and `e2e/start-page/join-link.mjs` (built
 start page in Chromium at 390 and 1280: class named, code field empty and focused, refresh-stable,
 링크 닫기, re-press, 시작 방법 다시 선택 and 기존 활동으로 돌아가기 dropping the link, a trial code
-carrying no class). Chalk side: REQ-CHALK-JOIN-LINK in
+carrying no class). DES-SHELL-04: `extensions/hypeproof-chat/test/join-code-field-computed.smoke.mjs`
+(the real webview bundle in headless Chromium at 320 and 1280 px, dark and light host themes and
+forced colours: the class line above the empty, focused field; 44px and 14px; a password field
+without autocomplete or spellcheck; paste and Ctrl/Cmd+V not cancelled and pasted text submitted;
+the refusal under the field, before the help line and the button, in the flow, 14px, the field
+`aria-invalid`, the code not in the page; another error and a refusal after leaving the form in the
+card's error area; the 체험 form measured the same way) and the host half of `join-link.smoke.mjs`
+(eight code refusals marked `errorAt: "code"` with no toast; the running-turn guard for another
+action and any later error unmarked). A headless run cannot show the OS IME itself; the field
+type is the contract it checks. Chalk side: REQ-CHALK-JOIN-LINK in
 [classroom-admin.md](requirements/classroom-admin.md#join-link-20261020).
 
 ## Sign-in link copy (CGP-SHELL-R-022)

@@ -8725,6 +8725,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
           "path": "chalk/src/ui/manage.html"
         }
       ]
@@ -8740,6 +8743,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/join-link.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/join-code-field-computed.smoke.mjs"
         },
         {
           "path": "chalk/test/join-link.test.mjs"

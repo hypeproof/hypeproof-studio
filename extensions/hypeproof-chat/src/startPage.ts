@@ -73,7 +73,13 @@ export class StartPage {
   private panel?: vscode.WebviewPanel;
   private busy = false;
   private choosingFolder = false;
-  private error?: string;
+  // The start page's one error line. Any assignment clears the code-field mark: only refuseCode sets it.
+  private errorText?: string;
+  private errorAtCode = false;
+  private get error(): string | undefined { return this.errorText; }
+  private set error(text: string | undefined) { this.errorText = text; this.errorAtCode = false; }
+  /** DES-SHELL-04 — the refusal of a submitted code; the page draws it under the code field, not in the card's error area. */
+  private refuseCode(text: string) { this.error = text; this.errorAtCode = true; }
   private started = false;
   // Invalid arrival may list saved activities, but only explicit entry reactivates its profile.
   private deferProfileUntilEntry = false;
@@ -848,6 +854,7 @@ export class StartPage {
       // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
       // The free card states a free seat's end itself (freeStart.ended), so its failure sentence is not repeated.
       error: withTrialPassPointer(this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
+      ...(this.error !== undefined && this.errorAtCode ? { errorAt: "code" as const } : {}),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
@@ -1029,7 +1036,12 @@ export class StartPage {
     if (msg.type === "continueFromGithub" || msg.type === "startNew") { await this.startFromGithubChoice(msg); return; }
     if (this.busy) return;
     const connections = activityConnections(this.context);
-    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    if (this.chat.hasActiveStream()) {
+      // DES-SHELL-04 — a code submitted during a turn is refused under the code field like any other code refusal.
+      const turnRunning = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요.";
+      if (msg.type === "connectCourse") this.refuseCode(turnRunning); else this.error = turnRunning;
+      await this.refresh(); return;
+    }
     if (msg.type === "openLocalFolder") {
       if (this.choosingFolder) return;
       this.choosingFolder = true;
@@ -1185,9 +1197,9 @@ export class StartPage {
     }
     if (msg.type !== "connectCourse" || typeof msg.token !== "string") return;
     const token = sanitizeWorkshopToken(msg.token);
-    if (!token) { this.error = "수업 참여 코드를 입력하세요."; await this.refresh(); return; }
+    if (!token) { this.refuseCode("수업 참여 코드를 입력하세요."); await this.refresh(); return; }
     if (looksLikeIssuerTokenUnverified(token)) {
-      this.error = "강사용 코드입니다. 수강생 참여 코드를 입력하세요."; await this.refresh(); return;
+      this.refuseCode("강사용 코드입니다. 수강생 참여 코드를 입력하세요."); await this.refresh(); return;
     }
     // REQ-STUDIO-JOIN-LINK — only the form that shows the link's class is constrained by it. A code
     // from any other form (the learner left the link's form) drops the stale link. On the link's
@@ -1196,7 +1208,7 @@ export class StartPage {
     if (this.joinLink && msg.joinClass !== this.joinLink.classId) this.joinLink = undefined;
     const codeClass = this.joinLink ? classOfCode(token) : undefined;
     if (this.joinLink && codeClass && codeClass !== this.joinLink.classId) {
-      this.error = JOIN_LINK_COPY.mismatch; await this.refresh(); return;
+      this.refuseCode(JOIN_LINK_COPY.mismatch); await this.refresh(); return;
     }
     const entryPanel=this.panel;
     this.busy = true; this.error = undefined;
@@ -1205,10 +1217,10 @@ export class StartPage {
       await this.refresh();
       const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
       const result = await fetchProfileResult({ proxyUrl, token });
-      if (!result.ok) { this.error = result.failure.friendly; return; }
+      if (!result.ok) { this.refuseCode(result.failure.friendly); return; }
       const p = result.profile;
       if (!p?.profile_id || !p.display_name || !p.ux?.coach || !p.welcome) {
-        this.error = "수업 정보 응답을 읽지 못했습니다. 잠시 후 다시 연결하세요."; return;
+        this.refuseCode("수업 정보 응답을 읽지 못했습니다. 잠시 후 다시 연결하세요."); return;
       }
       if (!entryPanel || this.panel!==entryPanel) return;
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
@@ -1223,7 +1235,7 @@ export class StartPage {
       else this.github = undefined;
     } catch (error) {
       console.error('[startPage] connectCourse failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
-      this.error = "수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";
+      this.refuseCode("수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.");
     } finally {
       this.busy = false; await this.chat.setConnectionChanging(false);
       await this.refresh();
