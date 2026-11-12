@@ -20,6 +20,8 @@ import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntr
 import { PublishReadGate } from "./publishReadGate";
 import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
 import { runWorkTakeaway } from "./workTakeawayHost";
+import { runShowWhatIMade } from "./showWhatIMadeHost";
+import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
@@ -12119,6 +12121,50 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const stored = this.context.globalState?.get<unknown>(this.learnerNicknameKey());
     const screened = typeof stored === "string" ? screenNickname(stored) : null;
     return screened?.ok ? screened.value : "";
+  }
+
+  /**
+   * REQ-STUDIO-SHOW-WHAT-I-MADE (#3794 slice 1) — "내가 만든 것 보여주기", on by default (Jay, 2026-11-12)
+   * and switchable off with `showWhatIMadeEnabled`. Local only: no Service call, no model call, nothing published.
+   */
+  async showWhatIMade(): Promise<void> {
+    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showWhatIMadeEnabled', true);
+    await runShowWhatIMade(this.context.extensionUri, {
+      enabled,
+      root: () => this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      refusal: (target) => this.folderWriteRefusalFor(target),
+      capturePage: (root, abs) => this.captureShowPageImage(root, abs),
+      noteWrite: (absPath, data) => noteHostWrite([{ absPath, data }], "studio"),
+    });
+  }
+
+  /** The person's HTML page as a 1920x1080 picture, served and shot by Studio's own browser like savePagePdf. */
+  private async captureShowPageImage(workRoot: string, file: string): Promise<Uint8Array | null> {
+    if (this.pagePdfBusy || this.deckPdfBusy) return null;
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const real = canonicalFolder(file);
+      root = active && isInsideFolder(real, canonicalFolder(active)) ? active : workRoot;
+      if (active && root !== active) return null;
+    } catch { return null; }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(file)).split(path.sep).join("/");
+    const page = resolvePageInFolder(root, rel);
+    if (!page.ok) return null;
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      tab = await vscode.window.openBrowserTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, background: true });
+      channel = await this.deckPdfAttach(tab);
+      return await captureShowPage(channel.send, { expectedUrl: url });
+    } catch {
+      return null;
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+    }
   }
 
   private takeawayBusy = false;
