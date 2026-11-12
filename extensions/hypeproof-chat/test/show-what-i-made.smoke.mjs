@@ -311,7 +311,7 @@ if (!bin) {
     await browser.send("Page.navigate", { url: `${origin}/audience.html` }); await new Promise((r) => setTimeout(r, 150));
     await browser.evaluate(`document.getElementById('audience').value='할머니';document.getElementById('next').click();document.getElementById('next').click()`);
     assert.deepEqual(await browser.evaluate("window.posts"), [{ type: "answer", text: "할머니", nonce }]);
-    console.log(`PASS show browser: page capture, offline playback (${requests.length} local requests, 0 external), seek t=0.1/3/10, ${cases} panel layouts`);
+    console.log(`PASS show browser: page capture, offline playback (${requests.length} local requests, 0 external), seek t=0.1/5/13, ${cases} panel layouts`);
   } finally {
     await browser.close();
     server.close();
