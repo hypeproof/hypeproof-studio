@@ -51,8 +51,8 @@ import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
-import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
-import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, trialEndNotice, trialEnding } from "./passPurchase";
+import { endCardAdvertised, notifyOptinOffered } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
@@ -8997,15 +8997,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "problemReportOffer", offer: null });
         if (msg.accept === true && (msg.reason === "repeat" || msg.reason === "frustration")) await this.openProblemReport(msg.reason);
         return;
-      case "trialEndCardPasses":
-        // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
-        // purchase view (REQ-L12 ②); no order is created until they choose there.
-        // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
-        // list directly and never passes through the start page's purchaseOpen (surface start_page).
-        this.emitEndCardOffer("offer_clicked");
-        // CONV-FUNNEL-R-006 — the pass list it opens is counted as pass_list_viewed on this surface.
-        void vscode.commands.executeCommand("hypeproof-chat.showPasses", msg.surface === "header_menu" ? "header_menu" : "end_card");
-        return;
       case "trialEndCardDismiss":
         // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
         this.emitEndCardOffer("offer_dismissed");
@@ -11163,29 +11154,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: 'streamError', streamId, error: err instanceof ProxyAuthError ? err.friendly : sdkErrorDisplayText(err, audience), activityUnavailable: unavailable, requestId, retry: false });
       return;
     }
-    // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
-    // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
-    // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
-    // purchase view, and any other turn ending falls through unchanged.
-    // CONV-ENDCARD-R-005 — an unreadable catalogue is read once more; if it still cannot be read the
-    // card is drawn without pass facts. Only a Service that sells no passes falls back to the banner.
-    if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
-      const card = trialEndCardView({ profile: current.profile, err, products: await endCardCatalogue(current.proxyUrl, { signal: current.signal }), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
-      if (current.signal?.aborted) return;
-      if (card) {
-        void this.post({ type: "streamError", streamId, error: card.text, activityUnavailable: { cause: trialEndReason(err, false) === "expired" ? "expired" : "exhausted", audience }, trialEndCard: card });
-        // CONV-FUNNEL-R-002 — count the card on the grant-scoped funnel route. Only reached when the
-        // card is drawn (never for the banner fallback, a code-issued trial or a pass). The reporter
-        // sends nothing unless the probe turned the route on, and keeps the first view per grant.
-        // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
-        this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
-        this.endCardOfferToken = current.token ?? null;
-        return;
-      }
-    }
+    // TUX-COND-07 — the end-of-trial card was a pass offer. No pass is sold and the app has no purchase
+    // view (2026-11-13, REQ-L12 ①–④ removed), so the host no longer reads the catalogue or draws the
+    // card: a free trial that ran out ends in the calm notice below.
     // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
-    // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
-    // opens the purchase screen or the code box, and leaves the saved code alone.
+    // says the files stay and names no pass. It never opens the code box and leaves the saved code alone.
     // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
     // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
     if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
@@ -11194,12 +11167,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     const ending = trialEnding(err, !!current?.profile?.pass);
     if (ending) {
-      const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
       return;
     }
-    // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
+    // REQ-L12 — a spent pass is not a crash: say what happened (no pass is sold, so no way to buy is named).
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent, activityUnavailable: {cause:"exhausted",audience} }); return; }
     if (unavailable) {

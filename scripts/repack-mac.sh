@@ -30,9 +30,9 @@
 #   BUILD_SOURCEVERSION  commit for product.json .commit (default: git HEAD)
 #   REPACK_SIGN=1        also run scripts/sign-mac.sh (CODESIGN_IDENTITY, default ad-hoc)
 #
-# Notarization: the release pipeline has no notarization step today (see
-# scripts/sign-mac.sh "THE REAL FIX"), so there is nothing to skip here. When
-# one is added it belongs after signing in build-mac.yml, shared by both paths.
+# Official Developer ID signing/notarization runs after all mutations in
+# build-mac.yml via scripts/release/macos-sign.py, shared by both paths.
+# REPACK_SIGN=1 remains local development/test sealing, not release evidence.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

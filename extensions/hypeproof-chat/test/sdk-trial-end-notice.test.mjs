@@ -108,22 +108,22 @@ async function present(error, products, profile = trialProfile) {
 }
 
 for (const [label, error, ending] of [['exhausted', SDK_EXHAUSTED, 'exhausted'], ['expired', SDK_EXPIRED, 'expired']]) {
-  test(`observed SDK ${label} text with passes on sale names kept files and '이용권으로 시작하기'`, async () => {
+  test(`observed SDK ${label} text names kept files and no pass, even if a catalogue answers (2026-11-13)`, async () => {
     const r = await present(error, catalogue);
     assert.equal(r.posts.length, 1);
-    assert.deepEqual(structuredClone(r.posts[0]), { type: 'streamError', streamId: 'stream-1', error: P.trialEndNotice(ending, true), activityUnavailable: {cause:ending,audience:'solo'} });
+    assert.deepEqual(structuredClone(r.posts[0]), { type: 'streamError', streamId: 'stream-1', error: P.trialEndNotice(ending), activityUnavailable: {cause:ending,audience:'solo'} });
     assert.match(r.posts[0].error, /만든 파일과 대화는 그대로 있어요/);
-    assert.match(r.posts[0].error, /'이용권으로 시작하기'/);
+    assert.doesNotMatch(r.posts[0].error, /이용권/);
     assert.doesNotMatch(r.posts[0].error, /API Error|코드 발급 담당자|다시 시도/);
     assert.deepEqual(structuredClone(errorBannerPresentation(r.posts[0].error)), { icon: '⏳', title: '체험이 끝났어요' });
     // Never opened for the person: no command (no purchase screen, no code box), no order, no credential touched.
     assert.deepEqual(r.commands, []);
-    assert.deepEqual(r.requests, [{ method: 'GET', url: '/v1/purchase/products', authorization: null }], 'one public catalogue read, without the code');
+    assert.deepEqual(r.requests, [], 'no catalogue read: the app no longer asks whether passes are sold');
     assert.equal(r.secrets.deletes, 0);
   });
   test(`observed SDK ${label} text with no passes on sale names no pass`, async () => {
     const r = await present(error, null);
-    assert.equal(r.posts[0].error, P.trialEndNotice(ending, false));
+    assert.equal(r.posts[0].error, P.trialEndNotice(ending));
     assert.doesNotMatch(r.posts[0].error, /이용권/);
     assert.deepEqual(r.commands, []);
   });

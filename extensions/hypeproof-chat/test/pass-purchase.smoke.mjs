@@ -1,4 +1,4 @@
-// REQ-L12 — buying a pass from inside Studio (src/passPurchase.ts).
+// REQ-L12 ⑤ — recovering a pass order an older build started (src/passPurchase.ts). ①–④ removed 2026-11-13.
 // The Service is a synthetic stand-in on globalThis.fetch; no network, no gateway.
 //
 // Run: node --experimental-strip-types test/pass-purchase.smoke.mjs
@@ -77,9 +77,8 @@ globalThis.fetch = async (url, init = {}) => {
 };
 try {
   assert.equal((await p.fetchProducts(SERVICE + '/')).length, 1);
-  const made = await p.createOrder(SERVICE, 'pass-30d', SITE);
-  assert.equal(made.id, ID);
-  assert.deepEqual(calls.at(-1), { url: `${SERVICE}/purchase/orders`, method: 'POST', secret: null, body: { product_id: 'pass-30d' } });
+  // REQ-L12 ①–④ removed (2026-11-13): this build has no way to create an order.
+  assert.equal(p.createOrder, undefined);
 
   assert.equal(await p.pollOrder(order), 'paid');
   assert.equal(calls.at(-1).secret, SECRET);
@@ -116,7 +115,6 @@ try {
   // A network failure reads as "could not tell", not as a decision.
   globalThis.fetch = async () => { throw new TypeError('synthetic network failure'); };
   assert.equal(await p.fetchProducts(SERVICE), null);
-  assert.equal(await p.createOrder(SERVICE, 'pass-30d', SITE), null);
   assert.equal(await p.pollOrder(order), null);
   assert.deepEqual(await p.claimSeat(order, false), { ok: false, reason: 'unavailable' });
 } finally { globalThis.fetch = original; }
@@ -125,8 +123,12 @@ try {
 for (const [key, text] of Object.entries(p.PURCHASE_COPY)) assert.ok(text.length > 10, key);
 assert.match(p.PURCHASE_COPY.failed, /돈이 나가지 않았어요/);
 assert.match(p.PURCHASE_COPY.claimFailed, /결제 내역은 그대로 있어요/);
-for (const key of ['waiting', 'failed', 'expired', 'cancelled', 'unavailable']) assert.doesNotMatch(p.PURCHASE_COPY[key], /결제를 확인했어요/, key);
+for (const key of ['waiting', 'failed', 'expired', 'cancelled']) assert.doesNotMatch(p.PURCHASE_COPY[key], /결제를 확인했어요/, key);
+// U3 (2026-11-13): no recovery or legacy-pass sentence tells the person to buy again.
+for (const [key, text] of Object.entries(p.PURCHASE_COPY)) assert.doesNotMatch(text, /새로 구매|새 이용권|이용권으로 시작하기|구매하면/, key);
+assert.doesNotMatch(p.PASS_SPENT_FRIENDLY, /새 이용권|이용권으로 시작하기|살 수 있어요/);
+for (const gone of ['passesOnSale', 'withTrialPassPointer', 'TRIAL_PASS_POINTER_CHAT', 'TRIAL_PASS_POINTER_START']) assert.equal(p[gone], undefined, gone);
 // 해요체 only on the purchase surface: no 합니다체 ending slipped back in.
 for (const [key, text] of Object.entries(p.PURCHASE_COPY)) assert.doesNotMatch(text, /(습니다|됩니다|합니다)[.]/, key);
 
-console.log('PASS pass purchase: product and order shapes, checkout origin, saved-order restore, wait decisions, secret-bound requests, lost-answer recovery, copy');
+console.log('PASS pass purchase (legacy order recovery): product and order shapes, no order creation, checkout origin, saved-order restore, wait decisions, secret-bound requests, lost-answer recovery, copy');

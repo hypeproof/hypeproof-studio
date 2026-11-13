@@ -3,7 +3,17 @@
 // decides every rule (price caps, age, refund window, fraud block); the App only shows the result
 // and the Service's reason. Custody (design v1 D1): the App receives the public layer of a skill
 // only. A run is composed by the Service on the buyer's chat turn; no call returns the seller's text.
-import type { StoreBuyerOrderView, StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
+import type { StoreBuyerOrderView, StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSaleView, StoreSellerView } from "./skillStoreProtocol.ts";
+
+/**
+ * The seller's sales row (Jay 2026-11-13): sale price, PG fee and the seller's own share only.
+ * Whatever else the Service sends (HypeProof's commission, the partner and instructor referral
+ * parts) is dropped here, so it never reaches the webview. The money split itself is the Service's.
+ */
+export function sellerSaleView(row: StoreSaleView): StoreSaleView {
+  const { order_id, title, gross, pg_fee, seller, seller_net, policy_version, paid_at, status, payout_hold_ends } = row;
+  return { order_id, title, gross, pg_fee, seller, seller_net, policy_version, paid_at, status, payout_hold_ends };
+}
 
 export class StoreClientError extends Error {
   readonly code: string;
@@ -82,8 +92,9 @@ export class StoreClient {
   me() {
     return this.call<{ age_group: "adult" | "minor" | "unknown"; installs: StoreInstallView[]; can_buy_paid: boolean; orders?: StoreBuyerOrderView[] }>("/me");
   }
-  seller() {
-    return this.call<StoreSellerView>("/seller");
+  async seller(): Promise<StoreSellerView> {
+    const view = await this.call<StoreSellerView>("/seller");
+    return Array.isArray(view?.sales) ? { ...view, sales: view.sales.map(sellerSaleView) } : view;
   }
   /** Names for the typed partner/instructor codes, before the seller confirms. Rate-limited by the Service. */
   resolveCodes(partnerCode: string, instructorCode: string) {
@@ -216,7 +227,7 @@ export const STORE_COPY = {
   codesNone: "코드가 없으면 비워 두고 올리면 돼요. 나중에 직접 추가할 수는 없어요.",
   codesCheck: "코드를 확인한 뒤에 올릴 수 있어요.",
   codesConsent: "정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 코드의 파트너·강사에게 제공되는 것에 동의해요.",
-  codesConsentNeeded: "코드를 쓰려면 제공 동의가 필요해요. 동의하지 않으면 「코드 없이 진행」을 눌러 주세요. 그러면 코드 없이 올라가고, 판매 수수료는 모두 HypeProof 몫이 돼요.",
+  codesConsentNeeded: "코드를 쓰려면 제공 동의가 필요해요. 동의하지 않으면 「코드 없이 진행」을 눌러 주세요. 그러면 코드 없이 올라가요.",
   codesSkip: "코드 없이 진행",
   courseBlocked: "이 과정에서는 스킬을 팔 수 없어요. 판매를 하지 않는 과정(청소년 과정 등)의 수강생은 스토어에 스킬을 올리거나 팔 수 없고, 스킬을 사거나 설치하는 것은 할 수 있어요. 잘못 표시됐다면 운영팀에 문의해 주세요.",
   courseBlockedItem: "판매 중지(과정 제한)",

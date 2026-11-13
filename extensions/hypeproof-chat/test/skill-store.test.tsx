@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import assert from 'node:assert/strict';
 import { SkillStoreView } from '../webview-ui/src/SkillStore';
+import { sellerSaleView } from '../src/skillStore';
 import type { StoreRequest, StoreState } from '../src/skillStoreProtocol';
 for (const name of ['Node', 'Element']) (globalThis as any)[name] ??= (window as any)[name];
 (globalThis as any).HTMLElement ??= (window as any).Element;
@@ -90,13 +91,19 @@ async function main() {
   await act(() => after.root.unmount());
 }
 
-// Sell: the settlement row shows the PG fee, the 80% share, the 20% commission and its referral parts, and the policy version.
+// Sell: the settlement row shows the sale price, the PG fee, the seller's 80% share and the policy version.
+// Jay 2026-11-13: HypeProof's 20% and the partner/instructor referral parts are never on the seller's screen.
 {
   const sale = { order_id: 'sto_' + 'd'.repeat(32), title: PAID.title, gross: 10000, pg_fee: 340, seller: 7728, commission: 1932, partner: 483, instructor: 483, hypeproof: 966, seller_net: 7728, policy_version: 'v1', paid_at: 1, status: 'refund_window' as const, payout_hold_ends: 2 };
   const seller = { ...SELLER, attribution: { ...DECIDED, partner: { name: '세바시' }, instructor: { name: '김강사' } }, sales: [sale], totals: { ...SELLER.totals, refund_window: 7728, pending: 7728 } };
   const adult = html(base({ tab: 'sell', seller }));
-  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>1,932원</td><td>483원</td><td>483원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.', '<th>결제 수수료(예상)</th>', '결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.', '<li>환불 가능 기간 7,728원</li><li>지급 보류 0원</li><li>정산 대상 0원</li>', '등록한 코드: 파트너 세바시 · 강사 김강사. 바꾸려면 운영팀에 문의해 주세요.'])
+  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.', '<th>결제 수수료(예상)</th>', '결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.', '<li>환불 가능 기간 7,728원</li><li>지급 보류 0원</li><li>정산 대상 0원</li>', '등록한 코드: 파트너 세바시 · 강사 김강사. 바꾸려면 운영팀에 문의해 주세요.'])
     assert.ok(adult.includes(cell), cell);
+  for (const hidden of ['그중 파트너', '그중 강사', 'HypeProof 수수료', '1,932원', '483원', '966원'])
+    assert.equal(adult.includes(hidden), false, `the seller's screen must not show ${hidden}`);
+  // The client drops the Service's commission and referral parts before the row reaches the webview.
+  const kept = sellerSaleView(sale as never);
+  assert.deepEqual(Object.keys(kept).sort(), ['gross', 'order_id', 'paid_at', 'payout_hold_ends', 'pg_fee', 'policy_version', 'seller', 'seller_net', 'status', 'title']);
   // Earnings first: no account form while the payable balance is under the prompt amount.
   assert.ok(adult.includes('정산 대상 금액이 10,000원 이상이 되면 받을 계좌를 여쭤볼게요.'));
   assert.equal(adult.includes('계좌번호'), false);

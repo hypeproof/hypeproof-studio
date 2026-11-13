@@ -1,0 +1,6 @@
+{
+  "schema": "hps-macos-distribution/v1",
+  "required": true,
+  "team_id": "RZBNT9ZB67",
+  "bundle_id": "ai.hypeproof.studio"
+}

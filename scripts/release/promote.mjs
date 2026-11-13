@@ -27,6 +27,7 @@ import {isAppPackage, sha256} from '../../e2e/unified-release/artifact.mjs';
 import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
 import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
+import {MAC_RECEIPT} from './macos-signing-receipt.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -89,7 +90,7 @@ export function promotionDecision({pr, commit, rcTags = [], writers = new Set(),
   if (gate.route !== 'approval') return {allow: false, reasons: gate.reasons.filter(r => !r.startsWith('hotfix:'))};
   if (!rcRelease) return refuse(`${rcTag} has no release: its builds have not uploaded`);
   if (rcRelease.isDraft) return refuse(`${rcTag} is still a draft: its acceptance has not passed yet. Rerun release-promote after it publishes`);
-  const assets = rcRelease.assets.filter(a => isAppPackage(a.name) || a.name === ACCEPTANCE);
+  const assets = rcRelease.assets.filter(a => isAppPackage(a.name) || a.name === ACCEPTANCE || a.name === MAC_RECEIPT);
   if (!assets.some(a => a.name === ACCEPTANCE)) return refuse(`${rcTag} has no ${ACCEPTANCE}`);
   if (!assets.some(a => isAppPackage(a.name))) return refuse(`${rcTag} has no App package`);
   return {allow: true, version, rcTag, candidate, assets: assets.map(a => a.name), reasons: gate.reasons};

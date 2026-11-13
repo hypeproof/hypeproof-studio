@@ -201,6 +201,27 @@ authentication path. Declare planned behavior as planned; a documented test is
 not an executed test. Keep changes in a focused branch and PR following the dev
 guide. Do not change production state merely to validate documentation.
 
+## Official macOS distribution
+
+The existing HypeProof Studio desktop app uses `.github/workflows/build-mac.yml`
+for direct Developer ID distribution. This is the same app and release pipeline,
+separate from the native TestFlight lane. The `macos-direct-release` GitHub
+Environment is restricted to `main` and `v*` release tags. Its three secrets are
+`MACOS_DEVELOPER_ID_P12`, `MACOS_DEVELOPER_ID_PASSWORD`, and
+`MACOS_NOTARY_KEY_P8`; its four variables are `MACOS_DEVELOPER_ID_SHA1`,
+`MACOS_TEAM_ID`, `MACOS_NOTARY_KEY_ID`, and `MACOS_NOTARY_ISSUER_ID`.
+Store credential values only in the approved environment or private owner vault;
+never commit them or introduce a personal-account authentication fallback.
+
+Follow [the signing and installation contract](docs/dev/macos-developer-id.md).
+Keep the existing source, build, approval, live-session freeze, acceptance,
+promotion, and mirror gates. Signing or a receipt does not replace release
+approval or installed-app acceptance, and quarantine removal is not a fallback.
+Canonical registration in [Harness policy](https://github.com/hypeproof/hypeproof-harness/blob/main/policy/repos.yaml)
+is tracked by [Harness #592](https://github.com/hypeproof/hypeproof-harness/issues/592).
+Check the landed policy and actual environment configuration before publication;
+this root instruction alone is not proof that either has been applied.
+
 ## Install order
 
 `hypeproof/hypeproof-service` is private (DEC-023). The `@hypeproof/*`
