@@ -55,6 +55,8 @@ export interface UpdateInfo {
   digest?: string;
   /** Where the release was read: the member mirror or the public release (D19). */
   source?: "member" | "public";
+  /** CGP-SHELL-R-003: the release notes carry SECURITY_CRITICAL_MARKER, so a cohort freeze does not hold it. */
+  securityCritical?: boolean;
 }
 
 export type ReleaseAsset = GhRelease["assets"][number];
@@ -213,10 +215,27 @@ export function parseLatestRelease(
     version,
     downloadUrl: asset.url ?? "",
     releaseUrl: release.html_url,
-    notes: typeof release.body === "string" ? release.body : "",
+    notes: releaseNotesText(release.body),
     sizeBytes: typeof asset.size === "number" ? asset.size : 0,
     digest: asset.digest,
+    ...(isSecurityCriticalRelease(release.body) ? { securityCritical: true } : {}),
   };
+}
+
+/**
+ * CGP-SHELL-R-003 — a release whose notes carry this line on its own is security-critical: a cohort's update
+ * freeze does not hold it, and Chalk labels it (chalk/src/lib/latest-release.ts reads the same line). An HTML
+ * comment, so GitHub does not render it; the mirror workflow copies it into the member mirror's notes.
+ * Agent choice (decisions.md CGP-SHELL-R-003, "Confirmed by Jay: no").
+ */
+export const SECURITY_CRITICAL_MARKER = "<!-- hps-update: security-critical -->";
+export function isSecurityCriticalRelease(body: unknown): boolean {
+  return typeof body === "string" && body.split(/\r?\n/).some(line => line.trim() === SECURITY_CRITICAL_MARKER);
+}
+/** The notes a learner may see: the body without the marker line. */
+function releaseNotesText(body: unknown): string {
+  if (typeof body !== "string") return "";
+  return isSecurityCriticalRelease(body) ? body.split(/\r?\n/).filter(line => line.trim() !== SECURITY_CRITICAL_MARKER).join("\n").trim() : body;
 }
 
 /**
@@ -527,6 +546,49 @@ export function classUpdateHold(
   return false;
 }
 export const CLASS_UPDATE_HOLD_COPY = "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요.";
+
+/**
+ * CGP-SHELL-R-003 (REQ-SHELL-03) — the cohort's update freeze, served by the Service on /v1/profile as
+ * `update_freeze {from, until, starts_at, ends_at}` (Korea calendar days; `ends_at` is exclusive). Active only on
+ * a classroom seat, inside [starts_at, ends_at) by this computer's clock. A personal, trial or pass seat, a missing,
+ * malformed, future or past range is no freeze. Returns the last frozen day (`until`) for the copy.
+ */
+export function updateFreeze(
+  profile: { activity_kind?: string | null; pass?: unknown; update_freeze?: unknown } | null | undefined,
+  now: number = Date.now(),
+): { until: string } | null {
+  if (!profile || profileAudience(profile) !== "classroom") return null;
+  const f = profile.update_freeze as { until?: unknown; starts_at?: unknown; ends_at?: unknown } | null | undefined;
+  if (!f || typeof f !== "object" || typeof f.until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(f.until)) return null;
+  const start = typeof f.starts_at === "string" ? Date.parse(f.starts_at) : NaN;
+  const end = typeof f.ends_at === "string" ? Date.parse(f.ends_at) : NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !(now >= start && now < end)) return null;
+  return { until: f.until };
+}
+/** A freeze holds an update unless the release is security-critical. */
+export function freezeHoldsUpdate(freeze: { until: string } | null, info: { securityCritical?: boolean } | null | undefined): boolean {
+  return freeze !== null && info?.securityCritical !== true;
+}
+/**
+ * The update offer the chat config sends: none inside a cohort freeze (unless security-critical), otherwise the
+ * offer with the class hold (CGP-SHELL-R-001) computed as always. A security release overrides the freeze only:
+ * it is still held for class and still needs the learner's restart approval.
+ */
+export function chatUpdateOffer<T extends { securityCritical?: boolean }>(
+  offer: T | null | undefined,
+  profile: Parameters<typeof updateFreeze>[0],
+  activity?: { kind?: string | null; pass?: unknown } | null,
+  now: number = Date.now(),
+): (T & { heldForClass: boolean }) | undefined {
+  if (!offer || freezeHoldsUpdate(updateFreeze(profile, now), offer)) return undefined;
+  return { ...offer, heldForClass: classUpdateHold(profile, activity) };
+}
+export const UPDATE_FREEZE_COPY = "선생님이 업데이트 시점을 정했어요.";
+/** "선생님이 업데이트 시점을 정했어요. 10월 31일까지 지금 버전을 써요." */
+export function updateFreezeCopy(freeze: { until: string }): string {
+  const [, m, d] = freeze.until.split("-").map(Number);
+  return `${UPDATE_FREEZE_COPY} ${m}월 ${d}일까지 지금 버전을 써요.`;
+}
 
 export const UPDATE_DOWNLOAD_URL = "https://hypeproof-ai.xyz/download";
 export const UPDATE_ACCESS_NOTICE_KEY = "hypeproofChat.updateAccessNotice";

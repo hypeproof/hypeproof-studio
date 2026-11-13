@@ -22,14 +22,28 @@ export function formalReleaseVersion(body: unknown): string | null {
   return match?.[1] ?? null;
 }
 
+/**
+ * CGP-SHELL-R-003 — a release whose notes carry this line on its own is security-critical: a cohort's update freeze
+ * does not hold it in Studio, and Chalk labels it so. The same line Studio's update checker reads
+ * (extensions/hypeproof-chat/src/updateCheckerHelpers.ts SECURITY_CRITICAL_MARKER). Agent choice, "Confirmed by Jay: no".
+ */
+export const SECURITY_CRITICAL_MARKER = "<!-- hps-update: security-critical -->";
+export function isSecurityCriticalRelease(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const notes = (body as Record<string, unknown>).body;
+  return typeof notes === "string" && notes.split(/\r?\n/).some(line => line.trim() === SECURITY_CRITICAL_MARKER);
+}
+
 export interface LatestRelease {
   /** The latest formal release, e.g. "2026.1109.0", or null when it is not known right now. */
   version: string | null;
   /** When the source was last read (ISO), or null before the first read. */
   checked_at: string | null;
+  /** CGP-SHELL-R-003: that release is marked security-critical (false while the version is unknown). */
+  security_critical: boolean;
 }
 
-let memo: { version: string | null; at: number; until: number } | null = null;
+let memo: { version: string | null; security: boolean; at: number; until: number } | null = null;
 
 /** Tests only: forget the per-isolate answer. */
 export function resetLatestReleaseMemo(): void {
@@ -40,8 +54,9 @@ export async function latestFormalRelease(
   now: number = Date.now(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<LatestRelease> {
-  if (memo && now < memo.until) return { version: memo.version, checked_at: new Date(memo.at).toISOString() };
+  if (memo && now < memo.until) return { version: memo.version, checked_at: new Date(memo.at).toISOString(), security_critical: memo.security };
   let version: string | null = null;
+  let security = false;
   try {
     const init = {
       method: "GET",
@@ -52,10 +67,15 @@ export async function latestFormalRelease(
       cf: { cacheTtl: LATEST_RELEASE_TTL_MS / 1000, cacheEverything: true },
     } as RequestInit;
     const response = await fetchImpl(LATEST_RELEASE_API, init);
-    if (response.ok) version = formalReleaseVersion(await response.json());
+    if (response.ok) {
+      const body = await response.json();
+      version = formalReleaseVersion(body);
+      security = version !== null && isSecurityCriticalRelease(body);
+    }
   } catch {
     version = null;
+    security = false;
   }
-  memo = { version, at: now, until: now + (version ? LATEST_RELEASE_TTL_MS : LATEST_RELEASE_RETRY_MS) };
-  return { version, checked_at: new Date(now).toISOString() };
+  memo = { version, security, at: now, until: now + (version ? LATEST_RELEASE_TTL_MS : LATEST_RELEASE_RETRY_MS) };
+  return { version, checked_at: new Date(now).toISOString(), security_critical: security };
 }

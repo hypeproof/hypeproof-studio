@@ -10,6 +10,7 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import {
   LATEST_RELEASE_API, LATEST_RELEASE_RETRY_MS, LATEST_RELEASE_TTL_MS,
   formalReleaseVersion, latestFormalRelease, resetLatestReleaseMemo,
+  SECURITY_CRITICAL_MARKER, isSecurityCriticalRelease,
 } from '../src/lib/latest-release.ts';
 
 const release = (tag, extra = {}) => ({tag_name: tag, draft: false, prerelease: false, html_url: 'https://github.com/x', ...extra});
@@ -31,7 +32,7 @@ test('reads the public release anonymously, bounded, and caches the answer', asy
   const fetchImpl = async (url, init) => { calls.push({url, init}); return Response.json(release('v2026.1109.0')); };
   const t0 = Date.UTC(2026, 10, 12, 9, 0, 0);
   const first = await latestFormalRelease(t0, fetchImpl);
-  assert.deepEqual(first, {version: '2026.1109.0', checked_at: new Date(t0).toISOString()});
+  assert.deepEqual(first, {version: '2026.1109.0', checked_at: new Date(t0).toISOString(), security_critical: false});
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, LATEST_RELEASE_API);
   assert.equal(LATEST_RELEASE_API, 'https://api.github.com/repos/hypeproof/hypeproof-studio/releases/latest');
@@ -83,7 +84,8 @@ test('GET /studio/latest-release serves the floor or null, with no instructor co
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('cache-control'), 'no-store');
       const body = await response.json();
-      assert.deepEqual(Object.keys(body).sort(), ['checked_at', 'source', 'version']);
+      assert.deepEqual(Object.keys(body).sort(), ['checked_at', 'security_critical', 'source', 'version']);
+      assert.equal(body.security_critical, false);
       assert.equal(body.version, want);
     }
   } finally { globalThis.fetch = previous; resetLatestReleaseMemo(); }
@@ -98,7 +100,7 @@ test('outside production HPS_STUDIO_LATEST_RELEASE answers without GitHub; the e
     resetLatestReleaseMemo();
     let calls = 0;
     globalThis.fetch = async () => { calls++; throw new Error('GitHub must not be read here'); };
-    assert.deepEqual(await read(app, {ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: 'off'}), {version: null, checked_at: null, source: 'HPS_STUDIO_LATEST_RELEASE'});
+    assert.deepEqual(await read(app, {ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: 'off'}), {version: null, checked_at: null, security_critical: false, source: 'HPS_STUDIO_LATEST_RELEASE'});
     assert.equal((await read(app, {ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: '2026.1111.0'})).version, '2026.1111.0');
     assert.equal((await read(app, {ENVIRONMENT: 'dev', HPS_STUDIO_LATEST_RELEASE: '2026.1111.0-rc.1'})).version, null, 'an rc is never a floor, here either');
     // Both browser-test wrappers default it to off, so no CI run that opens /manage reads GitHub.
@@ -112,4 +114,28 @@ test('outside production HPS_STUDIO_LATEST_RELEASE answers without GitHub; the e
     const prod = await read(app, {ENVIRONMENT: 'production', HPS_STUDIO_LATEST_RELEASE: '2026.1999.0'});
     assert.equal(prod.version, '2026.1109.0'); assert.equal(calls, 1);
   } finally { globalThis.fetch = previous; resetLatestReleaseMemo(); }
+});
+
+// CGP-SHELL-R-003 — a security-critical release (its notes carry the marker line) is labelled so in Chalk; the cohort
+// freeze does not hold it in Studio. The same line Studio's update checker reads.
+test('a security-critical release is read from its notes, only on a formal release, and never on a failure', async () => {
+  assert.equal(SECURITY_CRITICAL_MARKER, '<!-- hps-update: security-critical -->');
+  const marked = release('v2026.1112.0', {body: 'Fixes\n\n' + SECURITY_CRITICAL_MARKER + '\n'});
+  assert.equal(isSecurityCriticalRelease(marked), true);
+  assert.equal(isSecurityCriticalRelease(release('v2026.1112.0', {body: 'see ' + SECURITY_CRITICAL_MARKER + ' inline'})), false, 'the line on its own only');
+  assert.equal(isSecurityCriticalRelease(release('v2026.1112.0', {body: 'security fix'})), false, 'words are not the marker');
+  for (const junk of [null, 'x', [], {}, release('v2026.1112.0')]) assert.equal(isSecurityCriticalRelease(junk), false);
+  const t0 = Date.UTC(2026, 10, 12, 9, 0, 0);
+  resetLatestReleaseMemo();
+  const latest = await latestFormalRelease(t0, async () => Response.json(marked));
+  assert.deepEqual(latest, {version: '2026.1112.0', checked_at: new Date(t0).toISOString(), security_critical: true});
+  assert.equal((await latestFormalRelease(t0 + 1, async () => { throw new Error('cached'); })).security_critical, true, 'reused with the version');
+  resetLatestReleaseMemo();
+  assert.equal((await latestFormalRelease(t0, async () => Response.json({...marked, prerelease: true}))).security_critical, false, 'an rc is not labelled');
+  resetLatestReleaseMemo();
+  const {default: app} = await import('../src/index.ts');
+  const read = async env => (await (await app.fetch(new Request('https://chalk.test/studio/latest-release'), env)).json());
+  assert.equal((await read({ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: '2026.1112.0', HPS_STUDIO_LATEST_RELEASE_SECURITY: '1'})).security_critical, true);
+  assert.equal((await read({ENVIRONMENT: 'test', HPS_STUDIO_LATEST_RELEASE: 'off', HPS_STUDIO_LATEST_RELEASE_SECURITY: '1'})).security_critical, false, 'unknown release: no label');
+  resetLatestReleaseMemo();
 });

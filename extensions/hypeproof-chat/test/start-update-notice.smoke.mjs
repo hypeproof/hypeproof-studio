@@ -25,8 +25,8 @@ for (const line of Object.values(START_UPDATE_COPY)) assert.ok(!/체험|해요$/
 // ── Host ──────────────────────────────────────────────────────────────────────────────────────
 const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'error' });
 
-function harness({ offer = null, held = false } = {}) {
-  const world = { states: [], commands: [], listeners: [], offer, held };
+function harness({ offer = null, held = false, frozen = false } = {}) {
+  const world = { states: [], commands: [], listeners: [], offer, held, frozen };
   const ctx = {
     workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} },
     globalState: { get: (_k, d) => d, update: async () => {} },
@@ -37,6 +37,8 @@ function harness({ offer = null, held = false } = {}) {
     ensureProfile: async () => null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {},
     hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => '코치', coachNameIsChosen: () => true, funnelEmit() {},
     getAvailableUpdate: () => world.offer, isClassUpdateHeld: () => world.held,
+    // CGP-SHELL-R-003: the provider's freeze rule (freezeHoldsUpdate) — frozen holds every release but a security-critical one.
+    isUpdateFrozen: info => world.frozen && info?.securityCritical !== true,
     onAvailableUpdateChanged: fn => { world.listeners.push(fn); return () => {}; },
   };
   // The scheduler's real path: setAvailableUpdate stores the offer and notifies the listeners.
@@ -92,4 +94,13 @@ h = harness({ offer: null });
 await h.page.handle({ type: 'startReady' }); await h.settle();
 assert.equal(h.state().update, undefined, 'a dismissed version is never offered');
 
-console.log('PASS start-page update notice: pure view + copy, host shows when newer (first paint and late check), hidden when none/dismissed, class hold, install/dismiss commands');
+// CGP-SHELL-R-003: inside the cohort's freeze the start page shows no notice, like the chat banner…
+h = harness({ offer: OFFER, held: true, frozen: true });
+await h.page.handle({ type: 'startReady' }); await h.settle();
+assert.equal(h.state().update, undefined, 'frozen: no notice');
+// …unless the release is security-critical: then the class seat's held line comes back.
+h = harness({ offer: { ...OFFER, securityCritical: true }, held: true, frozen: true });
+await h.page.handle({ type: 'startReady' }); await h.settle();
+assert.deepEqual({ ...h.state().update }, { version: '2026.1029.0', heldForClass: true }, 'security-critical overrides the freeze');
+
+console.log('PASS start-page update notice: pure view + copy, host shows when newer (first paint and late check), hidden when none/dismissed, class hold, cohort freeze (and its security override), install/dismiss commands');

@@ -12,8 +12,10 @@ studioRelease.get("/studio/latest-release", async (c) => {
   const fixed = c.env?.ENVIRONMENT !== "production" ? c.env?.HPS_STUDIO_LATEST_RELEASE?.trim() : undefined;
   if (fixed) {
     const version = /^\d{1,4}\.\d{1,4}\.\d{1,5}$/.test(fixed) ? fixed : null;
-    return c.json({ version, checked_at: null, source: "HPS_STUDIO_LATEST_RELEASE" });
+    // CGP-SHELL-R-003: HPS_STUDIO_LATEST_RELEASE_SECURITY=1 marks the fixed release security-critical (tests only).
+    const security = version !== null && c.env?.HPS_STUDIO_LATEST_RELEASE_SECURITY?.trim() === "1";
+    return c.json({ version, checked_at: null, security_critical: security, source: "HPS_STUDIO_LATEST_RELEASE" });
   }
   const latest = await latestFormalRelease();
-  return c.json({ version: latest.version, checked_at: latest.checked_at, source: "github.com/hypeproof/hypeproof-studio releases/latest" });
+  return c.json({ version: latest.version, checked_at: latest.checked_at, security_critical: latest.security_critical, source: "github.com/hypeproof/hypeproof-studio releases/latest" });
 });

@@ -288,7 +288,7 @@ import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
 import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
-import { classUpdateHold } from "./updateCheckerHelpers";
+import { chatUpdateOffer, classUpdateHold, freezeHoldsUpdate, updateFreeze } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
 import { DELEGATION_ICON, DelegationTracker, delegationHeader, delegationResultLabel, NO_ANSWER_REASON, TURN_FAILED_REASON } from "./delegationRow";
@@ -11854,7 +11854,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
-        update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
+        // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
+        update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
+        ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -11919,6 +11921,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CGP-SHELL-R-001 — the active seat is a class, so no update installs now. */
   isClassUpdateHeld(): boolean {
     return classUpdateHold(this.cachedProfile, activityConnections(this.context)?.current);
+  }
+
+  /** CGP-SHELL-R-003 — the cohort's update freeze on the current seat, or null (personal seat, no or past range). */
+  updateFreezeState(): { until: string } | null {
+    return updateFreeze(this.cachedProfile);
+  }
+  /** CGP-SHELL-R-003 — the freeze holds this release (it is not security-critical). */
+  isUpdateFrozen(info?: { securityCritical?: boolean } | null): boolean {
+    return freezeHoldsUpdate(this.updateFreezeState(), info ?? this.availableUpdate);
   }
 
   getAvailableUpdate(): import("./protocol").UpdateOffer | null {
