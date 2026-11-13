@@ -5297,6 +5297,34 @@
       ]
     },
     {
+      "id": "ST-REQ-GUARDIAN",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-GUARDIAN",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-GUARDIAN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "section": "## 검증 계획"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-EMAIL-AUTOMATION",
       "stage": "requirement",
       "owner": "TJ-kr",
