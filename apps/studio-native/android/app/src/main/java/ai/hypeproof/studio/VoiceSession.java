@@ -5,7 +5,7 @@ final class VoiceSession {
     enum Phase { IDLE, PERMISSION, LISTENING, WAITING, SPEAKING, READY }
     private long epoch;
     private String project;
-    private boolean conversation;
+    private boolean conversation, ending;
     private Phase phase = Phase.IDLE;
     long start(String id, boolean automatic) {
         stop(); project=id; conversation=automatic; phase=Phase.PERMISSION; return epoch;
@@ -14,7 +14,11 @@ final class VoiceSession {
     boolean listening(long ticket, String id) { return matches(ticket,id)&&phase==Phase.LISTENING; }
     boolean beginListening(long ticket, String id) {
         if(!matches(ticket,id)||(phase!=Phase.PERMISSION&&phase!=Phase.READY))return false;
-        phase=Phase.LISTENING;return true;
+        ending=false;phase=Phase.LISTENING;return true;
+    }
+    boolean endSpeech(long ticket,String id){
+        if(!listening(ticket,id)||ending)return false;
+        ending=true;return true;
     }
     boolean finish(long ticket, String id) {
         if(!listening(ticket,id))return false;
@@ -29,7 +33,7 @@ final class VoiceSession {
         phase=Phase.READY;return true;
     }
     long next(String id) {
-        if(phase!=Phase.READY||!project.equals(id))return -1;
+        if(!conversation||phase!=Phase.READY||!project.equals(id))return -1;
         epoch++; return epoch;
     }
     void stop() { epoch++;phase=Phase.IDLE;project=null;conversation=false; }
