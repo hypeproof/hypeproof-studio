@@ -74,6 +74,108 @@ test('a desktop draft keeps receiving phone history and the next explicit send u
  assert.equal(calls.length,2);assert.equal(calls[1].path,'/turns');
  assert.equal(calls[1].body.revision,2);assert.equal(calls[1].body.text,draft.text);
 }));
+function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
+async function flush(){await new Promise(setImmediate);await new Promise(setImmediate);}
+function answerTo(body){return {...privateSnapshot,acknowledged_id:body.id,state:{...privateSnapshot.state,revision:4,messages:[...privateSnapshot.state.messages,
+ {id:body.id,role:'user',content:body.text,created_at:3},{id:body.id+'-answer',role:'assistant',content:'Next question?',created_at:4}],
+ turn:{id:body.id,text:body.text,status:'completed',created_at:3,updated_at:4}}};}
+async function overlapHost(f){
+ const scope=f.h.mobileConversationScope(),binding={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
+ await f.h.saveReflectionBinding(binding);const get=deferred(),calls=[];
+ f.vscode.window.showWarningMessage=async()=>undefined;
+ const accounts={conversationSession:async()=>binding.session,reflectionRequest:async(session,path,body)=>{calls.push({session,path,body});return body?answerTo(body):get.promise;}};
+ f.h.setReflectionAccount(accounts);
+ const message={type:'sendMessage',activityId:scope.activity,taskId:scope.task,text:'보내기로 선택한 원래 이야기',history:[],userMessageId:'overlap-original'};
+ return {scope,binding,get,calls,accounts,message};
+}
+test('one explicit Send during history GET keeps durable words and posts once at the fresh revision',async()=>host(async f=>{
+ const o=await overlapHost(f),refresh=f.h.refreshPersonalReflection(),sending=f.h.sendPersonalReflection(o.message);
+ try {
+  await flush();assert.equal(f.h.reflectionBinding().pending?.id,o.message.userMessageId,'Send must enter the durable outbox while the GET is held.');
+  assert.equal(f.h.reflectionBinding().pending.text,o.message.text);assert.equal(o.calls.length,1,'No POST may use the pre-refresh revision.');
+  assert.equal(f.posts.some(p=>p.type==='inputRejected'),false,'An ordinary sync overlap is not a rejected Send.');
+  await f.h.sendPersonalReflection({...o.message,userMessageId:'duplicate-click'});
+  await f.h.handleTaskMessage({type:'taskCreate',taskId:o.scope.task});assert.equal(f.store.getView().activeTaskId,o.scope.task);
+ } finally {o.get.resolve(privateSnapshot);await Promise.all([refresh,sending]);}
+ const posts=o.calls.filter(c=>c.body);assert.equal(posts.length,1);assert.deepEqual(JSON.parse(JSON.stringify(posts[0].body)),{id:o.message.userMessageId,text:o.message.text,revision:2});
+ assert.equal(f.h.reflectionBinding().pending,undefined);assert.equal(f.h.activeStreams.size,0);
+ const reopened=new f.internals.TaskWorkspaceStore(f.activity.workspace,f.activity.id);await reopened.initialize();
+ assert.equal(reopened.getHistory(o.scope.task).filter(m=>m.id===o.message.userMessageId).length,1);
+ assert.equal(reopened.getHistory(o.scope.task).find(m=>m.id===o.message.userMessageId+'-answer').content,'Next question?');
+}));
+test('Send arriving during snapshot disk persistence cannot lose its outbox or use the old revision',async()=>host(async f=>{
+ const o=await overlapHost(f),entered=deferred(),release=deferred(),append=f.store.append.bind(f.store);
+ f.store.append=async(...args)=>{entered.resolve();await release.promise;return append(...args);};
+ const refresh=f.h.refreshPersonalReflection();o.get.resolve(privateSnapshot);await entered.promise;
+ const sending=f.h.sendPersonalReflection(o.message);await flush();assert.equal(f.h.reflectionBinding().pending?.id,o.message.userMessageId);
+ release.resolve();await Promise.all([refresh,sending]);
+ assert.equal(o.calls.filter(c=>c.body).length,1);assert.equal(o.calls.find(c=>c.body).body.revision,2);
+ assert.equal(f.store.getHistory(o.scope.task).filter(m=>m.id===o.message.userMessageId).length,1);
+}));
+test('failed or aborted GET preserves queued input across reopen and never replays without explicit Send',async t=>{
+ for(const error of [Error('synthetic offline'),Object.assign(Error('synthetic abort'),{name:'AbortError'})])await t.test(error.name+error.message,async()=>host(async f=>{
+  const o=await overlapHost(f),refresh=f.h.refreshPersonalReflection();const observed=assert.rejects(refresh);
+  const sending=f.h.sendPersonalReflection(o.message);await flush();o.get.reject(error);await Promise.all([observed,sending]);
+  assert.equal(o.calls.length,1,'A failed prerequisite must not dispatch or start a hidden follow-up GET.');
+  assert.ok(f.posts.some(p=>p.type==='inputRejected'&&p.text===o.message.text));assert.equal(f.h.reflectionBinding().pending.id,o.message.userMessageId);
+  // Recreate the provider and disk store, restoring only the persisted Memento
+  // value; no in-flight promise, stream lock or callback survives this boundary.
+  const saved=JSON.parse(JSON.stringify(f.h.reflectionBinding())),reopened=await createTaskHarness(f.activity.workspace);
+  Object.assign(reopened.h,{_instructorMode:{isInstructor:false},reflectionStreams:new Map(),reflectionRefreshing:false});
+  await reopened.h.saveReflectionBinding(saved);
+  let posts=0;reopened.h.setReflectionAccount({conversationSession:async()=>o.binding.session,reflectionRequest:async(_s,_p,body)=>{if(body){posts++;assert.equal(body.revision,2);return answerTo(body);}return privateSnapshot;}});
+  await reopened.h.refreshPersonalReflection();assert.equal(posts,0);assert.equal(reopened.store.getDraft(o.scope.task).text,o.message.text);
+  await reopened.h.sendPersonalReflection({...o.message,userMessageId:'new-ui-id'});assert.equal(posts,1);
+  assert.ok(reopened.store.getHistory(o.scope.task).some(m=>m.id===o.message.userMessageId));
+ }));
+});
+test('queued Send revalidates account, activity, task and unsafe work after the same GET',async t=>{
+ for(const change of ['account-object','account-session','activity','task','hold'])await t.test(change,async()=>host(async f=>{
+  const o=await overlapHost(f),refresh=f.h.refreshPersonalReflection();const observed=refresh.catch(()=>{});
+  const sending=f.h.sendPersonalReflection(o.message);await flush();assert.equal(f.h.reflectionBinding().pending?.id,o.message.userMessageId);
+  if(change==='account-object')f.h.setReflectionAccount({conversationSession:async()=> 'account-b'});
+  if(change==='account-session')o.accounts.conversationSession=async()=> 'account-b';
+  if(change==='activity')f.connections.active={...f.activity,id:'other-personal'};
+  if(change==='task')await f.store.create('Other task',{taskId:f.store.getView().activeTaskId,revision:f.store.getView().revision});
+  if(change==='hold')f.h.opsHold='paused';
+  o.get.resolve(privateSnapshot);await Promise.all([observed,sending]);assert.equal(o.calls.filter(c=>c.body).length,0);
+  // Returning to the original scope restores words, never a delayed send.
+  f.connections.active=f.activity;f.h.opsHold=undefined;await f.store.select(o.scope.task,{taskId:f.store.getView().activeTaskId,revision:f.store.getView().revision});o.accounts.conversationSession=async()=>o.binding.session;f.h.setReflectionAccount(o.accounts);
+  await f.h.refreshPersonalReflection();assert.equal(o.calls.filter(c=>c.body).length,0);assert.equal(f.store.getDraft(o.scope.task).text,o.message.text);
+ }));
+});
+test('waiting for refresh never rebases an uncertain earlier POST payload',async()=>host(async f=>{
+ const o=await overlapHost(f),pending={id:'previous-uncertain',text:o.message.text,revision:0};
+ await f.h.saveReflectionBinding({...o.binding,pending});
+ const refresh=f.h.refreshPersonalReflection(),sending=f.h.sendPersonalReflection(o.message);await flush();
+ o.get.resolve(privateSnapshot);await Promise.all([refresh,sending]);
+ const posted=o.calls.filter(c=>c.body);assert.equal(posted.length,1);
+ assert.deepEqual(JSON.parse(JSON.stringify(posted[0].body)),pending,'Only an explicit never-dispatched wait may adopt the new revision.');
+}));
+test('a known rejection after refresh clears only that request so edited Send uses a new ID and revision',async t=>{
+ for(const code of ['reflection_changed','reflection_busy','invalid_reflection_turn'])await t.test(code,async()=>host(async f=>{
+  const o=await overlapHost(f);let reads=0,posts=0;
+  o.accounts.reflectionRequest=async(session,path,body)=>{
+   o.calls.push({session,path,body});
+   if(!body){reads++;return reads===1?o.get.promise:{...privateSnapshot,state:{...privateSnapshot.state,revision:4}};}
+   posts++;if(posts===1)throw Object.assign(Error('Known pre-dispatch rejection'),{code});
+   assert.equal(body.id,'edited-explicit');assert.equal(body.revision,4);assert.equal(body.text,'내가 고쳐 쓴 이야기');
+   const answer=answerTo(body);return {...answer,state:{...answer.state,revision:6}};
+  };
+  const refresh=f.h.refreshPersonalReflection(),sending=f.h.sendPersonalReflection(o.message);await flush();o.get.resolve(privateSnapshot);await Promise.all([refresh,sending]);
+  assert.equal(posts,1,'Reconciliation may read, but must not replay the rejected POST.');assert.equal(reads,2);
+  assert.equal(f.h.reflectionBinding().revision,4);assert.equal(f.h.reflectionBinding().pending,undefined,'A known rejection must clear its pending request at the latest binding revision.');
+  assert.ok(f.posts.some(p=>p.type==='inputRejected'&&p.text===o.message.text));
+  await f.h.sendPersonalReflection({...o.message,userMessageId:'edited-explicit',text:'내가 고쳐 쓴 이야기'});assert.equal(posts,2);
+  assert.equal(f.store.getHistory(o.scope.task).filter(m=>m.id==='edited-explicit').length,1);
+ }));
+});
+test('failed queued outbox persistence cannot dispatch when the GET later completes',async()=>host(async f=>{
+ const o=await overlapHost(f),refresh=f.h.refreshPersonalReflection(),save=f.h.saveReflectionBinding.bind(f.h);
+ f.h.saveReflectionBinding=async(b,update)=>{if(b.pending)throw Error('synthetic disk failure');return save(b,update);};
+ await f.h.sendPersonalReflection(o.message);assert.ok(f.posts.some(p=>p.type==='inputRejected'&&p.text===o.message.text));
+ o.get.resolve(privateSnapshot);await refresh;assert.equal(o.calls.filter(c=>c.body).length,0);assert.equal(f.h.activeStreams.size,0);
+}));
 test('draft history refresh still defers during unsafe host work',async()=>host(async f=>{
  const scope=f.h.mobileConversationScope(),binding={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
  await f.h.saveReflectionBinding(binding);await f.store.saveDraft(scope.task,{...f.store.getDraft(scope.task),text:'Keep my draft'});

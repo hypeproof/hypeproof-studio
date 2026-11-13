@@ -38,8 +38,13 @@ while its personal conversation has an unsent draft (#3968). Reading history
 preserves that draft and advances the bound revision without sending a turn.
 Account/task changes and unsafe active work still fence the read; creating a
 making task or executing a mobile request retains its stricter readiness checks.
-The next explicit send uses the refreshed revision. Host/store regression evidence
-does not replace installed two-device acceptance.
+The next explicit send uses the refreshed revision. If Send overlaps that GET
+(#3975), one explicit request retains its durable ID and words while waiting for
+the same read. It posts once only after refreshed revision and account/activity/task
+checks. Failed reads, failed persistence, cancellation or changed scope preserve
+recoverable input without later automatic replay. An uncertain earlier POST keeps
+its original idempotent payload. Host/store regression evidence does not replace
+installed two-device acceptance.
 
 MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
 screen and existing personal task navigation, including shipped layouts with the
