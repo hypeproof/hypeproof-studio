@@ -9,8 +9,9 @@
 // (calm word-by-word headline, slow push-in mask reveal of the person's material, thin lime rule, closing card).
 // Every file the composition loads sits beside it in the show folder; it names no network URL.
 //
-// Out of scope for this slice (TODO #3794): Service upload and the -try share link, MP4/WebM export, mobile,
-// and the consent-version bump. Slice 1 is local only, so it is on by default (Jay, 2026-11-12); sharing waits for consent.
+// Slice 1 is local only, so it is on by default (Jay, 2026-11-12). Sharing is slice 2 (showLink.ts,
+// REQ-STUDIO-SHOW-LINK): a separate step behind its own flag and consent item. Still out of scope (TODO #3794):
+// MP4/WebM export and mobile.
 
 import { jpegInfo, type CdpSend } from "./deckPdf.ts";
 

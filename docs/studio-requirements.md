@@ -9235,10 +9235,40 @@ setting `hypeproofChat.showWhatIMadeEnabled` turns it off. Uploading and sharing
   sha256 are listed in `media/show/VENDORED.json`.
 - No telemetry and no new network call.
 
-Out of scope (TODO #3794): Service upload and the `-try` share link, MP4/WebM export, mobile, the consent-version
-bump.
+Out of scope for slice 1 (TODO #3794): MP4/WebM export and mobile. Sharing is slice 2, below.
 
 Evidence: `test/show-what-i-made.smoke.mjs` (vendored pins, composition contract, escaping, flow state machine,
 host writes and refusals, headless offline playback sought to fixed times, panel layout at 360/800/1420) and
 `scripts/check-show-composition.mjs` (HyperFrames checker, run on a worker with a pinned CLI). Not covered: the
 installed Electron app. A real-app run of the panel is NOT RUN in this slice.
+
+## Show what I made as a link (#3794 slice 2)
+
+`REQ-STUDIO-SHOW-LINK` follows `REQ-STUDIO-SHOW-WHAT-I-MADE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12:
+link-first sharing, consent item, cost-first, nothing sent before the press). Desktop only, behind the machine setting
+`hypeproofChat.showLinkEnabled` (default off until the Service ships `HPS_SHOW_LINKS`), and only with a signed-in
+personal account (14+; a classroom code never reaches it).
+
+- After `이대로 할래요`, the accepted view offers `링크로 보여주기`. Reaching the accepted view sends nothing.
+  Pressing it reads only the person's own link list and consent state (`GET /v1/me/show-links`, account session).
+- The review lists every file that will be uploaded, by name, role and exact size: `index.html` (the scene),
+  `material-N.<ext>` (the picture copy that played) and the four vendored playback files (pinned by sha256 in
+  `media/show/VENDORED.json`). It shows the words the viewer will read (the headline and the closing line), plays the
+  scene, and says who can see it: anyone with the link, no login, not in search, and `링크 끄기` turns it off and
+  deletes the uploaded scene and picture.
+- Consent item `내가 만든 것을 영상·링크로 공유` (Service `SHOW_CONSENT_VERSION` 2026-11-12.5, its own record, never a
+  privacy-policy consent). Without the box checked `링크 만들기` sends nothing. Once given it is remembered by the Service.
+- `링크 만들기` records the consent when needed, then uploads exactly the bytes listed, with one request id per press
+  (a retry is the same link). A hand-edited `index.html` or a changed vendored copy is refused before anything is
+  sent; a picture over 10 MB is refused. The Service regenerates the template and refuses any other script.
+- The shared view shows the link (`https://show-<id>-try.hypeproof-ai.xyz/<key>/`, checked before it is shown),
+  `링크 복사` and `링크 끄기`. `share.json` beside the composition holds link ids, URLs and press counts (open,
+  share, copy, revoke), never the person's words.
+- No model call. Cost per upload about US$0.00001 and per view about US$0.000004; per account at most 20 live links,
+  100 MB and 20 uploads a day (hypeproof-service `DEPLOY.md`, "Show links").
+
+Evidence: `test/show-link.smoke.mjs` (cross-repo template digest, consent item, routes, link shape, reducer, bundle
+pins and cap, host against a recording Service: flag and sign-in gates, nothing before the press, the exact files,
+consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
+and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
+Electron app and a deployed Service; both are NOT RUN in this slice.
