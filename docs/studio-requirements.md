@@ -9,6 +9,13 @@ personal local draft; sending remains a separate action. Existing account drafts
 and outstanding turns are never replaced. Cached personal history opens without
 waiting for the network, and refresh does not change an explicit selection.
 
+MPER-02/03 continuation opens cached history at its latest exchange, including an
+equal-length conversation switch or a capped history window (#3962). New replies
+follow only while the person is at the bottom; reading older words must not force
+a jump. An explicit send or the accessible “최신 메시지” action resumes following.
+Account changes reset the view's following state. Native test diagnostics must not
+change transcript layout or substitute accessibility existence for visible bounds.
+
 The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
 prose, user bubbles, one rounded composer and secondary history navigation. It
 uses native system surfaces, desktop accent roles and Dynamic Type. The existing

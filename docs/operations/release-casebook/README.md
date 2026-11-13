@@ -126,6 +126,8 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
 | BB-036 | `testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID` |
 | BB-036 | `testRecordedFailureCannotReplaceExistingDraft` |
+| BB-036 | `testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch` |
+| BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
