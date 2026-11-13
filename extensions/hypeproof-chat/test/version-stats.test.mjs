@@ -78,13 +78,14 @@ test('the real PublishSession: never waits for the counts, reads in parallel, ca
     reads.push(m[1]);
     const answer = () => new Response(JSON.stringify({ evidence: { sessions: [{ session_id: `ps_${m[1]}`, at: now - DAY_MS, pseudonym: 'pp_SECRET', product_version: null, tasks: done, pages: 1, clicks: 1, inputs: 9 }] } }), { status: 200 });
     if (mode === 'fail' && m[1] === 'e2') return new Response('{}', { status: 503 });
-    if (mode === 'hang') return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)));
+    // Hangs for good unless the caller passes an abort signal that fires: without the timeout it never answers.
+    if (mode === 'hang') return new Promise((_, reject) => { init?.signal?.addEventListener('abort', () => reject(init.signal.reason)); });
     if (mode === 'gate') return new Promise((resolve) => waiting.push(() => resolve(answer())));
     return answer();
   };
-  let t = now, changed = 0;
+  let t = now, changed = 0, tokenThrows = false;
   const changes = () => new Promise((r) => { const at = changed; const tick = () => (changed > at ? r() : setTimeout(tick, 5)); tick(); });
-  const session = new PublishSession({ switchOn: () => true, token: async () => 'tok', scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => t, fetchImpl, statsChanged: () => { changed++; } });
+  const session = new PublishSession({ switchOn: () => true, token: async () => { if (tokenThrows) throw new Error('secret store unavailable'); return 'tok'; }, scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => t, fetchImpl, statsChanged: () => { changed++; } });
 
   // A read that has not answered never holds back the sharing state.
   let next = changes();
@@ -125,8 +126,30 @@ test('the real PublishSession: never waits for the counts, reads in parallel, ca
   view = await session.view();
   assert.ok(Date.now() - started < 1000, 'the view did not wait for the hanging read');
   assert.equal(view.stats.v1.state, 'loading');
-  await next;
-  assert.ok(Date.now() - started < 8000, 'the hanging read was cut off by the timeout');
+  const cut = await Promise.race([next.then(() => true), new Promise((r) => setTimeout(() => r(false), 8000))]);
+  assert.ok(cut, 'the hanging read was cut off by the timeout (no answer without it)');
   view = await session.view();
   assert.equal(view.stats.v1.state, 'unknown');
+
+  // The token lookup inside the background load throws: nothing is kept, nothing is unhandled, the version is unknown.
+  // (The last view started the seventh experiment's hanging read; let its timeout run out first.)
+  await new Promise((r) => setTimeout(r, 4500));
+  t += 61_000; mode = 'gate'; next = changes();
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    view = await session.view();
+    assert.equal(view.stats.v1.state, 'loading');
+    await new Promise((r) => setTimeout(r, 20));
+    tokenThrows = true;
+    for (const w of waiting.splice(0)) w();
+    const settled = await Promise.race([next.then(() => true), new Promise((r) => setTimeout(() => r(false), 3000))]);
+    assert.ok(settled, 'the load settled and asked for a redraw');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+    tokenThrows = false;
+    view = await session.view();
+    assert.equal(view.stats.v1.state, 'unknown', 'a token lookup that throws makes the version unknown');
+  } finally { process.off('unhandledRejection', onUnhandled); }
 });
