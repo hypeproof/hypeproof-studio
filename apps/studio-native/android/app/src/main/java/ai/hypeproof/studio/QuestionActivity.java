@@ -143,8 +143,9 @@ public final class QuestionActivity extends Activity {
             try{
                 if(s!=null){
                     if(s.earlier)messages.addView(text("최근 대화를 보여주고 있어요.",12,false));
-                    for(int i=0;i<s.messages.length();i++){JSONObject m=s.messages.getJSONObject(i);addMessage(m.getString("role").equals("user")?"나의 생각":"함께 생각하기",m.getString("content"));}
-                    if(s.status().equals("local"))addMessage("전송 확인이 필요한 내 생각",s.request.getString("text"));
+                    boolean requestShown=false;
+                    for(int i=0;i<s.messages.length();i++){JSONObject m=s.messages.getJSONObject(i);boolean user=m.getString("role").equals("user");addMessage(user?"나의 생각":"함께 생각하기",m.getString("content"));if(user&&s.request!=null&&m.getString("id").equals(s.request.optString("id"))&&m.getString("content").equals(s.request.optString("text")))requestShown=true;}
+                    if(!requestShown&&(s.status().equals("local")||s.status().equals("failed")))addMessage(s.status().equals("local")?"전송 확인이 필요한 내 생각":"나의 생각",s.request.getString("text"));
                     if(s.request!=null&&!s.outstanding()&&!s.status().equals("completed"))messages.addView(text("이 답변은 완료되지 않았어요. 이전 글은 남아 있어요.",13,false));
                 }
             }catch(Exception e){model.error="대화를 표시하지 못했어요. 원본은 보존돼요.";}
@@ -161,6 +162,11 @@ public final class QuestionActivity extends Activity {
         }else if(s.status().equals("local")&&!model.busy){
             LinearLayout row=new LinearLayout(this);row.addView(button("먼저 대화 확인",model::refresh),new LinearLayout.LayoutParams(0,-2,1));row.addView(button("같은 요청 다시 확인",model::retry),new LinearLayout.LayoutParams(0,-2,1));actions.addView(row);
         }else if(s.outstanding()&&!model.busy){actions.addView(button("응답 수신 멈추기",()->{stopVoice();new AlertDialog.Builder(this).setTitle("응답 수신 멈추기").setMessage("이 답변을 더 받지 않도록 요청해요. 이미 시작된 AI 처리에는 비용이 발생할 수 있어요. 보낸 글은 남아요.").setNegativeButton("계속 기다리기",null).setPositiveButton("멈추기",(d,w)->model.stopResponse()).show();}));}
+        if(s!=null&&s.status().equals("failed")){
+            Button restore=button("입력란에 가져오기",()->{stopVoice();if(model.restoreFailedDraft())composer.requestFocus();});
+            restore.setEnabled(model.canRestoreFailedDraft());actions.addView(restore);
+            if(!model.draft.isEmpty())actions.addView(text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.",13,false));
+        }
         if(s!=null&&!model.guestDraft.isEmpty()){
             TextView kept=text("로그인 전 글도 남아 있어요. 입력창을 비운 뒤 가져올 수 있어요.",13,false);actions.addView(kept);
             Button restore=button("로그인 전 글 가져오기",()->{stopVoice();model.restoreGuest();update();});restore.setEnabled(model.canRestoreGuest());actions.addView(restore);

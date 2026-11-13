@@ -263,6 +263,20 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+#### Confirmed failed-question recovery — Studio #3974
+
+MPER-03/04 and MREF-05 preserve the person's decision after a server-confirmed
+`failed` turn: `입력란에 가져오기` copies its text only into an empty effective
+account draft, using the existing atomic save-before-adopt path. The failed request
+and transcript remain unchanged, and its user message is displayed once. Another
+draft, including unsaved edits, is never replaced. Restore stops voice and neither
+sends nor resumes capture. Only a later explicit Send creates a new request ID at
+the latest confirmed revision. An uncertain `local` outbox keeps its ID and existing
+reconciliation path; a transport error alone does not enable failed-turn restore.
+This follows **Human judgment stays visible**: the person reviews retained words
+before authorizing another request. No provider, account, grant or price policy changes.
+Source tests and disposable emulator evidence are distinct from physical/live acceptance.
+
 ### Desktop visible question entry (Studio #3798)
 
 This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,

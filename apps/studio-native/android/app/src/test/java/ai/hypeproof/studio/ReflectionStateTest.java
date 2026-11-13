@@ -38,4 +38,14 @@ public class ReflectionStateTest {
         state.draft="한글과 🙂";assertEquals(state.draft,new ReflectionState("A",ReflectionState.decode(ReflectionState.encode(state.json().toString()))).draft);
     }
 
+    @Test public void onlyConfirmedFailedTextRestoresWithoutReplacingItsIdentity() throws Exception {
+        ReflectionState state=new ReflectionState("A");state.revision=7;state.draft="보존할 실패 질문";state.enqueue();String id=state.request.getString("id");
+        for(String status:new String[]{"local","pending","running","unknown","cancelled","completed"}){state.request.put("status",status);assertFalse(status,state.restoreFailedDraft());assertEquals("",state.draft);assertEquals(id,state.request.getString("id"));}
+        state.request.put("status","failed");String request=state.request.toString();
+        state.draft=" ";assertFalse(state.restoreFailedDraft());assertEquals(" ",state.draft);
+        state.draft="";assertTrue(state.restoreFailedDraft());assertEquals("보존할 실패 질문",state.draft);assertEquals(request,state.request.toString());assertFalse(state.restoreFailedDraft());
+        ReflectionState restored=new ReflectionState("A",state.json().toString());assertEquals("보존할 실패 질문",restored.draft);assertEquals(id,restored.request.getString("id"));
+        restored.enqueue();assertNotEquals(id,restored.request.getString("id"));assertEquals("7",restored.submission().get("revision"));
+    }
+
 }
