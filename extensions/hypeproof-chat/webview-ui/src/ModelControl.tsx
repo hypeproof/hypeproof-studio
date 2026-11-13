@@ -3,7 +3,8 @@ import { ChatIcon } from './ChatDetails';
 import type { ChatConfig } from '../../src/protocol';
 import { postToHost } from './vscode';
 
-export function ModelControl({ config, streaming }: { config: ChatConfig; streaming: boolean }) {
+/** `compact` (ux.coach_layout): the cohort-managed reason stays for assistive tech (the select's aria-describedby) but is not drawn. */
+export function ModelControl({ config, streaming, compact = false }: { config: ChatConfig; streaming: boolean; compact?: boolean }) {
   const reasonId = useId();
   const locked = config.cohortSettings?.model === true;
   return <>
@@ -27,7 +28,7 @@ export function ModelControl({ config, streaming }: { config: ChatConfig; stream
 
             {config.profile.model_selection.choices.map(c => <option key={c.id} value={c.alias}>{c.label}</option>)}
           </select></label>
-          <small id={locked ? reasonId : undefined} className={locked ? 'hps-managed-reason' : undefined}>{locked ? <><ChatIcon kind="lock" size={20} /> 선생님이 정한 설정이에요</> : config.profile.model_selection.choices.length === 1
+          <small id={locked ? reasonId : undefined} className={locked ? (compact ? 'hps-managed-reason hps-sr-only' : 'hps-managed-reason') : undefined}>{locked ? <><ChatIcon kind="lock" size={20} /> 선생님이 정한 설정이에요</> : config.profile.model_selection.choices.length === 1
             ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
             : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
         </div>}

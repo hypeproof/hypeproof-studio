@@ -940,3 +940,98 @@ body.vscode-high-contrast .hps-shell .hps-input > .hps-file-mentions { border-co
 @media (forced-colors: active) {
   .hps-memory-settings-delete, .hps-memory-settings-actions button, .hps-memory-settings-search input, .hps-memory-settings .tw-memory-source button { border-color: ButtonText; }
 }
+
+/* Compact coach layout — the per-cohort opt-in `ux.coach_layout: 'compact'`.
+ *
+ * Every rule here sits under `[data-coach-layout="compact"]` (the shell root, or the running-process
+ * section, which draws outside the shell's own markup), so a cohort that does not opt in matches none
+ * of them and keeps today's layout. Spacing is the --hp-space ladder; every control keeps the learner's
+ * 44px floor (--hp-control-min, DES-06): this file trims padding, margins and rows, never a hit target.
+ * This block closes chatDetails.css so it follows the base rules it adjusts (a separate stylesheet would change the
+ * CSS inventory type-scale.smoke.mjs pins). */
+
+/* ── Chrome above the conversation ─────────────────────────────────────────────────────────── */
+/* The mission header as one row (it wraps rather than clips when a lesson fills it). */
+.hps-shell[data-coach-layout="compact"] > .hp-mission {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 0 var(--hp-space-3);
+  padding: var(--hp-space-1) var(--hp-space-3);
+}
+.hps-shell[data-coach-layout="compact"] > .hp-mission > * { margin: 0; }
+/* A collapsed lesson card keeps its 44px summary row and loses the padding around it. */
+.hps-shell[data-coach-layout="compact"] details.hp-rail-lesson:not([open]) { margin: var(--hp-space-1) var(--hp-space-3) 0; padding: 0 var(--hp-space-2); }
+.hps-shell[data-coach-layout="compact"] details.hp-rail-lesson:not([open]) > summary { padding: 0 var(--hp-space-1); min-height: var(--hp-control-min); }
+
+/* ── Chrome below the conversation ─────────────────────────────────────────────────────────── */
+.hps-shell[data-coach-layout="compact"] .hps-input-area .hps-model-selection { gap: var(--hp-space-1) var(--hp-space-3); margin-bottom: var(--hp-space-1); }
+.hps-shell[data-coach-layout="compact"] .hps-input-area .hps-model-selection > * { margin-top: 0; margin-bottom: 0; }
+.hps-shell[data-coach-layout="compact"] .hps-input-area details.hps-access:not([open]) { margin: var(--hp-space-1) 0; padding: var(--hp-space-2) var(--hp-space-3); }
+/* Classroom composer: tools, text and send share one row instead of three stacked rows. A pending file
+   context keeps its own grid (chatDetails.css); the personal chat keeps its own composer layout. */
+.hps-shell[data-coach-layout="compact"]:not([data-chat-detail="personal"]) .hps-input-area .hps-input:not([data-file-context]) {
+  display: grid; grid-template-columns: var(--hp-control-min) minmax(0, 1fr) auto; align-items: end;
+  gap: var(--hp-space-2); padding: var(--hp-space-2);
+}
+.hps-shell[data-coach-layout="compact"]:not([data-chat-detail="personal"]) .hps-input-area .hps-input:not([data-file-context]) > * { grid-column: 1 / -1; }
+.hps-shell[data-coach-layout="compact"]:not([data-chat-detail="personal"]) .hps-input-area .hps-input:not([data-file-context]) > .hps-composer-tools { grid-column: 1; }
+.hps-shell[data-coach-layout="compact"]:not([data-chat-detail="personal"]) .hps-input-area .hps-input:not([data-file-context]) > textarea { grid-column: 2; }
+.hps-shell[data-coach-layout="compact"]:not([data-chat-detail="personal"]) .hps-input-area .hps-input:not([data-file-context]) > .hps-input-buttons { grid-column: 3; justify-self: end; }
+
+/* ── Running processes: one row, title · address · stop ────────────────────────────────────── */
+.hps-running-processes[data-coach-layout="compact"] { margin: var(--hp-space-1) 0; }
+.hps-running-processes[data-coach-layout="compact"] ul { gap: var(--hp-space-1); }
+.hps-running-processes[data-coach-layout="compact"] li.hps-process-card { flex-wrap: nowrap; padding-block: var(--hp-space-1); padding-inline: var(--hp-space-3) var(--hp-space-2); gap: var(--hp-space-3); }
+.hps-running-processes[data-coach-layout="compact"] .hps-process-text { display: flex; align-items: baseline; gap: var(--hp-space-3); }
+.hps-running-processes[data-coach-layout="compact"] .hps-process-text > p { margin: 0; white-space: nowrap; }
+/* A long purpose or address shortens with an ellipsis (the address first); neither can run under the stop button. */
+.hps-running-processes[data-coach-layout="compact"] .hps-process-title { flex: 0 1 auto; min-width: 0; }
+.hps-running-processes[data-coach-layout="compact"] .hps-shell-purpose { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-running-processes[data-coach-layout="compact"] .hps-process-address { flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--hp-text-muted-default); }
+.hps-running-processes[data-coach-layout="compact"] .hps-process-actions { flex: none; }
+
+/* ── 자료 as tags above the composer ───────────────────────────────────────────────────────── */
+.hps-shell[data-coach-layout="compact"] .hp-materials-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-1) var(--hp-space-2); min-width: 0; font-size: var(--hp-font-caption); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag {
+  display: inline-flex; align-items: center; min-width: 0; max-width: 100%; overflow: hidden;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-full);
+}
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag[data-selected] { border-color: var(--hp-text-accent-default); background: var(--hp-bg-control-pressed); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag > .hp-materials-tag-title { padding: 0 var(--hp-space-3); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick,
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-remove {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--hp-space-1);
+  min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--hp-space-2);
+  border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick { min-width: 0; padding: 0 var(--hp-space-3); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick:hover:not(:disabled),
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-remove:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick:active:not(:disabled),
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-remove:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick:disabled,
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-remove:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-pick > svg { flex: none; }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tag-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tags .hp-materials-url { flex: 1 1 100%; }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tags .hp-materials-url button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); }
+.hps-shell[data-coach-layout="compact"] .hp-materials-tags p { margin: 0; flex: 1 1 100%; }
+@media (forced-colors: active) {
+  .hps-shell[data-coach-layout="compact"] .hp-materials-tag { border-color: ButtonText; }
+  .hps-shell[data-coach-layout="compact"] .hp-materials-tag[data-selected] { border-color: Highlight; background: Canvas; }
+}
+
+/* ── "AI가 할 수 있는 일" inside the settings dialog ───────────────────────────────────────── */
+.hps-shell[data-coach-layout="compact"] .hps-preferences .hp-ai-can-do { margin-inline: 0; }
+
+/* ── Coach-driven next steps under the latest answer ───────────────────────────────────────── */
+.hps-shell[data-coach-layout="compact"] .hps-next-steps { display: flex; flex-direction: column; gap: var(--hp-space-1); padding: var(--hp-space-2) 0; }
+.hps-shell[data-coach-layout="compact"] .hps-next-steps-label { font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
+.hps-shell[data-coach-layout="compact"] .hps-next-steps-list { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hps-shell[data-coach-layout="compact"] .hps-next-step {
+  min-height: var(--hp-control-min); max-width: 100%; padding: 0 var(--hp-space-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-full);
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.hps-shell[data-coach-layout="compact"] .hps-next-step:hover { background-color: var(--hp-bg-control-hover); }
+.hps-shell[data-coach-layout="compact"] .hps-next-step:active { background-color: var(--hp-bg-control-pressed); }
