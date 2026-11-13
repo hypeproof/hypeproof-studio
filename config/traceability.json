@@ -19036,16 +19036,36 @@
       ]
     },
     {
-      "id": "ST-TEST-GUARDIAN",
-      "stage": "test",
+      "id": "ST-IMP-GUARDIAN",
+      "stage": "implementation",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-GUARDIAN"
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/src/childProfile.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/childProfileHost.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-GUARDIAN",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-GUARDIAN",
+        "ST-IMP-GUARDIAN"
+      ],
+      "sources": [
+        {
           "path": "docs/requirements/guardian-child-profile.md",
           "section": "## 검증 계획"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/child-profile-posture.smoke.mjs"
         }
       ]
     },
