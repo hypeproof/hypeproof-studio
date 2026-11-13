@@ -223,6 +223,66 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
         try evidence("journey-voice-stop", app: app)
     }
+    @MainActor private func waitForRegisteredResponse(in app: XCUIApplication) {
+        let transport = diagnostic("nativeJourneyTrace", in: app)
+        let registered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = transport.value as? String, let bytes = text.data(using: .utf8),
+                  let state = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
+            return (state["submitted_ids"] as? [String])?.count == 1
+        }, object: transport)
+        XCTAssertEqual(XCTWaiter.wait(for: [registered], timeout: 5), .completed)
+    }
+    @MainActor func testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch() throws {
+        let app = launch("response-stop-denied"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        let stop = app.buttons["sharedResponseStop"]; enabled(stop)
+        waitForRegisteredResponse(in: app); stop.tap()
+        let reason = app.staticTexts["sharedError"]
+        let denied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "이 계정의 AI 이용 권한"), object: reason)
+        XCTAssertEqual(XCTWaiter.wait(for: [denied], timeout: 10), .completed)
+        XCTAssertFalse(app.staticTexts["sharedReply"].exists); XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        XCTAssertTrue(app.staticTexts["내 메시지. I want to understand my next step"].exists)
+        let before = try trace(app), ids = try XCTUnwrap(before["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 1); XCTAssertEqual(before["cancelled_requests"] as? [String], [])
+        XCTAssertEqual(before["held_response_returns"] as? Int, 1)
+        app.terminate(); app.launch(); _ = field(app)
+        XCTAssertTrue(reason.waitForExistence(timeout: 5)); XCTAssertTrue(reason.label.contains("이 계정의 AI 이용 권한"))
+        let reopened = try trace(app)
+        XCTAssertEqual(reopened["submitted_ids"] as? [String], ids)
+        XCTAssertEqual(reopened["speech_captures"] as? Int, 1); XCTAssertEqual(reopened["accepted_turns"] as? Int, 0)
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists); XCTAssertFalse(app.staticTexts["sharedReply"].exists)
+        try evidence("journey-response-stop-denied", app: app)
+    }
+    @MainActor func testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch() throws {
+        let app = launch("response-stop"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        let stop = app.buttons["sharedResponseStop"]; enabled(stop)
+        XCTAssertTrue(stop.isHittable); XCTAssertGreaterThanOrEqual(stop.frame.height, 44)
+        waitForRegisteredResponse(in: app)
+        stop.tap()
+        let cancelled = app.staticTexts["답변 받기를 중지했어요. 보낸 이야기는 남아 있어요."]
+        XCTAssertTrue(cancelled.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        XCTAssertFalse(app.staticTexts["sharedReply"].exists)
+        XCTAssertFalse(app.buttons["sharedResponseStop"].exists)
+        let after = try trace(app), ids = try XCTUnwrap(after["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 1)
+        XCTAssertEqual(after["submitted_texts"] as? [String], ["I want to understand my next step"])
+        XCTAssertEqual(after["cancelled_requests"] as? [String], ids)
+        XCTAssertEqual(after["held_response_returns"] as? Int, 1, "The original POST transport delivers its error before cancel acknowledgement; actor callback order must not overwrite confirmation.")
+        XCTAssertEqual(after["speech_captures"] as? Int, 1); XCTAssertEqual(after["accepted_turns"] as? Int, 0)
+        XCTAssertTrue(app.staticTexts["내 메시지. I want to understand my next step"].exists)
+        field(app).tap(); field(app).typeText("Keep my separate draft")
+        app.terminate(); app.launch(); _ = field(app)
+        valueContains(field(app), "Keep my separate draft")
+        XCTAssertTrue(cancelled.waitForExistence(timeout: 5))
+        let reopened = try trace(app)
+        XCTAssertEqual(reopened["submitted_ids"] as? [String], ids)
+        XCTAssertEqual(reopened["cancelled_requests"] as? [String], ids)
+        XCTAssertEqual(reopened["speech_captures"] as? Int, 1)
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists); XCTAssertFalse(app.staticTexts["sharedReply"].exists)
+        try evidence("journey-response-stop", app: app)
+    }
     @MainActor func testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening() throws {
         let app = launch("queued-voice"); signIn(app)
         app.buttons["conversationSettings"].tap(); app.buttons["새로 고침"].tap()

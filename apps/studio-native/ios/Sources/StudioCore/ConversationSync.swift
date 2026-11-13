@@ -61,6 +61,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
         case "local": return "이 기기에 저장됨 · 전송 대기"
         case "running", "pending": return "질문을 이어가고 있어요"
         case "completed": return "같은 계정의 대화에 저장됨"
+        case "cancelled": return "답변 받기를 중지했어요. 보낸 이야기는 남아 있어요."
         case "unknown": return "완료 여부를 확인하지 못했어요. 자동으로 다시 실행하지 않아요."
         default: return "답변을 받지 못했어요. 보낸 이야기는 남아 있어요."
         }
@@ -133,6 +134,14 @@ public struct ConversationCache: Codable, Sendable {
         if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
         if request?.status == "completed" { requestFailure = nil }
     }
+    /// A cancel endpoint can return an older/unrelated snapshot when the POST
+    /// has not registered yet. Only an exact terminal turn confirms this action.
+    public mutating func applyReflectionStop(_ value: PersonalReflection, request original: SharedRequest) throws {
+        guard let turn = value.state.turn, turn.id == original.id, turn.text == original.text,
+              !turn.outstanding else { throw SyncFailure.invalidResponse }
+        try applyReflection(value)
+        if turn.status == "cancelled" || turn.status == "completed" { requestFailure = nil }
+    }
     public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
         request = try .pending(draft)
@@ -201,9 +210,9 @@ public final class ConversationService: @unchecked Sendable {
         guard !id.isEmpty, id.count <= 128, id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
         return "/v1/me/conversations/" + id
     }
-    private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil) async throws -> (Data, Int) {
+    private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil, timeout: TimeInterval? = nil) async throws -> (Data, Int) {
         guard let url = URL(string: path, relativeTo: base)?.absoluteURL, url.host == base.host else { throw SyncFailure.invalidResponse }
-        var req = URLRequest(url: url, timeoutInterval: path == "/v1/me/reflection/turns" ? 120 : 25)
+        var req = URLRequest(url: url, timeoutInterval: timeout ?? (path == "/v1/me/reflection/turns" ? 120 : 25))
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
@@ -258,13 +267,18 @@ public final class ConversationService: @unchecked Sendable {
         let (data, _) = try await request("/v1/me/conversations", token: token)
         return try JSONDecoder().decode(List.self, from: data).conversations
     }
-    public func reflection(_ token: String) async throws -> PersonalReflection {
-        let (data, _) = try await request("/v1/me/reflection", token: token)
+    public func reflection(_ token: String, timeout: TimeInterval = 25) async throws -> PersonalReflection {
+        let (data, _) = try await request("/v1/me/reflection", token: token, timeout: timeout)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
     public func reflect(_ value: SharedRequest, token: String) async throws -> PersonalReflection {
         guard let revision = value.expectedRevision, revision >= 0 else { throw SyncFailure.http(409, "reflection_changed") }
         let (data, _) = try await request("/v1/me/reflection/turns", method: "POST", body: ["id": value.id, "text": value.text, "revision": revision], token: token)
+        return try JSONDecoder().decode(PersonalReflection.self, from: data)
+    }
+    public func cancelReflection(_ id: String, token: String, timeout: TimeInterval = 25) async throws -> PersonalReflection {
+        _ = try path(id)
+        let (data, _) = try await request("/v1/me/reflection/turns/" + id + "/cancel", method: "POST", body: [:], token: token, timeout: timeout)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
     public func abandonReflection(_ id: String, token: String) async throws -> PersonalReflection {

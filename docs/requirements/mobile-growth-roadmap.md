@@ -301,3 +301,12 @@ human time remain costs. Endpoint thresholds require physical Korean/noisy-room
 validation; synthetic silence controls are not speech-quality evidence. Speech
 recognition and microphone OS permissions may both be required by iOS; app-level
 repeat approvals are removed, OS consent is not bypassed.
+
+Studio #3995 adds an explicit iPhone personal-response Stop action (at least
+44pt) while a submission is in flight or a saved request is pending/running.
+It uses the existing Service cancel route and preserves submitted words, request
+identity and separate drafts. Stop immediately ends local voice continuation;
+only a matching terminal server snapshot confirms the outcome. A completed reply
+winning the race remains completed, and an uncertain cancel leaves the outbox
+recoverable without replay. Already dispatched AI work may still incur cost.
+Source, synthetic native acceptance and installed/live acceptance remain distinct.

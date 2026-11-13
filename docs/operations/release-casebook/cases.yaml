@@ -642,16 +642,18 @@ cases:
       - 나의 질문 화면에서 음성 대화 를 누르고 처음 필요한 iOS 마이크·음성 인식 권한을 허용한다
       - 자신의 고민을 말하고 잠시 쉰다. 답변 뒤 두 번째 말을 시작한다
       - 두 번째 말을 보내기 전에 음성 멈춤 을 누르고 기다린다. 앱을 다시 열어도 임의로 음성이 재시작하지 않는지 확인한다
+      - 별도 실행에서 첫 응답이 전송 중일 때 답변 중지 를 누른다. 별도 초안을 적고 앱을 다시 연다
     expect:
       - 듣고 있어요 가 보이고, 매 차례 앱의 별도 동의·말 끝내기·다음 차례 버튼 없이 첫 말의 답변 뒤 다음 말을 듣는다. 필요한 최초 OS 권한은 생략하지 않는다
       - 음성 멈춤 뒤에는 녹음·재생이 멈추고 두 번째 말이나 빈 말을 뒤늦게 전송하지 않는다. 아직 보내지 않은 인식 글은 초안에 남는다 (App/SharedConversationView.swift)
+      - 전송 중에도 44pt 이상의 중지 버튼을 사용할 수 있다. 같은 요청의 서버 확인 뒤에만 중지로 표시하며 원래 글과 별도 초안을 남긴다. 뒤늦은 응답이나 앱 재실행이 음성·전송을 재시작하지 않는다. 이미 실행된 AI 비용은 발생할 수 있다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 다섯 차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
+    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 다섯 차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
 
   - id: BB-036
     journey: CUJ-8
@@ -692,14 +694,16 @@ cases:
       - 정상 로그인할 수 있지만 AI 이용 권한이 없는 별도 테스트 계정으로 나의 질문 화면에서 글을 보낸다. 운영 계정의 권한을 테스트 목적으로 바꾸지 않는다
       - 오류를 확인한 뒤 대화 설정 → 새로 고침 을 누르고 앱을 종료·다시 연다
       - 서버에 기록된 실패의 입력란에 가져오기 를 명시적으로 누르고 다시 앱을 열어 같은 초안을 확인한다
+      - 별도 합성 실행에서 전송 중 답변 중지 와 이용 권한 거절 응답을 겹치게 한 뒤 앱을 다시 연다
     expect:
       - 이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요. 가 보인다 (Sources/StudioCore/ConversationSync.swift)
       - 이력 조회 성공과 앱 재시작 뒤에도 권한 오류와 원래 글이 남는다. 로그인을 무료 AI 승인으로 바꾸거나 임의의 다른 제공자로 우회하지 않는다
       - 실패한 사용자 글과 요청 ID 는 계정 기록에 남는다. 다시 보내기 로 같은 실패 ID 를 실행하지 않는다. 초안 가져오기·재시작만으로 새 AI 요청이나 브라우저 로그인을 만들지 않는다
+      - 중지와 거절이 겹쳐도 같은 요청의 구체적인 이용 권한 오류가 남는다. 실패를 중지 완료로 바꾸거나 다른 요청·계정의 오류로 덮어쓰지 않는다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch 는 POST 403 뒤 GET 성공을 재현한다. 실제 계정의 이용 자격과 운영 정책은 합성 응답 검사와 별개다. 적합한 테스트 계정이 없으면 BLOCKED 로 남긴다.
+    notes: StudioJourneyTests.testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch 는 중지와 실패 응답의 경합 이후 구체적 오류의 보존을 검사한다. StudioJourneyTests.testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch 는 POST 403 뒤 GET 성공을 재현한다. 실제 계정의 이용 자격과 운영 정책은 합성 응답 검사와 별개다. 적합한 테스트 계정이 없으면 BLOCKED 로 남긴다.

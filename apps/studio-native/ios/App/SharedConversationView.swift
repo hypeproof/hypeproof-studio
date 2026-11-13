@@ -257,6 +257,16 @@ struct SharedConversationView: View {
                                 .disabled(!model.canRestoreFailedReflectionDraft).accessibilityIdentifier("restoreFailedReflectionDraft")
                                 if !model.draftText.isEmpty { Text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
                             }
+                            if model.isReflection && request.outstanding {
+                                Button {
+                                    voice.stop(); voiceRequestID = nil; voiceCompletionWaitStarted = nil
+                                    model.stopReflection()
+                                } label: {
+                                    Label(model.stoppingReflection ? "중지 확인 중" : "답변 중지", systemImage: "stop.fill").frame(minHeight: 44)
+                                }
+                                .buttonStyle(.bordered).disabled(!model.canStopReflection)
+                                .accessibilityIdentifier("sharedResponseStop")
+                            }
                             if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
                                 Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
@@ -449,7 +459,15 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                if NativeJourneyFixture.responseStop {
+                    // Observe a genuinely in-flight transport without changing
+                    // production state or occupying transcript layout.
+                    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                        journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                    }
+                } else {
+                    journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                }
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
