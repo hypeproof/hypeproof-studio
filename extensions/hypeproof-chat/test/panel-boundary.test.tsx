@@ -285,9 +285,6 @@ const PANELS: Row[] = [
   { panel: "long-step", key: "ChatPanel.tsx:LongStepHintLine", mode: "personal", msgs: () => [
     { type: "userSent", text: "빌드해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
     { type: "toolLog", streamId: "s1", id: "toolu_B", icon: "🔧", label: "Bash(npm run build)", state: "running", step: "명령을 실행하는 중…", since: Date.now() - 25_000 }] },
-  { panel: "trial-end", key: "TrialEndCard.tsx:TrialEndCard", mode: "personal", blocking: true, msgs: () => [
-    { type: "userSent", text: "더 해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
-    { type: "streamError", streamId: "s1", error: "체험이 끝났어요", trialEndCard: { kind: "ended" } }] },
   { panel: "settings", key: "AccessControl.tsx:AccessControl", mode: "personal" },
   // REQ-STUDIO-REPORT-LOGS: the report form sits beside ChatErrorBoundary (reachable from the crash card) in its own boundary.
   { panel: "report", key: "ProblemReportDialog.tsx:ProblemReportDialog", mode: "personal", msgs: () => [{ type: "problemReportForm", form: {

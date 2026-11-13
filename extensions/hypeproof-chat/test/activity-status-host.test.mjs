@@ -77,16 +77,16 @@ test('instructor pause and an unconfirmed stop hold a send with a typed status; 
  }
 });
 
-test('the trial card names expired and exhausted apart; a free daily cap is exhausted without a card',async t=>{
+test('an ended trial names expired and exhausted apart without a pass card; a free daily cap is exhausted',async t=>{
  const f=await harness(t);
  const server=http.createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({products:[{id:'pass-lite',label:'라이트',amount:30000,currency:'KRW',duration_hours:720,request_limit:200,recommended:true}]}));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r)); t.after(()=>server.close());
  const proxyUrl=`http://127.0.0.1:${server.address().port}/v1`;
  const open={activity_kind:'trial',profile_id:'studio-open-trial'};
  const expired=await fail(f,new Error('API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다.'),open,{proxyUrl});
- assert.equal(expired.trialEndCard.ending,'expired'); assert.deepEqual(expired.activityUnavailable,{cause:'expired',audience:'solo'});
+ assert.equal(expired.trialEndCard,undefined,'no pass card (2026-11-13)'); assert.deepEqual(expired.activityUnavailable,{cause:'expired',audience:'solo'});
  const spent=await fail(f,new Error('API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.'),open,{proxyUrl});
- assert.equal(spent.trialEndCard.ending,'exhausted'); assert.deepEqual(spent.activityUnavailable,{cause:'exhausted',audience:'solo'});
+ assert.equal(spent.trialEndCard,undefined); assert.deepEqual(spent.activityUnavailable,{cause:'exhausted',audience:'solo'});
  const cap=await fail(f,new Error('오늘 준비한 무료 사용량이 모두 소진되었습니다.'),open,{proxyUrl});
  assert.deepEqual(cap.activityUnavailable,{cause:'exhausted',audience:'solo'}); assert.equal(cap.retry,false); assert.equal(cap.trialEndCard,undefined);
  // Negative control: the same sentence on a seat that is not the free allowance is not called a free cap.

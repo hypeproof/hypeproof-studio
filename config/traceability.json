@@ -12214,9 +12214,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
         }
       ]
     },

@@ -8,13 +8,11 @@ import { ChatIcon } from "./ChatDetails";
 import "./start.css";
 
 import { AccountEntry } from "./AccountEntry";
-import { chosenPass } from "./purchaseChoice";
 import { InstructorInbox } from "./InstructorInbox";
 import { StartSettingsSheet } from "./StartSettingsSheet";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice, freeEndedBody } from "../../src/freeStart";
-import { PURCHASE_COPY } from "../../src/passPurchase";
 import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
 import { imeComposing } from "./imeGuard";
 
@@ -30,7 +28,6 @@ export function StartPage() {
   const [token, setToken] = useState("");
   const [editing, setEditing] = useState(false);
   const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | "account" | null>(null);
-  const [picked, setPicked] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   // CGP-SHELL-R-014 — "설정" opens the learner sheet here; the VS Code editor only via its "고급 설정".
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -39,11 +36,11 @@ export function StartPage() {
     const off = onHostMessage(msg => {
       if (msg.type !== "startState") return;
       setState(msg.state);
-      // Restored checkout or browser return keeps payment recovery above account navigation.
-      if (msg.state.purchase?.stage && msg.state.purchase.stage !== "choosing") {
+      // REQ-L12 ⑤ — a restored legacy order or a browser return keeps its recovery above account navigation.
+      if (msg.state.purchase?.stage) {
         setEntry("purchase"); setEditing(true);
       }
-      // REQ-L12 — a purchase in progress keeps its own view; the connected card must not take the screen back mid-payment.
+      // REQ-L12 ⑤ — a legacy order being recovered keeps its own view; the connected card must not take the screen back mid-payment.
       // REQ-STUDIO-JOIN-LINK — while a join link holds the code form open, a refresh does not close it.
       if (!msg.state.checking && !msg.state.error && msg.state.profile && !msg.state.purchase?.stage && !msg.state.joinLink) { setToken(""); setEditing(false); setEntry(e => e === "purchase" || (e === "account" && msg.state.candidate) ? null : e); }
     });
@@ -55,9 +52,6 @@ export function StartPage() {
   const joinSeq = state.joinLink?.seq;
   useEffect(() => { if (joinSeq) { setToken(""); setEntry("classroom"); setEditing(true); } }, [joinSeq]);
   useEffect(() => { if (editing) input.current?.focus(); }, [editing, entry, joinSeq]);
-  // TUX-COND-07 — the person pressed "이용권 살펴보기" on the chat's end-of-trial card: show the pass list once per press.
-  const purchaseFocus = state.purchase?.focus;
-  useEffect(() => { if (purchaseFocus) { setEntry("purchase"); setEditing(true); } }, [purchaseFocus]);
   const connect = (e: React.FormEvent) => {
     e.preventDefault(); if (!token.trim() || state.checking) return;
     setState(s => ({ ...s, checking: true, error: undefined }));
@@ -80,19 +74,18 @@ export function StartPage() {
   const ended = trialEndedFacts(trial, Date.now(), freeSeat);
   // A free seat shows no allowance while it is in use (Jay 2026-10-19); its end still draws the ended card.
   const trialLeft = ended || freeSeat ? null : state.candidate ? trialAllowance(trial, Date.now(), freeSeat) : trialSummary(trial, Date.now(), freeSeat);
-  const openPurchase = () => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); };
   const choose = (next: "trial" | "classroom") => { setToken(""); setEntry(next); setEditing(true); };
-  // REQ-L12 — buying a pass. The host owns the order; this view shows its stage and sends intents.
+  // REQ-L12 ⑤ — only an order an older build started is shown here (no pass is sold and there is no
+  // purchase view since 2026-11-13). The host owns the order; this view shows its stage and sends intents.
   const purchase = state.purchase;
-  const purchaseHeld = !!purchase?.stage && purchase.stage !== "choosing" && !state.candidate;
+  const purchaseHeld = !!purchase?.stage && !state.candidate;
   // TUX-SP-14 — free start: drawn only while the Service advertises it. While its claim leads into
   // the ordinary entry path, the free card stays on screen (no preview card, no folder choice).
   const free = state.freeStart;
   const freeEntering = !!free?.claiming;
   const showProfile = !!state.profile && !editing && !purchaseHeld && !freeEntering;
   const buying = !showProfile && (entry === "purchase" || purchaseHeld);
-  const grantedEntry = buying && !purchase?.order && (!purchase?.stage || purchase.stage === "choosing") && state.account?.status === "signedIn" && state.account.passes?.some(pass => pass.id === "super" && pass.status === "active" && pass.requests_remaining > 0);
-  const accountEntry = entry === "account" || grantedEntry;
+  const accountEntry = entry === "account";
   const freeCard = !!free && !showProfile && !buying && (entry === null || freeEntering);
   const freeBlocked = free?.age === "under14";
   // e2e D2 — a saved free seat whose window is over: the card names the end, never a fresh start.
@@ -114,12 +107,7 @@ export function StartPage() {
   const fieldError = codeForm && state.errorAt === "code" && !!state.error;
   const errorLine = (className: string) => <div className={className} id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>;
   const openCode = () => { setToken(""); setEntry("classroom"); setEditing(true); };
-  const products = purchase?.products ?? [];
-  // CONV-PURCHASE-R-002 — back from the purchase-time sign-in, the host gives the chosen pass back.
-  const restored = purchase?.selected;
-  useEffect(() => { if (restored) setPicked(restored); }, [restored]);
-  const chosen = chosenPass(products, picked, restored);
-  const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? (purchase.message === PURCHASE_COPY.unavailable ? PURCHASE_COPY.unavailableTitle : "구매를 마치지 못했어요") : "어떤 이용권으로 시작할까요?";
+  const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? "구매를 마치지 못했어요" : "결제 중인 이용권을 확인하고 있어요";
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   // Leaving keeps a saved order: the host stops waiting and the choice list offers it again.
   // Leaving the link's form by any path drops the link on the host, so it never constrains another form.
@@ -160,13 +148,12 @@ export function StartPage() {
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
         <div className="studio-card-top"><span className="studio-step">시작하기</span><span className="studio-dot"/></div>
         <h2 id="connect-title">{accountEntry ? "내 계정으로 시작하기" : freeCard ? (state.account ? "내 계정 또는 무료로 시작하기" : freeTitle) : showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? (free ? "참여 코드로 시작하기" : "수업에 참여하기") : "어떻게 시작할까요?"}</h2>
-        <p className="studio-card-description">{accountEntry ? "무제한 권한이 있으면 로그인 후 바로 시작합니다. 그 외 받은 이용권도 여기서 사용할 수 있어요." : freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : (state.account ? "받은 이용권이 있다면 Google로 로그인하세요." : FREE_START_COPY.readyBody)) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
-        {accountEntry && state.account ? <><div data-personal-question-flow><AccountEntry account={state.account} checking={state.checking} post={postToHost} /></div><button className="studio-text-button" onClick={() => { setEntry(null); setEditing(false); }}>돌아가기</button></> : freeCard ? <>{state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}<FreeStartCard accountAvailable={!!state.account} free={free!} checking={state.checking} calm={freeCalm} error={freeError} purchase={!!purchase?.available} onCode={openCode} onPurchase={openPurchase} onBack={state.profile && !freeEntering ? () => setEditing(false) : undefined} /></>
+        <p className="studio-card-description">{accountEntry ? "무제한 권한이 있으면 로그인 후 바로 시작합니다. 그 외 받은 이용권도 여기서 사용할 수 있어요." : freeCard ? (freeBlocked ? FREE_START_COPY.under14Body : freeEnded ? freeEndedBody(free?.refillsAt) : freeCalm ? "" : (state.account ? "받은 이용권이 있다면 Google로 로그인하세요." : FREE_START_COPY.readyBody)) : showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? "" : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? (free ? "받은 참여 코드를 입력하세요." : "발급받은 참여 코드로 수업을 확인하세요.") : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
+        {accountEntry && state.account ? <><div data-personal-question-flow><AccountEntry account={state.account} checking={state.checking} post={postToHost} /></div><button className="studio-text-button" onClick={() => { setEntry(null); setEditing(false); }}>돌아가기</button></> : freeCard ? <>{state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}<FreeStartCard accountAvailable={!!state.account} free={free!} checking={state.checking} calm={freeCalm} error={freeError} onCode={openCode} onBack={state.profile && !freeEntering ? () => setEditing(false) : undefined} /></>
         : state.profile && !editing ? <>
           <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}{ended ? <div><dt>{freeSeat ? "무료 사용" : "체험"}</dt><dd>{ended.row}</dd></div> : trialLeft && <div><dt>{state.candidate ? (freeSeat ? "무료 사용량" : "체험 한도") : (freeSeat ? "남은 무료 사용" : "남은 체험")}</dt><dd>{trialLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
-          {/* TUX-SP-13 — an ended trial has no "이어서 하기": peer choices only (SX-04), and the pass is opened only by the person (REQ-L12 ①). */}
-          {ended ? (purchase?.available || (ended.reason === "exhausted" && !state.candidate)) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "체험 이후 고르기"}>
-            {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이어서 하려면 이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
+          {/* TUX-SP-13 — an ended trial has no "이어서 하기": peer choices only (SX-04). No pass is offered (2026-11-13). */}
+          {ended ? (ended.reason === "exhausted" && !state.candidate) && <div className="studio-entry-options" role="group" aria-label={freeSeat ? "무료 사용 이후 고르기" : "체험 이후 고르기"}>
             {ended.reason === "exhausted" && !state.candidate && <button className="studio-choice" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : "지난 대화 보기"} <span aria-hidden="true">→</span></button>}
           </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: state.automationsEnabled ? "openEmailAutomation" : "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.automationsEnabled ? "메일 자동화 열기" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <ChatIcon kind="external" size={16} /></button>}
           {!ended && gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
@@ -176,12 +163,8 @@ export function StartPage() {
           {state.candidate && !ghChoice && !ended && <button className="studio-text-button" disabled={state.checking || ghBusy} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
-          {/* Checkout also exposes the shared account entry; granted access is available on first open. */}
-          {/* Login at purchase (2026-10-19): while an account is needed, the entry below the list is the Primary instead. */}
-          {free && state.account && !purchase?.login && (!purchase?.stage || purchase.stage === "choosing") && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
             {purchase.order && <div className="studio-course"><span className="studio-verified">{purchase.stage === "connecting" ? "결제 확인" : "결제 기다리는 중"}</span><h3>{purchase.order.label}</h3><dl><div><dt>결제할 금액</dt><dd>{won(purchase.order.amount)}</dd></div></dl></div>}
-            {purchase.guardian && <div className="studio-guardian-pay"><img src={purchase.guardian.qr} width={160} height={160} alt="보호자 결제 페이지 QR 코드" /><p className="studio-help">{FREE_START_COPY.guardianPayHelp}</p><a href={purchase.guardian.url} className="studio-text-button" target="_blank" rel="noreferrer">결제 페이지 주소 열기 <ChatIcon kind="external" size={16} /></a></div>}
             <p className="studio-help" role="status">{purchase.message}</p>
             {/* The way out when the browser says paid and this screen has not moved: ask the Service again. */}
             {purchase.stage === "waiting" && <div className="studio-purchase-actions"><button className="studio-text-button" onClick={() => postToHost({ type: "purchaseReopen" })}>결제 창 다시 열기</button><button className="studio-text-button" onClick={() => postToHost({ type: "purchaseRetry" })}>결제했는데 그대로예요</button><button className="studio-text-button" onClick={leavePurchase}>그만두기</button></div>}
@@ -189,35 +172,8 @@ export function StartPage() {
             <p className="studio-help" role="status">{purchase.message}</p>
             {purchase.order && <button className="studio-primary" disabled={state.checking} onClick={() => postToHost({ type: "purchaseRetry" })}>다시 연결 <span aria-hidden="true">→</span></button>}
             <button className="studio-text-button" disabled={state.checking} onClick={leavePurchase}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
-          </> : chosen ? <>
-            {/* SX-04 — the passes are a plain list of choices; the one Primary follows the list. */}
-            <div role="radiogroup" aria-label="이용권 고르기" className="studio-plans">{products.map(p => <button key={p.id} type="button" role="radio" aria-checked={p.id === chosen.id} className="studio-plan" disabled={state.checking} onClick={() => setPicked(p.id)}>
-              <span className="studio-plan-name">{p.label}{p.recommended && <em>추천</em>}</span>
-              <span className="studio-plan-price">{won(p.amount)}</span>
-              {p.tagline && <span className="studio-plan-for">{p.tagline}</span>}
-              <span className="studio-plan-what">AI 요청 {p.requestLimit.toLocaleString("ko-KR")}번 · {p.durationDays}일 동안</span>
-            </button>)}</div>
-            {/* Login at purchase (Jay 2026-10-19): Google sign-in comes before checkout. The account entry is
-                the one Primary and no pay button is offered until signed in (SX-04). Without an account
-                sign-in on this build or Service, a calm notice and no checkout: never an anonymous order. */}
-            {purchase?.login === "signIn" && state.account ? <div className="studio-purchase-login" role="group" aria-labelledby="purchase-login-lead">
-              <p id="purchase-login-lead" className="studio-question">{PURCHASE_COPY.signInFirst}</p>
-              <AccountEntry account={state.account} checking={state.checking} post={postToHost} productId={chosen.id} />
-            </div>
-            : purchase?.login ? <p className="studio-notice" role="status">{PURCHASE_COPY.loginUnavailable}</p>
-            /* SPEC iteration 4 §2.5 — on a free seat, one question before checkout; under 19 a guardian pays. */
-            : purchase?.freeSeat && purchase.payerAdult === undefined ? <div className="studio-entry-options" role="group" aria-labelledby="payer-question">
-              <p id="payer-question" className="studio-question">{FREE_START_COPY.payerQuestion}</p>
-              <button className="studio-choice" disabled={state.checking} onClick={() => postToHost({ type: "purchasePayer", adult: true })}>{FREE_START_COPY.payerYes} <span aria-hidden="true">→</span></button>
-              <button className="studio-choice" disabled={state.checking} onClick={() => postToHost({ type: "purchasePayer", adult: false })}>{FREE_START_COPY.payerNo} <span aria-hidden="true">→</span></button>
-            </div>
-            : purchase?.freeSeat && purchase.payerAdult === false ? <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id, guardian: true }); }}>{state.checking ? "결제 페이지를 준비하고 있어요" : FREE_START_COPY.guardianPay} <span aria-hidden="true">→</span></button>
-            : <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id }); }}>{state.checking ? "결제 창을 열고 있어요" : `${won(chosen.amount)} 결제하러 가기`} <ChatIcon kind="external" size={16} /></button>}
-            {!purchase?.login && purchase?.message && <p className="studio-help" role="status">{purchase.message}</p>}
-            {!purchase?.login && <p className="studio-help">브라우저가 열려요. 결제하고 돌아오면 바로 쓸 수 있어요.</p>}
-            <button className="studio-text-button" disabled={state.checking} onClick={leavePurchase}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
           </> : <>
-            <p className="studio-help" role="status">{purchase?.message ?? "이용권을 불러오고 있어요."}</p>
+            <p className="studio-help" role="status">{purchase?.message ?? "결제 중인 이용권을 확인하고 있어요."}</p>
             <button className="studio-text-button" onClick={leavePurchase}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
           </>}
         </div> : entry === null ? <div className="studio-entry-options" role="group" aria-label="시작 방법 고르기">
@@ -232,9 +188,8 @@ export function StartPage() {
             {(trialNote.code || trialNote.allowance) && <p id="trial-entry-note" className="studio-choice-note">{trialNote.code && <span>{trialNote.code}</span>}{trialNote.allowance && <span>{trialNote.allowance}</span>}</p>}
           </div>
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
-          {/* REQ-L12 — a third peer choice, drawn only when the Service sells passes. Chosen by the person; never opened for them. */}
-          {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
           {state.profile && <button className="studio-text-button" onClick={() => { dropJoin(); setEditing(false); }}>기존 활동으로 돌아가기</button>}
+          {/* REQ-L12 ⑤ — an order an older build started and the person left: they can pick its recovery up again. */}
           {purchase?.order && !purchase.stage && <button className="studio-text-button" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseRetry" }); }}>결제 중인 이용권 이어서 보기 · {purchase.order.label}</button>}
         </div> : <form onSubmit={connect}>
           {joinClass && <div className="studio-join-link" id="join-link-note">
@@ -269,23 +224,21 @@ export function StartPage() {
 
 /**
  * TUX-SP-14/15/16 — the free start card. One question before first use (만 14세 이상인가요?), then one
- * Primary. No 체험/수업 choice: a code is a small secondary link, the pass list another. The host
+ * Primary. No 체험/수업 choice: a code is a small secondary link. No pass is offered (2026-11-13). The host
  * owns the claim; this view sends intents only and never sees the install id or the issued token.
  */
-function FreeStartCard({ accountAvailable, free, checking, calm, error, purchase, onCode, onPurchase, onBack }: { accountAvailable?: boolean; free: NonNullable<StartState["freeStart"]>; checking: boolean; calm: string | null; error: string | null; purchase: boolean; onCode: () => void; onPurchase: () => void; onBack?: () => void }) {
+function FreeStartCard({ accountAvailable, free, checking, calm, error, onCode, onBack }: { accountAvailable?: boolean; free: NonNullable<StartState["freeStart"]>; checking: boolean; calm: string | null; error: string | null; onCode: () => void; onBack?: () => void }) {
   const busy = checking || !!free.claiming;
   const links = <div className="studio-free-links">
     <button className="studio-text-button" disabled={busy} onClick={onCode}>{FREE_START_COPY.codeLink}</button>
-    {purchase && free.age !== "under14" && <button className="studio-text-button" disabled={busy} onClick={onPurchase}>{FREE_START_COPY.passLink}</button>}
     {onBack && <button className="studio-text-button" disabled={busy} onClick={onBack}>기존 활동으로 돌아가기</button>}
   </div>;
   if (free.age === "under14") return <div className="studio-free" role="group" aria-labelledby="connect-title">
     <button className="studio-text-button studio-free-guardian" onClick={() => postToHost({ type: "freeStartGuardian" })}>{FREE_START_COPY.guardianLink} <ChatIcon kind="external" size={16} /></button>
     {links}
   </div>;
-  // An ended free seat: what can follow, as peer choices (SX-04); the pass opens only on a press (REQ-L12 ①).
+  // An ended free seat: what can follow (SX-04). No pass is offered (2026-11-13).
   if (free.ended) return <div className="studio-free" role="group" aria-label="무료 사용 이후 고르기">
-    {purchase && <div className="studio-entry-options"><button className="studio-choice" disabled={busy} onClick={onPurchase}>{FREE_START_COPY.endedPass} <span aria-hidden="true">→</span></button></div>}
     <div className="studio-free-links"><button className="studio-text-button" disabled={busy} onClick={onCode}>{FREE_START_COPY.codeLink}</button>{onBack && <button className="studio-text-button" disabled={busy} onClick={onBack}>기존 활동으로 돌아가기</button>}</div>
   </div>;
   const tooOld = free.tooOld && !free.claiming;

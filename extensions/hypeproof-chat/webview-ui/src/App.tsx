@@ -956,7 +956,6 @@ export function App() {
         errorRunbookUrl={state.errorRunbookUrl}
         trialEndCard={state.trialEndCard}
         safetyNotice={state.error ? state.safetyNotice : null}
-        onTrialEndCardPasses={() => postToHost({ type: "trialEndCardPasses" })}
         canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
         onSend={send}
         sendPending={sendPending}
