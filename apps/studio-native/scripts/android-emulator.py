@@ -278,7 +278,8 @@ class Bootstrap:
         if not self.owned_device or self.emulator.poll() is not None or self.adb_server.poll() is not None:
             return
         # Recheck ownership before diagnostics; never interact with a replacement.
-        code, name = self.adb("emu", "avd", "name")
+        deadline = time.monotonic() + 5
+        code, name = self.adb("emu", "avd", "name", timeout=self.remaining(deadline))
         if code or name.decode().splitlines()[:1] != [self.name]:
             return
         for label, command in [("window", ["shell", "dumpsys", "window"]),
@@ -287,10 +288,11 @@ class Bootstrap:
                                ("logcat", ["logcat", "-d", "-b", "main", "-b", "system", "-b", "crash", "-t", "1000"]),
                                ("screen.png", ["exec-out", "screencap", "-p"])]:
             try:
-                code, output = self.adb(*command)
+                code, output = self.adb(*command, timeout=self.remaining(deadline))
                 (self.evidence / ("failure-" + label)).write_bytes(output)
             except (Stopped, OSError) as error:
                 self.receipt.setdefault("diagnostic_errors", []).append(str(error))
+                break
 
 
 def main():
@@ -349,7 +351,10 @@ def main():
             bootstrap.receipt[name + "_reaped"] = process is None or process.poll() is not None
         cleanup("verifier", bootstrap.verifier)
         try:
-            if code:
+            # Cancellation spends its budget reaping owned groups, not issuing
+            # new ADB diagnostics. Normal failure capture has one five-second
+            # deadline (plus at most ten seconds to reap its last command).
+            if code and code not in (124, 130, 143):
                 bootstrap.capture_failure()
         except Exception as error:
             bootstrap.receipt["capture_error"] = str(error)

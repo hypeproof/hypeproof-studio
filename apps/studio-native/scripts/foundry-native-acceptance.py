@@ -267,9 +267,12 @@ def invoke(argv: list[str], workspace: Path, log: Path, timeout: int) -> dict:
             except ProcessLookupError:
                 pass
             try:
-                # The owned Android bootstrap handles TERM by reaping its
-                # separate verifier/emulator/ADB groups (at most five seconds each).
-                process.wait(timeout=20)
+                # Bootstrap owns separate verifier/emulator/ADB sessions. Allow
+                # their bounded cleanup (up to ten seconds each), plus a normal
+                # failure's already-running bounded diagnostics (at most15s).
+                # Cancellation itself skips diagnostics. Never kill that owner
+                # before it has had time to reap its independently owned groups.
+                process.wait(timeout=60)
             except subprocess.TimeoutExpired:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
