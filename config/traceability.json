@@ -19558,6 +19558,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/StartSettingsSheet.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
         }
       ]
     },
@@ -19578,6 +19581,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-contrast-computed.smoke.mjs"
         }
       ]
     }
