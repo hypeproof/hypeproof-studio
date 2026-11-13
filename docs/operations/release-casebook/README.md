@@ -64,14 +64,14 @@
 | 이유 | 조건 |
 |---|---|
 | `p0` | 해당 대상에 속한 모든 여정의 P0 케이스 전부 |
-| `touched:<id>` | 마지막 안정 태그 이후 머지된 PR 이 건드린 요구사항 id 에 연결된 케이스. id 는 커밋 제목·본문(스쿼시 머지가 PR 제목과 본문을 담는다)과 요구사항 문서(`docs/studio-requirements.md`, `docs/requirements/`, `docs/dev/04-requirements.md`) diff 의 바뀐 줄에서 찾는다. 로컬 git 만 쓴다. 바뀐 id 가 케이스 id 의 하위(`REQ-L12-14` → `REQ-L12`)여도 걸린다 |
+| `touched:<id>` | 마지막 공개 안정 릴리스 이후 머지된 PR 이 건드린 요구사항 id 에 연결된 케이스. id 는 커밋 제목·본문(스쿼시 머지가 PR 제목과 본문을 담는다)과 요구사항 문서(`docs/studio-requirements.md`, `docs/requirements/`, `docs/dev/04-requirements.md`) diff 의 바뀐 줄에서 찾는다. 기준 릴리스는 GitHub에서 조회하고 변경 내용은 로컬 git에서 읽는다. 바뀐 id 가 케이스 id 의 하위(`REQ-L12-14` → `REQ-L12`)여도 걸린다 |
 | `escaped:<날짜>` | 최근 14일 안에 추가된 유출 버그 케이스 |
 
 `status: 자동화됨` 케이스는 고르지 않는다. 출력은 마크다운 체크리스트(PR 본문)와 JSON
 (`cases.json`, `hps-release-cases/1`)이다. 컷 아티팩트에 둘 다 남는다.
 
 ```bash
-node scripts/release/select-cases.mjs                      # 마지막 안정 태그..origin/main
+node scripts/release/select-cases.mjs                      # 마지막 공개 안정 릴리스..origin/main
 node scripts/release/select-cases.mjs --json --today 2026-10-21
 node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문의 범위·커밋 (gh 읽기 1회)
 node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA> --candidate <후보-소스-SHA> --json
@@ -213,3 +213,19 @@ one issue titled "Daily release cut skipped: needs attention", and posts to `#al
 
 From 2026-10-25 to 10-28 the admin password rotation left this secret stale and the gate skipped three
 days with green runs and no message; this section exists because of that.
+
+## Published release baseline (#3910)
+
+Default case selection, release cuts and the daily app-change gate use GitHub's latest
+published stable release (`GET /repos/hypeproof/hypeproof-studio/releases/latest`). A
+stable-shaped Git tag is not proof of publication: draft or failed promotions must not
+hide unshipped changes. The published tag must exist locally and be an ancestor of the
+candidate. Missing metadata, API failures or an invalid range stop the command without
+a tag fallback. This adds one bounded read (30-second timeout), no model calls or builds.
+Explicit `--baseline`, release-PR ranges and `--since` dry-run trials retain their recorded
+range; they do not silently reselect it. Existing release PRs need their range reviewed
+against the published baseline before acceptance; this does not rewrite active tags.
+
+Regression: `node --test scripts/release/test/select-cases.test.mjs` checks a newer
+unpublished stable tag, retained earlier requirement changes, offline explicit baselines,
+and rejected draft/prerelease/missing metadata. These are tooling checks, not installed-App acceptance.
