@@ -1,5 +1,16 @@
 # Studio behavioral requirements
 
+## Personal reflection admission messages (#3958)
+
+MPER-03/04 retain the person's account, words and history when existing AI access
+is refused. iPhone and the existing desktop distinguish an authoritative monthly
+invite limit from missing access or temporarily unavailable admission. Only the
+typed monthly refusal states the next-month reset. Legacy generic budget refusals
+remain period-neutral; they must not promise a daily reset, reopen login or send
+again automatically. The existing allowance, consent and accounting policy is
+unchanged. Service #462 supplies the typed monthly/unavailable codes; older
+server errors remain supported. Android adoption follows baseline #3735.
+
 ## iPhone conversation from first use (#3937)
 
 MPER-01/03/04 require a usable question and composer on the first screen, including
