@@ -55,7 +55,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "access-denied", "queued-voice"].contains(scenario)
+        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "access-denied", "queued-voice", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -130,6 +130,8 @@ private struct JourneySnapshot: Codable {
     var historyReads = 0
     var delayedHistoryReads = 0
     var speechEndedDuringHistory = 0
+    var approvalDecisionID: String?
+    var approvalDecisionChoice: String?
 }
 private final class JourneyStore: @unchecked Sendable {
     private let lock = NSLock()
@@ -254,6 +256,19 @@ private final class JourneyStore: @unchecked Sendable {
         return ["state": state, "opening": "What would you like to understand about yourself?", "hint": "One unfinished thought is enough.",
                 "acknowledged_id": acknowledged as Any? ?? NSNull()]
     }
+    private func approvalCard() -> [String: Any] {
+        let now = Date().timeIntervalSince1970
+        var decision: Any = NSNull()
+        if let id = value.approvalDecisionID, let choice = value.approvalDecisionChoice {
+            decision = ["id": id, "choice": choice, "status": "awaiting_processing", "created_at": now]
+        }
+        return ["id": "member-card", "request_digest": String(repeating: "d", count: 64),
+                "source": ["repo": "hypeproof/hypeproof-studio", "pr": 3788, "head": String(repeating: "a", count: 40), "base": String(repeating: "b", count: 40), "policy_digest": String(repeating: "b", count: 64), "evidence_digest": String(repeating: "c", count: 64), "context_digest": String(repeating: "e", count: 64)],
+                "reviewer": "synthetic-reviewer", "brief": ["authored": ["Small synthetic change"], "verified": ["Fixture evidence only"]],
+                "state": value.approvalDecisionID == nil ? "pending" : "submitting", "created_at": now - 60,
+                "expires_at": now + 3600, "lease_expires_at": now + 50, "can_decide": value.approvalDecisionID == nil,
+                "unavailable_reason": NSNull(), "decision": decision, "review": NSNull()]
+    }
     func respond(_ request: URLRequest) throws -> (Int, [String: Any]) {
         lock.lock(); defer { save(); lock.unlock() }
         guard JourneyConfiguration.enabled, request.url?.host == "native-journey.invalid", request.url?.scheme == "https" else { throw URLError(.unsupportedURL) }
@@ -281,6 +296,15 @@ private final class JourneyStore: @unchecked Sendable {
         switch (method, path) {
         case ("GET", "/v1/me"):
             return (200, ["account": ["id": "journey-account", "status": "active"], "session_id": "journey-session"])
+        case ("GET", "/v1/me/approval-inbox"):
+            return (200, ["schema": "hps-member-approval-inbox/1", "availability": JourneyConfiguration.scenario == "member-inbox" ? "ready" : "not_enrolled", "cards": JourneyConfiguration.scenario == "member-inbox" ? [approvalCard()] : []])
+        case ("GET", "/v1/me/approval-inbox/member-card"): return (200, approvalCard())
+        case ("POST", "/v1/me/approval-inbox/member-card/decisions"):
+            guard Set(body.keys) == Set(["id", "request_digest", "choice"]), let id = body["id"] as? String, UUID(uuidString: id) != nil,
+                  body["request_digest"] as? String == String(repeating: "d", count: 64), let choice = body["choice"] as? String, ["approve", "reject", "question"].contains(choice), value.approvalDecisionID == nil else { return (409, ["error": "approval_conflict"]) }
+            value.approvalDecisionID = id; value.approvalDecisionChoice = choice
+            // The durable server decision exists, but the first response is uncertain.
+            return (503, ["error": "synthetic_response_lost"])
         case ("GET", "/v1/me/conversations"): return (200, ["conversations": []])
         case ("GET", "/v1/me/reflection"):
             return (200, reflection())

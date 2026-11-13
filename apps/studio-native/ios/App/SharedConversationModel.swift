@@ -77,6 +77,7 @@ private struct SharedCacheFile: Codable {
     var isReflection: Bool { selected == Self.personalID }
     private var selectPersonalOnLoad = true
     @Published private(set) var signedIn = false
+    @Published private(set) var approvalEntryVisible = false
     @Published private(set) var conversations: [SharedConversation] = []
     @Published private(set) var entries: [String: ConversationCache] = [:]
     @Published private(set) var signIn: DeviceSignIn?
@@ -91,6 +92,67 @@ private struct SharedCacheFile: Codable {
     @Published var notice = ""
     @Published private var editing: [String: [String: [String: String]]] = [:]
     private var account: StoredAccount?
+    private let tokenFlight = AccountTokenRefreshFlight()
+    lazy var approvals: MemberApprovalPresentation = {
+        let presentation = MemberApprovalPresentation()
+        presentation.controller = MemberApprovalController(identity: { [weak self] in try await self?.approvalIdentity() }, list: { [weak self] binding in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.service.approvalInbox(token)
+        }, card: { [weak self] binding, id, decision in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.service.approvalCard(id, decision: decision, token: token)
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }
+            let folder = try self.approvalDirectory(account)
+            guard FileManager.default.fileExists(atPath: folder.path) else { return [] }
+            let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            guard files.count <= 50 else { throw SyncFailure.invalidResponse }
+            return try files.map { file in
+                let data = try Data(contentsOf: file)
+                guard data.count < 4096 else { throw SyncFailure.invalidResponse }
+                let value = try JSONDecoder().decode(MemberApprovalPending.self, from: data)
+                try value.validate(account: account); return value
+            }
+        }, save: { [weak self] account, pending in
+            guard let self else { throw CancellationError() }
+            try pending.validate(account: account)
+            let folder = try self.approvalDirectory(account)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            var excluded = folder; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try excluded.setResourceValues(flags)
+            try JSONEncoder().encode(pending).write(to: folder.appendingPathComponent(pending.id + ".json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }, remove: { [weak self] account, id in
+            guard let self, UUID(uuidString: id)?.uuidString.lowercased() == id else { throw SyncFailure.invalidResponse }
+            let file = try self.approvalDirectory(account).appendingPathComponent(id + ".json")
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        }, changed: { [weak presentation, weak self] state in presentation?.state = state; self?.approvalEntryVisible = state.entryVisible })
+        return presentation
+    }()
+    private func discoverApprovals() {
+        let attempt = epoch
+        Task { [weak self] in
+            guard let self, self.epoch == attempt, self.signedIn else { return }
+            await self.approvals.controller?.discover()
+        }
+    }
+    private func approvalDirectory(_ account: String) throws -> URL {
+        guard StoredAccount.validID(account) else { throw SyncFailure.invalidResponse }
+        let key = Data(account.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "=", with: "")
+        return directory.appendingPathComponent("approval-decisions", isDirectory: true).appendingPathComponent(key, isDirectory: true)
+    }
+    private func approvalIdentity() async throws -> MemberApprovalIdentity? {
+        guard signedIn, let before = account else { return nil }
+        let attempt = epoch, credential = try await token()
+        let returned = try await service.accountID(credential, sessionID: before.tokens.session_id)
+        guard epoch == attempt, signedIn, let current = account, current.accountID == returned, current.accountID == before.accountID, current.tokens.session_id == before.tokens.session_id else { throw CancellationError() }
+        return MemberApprovalIdentity(accountID: returned, sessionID: current.tokens.session_id)
+    }
+    private func approvalToken(_ binding: MemberApprovalIdentity) async throws -> String {
+        let attempt = epoch, credential = try await token()
+        guard epoch == attempt, signedIn, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { throw CancellationError() }
+        return credential
+    }
     private var operation: Task<Void, Never>?
     private var polling: Task<Void, Never>?
     private var epoch = UUID()
@@ -140,7 +202,7 @@ private struct SharedCacheFile: Codable {
             }
 #endif
             accountStorageReady = true; signedIn = account != nil
-            if let account { try load(account.accountID) }
+            if let account { try load(account.accountID); discoverApprovals() }
         } catch { self.error = error.localizedDescription }
     }
     private func file(_ accountID: String) -> URL {
@@ -235,8 +297,9 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                account = value; signedIn = true; acquired = nil
+                tokenFlight.invalidate(); approvals.invalidate(); account = value; signedIn = true; acquired = nil
                 try load(id)
+                discoverApprovals()
             } catch {
                 if let acquired { try? await service.logout(acquired.access_token) }
                 if epoch == attempt {
@@ -253,6 +316,14 @@ private struct SharedCacheFile: Codable {
         signIn = nil; busy = false; loginStatus = ""; notice = "로그인을 취소했어요."
     }
     private func token() async throws -> String {
+        guard accountStorageReady, let current = account else { throw SyncFailure.http(401, "account_required") }
+        if current.expiresAt > Date().addingTimeInterval(90) { return current.tokens.access_token }
+        return try await tokenFlight.run(identity: MemberApprovalIdentity(accountID: current.accountID, sessionID: current.tokens.session_id), current: { [weak self] in
+            guard let account = self?.account else { return nil }
+            return MemberApprovalIdentity(accountID: account.accountID, sessionID: account.tokens.session_id)
+        }, renew: { try await self.renewToken() })
+    }
+    private func renewToken() async throws -> String {
         guard accountStorageReady, let old = account else { throw SyncFailure.http(401, "account_required") }
         if old.expiresAt > Date().addingTimeInterval(90) { return old.tokens.access_token }
         do {
@@ -263,6 +334,7 @@ private struct SharedCacheFile: Codable {
             }, refresh: { try await self.service.refresh($0) }, accountID: { tokens in
                 try await self.service.accountID(tokens.access_token, sessionID: tokens.session_id)
             }, revoke: { try? await self.service.logout($0) })
+            guard account?.accountID == old.accountID, account?.tokens.session_id == old.tokens.session_id else { throw CancellationError() }
             account = next; return next.tokens.access_token
         } catch {
             // Refresh tokens rotate once. An uncertain response requires fresh login, never reuse.
@@ -271,6 +343,7 @@ private struct SharedCacheFile: Codable {
         }
     }
     private func clearAccount() {
+        tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
         account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
     }
@@ -399,8 +472,10 @@ private struct SharedCacheFile: Codable {
         }
     }
     func logout() {
+        approvals.invalidate()
         guard !busy, !syncing else { return }
         if let account, !(editing[account.accountID] ?? [:]).isEmpty { error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return }
+        tokenFlight.invalidate()
         let old = account; epoch = UUID(); let attempt = epoch; busy = true
         operation = Task {
             do {

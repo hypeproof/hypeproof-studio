@@ -13,6 +13,7 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  memberApprovals?: import('./memberApproval').ApprovalView;
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
   personalReflectionPending?: boolean;
@@ -104,6 +105,8 @@ export interface FreeStartView {
   refillsAt?: number;
 }
 export type StartRequest =
+  | { type: 'memberApprovalRefresh' }
+  | { type: 'memberApprovalDecision'; id: string; requestDigest: string; choice: import('./memberApproval').ApprovalChoice }
   | { type: "startReady" }
   /** MPER-02/04: explicit personal-question intent, never an AI turn. */
   | { type: "openPersonalReflection" }

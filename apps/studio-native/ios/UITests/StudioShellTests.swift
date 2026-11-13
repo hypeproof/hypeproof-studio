@@ -159,6 +159,39 @@ final class StudioJourneyTests: XCTestCase {
         let observation = XCTAttachment(string: String(data: try JSONSerialization.data(withJSONObject: trace(app), options: [.sortedKeys]), encoding: .utf8)!)
         observation.name = name + "-synthetic-trace"; observation.lifetime = .keepAlways; add(observation)
     }
+    @MainActor func testOrdinaryAccountDoesNotShowMemberApprovalEntry() throws {
+        let app = launch("first-answer"); signIn(app)
+        let observed = app.staticTexts["nativeJourneyTrace"]
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "approval-inbox"), evaluatedWith: observed)
+        waitForExpectations(timeout: 10)
+        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        XCTAssertEqual(paths.filter { $0 == "GET /v1/me/approval-inbox" }.count, 1)
+        XCTAssertFalse(paths.contains { $0.contains("/decisions") })
+        app.buttons["연동 설정"].tap()
+        XCTAssertFalse(app.buttons["memberApprovalInbox"].exists)
+    }
+    @MainActor func testMemberInboxKeepsDraftAndReconcilesUncertainChoiceWithoutResend() throws {
+        let app = launch("member-inbox"); signIn(app)
+        let draft = field(app); draft.tap(); draft.typeText("Keep my question draft")
+        app.buttons["연동 설정"].tap(); enabled(app.buttons["memberApprovalInbox"]); app.buttons["memberApprovalInbox"].tap()
+        let approve = app.buttons["approvalApprove-member-card"]; enabled(approve); approve.tap()
+        let status = app.staticTexts["approvalInboxStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let uncertain = NSPredicate(format: "label CONTAINS %@", "자동으로 다시 보내지 않아요")
+        expectation(for: uncertain, evaluatedWith: status); waitForExpectations(timeout: 10)
+        app.buttons["닫기"].tap(); valueContains(field(app), "Keep my question draft")
+        app.terminate(); app.launch(); _ = field(app)
+        app.buttons["연동 설정"].tap(); enabled(app.buttons["memberApprovalInbox"]); app.buttons["memberApprovalInbox"].tap()
+        let cardStatus = app.staticTexts["approvalStatus-member-card"]
+        XCTAssertTrue(cardStatus.waitForExistence(timeout: 10)); XCTAssertTrue(cardStatus.label.contains("처리 대기"))
+        XCTAssertFalse(app.buttons["approvalApprove-member-card"].isEnabled)
+        XCTAssertFalse(app.staticTexts["GitHub 승인 반영됨"].exists)
+        app.buttons["닫기"].tap(); valueContains(field(app), "Keep my question draft")
+        let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
+        XCTAssertEqual(paths.filter { $0 == "POST /v1/me/approval-inbox/member-card/decisions" }.count, 1)
+        XCTAssertTrue(paths.contains("GET /v1/me/approval-inbox/member-card"))
+        try evidence("member-inbox-uncertain-choice", app: app)
+    }
     @MainActor func testFirstInstallSignInToFirstAnswerWithoutDesktop() throws {
         let app = launch("first-answer"); signIn(app)
         let input = field(app); input.tap(); input.typeText("I want to make time for learning")

@@ -16,6 +16,7 @@ struct SharedConversationView: View {
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
     @State private var showContext = false
+    @State private var showApprovals = false
     @State private var voiceRequestID: String?
     @State private var voiceCompletionWaitStarted: Date?
     @State private var speakAnswers = true
@@ -41,6 +42,7 @@ struct SharedConversationView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         if model.signedIn {
+                            if model.approvalEntryVisible { Button("확인 요청") { voice.stop(); focused = false; showApprovals = true }.accessibilityIdentifier("memberApprovalInbox") }
                             if model.selected != nil { Button("내 상황과 의도") { voice.stop(); focused = false; showContext = true } }
                             Button("새로 고침") { model.refresh() }
                             Button("이 기기의 연동 기록 내보내기") { exportURL = model.exportCache() }
@@ -82,6 +84,8 @@ struct SharedConversationView: View {
     }
     var body: some View {
         lifecycleContent
+        .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
+        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {

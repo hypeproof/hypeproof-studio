@@ -2651,6 +2651,8 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 
 ## L. Safety / observability
 
+멤버 확인 요청은 [MAI-01–06](requirements/member-approval-inbox.md)의 계정·최신 버전·명시적 선택·결과 조회 계약을 따른다. 기존 데스크톱과 iPhone에 같은 요청을 표시하며, 전송 완료를 GitHub 승인 반영으로 표시하지 않는다.
+
 후속 설계: [AB 이용권·예산·정산](requirements/access-budget-settlement.md)과
 [HC 후보 역량 해석 계약](requirements/capability-model-contract.md). 두 문서는 Lab #777 / #800의
 후속 요구사항이다. #853의 이용권 게시·조회 계약부터 구현하며 각 단계의 실행 근거는
