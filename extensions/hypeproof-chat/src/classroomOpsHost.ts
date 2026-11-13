@@ -18,7 +18,9 @@ import {
   evidencePayload, runtimePayload, stepPayload, turnObservations, uploadPayload, startOpsSync, tokenIdentityUnverified,
   RECOVERY_FOLLOWUP_CAPABILITY, RecoveryWatch, profileCheckClears, recoveryPayload, turnFailureClass, type OpsSyncLoop, type OutboxState, type RuntimeStatus, type SyncResponse,
 } from "./classroomOps";
-import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, INBOX_QUESTION_CAPABILITY, LESSON_BINDING_CAPABILITY, answerKey, answerableEntry, boundSetting, emptyView, inboxPresence, markAnswerPending, markAnswerSent, markSettingBound, mayHideInbox, pendingSetting, pointerIsStale, validateAnswer, type InboxView, type LessonRef, type QuestionAnswer } from "./classroomInbox";
+import { INBOX_CAPABILITY, INBOX_COMMENT_CAPABILITY, INBOX_PROMPT_CAPABILITY, INBOX_QUESTION_CAPABILITY, LESSON_BINDING_CAPABILITY, answerKey, answerableEntry, boundSetting, emptyView, inboxPresence, markAnswerPending, markAnswerSent, markSettingBound, mayHideInbox, pendingSetting, pointerIsStale, validateAnswer, type InboxAnswer, type InboxCard, type InboxView, type LessonRef } from "./classroomInbox";
+import { approvedVersions, commentVersion, validateCommentAnswer } from "./artifactComment.ts";
+import { createHash } from "crypto";
 import { InboxSession, InboxStore, inboxDir, inboxView } from "./classroomInboxStore";
 
 export const CREDENTIAL_KEY = "hypeproof.classroomOps.credential";
@@ -78,9 +80,23 @@ const ANSWER_NOTES: Record<string, string> = {
   run_ended: "수업이 끝나 답을 보내지 않았습니다.",
   ops_questions_disabled: "강사가 질문 카드를 꺼 두어 답을 보내지 않았습니다.",
   answer_invalid: "답 형식이 맞지 않아 보내지 않았습니다. 하나를 고르거나 500자 안으로 적은 뒤 제출하세요.",
+  comment_invalid: "답글은 500자 안으로 적어 주세요. 보내지 않았습니다.",
   credential: "수업 연결이 끝나 답을 보내지 않았습니다. 다시 연결한 뒤 제출하세요.",
   network: "서버에 연결하지 못해 답을 보내지 않았습니다. 인터넷 연결을 확인한 뒤 다시 제출하세요.",
   failed: "답을 보내지 못했습니다. 잠시 뒤 다시 제출하세요.",
+};
+
+/** CGP-ART-R-005 — the same refusals, worded for a comment instead of a question. Never a claim that anything was sent. */
+const COMMENT_NOTES: Record<string, string> = {
+  not_connected: "수업 연결이 없어 보내지 않았습니다. ‘수업 연결’로 다시 연결한 뒤 보내 주세요.",
+  not_answerable: "이 의견에는 더 답할 수 없습니다. 강사가 거둬들였거나 고친 의견이 왔습니다.",
+  declined: "동의하지 않아 보내지 않았습니다. 의견은 그대로 있고, 동의하면 다시 보낼 수 있습니다.",
+  withdrawn: "강사가 이 의견을 거둬들여 보내지 않았습니다.",
+  not_offered: "이 좌석에 남긴 의견이 아니어서 보내지 않았습니다.",
+  content_mismatch: "의견이 바뀌어 보내지 않았습니다. 새로 받은 의견을 확인하세요.",
+  run_ended: "수업이 끝나 보내지 않았습니다.",
+  ops_questions_disabled: "강사가 답 받기를 꺼 두어 보내지 않았습니다.",
+  guardian_consent_required: "이 수업은 보호자 동의가 필요해 앱에서 답글을 보낼 수 없습니다. 의견은 계속 볼 수 있습니다.",
 };
 
 /** The only things a remote command may touch. No shell, no file access, no history, no arbitrary VS Code command. */
@@ -108,6 +124,11 @@ export interface ClassroomOpsActions {
   readSpool(sinceMs: number): Promise<import("./sessionSpool").SpoolSnapshotSource | null>;
   /** #751 U1b — this learner's sessions in the class window (current + restarted/sealed ones). Absent in older hosts: a kinds collection then records nothing. */
   readCollection?(sinceMs: number, identity: { u: string; c: string; p: string }): Promise<import("./sessionSpool").SpoolCollectionSource | null>;
+  /**
+   * CGP-ART-R-005 — the learner's workspace index.html as it is now (null = none or unreadable). Read only to tell whether an
+   * instructor comment is about this version or an earlier one; nothing is sent. Absent in older hosts: comments are not shown.
+   */
+  currentPage?(): Promise<string | null>;
 }
 
 /** What the chat provider is allowed to tell this adapter. No message text, no paths. */
@@ -448,7 +469,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       placeHolder: "XXXX-XXXX 또는 XXXX-XXXX-XXXX", ignoreFocusOut: true, validateInput: (v) => (connectCodeKind(v) ? null : "수업 코드 8자리 또는 좌석 코드 12자리를 입력하세요"),
     });
     if (!code) return;
-    const device = { app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY], app_version: this.version() };
+    const device = { app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY], app_version: this.version() };
     const b = connectCodeKind(code) === "join" ? await this.joinWithClassCode(code, device) : await this.connectWithSeatCode(code, device);
     if (!b) return;
     await this.finishConnect(b, got.notice);
@@ -562,9 +583,36 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     const presence = inboxPresence({ connected, expired: p.expired === true, ends_at: p.ends_at ?? 0, now: Date.now() });
     try {
       const view = await inboxView(new InboxStore(inboxDir(this.context.globalStorageUri.fsPath, p)), { run: p.run, student: p.student, generation: gen, ...presence });
-      return { ...view, cards: view.cards.map((c) => { const slot = `${c.object_id}:${c.revision}`, note = this.answerNotes.get(slot); return c.kind === "question" && !c.withdrawn ? { ...c, ...(note ? { answer_note: note } : {}), ...(this.answerBusy.has(slot) ? { answer_busy: true } : {}) } : c; }) };
+      const placed = await this.placeComments(view.cards);
+      const cards = placed.map((c) => { const slot = `${c.object_id}:${c.revision}`, note = this.answerNotes.get(slot); return (c.kind === "question" || c.kind === "comment") && !c.withdrawn ? { ...c, ...(note ? { answer_note: note } : {}), ...(this.answerBusy.has(slot) ? { answer_busy: true } : {}) } : c; });
+      return { ...view, cards, unread: cards.filter((c) => c.is_new).length };
     }
     catch (err) { this.log(`[inbox] read: ${(err as Error).message}`); return emptyView(gen); }
+  }
+  /** CGP-ART-R-005 — the learner the last live connection named, kept in memory so comments stay placed after it ends. */
+  private commentLearner: { run: { starts_at: number } | null; student: { u: string; c: string; p: string } } | null = null;
+  /**
+   * CGP-ART-R-005 — a comment is drawn only on a version THIS learner approved on this device (their own spool sessions,
+   * matched by identity), and says whether their page is still that version. Any comment that cannot be placed — another
+   * learner's version, no learner known, no spool reader in this host — is dropped from the view, never shown "just in case".
+   */
+  private async placeComments(cards: InboxCard[]): Promise<InboxCard[]> {
+    const scope = this.scope(); if (scope) this.commentLearner = { run: scope.run, student: scope.student };
+    if (!cards.some((c) => c.kind === "comment" && !c.withdrawn)) return cards;
+    const who = this.commentLearner, me = tokenIdentityUnverified(this.token);
+    const known = !!who && !!this.actions.readCollection && !!this.actions.currentPage && me.u === who.student.u && me.c === who.student.c;
+    let approved = new Set<string>(), current: string | null = null;
+    if (known) {
+      try { approved = approvedVersions(await this.actions.readCollection!(who!.run ? who!.run.starts_at - WINDOW_LEAD_MS : 0, who!.student)); } catch { approved = new Set(); }
+      try { const page = await this.actions.currentPage!(); current = page === null ? null : createHash("sha256").update(page, "utf8").digest("hex"); } catch { current = null; }
+    }
+    const out: InboxCard[] = [];
+    for (const c of cards) {
+      if (c.kind !== "comment" || c.withdrawn) { out.push(c); continue; }
+      const v = known && c.anchor ? commentVersion(c.anchor.artifact_sha256, approved, current) : null;
+      if (v) out.push({ ...c, version: v });
+    }
+    return out;
   }
   /** A callback from a renderer names the generation it was drawn under; one from an ended connection changes nothing. */
   async inboxOpened(objectId: string, generation: number): Promise<void> {
@@ -593,16 +641,20 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     if (this.answerBusy.has(slot)) return; // one attempt per card at a time: a double press is not a second answer
     const store = this.inboxStore, credential = this.credential, gen = this.generation;
     const live = () => gen === this.generation && credential === this.credential;
-    const done = (code: string | null) => { if (code) this.answerNotes.set(slot, ANSWER_NOTES[code] ?? ANSWER_NOTES.failed); else this.answerNotes.delete(slot); };
+    let isComment = false;
+    const done = (code: string | null) => { if (code) this.answerNotes.set(slot, (isComment ? COMMENT_NOTES[code] : undefined) ?? ANSWER_NOTES[code] ?? ANSWER_NOTES.failed); else this.answerNotes.delete(slot); };
     this.answerBusy.add(slot); this.answerNotes.delete(slot); this.inboxChanged(false);
     try {
       if (!store || !credential || !this.meta) return done("not_connected");
       const { index, cards } = await store.read();
-      const card = cards.find((c) => c.object_id === objectId && c.revision === revision && c.kind === "question" && !c.withdrawn && !c.unreadable);
+      const card = cards.find((c) => c.object_id === objectId && c.revision === revision && (c.kind === "question" || c.kind === "comment") && !c.withdrawn && !c.unreadable);
       const entry = card?.content_hash ? answerableEntry(index, { object_id: objectId, revision, content_hash: card.content_hash }) : null;
       const source = entry?.sources.at(-1);
-      if (!card?.question || !entry || !source) return done("not_answerable");
-      const value = validateAnswer(raw, card.question); if (!value) return done("answer_invalid");
+      isComment = card?.kind === "comment";
+      // CGP-ART-R-005: a comment is answered only while it is placed on this learner's own approved version.
+      if (card?.kind === "comment" && !(await this.placeComments([card])).length) return done("not_answerable");
+      if ((card?.kind === "question" && !card.question) || !card || !entry || !source) return done("not_answerable");
+      const value: InboxAnswer | null = card.kind === "comment" ? validateCommentAnswer(raw) : validateAnswer(raw, card.question!); if (!value) return done(card.kind === "comment" ? "comment_invalid" : "answer_invalid");
       const target = { object_id: objectId, revision, content_hash: entry.content_hash };
       const { result: key } = await store.commit((ix) => { const e = answerableEntry(ix, target); if (!e) return { next: null, result: null }; const k = answerKey(e.answer, target, value, randomUUID); return { next: markAnswerPending(ix, target, k, value), result: k }; });
       if (!key) return done("not_answerable");
@@ -623,7 +675,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     } catch (err) { this.log(`[inbox] answer: ${(err as Error).message}`); done("failed"); }
     finally { this.answerBusy.delete(slot); this.inboxChanged(false); }
   }
-  private async postAnswer(credential: string, body: { idempotency_key: string; distribution_id: string; object_id: string; revision: number; content_hash: string; answer: QuestionAnswer }): Promise<{ ok: boolean; reason: string; answered_at?: number; answer_revision?: number }> {
+  private async postAnswer(credential: string, body: { idempotency_key: string; distribution_id: string; object_id: string; revision: number; content_hash: string; answer: InboxAnswer }): Promise<{ ok: boolean; reason: string; answered_at?: number; answer_revision?: number }> {
     let res: Response;
     try { res = await fetch(`${this.base()}/classroom/ops/participation/answers`, { method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) }); }
     catch { return { ok: false, reason: "network" }; }
@@ -733,7 +785,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
-      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, INBOX_QUESTION_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
+      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, INBOX_QUESTION_CAPABILITY, INBOX_COMMENT_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
       commands: runner as unknown as NonNullable<Parameters<typeof startOpsSync>[0]["commands"]>,
       post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox, appInstanceId: this.appInstanceId,
       sample: () => { const base = this.runtime(); const r = { ...base, status: automationOpsRuntime(live() ? this.refreshAutomation(false) : null, base.status) }; const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },

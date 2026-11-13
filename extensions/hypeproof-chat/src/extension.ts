@@ -445,6 +445,8 @@ export async function activate(context: vscode.ExtensionContext) {
     setHold: (hold) => provider.opsSetHold(hold),
     readSpool: (sinceMs) => provider.opsReadSpool(sinceMs),
     readCollection: (sinceMs, identity) => provider.opsReadCollection(sinceMs, identity),
+    // CGP-ART-R-005: the same file the learner approves (approveArtifactInteractively). Read only, to place instructor comments.
+    currentPage: async () => { const root = vscode.workspace.workspaceFolders?.[0]?.uri; try { return root ? Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, "index.html"))).toString("utf8") : null; } catch { return null; } },
     recoverPreview: () => provider.opsRecoverPreview(),
   }, (line) => console.log(line));
   classroomOps.setAutomationSource(() => automationHost.observation());
