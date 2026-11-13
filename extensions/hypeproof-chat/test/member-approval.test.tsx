@@ -19,6 +19,9 @@ async function main(){ try{
  const summary=[...document.querySelectorAll('article p')].find(p=>p.textContent===change);
  assert(summary,'what changes must be readable before expanding evidence');assert.equal(summary.closest('details'),null);assert.equal(document.querySelector('details')?.open,false);assert.equal(posted.length,0);
  assert(summary.compareDocumentPosition(button('승인')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,'change must precede choices');
+ assert(button('승인').compareDocumentPosition(document.querySelector('details')!) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,'choices must precede optional technical evidence');
+ assert([...document.querySelectorAll('details code')].some(code=>code.textContent===card.source.head),'complete exact version remains inspectable');
+ assert(document.querySelector('details summary')?.getAttribute('aria-label')?.includes(card.source.head),'collapsed version is accessible without shortening its identity');
  assert(document.querySelector('details')?.textContent?.includes('summary: '+change),'full authored source remains available');
  await render({status:'ready',cards:[{...card,brief:{authored:['<img src=x onerror=alert(1)>'],verified:['Actual evidence']}}],pending:[],busy:false});
  assert.equal(document.querySelector('article img'),null);assert([...document.querySelectorAll('article p')].some(p=>p.textContent==='<img src=x onerror=alert(1)>'));

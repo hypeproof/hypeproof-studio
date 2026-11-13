@@ -1022,7 +1022,7 @@
       "inline_prefixes": [
         "MAI"
       ],
-      "sha256": "29b61986e94cf66b94e0e34698e3b8c1a8daefbca63cac3fcb0ac930178e45a6",
+      "sha256": "0ac35a9343641ebdac207d7f8f61a3e361ff7d05ce9879a4b0dc38f00a1bfd5b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/member-approval-inbox.md",

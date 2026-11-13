@@ -192,6 +192,19 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue(summary.waitForExistence(timeout: 5)); XCTAssertTrue(summary.isHittable)
         XCTAssertEqual(summary.label, "Small synthetic change")
         XCTAssertFalse(app.staticTexts["Fixture evidence only"].exists, "evidence stays collapsed before the choice")
+        for identifier in ["approvalApprove-member-card", "approvalHold-member-card", "approvalQuestion-member-card"] {
+            let choice = app.buttons[identifier]; enabled(choice)
+            XCTAssertTrue(choice.isHittable)
+            XCTAssertGreaterThanOrEqual(choice.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(choice.frame.minY, summary.frame.maxY)
+            XCTAssertLessThanOrEqual(choice.frame.maxY, app.frame.maxY, "choices must be visible without scrolling through technical evidence")
+        }
+        let disclosure = app.buttons["approvalEvidence-member-card"]
+        XCTAssertTrue(disclosure.isHittable); disclosure.tap()
+        let exactHead = app.staticTexts["approvalExactHead-member-card"]
+        XCTAssertTrue(exactHead.waitForExistence(timeout: 5))
+        XCTAssertEqual(exactHead.label, String(repeating: "a", count: 40))
+        disclosure.tap()
         let beforeChoice = try XCTUnwrap(trace(app)["paths"] as? [String])
         XCTAssertFalse(beforeChoice.contains { $0.contains("/decisions") })
         let approve = app.buttons["approvalApprove-member-card"]; enabled(approve); approve.tap()

@@ -15,6 +15,12 @@ existing app support namespace; a UUID per file prevents unrelated records overw
 
 Both clients validate the shared `hps-member-approval-inbox/1` response and an allowlisted review
 projection. Three choices send exactly `{id, request_digest, choice}` to the account-bound route.
+The default card is compact: repository/PR, up to three lines of verbatim authored summary,
+one short assigned-review/status line, then the three choices. Repeated introductions and
+empty status rows are omitted. Refresh is in the desktop footer/native toolbar. Full repository,
+exact head, authored content and verified evidence remain in the disclosure after the choices;
+the shortened visible version has its complete accessible label. Native uses one content cell
+for the summary/status/choices so List row padding does not separate the decision from its context.
 A busy reservation is set before asynchronous work, persistence precedes POST and account/session
 are rechecked before and after transport. A failed save does not send; a lost response keeps the
 same intent. Refresh performs only GET, including each original pending card, and never sends a
