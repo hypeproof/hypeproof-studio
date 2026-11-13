@@ -19,6 +19,11 @@ protected-branch rules.
    active PR. Freeze only the acceptance conditions needed for that result. When the
    product has `config/requirement-work.json`, take the slice from
    `hype-align next --doc <epic>`, including an item it marks `REOPENED`.
+   For desktop changes, map every changed feature to each supported OS before
+   implementation. Trace local executables, SDK/bootstrap, Service and upstream
+   dependencies separately. Include clean install and upgrade impact; existing
+   prepared-runtime smokes do not prove user installation. Carry native case IDs
+   and explicit non-runtime rationales into the release delivery-coverage plan.
 2. Within ten minutes, produce a code diff, a failing test, or a concrete
    reproduction. If no such output appears for twenty minutes without an external
    blocker, reset the bloated context or transfer the same branch to a capable

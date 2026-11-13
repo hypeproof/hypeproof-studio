@@ -17,6 +17,7 @@ import publisher
 import routing
 import routing_service
 import macos_signing
+import delivery_coverage
 
 
 def read(path): return json.loads(Path(path).read_text(encoding='utf-8'))
@@ -138,7 +139,7 @@ def required_policy(base, product, probes):
     required = []
     for case in contract['checklist']['cases']:
         for target in cfg.get('casePlatforms', {}).get(case['id'], contract['platforms']):
-            identity = probes[target]['identity']
+            identity = probes[target].get('caseIdentities', {}).get(case['id'], probes[target]['identity'])
             require(identity['sourceSha'] == contract['candidate'] and identity['artifactSha256'] == next(a['sha256'] for a in contract['artifacts'] if a['target'] == target)
                     and identity['os'] + '-' + identity['arch'] == target and identity['testRevision'] == cfg['harnessTestRevision']
                     and identity['acceptanceRevision'] == contract['checklist']['checklistRevision'], 'native probe identity differs from frozen product')
@@ -147,7 +148,10 @@ def required_policy(base, product, probes):
     policy['routing']['contract'] = {'event': 'release-candidate-ready', 'repository': contract['repository'],
         'releasePr': contract['releasePr'], 'caseIds': [c['id'] for c in contract['checklist']['cases']],
         'platforms': contract['platforms'], 'casePlatforms': {c['id']: cfg.get('casePlatforms', {}).get(c['id'], contract['platforms']) for c in contract['checklist']['cases']},
-        'required': required}
+        'required': required, 'deliveryCoverage': copy.deepcopy(product['deliveryCoverage'])}
+    routing.contract_for({'candidate': {'repository': contract['repository'], 'sourceSha': contract['candidate'],
+        'sourcePrs': [c['pr'] for c in product['deliveryCoverage']['changes']]},
+        'artifacts': contract['artifacts']}, policy)
     return policy
 
 
@@ -192,6 +196,11 @@ class Coordinator:
         sequence = journal.get('sequence') or (shared or {}).get('channelSequence', 0) + 1
         product = self.product('prepare', {'pr': event['releasePr'], 'packages': str(packages), 'sequence': sequence})
         require(product['contract']['candidate'] == candidate['sourceSha'] and product['contract']['releaseHead'] == event['releaseHead'], 'prepared product changed')
+        coverage = self.config.get('deliveryCoverage')
+        matrix = {(case['id'], target) for case in product['contract']['checklist']['cases']
+                  for target in product['config'].get('casePlatforms', {}).get(case['id'], product['contract']['platforms'])}
+        delivery_coverage.validate(coverage, candidate, matrix)
+        product['deliveryCoverage'] = copy.deepcopy(coverage)
         mac_packages = [a for a in product['contract']['artifacts'] if a['name'] == macos_signing.PACKAGE]
         require(len(mac_packages) == 1, 'official Mac package missing from prepared contract')
         signing = macos_signing.collect(github, candidate, event['release']['assets'], mac_packages[0], packages)

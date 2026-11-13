@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import re
+import delivery_coverage
 
 from core import Blocked, digest, evidence_key, now, public_payload, require
 
@@ -53,6 +54,9 @@ def contract_for(state, policy):
                 f"desktop:{row['id']}:{row['platform']}:{evidence_key(identity)}", 'required check binding differs')
         require(row['checkId'] not in check_ids, 'duplicate required check')
         check_ids.add(row['checkId'])
+    if config['mode'] == 'active' or 'deliveryCoverage' in contract:
+        delivery_coverage.validate(contract.get('deliveryCoverage'), state['candidate'], matrix,
+            {(row['id'], row['platform']): row['identity'] for row in required})
     return contract
 
 
