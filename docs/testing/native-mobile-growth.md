@@ -105,6 +105,12 @@ Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 - `NativeDeviceSignInTest` / `DeviceSignInHttpTest` / `NativeHttpDeadlineTest`:
   actual loopback HTTP serialization/redirect refusal/invalid UTF-8, bounded drip
   and cancellation; exact browser URL, expiry, throttling and matching `/me`.
+- `DeviceSignInHttpTest` also passes typed monthly-limit and temporary-admission
+  errors through the real transport/model. Only the monthly code promises a
+  monthly reset; generic 429 and 403 retain their existing meaning. Rejected sends
+  preserve credentials, durable request ID/text and a concurrently edited draft;
+  a history GET returning 401 still clears login while keeping the account's
+  records (#3963).
 - `QuestionJourneyTest`: real Android launcher and consent UI, account draft
   recreation and voice Stop, actual Keystore ciphertext roundtrip,
   spent refresh and tamper rejection. Network is an in-process fixture restricted

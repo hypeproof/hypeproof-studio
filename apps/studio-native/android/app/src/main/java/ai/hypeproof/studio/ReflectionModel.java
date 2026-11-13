@@ -148,7 +148,10 @@ final class ReflectionModel {
                         // The server rejected this ID before dispatch. Preserve its words as a draft.
                         save(next->{if(next.status().equals("local")){String submitted=next.request.getString("text");if(!next.draft.isEmpty()&&!next.draft.equals(submitted))throw new Exception("preserve_both");next.draft=submitted;next.request=null;}});
                     }
-                    error=result.status()==403?"이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.":result.status()==429?"이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요.":"대화 상태가 바뀌었거나 응답을 받지 못했어요. 먼저 대화를 확인해 주세요.";changed.run();return;
+                    if(code.equals("reflection_monthly_limit"))error="이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+                    else if(code.equals("reflection_admission_unavailable"))error="AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.";
+                    else error=result.status()==403?"이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.":result.status()==429?"이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요.":"대화 상태가 바뀌었거나 응답을 받지 못했어요. 먼저 대화를 확인해 주세요.";
+                    changed.run();return;
                 }
                 try{JSONObject snapshot=new JSONObject(result.body());ReflectionState candidate=state.copy();candidate.apply(snapshot);if(save(next->next.apply(snapshot)))notice="같은 계정의 대화를 확인했어요.";}
                 catch(Exception e){error="이전 상태이거나 올바르지 않은 응답이라 반영하지 않았어요. 기존 글은 남아 있어요.";}
