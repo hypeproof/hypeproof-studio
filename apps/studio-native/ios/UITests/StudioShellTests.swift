@@ -242,9 +242,15 @@ final class StudioJourneyTests: XCTestCase {
         }
         let disclosure = app.buttons["approvalEvidence-member-card"]
         XCTAssertTrue(disclosure.isHittable); disclosure.tap()
-        let exactHead = app.staticTexts["approvalExactHead-member-card"]
+        // SwiftUI propagates the DisclosureGroup identifier to its expanded rows.
+        // Match the exact visible revision inside this card, not a child ID that
+        // the actual accessibility hierarchy replaces with the group ID.
+        let expectedHead = String(repeating: "a", count: 40)
+        let exactHead = app.staticTexts.matching(identifier: "approvalEvidence-member-card")
+            .matching(NSPredicate(format: "label == %@", expectedHead)).firstMatch
         XCTAssertTrue(exactHead.waitForExistence(timeout: 5))
-        XCTAssertEqual(exactHead.label, String(repeating: "a", count: 40))
+        XCTAssertEqual(exactHead.label, expectedHead)
+        XCTAssertTrue(exactHead.isHittable, "The complete revision must be visible in this card's expanded evidence.")
         disclosure.tap()
         let beforeChoice = try XCTUnwrap(trace(app)["paths"] as? [String])
         XCTAssertFalse(beforeChoice.contains { $0.contains("/decisions") })
