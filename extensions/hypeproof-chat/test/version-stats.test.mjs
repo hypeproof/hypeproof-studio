@@ -28,6 +28,28 @@ test('windows, attribution, de-duplication and sources', () => {
   assert.deepEqual(Object.keys(v.opened.sources[0]).sort(), ['at', 'clicks', 'completed', 'experiment_id', 'pages', 'session_id'], 'no participant identity in a source');
 });
 
+test('window edges: (now-7d, now] is this week, (now-14d, now-7d] the week before', () => {
+  const at = (id, ms, o = {}) => ({ session_id: id, at: now - ms, product_version: null, tasks: {}, pages: 1, clicks: 1, ...o });
+  const v = versionStats('v1', [{ id: 'e1', product_version_id: 'v1', sessions: [
+    at('ps_d65', 6.5 * DAY_MS),                       // a 6-day window would drop it
+    at('ps_e7', 7 * DAY_MS, { tasks: done }),         // exactly 7 days: last week, not this week
+    at('ps_e7b', 7 * DAY_MS - 1),                     // one ms inside this week
+    at('ps_e14', 14 * DAY_MS, { tasks: done }),       // exactly 14 days: outside both
+    at('ps_e14b', 14 * DAY_MS - 1),                   // one ms inside last week, not finished
+  ] }], now);
+  assert.deepEqual(v.opened.sources.map((x) => x.session_id).sort(), ['ps_d65', 'ps_e7b'], 'this week: 6.5 days in, the 7-day edge out');
+  assert.deepEqual([v.opened.last, v.opened.prev], [2, 2], 'last week holds the 7-day edge and 14d-1ms, not the 14-day edge');
+  assert.deepEqual([v.completed.last, v.completed.prev], [0, 1], 'last week finished = the 7-day edge only; the 14-day edge does not count');
+});
+
+test('one session in two experiments of the same version counts once', () => {
+  const v = versionStats('v1', [
+    { id: 'e1', product_version_id: 'v1', sessions: [s('ps_dup', 1, { tasks: done })] },
+    { id: 'e2', product_version_id: 'v1', sessions: [s('ps_dup', 1, { product_version: 'v1', tasks: done })] },
+  ], now);
+  assert.deepEqual([v.opened.last, v.completed.last, v.opened.sources.length], [1, 1, 1]);
+});
+
 test('empty and unknown are never zero', () => {
   assert.deepEqual(versionStats('v1', [{ id: 'e1', product_version_id: 'v1', sessions: [s('ps_x', 20)] }], now), { state: 'empty' });
   assert.deepEqual(versionStats('v1', [{ id: 'e1', product_version_id: 'v1', sessions: [] }, { id: 'e2', product_version_id: 'v1', sessions: null }], now), { state: 'unknown' });
@@ -40,36 +62,69 @@ test('the change is an arrow and words', () => {
   assert.deepEqual(changeWords({ last: 2, prev: 2 }), { arrow: '', text: '지난주와 같아요' });
 });
 
-test('the real PublishSession: evidence per experiment, no pseudonym kept, cached, capped, unknown on failure', async () => {
+test('the real PublishSession: never waits for the counts, reads in parallel, caps, caches without a pseudonym', async () => {
   const here = fileURLToPath(new URL('..', import.meta.url));
   const bundle = await build({ stdin: { contents: "export { PublishSession } from './src/publishSession';", resolveDir: here, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent' });
   const require = createRequire(import.meta.url), module = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, console, Buffer, process, setTimeout, clearTimeout, URL, TextEncoder, TextDecoder, Response, Headers, crypto: globalThis.crypto, AbortSignal, AbortController });
   const { PublishSession } = module.exports;
   const exps = [1, 2, 3, 4, 5, 6, 7].map((i) => ({ id: `e${i}`, week: 1, question: 'q', method: 'task_test', success_criteria: [], hypothesis_id: null, product_version_id: i === 7 ? 'v2' : 'v1', status: 'running' }));
-  const state = { project: { id: 'p', title: 'page', members: ['a'] }, test_origin: 'https://test.invalid', versions: [], hypotheses: [], links: [], experiments: exps };
-  const reads = [];
-  let failE2 = false;
-  const fetchImpl = async (url) => {
-    const path = new URL(url).pathname;
-    const m = path.match(/\/experiments\/([^/]+)\/evidence$/);
+  const state = { project: { id: 'p', title: 'page', members: ['a'] }, test_origin: 'https://test.invalid', versions: [], hypotheses: [], links: [{ id: 'l1', experiment_id: 'e1', channel: null, state: 'live', expires_at: now + 3_600_000, share_url: 'https://test.invalid/l/l1/' }], experiments: exps };
+  const reads = [], waiting = [];
+  let mode = 'gate';
+  const fetchImpl = async (url, init) => {
+    const m = new URL(url).pathname.match(/\/experiments\/([^/]+)\/evidence$/);
     if (!m) return new Response(JSON.stringify(state), { status: 200 });
     reads.push(m[1]);
-    if (failE2 && m[1] === 'e2') return new Response('{}', { status: 503 });
-    return new Response(JSON.stringify({ evidence: { sessions: [{ session_id: `ps_${m[1]}`, at: now - DAY_MS, pseudonym: 'pp_SECRET', product_version: null, tasks: done, pages: 1, clicks: 1, inputs: 9 }] } }), { status: 200 });
+    const answer = () => new Response(JSON.stringify({ evidence: { sessions: [{ session_id: `ps_${m[1]}`, at: now - DAY_MS, pseudonym: 'pp_SECRET', product_version: null, tasks: done, pages: 1, clicks: 1, inputs: 9 }] } }), { status: 200 });
+    if (mode === 'fail' && m[1] === 'e2') return new Response('{}', { status: 503 });
+    if (mode === 'hang') return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)));
+    if (mode === 'gate') return new Promise((resolve) => waiting.push(() => resolve(answer())));
+    return answer();
   };
-  let t = now;
-  const session = new PublishSession({ switchOn: () => true, token: async () => 'tok', scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => t, fetchImpl });
+  let t = now, changed = 0;
+  const changes = () => new Promise((r) => { const at = changed; const tick = () => (changed > at ? r() : setTimeout(tick, 5)); tick(); });
+  const session = new PublishSession({ switchOn: () => true, token: async () => 'tok', scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => t, fetchImpl, statsChanged: () => { changed++; } });
+
+  // A read that has not answered never holds back the sharing state.
+  let next = changes();
   let view = await session.view();
-  assert.equal(reads.length, 6, 'at most six new evidence reads per view');
-  assert.equal(view.stats.v1.state, 'ok');
-  assert.equal(view.stats.v1.opened.last, 6);
-  assert.equal(view.stats.v2.state, 'unknown', 'the seventh experiment was not read in this view: unknown, not zero');
-  assert.ok(!JSON.stringify(view.stats).includes('pp_SECRET'), 'no pseudonym reaches the view');
+  assert.equal(view.experiments.find((e) => e.id === 'e1').links[0].state, 'live', 'the sharing state is drawn at once');
+  assert.deepEqual([view.stats.v1.state, view.stats.v2.state], ['loading', 'loading']);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(reads.length, 6, 'the six reads start together (in parallel), capped at six');
+  assert.equal(waiting.length, 6);
+  for (const w of waiting.splice(0)) w();
+  await next;
+  next = changes();
   view = await session.view();
-  assert.equal(reads.length, 7, 'cached reads are reused; only the missing one is read');
+  assert.equal(view.stats.v1.state, 'ok'); assert.equal(view.stats.v1.opened.last, 6);
+  assert.equal(view.stats.v2.state, 'loading', 'the seventh experiment is read only now');
+  await new Promise((r) => setTimeout(r, 20)); for (const w of waiting.splice(0)) w(); await next;
+  view = await session.view();
   assert.equal(view.stats.v2.state, 'ok');
-  t += 61_000; failE2 = true;
+  assert.equal(reads.length, 7, 'fresh reads are reused');
+
+  // The cache itself holds no visitor pseudonym (not only the view).
+  const cache = session.statsCacheJson();
+  assert.ok(cache.includes('ps_e1') && cache.includes('ps_e7'), 'the cache is populated');
+  assert.ok(!cache.includes('pp_SECRET') && !cache.includes('pseudonym') && !cache.includes('inputs'), 'no pseudonym or other participant field is kept: ' + cache.slice(0, 200));
+  assert.ok(!JSON.stringify(view.stats).includes('pp_SECRET'));
+
+  // A failed read says unknown (never 0) until it is retried.
+  t += 61_000; mode = 'fail'; next = changes();
+  view = await session.view(); await next;
   view = await session.view();
   assert.equal(view.stats.v1.state, 'unknown', 'a failed read makes its version unknown');
+
+  // A read that never answers is cut off by the timeout; the panel kept drawing meanwhile.
+  t += 61_000; mode = 'hang'; next = changes();
+  const started = Date.now();
+  view = await session.view();
+  assert.ok(Date.now() - started < 1000, 'the view did not wait for the hanging read');
+  assert.equal(view.stats.v1.state, 'loading');
+  await next;
+  assert.ok(Date.now() - started < 8000, 'the hanging read was cut off by the timeout');
+  view = await session.view();
+  assert.equal(view.stats.v1.state, 'unknown');
 });

@@ -44,6 +44,10 @@ async function main() {
   await render({ state: 'unknown' });
   assert.equal(byTest(host, 'stat-unknown').textContent, '횟수를 확인하지 못했어요');
   assert.ok(!/\b0\b/.test(host.textContent), 'unknown is never drawn as 0');
+  await render({ state: 'loading' });
+  assert.equal(byTest(host, 'stat-loading').textContent, '횟수 확인 중');
+  assert.equal(byTest(host, 'stat-loading').getAttribute('role'), null, 'quiet: not a live region');
+  assert.equal(byTest(host, 'stat-opened'), undefined);
   await render(undefined);
   assert.equal(host.textContent, '');
   await act(async () => root.unmount());
