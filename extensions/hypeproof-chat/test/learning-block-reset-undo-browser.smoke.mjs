@@ -44,7 +44,13 @@ window.blurAll=()=>{document.activeElement&&document.activeElement.blur()};
 window.vals=(surf)=>[...document.querySelectorAll('[data-surface="'+surf+'"] input,[data-surface="'+surf+'"] textarea')].map(e=>e.value);
 window.btn=(surf,which)=>document.querySelector('[data-surface="'+surf+'"] [data-block-'+which+']');
 window.openCard=()=>{const b=document.querySelector('[data-block-card] [data-block-toggle][aria-expanded="false"]');if(b)b.click();return !!b};
-window.hostMsgs=()=>posted.filter(p=>p.type!=='lessonFocus').length;`;
+// Every host message counts, lessonFocus included, and every fetch: reset and undo must send nothing at all.
+window.__fetches=0;const __f=window.fetch;window.fetch=(...a)=>{window.__fetches++;return __f(...a)};
+window.hostMsgs=()=>posted.length+window.__fetches;
+window.compose=(sel,steps)=>{const el=document.querySelector(sel);el.focus();el.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:''}));
+  const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+  window.__composeStep=(value)=>{Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:value.slice(-1)}))};
+  window.__composeEnd=(value)=>{el.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:value.slice(-1)}))};};`;
 const settle = () => new Promise((r) => setTimeout(r, 60));
 
 let checks = 0;
@@ -104,16 +110,30 @@ try {
     await ev(`document.querySelector('button[data-step-id="build"]').click()`);
     await waitFor(`document.querySelector('[data-hps-material="decision_form"]')`, `${tag} decision block`);
     await ev('openCard()');
+    // History is kept per step: the criterion step's edits and reset are not carried to this step.
+    assert.deepEqual(await ev(`[btn('decision_form','reset').disabled,btn('decision_form','undo').disabled]`), [true, true], `${tag}: a new step starts with no history`);
+    checks += 1;
     await ev(`typeInto('[data-surface="decision_form"] input','토요일 오후 2시')`); await ev('blurAll()'); await settle();
     await ev(`typeInto('[data-surface="decision_form"] textarea','원장님 확인')`); await ev('blurAll()'); await settle();
     await ev(`btn('decision_form','reset').click()`); await settle();
     assert.deepEqual(await ev(`vals('decision_form')`), ['', ''], `${tag}: decision reset`);
     await ev(`btn('decision_form','undo').click()`); await settle();
     assert.deepEqual(await ev(`vals('decision_form')`), ['토요일 오후 2시', '원장님 확인'], `${tag}: decision undo`);
-    // History belongs to the step: back on expect, its own history is gone only for other steps (not carried across).
     await ev(`btn('decision_form','undo').click()`); await settle();
     assert.deepEqual(await ev(`vals('decision_form')`), ['토요일 오후 2시', ''], `${tag}: one burst per field change`);
     checks += 3;
+
+    // A Korean IME composition with a pause longer than the 1 s burst timer inside it is still ONE change: undo never lands
+    // on a half-composed syllable such as a lone "ㅎ".
+    const dIn = '[data-surface="decision_form"] input';
+    await ev(`compose(${JSON.stringify(dIn)})`);
+    await ev(`__composeStep('토요일 오후 2시 ㅎ')`); await new Promise((r) => setTimeout(r, 1300));
+    await ev(`__composeStep('토요일 오후 2시 하')`); await ev(`__composeStep('토요일 오후 2시 한')`); await new Promise((r) => setTimeout(r, 1300));
+    await ev(`__composeStep('토요일 오후 2시 한낮')`); await ev(`__composeEnd('토요일 오후 2시 한낮')`); await ev('blurAll()'); await settle();
+    assert.deepEqual(await ev(`vals('decision_form')[0]`), '토요일 오후 2시 한낮');
+    await ev(`btn('decision_form','undo').click()`); await settle();
+    assert.equal(await ev(`vals('decision_form')[0]`), '토요일 오후 2시', `${tag}: undo reverts the whole composition, never to a lone jamo`);
+    checks += 1;
   }
   console.log(`PASS learning-block-reset-undo-browser: ${checks} checks (light/dark, 800/1420 px)`);
 } finally { await browser.close(); }

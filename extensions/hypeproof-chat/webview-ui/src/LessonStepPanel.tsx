@@ -77,12 +77,20 @@ export function LessonStepPanel(props: {
   const [hist, setHist] = useState<{ key: string; h: BlockHistory }>({ key: "", h: EMPTY_HISTORY });
   const history = hist.key === key ? hist.h : EMPTY_HISTORY;
   const pause = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // A Korean IME composition is one burst however long the learner pauses inside it: the pause timer is not armed while
+  // composing, and the burst may end only after compositionend. Otherwise undo could land on a lone jamo ("ㅎ").
+  const composing = useRef(false);
   useEffect(() => () => clearTimeout(pause.current), []);
+  const armPause = () => {
+    clearTimeout(pause.current);
+    if (composing.current) return;
+    pause.current = setTimeout(() => { if (!composing.current) setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x)); }, 1000);
+  };
+  const ime = { onCompositionStart: () => { composing.current = true; clearTimeout(pause.current); }, onCompositionEnd: () => { composing.current = false; armPause(); } };
   const apply = (f: BlockFields) => { setText(f.text); setReason(f.reason); };
   const edit = (next: Partial<BlockFields>) => {
     setHist((x) => ({ key, h: historyEdit(x.key === key ? x.h : EMPTY_HISTORY, { text, reason }) }));
-    clearTimeout(pause.current);
-    pause.current = setTimeout(() => setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x)), 1000);
+    armPause();
     apply({ text: next.text ?? text, reason: next.reason ?? reason });
   };
   const endBurst = () => setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x));
@@ -160,7 +168,7 @@ export function LessonStepPanel(props: {
       {block(surface === "criterion_form" ? (
         <form data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
           <label>이 단계의 확인 기준 — 무엇이 되면 잘 된 것인지 한 줄로 적으세요
-            <textarea value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={endBurst} rows={2} aria-describedby={describe} />
+            <textarea value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim()}>기준 저장</button>
           {resetUndo}
@@ -169,10 +177,10 @@ export function LessonStepPanel(props: {
       ) : surface === "decision_form" ? (
         <form data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
           <label>무엇을 바꾸기로 했나요
-            <input value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={endBurst} aria-describedby={describe} />
+            <input value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} aria-describedby={describe} />
           </label>
           <label>왜 그렇게 정했나요
-            <textarea value={reason} maxLength={1000} onChange={(e) => edit({ reason: e.target.value })} onBlur={endBurst} rows={2} aria-describedby={describe} />
+            <textarea value={reason} maxLength={1000} onChange={(e) => edit({ reason: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim() || !reason.trim()}>결정 저장</button>
           {resetUndo}
