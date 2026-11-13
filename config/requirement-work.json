@@ -254,6 +254,7 @@
         "CH-09",
         "CH-10",
         "CH-11",
+        "CH-12",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -295,7 +296,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "8f0949ad39b0000fb02f6088c9aae150517281554ff9abfe8ad48f9b827ec511",
+      "sha256": "88ec11969dc83ff874d562d7dc764e467478d9b20177af0def6effb1ad3bcf18",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -386,10 +387,16 @@
         "ADM-11",
         "ADM-12",
         "ADM-13",
-        "ADM-14"
+        "ADM-14",
+        "ADM-CMT-01",
+        "ADM-CMT-02",
+        "ADM-CMT-03",
+        "ADM-CMT-04",
+        "ADM-CMT-05",
+        "ADM-CMT-06"
       ],
       "inline_prefixes": [],
-      "sha256": "050962daddcfbbb0bb85b97386d2a7c9e4bb83a397a09a6a9a67275d8286ad25",
+      "sha256": "55e8096e4c5d111fcf745a402d2ca0beaa2e2833b639a9c496fd6588407b24aa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -908,7 +915,7 @@
         "PCC-08"
       ],
       "inline_prefixes": [],
-      "sha256": "7b6c93345c77a55770c2224d371f6cc43ce3847d9961dd0e188572df2d80aa65",
+      "sha256": "895dde731027831df320a6b97f862b4d3318e6dfa9e3c70f2fc8b00226494744",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/personal-claude-continuation.md",
@@ -968,7 +975,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "939606b7b6178aa86ad15662a4dea0a1b5b8b2b0eff2dfcafe947ffc86497676",
+      "sha256": "2ed466b5834d97c24dc4e776125ea0513e7bb76d30b41560fa8b4ac85fcb885c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -1394,7 +1401,8 @@
             "CH-08",
             "CH-09",
             "CH-10",
-            "CH-11"
+            "CH-11",
+            "CH-12"
           ]
         }
       ],
@@ -1502,6 +1510,44 @@
         "docs/testing/classroom-admin.md",
         "docs/requirements/classroom-admin.md",
         "docs/plan/learning-agent-experience-epics.md"
+      ]
+    },
+    {
+      "id": "artifact-comments",
+      "title": "Instructor comment on a learner's approved artifact version (CGP-ART-R-005, CGP-ART-D-005)",
+      "issue": 3859,
+      "kind": "implementation",
+      "feature_ids": [
+        "feedback",
+        "keep-share"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "ids": [
+            "ADM-CMT-01",
+            "ADM-CMT-02",
+            "ADM-CMT-03",
+            "ADM-CMT-04",
+            "ADM-CMT-05",
+            "ADM-CMT-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Service #437 first, then this Studio + Chalk PR. After both merge: smoke the dev host with one adult seat (approve, collect artifacts, comment, reply, handled). Jay decides whether minors may answer (DEC-ART-R-005).",
+      "design_delta": "Reuse the U2 distribution ledger (kind comment, capability inbox_comment) and the E5 answer table ({handled, reply?}). The collection extent names approved_versions. Studio places a comment only on a version this learner approved on this device. Chalk anchors to one of nine regions.",
+      "positive_control": "An adult seat that approved version V sees the comment on V ('current'), or with '이전 판에 남긴 의견' after changing the page; replies and marks it handled; Chalk shows the reply and 확인함 for that one seat.",
+      "negative_control": "Two targets, a re-send to another seat, a version the learner never approved or withdrew, a host without approval readers, a malformed answer, no consent, links in a comment, a body over 500 characters, any request carrying the comment text other than the answer route, and any message to the coach are all refused or never drawn.",
+      "evidence_required": "Commit SHA, host, commands and exit codes for the Service and Studio tests and the Chalk browser test; NOT RUN for the dev host, a real Studio window and minors.",
+      "implementation_paths": [
+        "chalk/src",
+        "extensions/hypeproof-chat/src",
+        "extensions/hypeproof-chat/webview-ui/src"
+      ],
+      "verification_inputs": [
+        "docs/testing/classroom-admin.md",
+        "docs/requirements/classroom-admin.md"
       ]
     },
     {

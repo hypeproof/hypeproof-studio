@@ -9,6 +9,8 @@ test('actual existing task history is projected, drafts and classroom block remo
  const id=f.store.getView().activeTaskId;await f.store.append(id,[{id:'user-1',role:'user',content:'내 생각',createdAt:1}]);
  const scope=f.h.mobileConversationScope();assert.equal(scope.task,id);assert.match(scope.workspace,/^[a-f0-9]{64}$/);assert.equal(scope.messages[0].content,'내 생각');assert.equal(scope.ready,true);
  await f.store.saveDraft(id,{text:'아직 쓰는 중',images:[],queued:null});assert.equal(f.h.mobileConversationScope().ready,false);
+ let dispatched=0;f.h.handleMessage=async()=>{dispatched++;};
+ assert.equal(await f.h.submitMobileConversation(scope,{id:'must-wait',text:'Do not replace the draft'}),false);assert.equal(dispatched,0);
  f.connections.active={...f.activity,kind:'classroom'};assert.equal(f.h.mobileConversationScope(),undefined);
 }));
 test('mobile submits through typed message boundary and requires persisted answer',async()=>host(async f=>{
@@ -45,6 +47,61 @@ test('uncertain reflection send preserves an idempotent pending request and rest
 }));
 
 const privateSnapshot={state:{id:'personal-reflection',revision:2,messages:[{id:'private-user',role:'user',content:'Private account A reflection',created_at:1},{id:'private-answer',role:'assistant',content:'One question?',created_at:2}],has_earlier:false,turn:null},opening:'First question?',hint:'Optional'};
+test('a desktop draft keeps receiving phone history and the next explicit send uses its revision',async()=>host(async f=>{
+ const scope=f.h.mobileConversationScope(),binding={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
+ await f.h.saveReflectionBinding(binding);
+ const draft={...f.store.getDraft(scope.task),text:'아직 정리 중인 내 생각'};await f.store.saveDraft(scope.task,draft);
+ const calls=[];f.h.setReflectionAccount({conversationSession:async()=>binding.session,reflectionRequest:async(session,path,body)=>{
+  calls.push({session,path,body});if(!body)return privateSnapshot;
+  assert.equal(body.revision,2,'The accepted next turn must be based on the refreshed phone history.');
+  return {...privateSnapshot,acknowledged_id:body.id,state:{...privateSnapshot.state,revision:4,messages:[...privateSnapshot.state.messages,
+   {id:body.id,role:'user',content:body.text,created_at:3},{id:body.id+'-answer',role:'assistant',content:'Next question?',created_at:4}],
+   turn:{id:body.id,text:body.text,status:'completed',created_at:3,updated_at:4}}};
+ }});
+ await f.h.refreshPersonalReflection();
+ assert.equal(calls.length,1,'A local draft must not suppress the account-history GET.');assert.equal(calls[0].body,undefined);
+ assert.deepEqual(Array.from(f.store.getHistory(),m=>m.id),['private-user','private-answer']);
+ assert.equal(f.h.reflectionBinding().revision,2);assert.equal(f.store.getDraft(scope.task).text,draft.text);
+ assert.ok(f.posts.some(p=>p.type==='history'&&p.messages.some(m=>m.id==='private-answer')),'The refreshed phone reply must reach the existing desktop view.');
+ const reopened=new f.internals.TaskWorkspaceStore(f.activity.workspace,f.activity.id);await reopened.initialize();
+ assert.equal(reopened.getDraft(scope.task).text,draft.text);assert.equal(reopened.getHistory(scope.task).length,2);
+ assert.equal(f.h.mobileConversationScope(true).ready,false,'Reading history must not make a draft ready for execution.');
+ await assert.rejects(f.h.beginPersonalMaking(),/작성 중인 글/);assert.equal(f.store.getView().tasks.length,1);
+ assert.equal(calls.length,1,'Sync and refused making must not send a turn.');
+ // Match the composer's explicit send boundary; the saved words were preserved until now.
+ await f.store.saveDraft(scope.task,{...draft,text:''});
+ await f.h.sendPersonalReflection({type:'sendMessage',text:draft.text,history:[],userMessageId:'explicit-next'});
+ assert.equal(calls.length,2);assert.equal(calls[1].path,'/turns');
+ assert.equal(calls[1].body.revision,2);assert.equal(calls[1].body.text,draft.text);
+}));
+test('draft history refresh still defers during unsafe host work',async()=>host(async f=>{
+ const scope=f.h.mobileConversationScope(),binding={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
+ await f.h.saveReflectionBinding(binding);await f.store.saveDraft(scope.task,{...f.store.getDraft(scope.task),text:'Keep my draft'});
+ let reads=0;f.h.setReflectionAccount({conversationSession:async()=>binding.session,reflectionRequest:async()=>{reads++;return privateSnapshot;}});
+ for(const key of ['taskChanging','connectionChanging','turnRestoreBusy','clearingHistory','opsHold','interruptedHistory','reflectionRefreshing']){
+  f.h[key]=true;await f.h.refreshPersonalReflection();f.h[key]=false;
+ }
+ f.h.verifySession={running:true};await f.h.refreshPersonalReflection();f.h.verifySession=undefined;
+ f.h.activeStreams.set('existing-turn',new AbortController());await f.h.refreshPersonalReflection();f.h.activeStreams.clear();
+ f.connections.active={...f.activity,kind:'classroom'};await f.h.refreshPersonalReflection();f.connections.active=f.activity;
+ f.h._instructorMode.isInstructor=true;await f.h.refreshPersonalReflection();f.h._instructorMode.isInstructor=false;
+ assert.equal(reads,0);assert.equal(f.store.getDraft(scope.task).text,'Keep my draft');assert.equal(f.store.getHistory().length,0);
+ await f.h.refreshPersonalReflection();assert.equal(reads,1);assert.equal(f.store.getHistory().length,2);
+}));
+test('account or task changes while a draft refresh waits cannot import the old transcript',async t=>{
+ for(const change of ['account','task'])await t.test(change,async()=>host(async f=>{
+  const scope=f.h.mobileConversationScope(),binding={session:'account-a',activity:scope.activity,workspace:scope.workspace,task:scope.task,revision:0};
+  await f.h.saveReflectionBinding(binding);await f.store.saveDraft(scope.task,{...f.store.getDraft(scope.task),text:'Private draft A'});
+  let finish;const response=new Promise(resolve=>finish=resolve);let reads=0;
+  f.h.setReflectionAccount({conversationSession:async()=>binding.session,reflectionRequest:async()=>{reads++;return response;}});
+  const refresh=f.h.refreshPersonalReflection();assert.equal(reads,1);
+  if(change==='account')f.h.setReflectionAccount({conversationSession:async()=> 'account-b'});
+  else {await f.h.handleTaskMessage({type:'taskCreate',taskId:scope.task});assert.notEqual(f.store.getView().activeTaskId,scope.task);}
+  finish(privateSnapshot);await assert.rejects(refresh,/계정이나 열린 대화/);
+  assert.equal(f.store.getDraft(scope.task).text,'Private draft A');assert.equal(f.store.getHistory(scope.task).length,0);assert.equal(f.store.getHistory().length,0);
+  assert.equal(f.posts.some(p=>p.type==='history'&&p.messages.some(m=>m.id==='private-user')),false);assert.equal(f.h.reflectionRefreshing,false);
+ }));
+});
 async function makingHost(f) {
  const s=f.h.mobileConversationScope(true),b={session:'account-a',activity:s.activity,workspace:s.workspace,task:s.task,revision:2};
  await f.h.saveReflectionBinding(b);await f.store.append(s.task,privateSnapshot.state.messages.map(m=>({id:m.id,role:m.role,content:m.content,createdAt:m.created_at})));

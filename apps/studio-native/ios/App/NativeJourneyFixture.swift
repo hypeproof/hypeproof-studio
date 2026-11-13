@@ -20,9 +20,26 @@ import CryptoKit
     }
     static func authenticate(url: URL) async throws -> URL? {
         guard enabled else { return nil }
+        if JourneyConfiguration.scenario == "sign-in-cancel" {
+            // The UI cancels the real model operation while this owned transport
+            // is suspended. Bound a missing Cancel action rather than hang CI.
+            try await Task.sleep(nanoseconds: 15_000_000_000)
+            throw CancellationError()
+        }
         try await Task.sleep(nanoseconds: 150_000_000)
         try Task.checkCancellation()
         return try JourneyTransport.store.callback(url)
+    }
+    static func seedAccountDraftIfNeeded(at url: URL, accountID: String) throws {
+        guard enabled, JourneyConfiguration.scenario == "draft-collision", accountID == "journey-account",
+              !FileManager.default.fileExists(atPath: url.path) else { return }
+        // Simulate an existing local account draft. Do not rewrite it on relaunch
+        // or mint a credential; account lookup and file decoding remain real.
+        var cache = ConversationCache(); cache.draft = "Existing account draft"
+        let entry = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cache))
+        let snapshot: [String: Any] = ["accountID": accountID, "conversations": [],
+                                       "entries": ["personal-reflection": entry]]
+        try JSONSerialization.data(withJSONObject: snapshot).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
     static func speech(deliver: @escaping @MainActor (String, Bool) -> Void) -> Task<Void, Never>? {
         guard enabled else { return nil }
@@ -55,7 +72,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "access-denied", "queued-voice"].contains(scenario)
+        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }

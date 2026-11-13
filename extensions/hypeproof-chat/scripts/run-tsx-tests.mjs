@@ -73,6 +73,7 @@ const OVERRIDES = {
   "voice-mount": { banner: BANNER_POSTED },
   "voice-mute": { banner: BANNER_POSTED },
   "voice-agent-status": { banner: BANNER_POSTED },
+  "data-deletion-request-flow": { banner: BANNER_POSTED },
   "lesson-settings-change": { banner: BANNER_POSTED },
 };
 

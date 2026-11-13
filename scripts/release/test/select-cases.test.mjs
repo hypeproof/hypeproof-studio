@@ -135,8 +135,11 @@ test('iPhone escaped cases stay active and link every required simulator journey
   const root = path.resolve(here, '../../..');
   const collector = fs.readFileSync(path.join(root, 'apps/studio-native/scripts/collect-native-journeys.py'), 'utf8');
   const required = [...collector.split('REQUIRED = {')[1].split('\n}')[0].matchAll(/'([^']+)': '(test[^']+)'/g)].map(m => m[2]);
-  assert.equal(required.length, 8, 'Update the casebook mapping when the required native journeys change');
+  assert.ok(required.includes('testFirstInstallSignInToFirstAnswerWithoutDesktop'), 'The collector must contain the first-use journey');
+  assert.equal(new Set(required).size, required.length, 'Required journeys must not be duplicated');
   const notes = native.map(c => c.notes).join('\n');
+  const documented = [...new Set(notes.match(/\btest[A-Z][A-Za-z0-9]+/g) ?? [])];
+  assert.deepEqual([...required].sort(), documented.sort(), 'Every documented native journey must remain required, and every required journey must have a case');
   const readme = fs.readFileSync(path.join(CASEBOOK_DIR, 'README.md'), 'utf8');
   for (const name of required) {
     assert.ok(notes.includes(name), `${name} has no active escaped case`);

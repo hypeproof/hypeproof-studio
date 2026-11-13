@@ -1525,6 +1525,24 @@ collection contract.
 
 **NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu 글꼴로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 배포된 Chalk Worker(Cloudflare)에서의 GitHub 읽기와 그 사용 한도, 운영 배포.
 
+<a id="adm-14-deletion-request-run"></a>
+
+## 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)
+
+요구: [계정과 데이터 삭제 요청](../requirements/classroom-admin.md#adm-14-deletion-request), Studio REQ-STUDIO-DATA-DELETION-REQUEST. Service 계약: hypeproof/hypeproof-service#440. 실행: snts(Ubuntu 24.04, Node 22), 합성 좌석만.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| Service `worker/test/data-deletion-requests.test.mjs` | 꺼짐(값 없음·빈 값·`true`·`Enabled`)이면 모든 경로 404, 프로필에 키 없음 · 켜지면 학습자 좌석에 `data_deletion` · 요청 201, 다시 요청하면 같은 열린 요청 200 · 학습자 보기에 좌석 id·계정·운영자 없음 · 강사 토큰 403, 토큰 없음·틀림·회수 401, 정확하지 않은 본문 400 · 운영자 목록(ADM-14 공유 기록 수)과 접수→처리 중→보류(사유)→완료, 사유 없는 보류·마크업·방향 제어 문자·200자 초과 거절, 완료 뒤 이동 409 · 강사 토큰은 운영자 목록을 못 읽음 · 공유 기록은 그대로(삭제 없음) · 로그에 사용자 id·수업·사유 없음 | head 8/8 통과. base(`origin/main`)에서는 모듈이 없어 실패(빨강) |
+| Service 검증 보강(2026-11-14) | migration 0087(열린 #427이 0086)을 두 번 적용해도 안전 · 한 좌석의 31번째 호출은 429 · 좌석 토큰은 상태를 못 바꿈(학습자 경로 404, 운영자 경로 401) · 계정 좌석의 `shared_records`는 0이 아니라 `null` | 12/12 통과. 돌연변이 4개(호출 제한 끄기, 학습자 상태 경로 추가, `IF NOT EXISTS` 빼기, 계정 좌석을 0으로 세기) 모두 실패로 잡힘 |
+| Service 전체 `npm test`, `tsc --noEmit` | 다른 경로 회귀 | 거듭 merge한 head에서 모든 독립 명령 통과, typecheck 통과 |
+| `extensions/hypeproof-chat/test/data-deletion-request-flow.test.tsx` | 실제 상태를 가진 줄(최소 DOM, 기록하는 브리지): 열 때 `load` 한 번, 확인 단계를 열거나 `취소`해도 `submit` 없음, `요청 보내기`만 정확히 한 번, 보내는 중 잠김 · 이 기능의 CSS 규칙에 물리 상자 속성(`margin-top`·`width` 등) 없음(`logical-css-lint.mjs`는 가로축 속성만 세므로 `margin-top`을 못 잡는다) | 4/4 통과. 돌연변이 2개(확인 단계 건너뛰고 바로 보내기, `margin-top` 넣기) 모두 실패로 잡힘 |
+| `extensions/hypeproof-chat/test/data-deletion-request.test.tsx` | 광고가 정확히 `available: true`일 때만 줄 · Service 보기 해석(모르는 키 버림, 깨진 값 거절, 사유는 보류일 때만) · 한국 날짜 · 상태마다 칩 아이콘 + 글(아이콘은 `aria-hidden`) · 보류 사유는 줄 안의 글(마크업 아님) · 확인 단계(`취소` 먼저, 이 컴퓨터 파일 문장) · 보내는 중 버튼 잠김 · 열린 요청엔 버튼 없음, 완료 뒤 `다시 요청하기` · 불러오기·오류(알던 상태 유지) · 가짜 fetch로 경로·본문·자격·redirect 금지·Service 한국어 문장 · 호스트 게이트와 처리기(파일을 건드리지 않음, 로그 없음) · 두 설정 창에 장착 · 44px·14px·논리 속성·강제 색상 | head 13/13 통과. base에서 모듈이 없어 번들 실패(빨강) |
+| 확장 `tsc --noEmit`, webview `npm run build` | 타입·번들 | 통과 |
+| 확장 `npm test` 전체(조각마다 따로, 스모크·`npm run` 묶음·렌더 시험) | 회귀 | head `9b8e1bda6` 745개 중 실패 4개, base `10f467bb9` 744개 중 실패 3개(`model-selection.smoke`·`sdk-result-drift.smoke`·렌더 `panel-boundary`, 둘 다 같은 실패). head에만 있던 `work-power.smoke`는 head와 base를 동시에 돌린 탓의 타이밍 실패로, 혼자 다시 돌리니 통과 |
+
+**NOT RUN**: 실제 Studio 앱 화면(설정 창을 열고 누르기), 실제 화면 읽기 프로그램, 배포된 Service, 실제 운영자 처리, 보호자 경로(DEC-23 대기).
+
 <a id="adm-11-update-freeze-run"></a>
 
 ## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
@@ -1576,6 +1594,29 @@ collection contract.
 | `e2e/classroom/ops-join-code.mjs` (`npm run test:classroom-ops-join-code`, #3778) | ‘수업 코드’ → 30분 → 만들기: `XXXX-XXXX`(혼동 문자 없음), 글자 크기 32px 이상, 만료·“이 수업 명단에 있는 수강생만 연결됩니다”·연결 0회, DB 만료가 30분. 평문은 그 탭 `sessionStorage`에만 있고 `localStorage`에는 없다. 명단의 학습 토큰 두 개가 코드로 연결(소문자·하이픈 없는 입력 포함) → 연결 2회, 명단 밖 handle은 `seat_not_found`. 같은 탭을 다시 불러오면 코드가 다시 보이고, 다른 탭은 코드 없이 “만든 탭에서만” 안내. 다른 탭에서 새 코드 → 이전 코드 `code_invalid`, 첫 탭은 보관값을 지움. 폐기 → 활성 코드 0, 그 코드도 `code_invalid`. 좌석 상세의 12자리 코드 발급은 그대로 | 2026-11-12 5/5 PASS |
 
 **NOT RUN**: 실제 Studio 앱(이 체크아웃의 앱은 아직 `inbox_question`을 선언하지 않아 기기는 Service sync 규약으로 대신 몰았다), 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
+
+<a id="artifact-comments-cgp-art-r-005"></a>
+
+## Artifact comments · 2026-11-13 (ADM-CMT-01–06 · CGP-ART-R-005 · CGP-ART-D-005)
+
+Requirement: [Artifact comments](../requirements/classroom-admin.md#artifact-comments-cgp-art-r-005). Host snts (Ubuntu
+24.04, node 22.23.4), each head extracted with `git archive`, `npm ci` there, headless only.
+
+| Test | What | Result · evidence |
+|---|---|---|
+| Service `worker/test/classroom-artifact-comment.test.mjs` (hypeproof-service#437) | Anchor contract and hash. The question switch. One seat only and no re-send to another seat. The device receives the anchor. No offer to an app without `inbox_comment`. The instructor view shows only that seat. Consent required, the `{handled, reply?}` form, masked secrets, a metadata-only audit with the student actor, `created_by` for the instructor, consent withdrawal erases. | Red on `1919b92` (test only). 8/8 on `1fa5fe1`. `test:classroom-ops` group 15/15. |
+| `extensions/hypeproof-chat/test/artifact-comment.test.mjs` | The anchor exactly as the Service sends it, canonical bytes, `validateItem` (no links, ≤ 500, an anchor on a comment only), the answer form, approvals with the last word winning across sessions, and placement (`current` / `previous` / not this learner's). | Red on `17ba91f80` (module missing). 6/6 on `5862b6986`. |
+| `extensions/hypeproof-chat/test/classroom-artifact-comment-host.test.mjs` | The real host through sync and store: `inbox_comment` declared at connect and sync, current and previous placement, negatives (withdrawn approval, never approved, a host without approval readers: not drawn, not counted, not answerable), reply and handled POST bodies, and the comment text in no request. | Red on `17ba91f80`. 5/5 on `5862b6986`, three repeated runs. |
+| `extensions/hypeproof-chat/test/inbox-artifact-comment.test.tsx` | Drawn apart from notices. Text as text (no `a`/`b` elements). Pin at a logical inset of 17%/17% for the top-left third, place in words, the fingerprint. The `이전 판` badge. A polite live region for `새 의견 1개`. Groups open/handled. `inboxOpen` on opening. Typing sends nothing. Reply, handled and reopen bodies. Only `inboxAnswer`/`inboxOpen` posted. | Red on `17ba91f80`. PASS on `5862b6986`. |
+| `chalk/test/artifact-comment.browser.mjs` (`FOCUS_REQUIRE_BROWSER=1`) | The real `/manage` in headless Chromium: buttons only for verified seats with approved versions and the switch on. The composer copy, nine regions of 44 px or more, a 500 cap, text ≥ 14 px, focus. An empty comment sends nothing. One `/contents` with `{kind:'comment', anchor}` and one `/distributions` to `["A1"]`. The sent list shows `의견 ·`, the anchor in words, actors and the reply. | Red on `17ba91f80` (no buttons). 18 checks PASS on `5862b6986`. |
+| Full suites | `extensions/hypeproof-chat` `npm test` (all parts, continued past failures) and `chalk` `npm test`, on `4d5e33c00`. | Chalk 56 parts, 0 failures. Extension: 4 smokes failed on my new CSS (design-tokens, focus-placeholder, forced-colors, hover-pressed-fills) and type-scale failed on the bundle-order list. Fixed in `b79b514e6`/`5862b6986`, and those five plus logical-css and semantic-tokens re-ran PASS. The known snts base failures did not appear. |
+
+After rebasing onto main `8b4b00a2f` (code head `596fe25f2`, equal to this commit apart from this record), these were re-run on snts and passed: `tsc --noEmit` for the extension and the webview, the nine smokes above plus classroom-inbox and korean-input, the four comment and question node files (23/23), both inbox render tests, the Chalk browser test, and Chalk design-tokens.
+
+**NOT VERIFIED**: the Service's `approved_versions` through the real collection path. The Studio-integration test
+`classroom-ops-collect-kinds.test.mjs` stops at its line 162 (`consent_declined`) on base and branch alike, before the
+new assertions. **NOT RUN**: the dev host, a real Studio window, real Chalk against a deployed Service, minors
+(answers are refused by the adult-only consent, DEC-ART-R-005), Windows, and screen readers.
 
 <a id="help-queue-keyboard-triage-run"></a>
 

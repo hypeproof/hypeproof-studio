@@ -7,6 +7,7 @@ is recorded here before the slice that depends on it merges, so it can be revers
 |---|---|---|---|---|
 | DEC-14 | Minor cohorts: chat links open only in the integrated safe-session browser; adults: modal naming the host before the system browser. A blocked click does not notify the instructor | README section 3 #1: the system browser bypasses the safe-session allowlist; the confirm adds one click for adults | On (safety tightening, no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-003) | Who may set or end a cohort's update freeze: an instructor whose scope on that cohort has `can_start_session` (read-only scopes see it). How security fixes work: a release whose notes carry the line `<!-- hps-update: security-critical -->` is never held by a freeze; Studio shows it (still under the class hold and the learner's restart approval) and Chalk labels it. No Service minimum-version gate, no forced install | Agent choice for the open half of DEC-24 (2026-11-12). Whoever decides when the class runs decides when its seats update; a marker in the notes is the one place both Studio's update checker and Chalk's latest-release read already, and it needs no new release field or Service read | Off until an instructor sets a range | no |
+| DEC-23 (interim, for CGP-SHELL-R-027) | A learner asks for account and data deletion from the chat settings dialog; the Service records the request and an operator processes it by hand with the existing erasure tools (account deletion, ADM-14 share withdrawal, cohort retention). Nothing deletes automatically, nothing on the device is deleted, and the learner sees 접수 / 처리 중 / 완료 / 보류(사유). Guardian requests from a Lab page are not built: how a guardian proves the relationship is the open half of DEC-23 (recommended: the guardian account draft, guardian-child-profile.md GRD-12) | DEC-23 (PIPA guardian and deletion decisions) is Jay's and is not decided. Recording a request changes no data and stays reversible; executing deletion or accepting a guardian claim would not be | Off: Service `HPS_DATA_DELETION_REQUESTS` unset; Studio draws nothing without the profile advertisement | no |
 | DEC-25 (interim) | Until the Service sends the class window end time, the whole active class seat counts as the class window for the update hold | The client has no window end; a restart mid-lesson costs the lesson. A learner can still dismiss the banner and update outside a class seat | On (holds only; no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-034) | A seat's Studio version is behind when it is below the latest published formal (non-rc) Studio release; Chalk then shows `업데이트 필요`. No new Service minimum field. An unknown or expired heartbeat stays `확인 불가`; while the latest formal release is unknown nobody is flagged. Dev builds (package version `0.1.5`) are flagged like old `0.1.x` releases. The cohort version freeze (CGP-SHELL-R-003) and its security override remain a separate later slice | Jay's answer to the DEC-24 question for this slice (2026-11-12, AskUserQuestion via the loop lead). Source of the latest formal release (agent choice): the public GitHub release that Studio's own update checker reads anonymously, served by Chalk at `GET /studio/latest-release` | On | yes (2026-11-12) |
 | DEC-08 | Edit-and-resend keeps the original as version 1 and records an edit_resend event; both attempts stay in the observation record | The original prompt, its answer and its turn record are evidence of how the learner iterated (ADAPT); overwriting them would erase the first attempt. The event holds ids and lengths only, no text | On | no |
@@ -516,6 +517,45 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   separately (the counter above and the request/confirm times), never as a product miss and never
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
+
+## DEC-ART-R-005: instructor comment on an approved artifact version (2026-11-13, agent choice)
+
+Built (Service hypeproof/hypeproof-service#437, Studio + Chalk in this PR):
+
+- Channel (agent choice): a new distribution content kind `comment` on the existing U2 ledger, not a new message channel.
+  Targets, re-offer, withdrawal and device receipts are the ones notices and question cards already use. The learner's
+  answer is a row in `classroom_question_answers`, so it inherits the class-data consent (ADR 0012), secret masking,
+  instructor-only reads and erasure on consent withdrawal. No new table, no migration.
+- Anchor (agent choice): `artifact_sha256` (the sha256 of index.html that the learner approved, U1b) plus a permille
+  rectangle or a plain element reference. Chalk offers nine regions because it has no viewer of the approved page
+  (REQ-ART-22, P2). The rectangle contract already admits a precise click-to-place anchor later. Line numbers are never
+  used.
+- Which versions (agent choice): a verified collection's extent now names `approved_versions`, the approved pages whose
+  bytes arrived. Chalk offers a comment only for those versions. Studio shows a comment only on a version that this
+  learner approved on this device, read from their own spool sessions by identity. That makes "never on another
+  learner's artifact" a device-side check and not only a Service promise. The Service also sends a comment to one seat
+  only and never to a different seat later.
+- Thread (agent choice): one current state per learner per comment revision, `{handled, reply?}`. Each answer
+  replaces the last. There is no message history, and an instructor follow-up is a new revision. This keeps the
+  stored data the same shape as a question-card text answer.
+- Switch (agent choice): comments ride `ops_questions` ("learners in this run may write back") instead of a new run flag.
+- Pin (agent choice): a 16 px pin on a page outline in the inbox's side list, not on the live preview tab. The native
+  BrowserTab has no trusted in-tab surface (the same gap as CGP-ART-D-002, D-006 and D-008). The place is also said in
+  words. The instructor colour is a filled Paper disc with a control-boundary ring. The learner's own annotations are
+  outlined and numbered, never filled.
+- Coach (agent choice): there is no forward-to-coach action. The REQ allows an explicit forward, but nothing requires
+  one, and leaving it out keeps the negative condition trivially true. A learner can still quote the comment by typing it.
+
+Parked for Jay (not built, Confirmed by Jay: no):
+
+- Minor learners. The class-data consent is `adult_only: true`, so a child profile cannot send a reply or a handled
+  state. The Service refuses with `guardian_consent_required`, and Studio says `이 수업은 보호자 동의가 필요해 앱에서
+  답글을 보낼 수 없습니다. 의견은 계속 볼 수 있습니다.` A minor can still read comments. Question: may a minor send the
+  handled state (no text), and may a minor send a reply? Recommended: allow the handled state only, stored under the run
+  and deleted with it, and keep text replies adult-only until a guardian-consent path exists. Either way this is a new
+  data category about minors, so it needs Jay.
+
+Confirmed by Jay: no (all choices above are agent choices).
 
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
@@ -2122,12 +2162,13 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
   - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
   - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
-  - any parser finding (warn or fail) that the stored plan did not already have.
+  - any parser finding (warn or fail) that the stored plan did not already have;
+  - markup that a browser could read differently from the plan tokenizer (round 2 of the verification). This also applies to every PUT /plan. It covers abrupt or `--!>` comments, CDATA, a quoted value containing `<` or `>`, an unquoted value with quotes or a backtick, a `<` that does not start a well-formed tag, duplicate attributes and NUL. Round 3 adds three more. Inside a tag, only space, tab, LF and CR count as whitespace, so a form feed is refused. `textarea`, `template`, `svg` and `math` are refused anywhere, because foreign content and raw text are read differently. `style` and `title` are allowed only in the document head, with no `<` in their text. Five of the six plan fixtures and the derived handout and runbook use a head `<style>` or `<title>`, so refusing those outright would refuse real plans. The Service's own lesson and ops skeletons still save. Round 4 adds CSS. In a head `<style>` and in `style` attributes, the Service refuses every way CSS can load a resource other than `url(data:image…)`: `image-set()` (with or without a vendor prefix), `image()`, `cross-fade()`, `element()`, `src()`, `@import` and `@font-face`. Matching is case-insensitive and happens after CSS escapes and HTML entities are decoded and comments are dropped. A leading `<!DOCTYPE html>` and spec-valid comments still pass. The Service's own skeleton is full of guide comments, so refusing every comment would break real plans. A revision may keep a comment the section already has but may add none, and it may not add a second element carrying the selected marker.
 
   The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
 
   Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
-- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0085) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
 - **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
   - the pointer outline is CSS `:hover` on the innermost mark;
   - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
@@ -2142,3 +2183,34 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
   - a real screen reader;
   - staging or production.
+
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: block references pin type, version and params (2026-11-14)
+
+The Service contract is hypeproof-service#461; this entry covers the Chalk chip. Confirmed by Jay: no. All choices below are the agent's, made under DEC-19, which Jay ruled on 2026-10-28; none is waiting on Jay.
+
+- **Reference shape (agent choice; a technical compatibility choice, not a Jay decision, per the coordinator on 2026-11-14).** `ui` stays the type string, and two optional step keys carry the pin: `ui_version` and `ui_params`. The alternative was an object-valued `ui: {type, version, params}`. It would follow DEC-19's "reuse `ui`" more literally, but Studio apps already installed read `ui` as a string (`surfaceOf`, `stepMaterial`), so every block would turn off for them. There is no hps-session-design bump.
+- **Pin at confirm (agent choice).** The draft may omit the pin. At confirm the Service writes `ui_version` (the draft's value, or else the latest). It writes `ui_params` only when that version declares params: draft values over defaults. This is the same pattern as the model and feature bindings written at freeze.
+- **First catalog (agent choice).** The seven existing kinds, at v1, with no params and one preset, 기본. No type was given invented params to meet acceptance (a). That case (`prefix_length 31 > 30`) is proved with a test-only catalog injected through the Service's seam. The first real params come with the first parametric mechanic (R-005 onward).
+- **Append-only catalog (agent choice).** A published (type, version) is never removed or changed, and a snapshot fixture locks this. The Service re-validates a confirmed lesson every time it serves it, so removing a version would close running classes. Adding a version never does.
+- **Rehearsal (agent reading).** Readiness is keyed by version and sha256, and a different pin is different bytes, so (c) holds without a new rule. `impact` reports the change as `step_changes[].block`.
+- **Chalk chip (agent choice).**
+  - Shown under the step's 학생 작업 화면 select, read-only, 14px.
+  - A pinned step shows its pin. An unpinned step shows the latest version with "(확정할 때 고정)".
+  - A preset is named when the params equal it, otherwise "직접 설정".
+  - Changing the type drops the old type's pin from the saved content.
+  - The catalog comes from the existing features read (`step_ui_catalog`), so Chalk needs no new contracts release.
+- **Not covered:** a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu); the Studio learner side (a separate change).
+
+## CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+
+Service PR hypeproof/hypeproof-service#440 adds the contract (migration 0087, retry-safe; `docs/requirements/data-deletion-requests.md`); this slice draws it in Studio. Requirement: `docs/requirements/classroom-admin.md#adm-14-deletion-request`; Studio: `docs/studio-requirements.md` REQ-STUDIO-DATA-DELETION-REQUEST.
+
+- Default off (tick rule, DEC-23 undecided): one Service flag gates the routes and the `/v1/profile` advertisement, so Studio needs no flag of its own.
+- Record, never execute (agent choice): processing stays a human operator action (`/admin/data-deletion/requests`, operator guard only; instructor tokens cannot read or move requests). The operator runbook lives with the Service requirement.
+- Subject (agent choice): the seat from the verified token (cohort + cohort-local user id; an account seat by its account id). No name, email or learner-written text. One open request per seat; a second press returns it.
+- Hold reason (agent choice): one line of at most 200 characters, no control, bidi or `<>` characters, shown to the learner as text.
+- Confirm (agent choice): an in-place two-step group in the dialog with `취소` focused first, not a native modal; the action records a request and deletes nothing, so a second native confirm would add a step without protecting data.
+- Local files (agent choice): never touched. The request screen says so, which meets "local files are not deleted without a separate confirmation" without building a local deletion path.
+- Parked for Jay (DEC-23): guardian requests. Recommended: wait for the guardian account (GRD-12: the guardian deletes the child profile from their own account). Until then, when a guardian contacts HypeProof, an operator or support verifies the relationship outside the product and processes the deletion by hand with the existing operator tools. Not implemented: no operator or instructor route creates a request on a learner's behalf, so such a case leaves no request row; the learner can still file from their own seat. Alternatives: a Lab form verified by the instructor; no guardian path before the guardian account. Same wording as the Service requirement (hypeproof-service `docs/requirements/data-deletion-requests.md`).
+- Not covered: a live Studio run, a real screen reader, a deployed Service, status after the seat credential expired.
+- Confirmed by Jay: no.

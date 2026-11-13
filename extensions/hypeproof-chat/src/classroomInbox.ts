@@ -6,11 +6,14 @@
 // replaces v2; a withdrawal and an offer are ordered by the event number of their object, whichever arrives first; and
 // nothing in here ever touches the learner's own files, conversation or input.
 
+import { MAX_COMMENT_CHARS, anchorCanonical, validateAnchor, type CommentAnchor, type CommentAnswer } from "./artifactComment.ts";
+export { INBOX_COMMENT_CAPABILITY } from "./artifactComment.ts";
+
 export const INBOX_SCHEMA = "hps-classroom-inbox/2";
 export const CONTENT_SCHEMA = "hps-classroom-content/1";
 export const INBOX_CAPABILITY = "distribution_inbox";
 /** U3: `prompt` = a text the learner may import into their own draft by their own press; `setting` = a REFERENCE to a lesson version that applies from the next question. */
-export const INBOX_KINDS = ["notice", "material", "prompt", "setting", "question"] as const;
+export const INBOX_KINDS = ["notice", "material", "prompt", "setting", "question", "comment"] as const;
 /** Declared per kind: holding notices does not imply importing prompts or switching a lesson binding. */
 export const INBOX_PROMPT_CAPABILITY = "inbox_prompt", LESSON_BINDING_CAPABILITY = "lesson_binding";
 /** E5 (#3776): a question card the learner may answer (one choice or a short text) or skip. Answers need the class data consent. */
@@ -18,6 +21,8 @@ export const INBOX_QUESTION_CAPABILITY = "inbox_question";
 export type QuestionSpec = { type: "choice"; options: string[] } | { type: "text" };
 /** The learner's answer as the Service takes it: an option index, a short text, or a skip. */
 export type QuestionAnswer = { choice: number } | { text: string } | { skipped: true };
+/** CGP-ART-R-005: a comment's answer is the learner's current state of it. Stored and keyed exactly like a question answer. */
+export type InboxAnswer = QuestionAnswer | CommentAnswer;
 /** Same numbers as the Service (worker/src/lib/classroom-distribution.ts). */
 export const MAX_QUESTION_OPTIONS = 6, MAX_OPTION_CHARS = 80, MAX_ANSWER_CHARS = 500;
 export interface LessonRef { course_id: string; version: string; sha256: string }
@@ -31,7 +36,7 @@ const KEY_RE = /^[A-Za-z0-9-]{8,64}$/, SHA256_RE = /^[a-f0-9]{64}$/, DELIVERY_KE
 const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/;
 
 export interface InboxLink { label: string; url: string }
-export interface InboxItem { offer_key: string; distribution_id: string; seq: number; object_id: string; revision: number; kind: (typeof INBOX_KINDS)[number]; schema: string; title: string; body: string; links: InboxLink[]; lesson?: LessonRef | "base"; question?: QuestionSpec; content_hash: string; issued_at: number; expires_at: number; apply_within_ms: number }
+export interface InboxItem { offer_key: string; distribution_id: string; seq: number; object_id: string; revision: number; kind: (typeof INBOX_KINDS)[number]; schema: string; title: string; body: string; links: InboxLink[]; lesson?: LessonRef | "base"; question?: QuestionSpec; anchor?: CommentAnchor; content_hash: string; issued_at: number; expires_at: number; apply_within_ms: number }
 export interface InboxWithdraw { withdraw_key: string; object_id: string; seq: number; revision: number; reason: string }
 export type Verdict<T> = { ok: true; value: T } | { ok: false; code: "schema" | "unsupported_kind" };
 
@@ -94,8 +99,12 @@ export function validateItem(raw: unknown): Verdict<InboxItem> {
   let question: QuestionSpec | undefined;
   if (o.kind === "question") { const q = validateQuestion(o.question); if (!q) return bad(); question = q; }
   else if (o.question !== undefined) return bad();
+  // CGP-ART-R-005: a comment carries its anchor and nothing else does; its text is capped tighter than a notice.
+  let anchor: CommentAnchor | undefined;
+  if (o.kind === "comment") { const a = validateAnchor(o.anchor); if (!a || [...(o.body as string)].length > MAX_COMMENT_CHARS) return bad(); anchor = a; }
+  else if (o.anchor !== undefined) return bad();
   if (!Number.isSafeInteger(o.apply_within_ms) || (o.apply_within_ms as number) <= 0 || (o.apply_within_ms as number) > APPLY_WITHIN_MS) return bad();
-  return { ok: true, value: { offer_key: o.offer_key, distribution_id: o.distribution_id, seq: o.seq as number, object_id: o.object_id, revision: o.revision as number, kind: o.kind as InboxItem["kind"], schema: CONTENT_SCHEMA, title: o.title, body: o.body, links: (links as InboxLink[]).map((l) => ({ label: l.label, url: l.url })), ...(lesson !== undefined ? { lesson } : {}), ...(question ? { question } : {}), content_hash: o.content_hash, issued_at: Number.isSafeInteger(o.issued_at) ? o.issued_at as number : 0, expires_at: Number.isSafeInteger(o.expires_at) ? o.expires_at as number : 0, apply_within_ms: o.apply_within_ms as number } };
+  return { ok: true, value: { offer_key: o.offer_key, distribution_id: o.distribution_id, seq: o.seq as number, object_id: o.object_id, revision: o.revision as number, kind: o.kind as InboxItem["kind"], schema: CONTENT_SCHEMA, title: o.title, body: o.body, links: (links as InboxLink[]).map((l) => ({ label: l.label, url: l.url })), ...(lesson !== undefined ? { lesson } : {}), ...(question ? { question } : {}), ...(anchor ? { anchor } : {}), content_hash: o.content_hash, issued_at: Number.isSafeInteger(o.issued_at) ? o.issued_at as number : 0, expires_at: Number.isSafeInteger(o.expires_at) ? o.expires_at as number : 0, apply_within_ms: o.apply_within_ms as number } };
 }
 export function validateWithdraw(raw: unknown): InboxWithdraw | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -104,10 +113,12 @@ export function validateWithdraw(raw: unknown): InboxWithdraw | null {
   return { withdraw_key: o.withdraw_key, object_id: o.object_id, seq: o.seq as number, revision: Number.isSafeInteger(o.revision) ? o.revision as number : 0, reason: typeof o.reason === "string" && /^[a-z_]{1,32}$/.test(o.reason) ? o.reason : "revoked" };
 }
 /** Byte-for-byte what the Service hashed: schema, kind, title, body, links — nothing else, in this order. */
-export const contentCanonical = (c: { kind: string; title: string; body: string; links: InboxLink[]; lesson?: LessonRef | "base"; question?: QuestionSpec }) => {
+export const contentCanonical = (c: { kind: string; title: string; body: string; links: InboxLink[]; lesson?: LessonRef | "base"; question?: QuestionSpec; anchor?: CommentAnchor }) => {
   const head = [CONTENT_SCHEMA, c.kind, c.title, c.body, c.links.map((l) => [l.label, l.url])];
   // A question's sixth element is its form. A question without one hashes to nothing the Service ever sends.
   if (c.kind === "question") return JSON.stringify([...head, c.question?.type === "choice" ? ["choice", c.question.options] : c.question?.type === "text" ? ["text"] : []]);
+  // A comment's sixth element is its anchor (approved version + place). Without one it hashes to nothing the Service sends.
+  if (c.kind === "comment") return JSON.stringify([...head, c.anchor ? anchorCanonical(c.anchor) : []]);
   // A sixth element for a setting only: notices and materials hash exactly as they did before U3.
   return JSON.stringify(c.kind === "setting" ? [...head, c.lesson === "base" ? ["base"] : c.lesson ? [c.lesson.course_id, c.lesson.version, c.lesson.sha256] : []] : head);
 };
@@ -125,7 +136,7 @@ export interface SettingState { state: "pending" | "bound"; offer_key: string; d
  * `pending` = the answer last attempted and not confirmed, with the key a retry of the same answer reuses. `sent` = the
  * answer the Service confirmed with a 2xx. Both are bound to the revision and hash: a new revision starts without either.
  */
-export interface AnswerRecord { revision: number; content_hash: string; pending?: { key: string; value: QuestionAnswer }; sent?: { key: string; value: QuestionAnswer; at: number; answer_revision: number } }
+export interface AnswerRecord { revision: number; content_hash: string; pending?: { key: string; value: InboxAnswer }; sent?: { key: string; value: InboxAnswer; at: number; answer_revision: number } }
 export interface InboxEntry { object_id: string; revision: number; content_hash: string; seq: number; file: string; bytes: number; kind: string; title: string; received_at: number; opened: boolean; sources: InboxSource[]; setting?: SettingState; answer?: AnswerRecord; tombstone?: { seq: number; reason: string; at: number } }
 export type JournalEntry =
   | { type: "offer"; key: string; stage: "received" | "reflected" | "failed" | "superseded"; distribution_id: string; object_id: string; revision: number; content_hash: string; seq: number; result_code: string; observed_at: number }
@@ -205,17 +216,17 @@ export function applyWithdraw(index: InboxIndex, w: InboxWithdraw, serverTime: n
 }
 
 // ── E5 question answers: what this device remembers of its own answer ──
-const sameAnswer = (a: QuestionAnswer | undefined, b: QuestionAnswer) => !!a && JSON.stringify(a) === JSON.stringify(b);
+const sameAnswer = (a: InboxAnswer | undefined, b: InboxAnswer) => !!a && JSON.stringify(a) === JSON.stringify(b);
 /** The live question entry for exactly this revision and hash, or null (withdrawn, replaced by a newer revision, not a question). */
 export function answerableEntry(index: InboxIndex, o: { object_id: string; revision: number; content_hash: string }): InboxEntry | null {
   const e = index.objects[o.object_id];
-  return e && !e.tombstone && e.kind === "question" && e.revision === o.revision && e.content_hash === o.content_hash ? e : null;
+  return e && !e.tombstone && (e.kind === "question" || e.kind === "comment") && e.revision === o.revision && e.content_hash === o.content_hash ? e : null;
 }
 /**
  * The idempotency key for sending `value`: the same answer sent again (a retry, or a replay of what was confirmed) reuses its
  * key, so the Service records it once; a different answer gets a fresh key, so the Service records the change.
  */
-export function answerKey(record: AnswerRecord | undefined, o: { revision: number; content_hash: string }, value: QuestionAnswer, fresh: () => string): string {
+export function answerKey(record: AnswerRecord | undefined, o: { revision: number; content_hash: string }, value: InboxAnswer, fresh: () => string): string {
   if (record && record.revision === o.revision && record.content_hash === o.content_hash) {
     if (record.pending && sameAnswer(record.pending.value, value)) return record.pending.key;
     if (record.sent && sameAnswer(record.sent.value, value)) return record.sent.key;
@@ -223,13 +234,13 @@ export function answerKey(record: AnswerRecord | undefined, o: { revision: numbe
   return fresh();
 }
 /** Records the attempt BEFORE it is sent, so a retry after a restart reuses the key. Changes nothing for a card that moved on. */
-export function markAnswerPending(index: InboxIndex, o: { object_id: string; revision: number; content_hash: string }, key: string, value: QuestionAnswer): InboxIndex {
+export function markAnswerPending(index: InboxIndex, o: { object_id: string; revision: number; content_hash: string }, key: string, value: InboxAnswer): InboxIndex {
   const e = answerableEntry(index, o); if (!e) return index;
   const prev = e.answer && e.answer.revision === o.revision && e.answer.content_hash === o.content_hash ? e.answer : undefined;
   return { ...index, objects: { ...index.objects, [o.object_id]: { ...e, answer: { revision: o.revision, content_hash: o.content_hash, ...(prev?.sent ? { sent: prev.sent } : {}), pending: { key, value } } } } };
 }
 /** Only after the Service answered 2xx. The attempt with this key becomes the sent answer. */
-export function markAnswerSent(index: InboxIndex, o: { object_id: string; revision: number; content_hash: string }, key: string, value: QuestionAnswer, at: number, answerRevision: number): InboxIndex {
+export function markAnswerSent(index: InboxIndex, o: { object_id: string; revision: number; content_hash: string }, key: string, value: InboxAnswer, at: number, answerRevision: number): InboxIndex {
   const e = answerableEntry(index, o); if (!e) return index;
   const pending = e.answer?.pending && e.answer.pending.key !== key ? { pending: e.answer.pending } : {};
   return { ...index, objects: { ...index.objects, [o.object_id]: { ...e, answer: { revision: o.revision, content_hash: o.content_hash, ...pending, sent: { key, value, at, answer_revision: answerRevision } } } } };
@@ -283,7 +294,9 @@ export function withinApplyWindow(w: ApplyWindow, clock: Clock, applyWithinMs: n
  * `question`/`answer` (E5): the form, and what this device knows of its own answer — `sent` only after the Service confirmed it.
  * `answer_note` is the outcome of the last attempt in this window (not stored); `answer_busy` = an attempt is in flight.
  */
-export interface InboxCard { object_id: string; kind: string; title: string; body: string; links: InboxLink[]; revision: number; received_at: number; is_new: boolean; withdrawn: boolean; unreadable: boolean; content_hash?: string; setting?: "pending" | "bound"; question?: QuestionSpec; answer?: { sent: QuestionAnswer | null }; answer_note?: string; answer_busy?: boolean }
+export interface InboxCard { object_id: string; kind: string; title: string; body: string; links: InboxLink[]; revision: number; received_at: number; is_new: boolean; withdrawn: boolean; unreadable: boolean; content_hash?: string; setting?: "pending" | "bound"; question?: QuestionSpec; answer?: { sent: InboxAnswer | null }; answer_note?: string; answer_busy?: boolean;
+  /** CGP-ART-R-005: the anchor, and (set by the host) whether the learner's page is still that version. A comment without `version` is not shown. */
+  anchor?: CommentAnchor; version?: "current" | "previous" }
 /** `ended` = this device KNOWS the class is over (normal expiry, or its end time passed). `offline` = no valid connection right now and no such knowledge: the class may well be running. */
 export interface InboxView { run: string; student: string; generation: number; ended: boolean; offline: boolean; cards: InboxCard[]; unread: number }
 export const emptyView = (generation = 0): InboxView => ({ run: "", student: "", generation, ended: false, offline: false, cards: [], unread: 0 });

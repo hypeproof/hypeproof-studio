@@ -19223,6 +19223,80 @@
           "section": "## Voice agent-status line (CGP-VOICE-R-007 / CGP-VOICE-D-006)"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-DATA-DELETION-REQUEST",
+      "stage": "requirement",
+      "label": "REQ-SHELL-27 / DES-SHELL-26: a learner requests account and data deletion from the settings dialog; the Service records it, an operator processes it by hand; status chip 접수 / 처리 중 / 완료 / 보류(사유); local files untouched; default off (DEC-23)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)"
+        },
+        {
+          "path": "docs/studio-requirements.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DATA-DELETION-REQUEST",
+      "stage": "implementation",
+      "label": "Studio deletion request row: profile gate, host read/send with the seat credential, in-place confirm, status chip, styles",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DATA-DELETION-REQUEST",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/dataDeletionRequest.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DataDeletionRequest.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DATA-DELETION-REQUEST",
+      "stage": "test",
+      "label": "Deletion request helpers, Service calls, status row render, confirm step, wiring and style floors",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DATA-DELETION-REQUEST",
+        "ST-IMP-DATA-DELETION-REQUEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/data-deletion-request.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/data-deletion-request-flow.test.tsx"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)"
+        }
+      ]
     }
   ]
 }

@@ -31,9 +31,10 @@ permissions:
   contents: read
   pull-requests: read
 
-concurrency:
-  group: merge-tier-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+# No concurrency group: a cancelled run leaves a red `merge-tier` context that can
+# block a merge once the check is required (hypeproof-harness#626). Each run is a
+# cheap read-only check, so every run finishes and the newest one reads the newest
+# approval.
 
 jobs:
   gate:
