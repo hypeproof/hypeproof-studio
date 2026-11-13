@@ -802,10 +802,11 @@
         "PRA-12",
         "PRA-13",
         "PRA-14",
-        "PRA-15"
+        "PRA-15",
+        "PRA-16"
       ],
       "inline_prefixes": [],
-      "sha256": "1ca6952bc8b5ea4bd0a24336b57ab1ee1834ea7f92a3cef764b2a3ed5863078e",
+      "sha256": "907515f10f76f54061ee1f950f83570a32f33e90538fc978a445344cc4eefb2c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -4948,6 +4949,37 @@
         "extensions/hypeproof-chat/test/activity-resume.test.mjs",
         "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs",
         "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
+      ]
+    },
+    {
+      "id": "windows-advertised-runtime-delivery",
+      "title": "Advertised Windows updater delivers the verified App and native SDK",
+      "issue": 3865,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-16"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Review and merge the updater change, then run BB-026 and BB-038 on a native Windows host using the candidate release. Keep clean-install and upgrade NOT RUN until observed.",
+      "design_delta": "Pin App, SDK and canonical seeder digests before setup; publish the candidate-source seeder and return success only after both App and SDK preparation.",
+      "positive_control": "Generated Windows PowerShell installs synthetic setup and invokes the pinned seeder with the matching version and tarball; actual clean install reaches first answer, save and preview.",
+      "negative_control": "Corrupt or missing assets prevent setup; setup and seeding failures cannot report completion; running App blocks without killing unrelated processes.",
+      "evidence_required": "Exact source and package digests, Windows fixture CI, and separate clean-install/previous-release upgrade observations preserving work. CI fixtures alone do not prove native acceptance.",
+      "implementation_paths": [
+        "scripts/release/install-kit.mjs",
+        "scripts/release/templates/update-windows.cmd",
+        ".github/workflows/verify-unified-release.yml"
+      ],
+      "verification_inputs": [
+        "scripts/release/test/install-kit.test.mjs",
+        "scripts/release/test/windows-delivery.smoke.mjs",
+        "docs/operations/release-casebook/cases.yaml"
       ]
     }
   ]

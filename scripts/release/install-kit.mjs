@@ -18,7 +18,7 @@
 //       [--seed-name claude-agent-sdk-darwin-arm64-V.tgz --seed-sha256 HEX --seeder-sha256 HEX]
 //       --product-version EXACT_BUILD_CONTRACT_VERSION --mac-zip PATH_TO_ACCEPTED_MAC_ZIP --out DIR
 //     writes DIR/install-mac.sh and DIR/HypeProof-<tag>-Test-Kit.zip
-//   install-kit.mjs render-windows --tag vX --user-setup PATH_TO_ACCEPTED_USER_SETUP_EXE --out DIR
+//   install-kit.mjs render-windows --tag vX --user-setup PATH_TO_ACCEPTED_USER_SETUP_EXE --seed-tarball PATH_TO_SDK_TGZ --seeder scripts/seed-sdk-binary.ps1 --out DIR
 //     writes DIR/update-windows.cmd, pinned to this tag and to the exe's SHA-256 (2026-11-02)
 //   install-kit.mjs notes --tag vX [--mac] [--windows] < BODY > BODY
 //     the release body with the Mac and/or Windows install sections added (or replaced,
@@ -43,6 +43,7 @@ export const REPO = 'hypeproof/hypeproof-studio';
 export const INSTALLER_NAME = 'install-mac.sh';
 const TAG_RE = /^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?$/;
 const HEX64 = /^[a-f0-9]{64}$/;
+const WINDOWS_SEED_RE = /^claude-agent-sdk-win32-x64-(\d+\.\d+\.\d+)\.tgz$/;
 const SEED_RE = /^claude-agent-sdk-darwin-arm64-(\d+\.\d+\.\d+)\.tgz$/;
 // First version whose start needs no participation code (free start, 2026.1020.0).
 const FREE_START_FROM = [2026, 1020, 0];
@@ -137,18 +138,24 @@ export function renderInstaller(opts) {
 }
 
 /** update-windows.cmd for this tag: CRLF, pinned to the accepted per-user installer's SHA-256. */
-export function renderWindowsUpdater({tag, exeName, exeSha256}) {
+export function renderWindowsUpdater({tag, exeName, exeSha256, seedName, seedSha256, seederSha256}) {
   parseTag(tag);
   if (!USER_SETUP_RE.test(exeName ?? '')) throw Error(`not a Windows per-user installer: ${exeName}`);
   if (!HEX64.test(exeSha256 ?? '')) throw Error('exe sha256 must be 64 lowercase hex characters');
-  const text = fill(template(WINDOWS_UPDATER_NAME), {TAG: tag, EXE_NAME: exeName, EXE_SHA256: exeSha256});
+  const seed = WINDOWS_SEED_RE.exec(seedName ?? '');
+  if (!seed) throw Error('Windows win32-x64 SDK tarball name is required');
+  if (!HEX64.test(seedSha256 ?? '') || !HEX64.test(seederSha256 ?? '')) throw Error('Windows SDK and seeder sha256 pins are required');
+  const text = fill(template(WINDOWS_UPDATER_NAME), {TAG: tag, EXE_NAME: exeName, EXE_SHA256: exeSha256,
+    SEED_NAME: seedName, SEED_VERSION: seed[1], SEED_SHA256: seedSha256, SEEDER_SHA256: seederSha256});
   return text.replace(/\r?\n/g, '\r\n');
 }
 
 const fileSha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-export function writeWindowsUpdater({tag, userSetup}, outDir) {
-  const text = renderWindowsUpdater({tag, exeName: path.basename(userSetup ?? ''), exeSha256: fileSha256(userSetup)});
+export function writeWindowsUpdater({tag, userSetup, seedTarball, seeder}, outDir) {
+  if (!seedTarball || !seeder || path.basename(seeder) !== 'seed-sdk-binary.ps1') throw Error('Windows SDK tarball and canonical seeder are required');
+  const text = renderWindowsUpdater({tag, exeName: path.basename(userSetup ?? ''), exeSha256: fileSha256(userSetup),
+    seedName: path.basename(seedTarball), seedSha256: fileSha256(seedTarball), seederSha256: fileSha256(seeder)});
   fs.mkdirSync(outDir, {recursive: true});
   fs.writeFileSync(path.join(outDir, WINDOWS_UPDATER_NAME), text);
   return [WINDOWS_UPDATER_NAME];
@@ -257,7 +264,11 @@ export function installProblems({tag, platforms, body = '', assets = []}) {
     if (!body.includes(marker) || !body.includes(section)) problems.push(`${label}: the release notes lack the ${asset} command`);
   };
   if (platforms.includes('darwin-arm64')) need(INSTALLER_NAME, NOTES_BEGIN, oneLiner(tag), 'macOS');
-  if (platforms.includes('win32-x64')) need(WINDOWS_UPDATER_NAME, WIN_BEGIN, windowsOneLiner(tag), 'Windows');
+  if (platforms.includes('win32-x64')) {
+    need(WINDOWS_UPDATER_NAME, WIN_BEGIN, windowsOneLiner(tag), 'Windows');
+    if (!names.includes('seed-sdk-binary.ps1')) problems.push('Windows: canonical SDK seeder is missing');
+    if (names.filter(name => WINDOWS_SEED_RE.test(name)).length !== 1) problems.push('Windows: exactly one win32-x64 SDK tarball is required');
+  }
   return problems;
 }
 
@@ -329,7 +340,7 @@ function main(argv) {
     tag: {type: 'string'}, 'source-sha': {type: 'string'}, 'zip-sha256': {type: 'string'},
     'seed-name': {type: 'string'}, 'seed-sha256': {type: 'string'}, 'seeder-sha256': {type: 'string'},
     out: {type: 'string'}, 'mac-zip': {type: 'string'}, 'product-version': {type: 'string'},
-    'user-setup': {type: 'string'}, mac: {type: 'boolean'}, windows: {type: 'boolean'}, platforms: {type: 'string'},
+    'user-setup': {type: 'string'}, 'seed-tarball': {type: 'string'}, 'seeder': {type: 'string'}, mac: {type: 'boolean'}, windows: {type: 'boolean'}, platforms: {type: 'string'},
   }});
   if (command === 'render') {
     if (!values.out) throw Error('--out is required');
@@ -341,7 +352,7 @@ function main(argv) {
   } else if (command === 'render-windows') {
     if (!values.out) throw Error('--out is required');
     if (!values['user-setup']) throw Error('--user-setup is required: the accepted HypeProof.StudioUserSetup-x64-*.exe');
-    for (const name of writeWindowsUpdater({tag: values.tag, userSetup: values['user-setup']}, values.out)) console.log(path.join(values.out, name));
+    for (const name of writeWindowsUpdater({tag: values.tag, userSetup: values['user-setup'], seedTarball: values['seed-tarball'], seeder: values.seeder}, values.out)) console.log(path.join(values.out, name));
   } else if (command === 'notes') {
     if (!values.mac && !values.windows) throw Error('notes needs --mac and/or --windows');
     process.stdout.write(withInstallSection(fs.readFileSync(0, 'utf8'), parseTag(values.tag).tag, {mac: Boolean(values.mac), windows: Boolean(values.windows)}));

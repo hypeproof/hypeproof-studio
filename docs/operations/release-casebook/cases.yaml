@@ -191,20 +191,38 @@ cases:
 
   - id: BB-026
     journey: CUJ-1
-    priority: P1
-    title: Windows x64 설치본도 무료 시작 카드까지 간다
-    requirements: [PRA-09, REQ-STUDIO-FREE-START, TUX-SP-14]
+    priority: P0
+    title: 깨끗한 Windows 에서 공개 설치 명령으로 첫 답변과 결과물까지 만든다
+    requirements: [PRA-09, PRA-16, REQ-STUDIO-FREE-START, TUX-SP-14]
     steps:
-      - Windows 11 x64 PC 에서 rc 릴리스의 Windows x64 설치 파일(UserSetup x64 .exe)을 받아 실행한다
+      - Studio 와 SDK 캐시가 없는 Windows 11 x64 사용자 프로필에서 rc 릴리스 안내의 update-windows.cmd 명령을 실행한다. SDK 사전 주입은 하지 않는다
       - SmartScreen 경고가 뜨면 추가 정보 → 실행 을 누르고 설치를 마친다
       - 시작 메뉴에서 HypeProof Studio 를 연다
+      - 무료 시작 또는 승인된 테스트 계정으로 첫 답변을 받고 파일 결과물을 저장한 뒤 미리보기를 연다
     expect:
       - 설치가 끝나고 Studio 가 열린다
       - BB-004 와 같은 시작 카드(내 계정 또는 무료로 시작하기, 받은 이용권이 있다면 Google로 로그인하세요., 만 14세 이상인가요?)가 나온다
       - 네, 만 14세 이상입니다 를 누르면 채팅이 작업 폴더에서 열린다
+      - SDK 를 별도로 설치하지 않아도 첫 답변, 결과물 저장, 미리보기가 모두 성공한다
     origin:
       kind: design
-    notes: Windows 는 2026-10-20(#2139)부터 다시 출시한다. 설치 파일은 서명되지 않아 SmartScreen 경고가 정상이다(scripts/install-win.ps1). 사전 테스터는 Mac 에서만 돌므로 사람이 한다.
+    notes: 'OS, 소스 SHA, 설치 파일과 SDK 해시, 빈 프로필 여부, 설치 명령과 결과를 기록한다. SDK 사전 주입 runner 나 합성 설치 테스트는 이 케이스의 PASS 가 아니다. 실제 Windows 호스트가 없으면 NOT RUN 으로 남긴다. #3865'
+
+  - id: BB-038
+    journey: CUJ-4
+    priority: P0
+    title: Windows 이전 릴리스에서 업데이트한 뒤 기존 작업과 새 결과물이 모두 열린다
+    requirements: [PRA-16]
+    steps:
+      - Windows 11 x64 에 직전 공개 릴리스를 설치하고 대화와 파일을 만든다. 이전 패키지 해시를 기록한다
+      - Studio 를 닫고 새 rc 릴리스 안내의 update-windows.cmd 명령으로 업데이트한다
+      - 기존 대화와 파일을 열고 새 요청의 답변을 받은 뒤 결과물을 저장하고 미리보기를 연다
+    expect:
+      - 기존 대화와 파일이 유지되고 새 답변, 저장, 미리보기가 성공한다
+      - 새 App 과 SDK 버전 및 해시가 후보 릴리스와 일치한다
+    origin:
+      kind: design
+    notes: '이전 패키지와 새 패키지는 달라야 한다. 이전 SDK 캐시를 지운 깨끗한 설치만으로 업그레이드 PASS 를 대신할 수 없다. 실제 Windows 호스트에서 수행하고 이전/현재 해시와 결과를 함께 기록한다. #3865'
 
   - id: BB-027
     journey: CUJ-1
