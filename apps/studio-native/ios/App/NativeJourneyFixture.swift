@@ -8,6 +8,7 @@ import CryptoKit
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String { JourneyTransport.store.trace() }
+    static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
@@ -74,7 +75,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -85,14 +86,51 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private var stopped = false
     private var delayed: DispatchWorkItem?
     private let historyID = UUID()
+    private var heldResponse = false
+    private var delayedResponse: (Int, [String: Any])?
     // This protocol is installed only in the fixture's private session. Accept
     // every request so an unexpected URL fails locally instead of reaching DNS.
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        do {
+            if try Self.store.beginHeldResponse(request) {
+                heldResponse = true
+                waitForResponse(deadline: ProcessInfo.processInfo.systemUptime + 20)
+                return
+            }
+            if JourneyConfiguration.scenario == "response-stop", request.url?.path.hasSuffix("/cancel") == true {
+                // Commit cancel, then deliver the original POST's terminal error
+                // before this acknowledgement. Exercise the real model race.
+                delayedResponse = try Self.store.respond(request)
+                waitForCancelAcknowledgement(deadline: ProcessInfo.processInfo.systemUptime + 5)
+                return
+            }
+        } catch { client?.urlProtocol(self, didFailWithError: error); return }
         guard Self.store.holdHistory(request, id: historyID) else { complete(); return }
         // Fail this fixture before ConversationService's 25-second timeout.
         waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + 20)
+    }
+    private func waitForCancelAcknowledgement(deadline: TimeInterval) {
+        stopLock.lock(); let cancelled = stopped; stopLock.unlock()
+        guard !cancelled else { return }
+        if Self.store.originalResponseReturned() { complete(); return }
+        if ProcessInfo.processInfo.systemUptime >= deadline {
+            delayedResponse = (599, ["error": "fixture_response_barrier_timeout"]); complete(); return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.waitForCancelAcknowledgement(deadline: deadline) }
+        stopLock.lock(); delayed = work; let stoppedBeforeSchedule = stopped; stopLock.unlock()
+        if stoppedBeforeSchedule { work.cancel(); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+    private func waitForResponse(deadline: TimeInterval) {
+        stopLock.lock(); let cancelled = stopped; stopLock.unlock()
+        guard !cancelled else { return }
+        if Self.store.responseMayFinish() || ProcessInfo.processInfo.systemUptime >= deadline { complete(); return }
+        let work = DispatchWorkItem { [weak self] in self?.waitForResponse(deadline: deadline) }
+        stopLock.lock(); delayed = work; let stoppedBeforeSchedule = stopped; stopLock.unlock()
+        if stoppedBeforeSchedule { work.cancel(); return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05, execute: work)
     }
     private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
@@ -114,11 +152,16 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
         if let historyOutcome { Self.store.finishHistory(historyID, outcome: historyOutcome) }
         stopLock.unlock()
         do {
-            let (status, object) = try Self.store.respond(request)
+            let result: (Int, [String: Any])
+            if let delayedResponse { result = delayedResponse }
+            else if heldResponse { result = Self.store.finishHeldResponse() }
+            else { result = try Self.store.respond(request) }
+            let (status, object) = result
             guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else { throw URLError(.badServerResponse) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: object))
             client?.urlProtocolDidFinishLoading(self)
+            if heldResponse { Self.store.markOriginalResponseDelivered() }
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
     override func stopLoading() {
@@ -143,6 +186,11 @@ private struct JourneySnapshot: Codable {
     var additionalFailures: [JourneyAcceptedTurn]?
     var historyAccount: Int?
     var historyAdvances: Int?
+    var heldTurn: JourneyAcceptedTurn?
+    var responseCancelled: Bool?
+    var cancelledRequests: [String]?
+    var heldResponseReturns: Int?
+    var stopHistoryRead: Bool?
     var state = ""
     var challenge = ""
     var callbacks = 0
@@ -197,6 +245,7 @@ private final class JourneyStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         let trace: [String: Any] = ["schema": "hps-native-journey-trace/1", "scenario": JourneyConfiguration.scenario,
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
+            "cancelled_requests": value.cancelledRequests ?? [], "held_response_returns": value.heldResponseReturns ?? 0,
             "accepted_turns": value.accepted.count, "failed_turns": failedTurns.count, "browser_callbacks": value.callbacks,
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
             "history_account": historyAccount, "history_advances": value.historyAdvances ?? 0,
@@ -209,6 +258,30 @@ private final class JourneyStore: @unchecked Sendable {
             "history_barrier_cancellations": historyBarrierCancellations,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
+    }
+    func beginHeldResponse(_ request: URLRequest) throws -> Bool {
+        guard JourneyConfiguration.scenario.hasPrefix("response-stop"), request.httpMethod == "POST",
+              request.url?.path == "/v1/me/reflection/turns" else { return false }
+        let (status, _) = try respond(request)
+        guard status == 202 else { throw URLError(.badServerResponse) }
+        return true
+    }
+    func responseMayFinish() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return value.responseCancelled == true || (JourneyConfiguration.scenario == "response-stop-denied" && value.stopHistoryRead == true)
+    }
+    func originalResponseReturned() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return (value.heldResponseReturns ?? 0) > 0
+    }
+    func markOriginalResponseDelivered() {
+        lock.lock(); defer { save(); lock.unlock() }
+        value.heldResponseReturns = (value.heldResponseReturns ?? 0) + 1
+    }
+    func finishHeldResponse() -> (Int, [String: Any]) {
+        lock.lock(); defer { save(); lock.unlock() }
+        if JourneyConfiguration.scenario == "response-stop-denied" { return (403, ["error": "reflection_access_required"]) }
+        // Service refuses the late answer because the row is no longer running.
+        return (404, ["error": "reflection_unavailable"])
     }
     func holdHistory(_ request: URLRequest, id: UUID) -> Bool {
         lock.lock(); defer { save(); lock.unlock() }
@@ -279,6 +352,22 @@ private final class JourneyStore: @unchecked Sendable {
         return result
     }
     private func reflection(acknowledged: String? = nil) -> [String: Any] {
+        if JourneyConfiguration.scenario == "pending-text-mismatch", let id = value.submittedIDs.first {
+            // An unacknowledged send followed by an inconsistent history read.
+            // Keep the real decoder/outbox responsible for retaining local words.
+            return ["state": ["id": "personal-reflection", "revision": 1,
+                              "messages": [["id": id, "role": "user", "content": "Different words from history", "created_at": 1000]],
+                              "has_earlier": false, "turn": NSNull()],
+                    "opening": "What would you like to understand about yourself?", "hint": "One unfinished thought is enough.",
+                    "acknowledged_id": NSNull()]
+        }
+        if let held = value.heldTurn {
+            return ["state": ["id": "personal-reflection", "revision": 1,
+                    "messages": [["id": held.id, "role": "user", "content": held.text, "created_at": 1000]],
+                    "has_earlier": false, "turn": ["id": held.id, "text": held.text,
+                        "status": JourneyConfiguration.scenario == "response-stop-denied" ? "failed" : (value.responseCancelled == true ? "cancelled" : "running"), "created_at": 1000, "updated_at": 1000]],
+                    "opening": "What would you like to understand about yourself?", "hint": "One unfinished thought is enough."]
+        }
         var messages: [[String: Any]] = []
         let failureOffset = failedTurns.count
         for (index, failed) in failedTurns.enumerated() {
@@ -378,11 +467,20 @@ private final class JourneyStore: @unchecked Sendable {
             }
             return (200, ["events": events, "cursor": 80, "has_more": false])
         case ("GET", "/v1/me/reflection"):
+            if JourneyConfiguration.scenario == "response-stop-denied", value.heldTurn != nil { value.stopHistoryRead = true }
             return (200, reflection())
         case ("POST", "/v1/me/reflection/turns"):
             guard let id = body["id"] as? String, let text = body["text"] as? String,
                   let revision = body["revision"] as? Int else { return (400, ["error": "invalid_request"]) }
             value.submittedIDs.append(id); value.submittedTexts.append(text)
+            if JourneyConfiguration.scenario.hasPrefix("response-stop") {
+                guard revision == 0, value.heldTurn == nil else { return (409, ["error": "reflection_changed"]) }
+                value.heldTurn = JourneyAcceptedTurn(id: id, text: text)
+                return (202, reflection())
+            }
+            if JourneyConfiguration.scenario == "pending-text-mismatch" {
+                return (503, ["error": "fixture_unavailable"])
+            }
             if JourneyConfiguration.scenario == "retry-once", value.retryFailures == 0 {
                 value.retryFailures += 1; return (503, ["error": "fixture_unavailable"])
             }
@@ -406,6 +504,12 @@ private final class JourneyStore: @unchecked Sendable {
             value.accepted.append(JourneyAcceptedTurn(id: id, text: text))
             return (200, reflection(acknowledged: id))
         default:
+            if JourneyConfiguration.scenario == "response-stop", method == "POST", let held = value.heldTurn,
+               path == "/v1/me/reflection/turns/" + held.id + "/cancel", body.isEmpty {
+                value.responseCancelled = true
+                value.cancelledRequests = (value.cancelledRequests ?? []) + [held.id]
+                return (200, reflection())
+            }
             if path.hasPrefix("/v1/me/conversations/") { value.desktopRequests += 1 }
             return (599, ["error": "unexpected_fixture_route"])
         }

@@ -85,6 +85,11 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var signIn: DeviceSignIn?
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
+    @Published private(set) var stoppingReflection = false
+    private var reflectionCredential: Task<String, Error>?
+    private var responseGeneration = UUID()
+    private var stoppedResponse: (generation: UUID, requestID: String, accountID: String, sessionID: String, failure: String?)?
+    private var stopOperation: Task<Void, Never>?
     @Published private(set) var accountStorageReady = false
 #if DEBUG
     @Published private(set) var accountStorageVerified = false
@@ -186,7 +191,11 @@ private struct SharedCacheFile: Codable {
         } catch { self.error = error.localizedDescription; return false }
     }
     var title: String { conversations.first { $0.id == selected }?.title ?? "대화 이어가기" }
-    var canSend: Bool { signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
+    var canStopReflection: Bool {
+        signedIn && accountStorageReady && cacheReadable && isReflection && !stoppingReflection
+            && !syncing && (reflectionCredential != nil || !busy) && cache.request?.outstanding == true
+    }
+    var canSend: Bool { !stoppingReflection && signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
     var sendingCurrentRequest: Bool {
         busy || (queuedSend != nil && queuedSend?.id == selected && queuedSend?.requestID == cache.request?.id)
     }
@@ -207,7 +216,7 @@ private struct SharedCacheFile: Codable {
         }
     }
     func restoreAccount() {
-        guard !busy, !syncing, !signedIn else { return }
+        guard !busy, !syncing, !stoppingReflection, !signedIn else { return }
         error = nil; accountStorageReady = false
 #if DEBUG
         accountStorageVerified = false
@@ -334,7 +343,7 @@ private struct SharedCacheFile: Codable {
         // Keep an in-flight refresh alive to store rotated credentials. No new reads are scheduled in background.
     }
     func login() {
-        guard !busy, !syncing else { return }
+        guard !busy, !syncing, !stoppingReflection else { return }
         guard accountStorageReady else { error = "계정 저장소를 먼저 다시 확인해 주세요."; return }
         busy = true; error = nil; loginStatus = "계정 로그인 화면을 열고 있어요."; let attempt = epoch
         operation = Task {
@@ -413,7 +422,7 @@ private struct SharedCacheFile: Codable {
     }
     func refresh() { Task { await synchronize() } }
     private func synchronize() async {
-        guard signedIn, cacheReadable, visible, !busy, !syncing else { return }
+        guard signedIn, cacheReadable, visible, !busy, !syncing, !stoppingReflection else { return }
         syncing = true; let attempt = epoch; let current = selected
         defer {
             syncing = false
@@ -477,23 +486,27 @@ private struct SharedCacheFile: Codable {
         } else { retry() }
     }
     func retry() {
-        guard !busy, !syncing, let id = selected, let request = entries[id]?.request, request.status == "local" else { return }
+        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = entries[id]?.request, request.status == "local" else { return }
         busy = true; let attempt = epoch; error = nil
+        let generation = UUID(); responseGeneration = generation; stoppedResponse = nil
+        let credentialTask = Task { try await self.token() }
+        reflectionCredential = id == Self.personalID ? credentialTask : nil
         operation = Task {
             do {
-                let credential = try await token()
+                let credential = try await credentialTask.value
+                guard epoch == attempt, responseGeneration == generation else { return }
                 if id == Self.personalID {
                     let result = try await service.reflect(request, token: credential)
-                    guard epoch == attempt else { return }
+                    guard epoch == attempt, responseGeneration == generation else { return }
                     try applyReflection(result)
                 } else {
                 let result = try await service.submit(id, request: request, token: credential)
-                guard epoch == attempt else { return }
+                guard epoch == attempt, responseGeneration == generation else { return }
                 guard result.id == request.id, result.text == request.text else { throw SyncFailure.invalidResponse }
                 try edit(id) { $0.request = result }
                 }
             } catch {
-                if epoch == attempt {
+                if epoch == attempt, responseGeneration == generation {
                     // Successful history reads cannot erase a failed send (for
                     // example missing AI access, a budget limit or network loss).
                     try? edit(id) { $0.requestFailure = error.localizedDescription }
@@ -504,13 +517,89 @@ private struct SharedCacheFile: Codable {
                         }
                     }
                     failure(error)
+                } else if epoch == attempt, id == Self.personalID,
+                          stoppedResponse?.generation == generation,
+                          stoppedResponse?.requestID == request.id,
+                          stoppedResponse?.accountID == account?.accountID,
+                          stoppedResponse?.sessionID == account?.tokens.session_id,
+                          !(error is CancellationError), (error as? URLError)?.code != .cancelled {
+                    // Stop can race a typed admission failure. Preserve its
+                    // reason only for this failed row, never a cancelled or
+                    // completed turn, newer send, account or voice continuation.
+                    stoppedResponse?.failure = error.localizedDescription
+                    if entries[id]?.request?.id == request.id, entries[id]?.request?.status == "failed" {
+                        try? edit(id) { $0.requestFailure = error.localizedDescription }
+                        if selected == id { self.error = error.localizedDescription }
+                    }
                 }
             }
-            if epoch == attempt { busy = false; await synchronize() }
+            if epoch == attempt, responseGeneration == generation { reflectionCredential = nil; busy = false; await synchronize() }
+        }
+    }
+    func stopReflection() {
+        guard canStopReflection, let request = cache.request, let accountID = account?.accountID, let sessionID = account?.tokens.session_id else { return }
+        let attempt = epoch, credentialTask = reflectionCredential
+        let originalOperation = operation
+        // A late POST result must not overwrite the independently acknowledged
+        // cancel snapshot or restart read-aloud. Keep its durable outbox identity.
+        stoppedResponse = (responseGeneration, request.id, accountID, sessionID, nil)
+        responseGeneration = UUID(); stoppingReflection = true; error = nil
+        notice = "답변 중지를 확인하고 있어요. 이미 실행된 AI 비용은 발생할 수 있어요."
+        stopOperation = Task {
+            var awaitFailedResponse = false
+            defer {
+                if !awaitFailedResponse { originalOperation?.cancel() }
+                if epoch == attempt {
+                    reflectionCredential = nil; busy = false; stoppingReflection = false
+                    stopOperation = nil
+                }
+            }
+            do {
+                let credential: String
+                if let credentialTask { credential = try await credentialTask.value }
+                else { credential = try await token() }
+                // /cancel is a no-op before Service inserts the running row.
+                // Wait briefly for that exact human turn, never infer success
+                // from an unrelated/empty snapshot and never replay the POST.
+                let deadline = ProcessInfo.processInfo.systemUptime + 8
+                for check in 0..<10 {
+                    guard epoch == attempt, account?.accountID == accountID, account?.tokens.session_id == sessionID else { return }
+                    let remaining = deadline - ProcessInfo.processInfo.systemUptime
+                    guard remaining > 0 else { break }
+                    let current = try await service.reflection(credential, timeout: remaining)
+                    guard epoch == attempt, account?.accountID == accountID, account?.tokens.session_id == sessionID else { return }
+                    if let turn = current.state.turn, turn.id == request.id, turn.text == request.text {
+                        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+                        guard remaining > 0 else { break }
+                        let result = turn.outstanding ? try await service.cancelReflection(request.id, token: credential, timeout: remaining) : current
+                        guard epoch == attempt, account?.accountID == accountID, account?.tokens.session_id == sessionID else { return }
+                        guard let confirmed = result.state.turn, confirmed.id == request.id,
+                              confirmed.text == request.text, !confirmed.outstanding else {
+                            throw StudioError.message("아직 중지를 확인하지 못했어요. 보낸 글은 남아 있어요. 다시 확인해 주세요.")
+                        }
+                        try edit(Self.personalID) {
+                            try $0.applyReflectionStop(result, request: request)
+                            if confirmed.status == "failed", let reason = stoppedResponse?.failure { $0.requestFailure = reason }
+                        }
+                        awaitFailedResponse = confirmed.status == "failed"
+                        if confirmed.status == "failed" { error = entries[Self.personalID]?.requestFailure }
+                        opening = result.opening; openingHint = result.hint; hasEarlierReflection = result.state.has_earlier
+                        switch confirmed.status {
+                        case "cancelled": notice = "답변 받기를 중지했어요. 이미 실행된 AI 비용은 발생할 수 있어요."
+                        case "completed": notice = "답변이 이미 도착했어요. 대화에서 확인해 주세요."
+                        case "failed": notice = "답변을 받지 못했어요. 보낸 이야기는 남아 있어요."
+                        default: notice = "완료 여부를 확인하지 못했어요. 보낸 이야기는 남아 있으며 자동으로 다시 보내지 않아요."
+                        }
+                        return
+                    }
+                    if check < 9 { try await Task.sleep(nanoseconds: 200_000_000) }
+                }
+                throw StudioError.message("아직 중지를 확인하지 못했어요. 보낸 글은 남아 있어요. 다시 확인해 주세요.")
+            } catch { if epoch == attempt { failure(error) } }
         }
     }
     func recoverReflection() {
-        guard isReflection, !busy, !syncing, let request = cache.request, request.status == "running" else { return }
+        guard isReflection, !busy, !syncing, !stoppingReflection, let request = cache.request, request.status == "running" else { return }
         busy = true; let attempt = epoch
         operation = Task {
             do {
@@ -522,7 +611,7 @@ private struct SharedCacheFile: Codable {
         }
     }
     func cancelPending() {
-        guard !busy, !syncing, let id = selected, let request = cache.request else { return }
+        guard !busy, !syncing, !stoppingReflection, let id = selected, let request = cache.request else { return }
         guard request.status == "pending" else { return }
         busy = true; let attempt = epoch
         operation = Task {
@@ -536,7 +625,7 @@ private struct SharedCacheFile: Codable {
     }
     func logout() {
         approvals.invalidate()
-        guard !busy, !syncing else { return }
+        guard !busy, !syncing, !stoppingReflection else { return }
         if let account, !(editing[account.accountID] ?? [:]).isEmpty { error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return }
         tokenFlight.invalidate()
         let old = account; epoch = UUID(); let attempt = epoch; busy = true
@@ -560,7 +649,7 @@ private struct SharedCacheFile: Codable {
         } catch { self.error = error.localizedDescription; return nil }
     }
     func clearCache() {
-        guard !busy, !syncing, let account, (editing[account.accountID] ?? [:]).isEmpty, !entries.values.contains(where: { $0.request?.outstanding == true || !$0.draft.isEmpty }) else {
+        guard !busy, !syncing, !stoppingReflection, let account, (editing[account.accountID] ?? [:]).isEmpty, !entries.values.contains(where: { $0.request?.outstanding == true || !$0.draft.isEmpty }) else {
             error = "작성 중인 글이나 처리 중인 요청이 있어요. 먼저 내보내고 요청 상태를 확인해 주세요."; return
         }
         do {
