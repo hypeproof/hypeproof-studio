@@ -980,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "a0436e4d7ae49fd4e1ac4ef5e9c093d8126b25ee41cc3312c343001e8b4f4b87",
+      "sha256": "b7c4e3ec9f6d6c4e4dab2f96c0130a6d87f2b625360cf7cf6e4ff62a74176d2a",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5074,6 +5074,38 @@
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java"
+      ]
+    },
+    {
+      "id": "android-send-during-sync",
+      "title": "Preserve explicit Android Send during personal-history refresh",
+      "issue": 4010,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-02",
+            "MADR-03",
+            "MPER-03"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the held-read Send and lifecycle boundaries, resolve any failing voice regression, then obtain exact-source native CI and installed-device acceptance.",
+      "design_delta": "Keep one durable local outbox and one in-memory same-read continuation; do not change cache schema or replay uncertain requests.",
+      "positive_control": "A real Android Send during a held GET persists the exact words and sends once at the reconciled revision while preserving later draft edits.",
+      "negative_control": "Old Activity/model reject the same send; Stop, account/session/background, invalid reads, save failure and restart cannot dispatch the retained outbox.",
+      "evidence_required": "Before/after actual model and Activity evidence, original failures, APK/source hashes, independent review and exact-source native CI; physical/live acceptance separately identified.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     }
