@@ -30,7 +30,7 @@ final class NativeVoice {
     private final Host host;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final AudioManager audio;
-    private final java.util.function.BooleanSupplier recognitionAvailable;
+    private final java.util.function.BooleanSupplier recognitionAvailable,microphonePermission;
     private Capture recognizer;
     private final CaptureFactory captureFactory;
     private final Playback playback;
@@ -56,12 +56,13 @@ final class NativeVoice {
     };
     NativeVoice(Activity activity,Host host) {this(activity,host,()->available(activity));}
     NativeVoice(Activity activity,Host host,java.util.function.BooleanSupplier recognitionAvailable) {
-        this(activity,host,recognitionAvailable,null,null);
+        this(activity,host,recognitionAvailable,null,null,null);
     }
     // Per-instance audio ports let instrumentation exercise the real callback/Host flow without live speech.
-    NativeVoice(Activity activity,Host host,java.util.function.BooleanSupplier recognitionAvailable,CaptureFactory captureFactory,Playback playback) {
+    NativeVoice(Activity activity,Host host,java.util.function.BooleanSupplier recognitionAvailable,CaptureFactory captureFactory,Playback playback,java.util.function.BooleanSupplier microphonePermission) {
         this.recognitionAvailable=recognitionAvailable;this.activity=activity;this.host=host;
         this.captureFactory=captureFactory==null?this::deviceCapture:captureFactory;this.playback=playback;
+        this.microphonePermission=microphonePermission==null?()->activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED:microphonePermission;
         audio=(AudioManager)activity.getSystemService(Activity.AUDIO_SERVICE);
         routes=routeIDs();audio.registerAudioDeviceCallback(routeListener,handler);
     }
@@ -75,7 +76,7 @@ final class NativeVoice {
         if(permissionTicket>=0){host.failed("마이크 권한 확인을 마친 뒤 다시 시작해 주세요.");return;}
         if(!recognitionAvailable.getAsBoolean()){host.failed("이 기기는 한국어 기기 내 음성 인식을 사용할 수 없어요. 글로 계속 적을 수 있어요.");return;}
         session.start(id,conversation);handler.post(guard);host.changed();
-        if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+        if(!microphonePermission.getAsBoolean()){
             permissionTicket=session.ticket();permissionProject=id;
             activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},PERMISSION_REQUEST);return;
         }
@@ -102,6 +103,7 @@ final class NativeVoice {
         if(session.next(id)>=0)listen();
     }
     private Capture deviceCapture(RecognitionListener listener){
+        if(Build.VERSION.SDK_INT<31)throw new UnsupportedOperationException();
         SpeechRecognizer device=SpeechRecognizer.createOnDeviceSpeechRecognizer(activity);
         device.setRecognitionListener(listener);
         return new Capture(){

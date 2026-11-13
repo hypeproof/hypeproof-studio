@@ -149,14 +149,13 @@ final class VoiceFixture {
     int starts;final java.util.List<String> spoken=new java.util.ArrayList<>();
     static android.os.Bundle words(String text){android.os.Bundle b=new android.os.Bundle();b.putStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION,new java.util.ArrayList<>(java.util.List.of(text)));return b;}
     void install(android.app.Activity activity){try{
-        InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(activity.getPackageName(),android.Manifest.permission.RECORD_AUDIO);
         var field=activity.getClass().getDeclaredField("voice");field.setAccessible(true);NativeVoice previous=(NativeVoice)field.get(activity);
         var host=NativeVoice.class.getDeclaredField("host");host.setAccessible(true);NativeVoice.Host existing=(NativeVoice.Host)host.get(previous);previous.close();
         controller=new NativeVoice(activity,existing,()->true,listener->new NativeVoice.Capture(){
             public void start(){capture=listener;starts++;}public void close(){}
         },new NativeVoice.Playback(){
             public void speak(String text,String id,android.speech.tts.UtteranceProgressListener listener){spoken.add(text);utterance=id;output=listener;listener.onStart(id);}public void stop(){}
-        });field.set(activity,controller);
+        },()->true);field.set(activity,controller);
     }catch(Exception e){throw new AssertionError(e);}}
     void partial(String text){capture.onPartialResults(words(text));}void endpoint(){capture.onEndOfSpeech();}void result(String text){capture.onResults(words(text));}
     void checkScope(){try{var f=NativeVoice.class.getDeclaredField("guard");f.setAccessible(true);((Runnable)f.get(controller)).run();}catch(Exception e){throw new AssertionError(e);}}
