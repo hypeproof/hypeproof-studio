@@ -27,6 +27,12 @@ a jump. An explicit send or the accessible “최신 메시지” action resumes
 Account changes reset the view's following state. Native test diagnostics must not
 change transcript layout or substitute accessibility existence for visible bounds.
 
+Under MPER-03, the iPhone hides retained request text only when history already
+shows the same user ID and exact words (#3992). An inconsistent same-ID history
+row must not hide an unacknowledged local question, including after relaunch.
+An identical recorded question still appears once; this display rule does not
+acknowledge, resend or replace the durable request.
+
 The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
 prose, user bubbles, one rounded composer and secondary history navigation. It
 uses native system surfaces, desktop accent roles and Dynamic Type. The existing

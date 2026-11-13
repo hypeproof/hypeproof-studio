@@ -244,7 +244,7 @@ struct SharedConversationView: View {
                     }
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
-                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" })) {
+                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" && $0.content == request.text })) {
                                 Text(request.text).textSelection(.enabled)
                             }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)

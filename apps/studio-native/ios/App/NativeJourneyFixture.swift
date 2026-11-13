@@ -74,7 +74,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -277,6 +277,15 @@ private final class JourneyStore: @unchecked Sendable {
         return result
     }
     private func reflection(acknowledged: String? = nil) -> [String: Any] {
+        if JourneyConfiguration.scenario == "pending-text-mismatch", let id = value.submittedIDs.first {
+            // An unacknowledged send followed by an inconsistent history read.
+            // Keep the real decoder/outbox responsible for retaining local words.
+            return ["state": ["id": "personal-reflection", "revision": 1,
+                              "messages": [["id": id, "role": "user", "content": "Different words from history", "created_at": 1000]],
+                              "has_earlier": false, "turn": NSNull()],
+                    "opening": "What would you like to understand about yourself?", "hint": "One unfinished thought is enough.",
+                    "acknowledged_id": NSNull()]
+        }
         var messages: [[String: Any]] = []
         let failureOffset = failedTurns.count
         for (index, failed) in failedTurns.enumerated() {
@@ -359,6 +368,9 @@ private final class JourneyStore: @unchecked Sendable {
             guard let id = body["id"] as? String, let text = body["text"] as? String,
                   let revision = body["revision"] as? Int else { return (400, ["error": "invalid_request"]) }
             value.submittedIDs.append(id); value.submittedTexts.append(text)
+            if JourneyConfiguration.scenario == "pending-text-mismatch" {
+                return (503, ["error": "fixture_unavailable"])
+            }
             if JourneyConfiguration.scenario == "retry-once", value.retryFailures == 0 {
                 value.retryFailures += 1; return (503, ["error": "fixture_unavailable"])
             }

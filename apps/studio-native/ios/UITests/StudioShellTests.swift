@@ -279,6 +279,30 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(after["accepted_turns"] as? Int, 1)
         try evidence("journey-retry-outbox", app: app)
     }
+    @MainActor func testUnacknowledgedWordsStayVisibleWhenHistoryReusesIDWithDifferentText() throws {
+        let app = launch("pending-text-mismatch"); signIn(app)
+        let words = "Keep my original pending words"
+        field(app).tap(); field(app).typeText(words); app.buttons["sharedSend"].tap()
+        enabled(app.buttons["sharedRetry"])
+        let timeline = app.scrollViews["conversationTimeline"]
+        let otherWords = timeline.staticTexts["내 메시지. Different words from history"]
+        XCTAssertTrue(otherWords.waitForExistence(timeout: 5), "The mismatched snapshot must reach the real conversation view.")
+        XCTAssertTrue(timeline.staticTexts[words].exists, "A matching ID alone must not hide the retained original words.")
+        waitForTranscript(otherWords, in: app); waitForTranscript(timeline.staticTexts[words], in: app)
+        let before = try trace(app), ids = try XCTUnwrap(before["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 1); XCTAssertEqual(before["submitted_texts"] as? [String], [words])
+        XCTAssertEqual(before["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch(); _ = field(app)
+        enabled(app.buttons["sharedRetry"])
+        XCTAssertTrue(otherWords.waitForExistence(timeout: 5))
+        XCTAssertTrue(timeline.staticTexts[words].exists, "Relaunch must retain both the local request and its visible words.")
+        waitForTranscript(otherWords, in: app); waitForTranscript(timeline.staticTexts[words], in: app)
+        let after = try trace(app)
+        XCTAssertEqual(after["submitted_ids"] as? [String], ids, "Refreshing or reopening must not send another request.")
+        XCTAssertEqual(after["accepted_turns"] as? Int, 0); XCTAssertEqual(after["speech_captures"] as? Int, 0)
+        XCTAssertFalse(app.buttons["restoreFailedReflectionDraft"].exists, "An uncertain local request must not become a terminal failed turn.")
+        try evidence("journey-pending-text-mismatch", app: app)
+    }
     @MainActor private func historyReply(_ number: Int, account: Int = 1, in app: XCUIApplication) -> XCUIElement {
         app.staticTexts.matching(NSPredicate(format: "identifier == 'sharedReply' AND label BEGINSWITH %@", "HP Studio의 답변. Account \(account) answer \(number).")).firstMatch
     }
