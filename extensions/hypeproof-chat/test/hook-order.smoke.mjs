@@ -20,50 +20,41 @@
 //   양성 — 올바른 사본은 통과해야 한다. 너무 엄격하지 않은지
 
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TARGET = join(here, "..", "webview-ui", "src", "ChatPanel.tsx");
 
-const HOOK = /\buse(State|Effect|Memo|Callback|Ref|Reducer|LayoutEffect|Context)\s*\(/;
-const COMPONENT = /^(?:export\s+)?function\s+([A-Z][A-Za-z0-9_]*)/;
-const EARLY_RETURN = /^\s*(?:if\s*\(.*\)\s*)?return\b/;
+const HOOK = /^use(State|Effect|Memo|Callback|Ref|Reducer|LayoutEffect|Context)$/;
 
-/** 컴포넌트별로 (첫 조기 return 이후에 호출되는 훅) 을 찾는다. */
+/** Return and hook positions in the component's own lexical function only. */
 export function findHooksAfterEarlyReturn(source) {
-  const lines = source.split("\n");
-  const bounds = [];
-  lines.forEach((l, i) => {
-    const m = COMPONENT.exec(l);
-    if (m) bounds.push({ line: i + 1, name: m[1] });
-  });
-  bounds.push({ line: lines.length + 1, name: "<EOF>" });
-
+  const file = ts.createSourceFile('component.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const violations = [];
-  for (let b = 0; b < bounds.length - 1; b++) {
-    const { line: start, name } = bounds[b];
-    const end = bounds[b + 1].line;
-
-    let firstReturn = null;
-    for (let ln = start + 1; ln < end; ln++) {
-      const l = lines[ln - 1];
-      if (!EARLY_RETURN.test(l)) continue;
-      // 컴포넌트의 마지막 JSX return 도 매칭되지만, 그 뒤에는 훅이 없으므로
-      // 위반으로 잡히지 않는다 — 별도 구분이 필요 없다.
-      if (l.includes("return null") || l.includes("return <") || l.includes("return (")) {
-        firstReturn = ln;
-        break;
-      }
+  const visit = (component) => {
+    if (ts.isFunctionDeclaration(component) && component.name && /^[A-Z]/.test(component.name.text) && component.body) {
+      const returns = [], hooks = [];
+      const inspect = (node) => {
+        // A callback's return exits that callback, never the enclosing component render.
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isReturnStatement(node)) returns.push(node.getStart(file));
+        if (ts.isCallExpression(node) && (ts.isIdentifier(node.expression) || ts.isPropertyAccessExpression(node.expression))) {
+          const name = ts.isIdentifier(node.expression) ? node.expression.text : node.expression.name.text;
+          if (HOOK.test(name)) hooks.push(node.getStart(file));
+        }
+        ts.forEachChild(node, inspect);
+      };
+      inspect(component.body);
+      const first = Math.min(...returns);
+      const late = hooks.filter(position => position > first);
+      const line = position => file.getLineAndCharacterOfPosition(position).line + 1;
+      if (late.length) violations.push({ component: component.name.text, firstReturn: line(first), hooks: late.map(line) });
     }
-    if (firstReturn === null) continue;
-
-    const late = [];
-    for (let ln = firstReturn + 1; ln < end; ln++) {
-      if (HOOK.test(lines[ln - 1])) late.push(ln);
-    }
-    if (late.length) violations.push({ component: name, firstReturn, hooks: late });
-  }
+    ts.forEachChild(component, visit);
+  };
+  visit(file);
   return violations;
 }
 
@@ -104,6 +95,22 @@ function Fine(props) {
 findHooksAfterEarlyReturn(POSITIVE).length === 0
   ? ok("양성 대조군: 훅 아래의 조기 return 은 통과한다 (너무 엄격하지 않다)")
   : bad("양성 대조군이 잘못 잡혔다 — 계측기가 과하게 엄격하다");
+
+const NESTED = `
+function WithCallbacks(props) {
+  const submitVoice = () => { if (!props.ready) return null; return props.send(); };
+  function nested() { return <span />; }
+  const [value] = useState(0);
+  useEffect(() => { if (!value) return; return () => {}; }, [value]);
+  return <div onClick={submitVoice} />;
+}`;
+findHooksAfterEarlyReturn(NESTED).length === 0
+  ? ok("nested arrow/function callback returns do not exit the component")
+  : bad("nested callback return was mistaken for a component return");
+const planted = NESTED.replace('const [value]', 'if (!props.ready) return null; const [value]');
+findHooksAfterEarlyReturn(planted).length === 1
+  ? ok("negative control: a real early component return beside callbacks is rejected")
+  : bad("nested callbacks concealed a real component early return");
 
 console.log("");
 console.log("=== 2. 실제 ChatPanel.tsx (REQ-F6) ===");
