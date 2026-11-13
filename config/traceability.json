@@ -17889,9 +17889,6 @@
         },
         {
           "path": "release.json"
-        },
-        {
-          "path": "apps/studio-native/ios/Sources/StudioCore/GuestDraft.swift"
         }
       ]
     },
@@ -17972,9 +17969,6 @@
         },
         {
           "path": "apps/studio-native/tests/test_ios_cleanup.py"
-        },
-        {
-          "path": "apps/studio-native/ios/Tests/StudioCoreTests/GuestDraftTests.swift"
         }
       ]
     },
