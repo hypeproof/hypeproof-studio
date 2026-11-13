@@ -11,6 +11,7 @@ import { onHostMessage, postToHost } from './vscode';
 import { ChatIcon } from './ChatDetails';
 import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
+import { nativeComposing } from './imeGuard';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
   return JSON.stringify([config?.activity?.id, config?.taskWorkspace?.activeTaskId, config?.profile?.profile_id, config?.profile?.access_identity?.scope]);
@@ -86,7 +87,10 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
     });
     const hide = () => controller.stop();
     const visibility = () => { if (document.visibilityState === 'hidden') hide(); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && controller.active) { event.preventDefault(); controller.stop(); } };
+    const escape = (event: KeyboardEvent) => {
+      const isComposing = nativeComposing(event);
+      if (event.key === 'Escape' && !isComposing && controller.active) { event.preventDefault(); controller.stop(); }
+    };
     document.addEventListener('visibilitychange', visibility); window.addEventListener('pagehide', hide); window.addEventListener('keydown', escape);
     return () => { off(); offSpeech(); offMute(); controller.stop(); loop.current = null; document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', hide); window.removeEventListener('keydown', escape); };
   }, [speech, makeRecorder]);

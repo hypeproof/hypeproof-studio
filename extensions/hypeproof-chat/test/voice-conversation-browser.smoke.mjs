@@ -80,6 +80,18 @@ try {
  await click('자동 음성 대화 시작');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-disclosure")'),false,'existing acknowledgement adds no recurring mode gate');
  controls.push('one deliberate start with inline behavior and no redundant acknowledgement');
+ await wait(async()=>await live()===1,'capture before IME Escape');
+ // Exercise the native listener itself; document's IME host barrier is separate protection.
+ for (const flags of [{isComposing:true,keyCode:27},{isComposing:false,keyCode:229}]) {
+  const prevented=await b.evaluate(`(()=>{const event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,...${JSON.stringify(flags)}});window.dispatchEvent(event);return event.defaultPrevented})()`);
+  await drain();assert.equal(prevented,false,'composing Escape stays with the IME');
+  assert.equal(await live(),1,'composing Escape retains the active conversation');
+  assert(await b.evaluate(`!!document.querySelector('button[aria-label="음성 대화 중지"]')`),'conversation remains active');
+ }
+ const prevented=await b.evaluate(`(()=>{const event=new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true,cancelable:true});window.dispatchEvent(event);return event.defaultPrevented})()`);
+ await drain();assert.equal(prevented,true,'ordinary Escape is handled');assert.equal(await live(),0,'ordinary Escape stops capture');
+ controls.push('composing Escape and legacy 229 retain capture; ordinary Escape stops');
+ await click('자동 음성 대화 시작');
  // Silence alone cannot dispatch; the analyser and recorder are real, no fake end-turn event.
  await new Promise(r=>setTimeout(r,1100));await drain();assert.equal(calls.filter(c=>c.type==='voiceTranscribe').length,0);assert.equal(await live(),1);
  await b.evaluate('window.__gain.gain.value=0.0001');await new Promise(r=>setTimeout(r,500));await b.evaluate('window.__gain.gain.value=0');await new Promise(r=>setTimeout(r,900));await drain();assert.equal(calls.filter(c=>c.type==='voiceTranscribe').length,0,'below-floor audio never creates a paid turn');
