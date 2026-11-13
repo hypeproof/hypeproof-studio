@@ -35,7 +35,7 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, denialToolLine, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
 import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
@@ -10063,7 +10063,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
         deniedCalls.set(a.id, denial);
         tracker.settle(a.id);
-        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
       };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
@@ -10144,9 +10144,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             }catch {if(observation){observation.batch.incomplete=true;this.persistObservation(observation);}this.nativeObservationError='산출물 사본을 확인하지 못했습니다.';}
           })());
         }
-        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error") =>
+        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error", kind?: "tool") =>
           // #503 — a.at: the SDK's own timestamp as it sent it. It becomes the persisted line's createdAt.
-          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}) });
+          // `kind: "tool"` only from the tool_use / tool_result cases below, never thinking (the status line reads it).
+          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}), ...(kind ? { kind } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
             if (work) {
@@ -10213,13 +10214,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (line.kind === "row") {
               const header = delegationHeader(a.input, this.resolveCoachCwd());
               tracker.setHeader(a.id, header);
-              log(line.lineId, DELEGATION_ICON, header, "running");
+              log(line.lineId, DELEGATION_ICON, header, "running", "tool");
               // REQ-STUDIO-LONG-STEP-HINT — no clock yet; it starts at the approval (case "approval").
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: DELEGATION_ICON, label: header, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             } else if (work && shell) {
               // REQ-CGP-AGENT-60 — a summary seat still shows each shell row (collapsed), with its purpose.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, shell });
             } else if (work) {
@@ -10227,9 +10228,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               work.show(workPhrase(a.name, a.input));
             } else if (line.kind === "child") {
               // A helper's own call sits inside its row; the row is the step the hint times.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
             } else {
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               // The words come from the tool name (workPhrase), never from `label`.
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
@@ -10267,7 +10268,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 : denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom'));
               deniedCalls.set(a.id, denial);
               tracker.settle(a.id);
-              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial });
+              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
               break;
             }
             // A backgrounded helper's result is the SDK's placeholder, never its answer: the row
@@ -10280,6 +10281,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   DELEGATION_ICON,
                   delegationResultLabel(tracker.header(a.id), a.content, { isError: a.isError, reason: a.reason, workspaceRoot: this.resolveCoachCwd() }),
                   a.isError ? "error" : "done",
+                  "tool",
                 );
               }
             }
@@ -10295,9 +10297,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 ? `${shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label} — 실패${a.reason ? `: ${a.reason}` : ""}`
                 : (shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label),
               a.isError ? "error" : "done",
+              "tool",
             );
             // REQ-CGP-AGENT-60 — a summary seat's shell row still settles (errors were settled above).
-            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done");
+            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done", "tool");
             // Only a **successful** write tool establishes the evidence for "it was
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
@@ -11144,7 +11147,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             : await this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
           if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running", kind: "tool" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
           const tr = p.planGate
             ? (planFirstToolResult(p.planGate, call.name) as Awaited<ReturnType<typeof browser.execute>>)
@@ -11154,7 +11157,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)
             : await browser.execute(fixed.call);
           this.noteTaskActivity(p.streamId, { kind: 'result', id: call.id, isError: !!tr.isError });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done",
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done", kind: "tool",
             ...(tr.isError ? { denial: denialNotice(taggedDenialSource(tr.content.find(c => c.type === 'text')?.text), this.getSeatAudience() === 'classroom') } : {}) });
           // If it was corrected, tell the model too — fix it silently and it guesses
           // again next turn. One mapping shared with the CR-T03 adapter parity check.
@@ -12406,12 +12409,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the window is reopened — the very symptom this issue is meant to catch.
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
-    if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
-      entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
-    }
+    // The denial line keeps the call's `kind` marker: a refused or failed call still ends its running line.
+    if (entry.denial) entry = denialToolLine(entry);
     const t = this.turnTimelines.get(streamId);
-    if (t) this.turnTimelines.set(streamId, timelineTool(t, entry, Date.now()));
+    // `kind` is a live-channel marker only; the persisted line keeps its old shape.
+    const { kind: _kind, ...persisted } = entry;
+    if (t) this.turnTimelines.set(streamId, timelineTool(t, persisted, Date.now()));
     void this.post({ type: "toolLog", streamId, ...entry });
   }
 

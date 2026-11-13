@@ -354,3 +354,32 @@ reasoning effort를 전송하는 fixture를 거부하며 모델 변경 전후 �
 음량 tick마다 읽거나 포커스가 사라지는 대조군을 거부한다. 지원 OS별 결과를 분리한다.
 
 상태: NOT RUN.
+
+## #3686 automatic clip loop — internal-profile candidate
+
+The existing Electron chat has a bounded half-duplex candidate: explicit automatic-mode
+start with inline behavior, observed endpoint -> existing metered dictation -> ordinary composer submission
+and recovery -> the matching host answer -> shared device playback -> next capture.
+The existing provider/storage acknowledgement is unchanged; already acknowledged users
+start directly with no additional automatic-mode confirmation. If that existing sheet is
+needed, its copy explains automatic sending and Stop.
+Manual dictation retains edit-before-send behavior. Stop, hiding, account/activity/task
+change, refusal, approval, or unrelated draft/attachment work ends the automatic chain;
+an already dispatched request is not reported as refunded or undone.
+
+Focused controls are `voice-conversation.smoke.mjs` and
+`voice-conversation-browser.smoke.mjs`. The browser control uses actual Chromium
+MediaRecorder and Web Audio samples, the real AccountSession/ChatPanelProvider and disk
+TaskWorkspaceStore; oscillator input, Service replies and TTS completion are fixtures.
+It checks two automatic turns, exact reply identity, microphone exclusion during
+transcription/playback, stopped/stale callbacks, disclosure cancellation and cap refusal.
+Old-source failure must be preserved alongside the candidate result. Existing dictation,
+read-aloud, host and agent-status controls remain regression inputs.
+
+These controls do not prove microphone hardware, Korean pause/noise quality, audible
+OS playback, live internal-profile enablement or billed usage. Endpoint thresholds remain
+`PROVISIONAL_ENDPOINTING`, not a calibrated SLA. Rollout remains limited by the existing
+Service-served profile and current operator policy; this client change changes no live
+flag, grant, provider, price revision or budget. Installed signed Mac acceptance still
+requires five spoken automatic turns and stop/scope/noise checks with exact App, Service,
+OS and audio-device identity before any physical or live-billing PASS claim.

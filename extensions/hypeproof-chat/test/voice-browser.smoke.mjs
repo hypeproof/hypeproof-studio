@@ -206,10 +206,12 @@ try {
       await click('.hps-voice-mic'); await settle(900); await click('.hps-voice-mic'); await settle(400);
       const second = await b.evaluate(`window.__posts.filter(m=>m.type==='voiceTranscribe').at(-1)`);
       await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'unreadable', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
-      const note = await measure({ card: '.hps-voice-note', input: '.hps-input', retry: '.hps-voice-link' });
+      const notice = '.hps-voice-note[role="status"]';
+      assert.equal(await b.evaluate(`document.querySelectorAll('${notice}').length`), 1, `${label}: exactly one manual dictation status`);
+      const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-link` });
       assert.ok(note.items.card && inside(note.items.card, note.vw) && !overlap(note.items.card, note.items.input), `${label}: refusal note inside the viewport and clear of the composer`);
       assert.ok(note.items.retry.h >= 43.5, `${label}: retry is a 44px target`);
-      assert.ok((await b.evaluate(`document.querySelector('.hps-voice-note').textContent`)).includes('소리가 잘 들리지 않았어요. 다시 말해 볼까요?'), `${label}: the softer line`);
+      assert.ok((await b.evaluate(`document.querySelector('${notice}').textContent`)).includes('소리가 잘 들리지 않았어요. 다시 말해 볼까요?'), `${label}: the softer line`);
 
       // Disclosure sheet (a first use): fits a 320x480 / 480x480 viewport without scrolling and has one 시작하기 (DES-CGPV-04).
       await load('ok', 480);

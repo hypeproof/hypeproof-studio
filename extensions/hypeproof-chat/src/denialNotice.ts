@@ -68,3 +68,14 @@ export function storedDenialNotice(label: unknown): DenialNotice | null {
   }
   return null;
 }
+
+/**
+ * The line a denial is drawn as: the lock, the denial's own label, state `error`. It keeps the call's
+ * id, its timestamp and its `kind` marker (a real tool call's refusal is still that call's result),
+ * and nothing else the caller passed (CGP-VOICE-R-007).
+ */
+export function denialToolLine<E extends { id: string; denial?: DenialNotice; at?: number; kind?: 'tool' }>(entry: E): { id: string; icon: string; label: string; state: 'error'; at?: number; kind?: 'tool' } {
+  const d = entry.denial ?? denialNotice(undefined);
+  const denial = denialNotice(d.source, d.classroom, d.detail);
+  return { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}), ...(entry.kind ? { kind: entry.kind } : {}) };
+}

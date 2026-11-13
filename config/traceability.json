@@ -10363,6 +10363,57 @@
       ]
     },
     {
+      "id": "ST-REQ-HOST-THEME-KINDS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Host theme kinds (CGP-DS-R-004)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOST-THEME-KINDS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOST-THEME-KINDS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-KINDS",
+        "ST-IMP-HOST-THEME-KINDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/host-theme-kinds.md"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-TEXT-CONTRAST-TABLE",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -18396,6 +18447,71 @@
       ]
     },
     {
+      "id": "ST-REQ-CHALK-SEAT-VERSION",
+      "stage": "requirement",
+      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-SEAT-VERSION",
+      "stage": "implementation",
+      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-SEAT-VERSION",
+      "stage": "test",
+      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-IMP-CHALK-SEAT-VERSION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/seat-version.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-CHALK-LAB-CONNECT",
       "stage": "requirement",
       "label": "Chalk instructor access through the Lab login, never a pasted issuer",
@@ -18489,86 +18605,6 @@
       ]
     },
     {
-      "id": "ST-REQ-ANDROID-REFLECTION",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-PERSONAL-REFLECTION"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "### Android personal questions · issue #3733"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-ANDROID-REFLECTION",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-ANDROID-REFLECTION"
-      ],
-      "sources": [
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-ANDROID-REFLECTION",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-ANDROID-REFLECTION",
-        "ST-IMP-ANDROID-REFLECTION"
-      ],
-      "sources": [
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
-        },
-        {
-          "path": "docs/testing/native-mobile-growth.md"
-        },
-        {
-          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
-        }
-      ]
-    },
-    {
       "id": "ST-REQ-IOS-CREDENTIAL-CONTINUITY",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -18621,122 +18657,6 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-HOST-THEME-KINDS",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-MAPPING"
-      ],
-      "sources": [
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "## Host theme kinds (CGP-DS-R-004)"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-HOST-THEME-KINDS",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-KINDS",
-        "ST-IMP-HOST-THEME-MAPPING"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-HOST-THEME-KINDS",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-HOST-THEME-KINDS",
-        "ST-IMP-HOST-THEME-KINDS"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs"
-        },
-        {
-          "path": "docs/testing/host-theme-kinds.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-CHALK-SEAT-VERSION",
-      "stage": "requirement",
-      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CLASSROOM-ADMIN",
-        "ST-REQ-CLASSROOM-DESIGN"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/classroom-admin.md",
-          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
-        },
-        {
-          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-CHALK-SEAT-VERSION",
-      "stage": "implementation",
-      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-DES-CLASSROOM-ADMIN"
-      ],
-      "sources": [
-        {
-          "path": "chalk/src/ui/manage.html"
-        },
-        {
-          "path": "chalk/src/lib/latest-release.ts"
-        },
-        {
-          "path": "chalk/src/routes/studio-release.ts"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-CHALK-SEAT-VERSION",
-      "stage": "test",
-      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-IMP-CHALK-SEAT-VERSION"
-      ],
-      "sources": [
-        {
-          "path": "chalk/test/seat-version.browser.mjs"
-        },
-        {
-          "path": "chalk/test/latest-release.test.mjs"
-        },
-        {
-          "path": "e2e/classroom/ops-g1-layout.mjs"
-        },
-        {
-          "path": "docs/testing/classroom-admin.md",
-          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
         }
       ]
     },
@@ -19236,74 +19156,77 @@
       ]
     },
     {
-      "id": "ST-REQ-PUBLISH-STATS",
+      "id": "ST-REQ-VOICE-AGENT-STATUS",
       "stage": "requirement",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-INT-NATIVE",
-        "ST-REQ-PUBLISH-SHARING"
+        "ST-INT-NATIVE"
       ],
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Test version 7-day counts (CGP-ART-R-013)"
+          "section": "## Voice agent-status line (CGP-VOICE-R-007 / CGP-VOICE-D-006)"
         },
         {
-          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+          "path": "docs/requirements/voice-conversation.md"
         }
       ]
     },
     {
-      "id": "ST-IMP-PUBLISH-STATS",
+      "id": "ST-IMP-VOICE-AGENT-STATUS",
       "stage": "implementation",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-REQ-PUBLISH-STATS"
+        "ST-REQ-VOICE-AGENT-STATUS",
+        "ST-TEST-VOICE-AGENT-STATUS"
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/src/versionStats.ts"
+          "path": "extensions/hypeproof-chat/src/voiceAgentStatus.ts"
         },
         {
-          "path": "extensions/hypeproof-chat/src/publishSession.ts"
+          "path": "extensions/hypeproof-chat/src/voiceCopy.ts"
         },
         {
-          "path": "extensions/hypeproof-chat/src/publishView.ts"
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceAgentStatus.tsx"
         },
         {
-          "path": "extensions/hypeproof-chat/webview-ui/src/VersionStatsTiles.tsx"
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
         },
         {
-          "path": "extensions/hypeproof-chat/webview-ui/src/PublishPanel.tsx"
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
         },
         {
-          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+          "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatTimeline.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
     {
-      "id": "ST-TEST-PUBLISH-STATS",
+      "id": "ST-TEST-VOICE-AGENT-STATUS",
       "stage": "test",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-REQ-PUBLISH-STATS",
-        "ST-IMP-PUBLISH-STATS"
+        "ST-REQ-VOICE-AGENT-STATUS"
       ],
       "sources": [
         {
-          "path": "extensions/hypeproof-chat/test/version-stats.test.mjs"
+          "path": "extensions/hypeproof-chat/test/voice-agent-status.test.tsx"
         },
         {
-          "path": "extensions/hypeproof-chat/test/version-stats-tiles.test.tsx"
+          "path": "extensions/hypeproof-chat/test/voice-agent-status.smoke.mjs"
         },
         {
-          "path": "extensions/hypeproof-chat/test/version-stats-layout.smoke.mjs"
+          "path": "docs/testing/task-workspace.md",
+          "section": "## Voice agent-status line (CGP-VOICE-R-007 / CGP-VOICE-D-006)"
         }
       ]
     },
@@ -19382,6 +19305,78 @@
       ]
     },
     {
+      "id": "ST-REQ-PUBLISH-STATS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-PUBLISH-SHARING"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Test version 7-day counts (CGP-ART-R-013)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PUBLISH-STATS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PUBLISH-STATS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/versionStats.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publishSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publishView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VersionStatsTiles.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PublishPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PUBLISH-STATS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PUBLISH-STATS",
+        "ST-IMP-PUBLISH-STATS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/version-stats.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/version-stats-tiles.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/version-stats-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-VOICE-AUTOPLAY-BLOCKED",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -19438,6 +19433,86 @@
         {
           "path": "docs/testing/task-workspace.md",
           "section": "## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-ANDROID-REFLECTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Android personal questions · issue #3733"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ANDROID-REFLECTION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANDROID-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANDROID-REFLECTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANDROID-REFLECTION",
+        "ST-IMP-ANDROID-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
         }
       ]
     }
