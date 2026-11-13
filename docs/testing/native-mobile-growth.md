@@ -106,8 +106,9 @@ Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
   Reject duplicate finals, wrong/stale TTS IDs, expired/replaced credentials and
   post-background callbacks; preserve a draft edited during read-aloud.
 - Native end-of-speech waits at most eight seconds for a final result; duplicate
-  endpoints cannot extend it. Missing final, empty speech and the 60-second
-  capture limit preserve partial words and never auto-send or retry.
+  endpoints cannot extend it. No endpoint within 60 seconds, no final within
+  the following eight seconds, or empty speech preserves partial words and
+  never auto-sends or retries.
 - `StudioJourneyTest` retains notebook consent/storage controls and exercises
   editable final dictation plus grant expiry before final delivery. Audio ports
   are synthetic per controller instance; microphone, acoustic endpoint quality,

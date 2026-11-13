@@ -32,7 +32,8 @@ capture. Recognition failures preserve partial draft text.
 
 Android personal questions and local notebooks use the same automatic controller.
 Android waits for the recognizer's final result; end-of-speech starts a bounded
-8-second final wait, while the whole capture is limited to 60 seconds. Optional
+8-second final wait. Listening has up to 60 seconds to reach that endpoint,
+followed by at most eight seconds for the final result. Optional
 RMS callbacks are not a prerequisite, and a timeout never sends aged partial text.
 The iPhone legacy notebook still requires its own revised journey and physical verification. Existing
 source and tests do not establish acceptance of continuous conversation. The

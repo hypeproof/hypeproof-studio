@@ -128,9 +128,11 @@ one deliberate start, automatic turn boundaries and an always-available stop.
 Earlier requirements for a separate voice confirmation sheet, manual end-speech
 or a next-turn tap are superseded. The current iPhone account-conversation source
 implements that target. The iPhone legacy notebook also uses the shared automatic
-voice controls but still needs verification against these revised cases. Android
-retains manual controls and needs alignment under #3687. Neither platform is
-accepted from this document or source presence alone.
+voice controls but still needs verification against these revised cases. The
+Android candidate in #3733/#3735 now uses the shared automatic controller for
+personal questions and local notebooks. Synthetic callback/UI evidence remains
+separate from physical five-turn Korean voice acceptance under #3687. Neither
+platform is accepted from this document or source presence alone.
 
 | ID | Requirement | Verification boundary |
 |---|---|---|
