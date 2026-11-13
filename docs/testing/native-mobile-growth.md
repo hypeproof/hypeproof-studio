@@ -125,7 +125,21 @@ the new fixtures as a successful physical retest.
 | MFR-T03-queued | During a delayed history refresh, finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST or manual retry to make the test pass. |
 | MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
-| MFR-T06 | Collect actual native build/test exits and exact log hashes. All eight named simulator cases execute once and pass. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+| MFR-T06 | Collect actual native build/test exits and exact log hashes. Every named required simulator case executes once and passes. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+| MPER-T01-cancel | Type a first thought before login, cancel the real model's pending login, relaunch and read the same words. | No browser callback, credential exchange or AI turn; cancellation cannot consume the guest draft. |
+| MPER-T03-collision | Sign in with an existing account draft and a different guest draft. Keep the account words; relaunch; explicitly empty that draft and restore guest words. | No overwrite, auto-restore on cold launch or automatic AI request. Guest/account persistence failures preserve the original copy. |
+| MPER-T01-layout | In dark mode with accessibility XXXL text, type five lines with the keyboard visible. Composer and login remain reachable above the keyboard and below navigation. | Native screenshots of first use and keyboard state are retained. They do not prove physical-device accessibility or VoiceOver quality. |
+
+For Studio #3937, MFR-T01 starts by typing before authentication and proves zero
+network paths before login and zero AI turns after account adoption until explicit
+Send. Its failure case verifies the same draft survives relaunch. Local notebook
+capture/relaunch is still exercised through the secondary menu. Message roles
+remain in accessibility labels even when visible role headings are removed.
+`ios-verify.sh` exports the actual XCTest attachments under `journey-attachments/`
+for visual review; the unrelated post-suite launch screenshot cannot substitute
+for those journey states. GuestDraft unit controls exercise persisted reload,
+draft/outbox collision, account-write failure, guest-cleanup failure and unreadable
+files. These are test definitions, not completed native or physical acceptance.
 
 `StudioJourneyTests` in the existing Xcode-wired `StudioShellTests.swift` covers
 these cases. `NativeJourneyFixture` replaces only external transport and supplies

@@ -1,5 +1,25 @@
 # Studio behavioral requirements
 
+## iPhone conversation from first use (#3937)
+
+MPER-01/03/04 require a usable question and composer on the first screen, including
+before login. Typed or dictated guest words stay local through cancellation,
+failed login and relaunch. Explicit successful login moves them only into an empty
+personal local draft; sending remains a separate action. Existing account drafts
+and outstanding turns are never replaced. Cached personal history opens without
+waiting for the network, and refresh does not change an explicit selection.
+
+The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
+prose, user bubbles, one rounded composer and secondary history navigation. It
+uses native system surfaces, desktop accent roles and Dynamic Type. The existing
+local notebook remains reachable from the menu. There is no new Mac application.
+Voice stops on navigation and draft restoration; accessibility retains message
+authorship. The bounded implementation and acceptance contract are in
+[mobile growth](requirements/mobile-growth-roadmap.md#conversation-from-the-first-screen-studio-3937)
+and [native verification](testing/native-mobile-growth.md). Source/fixture checks,
+native screenshots, real account login and installed-device acceptance remain
+separate; this slice does not claim full desktop or Android parity.
+
 ## Personal question entry (#3798)
 
 MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first

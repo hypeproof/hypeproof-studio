@@ -219,6 +219,28 @@ An example path is: install and use the same account → “요즘 어떤 일에
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
 
+### Conversation from the first screen (Studio #3937)
+
+MPER-01 includes an editable text/voice composer before login. A person can write
+or dictate locally, then choose the existing account login. Cancelled or failed
+login and relaunch preserve those words. Successful explicit login places them
+in the personal account's local draft only when that draft is empty and has no
+outstanding request; it never sends them. An existing account draft wins and the
+guest copy stays available for explicit restoration when safe. Unreadable storage
+is preserved and blocks overwrite. A cached account opens its personal history
+immediately; a delayed refresh cannot replace the person's later selection.
+
+The iPhone adapts the existing desktop chat hierarchy: one conversation home,
+unboxed assistant prose, right-aligned user bubbles, system canvas/light and dark
+surfaces, and a single rounded composer. Native Dynamic Type replaces fixed web
+font sizes; desktop forest/lime accent roles are adapted for readable controls.
+Conversation history is secondary navigation. The existing device notebook remains
+available through that navigation and settings, without becoming a competing tab.
+Microphone use remains explicit and subject to OS permission. Leaving for history,
+privacy or the notebook stops capture. No new Mac app or account/AI entitlement is
+introduced. This bounded iPhone change does not establish Android parity or full
+desktop feature/design parity.
+
 ### Desktop visible question entry (Studio #3798)
 
 This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,
