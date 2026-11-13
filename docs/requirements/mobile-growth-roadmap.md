@@ -127,12 +127,12 @@ The interaction target below incorporates the 2026-11-12 correction in MFR-03:
 one deliberate start, automatic turn boundaries and an always-available stop.
 Earlier requirements for a separate voice confirmation sheet, manual end-speech
 or a next-turn tap are superseded. The current iPhone account-conversation source
-implements that target. The iPhone legacy notebook also uses the shared automatic
-voice controls but still needs verification against these revised cases. The
-Android candidate in #3733/#3735 now uses the shared automatic controller for
-personal questions and local notebooks. Synthetic callback/UI evidence remains
-separate from physical five-turn Korean voice acceptance under #3687. Neither
-platform is accepted from this document or source presence alone.
+implements that target. Automatic conversation belongs to the account question
+screen on each platform. Under Studio #3985, the secondary device notebook retains
+local on-device dictation and editable records, without an independent anonymous
+AI connection or automatic conversation. The Android account candidate in
+#3733/#3735 uses the shared automatic controller. Physical five-turn Korean voice
+acceptance remains open under #3687; source and synthetic controls do not establish it.
 
 | ID | Requirement | Verification boundary |
 |---|---|---|
@@ -292,6 +292,20 @@ It supports the Product Intent principle that human judgment stays visible by
 letting the person review earlier words without an arriving answer taking away
 their place. Real Activity geometry/gesture controls cover long history, delayed
 snapshot, rollover, keyboard and large text; physical/live acceptance is separate.
+
+### One conversation home and local records (Studio #3985)
+
+MPER-01/03 and MREF-01–05 keep the device notebook as secondary local storage.
+Its title and save action distinguish records on this device from account questions.
+Existing v1 messages, drafts, reflection notes, confirmed intent revisions, search,
+export and corrupt-file recovery remain available in their original storage.
+Opening, saving or leaving a notebook never creates an AI grant, dispatches a
+question, or imports its archive or draft into the account conversation. The
+notebook's old anonymous AI onboarding and continuous-conversation controls are
+removed; account conversation keeps the existing voice and admission contract.
+Optional on-device dictation only edits the notebook draft. Returning is an
+explicit navigation action that preserves both destinations' drafts and stops
+capture. Existing server compatibility for older versions remains unchanged.
 
 ### Desktop visible question entry (Studio #3798)
 
