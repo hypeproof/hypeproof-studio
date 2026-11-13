@@ -2072,9 +2072,12 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
 - **What the Service refuses (agent choice).** With 422 and nothing stored:
   - a shape change;
   - anything PUT /plan refuses;
-  - a link or resource the plan does not already carry;
-  - a new `data-chalk-requires` word, a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`;
+  - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
+  - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
+  - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
   - any parser finding (warn or fail) that the stored plan did not already have.
+
+  The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
 
   Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
 - **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
