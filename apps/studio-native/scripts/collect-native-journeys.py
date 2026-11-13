@@ -14,6 +14,8 @@ REQUIRED = {
     'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
     'MFR-T04': 'testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch',
     'MFR-T05': 'testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch',
+    'MFR-T05-recorded': 'testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID',
+    'MFR-T05-collision': 'testRecordedFailureCannotReplaceExistingDraft',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
     'MPER-T01-cancel': 'testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend',

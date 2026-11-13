@@ -72,7 +72,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice"].contains(scenario)
+        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -137,6 +137,7 @@ private struct JourneySnapshot: Codable {
     var submittedIDs: [String] = []
     var submittedTexts: [String] = []
     var accepted: [JourneyAcceptedTurn] = []
+    var failed: JourneyAcceptedTurn?
     var state = ""
     var challenge = ""
     var callbacks = 0
@@ -169,7 +170,7 @@ private final class JourneyStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         let trace: [String: Any] = ["schema": "hps-native-journey-trace/1", "scenario": JourneyConfiguration.scenario,
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
-            "accepted_turns": value.accepted.count, "browser_callbacks": value.callbacks,
+            "accepted_turns": value.accepted.count, "failed_turns": value.failed == nil ? 0 : 1, "browser_callbacks": value.callbacks,
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
             "voice_start_attempts": value.voiceStartAttempts,
             "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
@@ -250,21 +251,28 @@ private final class JourneyStore: @unchecked Sendable {
     }
     private func reflection(acknowledged: String? = nil) -> [String: Any] {
         var messages: [[String: Any]] = []
+        let failureOffset = value.failed == nil ? 0 : 1
+        if let failed = value.failed {
+            messages.append(["id": failed.id, "role": "user", "content": failed.text, "created_at": 1000])
+        }
         for (index, turn) in value.accepted.enumerated() {
             let userMessage: [String: Any] = [
                 "id": turn.id, "role": "user", "content": turn.text,
-                "created_at": (index * 2 + 1) * 1000,
+                "created_at": (index * 2 + 1 + failureOffset) * 1000,
             ]
             let assistantMessage: [String: Any] = [
                 "id": "answer-" + turn.id, "role": "assistant",
                 "content": "What small change would make tomorrow better?",
-                "created_at": (index * 2 + 2) * 1000,
+                "created_at": (index * 2 + 2 + failureOffset) * 1000,
             ]
             messages.append(userMessage)
             messages.append(assistantMessage)
         }
-        var state: [String: Any] = ["id": "personal-reflection", "revision": value.accepted.count * 2,
+        var state: [String: Any] = ["id": "personal-reflection", "revision": value.accepted.count * 2 + failureOffset,
                                    "messages": messages, "has_earlier": false, "turn": NSNull()]
+        if let failed = value.failed {
+            state["turn"] = ["id": failed.id, "text": failed.text, "status": "failed", "created_at": 1000, "updated_at": 1000]
+        }
         if let last = value.accepted.last {
             state["turn"] = ["id": last.id, "text": last.text, "status": "completed", "created_at": 1000, "updated_at": 2000]
         }
@@ -312,7 +320,16 @@ private final class JourneyStore: @unchecked Sendable {
             if let old = value.accepted.first(where: { $0.id == id }) {
                 return old.text == text ? (200, reflection(acknowledged: id)) : (409, ["error": "reflection_changed"])
             }
-            guard revision == value.accepted.count * 2 else { return (409, ["error": "reflection_changed"]) }
+            // Match Service's persisted failure: the user event and terminal ID
+            // survive a failed response. Replaying that ID cannot run a new turn.
+            if let failed = value.failed, failed.id == id {
+                return failed.text == text ? (200, reflection(acknowledged: id)) : (409, ["error": "reflection_changed"])
+            }
+            guard revision == value.accepted.count * 2 + (value.failed == nil ? 0 : 1) else { return (409, ["error": "reflection_changed"]) }
+            if JourneyConfiguration.scenario == "recorded-failure", value.failed == nil {
+                value.failed = JourneyAcceptedTurn(id: id, text: text)
+                return (503, ["error": "reflection_ai_unavailable"])
+            }
             value.accepted.append(JourneyAcceptedTurn(id: id, text: text))
             return (200, reflection(acknowledged: id))
         default:

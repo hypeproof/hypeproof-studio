@@ -215,9 +215,19 @@ struct SharedConversationView: View {
                     }
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
-                            if request.status != "completed" { Text(request.text).textSelection(.enabled) }
+                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" })) {
+                                Text(request.text).textSelection(.enabled)
+                            }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
                             if request.status == "local" { Button("다시 보내기") { model.retry() }.disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry") }
+                            if model.isReflection && request.status == "failed" {
+                                Button { voice.stop(); if model.restoreFailedReflectionDraft() { focused = true } } label: {
+                                    Text("입력란에 가져오기").frame(minHeight: 44)
+                                }
+                                .buttonStyle(.bordered).font(.callout)
+                                .disabled(!model.canRestoreFailedReflectionDraft).accessibilityIdentifier("restoreFailedReflectionDraft")
+                                if !model.draftText.isEmpty { Text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
+                            }
                             if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
                                 Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
