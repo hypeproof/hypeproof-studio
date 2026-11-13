@@ -2,7 +2,14 @@ import SwiftUI
 import AVFoundation
 
 struct StudioRoot: View {
-    var body: some View { SharedConversationView().tint(ConversationStyle.accent) }
+    var body: some View {
+        SharedConversationView().tint(ConversationStyle.accent)
+#if DEBUG
+            // XCTest's AppleInterfaceStyle launch preference does not change
+            // iOS appearance reliably. Exercise the real SwiftUI environment.
+            .preferredColorScheme(NativeJourneyFixture.enabled && ProcessInfo.processInfo.arguments.contains("--journey-dark") ? .dark : nil)
+#endif
+    }
 }
 // Desktop chat uses its host canvas, quiet assistant prose and a rounded composer.
 // Keep those semantic roles with native Dynamic Type and system light/dark surfaces.
@@ -39,6 +46,7 @@ struct SharedConversationView: View {
     @State private var showPrivacy = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
+    @Environment(\.colorScheme) private var colorScheme
     private var navigationContent: some View {
         NavigationStack {
             Group {
@@ -259,10 +267,10 @@ struct SharedConversationView: View {
                         Spacer()
                         Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
                     } else {
-                        Button { beginVoice(.dictation) } label: { Image(systemName: "mic").frame(width: 44, height: 44) }
+                        Button { beginVoice(.dictation) } label: { Image(systemName: "mic").font(.system(size: 20)).frame(width: 44, height: 44) }
                             .disabled(!model.canEditDraft || model.busy).accessibilityLabel("말로 적기").accessibilityIdentifier("sharedDictate")
                         Button { if model.signedIn { beginVoice(.conversation) } else { startLogin() } } label: {
-                            Image(systemName: "waveform").frame(width: 44, height: 44)
+                            Image(systemName: "waveform").font(.system(size: 20)).frame(width: 44, height: 44)
                         }.accessibilityLabel(model.signedIn ? "음성 대화" : "로그인하고 음성 대화")
                             .accessibilityIdentifier("sharedVoice")
                             .disabled(model.signedIn ? !model.canSend || !model.draftText.isEmpty : model.busy || !model.accountStorageReady)
@@ -291,9 +299,13 @@ struct SharedConversationView: View {
                     Text(model.busy ? (model.loginStatus.isEmpty ? "로그인을 마무리하고 있어요. 쓴 글은 남아 있어요." : model.loginStatus) : "먼저 적어도 좋아요. 로그인 후 직접 보내면 AI가 답해요.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
-                Button { voice.stop(); focused = false; showPrivacy = true } label: {
-                    Text("보낸 대화는 계정에 저장되고 AI에 전달돼요. 자세히").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
-                }.buttonStyle(.plain).accessibilityIdentifier("conversationPrivacy")
+                // The disclosure is visible before editing; while the keyboard
+                // is up it remains in Settings, leaving space for the thought.
+                if !focused {
+                    Button { voice.stop(); focused = false; showPrivacy = true } label: {
+                        Text("보낸 대화는 계정에 저장되고 AI에 전달돼요. 자세히").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+                    }.buttonStyle(.plain).accessibilityIdentifier("conversationPrivacy")
+                }
             }
             if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
             if reviewRecording { Text("원음은 최대 30초만 메모리에 담아요. 파일이나 서버에 저장하지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
@@ -335,7 +347,10 @@ struct SharedConversationView: View {
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
         if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
 #if DEBUG
-        if NativeJourneyFixture.enabled { Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace") }
+        if NativeJourneyFixture.enabled {
+            Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace")
+            Text(colorScheme == .dark ? "dark" : "light").accessibilityIdentifier("nativeJourneyAppearance")
+        }
 #endif
     }
     private func startLogin() { voice.stop(); focused = false; model.login() }

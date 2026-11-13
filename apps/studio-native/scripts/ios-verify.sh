@@ -5,9 +5,11 @@ mkdir -p ../evidence
 xcodebuild -version | tee ../evidence/xcode-version.txt
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
 if [ "${sdk%%.*}" -lt 26 ]; then echo "Xcode 26+ / iOS 26+ SDK is required for App Store Connect" >&2; exit 2; fi
-swift test > ../evidence/swift-tests.log 2>&1
+printf 'native verification: Swift core tests\n'
+swift test 2>&1 | tee ../evidence/swift-tests.log
 build_status=0
-xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Release -destination 'generic/platform=iOS' -derivedDataPath DerivedData-device CODE_SIGNING_ALLOWED=NO build > ../evidence/device-build.log 2>&1 || build_status=$?
+printf 'native verification: iPhone device build\n'
+xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Release -destination 'generic/platform=iOS' -derivedDataPath DerivedData-device CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ../evidence/device-build.log || build_status=$?
 if [ "$build_status" -ne 0 ]; then
   python3 ../scripts/collect-native-journeys.py --source-sha "${GITHUB_SHA:-$(git rev-parse HEAD)}" --build-log ../evidence/device-build.log --build-exit "$build_status" --simulator-log ../evidence/simulator-test.log --test-exit 125 --output ../evidence/native-journeys.json || true
   exit "$build_status"
@@ -81,7 +83,8 @@ xcrun simctl boot "$device"
 xcrun simctl bootstatus "$device" -b
 test_status=0
 # Simulator Keychain checks require an actual app identity. No distribution key is used.
-xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination "platform=iOS Simulator,id=$device" -derivedDataPath DerivedData -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test > ../evidence/simulator-test.log 2>&1 || test_status=$?
+printf 'native verification: iPhone simulator journeys\n'
+xcodebuild -project HPStudio.xcodeproj -scheme HPStudio -configuration Debug -destination "platform=iOS Simulator,id=$device" -derivedDataPath DerivedData -resultBundlePath ../evidence/Studio.xcresult -parallel-testing-enabled NO -destination-timeout 60 -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test 2>&1 | tee ../evidence/simulator-test.log || test_status=$?
 # Export the actual per-journey screenshots, including failed attempts, so review
 # does not substitute the unrelated post-suite relaunch image for first use.
 attachment_status=0

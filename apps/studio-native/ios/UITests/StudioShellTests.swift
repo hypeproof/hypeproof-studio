@@ -304,8 +304,10 @@ final class StudioJourneyTests: XCTestCase {
         try evidence("journey-login-failure", app: app)
     }
     @MainActor func testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable() throws {
-        let app = launch("first-answer", arguments: ["-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        let app = launch("first-answer", arguments: ["--journey-dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
         XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5))
+        let dark = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'dark'"), object: app.staticTexts["nativeJourneyAppearance"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dark], timeout: 5), .completed, "Observe the actual view environment, not just a launch preference.")
         let input = field(app)
         XCTAssertTrue(input.isEnabled && input.isHittable)
         try evidence("journey-first-use-dark-large-text", app: app)
@@ -318,6 +320,7 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(input.frame.minY, app.navigationBars.firstMatch.frame.maxY)
         XCTAssertLessThanOrEqual(login.frame.maxY, app.keyboards.firstMatch.frame.minY)
         XCTAssertGreaterThanOrEqual(login.frame.height, 44)
+        XCTAssertFalse(app.buttons["conversationPrivacy"].exists, "The expanded disclosure must not crowd the editor while the keyboard is up; it remains in Settings.")
         XCTAssertEqual(field(app).value as? String, thought)
         XCTAssertTrue((try trace(app)["paths"] as? [String] ?? []).isEmpty)
         try evidence("journey-first-use-dark-large-text-keyboard", app: app)
@@ -348,8 +351,14 @@ final class StudioJourneyTests: XCTestCase {
         app.terminate(); app.launch()
         XCTAssertEqual(field(app).value as? String, "Existing account draft")
         XCTAssertTrue(restore.exists); XCTAssertFalse(restore.isEnabled)
-        let draft = field(app); draft.tap()
+        let draft = field(app)
+        // A center tap can put the caret at the beginning. Tap the trailing
+        // edge of this single-line value before deleting, then verify the
+        // prerequisite rather than treating a disabled restore as a timeout.
+        draft.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         draft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Existing account draft".count))
+        let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '' OR value == %@", draft.placeholderValue ?? ""), object: draft)
+        XCTAssertEqual(XCTWaiter.wait(for: [empty], timeout: 5), .completed, "The account draft must actually be cleared before restoring the separate guest draft.")
         enabled(restore); restore.tap()
         XCTAssertEqual(field(app).value as? String, "My thought before login")
         XCTAssertFalse(restore.exists)
