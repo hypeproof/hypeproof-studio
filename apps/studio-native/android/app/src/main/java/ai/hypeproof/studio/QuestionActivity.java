@@ -34,7 +34,8 @@ public final class QuestionActivity extends Activity {
     private LinearLayout root,messages,actions,voiceActions,body;
     private EditText composer;
     private TextView heading,hint,status,voiceStatus,voiceHint;
-    private Button send;
+    private Button send,latest;
+    private ConversationScroll timeline;
     private ImageButton dictate,talk,voiceStop;
     private String shownAccount,transcriptKey="",voicePrefix="",voiceTurn;
     private long voiceWait,voiceTicket;
@@ -104,9 +105,13 @@ public final class QuestionActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(16),insets.getSystemWindowInsetTop()+dp(4),dp(16),bottom+dp(8));return insets;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setBaselineAligned(false);
         TextView title=text("HP Studio",18,true);title.setPadding(dp(4),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));header.addView(iconButton("메뉴",R.drawable.ic_conversation_menu,this::menu));root.addView(header);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);body=column();body.setPadding(dp(4),dp(24),dp(4),dp(20));
+        messages=column();timeline=new ConversationScroll(this,messages);body=column();body.setPadding(dp(4),dp(24),dp(4),dp(20));
         heading=text(ReflectionState.OPENING,24,true);heading.setLineSpacing(dp(3),1);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);
-        hint=text(ReflectionState.HINT,14,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        hint=text(ReflectionState.HINT,14,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);body.addView(messages);timeline.addView(body);
+        FrameLayout history=new FrameLayout(this);history.addView(timeline,new FrameLayout.LayoutParams(-1,-1));
+        latest=button("최신 메시지",timeline::showLatest);latest.setBackground(touchSurface(card,24));latest.setElevation(dp(2));latest.setVisibility(View.GONE);
+        FrameLayout.LayoutParams catchUp=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);catchUp.setMargins(dp(8),dp(8),dp(8),dp(8));history.addView(latest,catchUp);
+        timeline.onPositionChanged(()->latest.setVisibility(timeline.atLatest()?View.GONE:View.VISIBLE));root.addView(history,new LinearLayout.LayoutParams(-1,0,1));
         status=text("",13,false);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
         actions=column();root.addView(actions);
         LinearLayout compose=column();compose.setPadding(dp(12),dp(4),dp(12),dp(8));compose.setBackground(rounded(card,24));
@@ -119,7 +124,7 @@ public final class QuestionActivity extends Activity {
         dictate=iconButton("말로 적기",R.drawable.ic_conversation_mic,()->startVoice(false));talk=iconButton("음성 대화",R.drawable.ic_conversation_wave,()->startVoice(true));
         voiceStop=iconButton("음성 멈추기",R.drawable.ic_conversation_stop,()->{stopVoice();update();});voiceStop.setImageTintList(ColorStateList.valueOf(onAccent));voiceStop.setBackground(touchSurface(accent,24));
         voiceActions.addView(dictate);voiceActions.addView(talk);voiceActions.addView(voiceStop);tools.addView(voiceActions,new LinearLayout.LayoutParams(0,-2,1));
-        send=button("보내기",()->{stopVoice();if(model.account()==null)signIn();else model.send();});send.setTypeface(null,Typeface.BOLD);send.setTextColor(tones(onAccent,muted));
+        send=button("보내기",()->{stopVoice();if(model.account()==null)signIn();else if(model.send())timeline.showLatest();});send.setTypeface(null,Typeface.BOLD);send.setTextColor(tones(onAccent,muted));
         StateListDrawable sendStates=new StateListDrawable();sendStates.addState(new int[]{-android.R.attr.state_enabled},rounded(paper,24));sendStates.addState(new int[]{},rounded(accent,24));send.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33000000),sendStates,rounded(Color.WHITE,24)));
         tools.addView(send);compose.addView(tools);root.addView(compose);
         voiceHint=text("음성 대화는 말이 끝나면 보내고 계속 들어요.",12,false);voiceHint.setTextColor(muted);voiceHint.setPadding(dp(4),dp(8),dp(4),0);root.addView(voiceHint);
@@ -135,6 +140,7 @@ public final class QuestionActivity extends Activity {
     private void update(){
         if(isDestroyed()||model==null)return;
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
+        timeline.beforeContentChange();
         ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
         body.setGravity(s!=null&&s.messages.length()>0?Gravity.TOP:Gravity.BOTTOM);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
         String key=s==null?"signed-out":s.messages.toString()+String.valueOf(s.request)+s.earlier;
@@ -144,8 +150,8 @@ public final class QuestionActivity extends Activity {
                 if(s!=null){
                     if(s.earlier)messages.addView(text("최근 대화를 보여주고 있어요.",12,false));
                     boolean requestShown=false;
-                    for(int i=0;i<s.messages.length();i++){JSONObject m=s.messages.getJSONObject(i);boolean user=m.getString("role").equals("user");addMessage(user?"나의 생각":"함께 생각하기",m.getString("content"));if(user&&s.request!=null&&m.getString("id").equals(s.request.optString("id"))&&m.getString("content").equals(s.request.optString("text")))requestShown=true;}
-                    if(!requestShown&&(s.status().equals("local")||s.status().equals("failed")))addMessage(s.status().equals("local")?"전송 확인이 필요한 내 생각":"나의 생각",s.request.getString("text"));
+                    for(int i=0;i<s.messages.length();i++){JSONObject m=s.messages.getJSONObject(i);boolean user=m.getString("role").equals("user");addMessage(user?"나의 생각":"함께 생각하기",m.getString("content"),m.getString("id"));if(user&&s.request!=null&&m.getString("id").equals(s.request.optString("id"))&&m.getString("content").equals(s.request.optString("text")))requestShown=true;}
+                    if(!requestShown&&(s.status().equals("local")||s.status().equals("failed")))addMessage(s.status().equals("local")?"전송 확인이 필요한 내 생각":"나의 생각",s.request.getString("text"),s.request.getString("id"));
                     if(s.request!=null&&!s.outstanding()&&!s.status().equals("completed"))messages.addView(text("이 답변은 완료되지 않았어요. 이전 글은 남아 있어요.",13,false));
                 }
             }catch(Exception e){model.error="대화를 표시하지 못했어요. 원본은 보존돼요.";}
@@ -186,9 +192,9 @@ public final class QuestionActivity extends Activity {
         }
         updateVoiceReply();
     }
-    private void addMessage(String label,String value){
+    private void addMessage(String label,String value,String id){
         boolean user=label.equals("나의 생각")||label.equals("전송 확인이 필요한 내 생각");
-        LinearLayout box=column();box.setPadding(user?dp(16):0,dp(4),user?dp(16):0,dp(4));
+        LinearLayout box=column();box.setTag(java.util.Arrays.asList(user?"user":"assistant",id,user?value:""));box.setPadding(user?dp(16):0,dp(4),user?dp(16):0,dp(4));
         if(user){GradientDrawable bg=new GradientDrawable();bg.setColor(card);bg.setCornerRadius(dp(16));box.setBackground(bg);}
         TextView t=text(value,17,false);t.setLineSpacing(dp(4),1);t.setTextIsSelectable(true);t.setContentDescription(label+": "+value);box.addView(t);
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(user?-2:-1,-2);params.gravity=user?Gravity.END:Gravity.START;params.bottomMargin=dp(20);if(user)params.leftMargin=dp(24);messages.addView(box,params);

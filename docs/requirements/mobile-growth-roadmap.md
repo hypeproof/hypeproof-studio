@@ -277,6 +277,22 @@ This follows **Human judgment stays visible**: the person reviews retained words
 before authorizing another request. No provider, account, grant or price policy changes.
 Source tests and disposable emulator evidence are distinct from physical/live acceptance.
 
+#### Android long-conversation reading — Studio #3978
+
+Under MPER-03 and MREF-05, reopening the existing Android question conversation
+starts at its newest turn. New content and keyboard/layout changes follow the
+latest turn only while the person is already near it. A person reading earlier
+messages keeps a surviving message and its viewport offset when the recent
+80-message window rolls forward; if that anchor has left the available window,
+the nearest surviving later message is retained. The **최신 메시지** action has a
+48dp minimum touch target and deliberately returns to the latest content. An
+explicit Send also returns to the new turn. This view-local behavior changes no
+account, persisted draft/outbox, transport, voice policy or recovery contract.
+It supports the Product Intent principle that human judgment stays visible by
+letting the person review earlier words without an arriving answer taking away
+their place. Real Activity geometry/gesture controls cover long history, delayed
+snapshot, rollover, keyboard and large text; physical/live acceptance is separate.
+
 ### Desktop visible question entry (Studio #3798)
 
 This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,
