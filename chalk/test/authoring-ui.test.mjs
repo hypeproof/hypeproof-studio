@@ -106,8 +106,8 @@ assert.match(
 );
 assert.match(
   authoring,
-  /return \{\.\.\.carriedStep\.get\(own\.id\),\.\.\.own,\.\.\.stepTeachingValue\(f\)\};/,
-  'a step’s preserved keys are restored under the values the form produced (text fields, then help/ui controls)',
+  /const s=\{\.\.\.carriedStep\.get\(own\.id\),\.\.\.own,\.\.\.stepTeachingValue\(f\)\};if\(\(s\.ui\?\?''\)!==\(f\.dataset\.uiOrig\?\?''\)\)\{delete s\.ui_version;delete s\.ui_params;\}return s;/,
+  'a step’s preserved keys are restored under the values the form produced (text fields, then help/ui controls); a changed block type drops the old pin (CGP-LEARN-R-004)',
 );
 
 const learn = await page('/learn');
