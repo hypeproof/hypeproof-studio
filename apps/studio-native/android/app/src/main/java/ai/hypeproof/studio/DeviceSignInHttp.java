@@ -18,9 +18,13 @@ final class DeviceSignInHttp implements NativeDeviceSignIn.Transport {
  private final java.util.concurrent.ScheduledExecutorService deadlines;
  DeviceSignInHttp(NativeDeviceSignIn.Target target,java.util.concurrent.ScheduledExecutorService deadlines){this.target=target;this.deadlines=deadlines;}
  public NativeDeviceSignIn.Reply call(String path,Map<String,String> body,String bearer,NativeDeviceSignIn.Cancel cancel) throws Exception {
+  return call(path,body,bearer,cancel,path.equals("/me/reflection/turns")?90000:12000);
+ }
+ public NativeDeviceSignIn.Reply call(String path,Map<String,String> body,String bearer,NativeDeviceSignIn.Cancel cancel,long timeoutMillis) throws Exception {
+  if(timeoutMillis<1)throw new Exception("native_deadline");
   if(!Set.of("/auth/device/start","/auth/device/poll","/me","/auth/logout","/auth/refresh","/me/reflection","/me/reflection/turns").contains(path) && !path.matches("/me/reflection/turns/[A-Za-z0-9._:-]{1,120}/(?:abandon|cancel)"))throw new Exception("invalid_route");
   HttpURLConnection c=(HttpURLConnection)new URL(target.service+path).openConnection();
-  try (NativeHttpDeadline deadline=new NativeHttpDeadline(cancel,deadlines,path.equals("/me/reflection/turns")?90000:12000)) {
+  try (NativeHttpDeadline deadline=new NativeHttpDeadline(cancel,deadlines,Math.min(timeoutMillis,path.equals("/me/reflection/turns")?90000:12000))) {
    cancel.bind(c::disconnect);c.setInstanceFollowRedirects(false);c.setConnectTimeout(Math.min(10000,deadline.remaining()));c.setReadTimeout(deadline.remaining());
    c.setRequestMethod(body==null?"GET":"POST");c.setRequestProperty("Accept","application/json");
    if(bearer!=null)c.setRequestProperty("Authorization","Bearer "+bearer);

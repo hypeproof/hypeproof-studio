@@ -27,6 +27,12 @@ a jump. An explicit send or the accessible “최신 메시지” action resumes
 Account changes reset the view's following state. Native test diagnostics must not
 change transcript layout or substitute accessibility existence for visible bounds.
 
+Under MPER-03, the iPhone hides retained request text only when history already
+shows the same user ID and exact words (#3992). An inconsistent same-ID history
+row must not hide an unacknowledged local question, including after relaunch.
+An identical recorded question still appears once; this display rule does not
+acknowledge, resend or replace the durable request.
+
 The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
 prose, user bubbles, one rounded composer and secondary history navigation. It
 uses native system surfaces, desktop accent roles and Dynamic Type. The existing
@@ -9321,6 +9327,12 @@ desktop. Original local notebooks are preserved; no second desktop product is bu
 commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
 0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
 voice changes need their own package/device evidence.
+
+Android response Stop (#3997): MADR-02/03/04 and MPER-04 apply while the turn POST is still waiting: an accessible
+Stop remains available, halts voice continuation and confirms the same request's
+server registration before cancellation. Original words, drafts and request IDs
+survive unconfirmed cancellation; late replies cannot restart voice or overwrite
+confirmed cancellation. See the [Android contract](requirements/mobile-growth-roadmap.md#android-in-flight-response-stop--studio-3997).
 
 `ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
 extend expression with project-bound editable dictation and consented final-text
