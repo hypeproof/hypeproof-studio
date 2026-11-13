@@ -527,7 +527,9 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   count. The chart gets a dashed cap and the table says `미확인 (금액 확인 전)`; a malformed amount reads the same way. It
   is never drawn or written as 0 (AB-15).
 - Colour (agent choice): the chart is monochrome (`currentColor`). Solid, hatched and dashed patterns plus a worded legend
-  carry the meaning, which also keeps forced-colours mode readable.
+  carry the meaning. In forced-colours mode the chart takes `CanvasText`: SVG keeps its author colour by default, which
+  measured 1.19:1 on a light canvas (verify-3956). The day labels are HTML under the chart, so they keep their size
+  when the chart scales down at 320 px.
 - Stale (agent choice): the page reads once per open or refresh. After 30 minutes the header says so, and a minute timer
   updates that label without reading again.
 

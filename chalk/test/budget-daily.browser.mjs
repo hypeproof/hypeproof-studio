@@ -50,6 +50,17 @@ try {
     check(m.head.includes('기준 시각') && m.head.includes('한국 시간 기준') && m.stale, 'as-of time, fresh: ' + ctx);
     check(m.docFits && m.boxRight, 'nothing leaves the page: ' + ctx);
     check(m.minFont >= 14, 'text ≥ 14px: ' + ctx);
+    // The hatch is the reserved part's meaning (not colour): the reserved bar is filled with the hatch pattern, which exists.
+    const hatch = await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="reserved"]'); const f = r.getAttribute('fill'); const id = (f.match(/^url\\(#(.+)\\)$/) || [])[1];
+      const p = id && document.getElementById(id); return { f, pattern: !!p && p.tagName.toLowerCase() === 'pattern' && !!p.querySelector('line') }; })()`);
+    check(/^url\(#hatch-/.test(hatch.f) && hatch.pattern, 'reserved is hatched: ' + JSON.stringify(hatch));
+    check(await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="confirmed"]'); return r.getAttribute('fill') === 'currentColor'; })()`), 'confirmed is solid');
+    check(await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="unconfirmed"]'); return r.getAttribute('fill') === 'none' && !!r.getAttribute('stroke-dasharray'); })()`), 'unconfirmed is a dashed outline');
+    // Day labels keep their size whatever the chart scales to: rendered (not computed) height, and no overlap.
+    const lab = await b.evaluate(`(() => { const vw = document.documentElement.clientWidth; const r = [...document.querySelectorAll('[data-daily] .daily-days span')].map((s) => { const b = s.getBoundingClientRect(); return { t: s.textContent, h: b.height, l: b.left, r: b.right, sw: s.scrollWidth, cw: s.clientWidth }; }); return { r, vw }; })()`);
+    check(JSON.stringify(lab.r.map((x) => x.t)) === JSON.stringify(['2', '4', '6', '8', '10', '12', '14']), 'seven day-of-month labels, the last is today: ' + JSON.stringify(lab));
+    check(m.head.includes('11/1–11/14'), 'the range with its month is named: ' + m.head);
+    check(lab.r.every((x) => x.h >= 12) && lab.r.every((x, i) => i === 0 || x.l >= lab.r[i - 1].r - 0.5) && lab.r.every((x) => x.r <= lab.vw + 1 && x.sw <= x.cw + 1), 'labels at least 12px rendered, apart and inside: ' + width + ' ' + JSON.stringify(lab.r));
     check(m.toggle.text === '표로 보기' && m.toggle.h >= 44 && m.toggle.w >= 44 && m.toggle.pressed === 'false' && m.tableHidden, 'toggle 44px, table hidden: ' + ctx);
     // The table gives the same numbers, and never a bare 0 for an unknown amount.
     await b.evaluate(`document.querySelector('[data-daily-toggle]').click()`);
@@ -63,6 +74,18 @@ try {
     await b.evaluate(`document.querySelector('[data-daily-toggle]').click()`);
     check(await b.evaluate(`document.querySelector('.daily-table').hidden`), 'back to the chart');
   }
+  // Forced colours, light and dark: the chart takes the system text colour, readable on the canvas.
+  for (const dark of [false, true]) {
+    await b.load(html, { width: 1280, height: 900, forcedColors: true, dark });
+    await b.evaluate(show(viewOf(daily({ [M]: series }))));
+    const fc = await b.evaluate(`(() => { const rgb = (c) => (c.match(/[\\d.]+/g) || []).slice(0, 3).map(Number); const lum = (c) => rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const bg = (() => { for (let e = document.querySelector('[data-daily]'); e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return getComputedStyle(document.documentElement).backgroundColor; })();
+      const fill = getComputedStyle(document.querySelector('[data-daily] [data-kind="confirmed"]')).fill, stroke = getComputedStyle(document.querySelector('[data-daily] [data-kind="unconfirmed"]')).stroke;
+      const ratio = (a, c) => { const [x, y] = [lum(a), lum(c)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+      return { bg, fill, stroke, fillRatio: ratio(fill, bg), strokeRatio: ratio(stroke, bg) }; })()`);
+    check(fc.fillRatio >= 4.5 && fc.strokeRatio >= 4.5, `forced colours ${dark ? 'dark' : 'light'}: chart readable on the canvas: ` + JSON.stringify(fc));
+  }
+  await b.load(html, { width: 1280, height: 900 });
   // Stale: the read is older than 30 minutes.
   await b.evaluate(show(viewOf(daily({ [M]: series }), new Date(Date.now() - 31 * 60000).toISOString())));
   check(await b.evaluate(`(() => { const s = document.querySelector('[data-stale]'); return !s.hidden && s.textContent === '30분 넘게 지난 숫자 · 새로 확인하세요'; })()`), 'stale label');
