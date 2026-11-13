@@ -27,7 +27,9 @@ public final class MainActivity extends Activity {
     private NativeVoice voice;
     private String voicePrefix="";
     private long expiresAt;
-    private boolean busy, readOnly;
+    private boolean busy, readOnly, foreground;
+    private String voiceToken;
+    private long voiceExpiresAt;
     private int generation;
     private AtomicFile records;
     private final StudioService service = new StudioService();
@@ -53,6 +55,12 @@ public final class MainActivity extends Activity {
         } catch (Exception e) { readOnly = true; error = "기록을 읽지 못했어요. 원본을 보존하기 위해 저장을 멈췄어요."; try { state = new StudioState(); } catch (Exception ignored) {} }
         voice=new NativeVoice(this,new NativeVoice.Host(){
             public String projectID(){return activeID;}
+            public boolean foreground(){return foreground;}
+            public boolean allowed(boolean automatic){return !readOnly&&project()!=null&&(!automatic||(token!=null&&token.equals(voiceToken)&&expiresAt==voiceExpiresAt&&expiresAt>System.currentTimeMillis()+5000));}
+            public boolean nextTurn(){
+                if(busy||project()==null||!editing.getOrDefault(activeID+":draft",project().optString("draft")).trim().isEmpty())return false;
+                voicePrefix="";return true;
+            }
             public void changed(){render();}
             public void transcript(String id,String value,boolean complete,boolean automatic){voiceTranscript(id,value,complete,automatic);}
             public void failed(String message){cancel();error=message;render();}
@@ -63,7 +71,9 @@ public final class MainActivity extends Activity {
         super.onSaveInstanceState(out); out.putString("active", activeID);
         Bundle edits=new Bundle();for(java.util.Map.Entry<String,String> entry:editing.entrySet())edits.putString(entry.getKey(),entry.getValue());out.putBundle("pendingEdits",edits);
     }
+    @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
     @Override protected void onPause(){
+        foreground=false;
         if(voice!=null&&voice.session.active()&&voice.session.phase()!=VoiceSession.Phase.PERMISSION){cancel();render();}
         super.onPause();
     }
@@ -161,10 +171,9 @@ public final class MainActivity extends Activity {
                 if(voice!=null&&voice.session.active()) {
                     String status=voice.session.phase()==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":voice.session.phase()==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":voice.session.phase()==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":voice.session.phase()==VoiceSession.Phase.PERMISSION?"마이크 권한 확인 중":"답변을 기다려요 · 마이크 꺼짐";
                     TextView voiceStatus=text(status,13,true);voiceStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(voiceStatus);
-                    if(voice.session.phase()==VoiceSession.Phase.LISTENING)root.addView(button("말하기 끝",()->voice.finishListening()));
-                    if(voice.session.phase()==VoiceSession.Phase.READY)root.addView(button("다시 말하기",this::nextVoice));
                     root.addView(button("음성 멈추기",()->{cancel();render();}));
                 } else {
+                    root.addView(text("말로 적기는 입력창에만 적어요. 음성 대화는 말이 끝나면 현재 AI 연결로 보내고, 답변을 읽은 뒤 계속 들어요. 음성 멈추기로 끝낼 수 있어요.",12,false));
                     Button speak=button("말로 적기",()->voice(false));speak.setEnabled(!busy&&!readOnly);root.addView(speak);
                     Button talk=button("음성 대화",()->voice(true));talk.setEnabled(!busy&&!readOnly);root.addView(talk);
                 }
@@ -195,21 +204,7 @@ public final class MainActivity extends Activity {
         if(automatic&&!draft.trim().isEmpty()){
             error="작성 중인 글을 먼저 기록하거나 보내 주세요. 말로 적기로 내용을 덧붙일 수도 있어요.";render();return;
         }
-        new AlertDialog.Builder(this).setTitle(automatic?"음성 대화 시작":"말로 생각 적기")
-            .setMessage(automatic?"기기 내 한국어 인식을 사용해요. 말이 끝나면 인식한 글을 현재 AI 연결로 자동 전송해요. 최근 대화와 확인한 의도도 함께 전송되며 무료 비용 한도가 적용돼요. 답변은 설치된 한국어 음성으로 읽어요. 읽기가 끝나면 마이크는 꺼져 있고, 다시 말하기를 눌러야 해요. 음성 멈추기로 언제든 중단할 수 있어요.":"기기 내 한국어 인식만 사용해요. 변환된 글은 수정할 수 있는 입력창에만 담겨요. 직접 기록하거나 보내기 전에는 AI에 전송하지 않아요. 지원되지 않으면 글로 계속 적을 수 있어요.")
-            .setNegativeButton("취소",null)
-            .setPositiveButton(automatic?"동의하고 음성 대화":"음성 입력 시작",(dialog,which)->{
-                if(!id.equals(activeID)||busy||readOnly)return;
-                voicePrefix=editing.getOrDefault(id+":draft",project().optString("draft"));error=null;voice.start(automatic);
-            }).show();
-    }
-    private void nextVoice(){
-        if(project()==null||busy||readOnly)return;
-        String draft=editing.getOrDefault(activeID+":draft",project().optString("draft"));
-        if(!draft.trim().isEmpty()){
-            cancel();error="작성 중인 글을 먼저 기록하거나 보내 주세요. 말로 적기로 내용을 덧붙일 수도 있어요.";render();return;
-        }
-        voicePrefix="";voice.next();
+        voicePrefix=draft;voiceToken=token;voiceExpiresAt=expiresAt;error=null;voice.start(automatic);
     }
     private void voiceTranscript(String id,String value,boolean complete,boolean automatic){
         if(!id.equals(activeID)||project()==null||readOnly||busy)return;
@@ -254,7 +249,7 @@ public final class MainActivity extends Activity {
     private void connect(){run(()->service.claim(installID),result->{JSONObject grant=(JSONObject)result;String code=grant.getString("code");long expiry=grant.getLong("expires_at");if(code.isEmpty()||expiry<=System.currentTimeMillis())throw new IOException();token=code;expiresAt=expiry;});}
     private void ask(){
         if(token==null||expiresAt<=System.currentTimeMillis()+5000){if(voice!=null)voice.stop();token=null;error="무료 AI를 다시 연결해 주세요. 기록은 그대로 남아 있어요.";render();return;}
-        try{StudioState snapshot=new StudioState(state.data.toString());String id=activeID;String bearer=token;run(()->service.reply(snapshot,id,bearer),result->{if(change(()->state.find(id).getJSONArray("messages").put(StudioState.message("assistant",(String)result)))){voice.read(id,(String)result);}else voice.stop();});}catch(Exception e){voice.stop();error="먼저 생각을 적어 주세요.";render();}
+        try{StudioState snapshot=new StudioState(state.data.toString());String id=activeID;String bearer=token;long voiceTicket=voice.session.ticket();run(()->service.reply(snapshot,id,bearer),result->{if(change(()->state.find(id).getJSONArray("messages").put(StudioState.message("assistant",(String)result)))){voice.read(voiceTicket,id,(String)result);}else voice.stop();});}catch(Exception e){voice.stop();error="먼저 생각을 적어 주세요.";render();}
     }
     private void intent(){
         cancel();render();
@@ -325,7 +320,7 @@ public final class MainActivity extends Activity {
         query.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){filter.run();}public void afterTextChanged(Editable e){}});
         filter.run();dialog.show();
     }
-    private void menu(){cancel();render();new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제",readOnly?"읽지 못한 원본 내보내기":"전체 기록 내보내기","현재 기록 삭제"},(d,i)->{if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화, 생각 정리 메모와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
+    private void menu(){cancel();render();new AlertDialog.Builder(this).setTitle("기록 메뉴").setItems(new String[]{"새 생각",token==null?"무료 AI 연결":"AI 연결 해제",readOnly?"읽지 못한 원본 내보내기":"전체 기록 내보내기","현재 기록 삭제","나의 질문으로"},(d,i)->{if(i==4){cancel();startActivity(new Intent(this,QuestionActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}if(i==0)newProject();if(i==1){if(token==null)consent();else{cancel();token=null;render();}}if(i==2)export();if(i==3&&project()!=null)new AlertDialog.Builder(this).setTitle("이 기록을 삭제할까요?").setMessage("대화, 생각 정리 메모와 의도 변경 기록을 이 기기에서 삭제해요. AI에 이미 전송된 내용은 이 작업으로 삭제되지 않아요.").setNegativeButton("취소",null).setPositiveButton("삭제",(dialog,which)->{cancel();if(change(()->{state.delete(activeID);activeID=state.projects().length()>0?state.projects().getJSONObject(0).getString("id"):null;}))render();}).show();}).show();}
     private void recover(){new AlertDialog.Builder(this).setTitle("원본을 보존하고 새로 시작할까요?").setMessage("읽지 못한 원본은 기기에 별도 보관해요. 먼저 원본 내보내기로 외부에 복사해 두세요.").setNegativeButton("취소",null).setPositiveButton("원본 보존 후 새로 시작",(d,w)->{try{File backup=new File(getFilesDir(),"recovery-"+UUID.randomUUID()+".json");try(FileOutputStream out=new FileOutputStream(backup)){out.write(records.readFully());}readOnly=false;if(change(()->{state=new StudioState();activeID=null;})){error=null;render();}else readOnly=true;}catch(Exception e){error="원본을 보존하지 못해 초기화하지 않았어요.";render();}}).show();}
     private byte[] exportBytes() throws Exception {
         if(readOnly)return records.readFully();

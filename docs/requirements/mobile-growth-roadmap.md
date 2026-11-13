@@ -128,9 +128,11 @@ one deliberate start, automatic turn boundaries and an always-available stop.
 Earlier requirements for a separate voice confirmation sheet, manual end-speech
 or a next-turn tap are superseded. The current iPhone account-conversation source
 implements that target. The iPhone legacy notebook also uses the shared automatic
-voice controls but still needs verification against these revised cases. Android
-retains manual controls and needs alignment under #3687. Neither platform is
-accepted from this document or source presence alone.
+voice controls but still needs verification against these revised cases. The
+Android candidate in #3733/#3735 now uses the shared automatic controller for
+personal questions and local notebooks. Synthetic callback/UI evidence remains
+separate from physical five-turn Korean voice acceptance under #3687. Neither
+platform is accepted from this document or source presence alone.
 
 | ID | Requirement | Verification boundary |
 |---|---|---|
@@ -240,6 +242,56 @@ Microphone use remains explicit and subject to OS permission. Leaving for histor
 privacy or the notebook stops capture. No new Mac app or account/AI entitlement is
 introduced. This bounded iPhone change does not establish Android parity or full
 desktop feature/design parity.
+
+### Android personal questions · issue #3733
+
+Extend the existing `apps/studio-native` Android package with the same Service
+reflection conversation. The local notebook remains a separate destination;
+this does not revive the older companion WebView or introduce another product.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| MADR-01 | Launch into an optional everyday question. Account approval opens the existing browser page with its exact code included; no desktop, copied pairing code, age/job form or new account protocol. | Native launcher/consent UI and protocol controls. |
+| MADR-02 | Read/write `reflection-api@1` using the same account as iPhone and existing desktop. Persist an account-scoped outbox before dispatch; retry an uncertain ID/revision, never silently create a second turn. | Real HTTP serialization, state/model controls and two-device acceptance. |
+| MADR-03 | Preserve drafts, original corrupt files and saved words on write/network/refresh failures. Reject stale/account-switched data. Store credentials under Android Keystore encryption in no-backup storage; mark one-use refresh spent before dispatch. | Failure controls and actual emulator Keystore/AtomicFile tests. |
+| MADR-04 | Reuse existing Korean on-device speech and installed local TTS through one deliberate microphone action after OS permissions and existing AI/storage consent. Under MVOICE-02/03, native final results send once and only the initiating answer may be read before foreground capture resumes. Stop, account/session/navigation/background changes, expired access and unsent drafts prevent reopening. | VoiceSession and actual callback/Host/model composition controls, inline disclosure and the separate physical Korean voice gate. |
+| MADR-05 | Disclose server/AI processing and existing entitlement/cost limits. Guide making requests to the existing desktop's reviewed unsent task flow. Preserve local notebook and free local drafting. | Native UI, existing desktop handoff controls and installed-device review. |
+
+Dependency: Service #386 / migration 0073 and Harness #557 release contract must
+be released before claiming live Android reflection readiness. Current account
+entitlements apply; this work does not invent a free signed-in AI allowance.
+Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
+separate acceptance gates. Source/build tests are not those observations.
+
+#### Confirmed failed-question recovery — Studio #3974
+
+MPER-03/04 and MREF-05 preserve the person's decision after a server-confirmed
+`failed` turn: `입력란에 가져오기` copies its text only into an empty effective
+account draft, using the existing atomic save-before-adopt path. The failed request
+and transcript remain unchanged, and its user message is displayed once. Another
+draft, including unsaved edits, is never replaced. Restore stops voice and neither
+sends nor resumes capture. Only a later explicit Send creates a new request ID at
+the latest confirmed revision. An uncertain `local` outbox keeps its ID and existing
+reconciliation path; a transport error alone does not enable failed-turn restore.
+This follows **Human judgment stays visible**: the person reviews retained words
+before authorizing another request. No provider, account, grant or price policy changes.
+Source tests and disposable emulator evidence are distinct from physical/live acceptance.
+
+#### Android long-conversation reading — Studio #3978
+
+Under MPER-03 and MREF-05, reopening the existing Android question conversation
+starts at its newest turn. New content and keyboard/layout changes follow the
+latest turn only while the person is already near it. A person reading earlier
+messages keeps a surviving message and its viewport offset when the recent
+80-message window rolls forward; if that anchor has left the available window,
+the nearest surviving later message is retained. The **최신 메시지** action has a
+48dp minimum touch target and deliberately returns to the latest content. An
+explicit Send also returns to the new turn. This view-local behavior changes no
+account, persisted draft/outbox, transport, voice policy or recovery contract.
+It supports the Product Intent principle that human judgment stays visible by
+letting the person review earlier words without an arriving answer taking away
+their place. Real Activity geometry/gesture controls cover long history, delayed
+snapshot, rollover, keyboard and large text; physical/live acceptance is separate.
 
 ### Desktop visible question entry (Studio #3798)
 
