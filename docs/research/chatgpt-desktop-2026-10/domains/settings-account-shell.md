@@ -295,6 +295,10 @@ alone.
 | DES-SHELL-33 (REQ-34) | Version column in Chalk manage list. | Column ≤ 96 px; outdated = amber icon + "업데이트 필요"; sortable; included in the dense comparison view (report-gap reset G1). |
 | DES-SHELL-34 (REQ-35) | What's-new panel is dismissible and short. | ≤ 3 bullets, ≤ 40 chars each; close × with 44 px hit area; not modal; light/dark. |
 
+REQ-SHELL-17 status (2026-11-14): already shipped. The learner chooses the chat text size in #1902, the reading passage keeps its place across a size change in #1954, and the size geometry is measured in headless Chromium in #2716 (CGP-DS-D-006). The shipped body sizes are 16 / 18 / 20 px, not the 15 / 17 / 20 px in the row above, because DS-D-006 set the floor at 16.
+
+REQ-SHELL-18 / DES-SHELL-17 status (2026-11-14): already shipped. Studio webviews honour `workbench.reduceMotion` in #1896. The three-way host preference (on / off / follow the OS), which is Studio's own setting, comes from #2433 (CGP-DS-D-012).
+
 REQ-SHELL-31 / DES-SHELL-30 status (2026-11-14): built as AB-19 (`docs/requirements/access-budget-settlement.md`, "Chalk daily class usage"). The Chalk chart reads the daily view from hypeproof/hypeproof-service#270 and stays draft until #270 is live. Days follow Korea time (`decisions.md`, DEC-SHELL-R-031).
 
 DES-SHELL-34 status (2026-10-28, CGP-SHELL-D-034): already met on main by the CGP-SHELL-R-035 build. The panel draws the
