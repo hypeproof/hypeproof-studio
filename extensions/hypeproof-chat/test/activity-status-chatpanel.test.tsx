@@ -1,6 +1,6 @@
 // REQ-KNOW-68 (CGP-KNOW-R-036) — the real ChatPanel on the minimal DOM: when the activity can no longer run
 // AI the status is shown, the composer is held with the draft kept, 상태 다시 확인 asks the host, and the
-// trial card appears on solo seats only. Deleting the status wiring in ChatPanel must fail this file.
+// end-of-trial pass card is never drawn (retired 2026-11-13, REQ-L12 ①–④ removed). Deleting the status wiring in ChatPanel must fail this file.
 // Bundled with esbuild and run with plain Node; the banner captures what the panel posts to the host.
 
 import { click, mountPoint } from "./fixtures/mini-dom.mjs";
@@ -145,11 +145,11 @@ t("the file buttons ask the host, the token button only on auth and expired, sup
   ok(h.button("참여 코드 확인"), "expired has it");
 });
 
-t("solo seat: the trial card sits inside the status; its buttons work", async () => {
+t("solo seat: the status is shown and a card from an older host draws no pass card (2026-11-13)", async () => {
   const h = await harness(personal, { activityUnavailable: status("exhausted"), error: "x", trialEndCard: card, onTrialEndCardPasses: () => { h.calls.passes++; } });
-  ok(h.status(), "status"); ok(h.cardTitle(), "trial card shown on a solo seat");
-  await h.press(h.button("이용권 보기")); eq(h.calls.passes, 1);
-  await h.press(h.button("닫기")); eq(h.calls.dismiss, 1);
+  ok(h.status(), "status"); eq(h.cardTitle(), undefined, "no trial card on a solo seat");
+  ok(!h.text().includes("이용권 보기"), "no pass button");
+  eq(h.calls.passes, 0);
 });
 
 t("classroom seat: no trial card and no purchase, even if the status says solo or the host sent a card", async () => {
@@ -164,7 +164,7 @@ t("classroom seat: no trial card and no purchase, even if the status says solo o
   const h = await harness(classroom, { error: "x", trialEndCard: card, onTrialEndCardPasses: noop });
   eq(h.cardTitle(), undefined, "no card without a status");
   const solo = await harness(personal, { error: "x", trialEndCard: card, onTrialEndCardPasses: noop });
-  ok(solo.cardTitle(), "positive control: a solo seat gets the card without a status");
+  eq(solo.cardTitle(), undefined, "a solo seat gets no card either (the pass card is retired)");
 });
 
 t("takeaway is opt-in and its class-ended button reaches the host", async () => {
@@ -228,8 +228,7 @@ t("D-036: cause headline, 아직 할 수 있는 것 list with enabled own-file b
     ok(contact && contact.textContent.startsWith("다시 쓰려면"), `${cause}: contact line`);
     ok(contact.textContent.includes(config === classroom ? "강사" : "HypeProof 지원팀"), `${cause}: contact names the right person`);
     ok(h.announcer().textContent.includes(ACTIVITY_CAUSE_HEADLINE[cause]), `${cause}: the live region announces the headline`);
-    if (config === classroom) ok(!/구매|결제|이용권 보기/.test(h.status().textContent), `${cause}: no payment on class seats, even with a card sent`);
-    else ok(h.status().textContent.includes("이용권 보기"), `${cause}: positive control, the solo trial card sits in the screen`);
+    ok(!/구매|결제|이용권 보기/.test(h.status().textContent), `${cause}: no payment on any seat, even with a card sent`);
   }
 });
 
