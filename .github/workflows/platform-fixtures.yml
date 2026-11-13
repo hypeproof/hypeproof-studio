@@ -89,6 +89,10 @@ jobs:
       - name: Install extension dependencies without native model binaries
         working-directory: extensions/hypeproof-chat
         run: npm ci
+      - name: Install webview dependencies for required feature rendering
+        working-directory: extensions/hypeproof-chat/webview-ui
+        run: npm ci
+
       - name: Verify isolated launcher and subscription lifecycle controls
         shell: bash
         env:
