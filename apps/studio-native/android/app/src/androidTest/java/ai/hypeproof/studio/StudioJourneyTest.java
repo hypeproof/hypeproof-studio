@@ -122,7 +122,7 @@ public class StudioJourneyTest {
     }
     private void begin() { onView(withText("첫 생각 기록하기")).perform(click()); }
     private void draft(String value) { onView(withContentDescription("생각 입력")).perform(replaceText(value),closeSoftKeyboard()); }
-    private void record() { onView(withContentDescription("생각 기록 또는 보내기")).perform(click()); }
+    private void record() { onView(withContentDescription("생각 기록")).perform(click()); }
     private void screenshot(String name) throws Exception {
         Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(pixels);
@@ -149,16 +149,16 @@ public class StudioJourneyTest {
         assertEquals(0,notebook().find(first).getJSONArray("revisions").length());
         assertFalse(notebook().conversation(first).toString().contains("문 앞"));
         screenshot("android-reflection");
-        onView(withText("대화로 돌아가기")).perform(click());app.recreate();
+        onView(withText("닫기")).perform(click());app.recreate();
         onView(withText("생각 정리")).perform(scrollTo(),click());
         onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("손님이 문 앞에서 기다렸다")));
         onView(withContentDescription("해보니 무엇이 달랐나요?")).perform(scrollTo()).check(matches(withText("먼저 적은 배움")));
-        onView(withText("대화로 돌아가기")).perform(click());
+        onView(withText("닫기")).perform(click());
         draft("동네 가게 관찰");record();
         onView(withText("지금의 의도 정리하기")).perform(scrollTo(),click());
         onView(withContentDescription("의도 입력")).perform(replaceText("대기 시간을 줄인다"),closeSoftKeyboard());
         onView(withText("내 의도로 확인")).perform(click());
-        onView(allOf(withText("기록"),not(withContentDescription("생각 기록 또는 보내기")))).perform(click());
+        onView(allOf(withText("기록"),not(withContentDescription("생각 기록")))).perform(click());
         onView(withContentDescription("기록 검색")).perform(replaceText("대기 시간"),closeSoftKeyboard());
         onView(withText("확인한 의도 · 대기 시간을 줄인다")).check(matches(isDisplayed()));
         screenshot("android-project-search");
@@ -190,7 +190,7 @@ public class StudioJourneyTest {
                 StudioState exported=new StudioState(new String((byte[])method.invoke(activity),StandardCharsets.UTF_8));
                 assertEquals("저장 실패 후에도 지킬 관찰",exported.projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
             }catch(Exception e){throw new AssertionError(e);}});
-            onView(withText("대화로 돌아가기")).perform(click());
+            onView(withText("닫기")).perform(click());
             onView(withText("생각 정리")).perform(scrollTo(),click());
             onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
         } finally {
@@ -214,13 +214,13 @@ public class StudioJourneyTest {
         onView(withText("가게 손님의 대기 시간을 줄이는 작은 실험을 한다")).check(matches(isDisplayed()));
         onView(withContentDescription("생각 입력")).check(matches(withText("아직 전송하지 않은 질문")));
         screenshot("android-intent");
-        onView(allOf(withText("기록"),not(withContentDescription("생각 기록 또는 보내기")))).perform(click());
+        onView(allOf(withText("기록"),not(withContentDescription("생각 기록")))).perform(click());
         onView(withText("새 생각 기록하기")).perform(click());
         draft("버스 시간을 확인하기 어렵다"); record();
         String second=notebook().projects().getJSONObject(0).getString("id");
         assertFalse(notebook().conversation(second).toString().contains("가게"));
         assertEquals(1,notebook().find(first).getJSONArray("revisions").length());
-        onView(allOf(withText("기록"),not(withContentDescription("생각 기록 또는 보내기")))).perform(click());
+        onView(allOf(withText("기록"),not(withContentDescription("생각 기록")))).perform(click());
         onView(withText("동네 가게에서 기다리는 사람이 많다")).perform(click());
         onView(withContentDescription("생각 입력")).check(matches(withText("아직 전송하지 않은 질문")));
         screenshot("android-records");
@@ -290,7 +290,7 @@ public class StudioJourneyTest {
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
         screenshot("android-voice-denied");
     }
-    @Test public void transcribedDraftSurvivesStopBackgroundAndExpiredAIWithoutSending() throws Exception {
+    @Test public void transcribedDraftSurvivesBackgroundWithoutSending() throws Exception {
         begin();draft("먼저 적은 생각");
         final java.util.concurrent.atomic.AtomicReference<NativeVoice> controller=new java.util.concurrent.atomic.AtomicReference<>();
         final long[] oldTicket=new long[1];final String[] id=new String[1];
@@ -306,18 +306,10 @@ public class StudioJourneyTest {
         assertFalse(controller.get().session.matches(oldTicket[0],id[0]));
         app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
         onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
-        app.onActivity(activity->{try{
-            NativeVoice voice=controller.get();long ticket=voice.session.start(id[0],true);voice.session.beginListening(ticket,id[0]);voice.session.finish(ticket,id[0]);
-            java.lang.reflect.Field prefix=MainActivity.class.getDeclaredField("voicePrefix");prefix.setAccessible(true);prefix.set(activity,"");
-            java.lang.reflect.Method transcript=MainActivity.class.getDeclaredMethod("voiceTranscript",String.class,String.class,boolean.class,boolean.class);transcript.setAccessible(true);
-            transcript.invoke(activity,id[0],"연결이 끝나도 보존할 최종 인식",true,true);
-            assertFalse(voice.session.active());
-        }catch(Exception e){throw new AssertionError(e);}});
+        app.recreate();onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각\n아직 인식 중인 말")));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
-        app.recreate();onView(withContentDescription("생각 입력")).check(matches(withText("연결이 끝나도 보존할 최종 인식")));
-        onView(withText("음성 대화")).perform(click());
-        onView(withText("음성 대화 전에 무료 AI 연결과 전송 동의가 필요해요. 말로 적기는 연결 없이 사용할 수 있어요.")).check(matches(isDisplayed()));
     }
+
     @Test public void captureDisablesEditingAndReadyDraftCannotBeOverwritten() throws Exception {
         begin();draft("소중한 작성 중인 글");
         java.util.concurrent.atomic.AtomicReference<NativeVoice> voiceRef=new java.util.concurrent.atomic.AtomicReference<>();
@@ -327,7 +319,7 @@ public class StudioJourneyTest {
             java.lang.reflect.Method render=MainActivity.class.getDeclaredMethod("render");render.setAccessible(true);render.invoke(activity);
         }catch(Exception e){throw new AssertionError(e);}});
         onView(withContentDescription("생각 입력")).check(matches(not(isEnabled())));
-        onView(withContentDescription("생각 기록 또는 보내기")).check(matches(not(isEnabled())));
+        onView(withContentDescription("생각 기록")).check(matches(not(isEnabled())));
         app.onActivity(activity->{try{
             NativeVoice voice=voiceRef.get();long ticket=voice.session.ticket();String id=voice.session.project();
             voice.session.finish(ticket,id);voice.session.speak(ticket,id);voice.session.ready(ticket,id);
@@ -345,37 +337,89 @@ public class StudioJourneyTest {
         draft("직접 고친 내 글");assertFalse(voiceRef.get().session.active());
         assertEquals("직접 고친 내 글",notebook().projects().getJSONObject(0).getString("draft"));
     }
-    @Test public void cancelledSpeechAndUnconfirmedAIConsentPreserveLocalWork() throws Exception {
+    @Test public void cancelledSpeechPreservesLocalWorkWithoutAIControls() throws Exception {
         begin(); draft("지켜야 할 작성 중인 생각");
         VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
         onView(withText("말로 적기")).perform(click());onView(withText("음성 멈추기")).perform(click());
         onView(withContentDescription("생각 입력")).check(matches(withText("지켜야 할 작성 중인 생각")));
-        onView(withText("무료 AI 연결하고 질문 받기")).perform(click());
-        onView(withText("동의하고 연결")).check(matches(not(isEnabled())));
-        onView(withText("만 14세 이상이에요")).perform(click());
-        onView(withText("동의하고 연결")).check(matches(not(isEnabled())));
-        onView(withText("위 내용의 AI 전송에 동의해요")).perform(click());
-        onView(withText("동의하고 연결")).check(matches(isEnabled()));
-        onView(withText("닫기")).perform(click());
+        onView(withText("무료 AI 연결하고 질문 받기")).check(doesNotExist());
+        onView(withText("음성 대화")).check(doesNotExist());
         app.recreate();
         onView(withContentDescription("생각 입력")).check(matches(withText("지켜야 할 작성 중인 생각")));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
     }
-    @Test public void nativeDictationFinalStaysEditableAndExpiredNotebookGrantCannotSend()throws Exception{
+    @Test public void nativeDictationFinalStaysEditableAndAutomaticCaptureIsRefused() throws Exception {
         begin();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
         onView(withText("말로 적기")).perform(click());app.onActivity(a->{voice.partial("직접 고칠 말");voice.endpoint();voice.result("직접 고칠 최종 말");});
         onView(withContentDescription("생각 입력")).check(matches(withText("직접 고칠 최종 말")));
         assertFalse(voice.controller.session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
-        draft("");app.onActivity(a->{try{
-            var token=MainActivity.class.getDeclaredField("token");token.setAccessible(true);token.set(a,"synthetic-never-dispatched");
-            var expiry=MainActivity.class.getDeclaredField("expiresAt");expiry.setAccessible(true);expiry.setLong(a,System.currentTimeMillis()+3600000);
-        }catch(Exception e){throw new AssertionError(e);}});
-        onView(withText("음성 대화")).perform(click());app.onActivity(a->{voice.partial("연결 중에 남긴 말");try{
-            var expiry=MainActivity.class.getDeclaredField("expiresAt");expiry.setAccessible(true);expiry.setLong(a,0);
-            voice.result("만료 후 보내면 안 되는 말");voice.checkScope();
-        }catch(Exception e){throw new AssertionError(e);}});
-        assertFalse(voice.controller.session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
-        onView(withContentDescription("생각 입력")).check(matches(withText("연결 중에 남긴 말")));
+        app.onActivity(a->voice.controller.start(true));
+        assertFalse(voice.controller.session.active());
+        draft("직접 고친 최종 말");record();
+        assertEquals(1,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
+        assertEquals("직접 고친 최종 말",notebook().projects().getJSONObject(0).getJSONArray("messages").getJSONObject(0).getString("content"));
     }
 
+    @Test public void priorNotebookEditsExportAndReturnsToSameQuestionWithoutCopyOrNetwork() throws Exception {
+        app.close();app=null;
+        File reflection=new File(context.getNoBackupFilesDir(),"reflection");
+        if(reflection.isDirectory())for(File file:reflection.listFiles())Files.delete(file.toPath());
+        ReflectionStorage storage=new ReflectionStorage(context);storage.saveGuestDraft("질문 화면에 남겨 둔 초안");
+        String old="{\"version\":1,\"projects\":[{\"id\":\"old-project\",\"title\":\"예전 가게 관찰\",\"draft\":\"기기에 남긴 초안\",\"intentDraft\":\"아직 확인하지 않은 의도\",\"messages\":[{\"id\":\"old-user\",\"role\":\"user\",\"content\":\"손님이 문 앞에서 기다렸다\"},{\"id\":\"old-answer\",\"role\":\"assistant\",\"content\":\"예전에 받은 질문\"}],\"revisions\":[{\"revision\":1,\"author\":\"user\",\"text\":\"대기 시간을 줄인다\"}]},{\"id\":\"other-project\",\"title\":\"버스 기록\",\"draft\":\"버스 초안\",\"intentDraft\":\"\",\"messages\":[],\"revisions\":[],\"reflection\":{\"observation\":\"사람들이 정류장에 서 있었다\",\"audience\":\"승객\",\"change\":\"\",\"experiment\":\"\",\"learning\":\"\"}}]}";
+        File file=new File(context.getFilesDir(),"studio-notebook-v1.json");Files.write(file.toPath(),old.getBytes(StandardCharsets.UTF_8));
+        context.getSharedPreferences("installation",Context.MODE_PRIVATE).edit().putString("id","preserved-old-installation").commit();
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{calls.incrementAndGet();throw new java.io.IOException("No network in local notebook journey");};
+        intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
+        try(ActivityScenario<QuestionActivity> question=ActivityScenario.launch(QuestionActivity.class)) {
+            java.util.concurrent.atomic.AtomicReference<QuestionActivity> original=new java.util.concurrent.atomic.AtomicReference<>();question.onActivity(original::set);
+            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            onView(withText("기기 기록")).check(matches(isDisplayed()));
+            onView(withContentDescription("생각 입력")).check(matches(withText("기기에 남긴 초안")));
+            onView(withText("무료 AI 연결하고 질문 받기")).check(doesNotExist());onView(withText("음성 대화")).check(doesNotExist());
+            assertArrayEquals(old.getBytes(StandardCharsets.UTF_8),Files.readAllBytes(file.toPath()));
+            draft("편집한 기기 초안");
+            onView(withText("생각 정리")).perform(scrollTo(),click());
+            onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(scrollTo(),replaceText("오래된 기록에 덧붙인 관찰"),closeSoftKeyboard());
+            onView(withText("닫기")).perform(click());
+            onView(allOf(withText("기록"),not(withContentDescription("생각 기록")))).perform(click());
+            onView(withContentDescription("기록 검색")).perform(replaceText("대기 시간"),closeSoftKeyboard());
+            onView(withText("확인한 의도 · 대기 시간을 줄인다")).check(matches(isDisplayed()));
+            onView(withText("닫기")).perform(click());
+            screenshot("android-local-records");
+            onView(withText("메뉴")).perform(click());onView(withText("전체 기록 내보내기")).perform(click());
+            Intent chooser=Intents.getIntents().stream().filter(i->Intent.ACTION_CHOOSER.equals(i.getAction())).reduce((a,b)->b).orElseThrow();
+            Intent share=chooser.getParcelableExtra(Intent.EXTRA_INTENT);assertEquals(Intent.ACTION_SEND,share.getAction());assertEquals("application/json",share.getType());
+            android.net.Uri uri=share.getParcelableExtra(Intent.EXTRA_STREAM);
+            StudioState exported;try(java.io.InputStream input=context.getContentResolver().openInputStream(uri)){exported=new StudioState(new String(input.readAllBytes(),StandardCharsets.UTF_8));}
+            assertEquals("편집한 기기 초안",exported.find("old-project").getString("draft"));
+            assertEquals("아직 확인하지 않은 의도",exported.find("old-project").getString("intentDraft"));
+            assertEquals("오래된 기록에 덧붙인 관찰",exported.find("old-project").getJSONObject("reflection").getString("observation"));
+            assertEquals(2,exported.find("old-project").getJSONArray("messages").length());assertEquals(1,exported.find("old-project").getJSONArray("revisions").length());
+            assertEquals("버스 초안",exported.find("other-project").getString("draft"));
+            assertEquals("승객",exported.find("other-project").getJSONObject("reflection").getString("audience"));
+            onView(withText("메뉴")).perform(click());onView(withText("나의 질문으로")).perform(click());
+            onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));
+            question.onActivity(a->assertSame(original.get(),a));assertEquals(0,calls.get());assertNull(storage.loadCredentials());
+            assertEquals("preserved-old-installation",context.getSharedPreferences("installation",Context.MODE_PRIVATE).getString("id",null));
+            onView(withContentDescription("메뉴")).perform(click());onView(withText("기기 기록")).perform(click());
+            onView(withContentDescription("생각 입력")).check(matches(withText("편집한 기기 초안")));
+            androidx.test.espresso.Espresso.pressBack();
+            onView(withContentDescription("질문 대화 입력")).check(matches(withText("질문 화면에 남겨 둔 초안")));assertEquals(0,calls.get());
+        } finally {QuestionActivity.testTransport=null;}
+    }
+
+    @Test public void corruptNotebookExportsOriginalAndRecoveryPreservesBackup() throws Exception {
+        app.close();app=null;byte[] original="{broken prior notebook".getBytes(StandardCharsets.UTF_8);
+        File file=new File(context.getFilesDir(),"studio-notebook-v1.json");Files.write(file.toPath(),original);
+        app=ActivityScenario.launch(MainActivity.class);
+        onView(withText("첫 생각 기록하기")).check(matches(not(isEnabled())));
+        intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
+        onView(withText("메뉴")).perform(click());onView(withText("읽지 못한 원본 내보내기")).perform(click());
+        assertArrayEquals(original,Files.readAllBytes(new File(context.getCacheDir(),"exports/HP-Studio-recovery-original.json").toPath()));
+        onView(withText("원본 보존 후 새로 시작")).perform(scrollTo(),click());
+        onView(withId(android.R.id.button1)).perform(click());
+        assertEquals(0,notebook().projects().length());
+        assertTrue(java.util.Arrays.stream(context.getFilesDir().listFiles()).filter(f->f.getName().startsWith("recovery-")).anyMatch(f->{try{return java.util.Arrays.equals(original,Files.readAllBytes(f.toPath()));}catch(Exception e){return false;}}));
+    }
 }

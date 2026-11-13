@@ -21,9 +21,12 @@ inferred from UI use or passing these tests.
 MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
 a confirmation sheet or manual next-turn tap prove only the previous behavior
 and cannot satisfy these revised cases. Android alignment remains open under
-#3687. The iPhone legacy notebook uses shared automatic controls but needs its
-own revised journey verification; the account-conversation journeys below do
-not establish that acceptance. No native or physical pass is recorded here.
+#3687. Account-conversation journeys own automatic voice acceptance. Under #3985,
+the secondary notebook instead verifies local-only dictation, preserved v1 data,
+reflection/intent/draft recovery, search/export and deliberate return without
+copying a local draft or dispatching an account question. Assertions for its
+removed anonymous AI onboarding are retired, not counted as passed voice tests.
+No native or physical pass is recorded here.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and

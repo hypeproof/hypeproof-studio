@@ -81,19 +81,17 @@ final class StudioShellTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["이 기록은 이 기기에 보관돼요. 계정 대화는 ‘대화로 돌아가기’에서 이어갈 수 있어요."].exists)
         let draft = editable("thoughtInput", in: app)
         draft.tap(); draft.typeText("Keep this unfinished thought")
-        app.buttons["voiceConversation"].tap()
-        // The missing AI grant still requires its real disclosure. There is no
-        // extra voice-consent screen, and declining the grant must not record,
-        // transmit or replace the existing draft.
-        XCTAssertTrue(app.navigationBars["무료 AI 연결"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["startVoiceConsent"].exists)
-        XCTAssertFalse(app.buttons["cancelVoiceConsent"].exists)
-        XCTAssertFalse(app.buttons["동의하고 연결"].isEnabled)
-        XCTAssertFalse(app.buttons["stopVoice"].exists)
-        app.buttons["닫기"].tap()
-        XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
+        XCTAssertTrue(app.navigationBars["기기 기록"].exists)
+        XCTAssertFalse(app.buttons["voiceConversation"].exists, "Local records must not start a second AI conversation.")
+        XCTAssertFalse(app.buttons["connectAI"].exists, "Account questions own the only AI entry.")
         XCTAssertTrue(app.buttons["dictateVoice"].exists)
         XCTAssertFalse(app.buttons["stopVoice"].exists)
+        app.buttons["대화로 돌아가기"].tap()
+        XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5))
+        let accountDraft = editable("sharedInput", in: app).value as? String ?? ""
+        XCTAssertFalse(accountDraft.contains("Keep this unfinished thought"), "Returning must not copy private notebook text into the account conversation.")
+        openNotebook(app)
+        XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         app.terminate(); app.launch(); openNotebook(app)
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
