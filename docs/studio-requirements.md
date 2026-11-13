@@ -22,6 +22,14 @@ separate; this slice does not claim full desktop or Android parity.
 
 ## Personal question entry (#3798)
 
+MPER-02/03 also require the existing desktop to receive same-account phone replies
+while its personal conversation has an unsent draft (#3968). Reading history
+preserves that draft and advances the bound revision without sending a turn.
+Account/task changes and unsafe active work still fence the read; creating a
+making task or executing a mobile request retains its stricter readiness checks.
+The next explicit send uses the refreshed revision. Host/store regression evidence
+does not replace installed two-device acceptance.
+
 MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
 screen and existing personal task navigation, including shipped layouts with the
 status/activity bars hidden. The explicit intent uses existing account sign-in,

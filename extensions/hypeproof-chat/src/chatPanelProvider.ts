@@ -751,7 +751,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   async refreshPersonalReflection(): Promise<void> {
     const b=this.reflectionBinding();
-    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)?.ready)return;
+    // Reading the bound conversation preserves its draft; execution/making still
+    // requires the stricter empty-draft readiness in mobileConversationScope.
+    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)
+      ||this.hasActiveStream()||this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory
+      ||this.verifySession?.running||this.opsHold||this.interruptedHistory)return;
     this.reflectionRefreshing=true;
     try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
     finally { this.reflectionRefreshing=false; }
