@@ -15,6 +15,8 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {assertManagedCandidateSupport, buildDispatches, buildTagMessage} from './build-contract.mjs';
+import {automationConfig, CONFIG} from './machine-publication.mjs';
+import {reconcileAutomaticReviews, releaseCopy, candidateNote} from './release-review-requests.mjs';
 
 // The title release-cut.mjs gives the smoke-failure issue. Matched exactly: other issues are not ours to close.
 const SMOKE_ISSUE_TITLE = /^Smoke failed — release (v\d{4}\.\d+\.\d+) stopped$/;
@@ -135,12 +137,19 @@ function main() {
   if (releasePrToken) {
     pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
   }
+  const active = decision.steps.includes('pr') && automationConfig(JSON.parse(fs.readFileSync(new URL('../../' + CONFIG, import.meta.url), 'utf8'))).mode === 'active';
+  if (active && repo !== 'hypeproof/hypeproof-studio') throw Error('Active release creation requires the Studio repository');
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
+  if (active) {
+    const body = releaseCopy(fs.readFileSync(prBodyFile, 'utf8'), true);
+    prBodyFile = path.join(dir, 'machine-release-pr.md'); fs.writeFileSync(prBodyFile, body);
+  }
   if (dispatches.length && values['managed-draft']) {
     const original = fs.readFileSync(prBodyFile, 'utf8');
     prBodyFile = path.join(dir, 'managed-draft-pr.md');
     fs.writeFileSync(prBodyFile, `> **Managed draft only.** ${plan.rcTag} fixes source ${plan.candidate} and embeds final version ${plan.version}. ` +
-      `The builders stop after immutable draft upload. Black-box acceptance, manager approval and channel promotion remain NOT_RUN; this PR is not publication authority.\n\n${original}`);
+      (active ? `The builders stop after immutable draft upload. Native acceptance and channel promotion remain NOT_RUN; this PR is not publication authority.\n\n${original}`
+        : `The builders stop after immutable draft upload. Black-box acceptance, manager approval and channel promotion remain NOT_RUN; this PR is not publication authority.\n\n${original}`));
   }
 
   let releasePrUrl = null;
@@ -170,7 +179,7 @@ function main() {
       }
       say(values['managed-draft']
         ? `Started managed builds of ${plan.candidate} for ${plan.rcTag}, embedding ${plan.version}; draft upload only. Acceptance and promotion remain NOT_RUN.`
-        : `Started ${dispatches.map(d => d.workflow).join(' and ')} on ${plan.rcTag}, embedding ${plan.version}; they run the automatic E2E and publish a prerelease that release-promote turns into ${plan.version} on approval.`);
+        : `Started ${dispatches.map(d => d.workflow).join(' and ')} on ${plan.rcTag}, embedding ${plan.version}; they run the automatic E2E and publish a prerelease that release-promote turns into ${plan.version} ${active ? 'after complete machine gates' : 'on approval'}.`);
     }
     if (step === 'branch') {
       run('git', 'checkout', '-q', '-B', plan.branch, plan.candidate);
@@ -201,7 +210,7 @@ function main() {
         // The label is what the agent pre-tester watches (docs/operations/release-casebook/pre-tester-prompt.md).
         pr('pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body, '--add-label', 'release');
         pr('pr', 'comment', String(open[0].number), '--repo', repo, '--body',
-          `New candidate ${plan.rcTag} at ${plan.candidate.slice(0, 8)}. Approvals given before this comment were for an earlier candidate; review again.`);
+          candidateNote(plan, active));
         releasePrUrl = open[0].url;
         say(`Updated ${open[0].url} for ${plan.rcTag}.`);
       } else {
@@ -209,6 +218,10 @@ function main() {
           '--title', plan.title, '--body-file', body, '--label', 'release');
         releasePrUrl = url;
         say(`Opened ${url}.`);
+      }
+      if (active) {
+        const cleanup = reconcileAutomaticReviews({active, plan, number: Number(releasePrUrl.match(/\/pull\/([1-9]\d*)$/)?.[1]), head: run('git', 'rev-parse', 'HEAD'), gh: pr});
+        say(`Review requests: ${cleanup.status}; ${cleanup.removed} automatic requests removed, other requests preserved.`);
       }
     }
     // Runs after the tag and the PR exist, so a failure here cannot stop the release. Each close is independent.

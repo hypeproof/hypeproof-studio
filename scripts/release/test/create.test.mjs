@@ -1,6 +1,7 @@
 // Controls for release naming and the create decision. No GitHub or git calls.
 //   node --test scripts/release/test/create.test.mjs
 import assert from 'node:assert/strict';
+import './active-review.controls.mjs';
 import test from 'node:test';
 import {execFile, execFileSync} from 'node:child_process';
 import http from 'node:http';
