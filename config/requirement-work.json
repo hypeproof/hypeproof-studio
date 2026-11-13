@@ -973,7 +973,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "4f7e53b4c6bd731ba263b3abbe1b9af0b721d1e2affb4a398a692d65c6e68ff3",
+      "sha256": "03058a6c7f23e2e636fc3dbabca42a11d7a1fdb73865df165e0f129e8dd4c3e8",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4744,7 +4744,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "next_action": "Verify the Android MVOICE-02/03 correction in existing #3733/#3735 and iPhone legacy notebook journeys, then observe five Korean turns and offline/permission recovery on both physical platforms. Synthetic automatic callback journeys are not physical acoustic acceptance.",
       "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
       "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
       "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
@@ -5001,12 +5001,14 @@
             "MADR-02",
             "MADR-03",
             "MADR-04",
-            "MADR-05"
+            "MADR-05",
+            "MVOICE-02",
+            "MVOICE-03"
           ]
         }
       ],
       "depends_on": [],
-      "next_action": "Implement and verify Android account question parity; preserve Service release and physical two-device/voice acceptance as explicit gates.",
+      "next_action": "Verify the integrated Android account candidate and MVOICE-02/03 automatic conversation with exact-source native callback/UI evidence; keep live cross-device and physical Korean voice acceptance separate.",
       "design_delta": "Reuse the existing native Android package, account protocol, reflection API and on-device speech; persist encrypted credentials and account-scoped outbox.",
       "positive_control": "Android starts with a question and shares exact personal message IDs with iPhone and the existing desktop, even while the desktop is closed.",
       "negative_control": "Failed persistence, uncertain rotation, stale snapshot, background voice or account switch cannot lose words, replay a paid turn or import another account.",

@@ -9170,8 +9170,10 @@ voice changes need their own package/device evidence.
 extend expression with project-bound editable dictation and consented final-text
 auto-send/read-aloud. System on-device recognition is required with no cloud
 recognizer fallback. Next-turn recording originally required a visible tap;
-MFR-03 below supersedes that step within a deliberately started foreground voice
-session. Stop, background,
+MVOICE-02/03 and MFR-03 below supersede that step within a deliberately started
+foreground voice session on iPhone and Android. Android personal questions and
+local notebooks share the controller, use native recognizer completion, and bind
+continuation to the initiating credential, request and final TTS utterance. Stop, background,
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.

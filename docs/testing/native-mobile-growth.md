@@ -97,10 +97,21 @@ Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
   actual loopback HTTP serialization/redirect refusal/invalid UTF-8, bounded drip
   and cancellation; exact browser URL, expiry, throttling and matching `/me`.
 - `QuestionJourneyTest`: real Android launcher and consent UI, account draft
-  recreation and voice consent cancellation, actual Keystore ciphertext roundtrip,
+  recreation and voice Stop, actual Keystore ciphertext roundtrip,
   spent refresh and tamper rejection. Network is an in-process fixture restricted
   to a debug app, never a live account or Korean recognition claim.
-- Retain all existing `StudioJourneyTest` notebook/voice checks.
+- `QuestionJourneyTest` drives the actual NativeVoice listener → Host → durable
+  ReflectionModel send → matching Service fixture reply → TTS callback → capture
+  path for five synthetic turns from one visible tap, without RMS/end/next input.
+  Reject duplicate finals, wrong/stale TTS IDs, expired/replaced credentials and
+  post-background callbacks; preserve a draft edited during read-aloud.
+- Native end-of-speech waits at most eight seconds for a final result; duplicate
+  endpoints cannot extend it. Missing final, empty speech and the 60-second
+  capture limit preserve partial words and never auto-send or retry.
+- `StudioJourneyTest` retains notebook consent/storage controls and exercises
+  editable final dictation plus grant expiry before final delivery. Audio ports
+  are synthetic per controller instance; microphone, acoustic endpoint quality,
+  installed Korean TTS and five physical spoken turns remain NOT RUN here.
 
 After Service rollout, on a physical Android device sign in through the normal
 browser, send with the desktop closed, then observe identical message IDs on

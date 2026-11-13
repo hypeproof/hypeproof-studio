@@ -21,7 +21,7 @@ Records stay in app-private storage; iOS uses file protection and excludes noteb
 ## Native voice and acceptance
 
 **말로 적기** appends recognized Korean to an editable draft without sending;
-explicit Send requests an answer. The iPhone account-conversation candidate starts
+explicit Send requests an answer. The iPhone and Android account-conversation candidates start
 voice through one deliberate microphone action after required OS permissions and
 existing AI/storage consent. Stable speech and silence finalize once; its own
 reply is read before listening resumes in the active foreground conversation.
@@ -30,9 +30,11 @@ Stop, background, account/conversation change and audio interruption end the
 interaction and fence stale callbacks. Returning to the app does not restart
 capture. Recognition failures preserve partial draft text.
 
-Android voice still contains the older manual controls; alignment remains open
-under #3687. The iPhone legacy notebook uses the shared automatic voice controls
-but still requires its own revised journey and physical verification. Existing
+Android personal questions and local notebooks use the same automatic controller.
+Android waits for the recognizer's final result; end-of-speech starts a bounded
+8-second final wait, while the whole capture is limited to 60 seconds. Optional
+RMS callbacks are not a prerequisite, and a timeout never sends aged partial text.
+The iPhone legacy notebook still requires its own revised journey and physical verification. Existing
 source and tests do not establish acceptance of continuous conversation. The
 revised shared requirements and first iPhone journeys are in the mobile roadmap and
 `docs/testing/native-mobile-growth.md` (MVOICE-02/03 and MFR-03/04).
@@ -167,7 +169,10 @@ and account changes preserve the committed state; malformed files stay read-only
 and can be exported verbatim. Dictation and explicit voice conversation reuse
 the native on-device implementation. Only the initiating request's answer may
 be read aloud. Polling pauses in the background; voice stops on navigation or
-background and never automatically reopens the microphone.
+background. A matching completed reply resumes capture only in the same deliberate
+foreground session with an unchanged credential and empty draft. Credential
+rotation or approaching expiry stops this voice session; the existing account
+refresh protocol remains available through normal explicit account actions.
 
 These questions use existing account AI entitlements and Service cost limits.
 The free local notebook connection is separate; it does not grant a signed-in AI

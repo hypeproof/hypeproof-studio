@@ -150,9 +150,7 @@ public class StudioJourneyTest {
     }
     @Test public void unavailableCapabilityFixtureStaysLocalAndNeverLaunchesExternalRecognizer() throws Exception {
         begin(); draft("먼저 적은 생각");
-        onView(withText("말로 적기")).perform(click());
         screenshot("android-voice-disclosure");
-        onView(withText("취소")).perform(click());
         assertFalse(Intents.getIntents().stream().anyMatch(i -> RecognizerIntent.ACTION_RECOGNIZE_SPEECH.equals(i.getAction())));
         // The emulator advertises an engine but does not prove usable Korean ASR. Inject only the
         // capability boundary to exercise unavailable UI deterministically; never fake microphone input.
@@ -163,7 +161,7 @@ public class StudioJourneyTest {
             NativeVoice.Host host=(NativeVoice.Host)hostField.get(old);old.close();
             field.set(activity,new NativeVoice(activity,host,()->false));
         }catch(Exception e){throw new AssertionError(e);}});
-        onView(withText("말로 적기")).perform(click());onView(withText("음성 입력 시작")).perform(click());
+        onView(withText("말로 적기")).perform(click());
         onView(withContentDescription("생각 입력")).check(matches(withText("먼저 적은 생각")));
         onView(withText("이 기기는 한국어 기기 내 음성 인식을 사용할 수 없어요. 글로 계속 적을 수 있어요.")).perform(scrollTo()).check(matches(isDisplayed()));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
@@ -173,7 +171,7 @@ public class StudioJourneyTest {
     }
     @Test public void nativePermissionDenialKeepsKeyboardUsable() throws Exception {
         begin();draft("마이크 없이도 남길 글");
-        onView(withText("말로 적기")).perform(click());onView(withText("음성 입력 시작")).perform(click());
+        onView(withText("말로 적기")).perform(click());
         android.app.UiAutomation automation=InstrumentationRegistry.getInstrumentation().getUiAutomation();
         android.accessibilityservice.AccessibilityServiceInfo info=automation.getServiceInfo();
         info.flags|=android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;automation.setServiceInfo(info);
@@ -258,9 +256,9 @@ public class StudioJourneyTest {
             voice.session.finish(ticket,id);voice.session.speak(ticket,id);voice.session.ready(ticket,id);
             java.lang.reflect.Method render=MainActivity.class.getDeclaredMethod("render");render.setAccessible(true);render.invoke(activity);
         }catch(Exception e){throw new AssertionError(e);}});
-        onView(withText("다시 말하기")).perform(click());
+        onView(withText("다시 말하기")).check(doesNotExist());
         onView(withContentDescription("생각 입력")).check(matches(withText("소중한 작성 중인 글")));
-        assertFalse(voiceRef.get().session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
+        draft("소중한 작성 중인 글을 직접 고침");assertFalse(voiceRef.get().session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
         // Editing a completed/read-aloud session also invalidates its callback identity before saving.
         app.onActivity(activity->{try{
             NativeVoice voice=voiceRef.get();String id=notebook().projects().getJSONObject(0).getString("id");long ticket=voice.session.start(id,true);
@@ -272,7 +270,8 @@ public class StudioJourneyTest {
     }
     @Test public void cancelledSpeechAndUnconfirmedAIConsentPreserveLocalWork() throws Exception {
         begin(); draft("지켜야 할 작성 중인 생각");
-        onView(withText("말로 적기")).perform(click()); onView(withText("취소")).perform(click());
+        VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
+        onView(withText("말로 적기")).perform(click());onView(withText("음성 멈추기")).perform(click());
         onView(withContentDescription("생각 입력")).check(matches(withText("지켜야 할 작성 중인 생각")));
         onView(withText("무료 AI 연결하고 질문 받기")).perform(click());
         onView(withText("동의하고 연결")).check(matches(not(isEnabled())));
@@ -285,4 +284,21 @@ public class StudioJourneyTest {
         onView(withContentDescription("생각 입력")).check(matches(withText("지켜야 할 작성 중인 생각")));
         assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
     }
+    @Test public void nativeDictationFinalStaysEditableAndExpiredNotebookGrantCannotSend()throws Exception{
+        begin();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
+        onView(withText("말로 적기")).perform(click());app.onActivity(a->{voice.partial("직접 고칠 말");voice.endpoint();voice.result("직접 고칠 최종 말");});
+        onView(withContentDescription("생각 입력")).check(matches(withText("직접 고칠 최종 말")));
+        assertFalse(voice.controller.session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
+        draft("");app.onActivity(a->{try{
+            var token=MainActivity.class.getDeclaredField("token");token.setAccessible(true);token.set(a,"synthetic-never-dispatched");
+            var expiry=MainActivity.class.getDeclaredField("expiresAt");expiry.setAccessible(true);expiry.setLong(a,System.currentTimeMillis()+3600000);
+        }catch(Exception e){throw new AssertionError(e);}});
+        onView(withText("음성 대화")).perform(click());app.onActivity(a->{voice.partial("연결 중에 남긴 말");try{
+            var expiry=MainActivity.class.getDeclaredField("expiresAt");expiry.setAccessible(true);expiry.setLong(a,0);
+            voice.result("만료 후 보내면 안 되는 말");voice.checkScope();
+        }catch(Exception e){throw new AssertionError(e);}});
+        assertFalse(voice.controller.session.active());assertEquals(0,notebook().projects().getJSONObject(0).getJSONArray("messages").length());
+        onView(withContentDescription("생각 입력")).check(matches(withText("연결 중에 남긴 말")));
+    }
+
 }
