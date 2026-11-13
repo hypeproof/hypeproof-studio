@@ -9157,7 +9157,24 @@ is out of scope and stays unmounted.
 Design tokens only (`voice.css`, `test/design-tokens.smoke.mjs`), stroke icons through the icon set
 (`mic`, `speaker`, `level`; `test/stroke-icons.smoke.mjs`), text at the 14px floor, 44px targets, no overlap and no
 sideways scroll at 320 and 480 px in both seats and both themes. The webview reaches the seam through
-`composerAddon.ts` and `answerExtras.tsx`; `ChatPanel.tsx` names no voice symbol (`pre-voice-text-flow.smoke.mjs`).
+`composerAddon.ts` and `answerExtras.tsx`. #3686 adds a bounded automatic-turn adapter
+at the composer; direct device capture and playback stay outside `ChatPanel.tsx`.
+The queue, timeline, stored message format and host send path remain audio-independent
+(`pre-voice-text-flow.smoke.mjs`).
+
+**#3686 — 기존 데스크톱 자동 음성 대화 (PI#1 · PI#2, VO-04/06/08/25,
+REQ-CGPV-04/17/18/19/24/33).** 기존 Service 프로필이 받아쓰기와 읽기를 모두 허용한
+자리에서 한 번 시작하면 관측한 발화 종료 → 기존 전사 → 일반 입력창 전송/복구 →
+해당 요청의 답변 읽기 → 다음 듣기를 잇는다. 전사·응답·읽기 중에는 캡처를 닫는다.
+받아쓰기 단독은 여전히 편집 후 전송이다. 이미 정책 안내를 확인한 사람에게 추가
+확인을 요구하지 않고 시작 옆에 자동 전송·읽기·중지를 설명한다. 기존 안내가 필요한
+경우에만 해당 모드의 동작을 알린다. 중지/Escape, 숨김, 계정·활동·작업 변경, 거절,
+승인 대기나 별도 초안·첨부 작업은 연쇄를 끝내며 이미 보낸 요청을 취소했다고 하지 않는다.
+학습 자산은 기존 대화의 확정 텍스트/답변이며 오디오를 저장 자산으로 추가하지 않는다.
+`voice-conversation.smoke.mjs`와 `voice-conversation-browser.smoke.mjs`가 합성 오디오의
+실제 Recorder/Analyser, 일반 UI→호스트→디스크 기록, 두 턴·중지·이전 범위 응답을 검증한다.
+한국어 종료 임계값은 임시값이다. 설치 앱·물리 마이크·실제 청취·운영 이용량은 NOT RUN이며,
+이 클라이언트 변경은 운영 플래그·권한·요금·예산을 변경하지 않는다.
 
 Not covered, by design: real-device behaviour. This row set is synthetic and headless; nothing is on for any seat
 (Service flags default off) and nothing was run in the installed app. The microphone core patch (DEC-03) and

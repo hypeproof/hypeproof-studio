@@ -3,6 +3,12 @@
 // draws nothing, so a seat without one renders exactly what it rendered before.
 import type { ComponentType, ReactNode } from "react";
 
+export interface ComposerVoiceTurn {
+  ready: boolean;
+  interrupted: boolean;
+  submit(text: string): string | null;
+}
+
 export interface ComposerAddonApi {
   /**
    * Put text into the draft at the caret (replacing a selection), caret after it, focus in the composer.
@@ -12,6 +18,8 @@ export interface ComposerAddonApi {
   insert(text: string): boolean;
   /** True when the composer cannot take input now (no activity, missing folder, a question card open). */
   disabled: boolean;
+  /** Capture exclusion only; standalone dictation still inserts and never sends. */
+  onDictationBusy?(busy: boolean): void;
 }
 
 /**
