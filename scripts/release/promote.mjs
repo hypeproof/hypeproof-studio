@@ -29,6 +29,8 @@ import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
 import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
 import {automationConfig, CONFIG, releaseContract, verifyBundleSignature, verifyMachineBundle} from './machine-publication.mjs';
+import {readLiveAnchor, publicationWorkflowHead} from './publisher-anchor.mjs';
+import {digest} from './engine/core.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -252,9 +254,13 @@ function draftAssets(repo, tag) {
   return {published: false, assets: JSON.parse(gh('api', `repos/${repo}/releases/${pick.id}`)).assets.map(a => ({name: a.name, digest: a.digest ?? null}))};
 }
 
-export async function currentMachineAuthority({number, repo, packageDirectory, evidenceDirectory}) {
+export async function currentMachineAuthority({number, repo, packageDirectory, evidenceDirectory, stage = 'parent'}) {
   const config = automationConfig(JSON.parse(fs.readFileSync(path.join(scriptDir, '../..', CONFIG), 'utf8')));
   if (config.mode !== 'active') return null;
+  const workflowHead = publicationWorkflowHead({stage, githubSha: process.env.GITHUB_SHA,
+    checkoutHead: stage === 'parent' ? execFileSync('git', ['-C', path.join(scriptDir, '../..'), 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim() : undefined,
+    parentWorkflowHead: process.env.HPS_MACHINE_PARENT_WORKFLOW_HEAD});
+  if (!/^[a-f0-9]{64}$/.test(process.env.HPS_MACHINE_DISPATCH_KEY ?? '')) throw Error('Exact reserved machine dispatch key required');
   if (!evidenceDirectory) throw Error('Active machine release requires private signed evidence; manager approval cannot replace it');
   const bundle = JSON.parse(fs.readFileSync(path.join(evidenceDirectory, 'bundle.json'), 'utf8'));
   verifyBundleSignature(bundle, config); // Refuse untrusted provenance before interpreting the ledger.
@@ -276,6 +282,9 @@ export async function currentMachineAuthority({number, repo, packageDirectory, e
   const response = await fetch('https://api.hypeproof-ai.xyz/v1/health', {signal: AbortSignal.timeout(15000)});
   if (!response.ok) throw Error('Current public Service is unavailable');
   const serviceVersion = (await response.json()).version;
+  readLiveAnchor(bundle.body.publisherAnchor, contract, {bundleDigest: digest(bundle),
+    evidenceCommit: process.env.HPS_MACHINE_EVIDENCE_COMMIT, dispatchKey: process.env.HPS_MACHINE_DISPATCH_KEY, workflowHead},
+    endpoint => JSON.parse(gh('api', '--method', 'GET', endpoint)));
   const authority = verifyMachineBundle({bundle, config, contract, packageDirectory, evidenceDirectory, serviceVersion});
   return {...authority, decision: promotionDecision({...facts, machineAuthority: authority})};
 }
@@ -371,7 +380,7 @@ async function run({pr: number, out, machineBundle}) {
   // 5. The existing verify path: it reuses the rc's receipts, runs the publish gate and publishes.
   if (!draft.published) {
     await guardMachine();
-    const machineInputs = machine ? ['-f', `machine_pr=${number}`, '-f', `machine_evidence_commit=${process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? ''}`] : [];
+    const machineInputs = machine ? ['-f', `machine_pr=${number}`, '-f', `machine_evidence_commit=${process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? ''}`, '-f', `machine_dispatch_key=${process.env.HPS_MACHINE_DISPATCH_KEY ?? ''}`, '-f', `machine_parent_workflow_head=${process.env.GITHUB_SHA ?? ''}`] : [];
     if (machine && !/^[a-f0-9]{40}$/.test(process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? '')) throw Error('Immutable private evidence commit required for final publication');
     gh('workflow', 'run', 'verify-unified-release.yml', '--repo', repo, '-f', `tag=${version}`, '-f', 'override_live_session=false', ...machineInputs);
     say(`Started verify-unified-release for ${version}.`);

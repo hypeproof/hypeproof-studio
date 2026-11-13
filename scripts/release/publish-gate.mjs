@@ -206,7 +206,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
         const number = Number(arg('--machine-pr'));
         if (!Number.isSafeInteger(number) || !approval.releasePrs.some(p => p.number === number)) throw Error('Active release requires the exact machine release PR; human approval/override cannot replace its evidence');
         const {currentMachineAuthority} = await import('./promote.mjs');
-        const authority = await currentMachineAuthority({number, repo,
+        const authority = await currentMachineAuthority({number, repo, stage: 'verify',
           packageDirectory: path.resolve(arg('--package-directory', 'dist')),
           evidenceDirectory: arg('--machine-bundle')});
         const decision = authority.decision;

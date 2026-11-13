@@ -20,7 +20,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const MAX_FILE = 25 * 1024 * 1024, MAX_TOTAL = 100 * 1024 * 1024;
 const config = () => automationConfig(JSON.parse(fs.readFileSync(new URL('../../' + CONFIG, import.meta.url), 'utf8')));
 
-function records(body) {
+export function evidenceRecords(body) {
   const item = body.state?.candidates?.[body.intent?.candidateId];
   require(item && body.policy.requiredTests.length > 0, 'complete engine candidate required');
   const files = new Map();
@@ -28,6 +28,11 @@ function records(body) {
     const file = item.evidence?.[check.id]?.body?.file;
     require(HASH.test(file?.sha256) && Number.isSafeInteger(file.size) && file.size > 0 && file.size <= MAX_FILE, 'missing or oversized evidence record');
     require(!files.has(file.sha256) || files.get(file.sha256).size === file.size, 'conflicting evidence size');
+    files.set(file.sha256, file);
+  }
+  for (const file of body.attachments ?? []) {
+    require(HASH.test(file?.sha256) && Number.isSafeInteger(file.size) && file.size > 0 && file.size <= MAX_FILE, 'missing or oversized native attachment');
+    require(!files.has(file.sha256) || files.get(file.sha256).size === file.size, 'conflicting native attachment size');
     files.set(file.sha256, file);
   }
   require([...files.values()].reduce((sum, f) => sum + f.size, 0) <= MAX_TOTAL, 'private evidence exceeds the bounded transfer cap');
@@ -53,7 +58,7 @@ export function fetchEvidence({pr, commit, out, cfg = config(), get}) {
   const bundle = JSON.parse(bytes.toString('utf8'));
   const body = verifyBundleSignature(bundle, cfg);
   require(body.contract?.releasePr === pr && body.contract.repository === cfg.repository, 'private bundle belongs to another release');
-  const files = records(body);
+  const files = evidenceRecords(body);
   fs.mkdirSync(path.join(out, 'blobs'), {recursive: true, mode: 0o700});
   fs.writeFileSync(path.join(out, 'bundle.json'), bytes, {mode: 0o600, flag: 'wx'});
   for (const file of files) {
@@ -62,6 +67,24 @@ export function fetchEvidence({pr, commit, out, cfg = config(), get}) {
     fs.writeFileSync(path.join(out, 'blobs', file.sha256), blob, {mode: 0o600, flag: 'wx'});
   }
   return {status: 'FETCHED', repository: EVIDENCE_REPOSITORY, commit, bundleDigest: digest(bundle), files: files.length};
+}
+
+export function prepareCurrentProduct(pr, packages, sequence) {
+  const cfg = config(), repo = cfg.repository;
+  const facts = gatherPromotion(pr, repo), inputs = promotionInputs(facts);
+  require(inputs.allow, inputs.reasons.join('; '));
+  const acceptance = readAcceptedReceipt(facts, repo, packages);
+  const version = acceptance.receipts?.[0]?.publicService?.version;
+  const serviceProof = resolveServiceProof(version, endpoint => {
+    const env = {...process.env};
+    for (const name of ['GH_TOKEN','GITHUB_TOKEN','GH_ENTERPRISE_TOKEN','GITHUB_ENTERPRISE_TOKEN']) delete env[name];
+    if (process.env.HPS_SERVICE_READ_TOKEN) env.GH_TOKEN = process.env.HPS_SERVICE_READ_TOKEN;
+    return JSON.parse(execFileSync('gh', ['api', '--method', 'GET', endpoint], {env, encoding: 'utf8', timeout: 30000}));
+  });
+  const contract = releaseContract({...facts, ...inputs, assets: facts.rcRelease.assets, acceptance, serviceProof,
+    read: rev => readImmutableSource(repo, rev)});
+  require(Number.isSafeInteger(sequence) && sequence > 0, 'explicit product CAS channel sequence required');
+  return {config: cfg, contract, sequence};
 }
 
 function exportEvidence(values) {
@@ -90,7 +113,7 @@ function exportEvidence(values) {
   require(!fs.existsSync(values.out), 'preserve existing private export');
   fs.mkdirSync(path.join(values.out, 'blobs'), {recursive: true, mode: 0o700});
   const root = fs.realpathSync(values['source-evidence']);
-  for (const file of records(bundle.body)) {
+  for (const file of evidenceRecords(bundle.body)) {
     const resolved = fs.realpathSync(file.path), relative = path.relative(root, resolved);
     require(relative && !relative.startsWith('..') && !path.isAbsolute(relative), 'original evidence is outside the explicitly owned evidence root');
     let cursor = path.resolve(file.path);
@@ -110,16 +133,20 @@ function exportEvidence(values) {
     evidenceDirectory: values.out, serviceVersion});
   fs.writeFileSync(path.join(values.out, 'bundle.json'), JSON.stringify(bundle), {mode: 0o600, flag: 'wx'});
   return {status: 'EXPORTED', authority: result.allow ? 'machine-publisher-revalidation-required' : 'shadow',
-    files: records(bundle.body).length, bundleDigest: digest(bundle), publication: 'NOT_RUN'};
+    files: evidenceRecords(bundle.body).length, bundleDigest: digest(bundle), publication: 'NOT_RUN'};
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(process.argv[1])) {
   try {
     const [command, ...args] = process.argv.slice(2);
     const {values} = parseArgs({args, options: Object.fromEntries(['pr', 'commit', 'out', 'store', 'policy', 'intent', 'attestor',
-      'key', 'packages', 'source-evidence', 'service-version', 'bundle', 'tag'].map(name => [name, {type: 'string'}]))});
+      'key', 'sequence', 'packages', 'source-evidence', 'service-version', 'bundle', 'tag'].map(name => [name, {type: 'string'}]))});
     let result;
     if (command === 'fetch') result = fetchEvidence({pr: Number(values.pr), commit: values.commit, out: values.out});
+    else if (command === 'prepare-current') {
+      result = prepareCurrentProduct(Number(values.pr), values.packages, Number(values.sequence));
+      fs.writeFileSync(values.out, JSON.stringify(result), {flag: 'wx', mode: 0o600});
+    }
     else if (command === 'request') {
       const cfg = config();
       require(cfg.mode === 'active' && values.bundle && values.tag && values.pr, 'active release source inputs required');
