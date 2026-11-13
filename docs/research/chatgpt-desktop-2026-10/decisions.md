@@ -2247,3 +2247,11 @@ Requirement: `docs/studio-requirements.md` "Blocked read-aloud recovery"; VO-42 
 - **Gate.** The press runs through `voice.gate` like every read-aloud press. There is no new flag, policy or seat rule. Nothing is stored or logged.
 - **Not covered.** A real browser autoplay refusal (the scripted engine stands in), a screen reader, the packaged app, and the VAD half of D-021.
 - Confirmed by Jay: no.
+
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: Studio draws only the pinned versions it renders (2026-11-14)
+
+This is the Studio half of the block reference contract. The Service contract is hypeproof-service#461 and the Chalk chip is CH-12. Confirmed by Jay: no.
+
+- **Version set (agent choice).** `RENDERED_UI_VERSIONS` lists the catalog versions each kind is drawn at, which is v1 for all seven today. A step with no `ui_version` (frozen before pinning) means v1. A version outside the list, or a pin that is not an integer, is drawn as the existing unsupported notice: no block and no guessing. The rehearsal report then says `unsupported:<kind>`, so an App that cannot draw a pinned version cannot pass a rehearsal for it.
+- **Learner copy (agent choice).** The unsupported notice no longer shows the type id between brackets, to meet "the learner UI never shows type ids or versions". It reads "이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요." The id stays in the `data-surface` attribute for tests and rehearsal, and is not shown.
+- **Not covered:** a real installed App (only the component on the minimal DOM and the pure helpers ran); a real v2 block (none exists yet).

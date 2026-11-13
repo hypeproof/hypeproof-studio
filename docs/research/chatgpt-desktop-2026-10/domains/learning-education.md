@@ -273,7 +273,9 @@ REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 status (2026-11-14, CGP-LEARN-R-004 / D-004)
 - A v1 lesson keeps serving after v2 is published, because the catalog is append-only and the frozen bytes never change.
 - A different pin is a different sha256, so no rehearsal pass carries over.
 
-Not yet done: Studio drawing only the pinned versions it knows, with no ids shown to learners (a separate Studio change). No real type has params yet, so (a) is proved with a test-only catalog.
+The Studio side is the next paragraph. No real type has params yet, so (a) is proved with a test-only catalog.
+
+REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 Studio side (2026-11-14): REQ-STUDIO-LEARNING-BLOCK-PIN in `docs/studio-requirements.md`. Studio draws a block only at a pinned version it renders (v1 today, with an unpinned lesson meaning v1). Any other version gets the unsupported notice, and the learner's text never shows a type id or a version.
 
 DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
 
