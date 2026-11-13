@@ -1,7 +1,7 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
 import type { InboxCard } from "../../src/classroomInbox";
 import { MAX_REPLY_CHARS, fingerprint, pinPlace, placeWords, type CommentAnswer } from "../../src/artifactComment";
-import "./instructorComments.css";
+// Styles live in styles.css beside the .hp-inbox rules (one stylesheet entry, as for the rest of the inbox).
 
 /**
  * CGP-ART-R-005 / CGP-ART-D-005 — the instructor's comments on THIS learner's approved page versions, as a side list grouped
