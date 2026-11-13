@@ -9217,6 +9217,10 @@ foreground voice session on iPhone and Android. Android personal questions and
 local notebooks share the controller, use native recognizer completion, and bind
 continuation to the initiating credential, request and final TTS utterance. Stop, background,
 permission denial and expired access preserve text and fence late callbacks.
+When an automatic Android voice turn is refused, stopping its continuation must
+retain the existing Service error explanation instead of replacing it with a
+generic voice-wait message. The submitted words and request identity remain
+recoverable; no reply playback, resumed capture or automatic replay follows (#3971).
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
 

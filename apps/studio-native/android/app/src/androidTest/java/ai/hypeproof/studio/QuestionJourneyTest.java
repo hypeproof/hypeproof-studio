@@ -171,6 +171,9 @@ public class QuestionJourneyTest {
     }
 
     private VoiceFixture conversation(java.util.List<String> submitted)throws Exception{
+        return conversation(submitted,null);
+    }
+    private VoiceFixture conversation(java.util.List<String> submitted,String denial)throws Exception{
         ReflectionStorage store=new ReflectionStorage(context);
         store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         store.save(new ReflectionState("test-account"));
@@ -183,6 +186,11 @@ public class QuestionJourneyTest {
                     ReflectionState durable=store.load("test-account");assertEquals(id,durable.request.getString("id"));assertEquals(text,durable.request.getString("text"));
                     assertFalse(submitted.contains(id));submitted.add(id);
                     messages.put(new JSONObject().put("id",id).put("role","user").put("content",text).put("created_at",1000+revision[0]));
+                    if(denial!=null){
+                        // Service persists the failed user turn before admission rejects execution.
+                        turn[0]=new JSONObject().put("id",id).put("text",text).put("status","failed").put("created_at",1000).put("updated_at",1001);revision[0]++;
+                        return new NativeDeviceSignIn.Reply(403,Map.of("error",denial));
+                    }
                     messages.put(new JSONObject().put("id","answer-"+id).put("role","assistant").put("content","내 생각의 답변 "+submitted.size()).put("created_at",1001+revision[0]));
                     turn[0]=new JSONObject().put("id",id).put("text",text).put("status","completed").put("created_at",1000).put("updated_at",1001);revision[0]++;
                 }else assertEquals("/me/reflection",path);
@@ -192,6 +200,19 @@ public class QuestionJourneyTest {
         app=ActivityScenario.launch(QuestionActivity.class);ready();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));return voice;
     }
     private void drain(){InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
+    @Test public void voiceAdmissionDenialKeepsServiceReasonAndStopsWithoutReplay()throws Exception{
+        java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted,"reflection_monthly_limit");
+        String words="이번 주에 시도해 보고 싶은 일이 있어요";
+        onView(withContentDescription("음성 대화")).perform(click());
+        app.onActivity(a->{voice.partial("이번 주에 시도해 보고 싶은 일");voice.endpoint();voice.result(words);});ready();drain();
+        onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+        assertFalse(voice.controller.session.active());assertTrue(voice.spoken.isEmpty());assertEquals(1,voice.starts);assertEquals(1,submitted.size());
+        ReflectionStorage store=new ReflectionStorage(context);ReflectionState saved=store.load("test-account");
+        assertEquals(words,saved.request.getString("text"));assertEquals(submitted.get(0),saved.request.getString("id"));assertNotNull(store.loadCredentials());
+        app.onActivity(a->{voice.result("오래된 최종 결과");voice.endpoint();});drain();
+        assertFalse(voice.controller.session.active());assertEquals(1,voice.starts);assertEquals(1,submitted.size());assertTrue(voice.spoken.isEmpty());
+        screen("android-voice-admission-denial");
+    }
     @Test public void oneTapFiveAutomaticTurnsUseDurableOwnRepliesWithoutRmsOrNextTap()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
         onView(withContentDescription("음성 대화")).perform(click());onView(withText("말하기 끝")).check(doesNotExist());
