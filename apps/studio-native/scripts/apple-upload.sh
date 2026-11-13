@@ -7,10 +7,13 @@ case "$platform" in
   ios) ;;
   *) echo 'Mobile delivery supports iOS only. Desktop uses the existing Studio RC pipeline.' >&2; exit 2 ;;
 esac
-cd "$(dirname "$0")/../ios"
+control_scripts=$(cd "$(dirname "$0")" && pwd)
+candidate_root=${NATIVE_CANDIDATE_ROOT:-$(cd "$control_scripts/../../.." && pwd)}
+cd "$candidate_root/apps/studio-native/ios"
 # Validate request/trigger/checkout before reading any signing material. The
 # downloaded gate must match this run attempt, including on partial reruns.
-python3 ../scripts/verify-native-candidate.py request --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
+python3 "$control_scripts/verify-native-candidate.py" request --candidate-root "$candidate_root" \
+  --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
   --output "$RUNNER_TEMP/native-upload-preflight.json"
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"
@@ -124,7 +127,7 @@ xcrun altool --upload-app --type "$upload_type" --file "$package" \
 # set -e ensures none of these outcomes is recorded after a failed command.
 printf '%s\n' '{"archive":0,"export":0,"validation":0,"upload":0}' > "$private/command-results.json"
 cp "$package" "$evidence/HP-Studio-$platform.$extension"
-python3 ../scripts/verify-native-candidate.py receipt \
+python3 "$control_scripts/verify-native-candidate.py" receipt --candidate-root "$candidate_root" \
   --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
   --package "$evidence/HP-Studio-$platform.$extension" --archive-info "$archive/Info.plist" \
   --command-results "$private/command-results.json" --output "$evidence/upload-receipt.json"

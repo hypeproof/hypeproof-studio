@@ -207,7 +207,8 @@ print('fixture command completed')
                 evidence = root / 'apps/studio-native/evidence/apple-ios'; evidence.mkdir(parents=True)
                 env.update(PATH=str(commands) + os.pathsep + env['PATH'], FAIL_PHASE=failure, CALLS=str(temp / 'calls'),
                            APPLE_DEVELOPER_TEAM_ID='fixture', APP_STORE_CONNECT_KEY_ID='fixture', APP_STORE_CONNECT_ISSUER_ID='fixture',
-                           private=str(private), evidence=str(evidence), platform='ios', identity='fixture', profile_name='fixture')
+                           private=str(private), evidence=str(evidence), platform='ios', identity='fixture', profile_name='fixture',
+                           control_scripts=str(scripts), candidate_root=str(root))
                 p = subprocess.run(['bash', '-c', "set -euo pipefail\ndestination='generic/platform=iOS'" + tail], cwd=ios, env=env, capture_output=True, text=True)
                 receipt = evidence / 'upload-receipt.json'
                 if failure:
@@ -217,7 +218,10 @@ print('fixture command completed')
                     self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
                     value = json.loads(receipt.read_text()); self.assertEqual(value['state'], 'uploaded')
                     self.assertEqual((temp / 'calls').read_text().splitlines(), ['archive', 'export', 'validation', 'upload'])
-                    self.assertEqual(value['source_sha'], env['GITHUB_SHA'])
+                    self.assertEqual(value['source_sha'], env['NATIVE_EXPECTED_SHA'])
+                    if env.get('NATIVE_EXPECTED_WORKFLOW_SHA'):
+                        self.assertEqual(value['schema'], 'hps-native-upload-receipt/2')
+                        self.assertEqual(value['workflow_source_sha'], env['GITHUB_WORKFLOW_SHA'])
                     self.assertEqual(value['native_gate']['native_run_id'], 100)
                     self.assertEqual(value['native_gate']['native_run_attempt'], 3)
                     self.assertEqual(value['native_gate']['artifact_id'], 456)
@@ -225,12 +229,12 @@ print('fixture command completed')
     def test_workflow_keeps_existing_gates_and_optional_correlation(self):
         workflow = (NATIVE.parents[1] / '.github/workflows/studio-apple-testflight.yml').read_text()
         self.assertIn("studio-testflight:{0}:{1}", workflow)
-        for key in ['expected_sha', 'operation_id', 'request_digest']:
+        for key in ['expected_sha', 'expected_workflow_sha', 'operation_id', 'request_digest']:
             self.assertIn(key + ':', workflow); self.assertIn('${{ inputs.' + key + ' }}', workflow)
         for preserved in ["branches: ['release/studio-unified-preview']", 'needs: native-candidate',
                           'environment: apple-native-preview', 'platform: [ios]', 'cancel-in-progress: false']:
             self.assertIn(preserved, workflow)
-        self.assertEqual(workflow.count('required: false'), 3)
+        self.assertEqual(workflow.count('required: false'), 4)
         self.assertIn('uses: actions/download-artifact@v4', workflow)
         self.assertEqual(workflow.count('name: studio-native-release-gate-${{ github.run_id }}-${{ github.run_attempt }}'), 2)
         self.assertLess(workflow.index('uses: actions/download-artifact@v4'), workflow.index('name: Archive, validate and upload'))
