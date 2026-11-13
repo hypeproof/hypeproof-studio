@@ -233,6 +233,110 @@ Check arrow focus, Space selection, Enter confirmation, draft-preserving arrival
 and idle arrival. Physical IME, native screen-reader speech and forced-colors
 acceptance must be reported separately from synthetic DOM/browser tests.
 
+## Plan card (CGP-CHAT-D-004 / CGP-CHAT-D30)
+
+`test/plan-first-layout.smoke.mjs` drives the real App in headless Chromium on both
+seats, dark and light, at 320, 480 and 800px: the classroom chip's `aria-pressed`, the
+personal tools-menu item and pill, the card's numbered steps and four actions, the send
+button reading `계획 승인 기다리는 중` and disabled, and geometry (44px targets, no overlap,
+no horizontal scroll, text at least 14px). D-004 adds: every action has the primary's
+height and font size, and `이대로 진행` has its own fill and a heavier weight than each
+secondary action.
+Colours come from tokens only (`test/design-tokens.smoke.mjs` lints every webview sheet).
+Packaged-app and forced-colors acceptance are reported separately.
+
+## Selection action popover and quote chip (CGP-CHAT-D-007 / CGP-CHAT-D72)
+
+`test/quote-reply.test.tsx` checks the pure placement rules (above, the 48px flip,
+row and view clamps, a selection scrolled away), the chip's draft parts (typed text
+kept, quote first when sent, one quote at a time, × removes only the quote), Escape
+from the page and during IME composition, an Escape a menu already handled or pressed
+while a modal is open (the popover stays), nothing during a mouse drag, and the popover
+leaving an answer that starts streaming, through ChatPanel on the minimal DOM.
+`test/elevation-computed.smoke.mjs` measures the popover's overlay level in Dark+ and
+Light+ and, in high contrast and forced colors, that it drops the shadow and keeps a 1px
+solid edge (the theme's contrastBorder in high contrast).
+
+`test/quote-popover-layout.smoke.mjs` drives the real App in headless Chromium with CDP
+mouse and key input, personal and classroom, dark and light, at 320 and 1420px: nothing
+mid-drag; in the page within 150ms of the release and of a selection made without the
+mouse; no entry animation; above the first line with a 2px gap, below the last line when
+the selection is under 48px from the conversation's top; a 44px action that nothing covers;
+Escape from the page; none on the streaming answer; the chip inside the composer card on
+two lines with an ellipsis and a 44px `인용 빼기`; no horizontal scroll added (the 320px
+personal header already scrolls by 11px before any popover in this fixture; the smoke
+prints that as a note). Packaged-app, physical IME and screen-reader acceptance are
+reported separately.
+
+## Read-aloud control (CGP-CHAT-D-009 / CGP-CHAT-D67)
+
+`test/voice-mount.test.tsx` renders the real ChatPanel with served voice and two answers in
+the personal and classroom seats and presses the controls on the minimal DOM: idle
+`읽어 주기` with the speaker glyph; pressed `aria-pressed="true"`, `그만 읽기` and the level
+glyph; the second answer takes over and releases the first (one pressed at a time); the
+pressed control stops its own reading. The same file keeps the unserved markup byte-identical.
+`test/voice-ui.test.tsx` reads `aria-pressed` across play and stop on one answer, and across a
+reading that ends by itself. The answer is read in at least two utterances (the test asserts the
+count): an earlier utterance's end keeps it pressed with `그만 읽기`, and the last utterance's end
+event (no press) releases the control to `aria-pressed="false"` and `읽어 주기` without a cancel.
+
+`test/voice-browser.smoke.mjs` drives the real App bundle in headless Chromium at 320px,
+both seats, dark and light, with a recording synthesizer: the pressed control has a fill that
+the idle one has not, a 44px box and 14px text; the level glyph and its shape compute
+`animation-name: none` and run no animation with motion allowed, with OS reduced motion and
+with `data-reduced-motion="true"`; in forced colours the pressed and idle controls differ; the
+second answer takes over and the first reading is cancelled. These browser-only checks (the
+personal pressed fill, the cancel) must not skip: with `FOCUS_REQUIRE_BROWSER=1`, as the CI smoke
+shards set it, a missing Chromium fails the smoke instead of printing NOT RUN. Every read is a state, a computed style or a minimum box, not a
+text width, so a runner's fonts do not change the verdict. A real Korean voice, screen-reader
+speech of the pressed state and the packaged app are reported separately.
+
+## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)
+
+`test/voice-mute.test.tsx` renders the real VoicePanel, owned by the real popup and session
+reducers, next to a real read-aloud button under a served-voice profile (disclosure read), with a
+scripted synthesizer on the minimal DOM. Both presentations show exactly one `마이크 끄기` and one
+`소리 끄기` button, each with `aria-pressed` and its glyph. `소리 끄기` cancels a reading within the
+press, holds read-aloud (disabled, `읽어 주기, 소리 꺼짐`), sends no session event and leaves capture
+open. `마이크 끄기` sends one `mute`, closes capture and leaves the switch and the reading alone. Both
+are kept across collapse and expand; ending the conversation turns sound back on. Each change is
+announced in a status region. Red on main: all seven cases fail (no such buttons).
+
+`test/voice-read-aloud.smoke.mjs` checks the hub against the switch without React: muting cancels
+synchronously, a muted hub starts nothing, a hub without the switch is unchanged (negative
+control), a disposed hub stops listening. Red on main: the first assertion fails.
+
+`test/voice-mute-controls.smoke.mjs` drives the same composition in headless Chromium, dark and
+light at 1420 and 320 plus forced colours, with real mouse presses: two named toggles per
+presentation, 44px boxes, 20px glyphs, inside the viewport, no sideways scroll, pressed differs by
+glyph, fill and edge (and still differs in forced colours), off words at 14px or more, switches
+independent and kept across collapse and expand. Negative controls run by hand: main's VoicePanel
+fails it (no buttons) and a pressed rule without the edge fails it. Reads are states, computed
+styles and minimum boxes, not text widths, so a runner's fonts do not change the verdict. A real
+voice, a screen reader and the packaged app are reported separately.
+
+## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
+
+- `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell
+  presentation draws the row through ToolLine; the block is open on a detailed seat and has one
+  `명령 복사` button (a real `type="button"`, no tabindex or aria-hidden, after the summary and the
+  command in document order, inside the `<details>`). A click writes the command exactly as shown
+  (no `$ `, the ` ⏎ ` mark kept); `명령을 복사했습니다` only after the write resolves, the refusal
+  wording on a rejected write. A summary-seat row and a row restored from its stored label start
+  collapsed with the button inside. In 실행 중인 것 a shell task reads `멈추기`, then `멈추는 중` in
+  the status and the disabled button until the host reports the exit, then `멈췄어요` and no
+  button; the preview server keeps `끄는 중` (negative control).
+- `test/shell-process-layout.smoke.mjs`: the shipped cascade in headless Chromium, personal and
+  classroom, dark and light, 320/800/1420px, forced colours and both VS Code high-contrast themes.
+  Measured: monospace command (ten `i` and ten `W` equally wide), a long command block at most
+  240px with `overflow-y: auto` and content to scroll, the copy button 44 × 44 with a visible edge,
+  beside the command (no overlap) and inside the row, not drawn at rest, drawn under a forced
+  `:hover` on the row and when Tab from the summary reaches it, no opacity transition, the shared 2px focus ring (inset in the transcript scroll scope). Eleven new
+  injected overrides (proportional font, no cap, clipping, never/always drawn, hover only, out of
+  the tab order, over the command, small target, no edge, a fade) each fail it.
+- Physical IME is not involved (the button binds no key), and packaged-app, touch-device and
+  screen-reader acceptance are separate observations.
+
 ## Activity trash in 내 작품 (CGP-KNOW-D-013)
 
 - `test/activity-trash-panel.smoke.mjs`: the real provider routes the panel's requests into the

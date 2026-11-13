@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script, runInNewContext } from 'node:vm';
 import { localOps } from '@hypeproof/service-testkit/test/harness/classroom-ops.mjs';
-const f = await localOps(); const { default: chalk } = await import('../src/index.ts'); const savedFetch = globalThis.fetch; const calls = [];
+import { withBearerAsConnection } from './harness/connect.mjs';
+// E5: /manage keeps exactly what these named accessors hold in browser storage — learner names on this device (#3777)
+// and the class code made in this tab (#3778).
+// Each appears once; with them removed, nothing in the page touches storage, so tickets and tokens still never do.
+const DEVICE_STORES=["const namesStore=()=>{try{return window.localStorage;}catch{return null;}};","const tabStore=()=>{try{return window.sessionStorage;}catch{return null;}};"];
+const withoutStores=(s)=>DEVICE_STORES.reduce((t,a)=>{assert.equal(t.split(a).length-1,1,'one storage accessor: '+a);return t.replace(a,'');},s);
+const f = await localOps(); const chalk = withBearerAsConnection((await import('../src/index.ts')).default); const savedFetch = globalThis.fetch; const calls = [];
 const env = { ...f.env, HPS_SERVICE_ORIGIN: 'https://service.test' };
 globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return f.app.fetch(new Request(url, init), f.env, { waitUntil() {} }); };
 async function request(path, method = 'GET', body, token = f.teacherToken) { const r = await chalk.fetch(new Request('https://chalk.test' + path, { method, headers: { ...(token ? { authorization: 'Bearer ' + token } : {}), 'content-type': 'application/json', 'cf-access-authenticated-user-email': 'forged@example.test' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, { waitUntil() {} }); const raw = await r.text(); let json; try { json = JSON.parse(raw); } catch {} return { status: r.status, raw, json, headers: r.headers }; }
@@ -27,7 +33,7 @@ try {
     approvalWait, automationText, seatHelp:()=>0, reasonLabels:{waiting_approval:['학생의 승인을 기다리는 중']}, attentionLabels:{ok:'정상'},
   });
   assert.equal(seatStatus({signal:'fresh',attention:'ok',reason:'waiting_approval',automation:{phase:'waiting_approval',step_id:'upload',completed:5,total:8}}).stage,'메일 자동화 · Google 저장 · 승인 대기 · 5/8','runtime approval status must not hide actual automation progress');
-  assert.ok(!/localStorage|sessionStorage|\.innerHTML\s*=|insertAdjacentHTML|document\.cookie/.test(script), 'ticket and token stay in page memory and are rendered as text');
+  assert.ok(!/localStorage|sessionStorage|\.innerHTML\s*=|insertAdjacentHTML|document\.cookie/.test(withoutStores(script)), 'ticket and token stay in page memory and are rendered as text');
   for (const label of ['현황 새로 확인', '도움 요청 응대', '확인 불가', '발급은 연결 완료가 아닙니다', '개별 PC 초기화를 권하지 않습니다', '만료로 단정하지 말고']) assert.ok(html.includes(label), label);
   // Red is reserved for a confirmed block; silence and staleness render with the neutral class.
   assert.match(script, /s\.attention==='blocked'\?'blocked'/); assert.ok(!/no_signal[^\]]*blocked/.test(script));

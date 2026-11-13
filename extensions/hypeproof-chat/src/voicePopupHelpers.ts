@@ -430,8 +430,11 @@ export function assertPopupInvariants(p: PopupState, s: Pick<VoiceSession, 'capt
   if (bad.length > 0) throw new PopupInvariantError(bad);
 }
 
-/** 작은 컨트롤이 **항상** 제공해야 하는 조작 (VO-40). 목록이 줄면 테스트가 깨진다. */
-export const COMPACT_CONTROLS = ['mute', 'stop', 'expand'] as const;
+/**
+ * What the compact control always offers (VO-40); a shorter list breaks a test. `mute` is the
+ * microphone, `output_mute` the speaker: two controls, never one (CGP-VOICE-R-002).
+ */
+export const COMPACT_CONTROLS = ['mute', 'output_mute', 'stop', 'expand'] as const;
 export type CompactControl = (typeof COMPACT_CONTROLS)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────

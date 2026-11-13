@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChatIcon } from './ChatDetails';
 import { onHostMessage, postToHost } from './vscode';
+import { PLAN_FIRST_LABEL } from '../../src/planFirst';
 import './planFirst.css';
 
 export interface PlanFirstView { on: boolean; plan: { id: string; text: string } | null; /** False only when the class turned the mode off; absent otherwise. */ available?: false; /** True once the class switched off a mode this learner had on (kept until the task changes). */ switchedOff?: true }
@@ -33,9 +34,9 @@ export function PlanSwitchedOffNotice() {
 }
 
 export function PlanFirstChip({ on, disabled }: { on: boolean; disabled: boolean }) {
-  return <button type="button" className="hps-plan-chip" aria-label="계획 먼저" data-hp-tooltip="실행하기 전에 계획을 먼저 보여 줘요" aria-pressed={on} disabled={disabled}
+  return <button type="button" className="hps-plan-chip" aria-label={PLAN_FIRST_LABEL} data-hp-tooltip="실행하기 전에 계획을 먼저 보여 줘요" aria-pressed={on} disabled={disabled}
     onClick={() => postToHost({ type: 'planFirstSet', on: !on })}>
-    <ChatIcon kind={on ? 'check-square' : 'square'} size={16} /><span>계획 먼저</span>
+    <ChatIcon kind={on ? 'check-square' : 'square'} size={16} /><span>{PLAN_FIRST_LABEL}</span>
   </button>;
 }
 

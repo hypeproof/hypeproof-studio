@@ -9,6 +9,17 @@ export interface ChalkEnv {
   // Server-to-server credential for attesting an Access operator to Service.
   // Never included in App/browser requests or instructor write forwarding.
   HPS_CHALK_SERVICE_SECRET?: string;
+  // Shared with the Lab (same value on both servers, at least 32 characters). It
+  // authenticates the connect-code exchange and Chalk's two Lab workshop calls,
+  // and keys the sealed session cookie. Never sent to a browser. Unset = the Lab
+  // connection is off and instructor calls are refused.
+  HPS_CHALK_CONNECT_SECRET?: string;
+  // Tests and local runs only (ignored in production): the latest formal Studio release that GET /studio/latest-release
+  // answers without reading GitHub. "off" = unknown (nobody is flagged); a plain x.y.z = that floor. The e2e harness
+  // sets "off" so CI never depends on GitHub.
+  HPS_STUDIO_LATEST_RELEASE?: string;
+  /** CGP-SHELL-R-003: "1" marks the fixed HPS_STUDIO_LATEST_RELEASE security-critical (outside production only). */
+  HPS_STUDIO_LATEST_RELEASE_SECURITY?: string;
 }
 
 export const DEFAULT_SERVICE_ORIGIN = "https://api.hypeproof-ai.xyz";

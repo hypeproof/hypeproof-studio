@@ -8,9 +8,12 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import assert from 'node:assert/strict';
 import { SkillStoreView } from '../webview-ui/src/SkillStore';
+import { sellerSaleView } from '../src/skillStore';
 import type { StoreRequest, StoreState } from '../src/skillStoreProtocol';
 for (const name of ['Node', 'Element']) (globalThis as any)[name] ??= (window as any)[name];
 (globalThis as any).HTMLElement ??= (window as any).Element;
+// mini-dom models no <select>.options, which React reads to mark the chosen option.
+Object.defineProperty((window as any).Element.prototype, 'options', { configurable: true, get() { return String(this.tagName).toLowerCase() === 'select' ? this.findAll((e: any) => String(e.tagName).toLowerCase() === 'option') : undefined; } });
 
 const STEPS = [
   { step_id: 'read-notes', title: '메모 읽기', description: '회의 메모를 읽어요.', connections: [] },
@@ -24,6 +27,11 @@ const html = (state: StoreState) => renderToStaticMarkup(<SkillStoreView state={
 const typeInto = (el: any, value: string) => act(async () => { el.type ??= el.getAttribute('type') ?? 'text'; el.value = value; el.dispatchEvent({ type: 'input', bubbles: true }); });
 const byLabel = (host: any, label: string) => host.findAll((e: any) => e.getAttribute?.('aria-label') === label)[0];
 const buttons = (host: any, text: string) => host.querySelectorAll('button').filter((b: any) => b.textContent === text);
+
+const CONSENT_V = 'store-referral-2026-11-12';
+const DECIDED = { decided: true, partner: null, instructor: null, source: 'seller' as const, seller_editable: false, consent_version: CONSENT_V, consent_given: null as string | null };
+const NOT_DUE = { state: 'not_due' as const, prompt_at_krw: 10000, holder: 'self' as const, linked_adult_required: false };
+const SELLER = { tier: 'new' as const, cap_krw: 100000, identity_verified: true, attribution: DECIDED, items: [] as { id: string; title: string; price_krw: number; status: string; report_count: number }[], sales: [] as any[], totals: { refund_window: 0, payout_hold: 0, payable: 0, refunded: 0, pending: 0, rolls_over: true, payout_min_krw: 10000 }, payout_account: NOT_DUE as any, payout: 'not_started' as const, policy_version: 'v2' };
 
 async function mounted(state: StoreState) {
   const sent: StoreRequest[] = [];
@@ -83,13 +91,22 @@ async function main() {
   await act(() => after.root.unmount());
 }
 
-// Sell: the settlement row shows the PG fee, the 80% share, the 20% commission and its referral parts, and the policy version.
+// Sell: the settlement row shows the sale price, the PG fee, the seller's 80% share and the policy version.
+// Jay 2026-11-13: HypeProof's 20% and the partner/instructor referral parts are never on the seller's screen.
 {
   const sale = { order_id: 'sto_' + 'd'.repeat(32), title: PAID.title, gross: 10000, pg_fee: 340, seller: 7728, commission: 1932, partner: 483, instructor: 483, hypeproof: 966, seller_net: 7728, policy_version: 'v1', paid_at: 1, status: 'refund_window' as const, payout_hold_ends: 2 };
-  const seller = { tier: 'new' as const, cap_krw: 100000, identity_verified: true, origin: { lecture_id: 'lec', partner: true, instructor: true }, items: [], sales: [sale], totals: { payable: 0, pending: 7728, rolls_over: true, payout_min_krw: 10000 }, payout: 'not_started' as const, policy_version: 'v1' };
+  const seller = { ...SELLER, attribution: { ...DECIDED, partner: { name: '세바시' }, instructor: { name: '김강사' } }, sales: [sale], totals: { ...SELLER.totals, refund_window: 7728, pending: 7728 } };
   const adult = html(base({ tab: 'sell', seller }));
-  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>1,932원</td><td>483원</td><td>483원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.'])
+  for (const cell of ['<td>10,000원</td><td>340원</td><td>7,728원</td><td>환불 가능 기간</td><td>v1</td>', '정산은 기록만 되고 있어요.', '<th>결제 수수료(예상)</th>', '결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.', '<li>환불 가능 기간 7,728원</li><li>지급 보류 0원</li><li>정산 대상 0원</li>', '등록한 코드: 파트너 세바시 · 강사 김강사. 바꾸려면 운영팀에 문의해 주세요.'])
     assert.ok(adult.includes(cell), cell);
+  for (const hidden of ['그중 파트너', '그중 강사', 'HypeProof 수수료', '1,932원', '483원', '966원'])
+    assert.equal(adult.includes(hidden), false, `the seller's screen must not show ${hidden}`);
+  // The client drops the Service's commission and referral parts before the row reaches the webview.
+  const kept = sellerSaleView(sale as never);
+  assert.deepEqual(Object.keys(kept).sort(), ['gross', 'order_id', 'paid_at', 'payout_hold_ends', 'pg_fee', 'policy_version', 'seller', 'seller_net', 'status', 'title']);
+  // Earnings first: no account form while the payable balance is under the prompt amount.
+  assert.ok(adult.includes('정산 대상 금액이 10,000원 이상이 되면 받을 계좌를 여쭤볼게요.'));
+  assert.equal(adult.includes('계좌번호'), false);
   const minor = html(base({ tab: 'sell', ageGroup: 'minor', seller: { ...seller, tier: 'minor', payout: 'linked_adult_required' } }));
   assert.ok(minor.includes('보호자 연결이 필요해요.'), 'a minor seller sees the ledger and the linked-adult payout rule');
   assert.ok(minor.includes('<td>7,728원</td>'));
@@ -112,7 +129,7 @@ async function main() {
 }
 {
   // Scene 1: the finished quest's name and description are prefilled; a price over the tier cap cannot be sent.
-  const seller = { tier: 'new' as const, cap_krw: 100000, identity_verified: true, origin: null, items: [{ id: PAID.id, title: '서류 제출 요청', price_krw: 5000, status: 'listed', report_count: 0 }], sales: [], totals: { payable: 0, pending: 0, rolls_over: false, payout_min_krw: 10000 }, payout: 'not_started' as const, policy_version: 'v1' };
+  const seller = { ...SELLER, items: [{ id: PAID.id, title: '서류 제출 요청', price_krw: 5000, status: 'listed', report_count: 0 }] };
   const questDraft = { title: '서류 제출 요청', summary: '명단으로 안내 메일을 만들어요.', steps: [{ title: '내 Google 계정 연결', description: '보내는 계정을 연결해요.' }] };
   const { host, root, sent } = await mounted(base({ tab: 'sell', seller, questDraft }));
   const form = byLabel(host, '퀘스트 스토어에 등록');
@@ -154,6 +171,129 @@ async function main() {
   await act(() => click(buttons(consent.host, '확인하고 업데이트')[0]));
   assert.deepEqual(consent.sent.at(-1), { type: 'storeUpdate', itemId: PAID.id, consent: true });
   await act(() => consent.root.unmount());
+}
+
+// Policy v2 first publication: codes are optional, typed codes must be checked (names shown) before publishing,
+// and the choice rides on the publish message once.
+{
+  const questDraft = { title: '서류 제출 요청', summary: '명단으로 안내 메일을 만들어요.', steps: [{ title: '내 Google 계정 연결', description: '' }] };
+  const undecided = { ...SELLER, attribution: { ...DECIDED, decided: false, source: null } };
+  const { host, root, sent } = await mounted(base({ tab: 'sell', seller: undecided, questDraft }));
+  const codes = byLabel(host, '파트너·강사 코드');
+  assert.ok(codes, 'the code step is shown before the first publication');
+  assert.ok(codes.textContent.includes('처음 올릴 때 한 번만 정하고, 그 뒤에는 운영팀만 바꿀 수 있어요.'));
+  const publish = () => buttons(byLabel(host, '퀘스트 스토어에 등록'), '스토어에 등록')[0];
+  // No code typed: publishing registers "none".
+  await act(() => click(publish()));
+  assert.deepEqual(sent.at(-1), { type: 'storePublishQuest', title: '서류 제출 요청', summary: '명단으로 안내 메일을 만들어요.', price_krw: 0, attribution: { none: true } });
+  // A typed code blocks publishing until it is checked.
+  const [, instructorInput] = codes.querySelectorAll('input');
+  await typeInto(instructorInput, 'I-ABCDE-FGHJK');
+  assert.ok(publish().hasAttribute('disabled'), 'unchecked code');
+  assert.ok(host.textContent.includes('코드를 확인한 뒤에 올릴 수 있어요.'));
+  await act(() => click(buttons(codes, '코드 확인')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeResolveCodes', partnerCode: '', instructorCode: 'I-ABCDE-FGHJK' });
+  await act(() => root.render(<SkillStoreView state={base({ tab: 'sell', seller: undecided, questDraft, attributionPreview: { partnerCode: '', instructorCode: 'I-ABCDE-FGHJK', partner: { name: '세바시' }, instructor: { name: '김강사', partner_name: '세바시' } } })} send={m => sent.push(m)} />));
+  assert.ok(host.textContent.includes('확인했어요. 파트너: 세바시 (강사 소속으로 함께 등록돼요) · 강사: 김강사. 올리면 이대로 한 번만 등록돼요.'));
+  // Checked names are not enough: sharing the sales record needs the consent.
+  assert.ok(publish().hasAttribute('disabled'), 'checked but not consented');
+  assert.ok(host.textContent.includes('정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 코드의 파트너·강사에게 제공되는 것에 동의해요.'));
+  const consentBox = byLabel(host, '파트너·강사 코드').querySelector('input[type="checkbox"]');
+  consentBox.type = 'checkbox'; consentBox.checked = true;
+  await act(() => click(consentBox));
+  await act(() => click(publish()));
+  assert.deepEqual(sent.at(-1).attribution, { instructor_code: 'I-ABCDE-FGHJK', consent: { version: CONSENT_V, granted: true } });
+  // Changing the code after the check needs a new check and a new consent (negative control).
+  await typeInto(byLabel(host, '파트너·강사 코드').querySelectorAll('input')[1], 'I-ZZZZZ-ZZZZZ');
+  assert.ok(publish().hasAttribute('disabled'));
+  assert.equal(byLabel(host, '파트너·강사 코드').querySelector('input[type="checkbox"]').checked, false, 'the consent is asked again for the new code');
+  // Declining: 「코드 없이 진행」 clears the codes and the publish registers none.
+  await act(() => click(buttons(byLabel(host, '파트너·강사 코드'), '코드 없이 진행')[0]));
+  await act(() => click(publish()));
+  assert.deepEqual(sent.at(-1).attribution, { none: true });
+  // The single-step form waits for the same check and consent.
+  await typeInto(byLabel(host, '파트너·강사 코드').querySelectorAll('input')[0], 'P-ABCDE-FGHJK');
+  const form = byLabel(host, '스킬 올리기');
+  const [title, summary] = form.querySelectorAll('input');
+  await typeInto(title, '정리'); await typeInto(summary, '요약'); await typeInto(form.querySelector('textarea'), '지침');
+  assert.ok(buttons(form, '스토어에 올리기')[0].hasAttribute('disabled'), 'single-step publish waits for the code check');
+  await act(() => root.unmount());
+  // Decided: no code step, and the publish carries no attribution.
+  const done = await mounted(base({ tab: 'sell', seller: SELLER, questDraft }));
+  assert.equal(byLabel(done.host, '파트너·강사 코드'), undefined);
+  assert.ok(done.host.textContent.includes('등록한 파트너·강사 코드가 없어요. 바꾸려면 운영팀에 문의해 주세요.'));
+  await act(() => click(buttons(byLabel(done.host, '퀘스트 스토어에 등록'), '스토어에 등록')[0]));
+  assert.equal('attribution' in done.sent.at(-1), false);
+  await act(() => done.root.unmount());
+}
+// Payout account: asked for only when due; a minor is asked for a linked adult's account; on file it is masked.
+{
+  const due = { ...SELLER, totals: { ...SELLER.totals, payable: 15456, rolls_over: false }, payout_account: { ...NOT_DUE, state: 'due' as const } };
+  const { host, root, sent } = await mounted(base({ tab: 'sell', seller: due }));
+  const form = byLabel(host, '지급 계좌');
+  assert.ok(form.textContent.includes('정산금을 받을 계좌를 알려 주세요.'));
+  const save = () => buttons(form, '계좌 저장')[0];
+  assert.ok(save().hasAttribute('disabled'));
+  const select = form.querySelector('select');
+  await act(async () => { select.value = '004'; select.dispatchEvent({ type: 'change', bubbles: true }); });
+  const [number, holder] = form.querySelectorAll('input');
+  await typeInto(number, '123-456-789012');
+  await typeInto(holder, '홍길동');
+  await act(() => form.querySelector('form').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} }));
+  assert.deepEqual(sent.at(-1), { type: 'storeSavePayoutAccount', bankCode: '004', accountNumber: '123456789012', holderName: '홍길동' });
+  assert.equal(number.value, '', 'the typed number is cleared after sending');
+  await act(() => root.unmount());
+  const minor = html(base({ tab: 'sell', ageGroup: 'minor', seller: { ...due, tier: 'minor', payout: 'linked_adult_required', payout_account: { ...due.payout_account, holder: 'linked_adult', linked_adult_required: true } } }));
+  for (const t of ['만 19세 미만 판매자는 보호자 명의 계좌로만 받을 수 있어요.', '보호자 이름 (예금주)', '보호자 확인이 끝나야 지급돼요.']) assert.ok(minor.includes(t), t);
+  const onFile = html(base({ tab: 'sell', seller: { ...due, payout_account: { state: 'on_file', prompt_at_krw: 10000, holder: 'self', linked_adult_required: false, masked: '국민은행 ****9012', holder_check: 'sandbox_matched' } } }));
+  assert.ok(onFile.includes('지급 계좌: 국민은행 ****9012'));
+  assert.ok(onFile.includes('예금주 확인: 테스트 확인만 했어요.'));
+  assert.equal(onFile.includes('계좌번호'), false, 'no form until the seller asks to change it');
+}
+
+// Seller identity (#3770): an unverified seller gets the phone verification button; while it runs the panel waits.
+{
+  const none = { ...SELLER, tier: 'none' as const, cap_krw: 0 };
+  const { host, root, sent } = await mounted(base({ tab: 'sell', seller: none }));
+  assert.ok(host.textContent.includes('유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 한 번만 하면 돼요.'));
+  await act(() => click(buttons(host, '휴대폰 본인인증')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeVerifyIdentity' });
+  await act(() => root.render(<SkillStoreView state={base({ tab: 'sell', seller: none, identity: { sessionId: 'idv_' + 'a'.repeat(32), sandbox: true } })} send={m => sent.push(m)} />));
+  assert.ok(host.textContent.includes('브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.'));
+  assert.ok(host.textContent.includes('지금은 테스트 본인인증이에요.'));
+  assert.equal(buttons(host, '휴대폰 본인인증').length, 0, 'no second start while one runs');
+  await act(() => click(buttons(host, '기다리지 않기')[0]));
+  assert.deepEqual(sent.at(-1), { type: 'storeCancelIdentity' });
+  await act(() => root.unmount());
+  assert.ok(html(base({ tab: 'sell', seller: { ...SELLER, tier: 'minor' } })).includes('만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고'));
+  assert.equal(html(base({ tab: 'sell', seller: SELLER })).includes('휴대폰 본인인증'), false, 'a verified seller is not asked again');
+}
+
+// #3772: a course that does not sell shows why and offers no listing.
+{
+  const blocked = html(base({ tab: 'sell', seller: { ...SELLER, course_blocked: true, attribution: { ...DECIDED, decided: false }, items: [{ id: PAID.id, title: '회의록 정리 스킬', price_krw: 0, status: 'listed', report_count: 0 }] }, questDraft: { title: 'x', summary: 'y', steps: [] } }));
+  assert.ok(blocked.includes('이 과정에서는 스킬을 팔 수 없어요. 판매를 하지 않는 과정(청소년 과정 등)의 수강생은'));
+  assert.ok(blocked.includes('회의록 정리 스킬 · 무료 · 판매 중지(과정 제한)'), 'a hidden item is not shown as on sale');
+  assert.equal(blocked.includes('판매 중<'), false);
+  for (const hidden of ['스킬 올리기', '스토어에 등록', '파트너·강사 코드', '휴대폰 본인인증']) assert.equal(blocked.includes(hidden), false, hidden);
+  assert.ok(blocked.includes('정산 내역'), 'the settlement history stays');
+}
+
+// #3774: purchase history with receipts, refunded purchases included.
+{
+  const orders = [
+    { order_id: 'sto_' + '1'.repeat(32), item_id: PAID.id, title: PAID.title, amount: 10000, state: 'refunded' as const, paid_at: Date.UTC(2026, 10, 1), refunded_at: Date.UTC(2026, 10, 2) },
+    { order_id: 'sto_' + '2'.repeat(32), item_id: PAID.id, title: PAID.title, amount: 10000, state: 'paid' as const, paid_at: Date.UTC(2026, 10, 3), refunded_at: null },
+  ];
+  const { host, root, sent } = await mounted(base({ tab: 'mine', installs: [], orders }));
+  const list = byLabel(host, '구매 내역');
+  assert.ok(list.textContent.includes('회의록 정리 스킬 · 10,000원 · 환불됨'));
+  assert.ok(list.textContent.includes('회의록 정리 스킬 · 10,000원 · 결제 완료'));
+  assert.equal(buttons(list, '영수증 보기').length, 2);
+  await act(() => click(buttons(list, '영수증 보기')[1]));
+  assert.deepEqual(sent.at(-1), { type: 'storeReceipt', orderId: 'sto_' + '2'.repeat(32) });
+  assert.ok(host.textContent.includes('아직 설치한 스킬이 없어요.'), 'the history shows even with no install left');
+  await act(() => root.unmount());
 }
 
 // The age question appears before buying or selling when the Service does not know the age.

@@ -46,6 +46,7 @@ non_product_directories:
   - proxy-poc          # pre-SDK proxy; superseded, kept for reference
   - extensions         # container dir; the product is extensions/hypeproof-chat
   - releases           # release notes written by release-cut (releases/<version>.md)
+  - policy             # Harness-synced policy data (policy/merge-tiers.yaml)
 
 entries:
   - name: measurement-host-package
@@ -214,10 +215,29 @@ entries:
     owner: jay
 
 
+  - name: studio-native-mobile
+    layer: v
+    tag_prefix: mobile-v
+    directory: apps/studio-native
+    deploys_to: native-mobile-preview
+    contract:
+      format: "JSON — hp-studio-notebook/1, project-local messages and user-authored intent revisions, Unix milliseconds"
+    drift_lock: apps/studio-native/ios/Tests/StudioCoreTests/IntentTests.swift
+    drift_lock_extra:
+      - apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/StudioStateTest.java
+    exit_plan: >-
+      Export records explicitly before uninstalling. Stop distribution of this
+      native preview; no Service migration or desktop companion change is needed.
+      Preserve server allowance identity and existing Service retention policy.
+    owner: jayleekr
+    notes: >-
+      Native filesystem, protected app storage, share sheets and lifecycle require
+      the App layer. Service remains the owner of model routing and monetary caps.
+
 # ---------------------------------------------------------------------------
 # Planned entries. These are NOT yet admitted — they are here so the gates are
 # answered before the code lands, not after. Move them into `entries` in the
 # same PR that creates the directory.
 # ---------------------------------------------------------------------------
 
-planned:
+planned: []

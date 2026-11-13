@@ -41,6 +41,10 @@ interface Options {
   freeCredential?(): PromiseLike<string | undefined>;
   fetch?: typeof fetch; now?: () => number;
 }
+/** A reflection turn waits on a model; a show-link upload carries about 2 MB plus the picture. */
+const timeoutFor = (path: string, body: unknown) => path === '/me/reflection/turns' ? 120_000 : path === '/me/show-links' && body !== undefined ? 60_000 : 12_000;
+/** REQ-STUDIO-SHOW-LINK: the only show-link routes this client calls (hypeproof-service routes/show-links.ts). */
+export const SHOW_LINK_ROUTE = /^\/me\/(?:show-links(?:\/[0-9a-f]{16}\/revoke)?|consents\/show-share)$/;
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const identity = (v: unknown): AccountIdentity | undefined => record(v) && typeof v.id === 'string' && typeof v.email === 'string'
   ? { id: v.id, email: v.email, display_name: typeof v.display_name === 'string' ? v.display_name : v.email } : undefined;
@@ -107,11 +111,11 @@ export class AccountSession {
     if (!record(body) || typeof body.access_token !== 'string' || typeof body.refresh_token !== 'string' || typeof body.session_id !== 'string' || !Number.isFinite(body.expires_in) || body.expires_in <= 0) throw new AccountError('invalid_response', friendly('invalid_response'));
     return { service: this.options.service, accessToken: body.access_token, refreshToken: body.refresh_token, sessionId: body.session_id, expiresAt: this.now() + body.expires_in * 1000 };
   }
-  private async call(path: string, body?: unknown, token?: string, freeCredential?: string): Promise<{ status: number; body: any }> {
+  private async call(path: string, body?: unknown, token?: string, freeCredential?: string, method?: 'GET'|'POST'|'DELETE', signal?: AbortSignal): Promise<{ status: number; body: any }> {
     try {
       const r = await this.request(this.options.service.replace(/\/+$/, '') + path, {
-        method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(12_000),
+        method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutFor(path, body))]) : AbortSignal.timeout(timeoutFor(path, body)),
       });
       const value: any = await r.json();
       if (!r.ok) { const code = typeof value?.error === 'string' ? value.error : typeof value?.error?.code === 'string' ? value.error.code : `http_${r.status}`; throw new AccountError(code, friendly(code)); }
@@ -144,6 +148,40 @@ export class AccountSession {
       catch (e) { if (e instanceof AccountError && /^(invalid_refresh|refresh_reuse|session_revoked|invalid_token|authentication_required)$/.test(e.code)) await this.forget(b, e.message); throw e; }
     });
   }
+  /** Account-session-bound conversation transport; credentials remain in host SecretStorage. */
+  async conversationSession(): Promise<string | undefined> {
+    await this.accessToken(); return (await this.read())?.sessionId;
+  }
+  async reflectionRequest(sessionId: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (suffix !== '' && suffix !== '/turns' && !/^\/turns\/[A-Za-z0-9._:-]{1,128}\/(?:abandon|cancel)$/.test(suffix)) throw new Error('Invalid reflection route');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+    try {
+      const response = await this.call('/me/reflection' + suffix, body, token, undefined, undefined, signal);
+      if ((await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+      return response.body;
+    } catch (error) {
+      if (error instanceof AccountError && /^(http_401|account_(suspended|deleted|session_revoked)|session_revoked|invalid_token|unauthorized|authentication_required)$/.test(error.code)) {
+        await this.exclusive(async () => { const b=await this.read();if(b?.sessionId===sessionId)await this.forget(b,error.message); });
+      }
+      throw error;
+    }
+  }
+  async conversationRequest(sessionId: string, suffix: string, body?: unknown, method: 'GET'|'POST'|'DELETE' = body === undefined ? 'GET' : 'POST'): Promise<any> {
+    if (!/^\/(?:[A-Za-z0-9_-]{1,128})(?:\/(?:events|requests)(?:\/[A-Za-z0-9_-]{1,128}\/(?:claim|finish|cancel))?)?$/.test(suffix) && suffix !== '') throw new Error('Invalid conversation route');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+    try {
+      const response = await this.call('/me/conversations' + suffix, body, token, undefined, method);
+      if ((await this.read())?.sessionId !== sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+      return response.body;
+    } catch (error) {
+      if (error instanceof AccountError && /^(http_401|account_(suspended|deleted|session_revoked)|session_revoked|invalid_token|unauthorized|authentication_required)$/.test(error.code)) {
+        await this.exclusive(async () => { const b=await this.read();if(b?.sessionId===sessionId)await this.forget(b,error.message); });
+      }
+      throw error;
+    }
+  }
   private async authenticated(path: string, body?: unknown): Promise<any> {
     const token = await this.accessToken(); if (!token) throw new AccountError('unauthorized', friendly('unauthorized'));
     try { return (await this.call(path, body, token)).body; }
@@ -153,6 +191,14 @@ export class AccountSession {
       }
       throw e;
     }
+  }
+  /**
+   * REQ-STUDIO-SHOW-LINK — the person's own show links, with the account session. GET without a body,
+   * POST with one. Called only after the person pressed 링크로 보여주기 (list) or 링크 만들기 / 링크 끄기.
+   */
+  async showLinkRequest(path: string, body?: unknown): Promise<any> {
+    if (!SHOW_LINK_ROUTE.test(path)) throw new Error('Invalid show-link route');
+    return this.authenticated(path, body);
   }
   async refreshView(): Promise<void> {
     const initial = await this.read();

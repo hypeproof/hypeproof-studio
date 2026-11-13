@@ -1,8 +1,13 @@
 /**
- * Buying a pass from inside Studio (REQ-L12). Host side, no VS Code API here.
+ * Passes bought from inside Studio (REQ-L12). Host side, no VS Code API here.
  *
- * Studio creates an order on the Service, opens the checkout page in the browser and
- * waits. The Service confirms the card payment with the gateway itself; Studio never
+ * New passes are not sold (2026-11-11) and this build has no purchase view (2026-11-13,
+ * REQ-L12 ①–④ removed): Studio no longer creates orders. What stays is ⑤, the recovery of
+ * an order an older build created: Studio keeps waiting, claims a paid one and recovers a lost
+ * answer. The rest of this note describes that order's life.
+ *
+ * Studio created an order on the Service, opened the checkout page in the browser and
+ * waited. The Service confirms the card payment with the gateway itself; Studio never
  * sees card data and never decides that something was paid. When the Service reports
  * the order as paid, Studio claims the seat with the order secret and receives an
  * ordinary participation code, which then goes through the same entry path as a
@@ -41,39 +46,12 @@ export interface PendingOrder {
   accountOwned?: boolean;
 }
 export type OrderState = "pending" | "confirming" | "paid" | "failed" | "refunded" | "expired";
-/** What the start page may show. No secret, no code. */
+/** What the start page may show of a legacy order (REQ-L12 ⑤). No secret, no code. */
 export interface PurchaseView {
   available: boolean;
-  products?: PassProduct[];
-  stage?: "choosing" | "waiting" | "connecting" | "stopped";
+  stage?: "waiting" | "connecting" | "stopped";
   order?: { label: string; amount: number };
   message?: string;
-  /**
-   * TUX-COND-07 — set only when the person pressed "이용권 살펴보기" on the chat's end-of-trial
-   * card. The start page switches to the purchase list once per value; it is cleared when the
-   * start tab closes, so a later visit never opens the purchase view by itself (REQ-L12 ①).
-   */
-  focus?: number;
-  /**
-   * SPEC iteration 4 §2.5 — the current seat is the free allowance. The payer question is asked
-   * once before checkout; `payerAdult` is the saved answer (absent → not asked yet).
-   */
-  freeSeat?: boolean;
-  payerAdult?: boolean;
-  /** A guardian pays: the checkout page as a link and a QR (data URL), instead of opening a browser here. */
-  guardian?: { url: string; qr: string };
-  /**
-   * Login at purchase (Jay 2026-10-19). Set while this purchase needs a Google account and none is
-   * signed in: `signIn` — the account entry is the Primary and no pay button is offered;
-   * `unavailable` — this build or Service has no account sign-in, so nothing can be bought here
-   * (a calm notice, never an anonymous checkout). Absent: checkout as before.
-   */
-  login?: "signIn" | "unavailable";
-  /**
-   * CONV-PURCHASE-R-002 — the pass the person had chosen before the purchase-time sign-in. Sent
-   * only while the list is open (`stage: "choosing"`); the list selects it again on return.
-   */
-  selected?: string;
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */
@@ -85,25 +63,15 @@ export const POLL_INTERVAL_MS = 3000;
  * happened to the money. The rest of the start screen keeps its own voice.
  */
 export const PURCHASE_COPY = {
-  // CONV-ENDCARD-R-005 — the pass list could not be read. Calm, in the purchase screen's status
-  // line (never the red error box); the work is safe and the list can be opened again later.
-  unavailableTitle: "이용권 목록을 잠시 볼 수 없어요",
-  unavailable: "지금은 이용권 목록을 불러오지 못했어요. 만든 작업은 그대로 있으니 잠시 뒤에 다시 열어 주세요.",
-  orderFailed: "주문을 만들지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.",
-  badCheckout: "결제 페이지 주소가 이상해서 열지 않았어요. 앱을 업데이트하고 다시 해 주세요.",
   waiting: "결제를 마치면 이 화면이 저절로 바뀌어요.",
   confirming: "결제를 확인하고 있어요. 잠시만 기다려 주세요.",
   connecting: "결제를 확인했어요. 이용권을 넣고 있어요.",
   failed: "결제하지 못했어요. 카드에서 돈이 나가지 않았어요.",
   expired: "주문 시간이 지났어요. 결제하지 않았다면 다시 시작하면 돼요.",
-  refunded: "환불한 주문이에요. 다시 쓰려면 새로 구매하면 돼요.",
+  refunded: "환불한 주문이에요. 이 주문으로는 이용권을 넣지 않아요.",
   claimFailed: "결제는 확인했는데 이용권을 넣지 못했어요. 다시 연결을 눌러 주세요. 결제 내역은 그대로 있어요.",
   cancelled: "구매를 멈췄어요. 이미 결제했다면 다시 연결을 눌러 주세요.",
   unfinished: "결제한 이용권을 아직 넣지 못했어요. 다시 연결을 눌러 주세요.",
-  /** Login at purchase: the lead above the Google button, and the Service's `account_required`. */
-  signInFirst: "이용권을 사려면 Google로 로그인해 주세요.",
-  /** Login at purchase, but no account sign-in on this build or Service: calm, no checkout. */
-  loginUnavailable: "결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.",
 } as const;
 
 const ORDER_ID = /^ord_[0-9a-f]{32}$/;
@@ -182,21 +150,6 @@ export async function readCatalogue(proxyUrl: string, signal?: AbortSignal): Pro
   } catch { return "unreadable"; }
 }
 
-/**
- * `freeCredential` (SPEC iteration 4 §1.6/§2.5): the free seat's participant token, sent only as
- * `x-hps-free-credential` so the Service can link this order to the free start it came from. The
- * Service ignores a bad value; the token never reaches a webview or the checkout page.
- */
-export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string, freeCredential?: string): Promise<PendingOrder | "bad_checkout" | "account_required" | null> {
-  try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}), ...(freeCredential ? { "x-hps-free-credential": freeCredential } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
-    if (r.status === 201) return parseOrder(await r.json(), productId, proxyUrl, siteBase);
-    // Login at purchase (Service HPS_PURCHASE_ACCOUNT_REQUIRED): the order needs a Google account.
-    if (r.status === 401) { const body: unknown = await r.json().catch(() => null); if (isRecord(body) && body.error === "account_required") return "account_required"; }
-    return null;
-  } catch { return null; }
-}
-
 const secretHeader = (order: PendingOrder) => ({ "x-hps-order-secret": order.secret });
 
 /** `null` means the Service could not be read this time; keep waiting. */
@@ -256,9 +209,12 @@ export function passFacts(product: PassProduct): string {
 /** The pass a buyer sees selected first: the one the Service suggests, else the first. */
 export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];
 
-/** What a person reads when a bought pass has no requests left. 해요체 like the rest of the purchase copy. */
+/**
+ * What a person reads when a bought pass has no requests left. 해요체 like the rest of the purchase
+ * copy. No way to buy again is named: passes are not sold (2026-11-11).
+ */
 export const PASS_SPENT_FRIENDLY =
-  "이용권의 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
+  "이용권의 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
 
 /**
  * A turn that ended because the pass is spent. The SDK host sees only text: the Service's 429
@@ -332,35 +288,12 @@ export function freeDailyCapReached(err: unknown): boolean {
 /** Trial endings in 해요체, like the purchase copy. The files stay (CU-14); nothing is charged or opened. */
 export const TRIAL_EXHAUSTED_FRIENDLY = "체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
 export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
-/** The way on, named only when the Service sells passes. The person chooses it; it is never opened for them. */
-export const TRIAL_PASS_POINTER_CHAT = "계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
-export const TRIAL_PASS_POINTER_START = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
-
-/** `refillPending`: a free seat whose next daily allowance is still ahead (`freeRefillPending`). */
-export function trialEndNotice(ending: TrialEnding, passesSold: boolean, free = false, refillPending = false): string {
-  const said = free
+/**
+ * `refillPending`: a free seat whose next daily allowance is still ahead (`freeRefillPending`).
+ * No pass is named: passes are not sold and the app has no purchase view (2026-11-13).
+ */
+export function trialEndNotice(ending: TrialEnding, free = false, refillPending = false): string {
+  return free
     ? (refillPending ? FREE_REFILL_NOTICE : ending === "exhausted" ? FREE_EXHAUSTED_FRIENDLY : FREE_EXPIRED_FRIENDLY)
     : (ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY);
-  return passesSold ? `${said} ${TRIAL_PASS_POINTER_CHAT}` : said;
-}
-
-/** The start page's error line after a trial expired: the pointer is added only while passes are sold. */
-export function withTrialPassPointer(error: string | undefined, passesSold: boolean): string | undefined {
-  return (error === TRIAL_EXPIRED_FRIENDLY || error === FREE_EXPIRED_FRIENDLY) && passesSold ? `${error} ${TRIAL_PASS_POINTER_START}` : error;
-}
-
-/**
- * Whether the Service sells passes right now: one unauthenticated catalogue read, bounded so a
- * slow Service never holds back the notice. Unknown counts as not sold, so no dead pointer is shown.
- */
-export async function passesOnSale(proxyUrl: string, timeoutMs = 3000): Promise<boolean> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const products = await Promise.race([
-      fetchProducts(proxyUrl, ctrl.signal),
-      new Promise<null>((resolve) => ctrl.signal.addEventListener("abort", () => resolve(null), { once: true })),
-    ]);
-    return !!products?.length;
-  } finally { clearTimeout(timer); }
 }

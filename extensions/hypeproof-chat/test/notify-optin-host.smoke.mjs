@@ -152,31 +152,17 @@ const quiet = { log: console.log, error: console.error, warn: console.warn, info
 test.beforeEach(() => { logged.length = 0; for (const k of Object.keys(quiet)) console[k] = (...a) => { logged.push(a.map(String).join(' ')); }; });
 test.afterEach(() => { Object.assign(console, quiet); });
 
-test('positive: a free seat whose Service advertises it gets the optional section below the pass offer', async () => {
+// 2026-11-13 (REQ-L12 ①–④ removed): the optional email section lived on the end-of-trial pass card,
+// which the host no longer draws. Even a seat whose Service advertises it ends in the calm notice:
+// no card, no email form, nothing sent to the opt-in route. The submit path below is unchanged.
+test('an advertised seat gets no end card and so no email section (the pass card is gone)', async () => {
   for (const err of [EXHAUSTED, EXPIRED]) {
     const r = await endCard(err, freeSeat());
     assert.equal(r.posts.length, 1);
-    const card = r.posts[0].trialEndCard;
-    assert.ok(card, 'the end card itself is drawn');
-    assert.equal(card.primary, '이용권 살펴보기', 'the pass offer stays the Primary');
-    assert.equal(card.notify.consentVersion, CONSENT);
-    assert.equal(card.notify.submitted, false);
-    assert.equal(card.notify.prompt, '새 기능과 할인 소식을 이메일로 받아 볼래요? (선택)');
-    assert.equal(card.notify.button, '받기');
-    assert.match(card.notify.consent, /수집 항목: 이메일 · 목적: 서비스·할인 소식 안내 · 보관: 수신 거부 또는 1년 뒤 삭제/);
-    assert.ok(!card.text.includes(card.notify.prompt), 'the banner text stays the pass facts only');
-    // Drawing the card sends nothing to the opt-in route.
-    assert.ok(r.requests.every((q) => q.url === '/v1/purchase/products'));
+    assert.equal(r.posts[0].trialEndCard, undefined, 'no end card');
+    assert.ok(!JSON.stringify(r.posts).includes('이메일로 받아'));
+    assert.ok(r.requests.every((q) => q.url !== '/v1/free/notify-optin' && q.url !== '/v1/purchase/products'));
   }
-  // A seat that already submitted gets the done line, not the empty form.
-  const flagged = memento();
-  const svc = await service(defaultService);
-  try {
-    const h = host({ globalState: flagged, svcUrl: svc.url });
-    await ChatPanelProvider.prototype.handleNotifyOptin.call(h.self, EMAIL);
-  } finally { await svc.close(); }
-  const again = await endCard(EXHAUSTED, freeSeat(), flagged);
-  assert.equal(again.posts[0].trialEndCard.notify.submitted, true);
 });
 
 test('negative controls: not advertised, available:false, code-issued trial, pass seat, mid-work', async () => {

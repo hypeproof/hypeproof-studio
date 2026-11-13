@@ -94,6 +94,27 @@
 .ri-results li .ri-who{font-family:var(--ds-c-chalk-console-font-10)}
 .ri-count{font-size:var(--ds-c-chalk-console-type-2);color:var(--hp-text)}
 </style>
+<style>
+/* CGP-SHELL-R-003 / CGP-SHELL-D-002 (DES-SHELL-02) — cohort Studio update freeze. The badge on the cohort row is amber
+   text with a lock icon and a 1px edge in the same colour (icon + words, never colour alone). Controls keep the 44px
+   floor; text is 14px or more. Logical properties only. */
+.freeze-badge{display:inline-flex;align-items:center;gap:var(--ds-c-chalk-console-space-15);margin-inline-start:var(--ds-c-chalk-console-space-2);padding-block:var(--ds-c-chalk-console-space-14);padding-inline:var(--ds-c-chalk-console-space-2);border:var(--ds-c-chalk-console-size-3) solid currentColor;border-radius:var(--ds-c-chalk-console-radius-3);color:var(--hp-warn);font-size:var(--ds-c-chalk-console-type-17);font-weight:var(--ds-c-chalk-console-typography-7);letter-spacing:normal;text-transform:none;white-space:nowrap;vertical-align:middle}
+.freeze-badge svg,.freeze-security svg{inline-size:var(--ds-c-chalk-list-icon-size);block-size:var(--ds-c-chalk-list-icon-size);flex:none}
+.freeze-security svg{margin-block-start:var(--ds-c-chalk-console-size-7)}
+.freeze{margin-block-start:var(--ds-c-chalk-console-space-1);padding-block-start:var(--ds-c-chalk-console-space-1);border-block-start:var(--ds-c-chalk-console-size-3) solid var(--hp-line)}
+.freeze h3{margin-block:0 var(--ds-c-chalk-console-space-13);margin-inline:0;font-size:var(--ds-c-chalk-console-type-2);color:var(--hp-text)}
+.freeze p{margin-block:var(--ds-c-chalk-console-space-13);margin-inline:0;font-size:var(--ds-c-chalk-console-type-17);color:var(--hp-text-2)}
+.freeze .freeze-dates{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-2)}
+.freeze .freeze-dates>div{flex:1 1 20ch;min-inline-size:0}
+.freeze label{margin-block:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-13);margin-inline:0;font-size:var(--ds-c-chalk-console-type-17);color:var(--hp-text)}
+.freeze input[type=date]{min-block-size:var(--ds-c-chalk-console-size-8);font-size:var(--ds-c-chalk-console-type-17);color-scheme:dark}
+.freeze .freeze-actions{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-2)}
+.freeze .freeze-actions button{inline-size:auto;flex:1 1 24ch;min-block-size:var(--ds-c-chalk-console-size-8)}
+.freeze .freeze-range{color:var(--hp-text)}
+.freeze .freeze-msg:empty{display:none}
+.freeze .freeze-msg.err{color:var(--hp-alert)}
+.freeze-security{display:flex;align-items:flex-start;gap:var(--ds-c-chalk-console-space-15);color:var(--hp-text)!important}
+</style>
 </head>
 <body>
 <style>/* Instructor flow bar — the same three stages as /manage (docs/requirements/classroom-design.md · 강사 화면 공통 동선). Scoped so the page's own styles stay as they were. */.hp-flowbar{box-sizing:border-box;max-width:var(--ds-c-chalk-console-size-97);margin-left:auto!important;margin-right:auto!important;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-15) var(--ds-c-chalk-console-space-4);padding:var(--ds-c-chalk-console-space-2) var(--ds-c-chalk-console-space-20);margin:0 0 var(--ds-c-chalk-console-space-5);background:var(--ds-c-chalk-console-surface-82);border:var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-58);border-radius:var(--ds-c-chalk-console-radius-9);font:var(--ds-c-chalk-console-typography-27);color:var(--ds-c-chalk-console-ink-40);color-scheme:dark}.hp-flowbar .hp-home{font-size:var(--ds-c-chalk-console-type-17);color:var(--ds-c-chalk-console-ink-56);text-decoration:none}.hp-flowbar nav{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-13) var(--ds-c-chalk-console-space-15)}.hp-flowbar .hp-step{display:flex;align-items:center;flex-wrap:wrap;gap:var(--ds-c-chalk-console-space-14);padding-right:var(--ds-c-chalk-console-space-2);border-right:var(--ds-c-chalk-console-size-3) solid var(--ds-c-chalk-console-boundary-58)}.hp-flowbar .hp-step:last-child{border-right:0}.hp-flowbar .hp-label{font-size:var(--ds-c-chalk-console-type-17);color:var(--ds-c-chalk-console-ink-56);padding:0 var(--ds-c-chalk-console-space-15) 0 var(--ds-c-chalk-console-space-2);white-space:nowrap}.hp-flowbar nav a{font-size:var(--ds-c-chalk-console-type-2);font-weight:var(--ds-c-chalk-console-typography-12);display:inline-flex;align-items:center;min-height:var(--ds-c-chalk-console-size-8);padding:0 var(--ds-c-chalk-console-space-7);border-radius:var(--ds-c-chalk-console-radius-1);color:var(--ds-c-chalk-console-ink-40);text-decoration:none;white-space:nowrap}.hp-flowbar nav a:hover{background:var(--hp-state-hover);text-decoration:underline}.hp-flowbar nav a:focus-visible,.hp-flowbar .hp-home:focus-visible{outline:var(--ds-c-chalk-console-size-15) solid var(--ds-c-chalk-console-boundary-6);outline-offset:var(--ds-c-chalk-console-size-7)}.hp-flowbar nav a[aria-current="page"]{background:var(--ds-c-chalk-console-surface-83);box-shadow:inset 0 var(--ds-c-chalk-console-shadow-19) 0 var(--ds-c-chalk-console-shadow-20);font-weight:var(--ds-c-chalk-console-typography-7)}@media(max-width:620px){.hp-flowbar nav{flex:1 1 100%;min-width:0;flex-wrap:nowrap;overflow-x:auto;max-width:100%}.hp-flowbar .hp-step{flex-wrap:nowrap}}</style><style>
@@ -134,11 +155,9 @@ label small{color:var(--hp-mute)}
   <div class="sub">강사 연결 후 담당 수업을 선택하세요.</div>
 
   <fieldset>
-    <legend>강사 연결 코드</legend>
-    <textarea id="issuer" rows="3" placeholder="eyJjIgi… (Jay에게 받은 강사 토큰)"></textarea>
-    <button id="load">담당 수업 불러오기</button>
-    <button class="ghost" id="forget" type="button">토큰 지우기</button>
-    <div class="help">운영자에게 받은 강사 코드를 입력하세요.</div>
+    <legend>강사 연결</legend>
+    <!--@chalk-connect-->
+    <button id="load" type="button">담당 수업 불러오기</button>
   </fieldset>
 
   <div id="tokenBanner"></div>
@@ -152,20 +171,6 @@ label small{color:var(--hp-mute)}
 const rosterCsv = rosterCsvKit;
 const $ = (id) => document.getElementById(id);
 
-// --- shared with /issuer (issue #65): paste normalization -------------------
-const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-function sanitizeToken(raw) {
-  if (typeof raw !== "string") return "";
-  let s = raw.replace(/\s+/g, "");
-  s = s.replace(/[​-‍﻿⁠]/g, "");
-  for (let i = 0; i < 8; i++) {
-    const before = s;
-    s = s.replace(/^["'`,\[\]\{\}\s]+/, "").replace(/["'`,\[\]\{\}\s]+$/, "");
-    if (s === before) break;
-  }
-  return s;
-}
-
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -174,54 +179,31 @@ function esc(s) {
 
 function mapServerError(raw) {
   const e = String(raw || "").toLowerCase();
-  if (e.includes("expired")) return "issuer 토큰이 만료됐어요. Jay에게 재발급 요청해주세요.";
-  if (e.includes("revoked")) return "이 토큰은 무효화됐어요. Jay에게 새 토큰 요청해주세요.";
-  if (e.includes("not an issuer")) return "학생 토큰을 붙여넣으신 듯해요. Jay에게 받은 강사(issuer) 토큰이 필요해요.";
-  if (e.includes("can_start_session")) return "이 토큰에는 세션 시작 권한이 없어요. 구버전 토큰일 수 있어요 — Jay에게 재발급 요청해주세요. (오늘 겪은 그 403이 이거예요)";
-  if (e.includes("not scoped")) return "이 토큰의 권한 범위 밖 cohort예요. Jay에게 스코프 추가를 요청해주세요.";
-  if (e.includes("invalid signature") || e.includes("malformed")) return "토큰이 손상되었거나 잘못 복사됐어요. 따옴표·콤마·공백 없이 다시 붙여넣어 주세요.";
+  // Chalk's own connection refusals are already Korean and actionable.
+  if (/연결/.test(e)) return String(raw);
+  if (e.includes("expired")) return "강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.";
+  if (e.includes("revoked")) return "이 강사 연결은 무효화됐어요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("not an issuer")) return "강사 권한이 아닌 연결이에요. ‘다시 연결’을 눌러주세요.";
+  if (e.includes("can_start_session")) return "이 연결에는 세션 시작 권한이 없어요. 운영진에게 알려주세요.";
+  if (e.includes("not scoped")) return "연결할 때 이 수업을 고르지 않았어요. ‘다시 연결’에서 이 수업을 골라주세요.";
+  if (e.includes("invalid signature") || e.includes("malformed")) return "강사 연결 정보를 확인하지 못했어요. ‘다시 연결’을 눌러주세요.";
   if (e.includes("exceeds") && e.includes("max")) return "본인 권한의 최대 시간을 초과했어요. 시간을 줄여주세요.";
   return "오류: " + raw;
 }
 
-// Decode the payload half of a v2 token (base64url JSON). Display-only — the
-// server re-verifies everything; this never gates an action.
-function decodePayload(tok) {
-  try {
-    const b64 = tok.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64 + "===".slice((b64.length + 3) % 4);
-    return JSON.parse(decodeURIComponent(escape(atob(pad))));
-  } catch { return null; }
-}
-
-// Token via URL fragment (#t=…) → prefill once, then scrub the URL so the
-// token doesn't linger in the address bar / browser history UI.
-(function () {
-  const m = /[#&]t=([^&]+)/.exec(location.hash || "");
-  if (m) {
-    $("issuer").value = sanitizeToken(decodeURIComponent(m[1]));
-    history.replaceState(null, "", location.pathname);
-  }
-})();
-
-// Persist in sessionStorage only (tab-scoped), same policy as /issuer.
-const KEY = "hps_issuer_token";
-if (!$("issuer").value && sessionStorage.getItem(KEY)) $("issuer").value = sessionStorage.getItem(KEY);
-
-$("forget").onclick = () => {
-  sessionStorage.removeItem(KEY);
-  $("issuer").value = "";
-  $("tokenBanner").innerHTML = $("cohorts").innerHTML = $("minter").innerHTML = "";
-};
+// Clearing the Lab connection clears what was loaded with it.
+globalThis.chalkConnection?.onChange((c) => {
+  if (!c.connected) $("tokenBanner").innerHTML = $("cohorts").innerHTML = $("minter").innerHTML = "";
+});
 
 let countdownTimer = null;
 let distributionTargets = [];
 
+// No Authorization header: Chalk takes the issuer from the Lab login session.
 async function api(path, opts) {
-  const issuer = sanitizeToken($("issuer").value);
   const res = await fetch(path, {
     ...opts,
-    headers: { "Authorization": "Bearer " + issuer, "content-type": "application/json", ...(opts && opts.headers) },
+    headers: { "content-type": "application/json", ...(opts && opts.headers) },
   });
   const body = await res.json().catch(() => ({}));
   // Chalk's own upstream errors are objects ({type, message}); show the message, not [object Object].
@@ -232,33 +214,27 @@ async function api(path, opts) {
 
 $("load").onclick = load;
 async function load() {
-  const issuer = sanitizeToken($("issuer").value);
-  $("issuer").value = issuer;
   const banner = $("tokenBanner");
   banner.innerHTML = ""; $("cohorts").innerHTML = ""; $("minter").innerHTML = "";
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 
-  if (!issuer) return (banner.innerHTML = '<div class="banner err">issuer 토큰을 입력해주세요.</div>');
-  if (!TOKEN_SHAPE.test(issuer)) {
-    return (banner.innerHTML = '<div class="banner err">토큰 형식이 잘못됐어요. eyJj… 로 시작하고 점(.)이 1개인 한 줄이어야 해요.</div>');
+  // The connection status carries what the page used to decode from a pasted token:
+  // the handle, the expiry and the scope list. The Service still checks every call.
+  const conn = await (globalThis.chalkConnection?.refresh() ?? { connected: false });
+  if (!conn.connected) {
+    return (banner.innerHTML = '<div class="banner err">' + (conn.expired
+      ? '강사 연결이 만료됐어요. 위의 ‘다시 연결’을 눌러주세요.'
+      : '위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.') + '</div>');
   }
-  const payload = decodePayload(issuer);
-  if (!payload || payload.role !== "issuer") {
-    return (banner.innerHTML = '<div class="banner err">강사(issuer) 토큰이 아니에요. 학생 토큰을 붙여넣으신 듯해요.</div>');
-  }
-  sessionStorage.setItem(KEY, issuer);
+  const payload = { u: conn.member && conn.member.name, exp: Math.floor(Date.parse(conn.expires_at) / 1000), scopes: conn.scopes };
 
-  // Expiry banner — surfaces the "stale token" failure the moment the page
+  // Expiry banner — surfaces the "stale connection" failure the moment the page
   // opens, not as a 403 mid-lecture.
   const expMs = (payload.exp || 0) * 1000;
-  const daysLeft = Math.floor((expMs - Date.now()) / 86400000);
-  if (expMs && expMs < Date.now()) {
-    banner.innerHTML = '<div class="banner err">이 토큰은 <b>만료</b>됐어요 (' + esc(new Date(expMs).toLocaleDateString()) + '). Jay에게 재발급 요청해주세요.</div>';
-    return;
-  }
-  banner.innerHTML = '<div class="banner ' + (daysLeft <= 7 ? "warn" : "ok") + '">' +
-    esc(payload.u || "강사") + ' · 토큰 유효: ' + esc(new Date(expMs).toLocaleDateString()) + '까지' +
-    (daysLeft <= 7 ? ' — <b>만료 ' + daysLeft + '일 전!</b> 미리 Jay에게 재발급 요청해두세요.' : '') + '</div>';
+  const soon = expMs - Date.now() < 2 * 3600000;
+  banner.innerHTML = '<div class="banner ' + (soon ? "warn" : "ok") + '">' +
+    esc(payload.u || "강사") + ' · 연결 유효: ' + esc(new Date(expMs).toLocaleString()) + '까지' +
+    (soon ? ' — <b>곧 만료됩니다.</b> 수업 전에 ‘다시 연결’을 눌러두세요.' : '') + '</div>';
 
   distributionTargets = [];
   try {
@@ -292,7 +268,7 @@ async function renderCohort(scope) {
   const maxH = state.scope ? state.scope.max_session_hours : 4;
   let html = '<legend>② 세션 — ' + esc(scope.cohort) + '</legend>';
   if (state.paused) html += '<div class="banner warn">⚠ 이 cohort는 일시정지(pause) 상태예요 — 세션을 열어도 학생 채팅이 차단됩니다. Jay 확인 필요.</div>';
-  if (!canStart) html += '<div class="banner warn">이 토큰엔 세션 시작 권한이 없어요 (조회·토큰 발급만 가능). 구버전 토큰이면 Jay에게 재발급 요청.</div>';
+  if (!canStart) html += '<div class="banner warn">이 강사 연결엔 세션 시작 권한이 없어요 (조회·토큰 발급만 가능). 운영진에게 알려주세요.</div>';
 
   const live = state.session && Date.parse(state.session.ends_at) > Date.now();
   for (const p of state.profiles) {
@@ -316,7 +292,10 @@ async function renderCohort(scope) {
     html += '<div class="banner warn">지금 열려 있는 세션(' + esc(state.session.profile_id) + ')은 이 토큰의 트랙 범위 밖이에요.</div>';
   }
   html += '<div class="help">참가자 ' + state.roster_size + '명 등록됨 · 한 cohort에 세션은 동시에 1개 — 다른 트랙을 열면 기존 세션이 닫혀요.</div>';
+  html += freezeSection(scope.cohort, state.update_freeze, canStart);
   wrap.innerHTML = html;
+  setLegendBadge(wrap, scope.cohort, state.update_freeze);
+  wireFreeze(wrap, scope.cohort, state.update_freeze);
 
   wrap.querySelectorAll("[data-open]").forEach((btn) => {
     btn.onclick = async () => {
@@ -352,6 +331,128 @@ async function renderCohort(scope) {
   renderRosterImport(scope);
   renderMinter(scope, state);
   renderLabTokens(scope);
+}
+
+// ---- CGP-SHELL-R-003 / CGP-SHELL-D-002 — the cohort's Studio update freeze ----------------------------------------
+// The Service stores one range per cohort (PUT/DELETE /admin/cohorts/:id/update-freeze, can_start_session) and serves it
+// to the cohort's classroom seats; Studio hides the update banner inside it unless the release is security-critical.
+// Dates are Korea calendar days. The state read already carries update_freeze (null when missing or ended).
+const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const SHIELD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>';
+const FREEZE_MAX_DAYS = 60;
+const kstToday = (offsetDays = 0) => new Date(Date.now() + 9 * 3600000 + offsetDays * 86400000).toISOString().slice(0, 10);
+const md = (day) => { const [, m, d] = String(day).split('-').map(Number); return m + '/' + d; };
+const koDay = (day) => { const [, m, d] = String(day).split('-').map(Number); return m + '월 ' + d + '일'; };
+const dayCount = (from, until) => Math.round((Date.parse(until + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1;
+const freezeStarted = (f) => !!f && Date.parse(f.starts_at) <= Date.now();
+/** Badge words: "업데이트 고정 ~10/31" while it runs, "업데이트 고정 예정 11/20~11/30" before it starts. */
+function freezeBadgeText(f) {
+  return freezeStarted(f) ? '업데이트 고정 ~' + md(f.until) : '업데이트 고정 예정 ' + md(f.from) + '~' + md(f.until);
+}
+function freezeRangeText(from, until) {
+  if (!from || !until) return '시작일과 마지막 날을 고르세요.';
+  const n = dayCount(from, until);
+  if (!(n >= 1)) return '마지막 날이 시작일보다 앞이에요.';
+  return '고정 기간: ' + koDay(from) + '부터 ' + koDay(until) + '까지 (' + n + '일)' + (n > FREEZE_MAX_DAYS ? ' — 최대 ' + FREEZE_MAX_DAYS + '일까지 고정할 수 있어요.' : '');
+}
+function setLegendBadge(wrap, cohort, f) {
+  const legend = wrap.querySelector('legend');
+  if (!legend) return;
+  legend.textContent = '② 세션 — ' + cohort;
+  if (!f) return;
+  const badge = document.createElement('span');
+  badge.className = 'freeze-badge';
+  badge.dataset.freezeBadge = cohort;
+  badge.innerHTML = LOCK_SVG + '<span>' + esc(freezeBadgeText(f)) + '</span>';
+  legend.appendChild(badge);
+}
+function freezeSection(cohort, f, canStart) {
+  const id = 'fz-' + cohort.replace(/[^A-Za-z0-9_-]/g, '_');
+  const from = f ? f.from : kstToday(0);
+  const until = f ? f.until : '';
+  let html = '<div class="freeze" role="group" aria-labelledby="' + id + '-title" data-freeze="' + esc(cohort) + '">' +
+    '<h3 id="' + id + '-title">Studio 업데이트 고정</h3>' +
+    '<p>정한 기간에는 이 수업 학생들의 Studio에 업데이트 안내가 뜨지 않아요. 날짜는 한국 시간 기준이고, 최대 ' + FREEZE_MAX_DAYS + '일까지예요. 보안 업데이트는 고정과 상관없이 안내돼요.</p>' +
+    '<p class="freeze-security" data-freeze-security hidden></p>';
+  if (f) html += '<p class="freeze-now" data-freeze-now>' + (freezeStarted(f) ? '지금 고정 중: ' : '고정 예정: ') + esc(koDay(f.from)) + '부터 ' + esc(koDay(f.until)) + '까지' + (f.set_by ? ' · ' + esc(f.set_by) + ' 선생님이 정함' : '') + '</p>';
+  if (!canStart) return html + '<p>이 강사 연결엔 세션 시작 권한이 없어서 고정을 바꿀 수 없어요.</p></div>';
+  html += '<div class="freeze-dates">' +
+      '<div><label for="' + id + '-from">시작일</label><input type="date" id="' + id + '-from" data-freeze-from value="' + esc(from) + '" min="' + esc(f && f.from < kstToday(0) ? f.from : kstToday(0)) + '" aria-describedby="' + id + '-range"></div>' +
+      '<div><label for="' + id + '-until">마지막 날</label><input type="date" id="' + id + '-until" data-freeze-until value="' + esc(until) + '" min="' + esc(kstToday(0)) + '" aria-describedby="' + id + '-range"></div>' +
+    '</div>' +
+    '<p class="freeze-range" id="' + id + '-range" data-freeze-range aria-live="polite">' + esc(freezeRangeText(from, until)) + '</p>' +
+    '<div class="freeze-actions"><button type="button" data-freeze-save>' + (f ? '고정 기간 바꾸기' : '업데이트 고정하기') + '</button>' +
+    (f ? '<button type="button" class="ghost" data-freeze-clear>고정 풀기</button>' : '') + '</div>' +
+    '<p class="freeze-msg" data-freeze-msg role="status"></p>';
+  return html + '</div>';
+}
+const FREEZE_REASONS = {
+  freeze_invalid_date: '날짜를 확인해 주세요.',
+  freeze_range_reversed: '마지막 날이 시작일보다 앞이에요.',
+  freeze_range_past: '마지막 날이 이미 지났어요. 오늘이나 그 뒤로 골라 주세요.',
+  freeze_range_too_long: '최대 ' + FREEZE_MAX_DAYS + '일까지 고정할 수 있어요.',
+};
+async function freezeRequest(cohort, method, body) {
+  const res = await fetch('/admin/cohorts/' + encodeURIComponent(cohort) + '/update-freeze', {
+    method, headers: { 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) return data;
+  const e = data.error;
+  throw new Error(FREEZE_REASONS[data.reason] || mapServerError((typeof e === 'string' ? e : e && e.message) || ('HTTP ' + res.status)));
+}
+let latestReleaseRead = null;
+async function showSecurityLabel(box) {
+  const line = box.querySelector('[data-freeze-security]');
+  if (!line) return;
+  latestReleaseRead ??= fetch('/studio/latest-release').then(r => r.ok ? r.json() : null).catch(() => null);
+  const latest = await latestReleaseRead;
+  if (!latest || latest.security_critical !== true || typeof latest.version !== 'string') return;
+  line.innerHTML = SHIELD_SVG + '<span>최신 Studio v' + esc(latest.version) + '는 보안 업데이트예요. 업데이트 고정 중에도 학생에게 안내돼요.</span>';
+  line.hidden = false;
+}
+function wireFreeze(wrap, cohort, f) {
+  const box = wrap.querySelector('[data-freeze]');
+  if (!box) return;
+  // The latest release is read only while a freeze exists: that is when its security label changes what students see.
+  if (f) void showSecurityLabel(box);
+  const from = box.querySelector('[data-freeze-from]'), until = box.querySelector('[data-freeze-until]');
+  const range = box.querySelector('[data-freeze-range]'), msg = box.querySelector('[data-freeze-msg]');
+  if (!from || !until) return;
+  const update = () => { range.textContent = freezeRangeText(from.value, until.value); };
+  from.addEventListener('input', update); until.addEventListener('input', update);
+  from.addEventListener('change', update); until.addEventListener('change', update);
+  const busy = (on) => box.querySelectorAll('button').forEach(b => { b.disabled = on; });
+  const done = async (text) => {
+    const state = await api('/admin/cohorts/' + encodeURIComponent(cohort) + '/state', { method: 'GET' }).catch(() => null);
+    const next = state ? state.update_freeze : null;
+    const fresh = document.createElement('div');
+    fresh.innerHTML = freezeSection(cohort, next, true);
+    box.replaceWith(fresh.firstChild);
+    setLegendBadge(wrap, cohort, next);
+    wireFreeze(wrap, cohort, next);
+    const m = wrap.querySelector('[data-freeze-msg]');
+    if (m) m.textContent = text;
+  };
+  box.querySelector('[data-freeze-save]').onclick = async () => {
+    msg.className = 'freeze-msg'; msg.textContent = '';
+    const n = dayCount(from.value, until.value);
+    if (!from.value || !until.value) { msg.className = 'freeze-msg err'; msg.textContent = '시작일과 마지막 날을 모두 고르세요.'; return; }
+    if (!(n >= 1)) { msg.className = 'freeze-msg err'; msg.textContent = FREEZE_REASONS.freeze_range_reversed; return; }
+    if (n > FREEZE_MAX_DAYS) { msg.className = 'freeze-msg err'; msg.textContent = FREEZE_REASONS.freeze_range_too_long; return; }
+    busy(true);
+    try {
+      const saved = await freezeRequest(cohort, 'PUT', { from: from.value, until: until.value });
+      const v = saved.update_freeze;
+      await done('저장했어요. ' + koDay(v.from) + '부터 ' + koDay(v.until) + '까지 이 수업 학생들의 Studio 업데이트를 고정해요. 학생 화면에는 1분쯤 뒤에 반영돼요.');
+    } catch (err) { busy(false); msg.className = 'freeze-msg err'; msg.textContent = err.message; }
+  };
+  const clear = box.querySelector('[data-freeze-clear]');
+  if (clear) clear.onclick = async () => {
+    busy(true);
+    try { await freezeRequest(cohort, 'DELETE'); await done('고정을 풀었어요. 학생 Studio에 업데이트 안내가 다시 뜰 수 있어요.'); }
+    catch (err) { busy(false); msg.className = 'freeze-msg err'; msg.textContent = err.message; }
+  };
 }
 
 function startCountdowns() {
@@ -559,7 +660,7 @@ function renderRosterImport(scope) {
     try {
       const res = await fetch("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
         method: "POST",
-        headers: { "Authorization": "Bearer " + sanitizeToken($("issuer").value), "content-type": "application/json" },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(rosterCsv.requestBody(handles)),
       });
       answer = { status: res.status, body: await res.json().catch(() => null) };
@@ -625,13 +726,8 @@ function renderLabTokens(scope) {
   };
 }
 
-// Auto-load when a token is already present (fragment link or sessionStorage).
-if ($("issuer").value) load();
-
-// Expose pure helpers for the Node test harness (window undefined there).
-if (typeof window === "undefined") {
-  (globalThis).__consolePageHelpers = { sanitizeToken, mapServerError, decodePayload, TOKEN_SHAPE };
-}
+// Auto-load when the Lab connection is already there.
+globalThis.chalkConnection?.ready.then((c) => { if (c.connected) load(); });
 </script>
 <style>
 html:root,body{background:var(--ds-c-chalk-console-surface-87)!important;color:var(--ds-c-chalk-console-ink-66);min-height:100vh}body{margin:0!important}body>.wrap,body>header,body>main{width:min(100%,var(--ds-c-chalk-console-size-97));margin-inline:auto;padding:var(--ds-c-chalk-console-space-5)}

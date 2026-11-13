@@ -106,9 +106,22 @@ try {
     await guidance("parent is a file", path.join(home, "pfile", "Class"));
     fs.symlinkSync(path.join(home, "gone"), path.join(home, "plink"));
     await guidance("parent is a dangling link", path.join(home, "plink", "Class"));
-    fs.mkdirSync(path.join(home, "pro")); fs.chmodSync(path.join(home, "pro"), 0o500);
-    if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(home, "pro", "Class"));
-    fs.chmodSync(path.join(home, "pro"), 0o700);
+    const protectedDir = path.join(home, "pro"); fs.mkdirSync(protectedDir);
+    if (process.platform === "win32") {
+      // Windows chmod cannot model a read-only directory, and the hosted runner is privileged.
+      // Inject the filesystem denial for the guidance contract; this is not a native ACL acceptance test.
+      const mkdir = fs.mkdirSync;
+      fs.mkdirSync = (target, ...args) => {
+        if (String(target).startsWith(protectedDir + path.sep)) throw Object.assign(new Error("fixture access denied"), { code: "EACCES" });
+        return mkdir(target, ...args);
+      };
+      try { await guidance("injected write denial", path.join(protectedDir, "Class")); }
+      finally { fs.mkdirSync = mkdir; }
+    } else {
+      fs.chmodSync(protectedDir, 0o500);
+      try { if (process.getuid?.() !== 0) await guidance("read-only parent", path.join(protectedDir, "Class")); }
+      finally { fs.chmodSync(protectedDir, 0o700); }
+    }
     // N9: two windows open the same empty folder; the loser (busy lock or FOLDER_TAKEN) must not remove the winner's folder.
     {
       const race = path.join(home, "RaceFolder");
@@ -209,7 +222,7 @@ try {
   }
 
   // 2. The real call site.
-  const ext = fs.readFileSync(path.join(here, "../src/extension.ts"), "utf8");
+  const ext = fs.readFileSync(path.join(here, "../src/extension.ts"), "utf8").replace(/\r\n/g, "\n");
   const site = ext.slice(ext.indexOf("async function openWorkspaceFolder("));
   const siteBody = site.slice(0, site.indexOf("\n}\n"));
   assert.ok(siteBody.indexOf("createdFolder = createStudioFolder(dir);") > 0
@@ -236,7 +249,7 @@ try {
   assert.deepEqual([...fs.readFileSync(patch, "utf8").matchAll(/^diff --git a\/(\S+) /gm)].map((m) => m[1]), [PURE_REL, REL]);
   run("git", ["apply", "--check", "--ignore-whitespace", patch], tree); // prepare_vscode.sh's apply_patch flags
   run("git", ["apply", patch], tree);
-  const patched = fs.readFileSync(path.join(tree, REL), "utf8");
+  const patched = fs.readFileSync(path.join(tree, REL), "utf8").replace(/\r\n/g, "\n");
   assert.equal(patched.split("this.isHpsStudioCreatedFolder(uri)").length, 2, "one trust hook, inside doGetUriTrustInfo");
   const hookAt = patched.indexOf("this.isHpsStudioCreatedFolder(uri)");
   assert.ok(hookAt > patched.indexOf("private doGetUriTrustInfo(") && hookAt < patched.indexOf("let resultState = false;"));

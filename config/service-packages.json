@@ -13,9 +13,9 @@
       "sha256": "a43c6c62fdbc212df3f14f6ed3be33a522c091d80697062ee87e3ba298b0bed6"
     },
     {
-      "asset": "hypeproof-service-contracts-0.1.1.tgz",
-      "tag": "service-contracts-v0.1.1",
-      "sha256": "d1ba4928e81401f8d716193f6dd381378f076cca82196cab14bfb66720b4dadc"
+      "asset": "hypeproof-service-contracts-0.1.5.tgz",
+      "tag": "service-contracts-v0.1.5",
+      "sha256": "a705f0df7ff011b026f6f72a5b0194048016dc907077c7f0e2b52c9b75e6449a"
     },
     {
       "asset": "hypeproof-measurement-0.3.5.tgz",
@@ -23,19 +23,14 @@
       "sha256": "3bcc62170870a5ba881f3e7607740aaff2576920350ddb5097e6f71d7658c0d7"
     },
     {
-      "asset": "hypeproof-service-testkit-0.1.2.tgz",
-      "tag": "service-testkit-v0.1.2-private.1",
-      "sha256": "15bd637cdfc438ca6b63dd56434fd01ea0e26ec3ef88f4284ca8ea8e13f95d93"
+      "asset": "hypeproof-service-testkit-0.1.7.tgz",
+      "tag": "service-testkit-v0.1.7-private.1",
+      "sha256": "e3f1cdb2520eb0b9cd58c0914d11ace384927a38cadc321aebe629d734e436f2"
     },
     {
       "asset": "hypeproof-measurement-core-0.1.1.tgz",
       "tag": "measurement-core-v0.1.1",
       "sha256": "dbf7cfa5f504a37b8f82be1b56a9cff8d97bbfbd142f202674a0164033f93a74"
-    },
-    {
-      "asset": "hypeproof-service-testkit-0.1.4.tgz",
-      "tag": "service-testkit-v0.1.4-private.1",
-      "sha256": "765bf2b6034587b06631f4e62df14a020826a77e9d59637ad827e44119dfe96e"
     }
   ]
 }

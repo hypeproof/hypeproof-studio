@@ -1,4 +1,7 @@
 // REQ-CGP-AGENT-60 — shell rows and the "실행 중인 것" list, measured on the shipped cascade.
+// CGP-AGENT-D-025 (DES-CGP-AGENT-60): the command block is monospace and stops at 240px, scrolling inside;
+// its copy button sits beside the command (never over it), is a 44px tab stop right after the summary, and is
+// drawn while the row is hovered or holds focus, with no motion.
 // The stylesheet is the CSS esbuild emits for webview-ui/src/main.tsx (the exact product order:
 // tokens, focusGeometry, component sheets, styles, chatDetails, ...). Nothing is injected: no
 // token, no focus rule. Markup is the real ToolLine / RunningProcessesPanel output.
@@ -35,6 +38,9 @@ const bundle = await build({
   stdin: { contents: `import React from 'react'; import {renderToStaticMarkup} from 'react-dom/server'; import {ToolLine} from './webview-ui/src/ChatPanel'; import {RunningProcessesPanel} from './webview-ui/src/RunningProcesses';
     const row = (shell, state) => renderToStaticMarkup(<ToolLine message={{id:'s',role:'tool',content:'',createdAt:0,tool:{icon:'',label:'',state,shell}}} onReport={()=>{}}/>);
     export const rows = row({purpose:'개발 서버가 뜨는지 확인해요',command:'npm run dev -- --port 5173 '+'--flag '.repeat(80),collapsed:false}, 'running');
+    // ~4,600 characters: more than 240px of text at every tested width with any monospace font (CI's font set
+    // fits 2,000 characters into 208px at 1420px). The probe also checks that the content really is taller.
+    export const long = row({purpose:'모든 테스트를 차례로 돌려요',command:'npm run test:unit -- --reporter=dot ⏎ '.repeat(120),collapsed:false}, 'done');
     export const panel = renderToStaticMarkup(<RunningProcessesPanel entries={[{id:'live',purpose:'미리보기 서버',kind:'preview',folder:'작업 폴더 전체 (site)',address:'127.0.0.1:43299',state:'running'},{id:'sdk',purpose:'테스트 감시',state:'stopped'}]} onStop={()=>{}}/>);`, resolveDir: root, loader: 'tsx' },
   bundle: true, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
   alias: { react: root + '/webview-ui/node_modules/react', 'react-dom': root + '/webview-ui/node_modules/react-dom' }, nodePaths: [root + '/webview-ui/node_modules'],
@@ -42,14 +48,19 @@ const bundle = await build({
 });
 const module = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { window: { innerWidth: 1420, addEventListener() {}, removeEventListener() {} }, module, exports: module.exports, require: createRequire(import.meta.url), console, process, TextEncoder, TextDecoder, URL, setTimeout, clearTimeout });
-const { rows, panel } = module.exports;
+const { rows, long, panel } = module.exports;
 
 const THEMES = {
   dark: { cls: 'vscode-dark', dark: true, v: { 'editor-background': '#1f1f1f', 'sideBar-background': '#181818', foreground: '#cccccc', descriptionForeground: '#9d9d9d', focusBorder: '#0078d4' } },
   light: { cls: 'vscode-light', dark: false, v: { 'editor-background': '#ffffff', 'sideBar-background': '#f8f8f8', foreground: '#3b3b3b', descriptionForeground: '#717171', focusBorder: '#005fb8' } },
 };
+// VS Code's high-contrast themes (the copy button's edge must stay visible there too).
+const HC_THEMES = {
+  'high-contrast': { cls: 'vscode-high-contrast', dark: true, v: { 'editor-background': '#000000', 'sideBar-background': '#000000', foreground: '#ffffff', descriptionForeground: '#ffffff', focusBorder: '#f38518', contrastBorder: '#6fc3df' } },
+  'high-contrast-light': { cls: 'vscode-high-contrast vscode-high-contrast-light', dark: false, v: { 'editor-background': '#ffffff', 'sideBar-background': '#ffffff', foreground: '#292929', descriptionForeground: '#292929', focusBorder: '#006bbd', contrastBorder: '#0f4a85' } },
+};
 const page = (t, seat, extraCss) => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>:root{${Object.entries(t.v).map(([k, v]) => `--vscode-${k}:${v}`).join(';')}}${css}${extraCss}</style></head>
-<body class="${t.cls}" style="margin:0;background:var(--vscode-editor-background);color:var(--vscode-foreground)"><div id="root"><div class="hps-shell" data-chat-detail="${seat}">${panel}<div class="hps-messages">${rows}</div></div></div></body></html>`;
+<body class="${t.cls}" style="margin:0;background:var(--vscode-editor-background);color:var(--vscode-foreground)"><div id="root"><div class="hps-shell" data-chat-detail="${seat}">${panel}<div class="hps-messages">${rows}<div id="long">${long}</div></div></div></div></body></html>`;
 
 const probe = `(() => {
   const px = (v) => parseFloat(v);
@@ -71,8 +82,78 @@ const probe = `(() => {
     cards: [...document.querySelectorAll('.hps-running-processes li')].map(c => ({ border: px(getComputedStyle(c).borderTopWidth), top: r(c).top, bottom: r(c).bottom })),
     dotFolder: document.querySelector('.hps-running-processes').textContent.includes('폴더: .'),
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ...copyFacts(),
   };
+  function copyFacts() {
+    const copy = row.querySelector('.hps-shell-copy');
+    // Monospace: ten narrow and ten wide letters in the command's own font take the same width.
+    const code = pre.querySelector('code');
+    const width = (text) => { const s = document.createElement('span'); s.textContent = text; code.appendChild(s); const w = s.getBoundingClientRect().width; s.remove(); return w; };
+    const mono = Math.abs(width('iiiiiiiiii') - width('WWWWWWWWWW'));
+    const longPre = document.querySelector('#long pre'), lp = getComputedStyle(longPre);
+    const block = { mono, longContent: longPre.scrollHeight, longHeight: r(longPre).height, longScroll: longPre.scrollHeight - longPre.clientHeight, longOverflow: lp.overflowY };
+    if (!copy) return { ...block, copy: null };
+    const c = getComputedStyle(copy), cr = r(copy), pr = r(pre);
+    return { ...block, copy: {
+      tag: copy.localName, type: copy.type, tabIndex: copy.tabIndex, disabled: copy.disabled, name: copy.getAttribute('aria-label'),
+      w: cr.width, h: cr.height, opacity: +c.opacity, border: px(c.borderTopWidth), borderStyle: c.borderTopStyle, borderColor: c.borderTopColor,
+      // Does the opacity change animate? (a transition on opacity or all with a non-zero duration)
+      fade: (() => { const props = c.transitionProperty.split(',').map((v) => v.trim()), durs = c.transitionDuration.split(',').map(parseFloat); return props.some((p, i) => (p === 'opacity' || p === 'all') && durs[i % durs.length] > 0); })(),
+      // Beside the command, never over it: no overlap with the <pre> box, inside the row.
+      overlap: Math.max(0, Math.min(cr.right, pr.right) - Math.max(cr.left, pr.left)) * Math.max(0, Math.min(cr.bottom, pr.bottom) - Math.max(cr.top, pr.top)),
+      inside: cr.right <= r(row).right + 0.5 && cr.left >= r(row).left - 0.5,
+    } };
+  }
 })()`;
+const opacityOf = (sel) => `(() => { const e = document.querySelector('${sel}'); return e ? +getComputedStyle(e).opacity : null; })()`;
+const pause = () => new Promise((r) => setTimeout(r, 30));
+/** The copy button's opacity while the first shell row matches :hover (forced; headless updates no hover state). */
+async function hoveredOpacity(b) {
+  const { root } = await b.send('DOM.getDocument', { depth: 0 });
+  const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.hps-shell-row' });
+  await b.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['hover'] });
+  try { return await b.evaluate(opacityOf('.hps-shell-copy')); } finally { await b.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] }); }
+}
+async function tab(b) {
+  for (const type of ['keyDown', 'keyUp']) await b.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+  await pause();
+  return b.evaluate(`({ tag: document.activeElement?.localName ?? '', cls: document.activeElement?.className ?? '', opacity: ${opacityOf('.hps-shell-copy')} })`);
+}
+/** Tab from the summary: the next stop is the copy button, or the command itself first when it scrolls
+ * (Chromium makes a scroller with nothing focusable inside a tab stop, so the command can be scrolled by keys). */
+async function tabFromSummary(b) {
+  await b.evaluate(`document.querySelector('.hps-shell-row summary').focus()`);
+  let at = await tab(b);
+  if (at.tag === 'pre') at = await tab(b);
+  return at;
+}
+/** The forced :focus-visible ring of `sel`, or null when the page has no such element. */
+async function ringOf(b, sel) {
+  if (!(await b.evaluate(`!!document.querySelector('${sel}')`))) return null;
+  return b.focusVisibleStyle(sel);
+}
+async function copyChecks(b, at, bad) {
+  const m = await b.evaluate(probe);
+  const c = m.copy;
+  if (!c) { bad.push(`${at}: the command block has no copy button`); return; }
+  if (c.tag !== 'button' || c.type !== 'button' || c.tabIndex !== 0 || c.disabled) bad.push(`${at}: copy is not a plain enabled button in the tab order (${c.tag} ${c.type} ${c.tabIndex} ${c.disabled})`);
+  if (c.name !== '명령 복사') bad.push(`${at}: copy is named "${c.name}"`);
+  if (c.w < 44 || c.h < 44) bad.push(`${at}: copy target ${c.w}x${c.h} < 44px`);
+  if (c.overlap > 0) bad.push(`${at}: copy button covers the command (${c.overlap.toFixed(0)}px²)`);
+  if (!c.inside) bad.push(`${at}: copy button leaves the row`);
+  if (c.fade) bad.push(`${at}: copy reveal animates`);
+  if (c.border < 1 || c.borderStyle !== 'solid' || /rgba\(0, 0, 0, 0\)/.test(c.borderColor)) bad.push(`${at}: copy button has no visible edge (${c.border}px ${c.borderStyle} ${c.borderColor})`);
+  // At rest (pointer away, focus elsewhere) the button is not drawn; hover and focus draw it.
+  await b.evaluate(`document.activeElement?.blur()`);
+  const rest = await b.evaluate(opacityOf('.hps-shell-copy'));
+  if (rest !== 0) bad.push(`${at}: copy is drawn at rest (opacity ${rest})`);
+  const hover = await hoveredOpacity(b);
+  if (hover !== 1) bad.push(`${at}: copy not drawn while the pointer is over the row (opacity ${hover})`);
+  const focused = await tabFromSummary(b);
+  if (!/\bhps-shell-copy\b/.test(focused.cls)) bad.push(`${at}: Tab from the summary lands on <${focused.tag} class="${focused.cls}">, not the copy button`);
+  else if (focused.opacity !== 1) bad.push(`${at}: copy not drawn while it has keyboard focus (opacity ${focused.opacity})`);
+  await b.evaluate(`document.activeElement?.blur()`);
+}
 
 async function check(b, extraCss = '', shots) {
   const bad = [];
@@ -94,10 +175,16 @@ async function check(b, extraCss = '', shots) {
     else if (m.cards[1].top - m.cards[0].bottom < 4) bad.push(`${at}: cards touch (${(m.cards[1].top - m.cards[0].bottom).toFixed(1)}px)`);
     if (m.dotFolder) bad.push(`${at}: "폴더: ." is shown`);
     if (m.overflow > 0) bad.push(`${at}: horizontal overflow ${m.overflow}px`);
+    if (m.mono > 0.5) bad.push(`${at}: the command is not monospace (${m.mono.toFixed(1)}px apart)`);
+    // Fixture precondition first: the cap is only measurable on content taller than the cap.
+    if (m.longContent <= 260) bad.push(`${at}: fixture: the long command is only ${m.longContent}px of content, the 240px cap is not exercised`);
+    else if (m.longHeight > 240.5 || m.longScroll <= 0 || !/^(auto|scroll)$/.test(m.longOverflow)) bad.push(`${at}: a long command block is ${m.longHeight.toFixed(0)}px, overflow ${m.longOverflow}, ${m.longScroll}px to scroll (want <=240px, scrolling)`);
+    await copyChecks(b, at, bad);
     // Focus: the shared ring, measured. The button sits outside a scroll scope (+2px); the summary
     // and the scrolling <pre> sit inside .hps-messages (-2px, never clipped).
-    for (const [sel, offset] of [['.hps-running-processes button', '2px'], ['.hps-shell-row summary', '-2px'], ['.hps-shell-row pre', '-2px']]) {
-      const f = await b.focusVisibleStyle(sel);
+    for (const [sel, offset] of [['.hps-running-processes button', '2px'], ['.hps-shell-row summary', '-2px'], ['.hps-shell-row pre', '-2px'], ['.hps-shell-copy', '-2px']]) {
+      const f = await ringOf(b, sel);
+      if (!f) { bad.push(`${at}: no ${sel}`); continue; }
       if (f['outline-style'] !== 'solid' || f['outline-width'] !== '2px' || f['outline-offset'] !== offset) bad.push(`${at}: ${sel} ring ${f['outline-width']} ${f['outline-style']} offset ${f['outline-offset']} (want 2px solid ${offset})`);
       if (/rgba\(0, 0, 0, 0\)/.test(f['outline-color'])) bad.push(`${at}: ${sel} ring is transparent`);
     }
@@ -105,10 +192,16 @@ async function check(b, extraCss = '', shots) {
   }
   for (const [tname, t] of Object.entries(THEMES)) {
     await b.load(page(t, 'personal', extraCss), { width: 800, height: 900, dark: t.dark, forcedColors: true });
-    for (const sel of ['.hps-running-processes button', '.hps-shell-row summary']) {
-      const f = await b.focusVisibleStyle(sel);
+    for (const sel of ['.hps-running-processes button', '.hps-shell-row summary', '.hps-shell-copy']) {
+      const f = await ringOf(b, sel);
+      if (!f) { bad.push(`forced-colors/${tname}: no ${sel}`); continue; }
       if (f['outline-style'] !== 'solid' || f['outline-width'] !== '2px') bad.push(`forced-colors/${tname}: ${sel} ring ${f['outline-width']} ${f['outline-style']}`);
     }
+    await copyChecks(b, `forced-colors/${tname}`, bad);
+  }
+  for (const [tname, t] of Object.entries(HC_THEMES)) {
+    await b.load(page(t, 'personal', extraCss), { width: 800, height: 900, dark: t.dark });
+    await copyChecks(b, tname, bad);
   }
   return bad;
 }
@@ -121,7 +214,7 @@ try { b = await launch(bin); } catch (e) {
 try {
   const bad = await check(b, '', process.env.SHELL_PROCESS_SCREENSHOTS);
   assert.deepEqual(bad, [], 'shipped cascade');
-  console.log('  ok   shipped cascade: 2 seats x 2 themes x 3 widths + forced colours');
+  console.log('  ok   shipped cascade: 2 seats x 2 themes x 3 widths + forced colours + high contrast');
   // Self-tests: each override must be caught, so the probe is not a no-op.
   const overrides = {
     'focus ring removed': 'html body .hps-shell-row summary:focus-visible { outline: none !important; }',
@@ -136,6 +229,17 @@ try {
     'cards touch': '.hps-running-processes ul { gap: 0; }',
     'flat purpose': '.hps-shell-purpose { font-weight: inherit; color: inherit; } .hps-shell-folder { color: inherit; }',
     'horizontal overflow': '.hps-shell-row pre { white-space: pre; overflow-wrap: normal; overflow: visible; max-height: 240px; }',
+    'proportional command font': '.hps-shell-row pre, .hps-shell-row pre code { font-family: serif !important; }',
+    'block grows without a cap': '.hps-shell-row pre { max-height: none !important; }',
+    'block clips instead of scrolling': '.hps-shell-row pre { overflow: hidden !important; }',
+    'copy never drawn': '.hps-shell-row .hps-shell-copy { opacity: 0 !important; }',
+    'copy drawn at rest': '.hps-shell-copy { opacity: 1 !important; }',
+    'copy only on hover, not on focus': '.hps-shell-row:focus-within .hps-shell-copy { opacity: 0; } .hps-shell-row:hover .hps-shell-copy { opacity: 1 !important; }',
+    'copy out of the tab order': '.hps-shell-copy { visibility: hidden; }',
+    'copy over the command': '.hps-shell-block { position: relative; } .hps-shell-copy { position: absolute; inset-block-start: 0; inset-inline-end: 0; }',
+    'small copy target': '.hps-shell-copy { min-height: 0; min-width: 0; height: 24px; width: 24px; }',
+    'copy has no edge': '.hps-shell-copy { border: 0 !important; }',
+    'copy fades in': '.hps-shell-copy { transition: opacity 160ms; }',
   };
   for (const [name, extra] of Object.entries(overrides)) {
     const caught = await check(b, extra);

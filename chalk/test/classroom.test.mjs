@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
 import {localClassroom} from '@hypeproof/service-testkit/test/harness/classroom.mjs';
-const f=await localClassroom();const {default:chalk}=await import('../src/index.ts');const savedFetch=globalThis.fetch;const calls=[];
+import { withBearerAsConnection } from './harness/connect.mjs';
+// E5: /manage keeps exactly what these named accessors hold in browser storage — learner names on this device (#3777)
+// and the class code made in this tab (#3778).
+// Each appears once; with them removed, nothing in the page touches storage, so tickets and tokens still never do.
+const DEVICE_STORES=["const namesStore=()=>{try{return window.localStorage;}catch{return null;}};","const tabStore=()=>{try{return window.sessionStorage;}catch{return null;}};"];
+const withoutStores=(s)=>DEVICE_STORES.reduce((t,a)=>{assert.equal(t.split(a).length-1,1,'one storage accessor: '+a);return t.replace(a,'');},s);
+const f=await localClassroom();const chalk=withBearerAsConnection((await import('../src/index.ts')).default);const savedFetch=globalThis.fetch;const calls=[];
 const env={...f.env,HPS_SERVICE_ORIGIN:'https://service.test'};
 globalThis.fetch=async(url,init)=>{calls.push({url,init});return f.app.fetch(new Request(url,init),f.env,{waitUntil(){}});};
 const base=`/admin/cohorts/${f.cohort}/classroom/shares`;
@@ -10,7 +16,7 @@ async function request(path,method='GET',body,token=f.teacherToken){return chalk
 try{
  for(const file of ['manage','sharing']){
   const r=await request('/'+file);assert.equal(r.status,200);const html=await r.text();assert.match(html,/lang="ko"/);const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];assert.ok(script);new Script(script);
-  assert.ok(!/localStorage|sessionStorage|\.innerHTML\s*=|insertAdjacentHTML|document\.cookie/.test(script));assert.match(script,/textContent/);assert.match(script,/AbortController/);assert.match(html,/focus-visible/);assert.match(html,/role="status"/);
+  assert.ok(!/localStorage|sessionStorage|\.innerHTML\s*=|insertAdjacentHTML|document\.cookie/.test(file==='manage'?withoutStores(script):script));assert.match(script,/textContent/);assert.match(script,/AbortController/);assert.match(html,/focus-visible/);assert.match(html,/role="status"/);
  }
  const student='/v1/classroom/shares';const body={id:'forward-share',recipient_id:'teacher-a',kind:'help',consent:true,duration_minutes:60,content:{prompt:'내가 선택한 질문'}};
  assert.equal((await request(student,'POST',body,f.studentToken)).status,201);

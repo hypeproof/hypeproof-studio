@@ -1,5 +1,20 @@
 # Studio behavioral requirements
 
+## Personal question entry (#3798)
+
+MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
+screen and existing personal task navigation, including shipped layouts with the
+status/activity bars hidden. The explicit intent uses existing account sign-in,
+personal admission and activity/workspace preparation before opening the existing
+reflection task. Normal pass selection retains that intent; it never starts checkout
+or grants AI access. A validated, consumed-once activity-resume marker carries the
+account/session binding through a required folder reload. Cancel, logout, a changed
+account/task/activity, active work or failed persistence preserves the original work
+and cannot trigger a late question redirect. Classroom entry remains explicit.
+
+See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
+and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
+
 ## Personal task workspace (#1756)
 
 `REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and
@@ -273,10 +288,9 @@ lesson binding, or an unknown seat, where the baseline moves silently. Decision:
 change lessons live, so a card mid-class can be noise; REQ-M47 says nothing about change
 notices, so this follows the stricter existing quiet rule (REQ-STUDIO-FINISH-NOTICE #2072,
 CGP-SHELL-R-001 `classUpdateHold` #1890). In class the closed REQ-M47 card still follows the
-new profile. Limits: the register row's classroom case ("선생님이 도움 방식을 바꿨어요: <before>
-→ <after>" after a U3 settings change) is therefore not met for classroom seats and stays
-open for a separate decision; the card is not persisted, so a change made while Studio was
-closed is not reported. Pure diff, seats and once-only state: `src/capabilityChange.ts`; one
+new profile. The register row's classroom case ("선생님이 도움 방식을 바꿨어요: <before>
+→ <after>") is REQ-STUDIO-LESSON-SETTINGS-CHANGE below (2026-11-11). Limits: this card is not
+persisted, so a change made while Studio was closed is not reported on a personal seat. Pure diff, seats and once-only state: `src/capabilityChange.ts`; one
 observation in `postConfig` with the served profile, the card in the panel config
 (`capabilityChange`), dismiss message `dismissCapabilityChange`. Tests:
 `test/capability-change.smoke.mjs` — the shared evaluation equals the card's former formula
@@ -291,6 +305,33 @@ copy, only non-empty lines, no capability-score labels, composer not disabled) w
 and instructor negative controls. The first-load, folder, seat, dismiss, same-card,
 access-choice, fallback, current-inputs-baseline and both re-read guards and the card render
 were each removed once and a test failed.
+
+`REQ-STUDIO-LESSON-SETTINGS-CHANGE` (CGP-SHELL-R-024 / CGP-SHELL-D-023, P1, ADM-11,
+2026-11-11): the classroom case. A classroom seat, or one with a served lesson or an enforced
+lesson binding, sees one system line in the chat before its next turn when the instructor changed
+its lesson settings: "선생님이 도움 방식을 바꿨어요: <항목> <전> → <후>", several changes joined
+with " · " in one line. Compared: the approval preset (served label, `기본` when none),
+`plan_first.available`, the six REQ-M47 capabilities (same evaluation and words as the card:
+해요 / 물어봐요 / 안 해요; the per-session agent-sdk → proxy fallback is left out of the comparison),
+voice dictation and read-aloud, and the starter sentences (named only, never quoted). Not
+compared: model and effort, step content, AI role and tone (not drawn and not in a coach prompt
+yet, DEC-30 step 4). The baseline is persisted per seat in globalState (hashed seat key, no
+credential, starters as a fingerprint); the first profile is a silent baseline, learner-side inputs
+alone never make a line, and the baseline moves only when the panel reports the line drawn
+while a chat surface is visible (host `view.visible` / editor panel `visible`), so a reload does not repeat it and a change made while Studio was closed is told at
+the next panel open. A change observed during a running turn or image edit waits for that work to
+end, then the config is posted again (the turn keeps its start-of-turn profile); a U3 switch adopted by
+the turn-start preflight is told at once, placed before the starting turn. The line holds no live
+region; its text is announced once through the panel's always-mounted `role="status"` region. Known limit: the baseline keeps the capability
+rows already evaluated under the learner's inputs, so an instructor capability change that the current
+inputs hide and the learner's next runtime or access change reveals is not told; the follow-up is to
+persist the served capability fields (classroom-admin.md, 기준선 row). A runtime-setting change posts
+the config at once, so the coincident case is told outside a running turn. Contract (Korean, with the copy): `docs/requirements/classroom-admin.md#adm-11-settings-change`;
+agent choices: decisions.md "CGP-SHELL-R-024 / CGP-SHELL-D-023: classroom settings-change line".
+Code: `src/lessonSettingsChange.ts` (pure), `observeLessonSettings` in `chatPanelProvider.ts`,
+`webview-ui/src/LessonSettingsChange.tsx`. Tests: `test/lesson-settings-change-host.smoke.mjs`
+(real `postConfig`, `handleMessage` and preflight adoption), `test/lesson-settings-change.test.tsx`
+(real ChatPanel), `test/lesson-settings-change.test.mjs` (pure rules).
 
 `REQ-STUDIO-DELEGATION-ROW` (CGP-AGENT-R-009 / REQ-CGP-AGENT-12, design CGP-AGENT-D-008,
 P1, 2026-10-20): when the coach delegates to a helper (an agent SDK `Task`/`Agent` tool call
@@ -680,7 +721,7 @@ and it refuses a native `cancel` that follows a composing key. Surfaces:
 | Capability-change card | inline, shown by the system (no opener; the element focused when it appeared is deliberately not used) | 알겠어요 | the composer |
 | Verify panel (내 제품 테스트) | inline, opened by the host | 테스트 창 닫기 | the element focused before it opened, else the composer; it takes focus on open only when nothing holds it |
 | Publish, evidence, memory, skills and review panels (curriculum runtime) | inline, opened by the host | 닫기 | as the verify panel |
-| Quote action (인용하기) | transient button over a selection | Escape | the composer (REQ-STUDIO-QUOTE-REPLY) |
+| Quote action (인용하기) | transient popover over a selection | Escape, from anywhere while it is shown | the composer (REQ-STUDIO-QUOTE-REPLY) |
 
 Two browser facts shape the module. First, React puts focus back on an element that is still in the
 document after its commit, so a surface that stays mounted (the native dialog, the rail) is handed
@@ -841,7 +882,9 @@ runtime that runs tools (Agent SDK: nothing advertised or registered and `canUse
 refuses; proxy browser loop: the call returns an error result before `browser.execute`), and a planning turn also skips the app shortcuts,
 the fenced-HTML preview write and the `agent.md` save. A prompt line asks for the plan, but it is never what stops a tool. When the planning turn
 ends with an answer, the answer becomes a plan card above the composer (region "이렇게 해 볼까요?", numbered steps, "승인하기 전에는 아무것도 실행하지
-않아요") with four 44px actions: `이대로 진행`, `수정` (inline edit), `다시 계획`, `그만두기`. While the plan waits the send button reads
+않아요") with four 44px actions: `이대로 진행`, `수정` (inline edit), `다시 계획`, `그만두기`. CGP-CHAT-D-004: `이대로 진행` is the primary
+action, distinct (accent fill and strong weight) but the same height as the three secondary actions, in dark and light (before
+2026-11-12 the action row's shared `font: inherit` reset the primary's weight, so only the fill set it apart). While the plan waits the send button reads
 `계획 승인 기다리는 중` and is disabled, and the host treats any other send as superseding the plan. `이대로 진행` mints a one-time approval bound to
 exactly the send the host then makes ("계획대로 진행해 주세요." + the plan text as approved or edited); that turn is an ordinary turn under the
 profile grants and the lesson's approval preset, so every approval modal still fires. `다시 계획` runs another planning turn (an edit is passed as
@@ -898,10 +941,11 @@ opening a pill in personal and classroom chat.
 Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
 shown on failure, text-keyed memory, and others) fails it.
 
-`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20, adapted
-by the audit note: the quote is draft text, not a chip): the learner can quote part of one answer into
+`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20; the first
+slice kept the quote as draft text under an audit note, and CGP-CHAT-D-007 (2026-11-12, below) restores the
+register's removable chip and puts the action over the selection): the learner can quote part of one answer into
 the next message, in personal and classroom chat. When the selection starts inside the body of one
-finished answer, a `인용하기` button appears under that answer. If the selection ends past the body
+finished answer, a `인용하기` popover appears over the selection, on that answer's row (CGP-CHAT-D-007). If the selection ends past the body
 but still in the same message row (a triple-click on the last paragraph ends in the citations or the
 answer's actions), or at the very start of the element right after that row (a triple-click ends at
 the start of the next block), the end is clamped to the body. A selection that starts outside an answer, reaches
@@ -917,20 +961,22 @@ cells are joined with ` | `, and a Markdown soft break (drawn as a space) is a s
 read at most once per animation frame, the clamp only looks up the end's ancestors and the text walk
 stays inside the start answer's body, so the cost of a selectionchange does not grow with the
 conversation (a 300-answer test reads no node of any other answer). Pressing
-the button appends the quote to the composer draft as a `> ` quoted block (blank lines inside become
-`>`) followed by a blank line; an existing draft is kept byte for byte as the prefix, with one blank
-line before the quote. Focus then goes to the composer with the caret at the end, the selection is
-cleared and the button goes away. Nothing is sent: the quote is ordinary draft text the learner can
-edit or delete, saved with the draft like any other text. A selection longer than 1,000 characters
+the button puts the quote in the composer as the quote chip (CGP-CHAT-D-007): a `> ` quoted block (blank lines
+inside become `>`) followed by a blank line, kept as the draft's first part and drawn as the chip instead of in the
+editor. What the learner typed stays in the editor byte for byte; the message that goes out (sent, or parked
+while a turn runs) is the block, a blank line, then the typed text. One quote at a time: a second quote replaces
+the chip, never the typed text; × removes it. Focus then goes to the composer with the caret at the end, the
+selection is cleared and the button goes away. Nothing is sent. The saved draft carries the quote as text, so after
+a reload it comes back inline as ordinary `> ` draft text the learner can edit or delete. A selection longer than 1,000 characters
 (grapheme clusters, so a composed emoji or an NFD Hangul syllable is never split) is cut and ends
 with `…`, and the button shows `앞 1,000자만 들어가요` before it is pressed. The button is a 44px target
 reachable by Tab (it stays while it has focus even if the selection collapses); Escape dismisses it
-and returns focus to the composer without touching the draft; while an IME composition is open
+(from anywhere on the page while it is shown, not only from the button; not while an IME composition is open
+or a modal is open) and returns focus to the composer without touching the draft; while an IME composition is open
 (#1880, `imeGuard.ts`) it is disabled. It carries no capability or score label. The logic is in
 `webview-ui/src/quoteReply.ts` (range to answer text, quote block, merge with the draft), the button
-and selection tracking in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to
-make the selection (answers are not caret-browsable), a removable quote chip, positioning the button
-over the selection (it sits under the answer), list numbers in the quote (rendered `1. 사과` quotes as
+and selection tracking, the popover and the chip in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to
+make the selection (answers are not caret-browsable), the chip after a reload (the quote returns as draft text), list numbers in the quote (rendered `1. 사과` quotes as
 `사과`), and excluding code blocks (the research row offers only copy there; this slice quotes the
 code text). The offline send gate (`sendWhenOnline`, #2076) does not apply: quoting never sends,
 so it works offline and the gate still holds the later send. Test: `test/quote-reply.test.tsx`. Its selection stub is a range over real
@@ -938,13 +984,36 @@ mini-dom nodes whose `toString()` serialises every text node in it, buttons incl
 does. Pure checks cover the block format, the grapheme-safe cap, the scope and clamp rules (same-row
 citation and action ends, next-row start, negative controls for text in the next message) and the
 skipped UI, tables, lists and soft breaks, and instrument a 30- and a 300-answer conversation so any
-read of another answer's nodes fails. Through `ChatPanel` in both modes it presses the real button (draft, focus, caret,
-nothing sent) over answers with closed and open code pills, a prose code block, reply choices,
+read of another answer's nodes fails. Through `ChatPanel` in both modes it presses the real button (the chip, the typed draft untouched, focus, caret,
+nothing sent, then the text the send button sends) over answers with closed and open code pills, a prose code block, reply choices,
 citations and a one-paragraph answer, with negative controls for cross-message, user-line, composer,
 streaming, read-only and IME cases, plus an existing draft kept, Escape focus, Tab focus and the cut
 note, and the once-per-frame read. The same test fails 10 cases against the first version
 (`toString()`, no clamp) and 4 against the second (whole-document walk, no frame debounce, tables and
 lists). Each of 40 reverted behaviours fails it.
+
+CGP-CHAT-D-007 (selection action popover and quote chip, 2026-11-12, design row CGP-CHAT-D72): the action is a
+popover, not a row under the answer. It is out of flow on the answer's row and placed from the selected range's
+line boxes inside the answer body: above the first selected line (its bottom edge 2px above it), centred on that
+line; below the last selected line (2px under it) when the first line's top is less than 48px below the top of the
+visible conversation, or less than the popover's own height plus the gap. Horizontally it stays inside the answer's
+row; while the selection is in view it is kept inside the visible conversation (so it never sits under a header or
+the composer), and a selection scrolled out of view takes it along. It follows scrolling and window resizes from
+the range kept with the quote, so placing it never reads the selection again. It is 46px tall: one 44px action
+button in a 1px border, with the `앞 1,000자만 들어가요` note beside it when the quote is cut. It has no entry
+animation, so it is in the page within one animation frame of a selection made without the mouse, and at once on
+the release of a mouse drag; while the primary mouse button is down (a drag in progress) nothing is shown, and a
+press on the popover itself does not hide it. Escape anywhere dismisses it (above). It is never shown on the answer
+that is streaming, also when that answer starts streaming while the popover is open. The quote chip sits inside
+the composer card in the context row the file chip uses (same chip family, an accent bar at the start): the quote
+text without its `> ` marks on at most two lines with an ellipsis (body size, at least 14px), and a 44px `×`
+named `인용 빼기` that removes it and returns focus to the composer, keeping the typed draft and caret; removal has
+no undo toast (the learner can quote again; CGP-CHAT-R-029 already left the quote chip out). Tests:
+`test/quote-reply.test.tsx` (pure placement rules, chip draft parts, Escape from the page, IME Escape, drag,
+streaming) and `test/quote-popover-layout.smoke.mjs` (the real App in headless Chromium with real mouse and key
+input, personal and classroom, dark and light, 320 and 1420px: nothing mid-drag, in the page within 150ms of the
+release and of a script selection, above with a 2px gap, below at under 48px, 44px action not covered, Escape,
+streaming, the two-line chip with an ellipsis and a 44px ×, no horizontal scroll added).
 
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
@@ -2185,6 +2254,22 @@ explicit entry).
 - **Same class**: a link for the class already stored only says "이미 이 수업에 참여하고 있어요."
 - **Join form**: "참여 링크로 연 수업 <id>" and "링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은
   코드를 직접 입력해 주세요." above the empty code field (type password, focused; 14px+ text).
+  DES-SHELL-04 (CGP-SHELL-D-004, 2026-11-12), on every start-page code form (link, 수업, 체험,
+  무료 code): the field is one 44px learner control (`--hp-control-min`, no block padding, so the
+  height does not follow font metrics) with 14px text. The Korean IME stays out of the code because
+  the field is `type="password"`: Chromium (Electron and the VS Code webview) limits a focused
+  password field to ASCII-capable input sources on macOS and turns the IME off on Windows and
+  Linux. No other attribute does this on a desktop: `inputmode` has no `latin` value and only steers
+  on-screen keyboards, and `lang` and `autocapitalize` do not switch an IME; `autocomplete="off"`
+  and `spellcheck=false` stay. If a composition is open anyway (an IME that ignores the field
+  type), Enter belongs to it (CGP-DS-R-027, the shared `imeComposing` guard) and never submits the
+  half-typed code. Paste is never cancelled (neither the paste event nor Ctrl/Cmd+V).
+  A refused code is said directly under the field, before the help line and 코드 확인하기, in the
+  flow (`role="alert"`, 14px, never a toast), and the field takes `aria-invalid="true"`: the host
+  marks every refusal of a submitted code (`errorAt: "code"`: empty, 강사용 code, another class's
+  code on the link form, a Service refusal, an unreadable profile, a connection failure, a turn in
+  progress). Any other error, and a refusal after the learner has left the form, stays in the
+  card's error area, so the page still shows one error line. The code is never echoed in an error.
   A later refresh of the start page does not close the form; 링크 닫기 drops the link. Each press
   of a link refocuses the form. Leaving the form by any path (시작 방법 다시 선택, 기존 활동으로
   돌아가기, choosing a saved activity, a code submitted from any other form) drops the link, so it
@@ -2206,8 +2291,8 @@ REQ-SHELL-05 says a token-looking link is "rejected"; here the link is opened fo
 token-looking parameters are ignored and logged by name, which keeps one rule (only `class` is
 read) and loses nothing a learner sees. Not built: the class *name* (no credential-free class
 lookup exists, so the id is shown); "unknown class → neutral start screen" (Studio cannot tell an
-unknown class from a real one without a code); IME-off for the code field; the code error is
-shown in the card's error area, not directly under the field. Tests:
+unknown class from a real one without a code). The code field's height, IME, paste and error
+placement are built by DES-SHELL-04 (above). Tests:
 `extensions/hypeproof-chat/test/join-link.smoke.mjs` (parse with code=/token=/password=/identity
 ignored and neither values nor names leaving the parser or the log, 13 malformed links, decision,
 the URI host with ask/decline, ten links in a row giving one dialog, the real StartPage: class preselected, no fetch, no write, no entry, another
@@ -2215,7 +2300,17 @@ class's code refused before any Service call, a code from a form without the lin
 the stale link dropped, wiring) and `e2e/start-page/join-link.mjs` (built
 start page in Chromium at 390 and 1280: class named, code field empty and focused, refresh-stable,
 링크 닫기, re-press, 시작 방법 다시 선택 and 기존 활동으로 돌아가기 dropping the link, a trial code
-carrying no class). Chalk side: REQ-CHALK-JOIN-LINK in
+carrying no class). DES-SHELL-04: `extensions/hypeproof-chat/test/join-code-field-computed.smoke.mjs`
+(the real webview bundle in headless Chromium at 320 and 1280 px, dark and light host themes and
+forced colours: the class line above the empty, focused field; 44px and 14px; a password field
+without autocomplete or spellcheck; paste and Ctrl/Cmd+V not cancelled and pasted text submitted;
+Enter during a composition forced open through CDP not submitting, and submitting once it is gone;
+the refusal under the field, before the help line and the button, in the flow, 14px, the field
+`aria-invalid`, the code not in the page; another error and a refusal after leaving the form in the
+card's error area; the 체험 form measured the same way) and the host half of `join-link.smoke.mjs`
+(eight code refusals marked `errorAt: "code"` with no toast; the running-turn guard for another
+action and any later error unmarked). A headless run cannot show the OS IME itself; the field
+type is the contract it checks. Chalk side: REQ-CHALK-JOIN-LINK in
 [classroom-admin.md](requirements/classroom-admin.md#join-link-20261020).
 
 ## Sign-in link copy (CGP-SHELL-R-022)
@@ -2430,6 +2525,17 @@ Adult instructor practice (`homepage-practice-s1`, #737) uses a separate `homepa
 | REQ-D6 | previewReady handshake | host → webview 사이 `previewReady` 메시지 전에 보낸 HTML 은 pending 큐 → ready 시점에 flush | U + E |
 | REQ-D7 | 생성물 구조 가드 (#359) | reveal 직전 `validateAndRepairHtml`: 미종료 HTML 주석의 오타 close(`*/`)를 `-->` 로 자동복구(정상 CSS/JS `*/` 는 불간섭); 복구 후에도 주석/`<script>` 불균형이면 reveal **차단**(직전 빌드 유지)+경고. 순수 구조 검사 — 법·의료광고 관련 검사 없음(#384로 제거). 경고 표면 = 스트림 중 `toolLog` 한 줄, 스트림 밖(▶ Run) 경고 토스트 | U (`test/html-structure`) |
 
+### Named HTML auto-preview (REQ-D5)
+
+When a successful coach Write or Edit triggers an
+automatic preview of a named HTML file, Studio opens the existing file at its own path. A nested
+page resolves assets from its own directory. Previewing it leaves the home page and the named
+file's bytes intact and records the named path in the preview snapshot. The default home page used
+by the existing class approval and publishing flows remains the explicit root `index.html`.
+The home-page build and structural checks still apply to a direct root `index.html` edit and
+generated chat builds. Host regressions in `test/turn-tools.test.mjs` and
+`test/preview-recovery-provider.test.mjs` cover the write event, sandbox base, live URL, and home page.
+
 ## E. Manual-approve modal
 
 | ID | 요구사항 | 수용 기준 | Layer |
@@ -2511,7 +2617,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-I7 | 더블-클릭 idempotency | 같은 version 의 inflight Promise 재사용 | U |
 | REQ-I11 | 실패한 확인은 최신 버전 판정이 아니다 (#730) | HTTP 오류·시간 초과·잘못된 응답·지원하지 않는 OS/아키텍처·새 릴리스의 설치 파일 누락을 오류로 표시한다. 백그라운드 확인 실패는 기존 배너를 지우지 않는다. 릴리스 API 제한 15초 | U (`test/update-orchestration`, `test/update-transport`) + E (`e2e/update-check/run.mjs`, 확인만 수행) |
 | REQ-I12 | 검증된 다운로드 (#730) | 공개 미러의 HTTPS asset URL만 허용. 60초 무응답·10분 전체 제한, 스트림 backpressure와 파일 오류 전파, 선언 크기와 SHA-256 일치 필수. 손상·중단 파일은 제거하며 기존 파일은 덮거나 지우지 않는다. SHA-256은 코드 서명 인증을 대신하지 않는다 | U (`test/update-transport`) |
-| REQ-I13 | 기존 앱 보존 (#730) | macOS는 같은 볼륨에 staging·backup 후 교체. 백업 실패 시 기존 앱 삭제 금지, 교체 실패 시 복구. 종료 취소·계속 실행 상태면 Mac/Windows 모두 설치 중단. Windows wrapper는 BOM을 유지하고 오류를 숨기지 않는다 | U (`test/update-installer`, `test/update-windows-wrapper`, OS별 CI fixture 실행) + M (실제 패키지 교체·재시작은 별도 릴리스 게이트) |
+| REQ-I13 | [기존 앱 보존](dev/macos-update-verification.md) (#730, #3811) | macOS는 재시작 안내 전과 같은 볼륨에 복사한 최종 앱의 교체 직전에 codesign strict·deep·전체 아키텍처 검증, Apple Developer ID Application 인증서·고정 Team ID `RZBNT9ZB67`·번들 `ai.hypeproof.studio`, Gatekeeper의 `Notarized Developer ID` 판정을 모두 요구한다. 다운로드 메타데이터나 기존 로컬 서명에서 신뢰 기준을 가져오지 않고 quarantine을 제거하지 않는다. 실패하면 현재 앱을 그대로 둔다. 같은 볼륨에 staging·backup 후 교체. 백업 실패 시 기존 앱 삭제 금지, 교체 실패 시 복구. 종료 취소·계속 실행 상태면 Mac/Windows 모두 설치 중단. Windows wrapper는 BOM을 유지하고 오류를 숨기지 않는다 | U (`test/update-installer`: 실제 bash 교체·복구, Apple 도구는 mock; `test/update-stage-host`: 호스트 검증 실패; `test/update-windows-wrapper`) + M (실제 서명 패키지 N-1→N 교체·재시작은 별도 릴리스 게이트) |
 | REQ-I14 | Without release access, point to the homepage download (trial-diagnosis I5, PRA-01, TUX-COND-02) | When no member credential can read the private release mirror (no env token and no `gh` login, or a token the mirror answers with 401/404), the check fails with `UpdateAccessError`; the private mirror is never called anonymously. The manual check shows an info notification "이 Studio에서는 앱 안에서 새 버전을 확인할 수 없어요. 새 버전은 홈페이지에서 받을 수 있어요." with "홈페이지 열기" (`https://hypeproof-ai.xyz/download`) — never `gh auth login`, `HPS_RELEASE_TOKEN` or "잠시 후 다시 시도". The automatic check is not silent: once per installed app version (globalState `hypeproofChat.updateAccessNotice`) it shows the non-modal line "새 버전은 홈페이지에서 받을 수 있어요." (not the status bar, which Studio hides by default). It neither pushes nor clears a banner. The member path (banner, up-to-date verdict, retry copy for transient failures, silent transient automatic failures per REQ-I11) is unchanged | U (`test/update-access-copy`: bundled updateChecker + `vscode` stub; no credential and token without access (positive), member token (control)) |
 | REQ-I15 | Non-member updates read the public release (D19, TUX-COND-02, PRA-01) | Behind the machine setting `hypeproofChat.publicUpdates` (default `false`) or the free-start signal registered with `registerPublicUpdateSignal` (the Service offer). Off: REQ-I14 exactly, no request at all without a credential. On: a member credential the private mirror accepts keeps the private mirror only (a transient mirror failure is not rerouted). With no credential, or a token the mirror answers 401/404, the check reads `https://api.github.com/repos/hypeproof/hypeproof-studio/releases/latest` anonymously — the release the Lab download and its code-free kit serve (Lab `PUBLIC_RELEASE_REPO`); the private mirror is never called anonymously. The update asset must belong to the repository the release was read from; a public asset downloads with no Authorization header, a mirror asset keeps the member token; size and SHA-256 checks are unchanged. An anonymous rate limit (429, or 403 marked by `x-ratelimit-remaining: 0`, a `retry-after` header or a "rate limit" body) is "check later": the automatic check stays silent and keeps any banner, a manual check shows the info line "지금은 새 버전을 확인할 수 없어요. 한 시간쯤 뒤에 다시 확인해 주세요." (no warning, no error banner). Public 404, and a public 403 that is not a rate limit (an abuse block or an access change, so a non-member is never left silently un-updated), is REQ-I14's homepage copy. The banner's install re-check gives an access or rate-limit failure the same manual-check copy, never an error line with the internal English detail; other install failures keep the error line. Follow-up: the Service free-start offer must call `registerPublicUpdateSignal` (offer-parsing branch) so free-start seats do not ship with the setting as the only switch. Cadence unchanged (30 s, then 24 h). No user-facing copy mentions `gh auth login`, a token or 체험 | U (`test/update-public-source`: setting off and member token (negative controls), asset from the other repository refused (negative), non-rate-limit 403 not deferred (negative), member 503 never reaches the public release (negative, request list), a real install failure stays an error (negative), no credential / refused token / rate-limit 403 (body, header, retry-after) / 429 / 404 / install copy / signal (positive)) |
 | REQ-STUDIO-START-UPDATE-NOTICE | The start page shows the update the chat banner offers (Jay 2026-10-29, "첫 기본화면에서도 새버전이 뜨도록해야하는데"; issue #3207). Before this, `scheduleUpdateChecks` pushed a found update only to the chat panel (`setAvailableUpdate`), so a person on the start page (every launch lands there first) saw nothing: a 2026.1020.2 app started on 2026-10-29 had no visible sign of v2026.1029.0 although both release sources served it and no dismissal was stored. Now `setAvailableUpdate` notifies listeners and an open start page redraws with `update: { version, heldForClass? }`: one row under the top bar, `새 버전이 나왔습니다 v… 업데이트하면 Studio가 다시 시작됩니다.` with `업데이트` (runs `hypeproof-chat.installUpdate`, which keeps its class and active-turn guards) and `나중에` (runs `hypeproof-chat.dismissUpdate`: the same 7-day per-version dismissal as the banner, which also clears the banner). During a class seat it is a status line `수업이 끝나면 설치할 수 있습니다.` with no button (CGP-SHELL-R-001). No offer, a current version or a dismissed version draws nothing. Also on first launch: the offer appears when the first check finishes (30 s after activation). A transient check failure (not an access or rate-limit answer) now retries after 15 minutes, at most 3 times per 24-hour cycle, instead of waiting a day (REQ-I11 still holds: a failure never clears an offer). **Not claimed:** a real packaged app showing the notice. | `src/startUpdateNotice.ts`, `src/startPage.ts`, `src/startPageProtocol.ts`, `src/chatPanelProvider.ts` (`onAvailableUpdateChanged`), `src/updateChecker.ts` (retry), `webview-ui/src/StartPage.tsx`, `webview-ui/src/start.css`; `test/start-update-notice.smoke.mjs` (pure + host: shows when newer, hidden when none/dismissed, class hold, commands), `test/start-update-notice-render.test.tsx` (rendered row: version and buttons, nothing without an offer, no button during class), `test/update-orchestration.smoke.mjs` (retry cases) |
@@ -2521,8 +2627,9 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-I8 | Bundle id 일치 확인 | installer.sh 가 `ai.hypeproof.studio` 일 때만 swap | U |
 | REQ-I9 | win32 설치 pipeline (#447, #463) | macOS 처럼 우리가 .app 을 스왑하지 않고 Inno Setup 설치 관리자에 위임: download → `renderWindowsUpdateWrapper` 로 detached PowerShell wrapper write → spawn → `workbench.action.quit`. wrapper 가 앱 종료를 **먼저** 기다린 뒤 설치 관리자를 `/silent /mergetasks=runcode /LOG=…` 로 실행 — 종료 중인 구 인스턴스의 single-instance lock 과 경합하면 재실행된 프로세스가 죽어가는 구 인스턴스에 핸드오프하고 종료해 "업데이트는 됐는데 안 켜짐" 이 된다 | U (`test/update-checker`) |
 | REQ-I10 | win32 wrapper 는 UTF-8 BOM 으로 기록 — 한글 계정명 머신에서 업데이트 성립 | `renderWindowsUpdateWrapper` 반환값이 **U+FEFF 로 시작**하고 호출부가 그대로(`fs.writeFileSync(p, s, "utf8")`) 기록해 디스크에 `EF BB BF` 가 남아야 한다. 이유: 벤치 머신의 `powershell.exe` 는 Windows PowerShell **5.1** 이고, BOM 없는 `-File` 스크립트를 UTF-8 이 아니라 **ANSI 코드페이지(한국은 CP949)** 로 디코드한다. wrapper 에 박히는 설치 관리자 경로는 `%TEMP%` = `C:\Users\<계정명>\AppData\Local\Temp\…` 아래라, 계정명이 한글이면(코호트 대다수) 경로가 모지바케가 되어 `Start-Process` 가 아무것도 못 찾는다. 그런데 호출부는 wrapper 를 띄운 직후 앱을 종료하므로 **Studio 는 꺼지고 업데이트는 안 된 채 끝난다** — 실패가 조용하다. 실측(Windows 11 / PS 5.1.26100 / `C:\Users\신제형`): BOM 없음 → 설치 관리자 미기동, UTF-8 BOM → 기동. PS 5.1·PS 7 모두 UTF-8 BOM 을 존중한다. **주의(닭-달걀): 이 결함이 있는 빌드는 인앱 업데이트로 자신을 고칠 수 없다 — 해당 머신은 재설치가 유일한 경로다** | U (`test/update-checker`) + M (한글 경로 실기기 확인) |
-| REQ-I16 | No update install during a class (CGP-SHELL-R-001, 2026-10-19) | While the active seat is a classroom activity, the update banner shows the new version with "수업이 끝나면 설치할 수 있어요." and no install button, the install command refuses with "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요." before any download, and a manual check reports the same. Outside a class seat REQ-I2/I4 behave as before; every restart is still approved by the user (REQ-I4). The client does not yet receive the class window's end time (DEC-25), so the whole class seat counts as the window. It fails closed with the seat-vocabulary rule: a profile without a kind (older Service) holds, and without a loaded profile the saved activity decides; a bought pass, trial and personal seat never hold. Security-critical overrides and an instructor-set freeze range are REQ-SHELL-03 (not built) | U (`test/class-update-hold.test.tsx`) |
+| REQ-I16 | No update install during a class (CGP-SHELL-R-001, 2026-10-19) | While the active seat is a classroom activity, the update banner shows the new version with "수업이 끝나면 설치할 수 있어요." and no install button, the install command refuses with "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요." before any download, and a manual check reports the same. Outside a class seat REQ-I2/I4 behave as before; every restart is still approved by the user (REQ-I4). The client does not yet receive the class window's end time (DEC-25), so the whole class seat counts as the window. It fails closed with the seat-vocabulary rule: a profile without a kind (older Service) holds, and without a loaded profile the saved activity decides; a bought pass, trial and personal seat never hold. An instructor-set freeze range and its security-critical override are REQ-I21 (CGP-SHELL-R-003) | U (`test/class-update-hold.test.tsx`) |
 | REQ-I17 | During class the update state is one line, not a card or a modal (CGP-SHELL-D-001, DES-SHELL-01, 2026-10-21) | While the REQ-I16 hold applies, the chat panel shows the update as a single status line (`role="status"`): a 16px icon, "새 버전 v<version>" and "수업이 끝나면 설치할 수 있어요." with no install, dismiss or release-notes control. The line is at most 32px tall, its text is 14px, nothing animates or transitions, and it uses the theme foreground on the panel's own background (no tint, fade or muted token), which is ≥4.5:1 in the HP dark theme and VS Code dark and light themes. At 320px the version ellipsizes first and the verb is never shrunk, wrapped or cut. The held install command and a manual check answer with a non-modal notification (REQ-I16). Outside a class seat the REQ-I2 card is unchanged. Studio draws no update state on the start page or in the native About dialog, so the chat panel line is the only in-class surface (DEC-SHELL-D001) | U (`test/update-line.smoke.mjs`, `test/class-update-hold.test.tsx`) |
+| REQ-I21 | A cohort's update freeze hides the update for its range; a security-critical release is never held (CGP-SHELL-R-003, REQ-SHELL-03, 2026-11-12) | The Service serves `update_freeze {from, until, starts_at, ends_at}` on `/v1/profile` only to a classroom seat of the cohort, while the range (Korea calendar days, at most 60) has not ended; Chalk `/console` sets it (`docs/requirements/classroom-admin.md#adm-11-update-freeze`). Studio treats the seat as frozen when it is a classroom seat and `starts_at` ≤ now < `ends_at` (`updateFreeze`); a personal, trial or pass seat, a missing, past, future or malformed range is no freeze. While frozen: the chat banner (the REQ-I17 line included) and the start-page notice are not drawn, background staging does not start, and the manual check and the install command answer "선생님이 업데이트 시점을 정했어요. M월 D일까지 지금 버전을 써요."; the classroom settings dialog shows that sentence as a read-only line with a lock icon (`role="note"`). A release whose notes carry the line `<!-- hps-update: security-critical -->` (`SECURITY_CRITICAL_MARKER`) is not held by the freeze: the banner returns, labelled `보안 업데이트 v…`; the REQ-I16 class hold and the user's restart approval (REQ-I4) still apply. The marker is removed from the notes a learner sees, and `mirror-release.yml` copies it into the member mirror's notes when it mirrors; a release marked after it was mirrored needs a manual `mirror-release` re-dispatch for that tag, or member-mirror installs will not see it as security-critical. Agent choices: decisions.md CGP-SHELL-R-003 (Confirmed by Jay: no) | U (`test/cohort-update-freeze.test.tsx`, `test/start-update-notice.smoke.mjs`) + Service (`hypeproof-service` `worker/test/update-freeze.test.mjs`) + Chalk (`chalk/test/update-freeze.browser.mjs`) |
 
 ## J. Build / branding integrity (Phase 2-3 게이트)
 
@@ -2563,7 +2670,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-L9 | 학생·강사·운영자의 이용권과 예산 화면을 권한에 맞게 제공한다 (#856/#847) | 학생은 명시된 출처/기준 시각/자기 사용·예약·미확인을 보며 자동 전환하지 않는다. CGP-SHELL-R-029 (DEC-35: pass and class seats, never free seats): the chat header displays only the selected Service requests:count ledger with its as_of time. An account source adds its reservations and unresolved count; a selected cohort/organization source is named and shows its own remaining count and no other number. Classroom seats (activity or profile kind classroom, including instructor mode) show the line wherever Service's class funding supports it. A selected source that is not available or not in state ready shows no count: the usage panel's state word (이용 기간 종료, 남은 자원 부족, 일시정지, 사용량 확인 필요, …), or no line when that word would be 사용 가능. With no access state, access contracts off (configured:false), or no source chosen (never auto-selected) the header has no line; on a pass or class seat, when Service could not be reached or the ledger is missing/invalid it reads 미확인, and it never shows a 확인 중 that cannot resolve. At 640px and below the line takes its own row under the heading. CGP-SHELL-D-028: the line pairs the model label with an actionable 44px remaining-requests chip in one row, on the learner type scale (14px caption step, DEC-D028). The header keeps its height at wide widths. As the pane narrows, only the model label gives way (ellipsis, down to nothing); the count, the confirmation time, the reservation/unconfirmed parts and the class source name are never truncated or dropped. When the chip is narrower than its text, its parts wrap whole onto another line inside the chip (at 640px and below, where the line has its own row, the chip may grow taller); a part wider than the whole chip (an extreme ledger value) wraps inside itself. The full line is also the chip's accessible name and title. A decorative stroke clock icon accompanies the confirmation time. A valid positive integer requests:count limit with remaining/limit <= 0.1 adds an amber border and a stroke warning icon; unknown totals never produce a ratio or progress bar. Activating the chip opens the existing AB-11 usage detail, expanded, on personal and classroom seats, with normal dialog dismissal and focus return; the classroom detail dialog is only in the DOM while open. Free seats (activity.free or studio-open-trial) show no counter (DEC-35). Never infer requests from currency, percentages or pass limit minus usage. 강사는 담당 반과 별도 예산 위임의 교집합에서 배정·pause·요청 검토를 한다. 위임 취소와 동시 수정은 저장 transaction에서 확인한다. 운영자는 원가와 invoice 조정을 별도로 보고 복구 증거를 남긴다. | `budget-surfaces.test`, `budget-surfaces-d1.test`, Chalk `budgets.test`, `access-client.smoke`, `access-header.test.tsx`, `access-header-layout.smoke`, `access-chip.test.tsx`, `e2e/access-budgets` |
 | REQ-L10 | 공급자가 **실제로 보내는** usage 모양으로 원가를 매긴다 — 부재를 미지로 읽지 않는다 (#897 조사) | `openai-chat` 정규화가 세 입력 차원을 모두 `prompt_tokens_details.cache_write_tokens` 에서 유도했는데, **OpenAI 는 그 필드를 보내지 않는다**(레포 전체에서 하네스 fixture 와 그것을 읽는 두 줄 말고는 등장하지 않았다). 부재 시 `write` 가 null → `valid` 가 false → `tokens:input`·`cache_read`·`cache_write` 가 전부 null + `input_cache_split_unconfirmed`. 사유가 하나라도 있으면 상태가 `priced` 가 될 수 없으므로 **모든 openai-chat 턴이 입력 차원에서 영구히 정산되지 않았고 홀드만 남았다.** 2026-09-10 실측: 현실적인 모양 셋(details 없음 / `cached_tokens` 만 / reasoning 포함) 전부 입력 전멸, 가격이 나온 유일한 입력은 발명된 필드가 든 레포 자신의 fixture. 계약: ① 이 프로토콜에서 **부재는 미지가 아니라 알려진 0 이다** — `cached_tokens` 부재는 캐시 히트 0, cache-write 차원 부재는 0(OpenAI 는 캐시 쓰기를 과금하지 않는다); ② 그러나 **공급자가 값을 보내면 존중한다** — OpenAI 호환 표면을 쓰는 다른 공급자가 채울 수 있고 0 으로 덮으면 과소 계량이다; ③ 값이 **있는데** 숫자가 아니면 그건 진짜 미지이므로 null 로 두어 거절을 유도한다 (문자열·null·음수·비정수·합계 초과 여덟 모양을 음성 대조군으로 상시 검증); ④ 세 입력 차원의 합은 항상 `prompt_tokens` 와 같다 — 토큰이 사라지거나 중복되지 않는다; ⑤ 입력 경로를 살린 뒤에도 오디오·이미지 토큰은 **텍스트 단가를 타지 않는다**(REQ-R3 의 성질이며, 되살린 길로 회귀하기 쉬우므로 같은 파일에서 다시 검증한다); ⑥ 계측기 자신을 잠근다 — 하네스 fixture 가 여전히 발명된 필드를 들고 있다는 사실을 단언한다. 그 fixture 가 현실적으로 바뀌는 날 이 행의 근거를 다시 읽어야 한다. 이 해석은 이 레포가 이미 적어둔 경고와 일치한다 — `docs/design/usage-observation-audit.md` 는 "지원하는 새 모델의 캐시 쓰기 상세가 포함된다. Responses 예제를 Studio의 Chat Completions 추출기에 그대로 적용하지 않고 실제 응답 스키마를 대조해야 한다" 고 적었다. 즉 누군가 이 불일치를 이미 의심했고, 대조는 이뤄지지 않았다. 그래서 "부재는 0, 존재하면 존중" 이 **양쪽 답 모두에서 맞는** 유일한 모양이다. **이 행이 주장하지 않는 것**: 실제 OpenAI API 가 `cache_write_tokens` 를 보내지 않는다는 **확인** 아님 — 이 레포에 api.openai.com 의 200 기록이 없다(유일한 시도가 `429 credit_balance_exhausted`, #841). 두 답 모두에서 동작하도록 만들었을 뿐이다. 그리고 프로덕션 정산 검증 아님 — `HPS_ACCESS_CONTRACTS` 가 `wrangler.toml [vars]` 에 없다 | Service (`openai-usage-shape.test`, `usage-costs.test`) |
 | REQ-L11 | 운영자 표면은 **운영자 자격증명**을 요구한다 — 요청 헤더는 출처의 증거가 아니다 (#897 조사) | `/v1/health/deep` 이 `x-cron-trigger: true` 라는 **요청 헤더 하나로** 인증을 통과시켰다. 2026-09-10 프로덕션에서 자격증명 없이 실제로 열렸고(200, 공급자별 상태·지연·KV·D1·Anthropic 프록시 호스트명), 소스 주석은 그 헤더가 "set by the scheduled() entry point" 라고 단정하고 있었다. 두 번 틀렸다: 요청 헤더는 요청자가 정하므로 내부 출처의 증거가 될 수 없고, **그 헤더를 보내는 코드는 존재하지 않았다** (`scheduled()` 는 `runHeartbeat(env)` 를 평범한 함수로 부른다; 레포 전체 grep 결과가 우회 분기 자신의 두 줄뿐). 보호하는 호출자는 없고 노출만 있었다. **단정하는 주석이 이것을 살려뒀다** — 원인을 못박아서 아무도 그쪽을 보지 않았고, 이 레포에는 같은 실패 기록이 이미 있다("토큰 만료" 배너가 이틀을 태웠다). 공개보다 나쁜 것: 호출 한 번이 워커로 하여금 **네 공급자에 실제 probe** 를 보내게 한다 — 인증 없는 요청 하나가 유료 요청 넷으로 증폭됐다. 계약: ① 운영자 표면은 관리자 Basic 만 받는다. 세션 토큰도 받지 않는다; ② **핸들러는 `authorization` 외의 요청 헤더를 읽지 않는다** — 소스 단언으로 잠가, 다른 이름으로 같은 패턴이 되살아나는 것을 막는다; ③ 거절은 **업스트림 probe 를 하나도 보내지 않는다** — 401 을 주면서 probe 를 쏘면 증폭은 그대로 남으므로, 호출 수로 직접 확인한다; ④ 거절 본문은 아무것도 흘리지 않고 실패 **사유를 구분해 주지 않는다**(추측 공격에 단서를 주지 않는다); ⑤ 비밀번호 미설정 배포는 **열리지 않는다** — fail-open 이 가장 비싼 실수다; ⑥ 깨진 base64 는 500 이 아니라 401 이다(`atob` 는 던진다); ⑦ `scheduled()` 가 자기 자신에게 HTTP 요청을 하지 않는다는 사실을 시험이 지킨다 — 그게 우회를 지운 근거이므로, cron 이 HTTP 호출로 바뀌면 시험이 터지고 인증을 다시 설계해야 한다. **이 행이 주장하지 않는 것**: 다른 운영자 경로의 감사 아님 — `/admin/*` 은 이 변경 범위가 아니다 | Service (`deep-health-auth.test`) |
-| REQ-L12 | 이용권을 **앱 안에서** 카드로 산다 — 결제됐는지는 Service 만 판정한다 (Lab #1210 · Service #40) | 시작 화면의 구매 경로. 근거: [Product Intent](PRODUCT-INTENT.md)의 이용 권한 Intent(INT-ACCESS-01 실행 전에 포함 범위와 비용 부담을 이해한다 · INT-ACCESS-05 한도·만료 뒤에도 만든 결과를 유지하고 불필요한 업그레이드 압박을 하지 않는다). 계약: ① 시작 방법의 세 번째 선택지 `이용권으로 시작하기` 는 Service 가 상품을 줄 때만 그린다. 다른 두 선택지와 같은 급이고(SX-04), **사람이 눌러야만** 열린다 — 한도·만료·오류가 이 화면을 대신 열지 않는다. Service 가 `/v1/profile` 에서 `profile_id: "studio-open-trial"`(Service 의 `HPS_OPEN_TRIAL` 뒤에서만, 기본 꺼짐)로 내려준 열린 체험 좌석에서는 체험이 끝난 턴이 채팅 안 카드(TUX-COND-07)로 끝나고, 그 카드의 `이용권 살펴보기` 를 사람이 누를 때만 이 화면의 이용권 목록이 열린다. 카드의 이용권 사실(이름·기간·AI 요청 횟수·금액)은 ②와 같은 카탈로그에서 읽는다. 카탈로그를 읽지 못하면 한 번 더 읽고, 그래도 못 읽으면 이용권 사실 없이 `이용권 살펴보기` 가 있는 최소 카드로 끝나며(CONV-ENDCARD-R-005), 배너로 끝나는 것은 Service 가 이용권을 팔지 않는다고 답할 때(404·빈 목록)뿐이다; ② 결제 전 화면이 이용권을 **선택지 목록**으로 보여 준다 — 이름, 누구에게 맞는지 한 줄, 결제 금액, 포함된 AI 요청 횟수와 하루 환산. Service 가 추천으로 표시한 것이 먼저 선택돼 있고, Primary 는 목록 뒤 하나(`{금액} 결제하러 가기`)다. 화면은 `자동으로 다시 결제되지 않아요` 를 적는다. 구매 화면의 문구는 해요체다(2026-10-12 Jay) — 시작 화면의 다른 문구는 그대로 둔다; ③ 주문 비밀값은 **브라우저를 열기 전에** SecretStorage 에 저장한다 — 결제할 수 있게 된 사람은 창을 닫거나 앱을 다시 켜도 돌아올 수 있어야 한다. 비밀값과 발급된 코드는 webview 로 가지 않는다; ④ 브라우저는 설정된 사이트(`hypeproofChat.siteBase`)의 결제 페이지로만 연다. Service 응답이 다른 주소를 주면 열지 않고 아무것도 저장하지 않는다; ⑤ 앱은 결제를 판정하지 않는다 — Service 가 `paid` 라고 답하기 전에는 좌석을 받으러 가지 않는다. Service 를 못 읽은 것과 확인 중(`confirming`)인 것은 결제 실패가 아니므로 **주문을 버리지 않고 계속 기다린다**. 기한 뒤 여유 시간이 지나 끝내는 것은 Service 가 아직 `pending`(미결제)이라고 답한 주문뿐이다(2026-10-14 리허설: 오래 오프라인이었다가 돌아오면 결제한 주문을 지우는 경로가 있었다). Purchase-return link (CONV-PURCHASE-R-004): `hypeproof-studio://hypeproof.hypeproof-chat/purchase-return?order=ord_<32 lowercase hex>` from the Lab done page is accepted only in that exact shape (the app's own scheme, that authority and path, no fragment, exactly one `order` key matching `^ord_[0-9a-f]{32}$`, nothing else; `src/purchaseReturnHelpers.ts`). It brings the start page forward and, only when this window holds (in memory or in SecretStorage) a pending, unclaimed order with the same id, runs the check `purchaseRetry` runs, once (a check already on the wire is not doubled; repeated links leave one pending check). Another id, no held order, a claimed record or a claim in progress only shows the page (which, like any reopened start tab, resumes the held order's own wait; nothing is done for the link's id); a malformed link does nothing. A link never creates, claims or reissues anything, carries no credential and draws no error; ⑥ 받은 코드는 평범한 참여 코드로 **기존 입장 경로**(미리보기 → `이 활동 시작하기`)를 그대로 탄다. 구매가 별도 인증·별도 권한 경로를 만들지 않는다. 무료 좌석에서 산 이용권은 같은 입장 경로를 누르지 않고 탄다(⑮). A paid answer reached through the purchase-return link takes this same path, including ⑮'s in-place switch; there is no separate link path; ⑦ 주문 기록은 활동에 **실제로 들어간 뒤에** 지운다. 그 전에 연결이 실패하거나 앱이 꺼지면 `다시 연결` 이 코드를 **교체**받는다 — 다시 결제하게 하지 않는다. 교체는 자격증명을 바꾸므로 사람이 누를 때만 한다; ⑧ `그만두기` 는 기다림만 멈추고 **다른 시작 방법으로 돌아간다**. 결제됐을 수 있는 주문을 버리지 않고, 시작 방법 목록에 `결제 중인 이용권 이어서 보기` 로 다시 보여 준다. 시작 탭을 닫았다 다시 열면 기다림이 다시 시작된다. 기다리는 화면에는 `결제했는데 그대로예요` 가 있어 브라우저는 끝났는데 앱이 그대로일 때 Service 에 다시 묻는다; ⑨ 저장된 주문은 그것을 만든 Service 로만 보낸다 — 설정이 바뀌면 비밀값을 어디에도 보내지 않는다. ⑩ 산 이용권은 `체험` 이 아니라 **`이용권`** 으로 표시한다(시작 화면 미리보기·저장된 활동·채팅 머리말). 기준은 Service `/v1/profile` 의 `pass` 블록이다(Service #70; 종류는 호환을 위해 `trial` 그대로). 시작 화면은 연결할 때 읽은 남은 AI 요청 횟수와 끝나는 날을, 채팅 머리말은 끝나는 날만 보여 준다. 머리말은 턴마다 다시 읽지 않으므로 횟수를 적지 않는다; ⑪ 다 쓴 이용권으로 끝난 턴은 오류가 아니라 이용권 안내로 끝낸다 — 파일은 남고 `이용권으로 시작하기` 에서 새로 살 수 있다고 적는다. 환불·교체된 코드(401 `trial_revoked_or_reissued`)와 기간이 끝난 이용권(403 `trial_expired`)은 Service 가 보낸 문장을 그대로 보여 준다(Service #72 가 이용권용 문장을 보낸다). SDK 스트림이 본문 없는 401만 주면, 이미 산 이용권으로 확인된 프로필에 한해 같은 코드로 `/profile`을 다시 읽고 이 두 코드가 확인될 때만 이용권 종료 안내를 보인다. 일반 401은 원인을 단정하지 않는다. 이 안내의 제목은 `이용권을 더 쓸 수 없어요` 다; 상태코드만 있는 429나 이용권 확인을 권하는 일반 오류는 종료 증거가 아니므로 이 제목을 쓰지 않는다. 429는 `AI 요청이 제한됐어요`로 표시하고, 강사 화면도 요청 제한의 원인을 제공자나 예산으로 단정하지 않는다; ⑫ 새로 산 이용권은 이용권의 기본 작업 폴더(프로필의 `workspace_root`)를 앞 활동에게서 **이어받는다**. Claude Code 가 시작한 폴더에서 이어서 일하는 방식을 따른다(2026-10-14 Jay). 파일은 그대로 남고 대화 기록은 새 활동으로 시작한다. **예외 — 사용자가 확인한 체험 대화 이어가기**(ot-conversation-carryover, 기본 꺼짐): Service 가 이용권 프로필에 `conversation_carryover.available` 을 줄 때만(Service 플래그), 이용권이 **체험**(이용권 표시 없는 `trial`) 활동의 기본 폴더를 이어받은 경우에 한해 첫 입장 뒤 채팅에 `체험에서 하던 대화 이어가기` 를 한 번 제안한다. 사람이 `이어가기` 를 누르기 전에는 아무것도 섞지 않고, 이용권 대화에 학습자 메시지가 생기면 제안을 거둔다. `이어가기` 는 체험 대화를 **읽기 전용**으로 보여 주고(이용권 기록에 복사하지 않는다), 체험 대화는 체험 활동 자신의 작업 기록(`TaskWorkspaceStore`, 마지막으로 열린 작업)에서 읽는다 — 작업 기록 파일이 아직 없는 체험만 이전 기록(`workspaceState`)을 읽는다, 줄인 내용을 이용권 대화의 **보이는 앱 메시지**로 남겨 코치가 다음 턴 기록에서 읽게 한다. `새 대화로 시작하기` 는 기본 동작 그대로다. 체험 좌석의 SDK 세션·자격증명은 이어 쓰지 않는다 — 이용권은 자기 grant 로 새로 시작한다(US-09 는 그대로 인용: 재사용은 사용자가 범위를 확인한 별도 행동). 이어받을 기본 폴더는 입장 직전에 Service에서 다시 읽은 `workspace_root`로만 판정한다. 사용자가 고른 폴더나 저장된 활동의 폴더는 탐색 대상이며 이 값을 바꾸지 않는다. 기본 폴더라면 앞 활동이 수업이어도 이어받을 수 있고, 다른 폴더와 이용권이 아닌 새 활동에는 기존 충돌 차단을 유지한다. 폴더 준비는 기존 연결을 바꾸지 않으며, 준비·자격 저장·폴더 열기 실패 시 이전 연결·폴더 바인딩·파일을 보존한다. ⑬ 무료 체험이 끝난 턴도 오류가 아니라 체험 종료 안내로 끝낸다(2026-10-18 진단 P1-01). SDK 는 Service 의 체험 문장만 넘기고 코드는 넘기지 않으므로, 실측한 세 문장(`개인 체험의 총 요청 한도에 도달했습니다` · `개인 체험 시간이 끝났습니다` · AI 사용량 한도 429 `trial_cost_exhausted` 의 `체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다`)으로 판정한다. 산 이용권으로 돈 턴에는 코드만 있는 `trial_exhausted`·`trial_cost_exhausted` 를 체험으로 읽지 않는다. 안내는 `체험에서 쓸 수 있는 AI 요청을 모두 썼어요.` / `체험 시간이 끝났어요.` 다음에 `만든 파일과 대화는 그대로 있어요.` 를 적고(CU-14), Service 가 상품을 줄 때만(①) `계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.` 를 붙인다. 상품 확인은 코드 없이 읽는 공개 카탈로그 한 번이며 3초 안에 답이 없으면 붙이지 않는다. 구매 화면·코드 입력창을 열지 않고, 저장된 코드를 지우지 않으며, 주문을 만들지 않는다. 배너 제목은 `체험이 끝났어요` 다 — 연결 끊김·이용권 종료와 구분한다. 수업의 429(`이 수업의 요청 한도`)·예산 429·`trial_busy` 는 체험 종료가 아니다. 체험이 끝난 뒤 시작 화면(같은 코드로 다시 연결 · 403 `trial_expired`)은 더 이상 `코드 발급 담당자` 에게 보내지 않는다 — `체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.` 를 적고, 상품이 있을 때만 `계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.` 를 붙인다(TUX-SP-05). 이 항목이 주장하지 않는 것: 남은 시간·횟수 표시(CU-13), 소진 뒤 시작 화면의 `이어서 하기` 카드는 그대로다; **이 행이 주장하지 않는 것**: 2026-10-14 로컬 리허설(개발 앱 · 로컬 Service · 토스 테스트 키, 카드와 토스페이 간편결제)에서 결제 → 코드 → 시작 → 실제 AI 작업 → 소진 → 환불(좌석 회수)까지 왕복했다. 운영 결제대행사·출시 앱 인수는 아니다. 월 구독·자동결제·해지 화면 아님. 채팅 중 남은 횟수 실시간 표시, 재구매 시 기간 연장 규칙은 아직이다. 설치된 앱에 닿으려면 App 릴리스가 필요하다. ⑭ **무료 시작에서 결제로**(SPEC iteration 4 §2.5, 2026-10-19 결정): 무료 좌석(`profile_id: "studio-open-trial"`, `pass` 없음)에서 만드는 주문은 그 좌석의 참여 자격을 `x-hps-free-credential` 헤더로만 보내 Service 가 주문을 무료 시작에 잇게 한다(webview·결제 페이지로 가지 않으며, 다른 좌석은 보내지 않는다). 무료 좌석에서 처음 결제하기 전에 `결제하는 분이 만 19세 이상인가요?` 를 한 번 묻는다(답은 globalState `hypeproofChat.freeStart.payerAdult.v1`). `아니요` 면 Primary 가 `보호자에게 결제 요청하기` 로 바뀌고, 이 컴퓨터에서 브라우저를 열지 않고 결제 페이지 주소를 링크와 QR 로 보여 준다(`결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.`); 결제 확인·좌석 받기는 ⑤~⑦ 그대로다. **결제할 때 Google 로그인은 필수다**(2026-10-19 Jay `결제할때 구글로그인 필수로 하자`, TUX-SP-17): 무료 좌석과 무료 시작이 광고될 때 활동이 없는 새 사용자는 이용권 목록에서 로그인하기 전에는 결제 버튼·결제자 질문을 보지 못하고, 계정 입구(`Google로 시작하기`)가 그 화면의 유일한 Primary 다. 로그인한 주문은 계정 bearer 를 함께 보낸다. **로그인에서 돌아오면 같은 목록이다**(CONV-PURCHASE-R-002): 이용권 목록의 `Google로 시작하기` 를 누를 때 고른 이용권 id 를 호스트가 메모리에만 기억하고(SecretStorage·URL·로그에 넣지 않는다, 카탈로그에 있는 id 만), 목록이 열려 있는 동안(`stage: "choosing"`)에만 `purchase.selected` 로 돌려준다. 계정이 생긴 순간 목록이 열려 있으면 다시 누르지 않아도 그 이용권이 선택된 채 `{금액} 결제하러 가기` 가 Primary 로 보인다(무료 좌석이면 결제자 질문이 먼저다). 로그인을 취소하면 목록과 선택은 그대로이고 계정 입구가 Primary 로 남는다(`로그인을 취소했어요.`). 결제 버튼을 누르면 기억한 선택은 쓰인 것으로 지운다 — 주문이 실패해 목록으로 돌아와도 예전 이용권이 새 선택을 덮지 않는다. 목록을 떠난 뒤 로그인이 끝났거나 목록 밖에서 시작한 로그인은 아무 선택도 되살리지 않는다(음성 대조군: `test/start-page-purchase.smoke.mjs`; webview 쪽은 `test/purchase-return.test.tsx`). 계정 흐름(REQ-L13)이 이 빌드·Service 에 없으면 익명 결제로 대신하지 않고 `결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.` 만 보인다. 코드·수업 좌석은 Service 가 주문에 401 `account_required`(Service `HPS_PURCHASE_ACCOUNT_REQUIRED`)로 답할 때만 같은 단계로 간다. Service 는 무료 시작을 이 플래그와 계정 흐름(`HPS_ACCOUNTS`·`HPS_ACCOUNT_LAB_KEY`) 없이는 열지 않는다. 로그인은 **구매 화면에서만** 보이고 무료 시작의 첫 화면에는 없다. ① 은 그대로다 — 무엇도 이 화면을 대신 열지 않는다. **무료 시작은 폴더 때문에 멈추지도, 묻지도 않는다**(2026-10-20 Jay 출시 앱 2026.1020.0 실측: 예전 코드 체험이 묶어 둔 `~/HypeProofTrial` 에서 `이 폴더는 다른 활동에 연결돼 있습니다` 로 막혔다 — `자동으로 돼야지`). 새 무료 좌석은 자기 기본 폴더(`workspace_root`)와 그 번호 폴더(`~/HypeProofTrial-2`, `-3` …)를 **이 컴퓨터 주인의 앞선 혼자 쓰기**에게서 이어받는다: 앞의 무료 좌석(바인딩 `free:true` 또는 기록의 `free`), 앞의 코드 체험(기록 `kind: "trial"`, `pass` 없음), 그리고 **기록을 읽을 수 없는 주인**이다. 기록은 이 설치의 SecretStorage(이 사용자 계정의 OS 키체인)에 있으므로, 수업·이용권 기록이 남아 있으면 그대로 읽혀 막히고, 기록이 사라졌다면 키체인이 지워졌거나 앱을 다시 설치한 것이라 그 바인딩은 이 컴퓨터에서 어차피 다시 열 수 없다(`이 폴더의 활동 연결을 읽지 못했습니다`) — 이를 막으면 Service 가 정해 준 폴더에서 새 사용자만 갇힌다. 주인 종류는 `prepare()`(동기) 전에 SecretStorage 에서 비동기로 읽어 넘기고(`folderOwners`), `commit()` 도 잠금 전에 같은 판정을 읽는다. 읽은 뒤 바인딩이 바뀌면(ref 가 다르면) 판정이 맞지 않아 막힌 쪽으로 남는다. 수업·수업 레슨·개인 활동·이용권이 묶은 기본 폴더는 이어받지 않는다 — 대신 다음 번호 폴더(`~/HypeProofTrial-2`, 없으면 만든다)로 **묻지 않고** 들어가 바로 채팅으로 간다. 바인딩이 없는데 파일이 있는 번호 폴더는 남의 것일 수 있어 건너뛴다. 빨간 오류·추가 버튼·질문은 없다; 다른 창이 그 사이에 폴더를 가져가면 다음 번호로 조용히 다시 시도한다. 파일은 옮기거나 지우지 않는다. 앞 활동은 저장된 기록을 그대로 가지며, 나중에 고르면 이용권 이어받기(⑫)와 같이 폴더가 사용 중이라고 알린다. 무료 좌석이 아닌 활동(코드 체험·수업·이용권)의 충돌 차단과 기본 폴더가 아닌 폴더의 차단은 그대로다(음성 대조군: 코드 좌석이 수업 폴더에 들어가면 여전히 `이 폴더는 다른 활동에 연결돼 있습니다`). ⑮ **결제되면 무료 좌석이 그 자리에서 이용권 좌석이 된다**(CONV-PURCHASE-R-005): 이 창이 무료 좌석(저장 기록 `free`)을 돌리는 동안 Service 가 주문을 `paid` 로 답하고 좌석을 받으면(코드 주문·계정 주문 모두), 미리보기에서 `이 활동 시작하기` 를 누르지 않고 ⑥의 입장 경로(프로필·활동 확인, 바인딩, 실패 시 되돌림)를 곧바로 탄다. 폴더는 무료 좌석이 쓰던 그 폴더다 — 창이 그 폴더를 열고 있으면(그 자리) 이용권의 기본 폴더가 아닌 번호 폴더(`~/HypeProofTrial-2` …)여도 창을 바꾸지 않는다. 창이 다른 폴더를 열고 있으면 ⑥의 폴더 전환을 그대로 따르고, 번호 폴더라 전환이 막히면 아래 실패 경로로 간다. 이 이어받기는 **그 무료 좌석의 바인딩**(`free:true`, 같은 id)에만 허용되고, 다른 주인의 폴더는 ⑫·⑭의 차단 그대로다. 들어간 뒤 채팅 설정이 새 활동 id 로 다시 가므로 끝 카드(TUX-COND-07)와 체험 종료 문장은 사라지고, 다음 전송은 이용권 자격으로 나간다. 코드 주문의 기록은 ⑦대로 입장이 확인된 뒤(프로필 재확인까지 끝난 뒤)에 지운다 — 이 순서는 사람이 누르는 입장에도 같다. 계정 주문은 기존대로 계정 이용권을 활성화한 직후 지운다(이용권은 계정에 남는다). 대화 이어가기 제안(⑫ 예외)은 Service 가 `conversation_carryover.available` 을 줄 때만, 무료 좌석에서 한 번 기록된다(문구는 `무료 사용`). `pending`·`confirming`·읽지 못한 응답은 아무것도 바꾸지 않는다. 입장 중 무엇이든 실패하면(자격 저장 실패, 바인딩 뒤 프로필 재확인 실패 포함) 되돌림이 무료 좌석과 그 바인딩을 그대로 두고, 빨간 오류 없이 오늘의 미리보기(이용권 기본 폴더로 가는 `이 활동 시작하기`)가 남는다. 코드 주문의 저장된 기록도 남아, 시작 탭을 다시 열면 `다시 연결` 이 보인다 — 무료 시작은 막히지 않는다. 실패 전에 기록된 이어가기 제안은 지우지 않는다(같은 이용권이 나중에 들어갈 때 그대로 쓰인다). 코드 체험·수업·이용권 좌석에서 산 이용권은 ⑥ 그대로 미리보기에서 누른다. 남은 횟수는 보이지 않는다(CU-13). 근거: host `test/paid-seat-switch.smoke.mjs`(양성: 기본 폴더·번호 폴더·계정 주문; 음성: 제안 플래그 없음/false, 미결제 폴링, 자격 저장 실패, 바인딩 뒤 확인 실패, 다른 id·무료가 아닌 바인딩의 `replacesFree`, 무료가 아닌 좌석), webview `test/paid-seat-end-card.test.tsx`(새 활동 id 의 설정이 끝 카드를 지운다; 같은 활동은 유지) | Host (`test/purchase-return-uri.smoke.mjs`, `test/paid-seat-switch.smoke.mjs`, `test/paid-seat-end-card.test.tsx`, `test/free-start-host.smoke.mjs`, `test/free-start-folder.smoke.mjs`, `test/activity-connections.smoke.mjs`, `test/pass-purchase.smoke.mjs`, `test/start-page-purchase.smoke.mjs`, `test/pass-takeover-transaction.smoke.mjs`, `test/sdk-paid-pass-ending.test.mjs`, `test/trial-end-notice.smoke.mjs`, `test/sdk-trial-end-notice.test.mjs`, `test/trial-end-card.smoke.mjs`, `test/trial-end-card-host.smoke.mjs`, `test/trial-carryover.smoke.mjs`) · Browser (`e2e/trial-ux/run.mjs` TUX-SP-05, TUX-SP-17, TUX-COND-07) · Webview (`webview-ui/src/activityLabel.ts`, `webview-ui/src/TrialEndCard.tsx`, `webview-ui/src/TrialCarryover.tsx`) |
+| REQ-L12 | 이용권을 **앱 안에서** 카드로 산다 — 결제됐는지는 Service 만 판정한다 (Lab #1210 · Service #40) | **2026-11-13 상태: ①–④ 이번 릴리스에서 제거됨, ⑤ 유지.** 이용권 판매는 2026-11-11에 멈췄고(Lab 결정 `2026-11-11-stop-studio-pass-sales.md`, Service `PASS_SALES_OPEN = false`), 2026-11-13 결정(Jay)으로 앱 안 구매 화면을 뺀다. 앱은 상품 목록을 읽지 않고 주문을 만들지 않는다. 시작 화면의 `이용권으로 시작하기`·`이어서 하려면 이용권으로 시작하기`, 이용권 목록과 `{금액} 결제하러 가기`, 결제자 나이 질문과 보호자 결제 QR, 구매 때 Google 로그인 안내, 채팅의 체험 종료 카드와 머리줄의 `이용권 살펴보기`가 없다. 체험·무료 사용·이용권이 끝났을 때의 안내는 만든 파일과 대화가 남는다는 것만 말하고 새로 사라는 문장을 붙이지 않는다. ⑤(이전 빌드가 만든 주문의 결제 확인, 좌석 받기, 잃어버린 답 복구, 결제 복귀 링크, `다시 연결`, `결제 창 다시 열기`, `결제 중인 이용권 이어서 보기`)와 환불·만료·소진 안내는 기존 이용권 보유자를 위해 그대로 유효하다. 아래 ①–④ 본문은 기록으로 남긴다. 시작 화면의 구매 경로. 근거: [Product Intent](PRODUCT-INTENT.md)의 이용 권한 Intent(INT-ACCESS-01 실행 전에 포함 범위와 비용 부담을 이해한다 · INT-ACCESS-05 한도·만료 뒤에도 만든 결과를 유지하고 불필요한 업그레이드 압박을 하지 않는다). 계약: ① 시작 방법의 세 번째 선택지 `이용권으로 시작하기` 는 Service 가 상품을 줄 때만 그린다. 다른 두 선택지와 같은 급이고(SX-04), **사람이 눌러야만** 열린다 — 한도·만료·오류가 이 화면을 대신 열지 않는다. Service 가 `/v1/profile` 에서 `profile_id: "studio-open-trial"`(Service 의 `HPS_OPEN_TRIAL` 뒤에서만, 기본 꺼짐)로 내려준 열린 체험 좌석에서는 체험이 끝난 턴이 채팅 안 카드(TUX-COND-07)로 끝나고, 그 카드의 `이용권 살펴보기` 를 사람이 누를 때만 이 화면의 이용권 목록이 열린다. 카드의 이용권 사실(이름·기간·AI 요청 횟수·금액)은 ②와 같은 카탈로그에서 읽는다. 카탈로그를 읽지 못하면 한 번 더 읽고, 그래도 못 읽으면 이용권 사실 없이 `이용권 살펴보기` 가 있는 최소 카드로 끝나며(CONV-ENDCARD-R-005), 배너로 끝나는 것은 Service 가 이용권을 팔지 않는다고 답할 때(404·빈 목록)뿐이다; ② 결제 전 화면이 이용권을 **선택지 목록**으로 보여 준다 — 이름, 누구에게 맞는지 한 줄, 결제 금액, 포함된 AI 요청 횟수와 하루 환산. Service 가 추천으로 표시한 것이 먼저 선택돼 있고, Primary 는 목록 뒤 하나(`{금액} 결제하러 가기`)다. 화면은 `자동으로 다시 결제되지 않아요` 를 적는다. 구매 화면의 문구는 해요체다(2026-10-12 Jay) — 시작 화면의 다른 문구는 그대로 둔다; ③ 주문 비밀값은 **브라우저를 열기 전에** SecretStorage 에 저장한다 — 결제할 수 있게 된 사람은 창을 닫거나 앱을 다시 켜도 돌아올 수 있어야 한다. 비밀값과 발급된 코드는 webview 로 가지 않는다; ④ 브라우저는 설정된 사이트(`hypeproofChat.siteBase`)의 결제 페이지로만 연다. Service 응답이 다른 주소를 주면 열지 않고 아무것도 저장하지 않는다; ⑤ 앱은 결제를 판정하지 않는다 — Service 가 `paid` 라고 답하기 전에는 좌석을 받으러 가지 않는다. Service 를 못 읽은 것과 확인 중(`confirming`)인 것은 결제 실패가 아니므로 **주문을 버리지 않고 계속 기다린다**. 기한 뒤 여유 시간이 지나 끝내는 것은 Service 가 아직 `pending`(미결제)이라고 답한 주문뿐이다(2026-10-14 리허설: 오래 오프라인이었다가 돌아오면 결제한 주문을 지우는 경로가 있었다). Purchase-return link (CONV-PURCHASE-R-004): `hypeproof-studio://hypeproof.hypeproof-chat/purchase-return?order=ord_<32 lowercase hex>` from the Lab done page is accepted only in that exact shape (the app's own scheme, that authority and path, no fragment, exactly one `order` key matching `^ord_[0-9a-f]{32}$`, nothing else; `src/purchaseReturnHelpers.ts`). It brings the start page forward and, only when this window holds (in memory or in SecretStorage) a pending, unclaimed order with the same id, runs the check `purchaseRetry` runs, once (a check already on the wire is not doubled; repeated links leave one pending check). Another id, no held order, a claimed record or a claim in progress only shows the page (which, like any reopened start tab, resumes the held order's own wait; nothing is done for the link's id); a malformed link does nothing. A link never creates, claims or reissues anything, carries no credential and draws no error; ⑥ 받은 코드는 평범한 참여 코드로 **기존 입장 경로**(미리보기 → `이 활동 시작하기`)를 그대로 탄다. 구매가 별도 인증·별도 권한 경로를 만들지 않는다. 무료 좌석에서 산 이용권은 같은 입장 경로를 누르지 않고 탄다(⑮). A paid answer reached through the purchase-return link takes this same path, including ⑮'s in-place switch; there is no separate link path; ⑦ 주문 기록은 활동에 **실제로 들어간 뒤에** 지운다. 그 전에 연결이 실패하거나 앱이 꺼지면 `다시 연결` 이 코드를 **교체**받는다 — 다시 결제하게 하지 않는다. 교체는 자격증명을 바꾸므로 사람이 누를 때만 한다; ⑧ `그만두기` 는 기다림만 멈추고 **다른 시작 방법으로 돌아간다**. 결제됐을 수 있는 주문을 버리지 않고, 시작 방법 목록에 `결제 중인 이용권 이어서 보기` 로 다시 보여 준다. 시작 탭을 닫았다 다시 열면 기다림이 다시 시작된다. 기다리는 화면에는 `결제했는데 그대로예요` 가 있어 브라우저는 끝났는데 앱이 그대로일 때 Service 에 다시 묻는다; ⑨ 저장된 주문은 그것을 만든 Service 로만 보낸다 — 설정이 바뀌면 비밀값을 어디에도 보내지 않는다. ⑩ 산 이용권은 `체험` 이 아니라 **`이용권`** 으로 표시한다(시작 화면 미리보기·저장된 활동·채팅 머리말). 기준은 Service `/v1/profile` 의 `pass` 블록이다(Service #70; 종류는 호환을 위해 `trial` 그대로). 시작 화면은 연결할 때 읽은 남은 AI 요청 횟수와 끝나는 날을, 채팅 머리말은 끝나는 날만 보여 준다. 머리말은 턴마다 다시 읽지 않으므로 횟수를 적지 않는다; ⑪ 다 쓴 이용권으로 끝난 턴은 오류가 아니라 이용권 안내로 끝낸다 — 파일은 남고 `이용권으로 시작하기` 에서 새로 살 수 있다고 적는다. 환불·교체된 코드(401 `trial_revoked_or_reissued`)와 기간이 끝난 이용권(403 `trial_expired`)은 Service 가 보낸 문장을 그대로 보여 준다(Service #72 가 이용권용 문장을 보낸다). SDK 스트림이 본문 없는 401만 주면, 이미 산 이용권으로 확인된 프로필에 한해 같은 코드로 `/profile`을 다시 읽고 이 두 코드가 확인될 때만 이용권 종료 안내를 보인다. 일반 401은 원인을 단정하지 않는다. 이 안내의 제목은 `이용권을 더 쓸 수 없어요` 다; 상태코드만 있는 429나 이용권 확인을 권하는 일반 오류는 종료 증거가 아니므로 이 제목을 쓰지 않는다. 429는 `AI 요청이 제한됐어요`로 표시하고, 강사 화면도 요청 제한의 원인을 제공자나 예산으로 단정하지 않는다; ⑫ 새로 산 이용권은 이용권의 기본 작업 폴더(프로필의 `workspace_root`)를 앞 활동에게서 **이어받는다**. Claude Code 가 시작한 폴더에서 이어서 일하는 방식을 따른다(2026-10-14 Jay). 파일은 그대로 남고 대화 기록은 새 활동으로 시작한다. **예외 — 사용자가 확인한 체험 대화 이어가기**(ot-conversation-carryover, 기본 꺼짐): Service 가 이용권 프로필에 `conversation_carryover.available` 을 줄 때만(Service 플래그), 이용권이 **체험**(이용권 표시 없는 `trial`) 활동의 기본 폴더를 이어받은 경우에 한해 첫 입장 뒤 채팅에 `체험에서 하던 대화 이어가기` 를 한 번 제안한다. 사람이 `이어가기` 를 누르기 전에는 아무것도 섞지 않고, 이용권 대화에 학습자 메시지가 생기면 제안을 거둔다. `이어가기` 는 체험 대화를 **읽기 전용**으로 보여 주고(이용권 기록에 복사하지 않는다), 체험 대화는 체험 활동 자신의 작업 기록(`TaskWorkspaceStore`, 마지막으로 열린 작업)에서 읽는다 — 작업 기록 파일이 아직 없는 체험만 이전 기록(`workspaceState`)을 읽는다, 줄인 내용을 이용권 대화의 **보이는 앱 메시지**로 남겨 코치가 다음 턴 기록에서 읽게 한다. `새 대화로 시작하기` 는 기본 동작 그대로다. 체험 좌석의 SDK 세션·자격증명은 이어 쓰지 않는다 — 이용권은 자기 grant 로 새로 시작한다(US-09 는 그대로 인용: 재사용은 사용자가 범위를 확인한 별도 행동). 이어받을 기본 폴더는 입장 직전에 Service에서 다시 읽은 `workspace_root`로만 판정한다. 사용자가 고른 폴더나 저장된 활동의 폴더는 탐색 대상이며 이 값을 바꾸지 않는다. 기본 폴더라면 앞 활동이 수업이어도 이어받을 수 있고, 다른 폴더와 이용권이 아닌 새 활동에는 기존 충돌 차단을 유지한다. 폴더 준비는 기존 연결을 바꾸지 않으며, 준비·자격 저장·폴더 열기 실패 시 이전 연결·폴더 바인딩·파일을 보존한다. ⑬ 무료 체험이 끝난 턴도 오류가 아니라 체험 종료 안내로 끝낸다(2026-10-18 진단 P1-01). SDK 는 Service 의 체험 문장만 넘기고 코드는 넘기지 않으므로, 실측한 세 문장(`개인 체험의 총 요청 한도에 도달했습니다` · `개인 체험 시간이 끝났습니다` · AI 사용량 한도 429 `trial_cost_exhausted` 의 `체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다`)으로 판정한다. 산 이용권으로 돈 턴에는 코드만 있는 `trial_exhausted`·`trial_cost_exhausted` 를 체험으로 읽지 않는다. 안내는 `체험에서 쓸 수 있는 AI 요청을 모두 썼어요.` / `체험 시간이 끝났어요.` 다음에 `만든 파일과 대화는 그대로 있어요.` 를 적고(CU-14), Service 가 상품을 줄 때만(①) `계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.` 를 붙인다. 상품 확인은 코드 없이 읽는 공개 카탈로그 한 번이며 3초 안에 답이 없으면 붙이지 않는다. 구매 화면·코드 입력창을 열지 않고, 저장된 코드를 지우지 않으며, 주문을 만들지 않는다. 배너 제목은 `체험이 끝났어요` 다 — 연결 끊김·이용권 종료와 구분한다. 수업의 429(`이 수업의 요청 한도`)·예산 429·`trial_busy` 는 체험 종료가 아니다. 체험이 끝난 뒤 시작 화면(같은 코드로 다시 연결 · 403 `trial_expired`)은 더 이상 `코드 발급 담당자` 에게 보내지 않는다 — `체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.` 를 적고, 상품이 있을 때만 `계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.` 를 붙인다(TUX-SP-05). 이 항목이 주장하지 않는 것: 남은 시간·횟수 표시(CU-13), 소진 뒤 시작 화면의 `이어서 하기` 카드는 그대로다; **이 행이 주장하지 않는 것**: 2026-10-14 로컬 리허설(개발 앱 · 로컬 Service · 토스 테스트 키, 카드와 토스페이 간편결제)에서 결제 → 코드 → 시작 → 실제 AI 작업 → 소진 → 환불(좌석 회수)까지 왕복했다. 운영 결제대행사·출시 앱 인수는 아니다. 월 구독·자동결제·해지 화면 아님. 채팅 중 남은 횟수 실시간 표시, 재구매 시 기간 연장 규칙은 아직이다. 설치된 앱에 닿으려면 App 릴리스가 필요하다. ⑭ **무료 시작에서 결제로**(SPEC iteration 4 §2.5, 2026-10-19 결정): 무료 좌석(`profile_id: "studio-open-trial"`, `pass` 없음)에서 만드는 주문은 그 좌석의 참여 자격을 `x-hps-free-credential` 헤더로만 보내 Service 가 주문을 무료 시작에 잇게 한다(webview·결제 페이지로 가지 않으며, 다른 좌석은 보내지 않는다). 무료 좌석에서 처음 결제하기 전에 `결제하는 분이 만 19세 이상인가요?` 를 한 번 묻는다(답은 globalState `hypeproofChat.freeStart.payerAdult.v1`). `아니요` 면 Primary 가 `보호자에게 결제 요청하기` 로 바뀌고, 이 컴퓨터에서 브라우저를 열지 않고 결제 페이지 주소를 링크와 QR 로 보여 준다(`결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.`); 결제 확인·좌석 받기는 ⑤~⑦ 그대로다. **결제할 때 Google 로그인은 필수다**(2026-10-19 Jay `결제할때 구글로그인 필수로 하자`, TUX-SP-17): 무료 좌석과 무료 시작이 광고될 때 활동이 없는 새 사용자는 이용권 목록에서 로그인하기 전에는 결제 버튼·결제자 질문을 보지 못하고, 계정 입구(`Google로 시작하기`)가 그 화면의 유일한 Primary 다. 로그인한 주문은 계정 bearer 를 함께 보낸다. **로그인에서 돌아오면 같은 목록이다**(CONV-PURCHASE-R-002): 이용권 목록의 `Google로 시작하기` 를 누를 때 고른 이용권 id 를 호스트가 메모리에만 기억하고(SecretStorage·URL·로그에 넣지 않는다, 카탈로그에 있는 id 만), 목록이 열려 있는 동안(`stage: "choosing"`)에만 `purchase.selected` 로 돌려준다. 계정이 생긴 순간 목록이 열려 있으면 다시 누르지 않아도 그 이용권이 선택된 채 `{금액} 결제하러 가기` 가 Primary 로 보인다(무료 좌석이면 결제자 질문이 먼저다). 로그인을 취소하면 목록과 선택은 그대로이고 계정 입구가 Primary 로 남는다(`로그인을 취소했어요.`). 결제 버튼을 누르면 기억한 선택은 쓰인 것으로 지운다 — 주문이 실패해 목록으로 돌아와도 예전 이용권이 새 선택을 덮지 않는다. 목록을 떠난 뒤 로그인이 끝났거나 목록 밖에서 시작한 로그인은 아무 선택도 되살리지 않는다(음성 대조군: `test/start-page-purchase.smoke.mjs`; webview 쪽은 `test/purchase-return.test.tsx`). 계정 흐름(REQ-L13)이 이 빌드·Service 에 없으면 익명 결제로 대신하지 않고 `결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.` 만 보인다. 코드·수업 좌석은 Service 가 주문에 401 `account_required`(Service `HPS_PURCHASE_ACCOUNT_REQUIRED`)로 답할 때만 같은 단계로 간다. Service 는 무료 시작을 이 플래그와 계정 흐름(`HPS_ACCOUNTS`·`HPS_ACCOUNT_LAB_KEY`) 없이는 열지 않는다. 로그인은 **구매 화면에서만** 보이고 무료 시작의 첫 화면에는 없다. ① 은 그대로다 — 무엇도 이 화면을 대신 열지 않는다. **무료 시작은 폴더 때문에 멈추지도, 묻지도 않는다**(2026-10-20 Jay 출시 앱 2026.1020.0 실측: 예전 코드 체험이 묶어 둔 `~/HypeProofTrial` 에서 `이 폴더는 다른 활동에 연결돼 있습니다` 로 막혔다 — `자동으로 돼야지`). 새 무료 좌석은 자기 기본 폴더(`workspace_root`)와 그 번호 폴더(`~/HypeProofTrial-2`, `-3` …)를 **이 컴퓨터 주인의 앞선 혼자 쓰기**에게서 이어받는다: 앞의 무료 좌석(바인딩 `free:true` 또는 기록의 `free`), 앞의 코드 체험(기록 `kind: "trial"`, `pass` 없음), 그리고 **기록을 읽을 수 없는 주인**이다. 기록은 이 설치의 SecretStorage(이 사용자 계정의 OS 키체인)에 있으므로, 수업·이용권 기록이 남아 있으면 그대로 읽혀 막히고, 기록이 사라졌다면 키체인이 지워졌거나 앱을 다시 설치한 것이라 그 바인딩은 이 컴퓨터에서 어차피 다시 열 수 없다(`이 폴더의 활동 연결을 읽지 못했습니다`) — 이를 막으면 Service 가 정해 준 폴더에서 새 사용자만 갇힌다. 주인 종류는 `prepare()`(동기) 전에 SecretStorage 에서 비동기로 읽어 넘기고(`folderOwners`), `commit()` 도 잠금 전에 같은 판정을 읽는다. 읽은 뒤 바인딩이 바뀌면(ref 가 다르면) 판정이 맞지 않아 막힌 쪽으로 남는다. 수업·수업 레슨·개인 활동·이용권이 묶은 기본 폴더는 이어받지 않는다 — 대신 다음 번호 폴더(`~/HypeProofTrial-2`, 없으면 만든다)로 **묻지 않고** 들어가 바로 채팅으로 간다. 바인딩이 없는데 파일이 있는 번호 폴더는 남의 것일 수 있어 건너뛴다. 빨간 오류·추가 버튼·질문은 없다; 다른 창이 그 사이에 폴더를 가져가면 다음 번호로 조용히 다시 시도한다. 파일은 옮기거나 지우지 않는다. 앞 활동은 저장된 기록을 그대로 가지며, 나중에 고르면 이용권 이어받기(⑫)와 같이 폴더가 사용 중이라고 알린다. 무료 좌석이 아닌 활동(코드 체험·수업·이용권)의 충돌 차단과 기본 폴더가 아닌 폴더의 차단은 그대로다(음성 대조군: 코드 좌석이 수업 폴더에 들어가면 여전히 `이 폴더는 다른 활동에 연결돼 있습니다`). ⑮ **결제되면 무료 좌석이 그 자리에서 이용권 좌석이 된다**(CONV-PURCHASE-R-005): 이 창이 무료 좌석(저장 기록 `free`)을 돌리는 동안 Service 가 주문을 `paid` 로 답하고 좌석을 받으면(코드 주문·계정 주문 모두), 미리보기에서 `이 활동 시작하기` 를 누르지 않고 ⑥의 입장 경로(프로필·활동 확인, 바인딩, 실패 시 되돌림)를 곧바로 탄다. 폴더는 무료 좌석이 쓰던 그 폴더다 — 창이 그 폴더를 열고 있으면(그 자리) 이용권의 기본 폴더가 아닌 번호 폴더(`~/HypeProofTrial-2` …)여도 창을 바꾸지 않는다. 창이 다른 폴더를 열고 있으면 ⑥의 폴더 전환을 그대로 따르고, 번호 폴더라 전환이 막히면 아래 실패 경로로 간다. 이 이어받기는 **그 무료 좌석의 바인딩**(`free:true`, 같은 id)에만 허용되고, 다른 주인의 폴더는 ⑫·⑭의 차단 그대로다. 들어간 뒤 채팅 설정이 새 활동 id 로 다시 가므로 끝 카드(TUX-COND-07)와 체험 종료 문장은 사라지고, 다음 전송은 이용권 자격으로 나간다. 코드 주문의 기록은 ⑦대로 입장이 확인된 뒤(프로필 재확인까지 끝난 뒤)에 지운다 — 이 순서는 사람이 누르는 입장에도 같다. 계정 주문은 기존대로 계정 이용권을 활성화한 직후 지운다(이용권은 계정에 남는다). 대화 이어가기 제안(⑫ 예외)은 Service 가 `conversation_carryover.available` 을 줄 때만, 무료 좌석에서 한 번 기록된다(문구는 `무료 사용`). `pending`·`confirming`·읽지 못한 응답은 아무것도 바꾸지 않는다. 입장 중 무엇이든 실패하면(자격 저장 실패, 바인딩 뒤 프로필 재확인 실패 포함) 되돌림이 무료 좌석과 그 바인딩을 그대로 두고, 빨간 오류 없이 오늘의 미리보기(이용권 기본 폴더로 가는 `이 활동 시작하기`)가 남는다. 코드 주문의 저장된 기록도 남아, 시작 탭을 다시 열면 `다시 연결` 이 보인다 — 무료 시작은 막히지 않는다. 실패 전에 기록된 이어가기 제안은 지우지 않는다(같은 이용권이 나중에 들어갈 때 그대로 쓰인다). 코드 체험·수업·이용권 좌석에서 산 이용권은 ⑥ 그대로 미리보기에서 누른다. 남은 횟수는 보이지 않는다(CU-13). 근거: host `test/paid-seat-switch.smoke.mjs`(양성: 기본 폴더·번호 폴더·계정 주문; 음성: 제안 플래그 없음/false, 미결제 폴링, 자격 저장 실패, 바인딩 뒤 확인 실패, 다른 id·무료가 아닌 바인딩의 `replacesFree`, 무료가 아닌 좌석), webview `test/paid-seat-end-card.test.tsx`(새 활동 id 의 설정이 끝 카드를 지운다; 같은 활동은 유지) | Host (`test/purchase-return-uri.smoke.mjs`, `test/paid-seat-switch.smoke.mjs`, `test/paid-seat-end-card.test.tsx`, `test/free-start-host.smoke.mjs`, `test/free-start-folder.smoke.mjs`, `test/activity-connections.smoke.mjs`, `test/pass-purchase.smoke.mjs`, `test/start-page-purchase.smoke.mjs`, `test/pass-takeover-transaction.smoke.mjs`, `test/sdk-paid-pass-ending.test.mjs`, `test/trial-end-notice.smoke.mjs`, `test/sdk-trial-end-notice.test.mjs`, `test/trial-end-card.smoke.mjs`, `test/trial-end-card-host.smoke.mjs`, `test/trial-carryover.smoke.mjs`) · Browser (`e2e/trial-ux/run.mjs` TUX-SP-05, TUX-SP-17, TUX-COND-07) · Webview (`webview-ui/src/activityLabel.ts`, `webview-ui/src/TrialEndCard.tsx`, `webview-ui/src/TrialCarryover.tsx`) |
 | REQ-L13 | 개인 계정으로 이용권을 복사하지 않고 시작한다 — Lab #1254 P4의 **로컬 미리보기** | 근거: INT-ACCESS-01/05 및 REQ-L12. 기본은 꺼져 있고 머신의 로컬 미리보기 설정과 loopback Service·Lab가 모두 있어야 미리보기 `Google로 시작하기`를 표시한다. 별도 `accountsEnabled` 설정은 **기본으로 켜져 있다**(결정 B3, 2026-10-19: 무료 시작 사용자가 결제할 때 Google 로그인을 할 수 있어야 한다). 켜져 있어도 정확한 공식 HTTPS Service(`https://api.hypeproof-ai.xyz/v1`)·Lab(`https://hypeproof-ai.xyz`) 주소에서만 운영 계정 경로를 연다. 다른 Service·Lab·http·포트·경로·질의가 붙은 주소에서는 기본값이 켜져 있어도 계정이 없다(음성 대조군: `test/account-session.smoke.mjs`). 사용자가 끄면 꺼진다. 미리보기 설정·환경 변수로 운영 계정을 켤 수 없다. ① Service 기기 요청 → 브라우저의 명시 승인 → polling 순서이며 취소·거절·만료는 계정을 만들지 않는다. 취소와 승인 응답이 겹치면 받은 세션을 즉시 회수한다. ② access/refresh/device credential은 호스트 SecretStorage·메모리에만 있고 webview·URL·로그에 없다. 사용자 비교용 번호만 화면과 승인 URL에 쓴다. 돌아가기 URI에는 credential 대신 단회 nonce·원래 windowId를 넣고 Service 승인이 확인돼야 계정 화면을 연다. 브라우저 재시도 실패를 표시하며 기본 브라우저 복구 후 다시 열 수 있다. ③ refresh rotation은 창 사이에도 직렬화하고 SDK·proxy가 실제 읽는 `ActivityConnections.token()` 경로에서 활성 이용권을 다시 발급받는다. 240초 실행 한도보다 긴 5분 만료 여유를 둔다. ④ Service가 거절한 세션은 활성 실행을 중지하고 해당 계정의 저장 credential을 지운다. 다른 창의 로그아웃과 원격 회수는 15초 간격으로 확인한다. 네트워크 오류는 로그아웃으로 추정하지 않는다. 수업 연결·작업 파일은 보존한다. ⑤ 계정의 이용권과 남은 횟수·종료일을 보여 주며 기존 미리보기 → `이 활동 시작하기` 트랜잭션을 탄다. Service가 소유권·횟수·기간을 판정한다. ⑥ 미리보기의 새 구매는 로그인이 필요하고 주문에 계정 bearer를 보낸다. 무료 좌석·무료 시작 신규 사용자·Service 의 `account_required` 뒤에는 운영 설정에서도 같다(REQ-L12 ⑭, TUX-SP-17) — 계정 런타임이 없으면 익명 주문으로 대신하지 않는다. 결제된 계정 주문은 코드 claim 없이 계정 이용권으로 활성화한다. ⑦ 영수증·기기·동의·삭제는 인증된 웹 계정 화면을 연다. 기존 수업·체험·익명 이용권 경로는 switch-off 상태에서 그대로 동작한다. ⑧ 브라우저 승인을 기다리는 동안 **링크 복사**를 제공한다(CGP-SHELL-R-022). 복사하는 값은 흐름이 이미 여는 확인 URL 을 정규화한 형태이고, 화면의 연결 번호(`code`, 필수)만 담은 URL 일 때만 버튼을 그린다. 안내 문구는 "내 다른 브라우저나 기기에서만 여세요. 이 링크를 다른 사람에게 보내지 마세요."이다 — device-code 피싱 때문이다: 링크를 승인한 사람의 계정으로 이 Studio 가 로그인되므로, "링크 보내 주면 내가 승인해 줄게"에 응하면 학습자의 작업·이용권이 남의 계정으로 간다. 복사 버튼은 이 전달을 한 번의 붙여넣기로 쉽게 만들기 때문에 문구가 "내 것"과 "다른 사람에게 보내지 말 것"을 말한다. device code·access/refresh token 은 클립보드에 가지 않는다. 클립보드가 거절하면 복사했다고 말하지 않고 주소를 보여 준다. 세부: [Sign-in link copy](#sign-in-link-copy-cgp-shell-r-022). **Free seat link at sign-in (CONV-FUNNEL-R-007, hypeproof-service #176):** when a Google sign-in starts on a free seat (`isFreeSeat`, the same rule as the order header of REQ-L12), the host reads the seat's own grant token once at start (`StartPage.freeSignInCredential`) and sends it as `x-hps-free-credential` on every `POST /v1/auth/device/poll` of that sign-in, so the Service links the free seat to the account on the completing poll. `/auth/device/start`, `/me` and every other call carry no such header; a paid, code-issued or class seat, no seat, an empty token or a failed token read sends none; the value is never the account token and is not stored with the account, shown or logged. The header never blocks, retries or changes the sign-in: the calls and outcome are identical without it, and a read that hangs is abandoned after 2 s (`FREE_CREDENTIAL_READ_MS`) so the sign-in starts without it. The free-seat decision is the start page's as of its last refresh (it refreshes on activation and after each action); while another activity is being previewed the running free seat is not counted, as for orders. Not claimed: the Service deployment and its `HPS_FREE_START`/`HPS_TRIAL_FUNNEL` state. **범위 한계:** 실제 Google 동의·카드 결제·운영 계정 활성화·출시 앱·Windows 인수·법률 검토를 증명하지 않는다. | Host (`test/account-session.smoke.mjs`, `test/account-runtime.smoke.mjs`, `test/account-lock.smoke.mjs`, `test/signin-copy-link.smoke.mjs`, `test/account-signin-free-link.smoke.mjs` — free seat link: header on every poll, none on start; negative controls no option / non-free seat / empty / failed read / hanging read / changed seat / cancel during the read / late-poll revoke; `test/free-start-host.smoke.mjs` — free seat gives the grant token, code-issued, paid and no seat give none) · Webview render (`test/signin-copy-link.test.tsx`) · 실제 Mac 개발 앱 (`e2e/accounts/mac-preview.mjs`) · [개발·수용 기준](dev/studio-account-preview.md) |
 | REQ-L14 | Solo seats are not told to call staff — trial/pass/personal wording (trial diagnosis 2026-10-18 D3/D9) | A seat is **solo** when its `activity_kind` is `trial` or `personal`, or it carries a `pass`; anything else, including a profile with no kind, keeps the classroom copy byte for byte. On a solo seat no host or webview string covered here names 스태프, 강사, 운영 담당자 or Jay: the generic proxy failure card ("…계속되면 ‘문제 신고하기’로 알려 주세요."), the SDK 429 stall line, the SDK-degraded notice, the chat error banner hover titles, and the report flow's contact prompt and receipt. The chat send button reads "보내기" on every seat (was "Send"); the start page eyebrow reads "시작하기" and the footer motto "만들기 · 검토하기 · 내 것으로" (was "GET STARTED" / "MAKE · VERIFY · OWN"). One pure module (`src/seatVocabulary.ts`) holds both variants; the host passes the seat to `proxyChat` (`audience`), `coachDegradedNotice` and the report command, and the webview derives it from `config.activity`. Out of scope here: the missing-SDK error path (ind-missing-sdk-error) and classroom-only surfaces (help requests, ops, instructor tools). | U (`test/seat-vocabulary.smoke.mjs`: per-seat strings with a classroom positive control and a solo negative control, `proxyChat` fed a 500) · W (`test/seat-vocabulary-render.test.tsx`: rendered chat panel per trial/pass/classroom seat, start page chrome) · E (`e2e/trial-ux/run.mjs` TUX-CHAT-02 selects the button by "보내기") |
 
@@ -2674,7 +2781,9 @@ CGP-AGENT-R-007 / REQ-CGP-AGENT-08, 2026-10-20): every denied tool call or disab
 who decided it, in the learner's words, with one next step. A tool call refused because its path is outside the work folder (`path_outside_workspace`) saves its step as 안전 규칙 with the reason "작업 폴더 밖이라 실행하지 않았어요. AI는 작업 폴더 안에서만 파일을 만들고 고쳐요." (#3224, Jay 2026-10-29; `DenialNotice.detail = 'outside_folder'`, an enum, never the path); every other safety step keeps "안전 규칙에 맞지 않아 실행하지 않았어요.", and saved steps of either form decode (`storedDenialNotice`). On macOS, a file tool (Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep) whose result is EPERM ("Operation not permitted", the Mac's privacy protection; EACCES is not this) saves its step as 앱 버전/환경 with "macOS가 이 폴더 접근을 막았어요. 시스템 설정 › 개인정보 보호 및 보안 › 파일 및 폴더에서 HypeProof Studio를 켜 주세요." and a `macOS 설정 열기` button; the webview sends `openMacPrivacySettings` and the host opens the fixed Files and Folders settings URL (#3221 part 4, `DenialNotice.detail = 'macos_privacy'`). One pure module,
 #3586 second part: the command and browser windows (learner and instructor local `browser_open`) that run out of time save `timeout`: one 시간 초과 card per tool call, no report button, recorded as policy. The folder window adds no card: on timeout only, its choice says `FOLDER_CONSENT_TIMED_OUT` (`missingTaskFolder.ts`); a close keeps `MISSING_TASK_FOLDER_UNDECIDED`. Outbound (publish, gallery, problem report, classroom ops) keeps its sentences: a timeout reads 보내지 않았어요. (neutral), and the problem report ends silently; the classroom ops timeout is reported to the server as `consent_declined` (follow-up). Annotation keeps the marks and adds no card. A write or browser refusal by the learner still reads as the unknown card (follow-up, separate issue).
 
-`extensions/hypeproof-chat/src/denialSource.ts`, holds the six sources and `timeout` (시간 초과: a write approval window that ran out of time, #3586; recorded as policy with this source, never as a learner refusal), the copy builder and the
+#3594: a learner's refusal in a coach tool window (write, shell or outward command, browser learner and instructor local, `publish_site`, `consultHelper`) saves `declined`: one 거절함 card per tool call with no report button, the copy 허용하지 않아서 하지 않았어요. 하고 싶으면 다시 말해 주세요. The learner's refusal stays actor `user`. A cancel (turn end or scope change) and an approval save nothing. The saved set is cleared at turn end. The instructor local `browser_open` row now emits its activity (tool_use, approval, tool_result), so its refusal and timeout each get one card. Chalk follow-up: legacy instructor path (DEC-027), bug-fix scope only.
+
+`extensions/hypeproof-chat/src/denialSource.ts`, holds the seven sources (`timeout` and `declined` added here) (시간 초과: a write approval window that ran out of time, #3586; recorded as policy with this source, never as a learner refusal), the copy builder and the
 classifier (`classifyDenial`: a fixed cause table; any other value is unknown). Copy:
 수업 설정 "이 수업에서는 {기능}을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." (solo seats,
 `profileAudience`: "지금 활동에서는 … 다른 방법으로 이어서 해 볼 수 있어요." with no teacher word);
@@ -4281,15 +4390,15 @@ black-box cases that hang under the core user journeys in
 [docs/operations/release-casebook/](operations/release-casebook/README.md) (`journeys.yaml`
 CUJ-1–4, `cases.yaml` BB-nnn with priority, linked requirement ids, steps, verbatim expected
 Korean copy, origin and optional `automated_by`). `scripts/release/select-cases.mjs` selects,
-from local git only, every P0 case, every case linked to a requirement id touched since the last
-stable `v` tag (commit subjects/bodies and changed lines of requirement docs; a touched child id
+every P0 case, every case linked to a requirement id touched since the latest published stable
+GitHub release (local commit subjects/bodies and changed requirement-doc lines; a touched child id
 reaches its parent case) and every escaped-bug case dated within 14 days; `자동화됨` cases are
 never selected. release-cut puts the rc install one-liner first in the release PR body, lists the
 touched requirement ids and the selected checklist, and the release PR carries the `release` label
 (created when missing, re-applied when a later rc updates the PR). A broken casebook does not stop
 the cut; the body says the selection failed and the manager runs every P0 case. `release-cut.yml`
 also runs at 17:00 KST: `scripts/release/daily-gate.mjs` skips the run when the repository variable
-`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the last stable tag,
+`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the latest published stable release,
 or when the live-class freeze (`scripts/check-live-sessions.mjs`) does not answer `proceed`, and
 otherwise cuts with `mode=create` (`dry-run` when the variable says so); a manual dispatch keeps its
 inputs and defaults to dry-run. Existing smoke, NOT_RUN, publish-gate and freeze gates are
@@ -4298,6 +4407,17 @@ one `hps-blackbox-run/1` result (`scripts/release/validate-blackbox-run.mjs`: a 
 screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 보류 권장`, every selected
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
+Draft releases and tag-only promotions cannot narrow the default range. Missing release metadata
+or a published tag absent from the candidate ancestry stops selection without a tag fallback (#3910).
+Explicit baseline/PR ranges and dry-run trial ranges remain explicit overrides.
+
+Studio #3771 extends this same casebook to native iPhone first-use failures.
+Cases declare validated release targets; omission retains the existing desktop
+scope. Selection and the desktop publication P0 list use the same target rule.
+Native login, dictation-to-answer and hands-free recovery remain active cases,
+even when corresponding simulator controls pass. A TestFlight test candidate
+may be distributed to collect physical evidence; that distribution is not a
+physical acceptance result or permission to retire the case.
 
 Verification: `scripts/release/test/select-cases.test.mjs` (YAML subset parser with refusal controls
 and a PyYAML cross-check of the real casebook; selection positive controls and negative controls for an
@@ -4478,6 +4598,13 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   the latest recorded event, or `바뀐 때 기록 없음` when there is none. List by default;
   `목록`/`격자` (aria-pressed, weight plus underline) switches to a grid; a window of 360px
   or less shows the list only and offers no switch. Opening asks the host for a fresh list.
+- **Find a listed file (#3290).** A labelled search field filters the current inventory by
+  literal filename or folder path, ignoring case and Unicode composition. Matching preserves
+  original order, provenance and file identity. The count says “현재 목록에서” and the existing
+  omitted/unconfirmed inventory notices stay visible, including when no item matches; this is
+  not a whole-workspace scan. Clear restores the list and returns focus to the field. A new
+  task/activity starts with an empty query. Matching sends no inventory-scan or model request;
+  existing bounded lazy-thumbnail requests still run for newly visible rows after filtering.
 - **Keyboard and focus.** A native modal dialog on the rail's side, full height, at most
   360px wide: focus moves in on open, Tab stays inside (the page behind is inert), Escape
   or `내 작품 닫기` closes it, and focus returns to the opener, else the rail toggle. A task
@@ -4982,6 +5109,48 @@ Test: `extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs` (recorded th
 re-derived from `theme-defaults` when `vscodium-base` is checked out, and 14 negative controls).
 Decision: DEC-DS-D-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
+## Host theme kinds (CGP-DS-R-004)
+
+`REQ-STUDIO-HOST-THEME-KINDS` adopts REQ-CGP-DS-03 ("Webview follows the host theme kind
+(light/dark/high-contrast)"). Product Intent PI#1: a learner who runs VS Code in a light or a
+high-contrast theme reads every Studio screen in that theme, and the HypeProof Studio theme still
+draws the HP palette (dark + lime). No scored outcome. Builds on the host theme mapping above
+(CGP-DS-D-002) and the elevation levels (CGP-DS-R-012).
+
+- Scope: every webview this extension creates. The chat view and the four panels that load the
+  same bundle (start page, automation, local review, skill store) take their colours from
+  `tokens.css`; the seven panels that draw their own HTML (artifact history, the image-edit
+  comparison, personal continuation, slide studio, visitor preview, work takeaway, the preview
+  shell) read the `--vscode-*` theme variables directly.
+- Each of `body.vscode-dark`, `body.vscode-light`, `body.vscode-high-contrast` and
+  `body.vscode-high-contrast vscode-high-contrast-light` maps to its own token set on the chat:
+  the text, app surface, focus ring and CTA roles resolve to that theme's `foreground`,
+  `editor.background`, `focusBorder` and `button.background`; elevation is the dark level on
+  dark kinds, the light level on light kinds and flat in both high-contrast kinds; the four kinds
+  give four different token sets. Under the HypeProof Studio theme the roles equal the forest
+  palette.
+- The branded start and disconnected screens stay forest in every kind (DEC-27, CGP-DS-D-002).
+- Every panel that draws its own HTML paints the theme's `editor.background` as its page.
+- Text: every visible element with its own text is at least 4.5:1 against what is painted under
+  it, with its colour's alpha and every ancestor's opacity applied, in all four kinds and at
+  320, 390 and 1280px. Secondary text on light kinds is the description colour pulled 20%
+  toward the foreground (as in `tokens.css`), never the foreground dimmed with `opacity`.
+- High-contrast kinds: no element casts an outer shadow unless it also draws a solid, opaque,
+  at least 1px border on every side.
+- Changed by CGP-DS-R-004: the preview shell's page was a fixed `#1b1b2a` with `#ddd` text in
+  every theme; it now paints the editor surface and the theme's text, and its placeholder and
+  review notice use the description colour instead of the text at 70% and 85% opacity (3.2:1
+  and 4.4:1 on Light+). The slide studio's secondary text (`--muted`) takes the light-kind mix
+  (Light+ `#717171` on its `#F3F3F3` card was 4.4:1).
+
+Test: `extensions/hypeproof-chat/test/host-theme-kinds-computed.smoke.mjs` (headless Chromium,
+nine surfaces, four kinds plus the HypeProof Studio theme, three widths, one screenshot per
+surface, kind and width with `HOST_THEME_KINDS_EVIDENCE=<dir>`, seven negative controls; it
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Colours are read from the computed
+cascade, never sampled from glyphs, so the result does not depend on installed fonts.
+Verification: `docs/testing/host-theme-kinds.md`. Decision: CGP-DS-R-004 in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
 ## Text contrast table (CGP-DS-D-028)
 
 DES-CGP-DS-42, traces to CGP-DS-R-034 (REQ-CGP-DS-42, "no text token below 4.5:1 is used for
@@ -5400,6 +5569,16 @@ Evidence: `answer-attempts.smoke.mjs`, `answer-attempts.test.tsx`,
 Chromium: 44px targets, 14px text, focus ring, both seats, dark and light, 1420/800/320,
 measured against clientWidth) in `extensions/hypeproof-chat/test/`.
 
+## Work assessment grouped confirmation (CGP-KNOW-R-006)
+
+Before “내 작업 돌아보기” sends records for assessment, the learner sees the exact
+destination and one unchecked box per kind of record. An independent disclosure
+opens the records in that group, with their text where available and byte counts.
+Send requires every group and the host checks the original full set of item IDs.
+The current activity, connection and exact batch must still match before sending.
+Cancel, timeout, a stale batch or an unavailable chat panel authorizes no send.
+Public publication retains its separate content and audience decisions.
+
 ## Public publication second confirmation (CGP-KNOW-R-007)
 
 REQ-KNOW-10 / CGP-KNOW-010 / PI#2: after the per-content outbound confirmation
@@ -5557,6 +5736,20 @@ separate.
 | ID | Requirement | Evidence |
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
+
+## Publish responsibility notice (CGP-ART-R-012)
+
+CGP-ART-R-012 / CGP-ART-D-012 (CGP-ART-013, REQ-ART-12) add a short responsibility notice before
+a learner's first test-version link. It exposes the learner's own responsibility for what they
+publish (Product Intent 2, visible responsibility; OWNERSHIP hypothesis) and makes no
+learning-outcome claim; no capability label appears. This slice is the notice for every seat.
+The minor-cohort instructor confirmation (REQ-ART-12 parts 2 and 3) is not built: it needs a
+Service link state, a Chalk list and the SX-41 policy flag, planned in `decisions.md`
+(DEC-ART-R-012). Until it exists, a minor cohort's link opens as it did before this change.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-PUBLISH-NOTICE | Pressing `공개하고 테스트 시작`, or `링크 하나 더 만들기`, when the signed-in learner has not acknowledged the current notice version opens an inline sheet beside that button: the title `공개하기 전에 확인해요`, three bullets (`링크를 받은 사람은 누구나 이 페이지를 볼 수 있어요.`, `페이지에 담긴 내용은 공개한 내가 책임져요.`, `이름이나 연락처 같은 개인정보를 모으지 않는지 확인해요.`), `알겠어요` and `취소`. Focus moves to `알겠어요`; `취소` and Escape send nothing and return focus to the opener. `알겠어요` sends the pending action with the notice version. The host enforces the gate: `PublishSession` refuses every new link (`submit` and `link`) before any visitor preview, checklist or request unless the learner's acknowledgment of the current version is recorded, answering `공개하기 전에 안내를 먼저 읽어 주세요.`; an acknowledgment for another version is refused and not recorded; an acknowledgment that cannot be saved answers `안내를 읽은 기록을 저장하지 못했어요. 다시 시도해 주세요.` and sends nothing. The record is in machine `globalState`, keyed by the token's owner digest (`crBytesOwner`, never the identity) and the notice version, written once (the first time is kept), bounded, and read as empty when malformed. A token without an owner, or a missing ledger, never passes. Changing the notice copy means a new version, and every learner reads it again. Bullets fit two lines at 320 px, also under a font-independent bound (each Hangul syllable 1 em, other characters 0.6 em); buttons are at least 44 px with text at least 14 px, logical properties and tokens only, a focus ring, and edges in forced colours. | `test/publish-notice.smoke.mjs` (real `PublishSession`, ledger and owner digest; negative and fail-closed controls), `test/publish-notice.test.tsx` (real `PublishPanel`: sheet, 취소, Escape, 알겠어요 for both actions, focus), `test/publish-notice-layout.smoke.mjs` (headless Chromium, 320/800/1420, both themes, personal and classroom, forced colours); CGP-ART-013 / REQ-ART-12 / DES-ART-12; Product Intent 2. |
 
 ## Task activity summary (CGP-ART-R-020)
 
@@ -5975,6 +6168,13 @@ separate from installed Studio and native OS IME acceptance.
 | ID | Requirement and acceptance | Evidence |
 |---|---|---|
 | REQ-CGPV-12 | PI#4 (minimum necessary intervention: the control moves out of the learner's way without leaving the screen) / CGP-VOICE-012 / VO-40 / VO-47: the compact voice control floats in one of four viewport corners, 16px from the edges. With focus anywhere in the control, ArrowUp/ArrowDown choose the top/bottom side and ArrowLeft/ArrowRight the left/right side; Home returns to the home corner (top right, so the composer and its send button at the bottom stay uncovered). Arrow keys or Home with Shift, Alt, Ctrl or Meta, or during an open IME composition, are not taken. Focus stays on the control that had it, and each move is announced in a status region (`음성 컨트롤을 {corner}로 옮겼어요`). A `옮기기` button (44px, tooltip and accessible description `화살표 키로 네 모서리 중 한 곳으로 옮겨요. Home 키를 누르면 처음 자리로 돌아가요.`) steps clockwise on press, so pointer users can move it too. Only the four corners exist: no free position and no drag, so the control can never be parked partly off-screen; its width is capped to the viewport minus both gaps and it wraps, so it stays fully inside the viewport at 320px. The corner is remembered per window (this webview's sessionStorage); an unknown stored value or blocked storage falls back to the home corner without an error. Moves ease over the press duration (140ms, within DES-CGPV-12's 150ms, on the ease-out UI curve) only when motion is allowed and are instant under reduced motion; the move button's tooltip carries the keyboard help (DES-CGPV-12, CGP-VOICE-D-007). Escape still ends the session (VO-41). Learner floors win over DES-CGPV-12/DES-CGPV-02: 44px targets and 14px text. Not claimed: voice works or this control is mounted on a learner screen. VoicePanel is still unmounted (REQ-R1/REQ-R6), so seats (personal, classroom) inherit this when voice ships | `voice-popup.smoke.mjs` §15 (decision table, modifiers, parse), `voice-compact-corner.smoke.mjs` (headless Chromium, computed rects in dark/light at 1420/800/320 and forced colours; CGP-VOICE-D-007 / DES-CGPV-12: the running move transitions last 140ms on an ease-out curve, none under reduced motion, keyboard help text in the move button's tooltip) |
+
+## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-02 | PI#2 (the learner keeps visible control of what the AI hears and says) / CGP-VOICE-002 / VO-06 / VO-40: microphone mute and speaker (output) mute are two separate switches. `마이크 끄기` is the session's mute: it closes capture (the `mute` session event, so the OS microphone indicator goes off) and never changes the speaker switch. `소리 끄기` is the window's output switch (`src/voiceOutputMute.ts`, memory only, never stored, logged or sent): it stops audible output in the same press (read-aloud cancels the synthesizer synchronously, well inside 200ms), holds every output while on (a read-aloud press speaks nothing; its button is disabled with `읽어 주기, 소리 꺼짐` and the tooltip `소리를 꺼 두었어요. 음성 대화에서 소리를 켜면 들을 수 있어요`), and sends no session event, so capture stays as it was. A reading keeps going when the microphone is muted. Each change is announced in its own words (`마이크 꺼짐`/`마이크 켜짐`, `소리 꺼짐`/`소리 켜짐`). Both survive collapsing and expanding the panel; ending the conversation (종료, X, Escape, 텍스트로 전환) or the chat leaving the window turns sound back on, so read-aloud is never left held with no `소리 끄기` on screen. Unchanged: the realtime session's existing VO rule that a microphone mute also stops the AI's reply in progress (voice-conversation.md state table), which is a session fact, not the speaker switch. Not claimed: voice works or the panel is mounted. VoicePanel is still unmounted (REQ-R1/REQ-R6) and read-aloud draws nothing unless the Service serves it, so every seat renders as before | `voice-mute.test.tsx` (real VoicePanel through the real popup and session reducers next to a real read-aloud button under a served-voice profile: two named toggles in both presentations, speaker mute stops and holds a reading with no mute event, microphone mute closes capture and leaves the reading and the switch alone, both kept across collapse and expand, reset on end), `voice-read-aloud.smoke.mjs` (the hub obeys the switch synchronously; a disposed hub stops listening), `voice-popup.smoke.mjs` (`COMPACT_CONTROLS` carries `output_mute`) |
+| DES-CGPV-02 | The two switches are two square icon buttons in the big panel's action row and in the compact control: microphone and speaker glyphs at 20px, struck through when off (`mic-off`, `speaker-off`). The accessible names stay `마이크 끄기` and `소리 끄기` while pressed; `aria-pressed` carries the state. Off states are also written beside them at the 14px caption step (`마이크 꺼짐`, `소리 꺼짐`; the compact control adds only `소리 꺼짐` when its status name already says `마이크 꺼짐`). Pressed = the struck glyph, the pressed fill, primary ink and the selected edge (`--hp-border-control-selected`), never colour alone; forced colours use the global `[aria-pressed="true"]` Highlight pair. Learner floors win over the row's 32px: 44px targets. Visible at 320px with no sideways scroll | `voice-mute-controls.smoke.mjs` (headless Chromium, dark/light at 1420 and 320 and forced colours, real mouse presses: exactly two named toggles per presentation, 44px, 20px glyphs, inside the viewport, pressed differs by glyph, fill and edge, off words at 14px or more, switches independent and kept across collapse and expand; negative controls: the base panel and a pressed rule without the edge both fail it) |
 
 ## Class window notice (CGP-SHELL-R-025)
 
@@ -6727,12 +6927,28 @@ the saved learner asset. Unattached canvas marks are local to the open dialog.
 
 | ID | Requirement | Acceptance | Intent |
 |---|---|---|---|
-| REQ-CGP-AGENT-60 | Show the tool-call purpose before `$ command`, a workspace-relative folder only where the host knows it, and owned background processes in 실행 중인 것 with stop. | SDK Bash/PowerShell description is preserved in the timeline and task history; absent descriptions are explicitly unknown. The SDK shell input has no working directory and the shell keeps `cd` between calls, so shell rows and SDK background tasks show no folder; the live server is listed as 미리보기 서버 and shows what it serves in words (`작업 폴더 전체 (<folder name>)`, `작업 폴더/<sub>` or `작업 폴더 밖`; never `.`) and its loopback address. Each entry is one bordered card with a status dot, a plain title (`미리보기 서버 실행 중`, or the shell purpose), a muted status label and one aligned button (`끄기` for the preview server, `멈추기` for a shell task) shown only while it runs; a running preview server says why it stays on (`미리보기 창을 보는 동안 켜 두어요. 다 봤으면 꺼도 돼요.`), because it serves the open preview tab and does not end with the turn (Jay 2026-10-29: `라이브 서버 · 폴더: .` read as a turn still running). Purpose and command text neutralise control, bidi, zero-width, BOM, tag and filler characters (purpose 500, command 2000 characters); a line break the shell acts on (LF, CR, CRLF, NEL, U+2028/2029) is shown as ` ⏎ `, never a plain space, so a `#` comment or a heredoc cannot make the next command read as harmless text, and a trailing break is dropped; longer text keeps its start and its end around a visible `… (가운데 N자 생략) …` marker, so a padded command never hides its tail. Summary seats collapse command details and still settle each row from its tool result. Settled entries leave the list after a short final state; SDK `ambient` tasks are excluded. SDK background shell tasks and the Studio live server have owned stop handles; 끄는 중 lasts until authoritative task exit or HTTP server close, never merely request acknowledgement. Activity changes isolate lists and stop handles; a stop message only looks in the current activity. | PI#2, PI#5; exposes VERIFY and OWNERSHIP through inspectable action and explicit stop, without capability labels. |
+| REQ-CGP-AGENT-60 | Show the tool-call purpose before `$ command`, a workspace-relative folder only where the host knows it, and owned background processes in 실행 중인 것 with stop. | SDK Bash/PowerShell description is preserved in the timeline and task history; absent descriptions are explicitly unknown. The SDK shell input has no working directory and the shell keeps `cd` between calls, so shell rows and SDK background tasks show no folder; the live server is listed as 미리보기 서버 and shows what it serves in words (`작업 폴더 전체 (<folder name>)`, `작업 폴더/<sub>` or `작업 폴더 밖`; never `.`) and its loopback address. Each entry is one bordered card with a status dot, a plain title (`미리보기 서버 실행 중`, or the shell purpose), a muted status label and one aligned button (`끄기` for the preview server, `멈추기` for a shell task) shown only while it runs; a running preview server says why it stays on (`미리보기 창을 보는 동안 켜 두어요. 다 봤으면 꺼도 돼요.`), because it serves the open preview tab and does not end with the turn (Jay 2026-10-29: `라이브 서버 · 폴더: .` read as a turn still running). Purpose and command text neutralise control, bidi, zero-width, BOM, tag and filler characters (purpose 500, command 2000 characters); a line break the shell acts on (LF, CR, CRLF, NEL, U+2028/2029) is shown as ` ⏎ `, never a plain space, so a `#` comment or a heredoc cannot make the next command read as harmless text, and a trailing break is dropped; longer text keeps its start and its end around a visible `… (가운데 N자 생략) …` marker, so a padded command never hides its tail. Summary seats collapse command details and still settle each row from its tool result. Settled entries leave the list after a short final state; SDK `ambient` tasks are excluded. SDK background shell tasks and the Studio live server have owned stop handles; the pressed button keeps its verb while the stop is on its way (`멈추기` → `멈추는 중` for a shell task, `끄기` → `끄는 중` for the preview server), and that word lasts until authoritative task exit or HTTP server close, never merely request acknowledgement. Activity changes isolate lists and stop handles; a stop message only looks in the current activity. | PI#2, PI#5; exposes VERIFY and OWNERSHIP through inspectable action and explicit stop, without capability labels. |
 
 The list does not enumerate arbitrary operating-system processes. If an SDK query ends without
 terminal task evidence, its remaining entries say 실행 상태 확인 불가; Studio does not claim they
 exited or send a stop to a reused process identifier. Proxy and local subscription runtimes do
 not expose shell execution. Live-server controls are shared across these runtime choices.
+
+Shell row presentation (CGP-AGENT-D-025, DES-CGP-AGENT-60). The row is the purpose line (14px or
+larger, strong), then a `<details>` block whose 44px summary reads `실행 명령 · 처리 중|완료|실패`.
+The block holds the monospace `$ command` and, only where the host knows one, the muted
+`폴더: <folder>` caption; summary seats and rows restored from task history start collapsed, other
+seats open. The block is at most 240px tall and scrolls inside (the command wraps, so the page
+never scrolls sideways). A 44px `명령 복사` button sits beside the command, never over it: it is
+always in the tab order (Tab from the summary reaches it, after the command itself when the
+command scrolls), and it is drawn while the row is hovered or holds keyboard focus and while a
+copy result shows. It has the control boundary as its edge (`ButtonText` in forced colours) and no reveal animation. It copies the command as the
+row shows it, without the `$ ` prompt and with its ` ⏎ ` marks and omission marker, never the raw
+model input; success (`명령을 복사했습니다`, 4 s) waits for the clipboard write and a refusal
+(`복사하지 못했습니다. 명령을 선택해 복사해 주세요.`) stays, through the shared copy outlet
+(CGP-DS-R-025). Studio shows no shell output in the row: the "output block" of the design row is
+this command block. Every seat that draws the transcript gets the button; it copies only text
+the seat already shows. Agent choices: decisions.md "CGP-AGENT-D-025".
 
 ## Copy the task conversation (CGP-CHAT-R-024)
 
@@ -6820,7 +7036,9 @@ covers CGP-AGENT-R-025 / REQ-CGP-AGENT-48). Cmd+F on macOS, Ctrl+F elsewhere, an
 the chat webview opens a find bar at the top of the open transcript, right-aligned in the
 chat column, and focuses its input (대화에서 찾기). The physical F key counts too, so a
 Korean input source opens it. Pressing it again refocuses and selects the query; a query
-kept from an earlier search is repainted on reopening without scrolling. It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
+kept from an earlier search in the same conversation is repainted on reopening without scrolling.
+Changing task or activity closes the bar and clears its query; typing the same text in the new
+conversation performs a fresh search and reveals its current match (#2974). It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
 owns the keyboard, nor during IME composition. Every seat that draws the transcript gets it
 (personal, classroom, lesson, trial, pass and the instructor's nested panel); it reads only
 the local DOM and sends nothing to the host or the network.
@@ -8109,10 +8327,14 @@ command (kept out of the palette, like the other learner commands). It writes on
    A second press while one runs does nothing.
 7. Progress shows as a notification ("내 작업을 내보내는 중이에요"); the result is one line
    "저장했어요: <폴더> · <파일 이름> · 작업 파일 n개 · 대화 m개" with "폴더 열기", which reveals the zip.
+   The result includes the count of HTML files in the ZIP when present. If any encountered `.html` or
+   `.htm` file is left out, including in a subfolder, a warning says how many HTML files are missing,
+   points to `내보내기-안내.txt` and asks the learner to review the original and export again before sharing.
+   This warning reveals no omitted names or contents and still offers "폴더 열기".
    The entry is a 44px target with ≥14px text, a focus ring and a forced-colours border (DES-SHELL-27).
    The progress notification opens as soon as the export starts and counts files read every 50
    ("파일 50개 담는 중"). The folder in the result line is a display copy (DES-SHELL-27, CGP-SHELL-D-027):
-   VS Code runs `[text](command:…)` in a notification as a link and draws control and bidi characters, so
+   Credential values are redacted. VS Code runs `[text](command:…)` in a notification as a link and draws control and bidi characters, so
    C0/C1 controls, U+2028/2029, bidi marks and embeddings, zero-width space and BOM show as `�`; when `](`
    appears, `[`/`]` show as `［`/`］`; a path over 120 characters keeps its first 40 and last 79 around
    `…`, so the file name and counts are never cut by the 1000-character notification limit. "폴더 열기"
@@ -8258,7 +8480,7 @@ block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING
 line under it (one line, ellipsis; once open the whole sentence moves under the work surface, REQ-STUDIO-LEARNING-BLOCK-CAPTION), and a 44px "열어 보기" button (`aria-expanded`,
 `aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
 nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
-open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
+open/closed choice is keyed to the course, lesson version, content hash and step, so even a new version with identical content starts closed; returning to a previously opened version restores only its own choice. Opening one step's card never opens another's (it is not
 stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
 named by the title in its head and described by the controls help. The live state line is never in the hidden body, so
 a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
@@ -8899,7 +9121,12 @@ Custody follows the Epic's design v1 (comment on #3418): the seller's private la
 | REQ-STORE-MAIL | A store skill that declares `mail_draft` runs from the buyer's own roster, never as a chat turn and never with its template on the buyer's device (design v1 D10, F7). 「실행」 reads the sheet set up in the buyer's automation, maps columns by the skill's public parameter labels, sends only the rows (address + parameter cells, at most the activity's recipient cap) to the Service's render route, and refuses the result unless it has one message per row with exactly that row's address. The preview is built only from addresses in the recipient column of the sheet as last read on this device under the same Google connection (no duplicates, no header injection; an address in another column is not a recipient; a newer preview clears the older one), shown in full (every recipient, subject and body) and sent through the buyer's own Gmail connection only after the buyer approves that exact preview; every send is approved, so the first send of an installed or updated version always is. No model takes part, so none can choose or add a recipient; the Service refuses minors and age-unknown buyers (F14) and ends the refund right at the first render (F1). The run never reaches the Apps Script project generator or the shared runner, so no store recipe is embedded in or sent to either. | `storeMail.ts`, `automationHost.ts` `runStoreMail`, `googleAutomation.ts` `previewRendered`, `skillStore.ts` `render`, `skillStorePanel.ts` · `store-mail-custody.smoke.mjs` · Service `store.test.mjs` render tests |
 | REQ-STORE-LOCAL-SEAL | The creator's automation draft in `globalState` (`hps.automation.recipe.<namespace>`) is stored as AES-256-GCM ciphertext under a per-device key kept in SecretStorage (design v1 D7); the AAD binds it to its namespace, so a copied value opens neither in another activity's slot nor with another device's key. A plaintext draft written before this is sealed in place when the automation next opens. The key is created only when a draft is first written. | `automationDraftSeal.ts`, `automationHost.ts` · `store-mail-custody.smoke.mjs`, `automation-conversation-host.smoke.mjs` |
 | REQ-STORE-REFUND | Within `refund.window_days` of payment and before the first run, a refund cancels the whole payment at the gateway, removes the install and reverses every ledger line under the sale's own `policy_version` (`refund.after_split`, unsettled case). After the first run or past the window the refund button is absent and the reason is shown. A gateway cancel failure leaves the sale, install and ledger unchanged. | W `skill-store.test.tsx` · Service `store.test.mjs` refund tests |
-| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the seller's first-lecture origin, `attribution`), policy version and status (refund window, payout hold by `tier.*` hold days, payable). Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale and no-origin tests |
+| REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first, labelled 예상 while `pg.fee_rate_bps` is a placeholder), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the partner and instructor the seller registered, `attribution.*`), policy version and status (refund window, refund in progress, payout hold by `tier.*` hold days, payable, refunded). Totals for refund window, payout hold, payable and refunded are shown before any payout account exists. Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale, no-code and earnings tests |
+| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. Entering a code shows the consent to provide the seller's display name and sale amounts to that partner/instructor for settlement; publishing with a code needs it checked, and 「코드 없이 진행」 clears the codes so the publication registers none. The choice is registered once (`attribution.seller_editable`); if a registration committed but its answer was lost, the retry reads the recorded choice back and continues the publish. Afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
+| REQ-STORE-PAYOUT-ACCOUNT | The payout account is asked for only once the payable balance reaches `payout.account_prompt_krw`; before that the view says when it will be asked. The form takes bank, account number and holder; a minor seller is asked for a linked adult's account and sees that payout waits for the adult's verification (`linked_adult.verification`). After saving, only the bank and last four digits are shown; the panel keeps no copy of the number. Holder verification is a sandbox check until the payout agency contract (#3419). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · Service `store.test.mjs` payout-account and minor tests |
+| REQ-STORE-IDENTITY | An unverified seller (`tier.none`, cap `tier.none.cap_krw`) sees 「휴대폰 본인인증」 in 「내 스토어」. It opens only the Service's own verification page for that session in the browser, and the panel waits until the Service reports the outcome: verified (the seller's tier and cap follow), failed, expired or 「기다리지 않기」. The verified birth date replaces the self-declared year, so a 14–18 seller lands in `tier.minor` and under `age.minor_min` is refused. One person verifies one store account. Only the outcome is stored (no name, phone or birth date). Until the provider contract (#3419) the provider is a sandbox and the page says so. | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` identity tests |
+| REQ-STORE-COURSE-BLOCK | A course whose profile does not sell (every minor cohort; any profile with `store.sell: false`) keeps everyone on its seats, and every account marked as coming from it, from listing or selling store skills. 「내 스토어」 then shows 「이 과정에서는 스킬을 팔 수 없어요…」 with no code step and no listing forms; the settlement history stays. Their listed skills are not shown or sold, and buyers who hold one keep running it. Marks come from the account's own seat token or an operator (audited). | W `skill-store.test.tsx` · Service `store.test.mjs` course block test |
+| REQ-STORE-RECEIPT | 「내 스킬」 lists the buyer's purchases (paid and refunded) with amount, state and date, each with 「영수증 보기」. The receipt is the gateway's own page for that payment: the Service reads it from the gateway's record of that order and amount, and the App opens it only when it is an https page. A refund removes the install but keeps its row and receipt. | W `skill-store.test.tsx` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` receipts test |
 | REQ-STORE-MINOR | A self-declared 14–18 account may install free items only (`minor.buy`), may sell within `tier.minor`, sees its own ledger, and its payout is marked linked adult required (`minor.sell`). The age question appears before the first purchase or sale. | W `skill-store.test.tsx` · Service `store.test.mjs` minors test |
 | REQ-STORE-FRAUD | An order is refused when buyer and seller share a recorded device or network address, and a payment made with a card the seller used is cancelled and never recorded as a sale (`fraud.shared_signal`). A seller's monthly paid total cannot exceed `fraud.seller_monthly_cap_krw`. Reports from `reports.auto_unlist` distinct buyers unlist an item. | Service `store.test.mjs` fraud and report tests |
 
@@ -8914,15 +9141,15 @@ is out of scope and stays unmounted.
 | ID | Requirement and acceptance | Evidence |
 |---|---|---|
 | REQ-CGPV-33 | Class feature keys `dictation` and `read_aloud` (CGP-VOICE-R-024; DEC-06, DEC-07; policy 4 and 6). The only input is the served `voice` block: a seat with no block, a block with both halves off, or a block naming a policy version this build has no copy for renders no voice element anywhere and its markup is byte-identical to a build without voice. Each half is its own switch. A seat that was served voice earlier in this window and is served none now (the Service omits the block when a class turns voice off, or a minor class loses consent) shows the disabled state (CGP-VOICE-D-018): the mic button and each answer's read-aloud button are disabled, named with the reason `이 수업에서는 쓸 수 없어요`, and the reason is also visible text above the composer; the text flow is unchanged. A Service refusal `voice_off` or `voice_consent_required` switches the seat to the same state. A class that never enabled voice shows nothing | `test/voice-served.smoke.mjs`, `test/voice-mount.test.tsx` (classroom and personal seats, SSR markup compared byte for byte), `test/voice-ui.test.tsx`, `test/voice-browser.smoke.mjs` (real App bundle, 320/480/800) |
-| REQ-CGPV-04 | Disclosure before first use (CGP-VOICE-R-004, CGP-VOICE-D-003; VO-25; policy 5). One modal sheet with the approved Appendix B sentence for each served half (dictation: minor wording unless the tier is a professional workshop tier, then the adult wording; read-aloud: one wording), one primary button `시작하기`, Escape or the close button cancels. Nothing starts and nothing is recorded as read on cancel. The first press of the mic button or of `소리로 듣기` opens it; the microphone is not opened before `시작하기`. Remembered once per seat and policy version in the host's `globalState` (one record keyed by the seat's scope, version strings only), so on a shared laptop each seat sees it once. The sentences are keyed by policy version in `voiceCopy.ts`; an unknown version shows no sheet and no voice. The sheet fits a 320x480 viewport without scrolling | `voice-served.smoke.mjs` (copy equals the record), `voice-ui.test.tsx` (gating, Escape, acknowledgement once), `voice-browser.smoke.mjs` (sheet geometry) |
+| REQ-CGPV-04 | Disclosure before first use (CGP-VOICE-R-004, CGP-VOICE-D-003; VO-25; policy 5). One modal sheet with the approved Appendix B sentence for each served half (dictation: minor wording unless the tier is a professional workshop tier, then the adult wording; read-aloud: one wording), one primary button `시작하기`, Escape or the close button cancels. Nothing starts and nothing is recorded as read on cancel. The first press of the mic button or of `읽어 주기` opens it; the microphone is not opened before `시작하기`. Remembered once per seat and policy version in the host's `globalState` (one record keyed by the seat's scope, version strings only), so on a shared laptop each seat sees it once. The sentences are keyed by policy version in `voiceCopy.ts`; an unknown version shows no sheet and no voice. The sheet fits a 320x480 viewport without scrolling | `voice-served.smoke.mjs` (copy equals the record), `voice-ui.test.tsx` (gating, Escape, acknowledgement once), `voice-browser.smoke.mjs` (sheet geometry) |
 | REQ-CGPV-17, 17b, 17c | Dictation (CGP-VOICE-R-012; policy 1). A `받아쓰기` mic button (stroke icon, 44px) sits in the composer's button row. Press to start, press again to stop; one clip at a time. The webview records with `MediaRecorder` as `audio/webm;codecs=opus` (`audio/ogg;codecs=opus` as the only fallback; never `audio/mp4`) at 32 kbps and stops itself at 58 s (the Service refuses a clip it measures over 60 s, and the encoder flushes a last packet after `stop()`); a clip over 2 MiB is not sent. The host alone sends it to `POST /v1/voice/transcribe` with the seat token, the container type and the declared whole seconds. The transcript is inserted into the composer draft at the caret (replacing a selection, one space of separation), the caret after it, focus in the composer; it is never sent. While a Korean IME composition is open the insert waits for `compositionend`. The control is a separate control with its own name from voice chat. The in-app key Alt+Shift+M starts and stops it and Escape cancels a recording; both are bound only while this webview has focus (never a global shortcut) and are listed in the keyboard sheet only where the mic button is drawn | `voice-dictation.smoke.mjs` (format, 32 kbps, hard stop, 2 MiB, one at a time, microphone released), `voice-host.smoke.mjs`, `voice-ui.test.tsx`, `voice-mount.test.tsx` (insert at the caret in the real composer, nothing sent), `voice-browser.smoke.mjs` (a real MediaRecorder clip arrives as WebM) |
 | REQ-CGPV-18 | Failures are said by cause, calmly, with a way on. Service refusals are shown as the Service wrote them (cap `오늘 쓸 수 있는 음성 받아쓰기를 다 썼어요. 글로는 계속 이야기할 수 있어요.` with no retry and no red; busy; too long; minors or kill switch). A clip the Service cannot read, or that held no words, gets `소리가 잘 들리지 않았어요. 다시 말해 볼까요?`. Too short, no microphone, microphone busy, no webm/ogg opus support, network and a provider outage have their own lines. Text typed before dictation is never touched by any failure | `voice-host.smoke.mjs`, `voice-dictation.smoke.mjs`, `voice-ui.test.tsx` |
 | REQ-CGPV-03 | Microphone permission denied (CGP-VOICE-R-003, CGP-VOICE-D-002). A card above the composer says the microphone is not allowed and offers `마이크 설정 열기` (macOS `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`, Windows `ms-settings:privacy-microphone`, chosen by the host from the platform; the webview names no URL) and `글로 계속하기`. Pressing it does not try the microphone again and returning to Studio does not retry. A failed handoff says so. Device absence and a busy device are not permission denial | `voice-ui.test.tsx`, `voice-host.smoke.mjs` (`micSettingsUri`), `voice-browser.smoke.mjs` |
 | REQ-CGPV-19 | A clip is audio only in memory (CGP-VOICE-R-016; hiding the window, `pagehide`, a task or seat switch and disposing the panel stop a recording, release the microphone and drop the clip, including a clip still being transcribed (its late answer is ignored, so no retry copy is kept); policy 3; DEC-05). It is never written to a file, a Blob URL, web storage, `globalState` or a log line, by the webview or the host, and Studio emits no telemetry of content. A clip whose transcription failed in a way worth retrying is kept in memory for one retry, dropped on success, dismiss, window close or after ten minutes; a retried transcript is shown with `메시지에 넣기` and `복사` and needs an explicit insert. Not covered here: the Service's own handling (migration 0070 holds metadata only) | `voice-dictation.smoke.mjs` (source scan with planted controls), `voice-host.smoke.mjs` (no log line), `voice-ui.test.tsx` (retry resends the kept clip, recovered text needs a press) |
-| REQ-CGPV-24 | Read-aloud (CGP-VOICE-R-024 half, CGP-CHAT-R-009; policy 1, D1). Each completed assistant answer has `소리로 듣기` (personal seats: in the answer's action row; classroom seats: beside the speaker's name). It plays only on a press, in Korean (`ko-KR`) on the device's own voice (only an on-device Korean voice is picked; a streaming voice never is), one answer at a time, and the same button stops it. Fenced code is not read and `코드는 건너뛰었어요` is announced. No Service call and no network request is made by read-aloud. Without `speechSynthesis` the button is disabled with its reason. Unless read-aloud is served nothing speech-related is looked up or called (no `speechSynthesis.cancel()`). Whether read-aloud is useful needs a real Korean voice check (below) | `voice-read-aloud.smoke.mjs` (network tripwires), `voice-ui.test.tsx`, `voice-mount.test.tsx`, `voice-browser.smoke.mjs` |
+| REQ-CGPV-24 | Read-aloud (CGP-VOICE-R-024 half, CGP-CHAT-R-009; policy 1, D1). Each completed assistant answer has `읽어 주기` with the speaker glyph (personal seats: in the answer's action row; classroom seats: beside the speaker's name). It plays only on a press, in Korean (`ko-KR`) on the device's own voice (only an on-device Korean voice is picked; a streaming voice never is), one answer at a time, and the same button stops it. While its answer is read the button is pressed (CGP-CHAT-D-009, CGP-CHAT-D67): `aria-pressed="true"`, `그만 읽기`, a level glyph instead of the speaker and a fill; nothing on it animates in any motion mode; starting another answer releases the first, so at most one button is pressed; forced colours show the pressed state with the system selection pair. Fenced code is not read and `코드는 건너뛰었어요` is announced. No Service call and no network request is made by read-aloud. Without `speechSynthesis` the button is disabled with its reason. Unless read-aloud is served nothing speech-related is looked up or called (no `speechSynthesis.cancel()`). Whether read-aloud is useful needs a real Korean voice check (below) | `voice-read-aloud.smoke.mjs` (network tripwires), `voice-ui.test.tsx`, `voice-mount.test.tsx` (two answers in the real ChatPanel: labels, glyph, `aria-pressed`, one pressed at a time), `voice-browser.smoke.mjs` (real App bundle at 320px, both seats and themes: fill, 44px, 14px, the glyph still under no-preference, OS reduced motion and `data-reduced-motion`, forced colours) |
 
 Design tokens only (`voice.css`, `test/design-tokens.smoke.mjs`), stroke icons through the icon set
-(`mic`, `speaker`; `test/stroke-icons.smoke.mjs`), text at the 14px floor, 44px targets, no overlap and no
+(`mic`, `speaker`, `level`; `test/stroke-icons.smoke.mjs`), text at the 14px floor, 44px targets, no overlap and no
 sideways scroll at 320 and 480 px in both seats and both themes. The webview reaches the seam through
 `composerAddon.ts` and `answerExtras.tsx`; `ChatPanel.tsx` names no voice symbol (`pre-voice-text-flow.smoke.mjs`).
 
@@ -8931,3 +9158,132 @@ Not covered, by design: real-device behaviour. This row set is synthetic and hea
 `getUserMedia` inside the packaged Electron webview, the OS Korean voices on macOS and Windows class laptops, and
 the OS settings handoff are the real-device check (policy 6 step 4). Not built here: CGP-VOICE-R-001 (realtime
 session states), CGP-VOICE-R-021 (the four `hypeproof.voice.*` Command Palette commands).
+
+
+## Native mobile and existing desktop — revised 2026-11-11
+
+`ST-REQ-NATIVE-MOBILE` follows `ST-INT-NATIVE`: native iOS and Android capture,
+project-local context, consented Service questioning and human-confirmed intent
+revisions. Drafts survive restart; export/deletion are explicit. The iPhone now continues an explicitly shared personal task in the existing
+desktop. Original local notebooks are preserved; no second desktop product is built. Implementation and native build
+commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
+0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
+voice changes need their own package/device evidence.
+
+`ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
+extend expression with project-bound editable dictation and consented final-text
+auto-send/read-aloud. System on-device recognition is required with no cloud
+recognizer fallback. Next-turn recording originally required a visible tap;
+MFR-03 below supersedes that step within a deliberately started foreground voice
+session. Stop, background,
+permission denial and expired access preserve text and fence late callbacks.
+The shared Service owns policy/admission. Core/native fixtures do not establish
+physical Korean ASR, five-turn acceptance or a human growth outcome.
+
+### Native iPhone credential continuity — MIRS-01
+
+The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
+
+
+### Native first-use and hands-free correction — MFR-01–06
+
+Studio #3771 applies minimum necessary intervention to existing native iPhone:
+code-free same-device login, durable Send during sync, persistent failure reasons,
+automatic voice endpoints and foreground-only next-turn listening. See
+[required behavior](requirements/mobile-growth-roadmap.md#native-login-and-conversation-friction-correction--mfr-0106-studio-3771)
+and [journey verification](testing/native-mobile-growth.md). This is source work;
+actual provider sign-in, physical audio and distributed-package acceptance must
+be reported separately. Existing desktop execution remains unchanged.
+
+Every escaped user failure follows the same delivery loop: retain the observed
+version and failure (or mark the installed version unknown), add its requirement
+and release-casebook scenario, reproduce the failed boundary, fix it, run the
+exact-source native journeys, distribute a verified test candidate, and record
+the installed retest separately. Missing, skipped or failed required journeys
+cannot pass the native gate. Compilation, simulator, uploaded package, tester
+availability and actual device behavior remain distinct states throughout.
+
+### Correlated iPhone testing delivery — MTF-01
+
+`ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
+receipts to the existing exact-source native CI and Apple environment gates.
+Partial inputs/source movement or an older release-attempt gate refuse signing.
+Studio #3866 keeps a v2 app candidate fixed while separately pinning trusted-main
+workflow/control source. Exact-candidate CI and candidate → workflow → current-main
+ancestry proofs remain required; the legacy v1 equal-source path remains supported.
+The exact current-attempt gate is checked before signing and receipt emission;
+failed-job-only reruns must not reuse an older successful gate. Successful command completion
+does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
+and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).
+
+## Show what I made (#3794 slice 1)
+
+`REQ-STUDIO-SHOW-WHAT-I-MADE` follows `ST-INT-NATIVE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12). It
+serves the moment a person shows what they made to someone else. It is not "make me a promo video". Desktop only,
+on by default (Jay, 2026-11-12: slice 1 stores only in the person's workspace and sends nothing); the machine
+setting `hypeproofChat.showWhatIMadeEnabled` turns it off. Uploading and sharing wait for the consent item.
+
+- Command `hypeproof-chat.showWhatIMade` (`내가 만든 것 보여주기`) opens one panel and asks one question at a
+  time: `누구에게 보여 주고 싶나요?` (up to 40 characters), then `그 사람이 처음 3초 안에 무엇을 봤으면 하나요?`
+  (up to 60), then the person's own material. The native picker may only return an image (PNG, JPG, WebP, GIF;
+  sniffed bytes, 20 MB at most) or an HTML page inside the work folder, with no link on the path. A page becomes a
+  1920x1080 picture of its first screen through Studio's own preview server and browser tab (the `savePagePdf` path).
+  Folder consent applies before any write.
+- Studio drafts exactly one scene: the person's 3-second answer as the headline over their material, and a closing
+  card `내가 만든 것 · <audience>에게`. No model call is made. No AI-generated people, no stock imagery, and no text
+  except the person's own words, apart from that one closing label. The person can edit the headline, accept or
+  redo (back to the 3-second question, the audience kept). Nothing is published.
+- Files go to `<work folder>/.hypeproof/show/<YYYYMMDD-HHMMSS>/`: `index.html` (the HyperFrames composition),
+  `material-N.<ext>` (a copy of the person's bytes), `anime.umd.min.js`, `NotoSansKR-Korean.woff2` and
+  `decisions.json`. `decisions.json` counts the person's choices (audience, 3-second goal, material, headline
+  edits, accept, redo) and holds no person text.
+- Composition contract: 1920x1080, 15 s (`data-duration`, never over 15), `data-no-timeline` on the root, and one
+  paused Anime.js 4.5.0 timeline pushed to `window.__hfAnime`. The HyperFrames animejs adapter seeks it in
+  composition milliseconds, so a frame is a function of time alone. No GSAP (its license does not clearly allow
+  redistribution in the app). There is no clock, randomness or network read. The only references are the material,
+  Anime.js and the font beside the file. Person text is HTML-escaped, split into one span per word, and never placed
+  inside a script. `scripts/check-show-composition.mjs` runs `hyperframes check --json` on a generated composition
+  and must report 0 errors and 0 warnings.
+- Playback happens inside the panel through the vendored Apache-2.0 `<hyperframes-player>` and runtime (0.9.38), with
+  the composition as `srcdoc`. The runtime keeps its upstream file name so the player never injects its CDN copy. The
+  panel CSP admits only nonce'd scripts and the webview resource origin. Vendored files, versions, licenses and
+  sha256 are listed in `media/show/VENDORED.json`.
+- No telemetry and no new network call.
+
+Out of scope for slice 1 (TODO #3794): MP4/WebM export and mobile. Sharing is slice 2, below.
+
+Evidence: `test/show-what-i-made.smoke.mjs` (vendored pins, composition contract, escaping, flow state machine,
+host writes and refusals, headless offline playback sought to fixed times, panel layout at 360/800/1420) and
+`scripts/check-show-composition.mjs` (HyperFrames checker, run on a worker with a pinned CLI). Not covered: the
+installed Electron app. A real-app run of the panel is NOT RUN in this slice.
+
+## Show what I made as a link (#3794 slice 2)
+
+`REQ-STUDIO-SHOW-LINK` follows `REQ-STUDIO-SHOW-WHAT-I-MADE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12:
+link-first sharing, consent item, cost-first, nothing sent before the press). Desktop only, behind the machine setting
+`hypeproofChat.showLinkEnabled` (default off until the Service ships `HPS_SHOW_LINKS`), and only with a signed-in
+personal account (14+; a classroom code never reaches it).
+
+- After `이대로 할래요`, the accepted view offers `링크로 보여주기`. Reaching the accepted view sends nothing.
+  Pressing it reads only the person's own link list and consent state (`GET /v1/me/show-links`, account session).
+- The review lists every file that will be uploaded, by name, role and exact size: `index.html` (the scene),
+  `material-N.<ext>` (the picture copy that played) and the four vendored playback files (pinned by sha256 in
+  `media/show/VENDORED.json`). It shows the words the viewer will read (the headline and the closing line), plays the
+  scene, and says who can see it: anyone with the link, no login, not in search, and `링크 끄기` turns it off and
+  deletes the uploaded scene and picture.
+- Consent item `내가 만든 것을 영상·링크로 공유` (Service `SHOW_CONSENT_VERSION` 2026-11-12.5, its own record, never a
+  privacy-policy consent). Without the box checked `링크 만들기` sends nothing. Once given it is remembered by the Service.
+- `링크 만들기` records the consent when needed, then uploads exactly the bytes listed, with one request id per press
+  (a retry is the same link). A hand-edited `index.html` or a changed vendored copy is refused before anything is
+  sent; a picture over 10 MB is refused. The Service regenerates the template and refuses any other script.
+- The shared view shows the link (`https://show-<id>-try.hypeproof-ai.xyz/<key>/`, checked before it is shown),
+  `링크 복사` and `링크 끄기`. `share.json` beside the composition holds link ids, URLs and press counts (open,
+  share, copy, revoke), never the person's words.
+- No model call. Cost per upload about US$0.00001 and per view about US$0.000004; per account at most 20 live links,
+  100 MB and 20 uploads a day (hypeproof-service `DEPLOY.md`, "Show links").
+
+Evidence: `test/show-link.smoke.mjs` (cross-repo template digest, consent item, routes, link shape, reducer, bundle
+pins and cap, host against a recording Service: flag and sign-in gates, nothing before the press, the exact files,
+consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
+and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
+Electron app and a deployed Service; both are NOT RUN in this slice.

@@ -18,9 +18,10 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { makeCtx, TEST_SECRET } from '@hypeproof/service-testkit/test/harness/index.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-feedback-loop'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_FEEDBACK_LOOP = 'enabled';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, makeCtx());
@@ -83,7 +84,7 @@ try {
 
   // ── 1b. the instructor sees that answer on the /manage share detail where they wrote the feedback ──
   const board = await open('/manage', { width: 1280, height: 720 });
-  await board.locator('#token').fill(teacher); await board.locator('#cohort').fill(local.cohort); await board.locator('#connect button').first().click();
+  await signInChalk(board, teacher); await board.locator('#cohort').fill(local.cohort); await board.locator('#connect button').first().click();
   await board.locator('#status').filter({ hasText: '연결됨' }).waitFor();
   // The share list sits in the board's folded "공유 기록" section; open it the way the instructor does.
   await board.locator('#legacy-wrap > summary').click();
@@ -103,7 +104,7 @@ try {
     .then((h) => h.jsonValue(), async (e) => { throw Error('retro-view: expected ' + re + ', shows: ' + await page.locator('#retro-view').innerText() + ' | ' + e.message); });
   // Section 07 exists only where the Service has the loop on: with the switch off, connecting hides it (and its link).
   local.env.HPS_FEEDBACK_LOOP = undefined;
-  await page.locator('#token').fill(teacher); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
+  await signInChalk(page, teacher); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
   await page.locator('#retro').waitFor({ state: 'hidden' }); assert.equal(await page.locator('.page-help a[href="#retro"]').isHidden(), true);
   local.env.HPS_FEEDBACK_LOOP = 'enabled';
   await page.locator('#connect').click(); await page.locator('#retro').waitFor({ state: 'visible' }); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
@@ -269,7 +270,7 @@ try {
   ok('learner: on a 결과물 제출 (and only there, only where the Service offers it) the independent task, the help used ("도움 없이" alone) and the self-reliance rows are recorded; nothing pre-selected, an unjudged row refused before sending, shown back on the card');
 
   const board2 = await open('/manage', { width: 1280, height: 720 });
-  await board2.locator('#token').fill(teacher); await board2.locator('#cohort').fill(local.cohort); await board2.locator('#connect button').first().click();
+  await signInChalk(board2, teacher); await board2.locator('#cohort').fill(local.cohort); await board2.locator('#connect button').first().click();
   await board2.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await board2.locator('#legacy-wrap > summary').click();
   await board2.locator('#shares article').filter({ hasText: 'student-c · 결과물 제출' }).locator('button', { hasText: '공유 기록 열기' }).click();
   await board2.locator('#content').filter({ hasText: '독립 과제 기록 · 학생의 자기 보고' }).waitFor();

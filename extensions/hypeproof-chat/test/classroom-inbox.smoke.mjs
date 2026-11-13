@@ -3,7 +3,7 @@
 // replaces v2; a withdrawal and an offer end the same way whichever arrives first; a writer that was paused (or another
 // window) can never overwrite a newer index and never claims "reflected" for what is not shown; an item fetched before a
 // restart, a sleep, or a slow answer is not applied after it; an acknowledgement clears only the entry with its own key.
-// Every interference is preceded by the undisturbed control. macOS/APFS here — Windows link/rename behaviour is NOT RUN.
+// Every interference is preceded by the undisturbed control. actual host filesystem; POSIX process suspension and Windows IPC-held commit boundaries are reported separately.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, existsSync, writeFileSync, rmSync } from "node:fs";
@@ -131,14 +131,14 @@ try {
     assert.equal((await cardsOf(d2)).length, 8); assert.equal((await journalOf(d2)).filter((x) => x.startsWith("reflected")).length, 8, "no lost update across eight writers");
   });
 
-  await check("D9 real processes: a writer killed (SIGKILL) in the middle of a commit leaves the held card whole; SIGSTOP/SIGCONT around a competing commit cannot go backwards", async () => {
+  await check("D9 real processes: a writer killed (SIGKILL) in the middle of a commit leaves the held card whole; a paused commit around a competing process cannot go backwards", async () => {
     const dir = fresh(), seed = session(dir); await seed.s.onBlock({ items: [item(1, 1)] }, seed.win(), 10);
-    const child = (rev, seq, pauseAt) => { const p = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", fileURLToPath(new URL("./fixtures/inbox-writer.mjs", import.meta.url)), dir, String(rev), String(seq), pauseAt], { stdio: ["ignore", "pipe", "inherit"] }); let out = ""; p.stdout.on("data", (b) => { out += b; }); return { p, until: (word) => new Promise((res, rej) => { const t = setInterval(() => { if (out.includes(word)) { clearInterval(t); res(out); } }, 10); p.on("exit", () => { clearInterval(t); out.includes(word) ? res(out) : rej(new Error("child exited: " + out)); }); }), done: new Promise((res) => p.on("exit", res)) }; };
+    const child = (rev, seq, pauseAt) => { const p = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", fileURLToPath(new URL("./fixtures/inbox-writer.mjs", import.meta.url)), dir, String(rev), String(seq), pauseAt], { stdio: ["ignore", "pipe", "inherit", "ipc"] }); let out = ""; p.stdout.on("data", (b) => { out += b; }); return { p, until: (word) => new Promise((res, rej) => { const t = setInterval(() => { if (out.includes(word)) { clearInterval(t); res(out); } }, 10); p.on("exit", () => { clearInterval(t); out.includes(word) ? res(out) : rej(new Error("child exited: " + out)); }); }), done: new Promise((res) => p.on("exit", res)) }; };
     const killed = child(2, 2, "index_tmp_written"); await killed.until("PAUSED"); killed.p.kill("SIGKILL"); await killed.done;
     assert.deepEqual(await cardsOf(dir), [["M", 1, "v1 본문"]], "killed between the temp file and the link: v1 is intact"); await new InboxStore(dir).reconcile(Date.now() + 600_000); assert.deepEqual(await cardsOf(dir), [["M", 1, "v1 본문"]]);
-    const stopped = child(2, 2, "index_tmp_written"); await stopped.until("PAUSED"); stopped.p.kill("SIGSTOP");
+    const stopped = child(2, 2, "index_tmp_written"); await stopped.until("PAUSED"); if (process.platform !== "win32") stopped.p.kill("SIGSTOP");
     const other = session(dir); await other.s.onBlock({ items: [item(3, 3)] }, other.win(), 12);
-    stopped.p.kill("SIGCONT"); stopped.p.kill("SIGUSR2"); await stopped.done;
+    if (process.platform !== "win32") stopped.p.kill("SIGCONT"); stopped.p.send("resume"); await stopped.done;
     assert.deepEqual(await cardsOf(dir), [["M", 3, "v3 본문"]], "the process that was stopped and resumed did not put v2 over v3"); assert.ok(!(await journalOf(dir)).includes("reflected:r2"));
   });
 

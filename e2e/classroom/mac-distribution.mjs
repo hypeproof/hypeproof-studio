@@ -27,6 +27,7 @@ import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u2'));
 const servicePort = Number(process.env.HPS_DIST_SERVICE_PORT || 18771), boardPort = Number(process.env.HPS_DIST_BOARD_PORT || 18772), debugPort = Number(process.env.HPS_DIST_DEBUG_PORT || 9371), prefix = 'u2-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -65,7 +66,7 @@ const server = createServer(async (req, res) => { try { const parts = []; for aw
   const r = await local.app.fetch(new Request('https://service.test' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), local.env, { waitUntil() {}, passThroughOnException() {} });
   res.writeHead(r.status, Object.fromEntries(r.headers)); if (r.body) for await (const chunk of r.body) res.write(chunk); res.end(); } catch { if (!res.headersSent) res.writeHead(500); res.end(); } });
 server.listen(servicePort, '127.0.0.1'); await once(server, 'listening'); const origin = 'http://127.0.0.1:' + server.address().port;
-const { default: chalk } = await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const board = createServer(async (req, res) => { try { const parts = []; for await (const b of req) parts.push(b); const body = Buffer.concat(parts);
   const rr = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(rr.status, Object.fromEntries(rr.headers)); res.end(Buffer.from(await rr.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 board.listen(boardPort, '127.0.0.1'); await once(board, 'listening');
@@ -125,7 +126,7 @@ try {
 
   // ── 1. the instructor, in a visible Chalk window: write → select A1 only → preview → send ──
   const browser = await chromium.launch({ headless: process.env.HPS_BOARD_HEADLESS === '1' }), page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
-  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await page.locator('#token').fill(teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#ops-check').click();
+  await page.goto('http://127.0.0.1:' + boardPort + '/manage'); await signInChalk(page, teacherToken); await page.locator('#cohort').fill(local.cohort); await page.locator('#prefix').fill(prefix); await page.locator('#connect button').first().click(); await page.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await page.locator('#ops-check').click();
   const row = (id) => page.locator(`#ops-seats .ops-seat[data-seat="${id}"]`), T = (id) => page.locator('#' + id).innerText(); await row('A3').waitFor();
   const onlyA1 = async () => { await page.locator('#ops-check').click(); await page.waitForTimeout(800); await page.locator('#ops-select-none').click(); await row('A1').getByLabel('선택').check(); };
   const sendToA1 = async (expectPlan) => { await onlyA1(); local.db.prepare('UPDATE classroom_distributions SET created_at=created_at-120000').run(); await page.locator('#ops-dist-preview').click(); await page.locator('#ops-dist-confirm').waitFor(); if (expectPlan) assert.match(await T('ops-dist-plan'), expectPlan); await page.locator('#ops-dist-go').click(); await page.locator('#ops-dist-items').filter({ hasText: /^A1 · / }).waitFor(); };

@@ -5,7 +5,7 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // plain-language stage, and a row-open button ("근거·조치"). The full breakdown that used to live in seven per-row cells is
 // rendered in #ops-detail by openSeat(); tests here therefore check the compact row contract AND the drawer contract.
 //
-//   the table      one row per learner, the same four columns, 24 synthetic seats; the default board shows at least 8 complete rows at
+//   the table      one row per learner, the same five columns (버전 since CGP-SHELL-R-034), 24 synthetic seats; the default board shows at least 8 complete rows at
 //                  1280×720 and 4 at 1024×640 with 14px+ text and no horizontal overflow (row boxes measured, not CSS read);
 //   filter/search  the summary chips and the search box change only what is SHOWN — a hidden seat stays selected and is still a target;
 //   selection      choosing seats sends nothing; the one primary button follows the context and opens a confirmation, never a request;
@@ -28,9 +28,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-g1'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const local = await localOps(), chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 const server = createServer(async (req, res) => { try { const parts = []; for await (const p of req) parts.push(p); const body = Buffer.concat(parts); const r = await chalk.fetch(new Request('http://localhost' + req.url, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), { ...local.env, HPS_SERVICE_ORIGIN: 'https://service.test' }, {}); res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); } catch (e) { res.writeHead(500); res.end(String(e)); } });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -53,7 +54,7 @@ try {
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + server.address().port, errors = [];
   const open = async (viewport) => { const p = await browser.newPage({ viewport }); p.on('pageerror', (e) => errors.push(e.message)); await p.goto(origin + '/manage'); return p; };
-  const connect = async (p) => { await p.locator('#token').fill(teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(23).waitFor(); await p.locator('#ops-help-toggle').filter({ hasText: '1건' }).waitFor(); };
+  const connect = async (p) => { await signInChalk(p, teacher); await p.locator('#cohort').fill(local.cohort); await p.locator('#prefix').fill('student-'); await p.locator('#connect-go').click(); await p.locator('#status').filter({ hasText: '연결됨' }).waitFor(); await p.locator('#ops-seats .ops-seat').nth(23).waitFor(); await p.locator('#ops-help-toggle').filter({ hasText: '1건' }).waitFor(); };
   // A row is complete when all of it is inside the viewport AND inside the list's own scrolling box (a clipped row does not count).
   const measure = (p) => p.evaluate(() => { const list = document.getElementById('ops-seats').getBoundingClientRect(), bottom = Math.min(innerHeight, list.bottom), rows = [...document.querySelectorAll('#ops-seats .ops-seat')].filter((r) => !r.hidden).map((r) => r.getBoundingClientRect());
     const texts = [...document.querySelectorAll('#ops-seats td *, #ops-seats th')].filter((e) => [...e.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && e.checkVisibility());
@@ -62,16 +63,16 @@ try {
 
   // ── states before a connection ──
   let page = await open({ width: 1280, height: 720 });
-  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /강사 토큰과 코호트를 입력하세요/);
+  assert.equal(await page.locator('#ops-table').isHidden(), true); assert.equal(await page.locator('#ops-seats .ops-seat').count(), 0); assert.match(await page.locator('#status').innerText(), /Lab 로그인으로 연결한 뒤 코호트를 입력하세요/);
   await connect(page); console.log('PASS states: before a connection the table is absent and the connection form is the page');
   // HPS_G1_WIDEN=0.06 widens every glyph (letter-spacing, em) to rehearse a wider font on a machine that has a narrow one — the CI
   // runner's Korean font measured one to two toolbar lines taller than the Mac's. The default run measures the page as it is.
   if (process.env.HPS_G1_WIDEN) await page.addStyleTag({ content: `*{letter-spacing:${Number(process.env.HPS_G1_WIDEN)}em!important}` });
 
   // ── 1. the table at 1280×720 and 1024×640 ──
-  // #1363 progressive disclosure: the row is one line — 선택, 좌석·학생, 지금 상태, 근거·조치. Cause/token/step/signal/upload live in #ops-detail.
-  const heads = await page.locator('#ops-table thead th').allInnerTexts(); assert.deepEqual(heads, ['선택', '좌석 · 학생', '지금 상태', '근거·조치']);
-  for (const id of ['A1', 'C4', 'D6']) assert.equal(await row(page, id).locator('> td').count(), 4, id + ': every row is one compact line');
+  // #1363 progressive disclosure: the row is one line — 선택, 좌석·학생, 지금 상태, 버전 (CGP-SHELL-R-034), 근거·조치. Cause/token/step/signal/upload live in #ops-detail.
+  const heads = await page.locator('#ops-table thead th').allInnerTexts(); assert.deepEqual(heads, ['선택', '좌석 · 학생', '지금 상태', '버전', '근거·조치']);
+  for (const id of ['A1', 'C4', 'D6']) assert.equal(await row(page, id).locator('> td').count(), 5, id + ': every row is one compact line');
   assert.equal(await page.locator('#ops-dist-preview').isVisible(), false, 'distribution action lives in the bulk row and is hidden until a selection exists');
   const wide = await measure(page); results.default_1280x720 = wide; await page.screenshot({ path: path.join(out, 'g1-default-1280x720.png') });
   assert.ok(wide.complete >= 8, '1280×720: at least 8 complete rows before page scrolling: ' + JSON.stringify(wide)); assert.ok(wide.min_font_px >= 14 && wide.body_font_px >= 14 && !wide.overflow && wide.zoom === 1, JSON.stringify(wide));
@@ -90,7 +91,7 @@ try {
     // the detail is a drawer too; Escape returns focus to the row that opened it
     await row(p, 'A1').getByRole('button', { name: '근거·조치' }).click(); const d = await p.evaluate(() => getComputedStyle(document.getElementById('ops-detail')).position); assert.equal(d, 'fixed'); await p.screenshot({ path: path.join(out, 'g1-detail-drawer-1024x640.png') });
     await p.keyboard.press('Escape'); assert.equal(await p.locator('#ops-detail').isHidden(), true); assert.equal(await p.evaluate(() => document.activeElement?.closest('.ops-seat')?.dataset.seat), 'A1'); await p.close(); }
-  console.log('PASS table: four compact columns; 1280×720 ' + wide.complete + ' complete rows, 1024×640 ' + results.default_1024x640.complete + ' (row boxes measured, 14px+, no overflow); fault ≠ help ≠ stale ≠ approval wait; long id stays accessible; drawers at 1024 with inert page, Escape and focus return');
+  console.log('PASS table: five compact columns; 1280×720 ' + wide.complete + ' complete rows, 1024×640 ' + results.default_1024x640.complete + ' (row boxes measured, 14px+, no overflow); fault ≠ help ≠ stale ≠ approval wait; long id stays accessible; drawers at 1024 with inert page, Escape and focus return');
 
   const beforeMobileCommands=commands();
   // Progressive disclosure remains usable on a phone: no clipped filters or unavailable selection tools.

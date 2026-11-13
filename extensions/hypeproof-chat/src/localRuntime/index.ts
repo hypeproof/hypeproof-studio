@@ -217,9 +217,37 @@ export async function runLocalCoach(args: {
   const withChalk = mergeExtraTools(workTools, args.extraTools);
   // Browser tools (live_preview_start + browser_open)은 강사 모드에서만 붙는다.
   // #3464 — browser tools get the turn's approval gate, so an outside address is asked through the same gate.
+  // #3586 — browser tools emit the same activity as the workspace tools (tools.ts), so a refused, timed-out or
+  // opened page gets a row: tool_use, then approval when the gate asks, then tool_result. Without these the
+  // chat panel has no row to put a denial card on.
   const browserTools = args.browserTools && {
     definitions: args.browserTools.definitions,
-    call: (name: string, input: unknown) => args.browserTools!.call(name, input, approve as never),
+    call: async (name: string, input: unknown) => {
+      const id = crypto.randomUUID();
+      args.onActivity?.({ kind: "tool_use", id, name, input });
+      const gate = async (action: { toolName: string; input: unknown }) => {
+        const approval = await approve(action as never);
+        const allowed = typeof approval === "boolean" ? approval : approval.approved;
+        args.onActivity?.({
+          kind: "approval",
+          id,
+          name,
+          input,
+          allowed,
+          actor: typeof approval === "boolean" ? "user" : approval.actor,
+          denialSource: typeof approval === "boolean" ? undefined : approval.denialSource,
+        } as never);
+        return approval;
+      };
+      try {
+        const result = await args.browserTools!.call(name, input, gate as never);
+        args.onActivity?.({ kind: "tool_result", id, isError: false } as never);
+        return result;
+      } catch (e) {
+        args.onActivity?.({ kind: "tool_result", id, isError: true, reason: (e as Error).message } as never);
+        throw e;
+      }
+    },
   };
   const withBrowser = mergeBrowserTools(withChalk, browserTools);
   const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });

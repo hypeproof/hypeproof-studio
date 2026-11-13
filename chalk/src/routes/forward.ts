@@ -11,15 +11,28 @@
 // Allowlist = the Service's own isIssuerAllowedEndpoint (shared.ts): exactly
 // the set an instructor Bearer may reach over there. Not a second list.
 //
-// Forwarded headers are a whitelist: Authorization (Bearer only — Basic is
-// refused here, Chalk is never a path to the admin password) and
-// Content-Type. In particular `cf-access-authenticated-user-email`, which
-// the Service's admin middleware trusts, is NEVER forwarded.
+// Forwarded headers are a whitelist: Authorization and Content-Type. For an
+// instructor call the Authorization is the issuer from the Lab login connection
+// (src/lib/connect.ts), never a header the request brought: a request carrying
+// its own Authorization is refused, so a pasted issuer has no way in. Student
+// share/profile routes keep forwarding the student's own Bearer. Basic is never
+// forwarded (Chalk is never a path to the admin password), and neither is
+// `cf-access-authenticated-user-email`, which the Service's admin middleware trusts.
 
 import type { Context } from "hono";
 import { resolveChalkVersion, resolveLabOrigin, resolveServiceOrigin, type ChalkEnv } from "../env.ts";
 import { isIssuerAllowedEndpoint } from "../shared.ts";
 import { completionProblems } from "../lib/completion-checklist.ts";
+import { CONNECT_SECRET_HEADER, connectSecret, instructorAuthorization } from "../lib/connect.ts";
+
+const SECTION_REVISION = /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/plan\/section-revision$/;
+export const isSectionRevision = (pathname: string, method: string) => method === "POST" && SECTION_REVISION.test(pathname);
+// The section revision waits on one Haiku call (Service timeout 30 s); every other forward keeps its short budget.
+export function forwardTimeoutMs(pathname: string, method: string, distribution: boolean): number {
+  if (distribution && method === "POST") return 60_000;
+  if (isSectionRevision(pathname, method)) return 45_000;
+  return 8_000;
+}
 
 type Ctx = Context<{ Bindings: ChalkEnv; Variables: { requestId: string } }>;
 
@@ -34,24 +47,45 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // Lab registers this batch in the participant distribution board; the Service
   // still authorizes, rosters and signs every student token behind that adapter.
   const distribution = (method === 'POST' || method === 'GET') && url.pathname === '/workshop/boa-tokens';
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution) {
+  // CGP-ART-R-004 — revise one marked plan section (instructor write). The Service admits it in service-contracts 0.1.6
+  // (hypeproof-service#433); until Chalk's pin moves past 0.1.5 it is named here. The Service re-checks the issuer,
+  // course ownership, the draft revision and the authoring assistant's money cap, and answers 404 while the flag is off.
+  const sectionRevision = isSectionRevision(url.pathname, method);
+  // CGP-SHELL-R-003 — the cohort's Studio update freeze (instructor write). The Service admits it in its service-contracts
+  // source after 0.1.5 (the pinned 0.1.5 tarball does not); until Chalk's pin includes it, it is named here. Same issuer-from-connection path as every write;
+  // the Service re-checks the issuer and can_start_session on the cohort.
+  const updateFreeze = (method === 'PUT' || method === 'DELETE') && /^\/admin\/cohorts\/[^/]+\/update-freeze$/.test(url.pathname);
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision && !updateFreeze) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,
     );
   }
-  const auth = c.req.header("authorization") ?? "";
-  if (!/^Bearer\s+\S/i.test(auth.trim())) {
-    return c.json(
-      { error: { type: "auth", message: "instructor issuer token required (Authorization: Bearer …)", request_id: rid } },
-      401,
-    );
+  // Public routing metadata needs no instructor credential at the Lab origin.
+  const metadata = distribution && method === 'GET';
+  let auth = "";
+  if (studentShare || studentProfile) {
+    auth = (c.req.header("authorization") ?? "").trim();
+    if (!/^Bearer\s+\S/i.test(auth)) {
+      return c.json({ error: { type: "auth", message: "student token required (Authorization: Bearer …)", request_id: rid } }, 401);
+    }
+  } else if (!metadata) {
+    const instructor = await instructorAuthorization(c);
+    if (!instructor.ok) {
+      return c.json({ error: { type: "auth", reason: instructor.reason, message: instructor.message, request_id: rid } }, instructor.status);
+    }
+    auth = instructor.authorization;
+  }
+  // The Lab takes a Bearer only from this server, proven by the shared secret.
+  const labSecret = distribution && !metadata ? connectSecret(c.env) : null;
+  if (distribution && !metadata && !labSecret) {
+    return c.json({ error: { type: "config", message: "Lab 연결이 설정되지 않았습니다. 운영진에게 알려주세요.", request_id: rid } }, 503);
   }
 
   const origin = distribution ? resolveLabOrigin(c.env) : resolveServiceOrigin(c.env);
   const target = distribution ? `${origin}/api/workshop/boa-tokens` : `${origin}${url.pathname}${url.search}`;
-  // Public routing metadata needs no instructor credential at the Lab origin.
-  const headers = new Headers(distribution && method === 'GET' ? {} : { authorization: auth.trim() });
+  const headers = new Headers(metadata ? {} : { authorization: auth });
+  if (labSecret) headers.set(CONNECT_SECRET_HEADER, labSecret);
   const ct = c.req.header("content-type");
   if (ct) headers.set("content-type", ct);
   headers.set("x-hps-forwarded-by", `chalk/${resolveChalkVersion(c.env)}`);
@@ -83,7 +117,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   try {
     // workerd rejects redirect: "error" (it throws before sending), so take
     // "manual" and refuse any 3xx ourselves.
-    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(distribution && method === 'POST' ? 60_000 : 8_000) });
+    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(forwardTimeoutMs(url.pathname, method, distribution)) });
     if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err instanceof Error ? err.name : 'upstream error');

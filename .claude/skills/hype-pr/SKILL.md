@@ -185,6 +185,13 @@ uncommitted text. Read working changes directly when developing.
    The human remains a separate reviewer; approval and merge rules still apply,
    and a push after approval makes that approval stale.
 
+   After the PR exists, `create` places it and its issue on the boards with a separate
+   board-scoped bot token. The `board` result is `placed` or `blocked`. A block names a
+   `reason`, the token it had and needed, the App installation fact, the tracking issue
+   and `recovery.command` (`pr.py board --repo R --pr N --issue M --apply`, the board
+   step only). Relay those fields as given; do not guess a cause from GitHub text, and
+   never re-run `create` for a board failure.
+
    The PR body must close that issue and no other issue. Omit `--apply` for a command
    preview. The apply path verifies that the target is an existing open same-repository
    issue rather than a PR or Epic, then recomputes source checks,

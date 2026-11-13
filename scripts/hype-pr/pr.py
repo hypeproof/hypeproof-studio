@@ -11,6 +11,7 @@ This tool is intentionally conservative:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -86,16 +87,27 @@ def _lock(handle, seconds):
 
     Released when the handle is closed, also when the process dies.
     """
-    try:
-        import fcntl
-    except ImportError:  # No fcntl (Windows): runs are not serialized.
-        return True
     import time
+
+    if os.name == "nt":
+        import msvcrt
+        # Lock the same byte in every process, including a newly created file.
+        # Append mode is used by prepare_engine; flush before byte-range locking.
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write("0")
+            handle.flush()
+    else:
+        import fcntl
 
     deadline = time.monotonic() + seconds
     while True:
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if os.name == "nt":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return True
         except OSError:
             if time.monotonic() >= deadline:
@@ -394,6 +406,31 @@ def required_checks(repo: dict[str, Any]) -> list[str]:
     return list(repo.get("required_status_checks") or [])
 
 
+def merge_tier(repo: str, paths: list[str]) -> dict[str, Any] | None:
+    """Tier of the PR's paths from policy/merge-tiers.yaml (#385), or None when the
+    repository has no tier policy. A classification error is reported as tier "?"
+    and treated like tier A: it never gets auto-merge."""
+    path = ROOT / "scripts/merge-tier/merge_tier.py"
+    try:
+        spec = importlib.util.spec_from_file_location("hypeproof_merge_tier", path)
+        if not spec or not spec.loader or not path.is_file():
+            raise RuntimeError(f"tier classifier missing: {path}")
+        tiers = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = tiers  # dataclasses resolve their module by name
+        spec.loader.exec_module(tiers)
+    except Exception as exc:  # noqa: BLE001 - any failure here fails closed
+        return {"tier": "?", "reasons": [f"classifier unavailable: {exc}"]}
+    try:
+        tier_policy = tiers.load_policy(ROOT / "policy/merge-tiers.yaml")
+        if not tier_policy.classified(repo):
+            return None
+        result = tiers.classify(repo, paths, tier_policy)
+    except tiers.TierError as exc:
+        return {"tier": "?", "reasons": [str(exc)]}
+    return {"tier": result["tier"], "reasons": tiers.reasons(result),
+            "matched": [m["path"] for m in result["matched"]]}
+
+
 def plan(
     *,
     policy: dict[str, Any],
@@ -413,8 +450,13 @@ def plan(
     reviewer_logins = eligible_reviewers if request_reviewers else []
     profile_allows_auto_merge = bool(profile_repo.get("allow_auto_merge"))
     checks = required_checks(repo)
+    tier = merge_tier(full, paths)
 
     blockers: list[str] = []
+    if tier and tier["tier"] == "A":
+        blockers.append("merge_tier_a:" + ",".join(tier["reasons"]))
+    elif tier and tier["tier"] != "B":
+        blockers.append("merge_tier_unknown:" + "; ".join(tier["reasons"]))
     if not auto_merge:
         blockers.append("auto_merge_not_requested")
     if draft:
@@ -456,6 +498,7 @@ def plan(
             "blocked_by": uniq(blockers),
         },
         "required_status_checks": checks,
+        "merge_tier": tier,
     }
 
 
@@ -479,7 +522,7 @@ def gh_json(args: list[str]) -> Any:
     return json.loads(text) if text else None
 
 
-def run(cmd: list[str], *, input_text: str | None = None) -> CommandResult:
+def run(cmd: list[str], *, input_text: str | None = None, env: dict[str, str] | None = None) -> CommandResult:
     proc = subprocess.run(
         cmd,
         input=input_text,
@@ -487,8 +530,11 @@ def run(cmd: list[str], *, input_text: str | None = None) -> CommandResult:
         capture_output=True,
         check=False,
         cwd=ROOT,
+        env=env,
     )
-    return CommandResult(proc.returncode, proc.stdout, proc.stderr)
+    sys.path.insert(0, str(ROOT / "scripts/agent-identity"))
+    from write_guard import redact_diagnostic
+    return CommandResult(proc.returncode, redact_diagnostic(proc.stdout), redact_diagnostic(proc.stderr))
 
 
 def command_request_reviewers(args: argparse.Namespace, policy: dict[str, Any]) -> int:
@@ -738,20 +784,108 @@ def fetch_pull(repo: str, number: int) -> dict[str, Any]:
     return json.loads(response.stdout)
 
 
+def board_token_module():
+    sys.path.insert(0, str(ROOT / "scripts/agent-identity"))
+    import board_token
+    return board_token
+
+
+def board_retry_command(repo_ref: str, pr_url: str, issue: int) -> str:
+    number = pr_url.rstrip("/").rsplit("/", 1)[-1]
+    return (f"python3 scripts/hype-pr/pr.py board --repo {github_repo(repo_ref)} --pr {number} "
+            f"--issue {issue} --apply")
+
+
 def board_on_create(repo_ref: str, pr_url: str, issue: int) -> dict[str, Any]:
     """Put the new PR and the issue it closes on the project boards as in_review (#397).
 
-    The PR already exists, so a board failure does not fail `create`; it is
-    reported in the result and on stderr.
+    The board step requests its own board-scoped bot token (#548, #565); the
+    ordinary repository token this command holds cannot see the boards. The result
+    is placed, or blocked with a reason code and the exact command that reruns only
+    this step. The PR already exists, so a board failure never fails or replays
+    `create`.
     """
     board = ROOT / "scripts/board/board.py"
     if not board.is_file():
         return {"ok": False, "error": f"{board} is missing"}
-    items = []
-    for url in (pr_url, f"https://github.com/{github_repo(repo_ref)}/issues/{issue}"):
-        done = run([sys.executable, str(board), "set", url, "--state", "in_review"])
-        items.append({"url": url, "returncode": done.returncode, "detail": (done.stdout or done.stderr).strip()[-300:]})
-    return {"ok": all(item["returncode"] == 0 for item in items), "items": items}
+    tokens = board_token_module()
+    repository = github_repo(repo_ref)
+    retry = board_retry_command(repo_ref, pr_url, issue)
+    urls = [pr_url, f"https://github.com/{repository}/issues/{issue}"]
+    if os.environ.get("GH_TOKEN"):
+        ordinary = {"profile": os.environ.get(tokens.PROFILE_ENV) or "undeclared",
+                    "permissions": tokens.ordinary_permissions(),
+                    "note": "the only token this command holds; the board profile could not be minted"}
+    else:
+        ordinary = {"profile": "none", "permissions": None,
+                    "note": "no bot token in this process; the board profile could not be minted"}
+    try:
+        minted = tokens.mint(repository)
+    except tokens.BoardTokenBlocked as blocked:
+        return {"ok": False, "items": [], "existing_pr": pr_url, "replay_create": False,
+                **blocked.diagnosis(had=ordinary, existing_pr=pr_url, retry=retry)}
+    items: list[dict[str, Any]] = []
+    blocked_by: dict[str, Any] | None = None
+    try:
+        env = {**tokens.board_env(minted), "HYPEPROOF_BOARD_RETRY_COMMAND": retry}
+        for url in urls:
+            done = run([sys.executable, str(board), "set", url, "--state", "in_review"], env=env)
+            try:
+                parsed = json.loads(done.stdout) if done.stdout.strip() else {}
+            except json.JSONDecodeError:
+                parsed = {}
+            items.append({"url": url, "returncode": done.returncode,
+                          "detail": (done.stdout or done.stderr).strip()[-300:]})
+            if done.returncode != 0 and blocked_by is None:  # report the first refusal; still try the other item
+                blocked_by = parsed if parsed.get("reason") else tokens.diagnosis(
+                    "board_error_unclassified", had={"profile": tokens.PROFILE, "permissions": minted["permissions"]},
+                    detail=(done.stderr or done.stdout).strip()[-300:], existing_pr=pr_url, retry=retry)
+    finally:
+        revoked = tokens.revoke(minted["token"])
+    result: dict[str, Any] = {"ok": blocked_by is None, "items": items, "token_revoked": revoked,
+                              "existing_pr": pr_url, "replay_create": False}
+    if blocked_by is None:
+        result.update(status="placed", boards=[f"https://github.com/orgs/hypeproof/projects/{n}"
+                                               for n in board_boards(repository)],
+                      token={"profile": tokens.PROFILE, "permissions": minted["permissions"], "path": minted["path"]},
+                      app_installation=minted["app_installation"])
+        return result
+    blocked_by.setdefault("recovery", {})
+    blocked_by["recovery"].update(existing_pr=pr_url, replay_create=False, command=retry,
+                                  next_action="retry_board_for_existing_pr")
+    return {**blocked_by, **result}
+
+
+def board_boards(repository: str) -> list[int]:
+    sys.path.insert(0, str(ROOT / "scripts/board"))
+    import board
+    return board.boards_for(repository.split("/", 1)[1])
+
+
+def board_summary(pr_url: str, outcome: dict[str, Any]) -> str:
+    if outcome.get("ok"):
+        return f"hype-pr: board placed: {pr_url} and its issue are In Review on {', '.join(outcome.get('boards', []))}"
+    if outcome.get("reason"):
+        tokens = board_token_module()
+        return (f"hype-pr: the PR was created but the board was not updated. PR: {pr_url}. "
+                f"{tokens.summary_line(outcome)} Do not re-run create.")
+    return f"hype-pr: the PR was created but the board was not updated. PR: {pr_url}. {outcome.get('error')}"
+
+
+def command_board(args: argparse.Namespace) -> int:
+    """Rerun only the board step for an existing PR; never creates or edits the PR."""
+    pr_url = f"https://github.com/{github_repo(args.repo)}/pull/{args.pr}"
+    if not args.apply:
+        tokens = board_token_module()
+        print(json.dumps({"apply": False, "existing_pr": pr_url, "issue": args.issue,
+                          "boards": board_boards(github_repo(args.repo)), "state": "in_review",
+                          "token": {"profile": tokens.PROFILE, "permissions": tokens.BOARD_PERMISSIONS}},
+                         ensure_ascii=False, indent=2))
+        return 0
+    outcome = board_on_create(args.repo, pr_url, args.issue)
+    print(json.dumps(outcome, ensure_ascii=False, indent=2))
+    print(board_summary(pr_url, outcome), file=sys.stderr)
+    return 0 if outcome.get("ok") else 3
 
 
 def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
@@ -766,6 +900,13 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     lane = release_lane(args, report)
     labels = lane["labels"]
     paths = report["paths"] if report else (args.path or [])
+    if args.auto_merge:
+        tier = merge_tier(repo_full_name(find_repo(policy, args.repo)[0]), paths)
+        if tier and tier["tier"] != "B":
+            raise ValueError(
+                f"--auto-merge refused: this PR is tier {tier['tier']} ({'; '.join(tier['reasons'])}) under "
+                "policy/merge-tiers.yaml. A human approver approves the head commit and merges it; "
+                "drop --auto-merge (#385)")
     planned = plan(
         policy=policy,
         repo_ref=args.repo,
@@ -884,11 +1025,29 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
         }
     if not work:  # the Work transport has no local gh to write the boards with
         result["board"] = board_on_create(args.repo, pr_ref, args.issue)
-        if not result["board"]["ok"]:
-            print(f"hype-pr: the PR was created but the board was not updated: {result['board']}", file=sys.stderr)
+        print(board_summary(pr_ref, result["board"]), file=sys.stderr)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     cleanup_failed = any(item["returncode"] != 0 for item in result["reviewer_cleanup_results"])
     return 1 if cleanup_failed else 0
+
+
+def preview_main():
+    """scripts/preview/preview.py's entry point; loaded only for the preview command (#566)."""
+    spec = importlib.util.spec_from_file_location("hypeproof_preview", ROOT / "scripts/preview/preview.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.main
+
+
+def command_preview(args: argparse.Namespace) -> int:
+    argv = ["--repo", github_repo(args.repo), "--pr", str(args.pr), "--max-routes", str(args.max_routes)]
+    for flag, value in (("--checkout", args.checkout), ("--json", args.json), ("--markdown", args.markdown)):
+        if value:
+            argv += [flag, value]
+    argv += ["--comment"] if args.comment else []
+    argv += ["--apply"] if args.apply else []
+    return preview_main()(argv)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -903,6 +1062,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--draft", action="store_true")
     plan_parser.add_argument("--auto-merge", action="store_true")
     plan_parser.add_argument("--request-reviewers", action="store_true", help="Opt in to all active non-author reviewers.")
+
+    preview_parser = sub.add_parser("preview", help="Preview links of the pages a PR changes, checked on its deployed preview.")
+    preview_parser.add_argument("--repo", required=True)
+    preview_parser.add_argument("--pr", required=True, type=positive_issue)
+    preview_parser.add_argument("--checkout", help="Local checkout of the repository; default: this directory or a sibling")
+    preview_parser.add_argument("--json")
+    preview_parser.add_argument("--markdown")
+    preview_parser.add_argument("--max-routes", type=int, default=12)
+    preview_parser.add_argument("--comment", action="store_true", help="Post or update the PR's Preview comment (with --apply)")
+    preview_parser.add_argument("--apply", action="store_true", help="Write the comment. Omit for dry-run.")
 
     req_parser = sub.add_parser("request-reviewers", help="Request all active members on an existing PR.")
     req_parser.add_argument("--repo", required=True)
@@ -928,6 +1097,12 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--checkout", default=".", help="Target worktree; inferred from the invocation directory")
     create_parser.add_argument("--preparation", help="Receipt from prepare, required for --apply")
     create_parser.add_argument("--apply", action="store_true", help="Mutate GitHub. Omit for dry-run.")
+
+    board_parser = sub.add_parser("board", help="Retry only the board step for an existing PR (board-scoped bot token).")
+    board_parser.add_argument("--repo", required=True)
+    board_parser.add_argument("--pr", required=True, type=positive_issue)
+    board_parser.add_argument("--issue", required=True, type=positive_issue, help="The issue the PR closes")
+    board_parser.add_argument("--apply", action="store_true", help="Write the boards. Omit for dry-run.")
 
     for name in ("inspect", "prepare"):
         command = sub.add_parser(name, help="Inspect source links or bind the agent assessment before PR creation")
@@ -982,11 +1157,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"hype-pr: --base {args.base} names a local ref; using the branch {bare}", file=sys.stderr)
             args.base = bare
     try:
+        # Work transport independently verifies its connected author in work_host.js.
+        if args.command in {"create", "request-reviewers"} and args.apply and not os.environ.get("HYPE_PR_WORK_DIR"):
+            sys.path.insert(0, str(ROOT / "scripts/agent-identity"))
+            from write_guard import WriteIdentityError, require_agent_writer
+            try:
+                require_agent_writer(args.author if args.command == "create" else None)
+            except WriteIdentityError as exc:
+                print(json.dumps(exc.as_dict()))
+                return 2
         policy = load_policy()
         findings = validate_policy(policy)
         if findings:
             print(json.dumps({"status": "policy-invalid", "findings": [f.as_dict() for f in findings]}, indent=2))
             return 4
+        if args.command == "preview":  # read-only unless --comment --apply (#566)
+            return command_preview(args)
         if args.command == "plan":
             data = plan(
                 policy=policy,
@@ -1006,6 +1192,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_prepare(args, policy)
         if args.command == "create":
             return command_create(args, policy)
+        if args.command == "board":
+            return command_board(args)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(f"hype-pr: {describe_process_failure(exc)}", file=sys.stderr)
         return 2

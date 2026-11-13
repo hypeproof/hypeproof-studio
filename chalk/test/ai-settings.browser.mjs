@@ -14,6 +14,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// The page holds no token: every request carries a Lab-connected session (harness/connect.mjs).
+import { TEST_CONNECT_SECRET, sessionCookie } from './harness/connect.mjs';
 import { readFileSync } from 'node:fs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
 
@@ -27,7 +29,7 @@ if (!bin) {
 }
 const { default: app } = await import('../src/index.ts');
 const server = createServer(async (req, res) => {
-  const r = await app.fetch(new Request('http://127.0.0.1' + req.url), { ENVIRONMENT: 'test' });
+  const r = await app.fetch(new Request('http://127.0.0.1' + req.url, { headers: { cookie: await sessionCookie('t') } }), { ENVIRONMENT: 'test', HPS_CHALK_CONNECT_SECRET: TEST_CONNECT_SECRET });
   res.writeHead(r.status, Object.fromEntries(r.headers));
   res.end(Buffer.from(await r.arrayBuffer()));
 });
@@ -53,7 +55,7 @@ const stub = `window.__puts=[];window.__saved=null;window.fetch=async(path,init)
   if(m==='PUT'){const body=JSON.parse(init.body);window.__puts.push(body);window.__saved=body.content;return json({revision:body.expected_revision+1});}
   if(m==='GET'&&window.__saved)return json({profile_id:'p1',revision:1,content:window.__saved});
   return json({});};
-  for(const [k,v] of [['token','t'],['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;return 0`;
+  for(const [k,v] of [['cohort','c1'],['profile','p1'],['course','course-1']])document.getElementById(k).value=v;return 0`;
 const geometry = `const q=s=>[...document.querySelectorAll(s)];
   const sections=q('#ai-settings>details.ai-section').map(d=>d.getBoundingClientRect());
   let overlap=0;for(let i=1;i<sections.length;i++)if(sections[i].top<sections[i-1].bottom-0.5)overlap++;
@@ -72,7 +74,7 @@ try {
   for (const width of [1280, 375]) {
     await b.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     await b.send('Page.navigate', { url: origin + '/authoring' });
-    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('ai-settings')`, '/authoring with the AI settings page');
+    await until(`return document.readyState === 'complete' && typeof render === 'function' && !!document.getElementById('ai-settings') && !!window.chalkConnection?.current?.connected`, '/authoring with the AI settings page');
     await ev(stub);
 
     // 1. Section order (D-013) and the nav in the same order; no starter-prompt section.

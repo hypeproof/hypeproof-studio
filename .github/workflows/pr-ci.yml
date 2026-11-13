@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
+      - 'scripts/run-playwright-ci.sh'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
       - 'scripts/email-test-participant-auth.mjs'
       - 'scripts/tests/email-test-participant-auth.test.mjs'
@@ -56,6 +57,9 @@ jobs:
           cache: npm
           cache-dependency-path: packages/measurement/package-lock.json
       - run: pip install --quiet pyyaml
+      - name: Developer ID and notarization release controls
+        if: ${{ !cancelled() }}
+        run: python3 scripts/release/test/test_macos_sign.py
       - name: Portable feedback evidence integrity
         if: ${{ !cancelled() }}
         run: python3 scripts/test-feedback-report.py
@@ -97,7 +101,7 @@ jobs:
         run: |
           npm ci --prefix scripts/release/engine --ignore-scripts --no-audit --no-fund
           node e2e/unified-release/gate.test.mjs
-          node --test scripts/release/test/build-contract.test.mjs scripts/release/test/platforms.test.mjs scripts/release/test/release-draft.test.mjs
+          node --test scripts/release/test/build-contract.test.mjs scripts/release/test/macos-signing-receipt.test.mjs scripts/release/test/platforms.test.mjs scripts/release/test/release-draft.test.mjs
           node --test scripts/release/test/sdk-seed-assets.test.mjs
           node --test scripts/release/test/install-kit.test.mjs scripts/release/test/mac-usage-strings.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
@@ -447,6 +451,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -462,11 +468,11 @@ jobs:
         run: npm ci
       - name: Install Chromium
         working-directory: e2e
-        run: npx playwright install --with-deps chromium
+        run: bash ../scripts/run-playwright-ci.sh prepare
       - name: Run the published runtime in real Chromium
         working-directory: e2e
-        run: npm run test:cr-publish
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:cr-publish
       # cr-evidence (#1394): participant events from the same runtime (CR-T23, CR-T62, CR-T67, CR-T19 events half).
       - name: Run participant events in real Chromium
         working-directory: e2e
-        run: npm run test:cr-evidence
+        run: bash ../scripts/run-playwright-ci.sh run npm run test:cr-evidence

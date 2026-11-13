@@ -381,7 +381,8 @@ export class PreviewProvider {
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
-    html, body { margin: 0; height: 100%; background: #1b1b2a; color: #ddd;
+    /* CGP-DS-R-004: the shell follows the host theme kind (the editor surface); the old fixed dark is the fallback. */
+    html, body { margin: 0; height: 100%; background: var(--vscode-editor-background, #1b1b2a); color: var(--vscode-foreground, #ddd);
                  font-family: var(--vscode-font-family, sans-serif); }
     body { display: flex; flex-direction: column; }
     #preview-header[hidden] { display: none; }
@@ -392,7 +393,8 @@ export class PreviewProvider {
     #ask-file:focus-visible { outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
     @media (forced-colors: active) { #ask-file { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
     #placeholder { display:flex; flex-direction:column; align-items:center;
-                   justify-content:center; flex:1; min-height:0; opacity:0.7; gap:8px; }
+                   justify-content:center; flex:1; min-height:0; gap:8px;
+                   color: var(--vscode-descriptionForeground, #ddd); } /* CGP-DS-R-004: not foreground at .7 (3.2:1 on Light+) */
     #placeholder .big { font-size: 40px; }
     iframe { width: 100%; flex: 1; min-height: 0; border: 0; background: #fff; display: block; }
     /* CGP-ART-D-002 — a strip below the page, never over it: the page's last pixels stay visible. */
@@ -409,7 +411,8 @@ export class PreviewProvider {
     #review-text { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
     #review-title, #review-notice { margin: 0; font-size: 14px; line-height: 20px; }
     #review-notice[hidden] { display: none; }
-    #review-notice { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32em; opacity: .85; }
+    #review-notice { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32em;
+      color: var(--vscode-descriptionForeground, #ddd); } /* CGP-DS-R-004: not foreground at .85 (4.4:1 on Light+) */
     #review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     #review-actions button[hidden] { display: none; }
     #review-actions button { min-height: 44px; min-width: 44px; padding: 0 10px; font: inherit; font-size: 14px;

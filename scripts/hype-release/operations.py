@@ -10,10 +10,13 @@ from pathlib import Path
 
 from core import Blocked, canonical, committed_cost, digest, public_payload, require
 from transport import ApiError, file_hash, safe_name
+import macos_signing
 
 
 def product_checkout(path, candidate):
     path = Path(path).resolve()
+    # A caller may point at an app subdirectory from any working directory.
+    path = Path(subprocess.check_output(["git", "-C", str(path), "rev-parse", "--show-toplevel"], text=True).strip())
     def git(*args):
         return subprocess.check_output(["git", "-C", str(path), *args], text=True).strip()
     require(git("rev-parse", "HEAD") == candidate["sourceSha"], "product checkout must be at exact candidate SHA")
@@ -138,14 +141,20 @@ def collect(github, candidate, directory, tag_object):
             github.download(candidate["repository"], asset, directory / name)
             result.append({**built, "name": name, "buildName": built["name"], "assetId": asset["id"], "platform": platform})
     require(len({a["assetId"] for a in result}) == 4, "package roles must bind distinct uploaded assets")
-    return {"artifacts": result, "builds": runs, "releaseId": release["id"], "releaseUrl": release["html_url"]}
+    mac = next(a for a in result if a['id'] == 'mac-zip')
+    signing = macos_signing.collect(github, candidate, assets, mac, directory, runs['darwin-arm64']['id'])
+    return {"artifacts": result, "macSigning": signing, "builds": runs, "releaseId": release["id"], "releaseUrl": release["html_url"]}
 
 
 def verify_remote_packages(github, state):
     c = state["candidate"]
     release = github.api(f"repos/{c['repository']}/releases/{state['releaseId']}")
     require(release["tag_name"] == c["tag"] and release["draft"] and release["prerelease"], "candidate draft state changed")
-    for artifact in state["artifacts"]:
+    immutable = list(state['artifacts'])
+    if state.get('macSigning'):
+        receipt = macos_signing.require_official(state)['receiptAsset']
+        immutable.append({**receipt, 'assetId': receipt['id']})
+    for artifact in immutable:
         matches = [a for a in release["assets"] if a["id"] == artifact["assetId"]]
         require(len(matches) == 1 and matches[0]["name"] == artifact["name"] and matches[0].get("digest") == "sha256:" + artifact["sha256"] and matches[0]["size"] == artifact["size"], "candidate package replaced or missing")
     return release
@@ -161,13 +170,14 @@ def report(state, release, directory):
     manifest.update(schema="hype-release-report/1", releaseId=release["id"], releaseUrl=release["html_url"],
                     reservedOrObservedUsd=str(committed_cost(state)), tokenUsage=state.get("tokenUsage", []), automaticModelCalls=0,
                     builds=state.get("builds", {}), reportScope="RC test delivery; not stable publication or human acceptance")
+    manifest.update(macSigning=state.get('macSigning'), signingStatus=macos_signing.status(state))
     manifest_text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
     (directory / "release-manifest.json").write_text(manifest_text)
     escape = lambda x: html.escape(str(x))
     changes = "".join(f"<tr><td>{escape(x['before'])}</td><td>{escape(x['after'])}</td></tr>" for x in c["changes"])
     checks = "".join(f"<tr><td>{escape(k)}</td><td>{escape(v['verdict'])}</td><td>{escape(v['observed'])}</td></tr>" for k, v in state["checks"].items()) or '<tr><td colspan="3">NOT_RUN — no package/user-flow verdict supplied.</td></tr>'
     packages = "".join(f"<tr><td>{escape(a['name'])}</td><td>{a['size']}</td><td><code>{a['sha256']}</code></td></tr>" for a in state["artifacts"])
-    content = f'''<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{escape(c['tag'])} · RC 보고서</title><style>body{{font:16px/1.7 system-ui;margin:40px auto;padding:0 24px;max-width:1000px;color:#202b2b}}h1,h2{{line-height:1.3}}table{{width:100%;border-collapse:collapse;margin:20px 0}}td,th{{padding:12px;text-align:left;border-bottom:1px solid #ddd;overflow-wrap:anywhere}}code{{font-size:12px}}.note{{padding:18px;background:#eef5f1}}a{{color:#155d4f}}@media(max-width:600px){{body{{padding:0 12px}}td,th{{padding:6px}}}}</style><main><p>HYPEPROOF · RC TEST DELIVERY</p><h1>{escape(c['tag'])}</h1><p class="note">테스트용 초안입니다. 빌드 성공은 실제 기기·사용자 수락을 의미하지 않습니다. 정식 공개: {escape(state['stablePublished'])}, 사용자 수락: {escape(state['humanAcceptance'])}</p><p><a href="{escape(release['html_url'])}">RC 다운로드</a> · 담당자 {escape(state['owner'])}</p><h2>Before → After</h2><table><tr><th>Before</th><th>After</th></tr>{changes}</table><h2>검증 결과</h2><table><tr><th>검사</th><th>판정</th><th>관측 결과</th></tr>{checks}</table><h2>복구·테스트</h2><p>{escape(c['rollback'])}</p><p>기존 설치와 분리한 프로필에서 입력·전송·중지·재시도·출처 복귀·작업 전환·재시작을 확인하세요. 지원되는 실계정 환경에서만 검색·모델 호출을 시험하세요.</p><h2>파일 식별</h2><p>소스 {escape(c['sourceSha'])} · 앱 버전 {escape(c['version'])}</p><table><tr><th>파일</th><th>바이트</th><th>SHA-256</th></tr>{packages}</table><h2>비용</h2><p>예상 예약액, 보고된 금액, 최종 정산은 별도 기록입니다. 저장소 당일 청구액을 이 실행의 최종 비용으로 간주하지 않습니다.</p><pre style="white-space:pre-wrap">{escape(json.dumps(state['costs'],ensure_ascii=False,indent=2))}</pre></main></html>'''
+    content = f'''<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{escape(c['tag'])} · RC 보고서</title><style>body{{font:16px/1.7 system-ui;margin:40px auto;padding:0 24px;max-width:1000px;color:#202b2b}}h1,h2{{line-height:1.3}}table{{width:100%;border-collapse:collapse;margin:20px 0}}td,th{{padding:12px;text-align:left;border-bottom:1px solid #ddd;overflow-wrap:anywhere}}code{{font-size:12px}}.note{{padding:18px;background:#eef5f1}}a{{color:#155d4f}}@media(max-width:600px){{body{{padding:0 12px}}td,th{{padding:6px}}}}</style><main><p>HYPEPROOF · RC TEST DELIVERY</p><h1>{escape(c['tag'])}</h1><p class="note">테스트용 초안입니다. 빌드 성공은 실제 기기·사용자 수락을 의미하지 않습니다. 정식 공개: {escape(state['stablePublished'])}, 사용자 수락: {escape(state['humanAcceptance'])}</p><p><a href="{escape(release['html_url'])}">RC 다운로드</a> · 담당자 {escape(state['owner'])}</p><h2>Before → After</h2><table><tr><th>Before</th><th>After</th></tr>{changes}</table><h2>검증 결과</h2><table><tr><th>검사</th><th>판정</th><th>관측 결과</th></tr>{checks}</table><h2>복구·테스트</h2><p>{escape(c['rollback'])}</p><p>기존 설치와 분리한 프로필에서 입력·전송·중지·재시도·출처 복귀·작업 전환·재시작을 확인하세요. 지원되는 실계정 환경에서만 검색·모델 호출을 시험하세요.</p><h2>파일 식별</h2><p>Mac 서명: {escape(macos_signing.status(state)["darwin-arm64"])} · iOS TestFlight: NOT_EVALUATED</p><p>소스 {escape(c['sourceSha'])} · 앱 버전 {escape(c['version'])}</p><table><tr><th>파일</th><th>바이트</th><th>SHA-256</th></tr>{packages}</table><h2>비용</h2><p>예상 예약액, 보고된 금액, 최종 정산은 별도 기록입니다. 저장소 당일 청구액을 이 실행의 최종 비용으로 간주하지 않습니다.</p><pre style="white-space:pre-wrap">{escape(json.dumps(state['costs'],ensure_ascii=False,indent=2))}</pre></main></html>'''
     (directory / "RC-REPORT.html").write_text(content)
     sums = [(a["name"], a["sha256"]) for a in state["artifacts"]]
     sums += [(name, file_hash(directory / name)) for name in ["RC-REPORT.html", "release-manifest.json"]]

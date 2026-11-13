@@ -55,6 +55,8 @@ export interface UpdateInfo {
   digest?: string;
   /** Where the release was read: the member mirror or the public release (D19). */
   source?: "member" | "public";
+  /** CGP-SHELL-R-003: the release notes carry SECURITY_CRITICAL_MARKER, so a cohort freeze does not hold it. */
+  securityCritical?: boolean;
 }
 
 export type ReleaseAsset = GhRelease["assets"][number];
@@ -213,10 +215,27 @@ export function parseLatestRelease(
     version,
     downloadUrl: asset.url ?? "",
     releaseUrl: release.html_url,
-    notes: typeof release.body === "string" ? release.body : "",
+    notes: releaseNotesText(release.body),
     sizeBytes: typeof asset.size === "number" ? asset.size : 0,
     digest: asset.digest,
+    ...(isSecurityCriticalRelease(release.body) ? { securityCritical: true } : {}),
   };
+}
+
+/**
+ * CGP-SHELL-R-003 — a release whose notes carry this line on its own is security-critical: a cohort's update
+ * freeze does not hold it, and Chalk labels it (chalk/src/lib/latest-release.ts reads the same line). An HTML
+ * comment, so GitHub does not render it; the mirror workflow copies it into the member mirror's notes.
+ * Agent choice (decisions.md CGP-SHELL-R-003, "Confirmed by Jay: no").
+ */
+export const SECURITY_CRITICAL_MARKER = "<!-- hps-update: security-critical -->";
+export function isSecurityCriticalRelease(body: unknown): boolean {
+  return typeof body === "string" && body.split(/\r?\n/).some(line => line.trim() === SECURITY_CRITICAL_MARKER);
+}
+/** The notes a learner may see: the body without the marker line. */
+function releaseNotesText(body: unknown): string {
+  if (typeof body !== "string") return "";
+  return isSecurityCriticalRelease(body) ? body.split(/\r?\n/).filter(line => line.trim() !== SECURITY_CRITICAL_MARKER).join("\n").trim() : body;
 }
 
 /**
@@ -279,10 +298,36 @@ export interface InstallerScriptInput {
   relaunch?: boolean | "background";
 }
 
+// Release-owner verified Apple team (#3811). This trust anchor ships in the app;
+// a download, environment variable or the old local-signing identity cannot replace it.
+export const MAC_UPDATE_TEAM_ID = "RZBNT9ZB67";
+export const MAC_UPDATE_BUNDLE_ID = "ai.hypeproof.studio";
+
+/** Used before offering a restart AND on the final staged copy before any swap. */
+export function renderMacUpdateVerification(): string {
+  // Apple TN3127 Developer ID Application requirement, also used by #620 signing.
+  // Check the outer identifier separately: nested helpers have their own identifiers.
+  const requirement = `identifier "${MAC_UPDATE_BUNDLE_ID}" and anchor apple generic ` +
+    `and certificate 1[field.1.2.840.113635.100.6.2.6] exists ` +
+    `and certificate leaf[field.1.2.840.113635.100.6.1.13] exists ` +
+    `and certificate leaf[subject.OU] = "${MAC_UPDATE_TEAM_ID}"`;
+  return `verify_signed_update() {
+  local app="$1" bid assessment
+  bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") || return 1
+  [[ "$bid" == ${shJsonString(MAC_UPDATE_BUNDLE_ID)} ]] || return 1
+  /usr/bin/codesign --verify --deep --strict --all-architectures "$app" || return 1
+  /usr/bin/codesign --verify --strict --all-architectures ${shJsonString("-R=" + requirement)} "$app" || return 1
+  assessment=$(LC_ALL=C /usr/sbin/spctl --assess --type execute --verbose=4 "$app" 2>&1) || { printf '%s\\n' "$assessment"; return 1; }
+  # Require the single authority result; an extra source line in a file name is not proof.
+  [[ "$(printf '%s\\n' "$assessment" | /usr/bin/sed -n 's/^source=//p')" == 'Notarized Developer ID' ]] || return 1
+}
+`;
+}
+
 /**
  * Render the installer.sh contents. Pure string assembly so unit tests can
  * snapshot it. The script is intentionally bash-only + relies on macOS-native
- * tools (osascript, pgrep, xattr, mv, open, /usr/libexec/PlistBuddy).
+ * tools (codesign, spctl, pgrep, mv, open, /usr/libexec/PlistBuddy).
  *
  * Safety properties:
  *   - Refuses to run if the new bundle's CFBundleIdentifier doesn't match
@@ -290,7 +335,8 @@ export interface InstallerScriptInput {
  *   - Refuses to run if NEW or OLD path doesn't end in ".app".
  *   - Stages and backs up beside OLD so each rename is on the same volume.
  *   - Never deletes OLD if backup fails; restores it if installation fails.
- *   - Strips quarantine AFTER swap (a fresh xattr -dr).
+ *   - Verifies the final copy's Apple signature, pinned team/bundle and notarization
+ *     before touching OLD. Preserves quarantine and the existing rollback.
  *   - Refuses to replace an app that is still running (including cancelled quit).
  *   - Logs everything to `logPath`; exit code is non-zero on any abort.
  */
@@ -338,6 +384,8 @@ echo "  old:  $OLD_APP"
 echo "  bid:  $EXPECTED_BUNDLE_ID"
 
 abort() { echo "[ABORT] $*"; exit 1; }
+
+${renderMacUpdateVerification()}
 
 [[ "$NEW_APP" == *.app ]] || abort "new app path doesn't end in .app: $NEW_APP"
 [[ "$OLD_APP" == *.app ]] || abort "old app path doesn't end in .app: $OLD_APP"
@@ -389,17 +437,11 @@ restore_on_exit() {
 }
 trap restore_on_exit EXIT
 ditto "$NEW_APP" "$STAGE/next.app" || abort "could not stage new app; old app unchanged"
+verify_signed_update "$STAGE/next.app" || abort "new app signature or notarization rejected; old app unchanged"
 mv "$OLD_APP" "$BACKUP_PATH" || abort "could not back up old app; refusing to delete it"
 echo "[ok] backed up old → $BACKUP_PATH"
 mv "$STAGE/next.app" "$OLD_APP" || abort "could not install new app; restoring previous app"
 echo "[ok] installed new app"
-
-# Strip quarantine on the freshly-moved bundle. Required: install-mac.sh
-# does this on first install; an auto-update without this step would trigger
-# Gatekeeper on the new launch (even though path+bid trust persists, the
-# downloaded bundle has its OWN quarantine attr from curl).
-xattr -dr com.apple.quarantine "$OLD_APP" 2>/dev/null || true
-echo "[ok] stripped quarantine"
 
 # Reopen
 ${input.relaunch === false ? ": # next launch is user initiated" : `open ${input.relaunch === "background" ? "-g " : ""}"$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"`}
@@ -504,6 +546,49 @@ export function classUpdateHold(
   return false;
 }
 export const CLASS_UPDATE_HOLD_COPY = "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요.";
+
+/**
+ * CGP-SHELL-R-003 (REQ-SHELL-03) — the cohort's update freeze, served by the Service on /v1/profile as
+ * `update_freeze {from, until, starts_at, ends_at}` (Korea calendar days; `ends_at` is exclusive). Active only on
+ * a classroom seat, inside [starts_at, ends_at) by this computer's clock. A personal, trial or pass seat, a missing,
+ * malformed, future or past range is no freeze. Returns the last frozen day (`until`) for the copy.
+ */
+export function updateFreeze(
+  profile: { activity_kind?: string | null; pass?: unknown; update_freeze?: unknown } | null | undefined,
+  now: number = Date.now(),
+): { until: string } | null {
+  if (!profile || profileAudience(profile) !== "classroom") return null;
+  const f = profile.update_freeze as { until?: unknown; starts_at?: unknown; ends_at?: unknown } | null | undefined;
+  if (!f || typeof f !== "object" || typeof f.until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(f.until)) return null;
+  const start = typeof f.starts_at === "string" ? Date.parse(f.starts_at) : NaN;
+  const end = typeof f.ends_at === "string" ? Date.parse(f.ends_at) : NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !(now >= start && now < end)) return null;
+  return { until: f.until };
+}
+/** A freeze holds an update unless the release is security-critical. */
+export function freezeHoldsUpdate(freeze: { until: string } | null, info: { securityCritical?: boolean } | null | undefined): boolean {
+  return freeze !== null && info?.securityCritical !== true;
+}
+/**
+ * The update offer the chat config sends: none inside a cohort freeze (unless security-critical), otherwise the
+ * offer with the class hold (CGP-SHELL-R-001) computed as always. A security release overrides the freeze only:
+ * it is still held for class and still needs the learner's restart approval.
+ */
+export function chatUpdateOffer<T extends { securityCritical?: boolean }>(
+  offer: T | null | undefined,
+  profile: Parameters<typeof updateFreeze>[0],
+  activity?: { kind?: string | null; pass?: unknown } | null,
+  now: number = Date.now(),
+): (T & { heldForClass: boolean }) | undefined {
+  if (!offer || freezeHoldsUpdate(updateFreeze(profile, now), offer)) return undefined;
+  return { ...offer, heldForClass: classUpdateHold(profile, activity) };
+}
+export const UPDATE_FREEZE_COPY = "선생님이 업데이트 시점을 정했어요.";
+/** "선생님이 업데이트 시점을 정했어요. 10월 31일까지 지금 버전을 써요." */
+export function updateFreezeCopy(freeze: { until: string }): string {
+  const [, m, d] = freeze.until.split("-").map(Number);
+  return `${UPDATE_FREEZE_COPY} ${m}월 ${d}일까지 지금 버전을 써요.`;
+}
 
 export const UPDATE_DOWNLOAD_URL = "https://hypeproof-ai.xyz/download";
 export const UPDATE_ACCESS_NOTICE_KEY = "hypeproofChat.updateAccessNotice";

@@ -9,21 +9,20 @@ import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
-import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, pollOrder, restorePendingOrder, waitDecision, type PendingOrder, type PurchaseView } from "./passPurchase";
 import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
-import { qrDataUrl } from "./testQr";
 import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
-import { passSurface, type PassSurface, type PurchasePathEvent } from "./funnelEvents";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
 import { TEXT_SIZE_KEY } from "./textSize";
+import type { ActivityResume } from './studioNavigation';
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -67,26 +66,32 @@ const isLegacyHistoryKey = (key: string): boolean =>
 type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding; replacesFree?: string };
 /** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
 type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
+type ReflectionEntry = { accountId?: string; sessionId?: string; activity?: string; workspace?: string; service: string; opening: boolean; waiting?: boolean; task?: string };
 
 /** App entry surface; authentication and cohort authority remain in Service. */
 export class StartPage {
   private panel?: vscode.WebviewPanel;
   private busy = false;
   private choosingFolder = false;
-  private error?: string;
+  // The start page's one error line. Any assignment clears the code-field mark: only refuseCode sets it.
+  private errorText?: string;
+  private errorAtCode = false;
+  private get error(): string | undefined { return this.errorText; }
+  private set error(text: string | undefined) { this.errorText = text; this.errorAtCode = false; }
+  /** DES-SHELL-04 — the refusal of a submitted code; the page draws it under the code field, not in the card's error area. */
+  private refuseCode(text: string) { this.error = text; this.errorAtCode = true; }
   private started = false;
   // Invalid arrival may list saved activities, but only explicit entry reactivates its profile.
   private deferProfileUntilEntry = false;
   private candidate?: Candidate;
-  // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
-  private products?: PassProduct[] | null;
+  // REQ-L12 ⑤ — legacy order recovery only. New passes are not sold (2026-11-11) and this build has
+  // no purchase view (2026-11-13): no catalogue read, no order creation. An order saved by an older
+  // build is still waited on, claimed and recovered here.
   // TUX-SP-12 — what the Service advertises about the trial before entry. `null`: not advertised (or unreadable).
   private trialOffer?: TrialOffer | null;
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
-  /** TUX-COND-07 — one press of the chat card's "이용권 살펴보기"; cleared with the tab. */
-  private purchaseFocus?: number;
   private purchaseTimer?: ReturnType<typeof setTimeout>;
   /** A check is on the wire; a purchase-return link arriving meanwhile does not start a second one. */
   private purchaseTickRunning = false;
@@ -99,36 +104,22 @@ export class StartPage {
   private freeRefusal?: FreeClaimRefusal;
   /** REQ-STUDIO-FREE-DAILY-REFILL — the `refills_at` values this window already re-claimed for (once each). */
   private readonly refillsClaimed = new Set<number>();
-  /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
+  /** The current seat is the free allowance (read in refresh; its credential links a sign-in, CONV-FUNNEL-R-007). */
   private freeSeatNow = false;
-  /** No activity at all while the Service advertises free start: a newcomer buying before any use. */
-  private freeNewcomer = false;
-  /** This window's Service refused an order with `account_required` (login at purchase). */
-  private accountRequired = false;
-  /**
-   * CONV-PURCHASE-R-002 — the pass chosen when the purchase-time sign-in began. Host memory only:
-   * a catalogue product id, never a secret, never in a URL. Given back to the list while it is open.
-   */
-  private purchasePick?: string;
-  /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
-  private guardianCheckout?: { url: string; qr: string };
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
   private offerWaited = false;
   /** REQ-STUDIO-JOIN-LINK — the class a join link named, until a code is confirmed or the learner drops it. */
   private joinLink?: { classId: string; seq: number };
-  /** CONV-FUNNEL-R-006 — where the pass list on screen was opened from (end card, header link, start page). */
-  private passListSurface: PassSurface = "start_page";
-  /** CONV-FUNNEL-R-006 — the pass list was on screen at the last paint; a new appearance counts once. */
-  private passListShown = false;
-  /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
-  private purchaseSignIn?: PassSurface;
   private useGrantAfterSignIn = false;
   private enteringAccountGrant = false;
   private accountEntryRevision = 0;
+  private reflectionEntry?: ReflectionEntry;
+  private reflectionEntering = false;
+  private openingChat?: vscode.WebviewPanel;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
-    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
+    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string, reflection?: ActivityResume['personalReflection'], validateEntry?: () => Promise<void>) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
   ) {
@@ -140,26 +131,23 @@ export class StartPage {
   private updateView(): StartState["update"] {
     const offer = this.chat.getAvailableUpdate?.();
     if (!offer?.version) return undefined;
+    // CGP-SHELL-R-003 — the cohort's update freeze hides the notice too, unless the release is security-critical.
+    if (this.chat.isUpdateFrozen?.(offer)) return undefined;
     return { version: offer.version, ...(this.chat.isClassUpdateHeld?.() ? { heldForClass: true } : {}) };
   }
 
   accountChanged(): void {
-    // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
     const account = this.accounts?.view();
-    if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
-    else if (this.purchaseSignIn && (!account || (account.status === "signedOut" && !account.busy))) this.purchaseSignIn = undefined;
+    if (this.reflectionEntry && ((this.reflectionEntry.accountId && account?.account?.id !== this.reflectionEntry.accountId)
+        || (this.reflectionEntry.waiting && account?.status === 'signedOut' && !account.busy))) this.reflectionEntry = undefined;
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
-    // Signed in after a login-at-purchase prompt: the prompt has been answered.
-    if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
-    // CONV-PURCHASE-R-002 — the chosen pass comes back only to the list it was chosen on. Signed in
-    // anywhere else (waiting, stopped, list closed): nothing is restored later.
-    if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
     void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
   }
 
   /** Explicit login resumes granted personal use; background refresh never changes activities. */
   async finishAccountSignIn(): Promise<void> {
+    if (this.reflectionEntry) { await this.continuePersonalReflection(); return; }
     if (!this.useGrantAfterSignIn) return;
     this.useGrantAfterSignIn = false;
     const account = this.accounts?.view();
@@ -168,6 +156,106 @@ export class StartPage {
     const grant = account.passes?.find(pass => pass.id === "super" && pass.status === "active" && pass.requests_remaining > 0);
     if (!grant) return;
     await this.enterGrantedAccountPass();
+  }
+
+  private reflectionStillWanted(entry: ReflectionEntry): boolean {
+    const current = activityConnections(this.context)?.current;
+    return this.reflectionEntry === entry && this.settings().proxyUrl === entry.service
+      && current?.id === entry.activity && current?.workspace === entry.workspace
+      && (!entry.accountId || this.accounts?.view().account?.id === entry.accountId)
+      && (!entry.task || this.chat.mobileConversationScope(true)?.task === entry.task);
+  }
+  private async assertReflectionEntry(entry: ReflectionEntry): Promise<void> {
+    if (!this.reflectionStillWanted(entry) || (entry.sessionId && await this.accounts?.conversationSession() !== entry.sessionId)
+        || !this.reflectionStillWanted(entry)) throw new ActivityConnectionError('계정이나 활동이 바뀌었어요. 현재 화면에서 나의 질문을 다시 선택해 주세요.');
+  }
+  /** One explicit action owns login, existing admission and the existing reflection task. */
+  async openPersonalReflectionEntry(): Promise<void> {
+    if (this.reflectionEntry || this.reflectionEntering || this.busy) return;
+    const current = activityConnections(this.context)?.current;
+    if (current?.kind === 'classroom' || current?.lesson || this.chat.isInstructor) {
+      await this.show(); this.error = '수업은 그대로 유지했어요. 개인 활동을 선택한 뒤 나의 질문을 시작해 주세요.'; await this.refresh(); return;
+    }
+    if (this.chat.hasActiveStream()) {
+      await this.show(); this.error = '진행 중인 작업을 마치거나 중지한 뒤 나의 질문을 열어 주세요.'; await this.refresh(); return;
+    }
+    if (!this.accounts) { await this.show(); await this.handle({ type: 'accountSignIn' }); return; }
+    const entry: ReflectionEntry = { accountId: this.accounts.view().account?.id, activity: current?.id, workspace: current?.workspace, service: this.settings().proxyUrl, opening: false, task: this.chat.mobileConversationScope(true)?.task };
+    this.reflectionEntry = entry; this.useGrantAfterSignIn = false; this.error = undefined;
+    try {
+      if (this.accounts.view().status !== 'signedIn') {
+        await this.show(); await this.refresh();
+        if (!this.reflectionStillWanted(entry)) return;
+        entry.waiting = true; await this.accounts.start();
+        if (this.accounts.view().status !== 'signedIn') return;
+      }
+      await this.continuePersonalReflection();
+    } catch (error) { await this.reflectionEntryFailed(entry, error); }
+  }
+  private async reflectionEntryFailed(entry: ReflectionEntry, error: unknown): Promise<void> {
+    if (this.reflectionEntry !== entry) return;
+    if (!this.reflectionStillWanted(entry)) { this.reflectionEntry = undefined; return; }
+    this.reflectionEntry = undefined;
+    await this.show();
+    this.error = error instanceof AccountError || error instanceof ActivityConnectionError || error instanceof Error
+      ? error.message : '나의 질문을 열지 못했어요. 기존 작업은 그대로 있어요.';
+    await this.refresh();
+  }
+  private async continuePersonalReflection(passId?: string): Promise<void> {
+    const entry = this.reflectionEntry, accounts = this.accounts;
+    if (!entry || !accounts || this.reflectionEntering) return;
+    this.reflectionEntering = true;
+    try {
+      await this.assertReflectionEntry(entry);
+      const session = await accounts.conversationSession();
+      await this.assertReflectionEntry(entry);
+      const account = accounts.view();
+      if (!session || account.status !== 'signedIn' || !account.account?.id) throw new ActivityConnectionError('Google 로그인을 마친 뒤 나의 질문을 다시 선택해 주세요.');
+      entry.sessionId = session; entry.accountId = account.account.id;
+      const current = activityConnections(this.context)?.current;
+      if (current?.kind === 'personal' && activityConnections(this.context)?.matchesService) {
+        if (current.accountPass && current.accountPass.sessionId !== session) throw new ActivityConnectionError('이 개인 활동의 계정이 달라요. 내 계정의 활동을 선택해 주세요.');
+        const profile = await this.chat.ensureProfile(true); await this.assertReflectionEntry(entry);
+        if (profile?.activity_kind !== 'personal' || profile.lesson) throw new ActivityConnectionError('개인 활동 연결을 확인하지 못했어요. 내 계정 · 이용권에서 확인해 주세요.');
+        entry.opening = true;
+        if (this.panel) await this.openChat();
+        await this.chat.refreshConfig(); await this.assertReflectionEntry(entry);
+        await this.chat.openPersonalReflection(() => this.reflectionStillWanted(entry));
+        if (this.reflectionEntry === entry) this.reflectionEntry = undefined;
+        return;
+      }
+      if (current && !current.free) throw new ActivityConnectionError('현재 활동은 그대로 유지했어요. 개인 활동을 선택한 뒤 나의 질문을 시작해 주세요.');
+      // Keep the existing account pass chooser. A normal pass may start its paid period on
+      // activation, so only its explicit button selects it; the existing super grant is immediate.
+      const chosen = passId ?? account.passes?.find(pass => pass.id === 'super' && pass.status === 'active' && pass.requests_remaining > 0)?.id;
+      await this.show(); await this.assertReflectionEntry(entry);
+      if (!chosen) {
+        this.error = account.passes?.length ? '나의 질문에 사용할 이용권을 골라 주세요.' : '개인 AI 이용 권한이 아직 없어요. 내 계정 · 이용권에서 권한을 확인해 주세요. 기존 작업은 그대로 있어요.';
+        await this.refresh(); return;
+      }
+      try { await this.activateAccountPass(chosen, () => this.reflectionStillWanted(entry)); }
+      catch (error) {
+        await this.assertReflectionEntry(entry);
+        this.error = error instanceof Error ? error.message : '이용권을 확인하지 못했어요. 다른 이용권을 선택하거나 새로고침해 주세요.';
+        await this.refresh(); return;
+      }
+      await this.assertReflectionEntry(entry);
+      if (this.candidate?.profile.activity_kind !== 'personal' || this.candidate.profile.lesson) throw new ActivityConnectionError('이 이용권은 개인 질문 활동이 아니에요. 기존 활동은 그대로 유지했어요.');
+      await this.handle({ type: 'beginCourse' }, () => this.reflectionStillWanted(entry), entry);
+    } catch (error) { await this.reflectionEntryFailed(entry, error); }
+    finally { this.reflectionEntering = false; }
+  }
+  /** Called only with the existing one-shot, validated workspace-resume marker. */
+  async resumePersonalReflection(intent: NonNullable<ActivityResume['personalReflection']>): Promise<void> {
+    if (this.reflectionEntry || !this.accounts) return;
+    const current = activityConnections(this.context)?.current, revision = this.accountEntryRevision;
+    if (current?.kind !== 'personal') return;
+    const task = this.chat.mobileConversationScope(true)?.task;
+    await this.accounts.refreshView();
+    if (this.accountEntryRevision !== revision || activityConnections(this.context)?.current !== current
+        || this.accounts.view().account?.id !== intent.accountId || this.chat.mobileConversationScope(true)?.task !== task) return;
+    this.reflectionEntry = { ...intent, activity: current.id, workspace: current.workspace, task, service: this.settings().proxyUrl, opening: true };
+    await this.continuePersonalReflection();
   }
 
   private async enterGrantedAccountPass(): Promise<void> {
@@ -266,6 +354,7 @@ export class StartPage {
    * learner types the code and starts the class themselves, through the ordinary path.
    */
   async openJoinLink(classId: string): Promise<void> {
+    this.reflectionEntry = undefined;
     if (!isClassId(classId)) return;
     this.joinLink = { classId, seq: (this.joinLink?.seq ?? 0) + 1 };
     this.error = undefined;
@@ -311,6 +400,7 @@ export class StartPage {
 
   /** Release only the entry panel we own; never close user editors or the chat. */
   closeForAutomationPreview(): vscode.ViewColumn | undefined {
+    this.reflectionEntry = undefined;
     const entry = this.panel;
     if (!entry) return undefined;
     const column = entry.viewColumn;
@@ -334,8 +424,15 @@ export class StartPage {
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;
-    await this.chat.openInEditor(entry);
-    if (this.panel === entry) this.panel = undefined;
+    // Chat reuses this webview and can send ready before openInEditor resolves.
+    // Its messages must never be interpreted as canceling the start-page intent.
+    this.openingChat = entry;
+    try {
+      await this.chat.openInEditor(entry);
+      if (this.panel === entry) this.panel = undefined;
+    } finally {
+      if (this.openingChat === entry) this.openingChat = undefined;
+    }
     this.started = true;
     this.deferProfileUntilEntry = false;
     this.chat.refreshConfig();
@@ -351,15 +448,15 @@ export class StartPage {
     this.panel = panel;
     panel.webview.html = this.chat.renderHtml(panel.webview, vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist"))
       .replace(/<html\b/, '<html data-surface="start"');
-    panel.webview.onDidReceiveMessage((msg: StartRequest) => { void this.handle(msg); });
+    panel.webview.onDidReceiveMessage((msg: StartRequest) => {
+      if (this.panel === panel && this.openingChat !== panel) void this.handle(msg);
+    });
     // #747 — the naming step happens in the chat panel; this tab is retained
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
-      // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
-      // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
-      this.passListShown = true; this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.stopPurchaseWait();
+      this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -380,57 +477,14 @@ export class StartPage {
    */
   async freeSignInCredential(): Promise<string | undefined> { return this.freeSeatNow ? await this.currentToken() : undefined; }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
-  /**
-   * Login at purchase (Jay 2026-10-19, "결제할때 구글로그인 필수로 하자"). A free seat, a newcomer
-   * under free start, and any purchase after the Service answered `account_required` need a Google
-   * account. The Service's free-start readiness requires HPS_PURCHASE_ACCOUNT_REQUIRED, so an
-   * advertised free start means anonymous orders are refused anyway. Code-issued and class seats
-   * keep today's path until the Service says otherwise. Never asked before purchase: the first
-   * screen has no login.
-   */
-  private loginAtPurchase(): boolean { return this.freeSeatNow || this.freeNewcomer || this.accountRequired; }
-  /**
-   * CONV-FUNNEL-R-006 — one purchase-path funnel event for a free seat (Service #168). The chat host's
-   * reporter sends it with the seat's grant token, only when the Service's probe lists the type, and
-   * never throws. Any other seat (pass, code-issued trial, class, none) sends nothing.
-   */
-  private purchasePathEvent(type: PurchasePathEvent, surface: PassSurface = this.passListSurface): void {
-    if (!this.freeSeatNow) return;
-    try { this.chat.funnelEmit?.({ type, surface }); } catch { /* telemetry never interrupts a purchase */ }
-  }
-  /** What blocks checkout for want of an account; undefined when checkout may go ahead. */
-  private loginGate(): PurchaseView["login"] {
-    if (!this.loginAtPurchase()) return undefined;
-    if (!this.accounts) return "unavailable";
-    return this.accounts.view().status === "signedIn" ? undefined : "signIn";
-  }
+  /** REQ-L12 ⑤ — what the start page shows of a legacy order. No secret, no code. */
   private purchaseView(): PurchaseView {
-    const payerAdult = this.context.globalState?.get<unknown>(PAYER_ADULT_KEY);
-    const login = this.order ? undefined : this.loginGate();
     return {
-      ...(login ? { login } : {}),
-      ...(this.freeSeatNow ? { freeSeat: true, ...(typeof payerAdult === "boolean" ? { payerAdult } : {}) } : {}),
-      ...(this.guardianCheckout && this.order ? { guardian: this.guardianCheckout } : {}),
-      available: !!this.products?.length || !!this.order,
-      ...(this.products?.length ? { products: this.products } : {}),
+      available: !!this.order,
       ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
-      ...(this.purchaseFocus ? { focus: this.purchaseFocus } : {}),
-      ...(this.selectedPass() ? { selected: this.selectedPass() } : {}),
     };
-  }
-  /** CONV-PURCHASE-R-002 — remember the chosen pass when the purchase-time sign-in begins. */
-  private notePurchasePick(productId: unknown): void {
-    if (typeof productId !== "string" || this.purchaseStage !== "choosing" || this.order) return;
-    if (!this.products?.some(p => p.id === productId)) return;
-    this.purchasePick = productId;
-  }
-  /** The remembered pass, only while the pass list is open and still sells it. */
-  private selectedPass(): string | undefined {
-    const pick = this.purchasePick;
-    if (!pick || this.purchaseStage !== "choosing" || this.order) return undefined;
-    return this.products?.some(p => p.id === pick) ? pick : undefined;
   }
   /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
   private async loadTrialOffer(): Promise<void> {
@@ -562,18 +616,6 @@ export class StartPage {
     }
   }
   /**
-   * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
-   * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
-   */
-  async showPurchase(surface?: unknown): Promise<void> {
-    // CONV-FUNNEL-R-006 — the command argument names the surface; anything else is the end card's.
-    this.passListSurface = passSurface(surface, "end_card");
-    await this.show();
-    await this.handlePurchase({ type: "purchaseOpen" });
-    this.purchaseFocus = Date.now();
-    await this.refresh();
-  }
-  /**
    * Epic #3418 — one read per window and account: the store entry is drawn only when the Service
    * answers the store for this account (a rollout may open it to listed accounts only).
    */
@@ -588,11 +630,6 @@ export class StartPage {
     const before = this.storeOn;
     this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => token }).items().then(() => true, () => false);
     return before !== this.storeOn;
-  }
-  /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
-  private async loadProducts(force = false): Promise<void> {
-    if (this.products !== undefined && !force) return;
-    this.products = await fetchProducts(this.settings().proxyUrl);
   }
   private async savedOrder(): Promise<PendingOrder | null> {
     const { proxyUrl, siteBase } = this.settings();
@@ -620,7 +657,7 @@ export class StartPage {
   private async endPurchase(message: string): Promise<void> {
     this.stopPurchaseWait();
     await this.context.secrets.delete(PENDING_PURCHASE_KEY);
-    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message; this.guardianCheckout = undefined;
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
     await this.refresh();
   }
   private async purchaseTick(): Promise<void> {
@@ -705,86 +742,34 @@ export class StartPage {
     c.workspace = ordinary; c.replacesFree = undefined;
     this.error = undefined;
   }
+  /** REQ-L12 ⑤ — the recovery intents for a legacy order. There is no way to start a new order here. */
   private async handlePurchase(msg: StartRequest): Promise<void> {
-    if (msg.type === "purchaseOpen") {
-      // Every open is a new view of the list, even when it was already on screen.
-      this.passListShown = false;
-      await this.loadProducts(true);
-      if (!this.order) { this.purchaseStage = this.products?.length ? "choosing" : "stopped"; this.purchaseMessage = this.products?.length ? undefined : PURCHASE_COPY.unavailable; }
-      await this.refresh(); return;
-    }
     if (msg.type === "purchaseCancel") {
       // Cancelling stops the wait only. A saved paid order is never thrown away from here.
-      this.stopPurchaseWait(); this.purchaseFocus = undefined;
+      this.stopPurchaseWait();
       if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
-      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseHide") {
       // Back to the other ways to start. The order stays saved and the choice list offers it again.
-      this.stopPurchaseWait(); this.purchaseFocus = undefined;
+      this.stopPurchaseWait();
       if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
-      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseReopen") {
-      if (this.order && await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl))) this.purchasePathEvent("checkout_opened");
+      // An order an older build started may still be unpaid: the person can reopen its own checkout page.
+      if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
       return;
     }
     if (msg.type === "purchaseRetry") {
       const order = this.order ?? await this.savedOrder();
-      if (!order) { this.purchaseStage = this.products?.length ? "choosing" : undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
+      if (!order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
       this.order = order;
       if (order.claimed) { await this.claimPurchase(order); return; }
       this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       await this.refresh(); this.schedulePurchasePoll(0); return;
     }
-    if (msg.type === "purchasePayer") {
-      if (typeof msg.adult === "boolean") await this.context.globalState?.update(PAYER_ADULT_KEY, msg.adult);
-      await this.refresh(); return;
-    }
-    if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
-    if (!this.products?.some(p => p.id === msg.productId)) return;
-    // Login at purchase without an account runtime: no anonymous fallback. The view offers no pay
-    // button in this state; this guards a stale view.
-    if (this.loginGate() === "unavailable") { this.purchaseStage = "choosing"; this.purchaseMessage = undefined; await this.refresh(); return; }
-    const { proxyUrl, siteBase } = this.settings();
-    this.busy = true; await this.refresh();
-    try {
-      if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
-      const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
-      if (this.accounts && !accountToken) {
-        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; this.notePurchasePick(msg.productId); return; }
-        throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
-      }
-      // CONV-PURCHASE-R-002 — the pay press is the person's latest choice. A remembered pick is spent
-      // here, so a failed order and a retry never bring an older pass back over it.
-      this.purchasePick = undefined;
-      // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
-      // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
-      const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
-      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken, freeCredential);
-      if (result === "account_required") {
-        // The Service requires a Google account for this order. Back to the list with the sign-in
-        // as the Primary (or the calm notice without an account runtime); nothing was ordered.
-        this.accountRequired = true; this.purchaseStage = "choosing";
-        this.purchaseMessage = this.accounts ? PURCHASE_COPY.signInFirst : undefined;
-        if (this.accounts) this.notePurchasePick(msg.productId);
-        if (this.accounts && accountToken) await this.accounts.refreshView();
-        return;
-      }
-      const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
-      if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
-      // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
-      await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
-      this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
-      // Under 19 on a free seat: the guardian pays on their own phone, so the page is shown here as a link and QR.
-      if (msg.guardian && this.freeSeatNow) this.guardianCheckout = { url: order.checkoutUrl, qr: qrDataUrl(order.checkoutUrl) };
-      else { this.guardianCheckout = undefined; if (await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl))) this.purchasePathEvent("checkout_opened"); }
-      this.schedulePurchasePoll();
-    } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
-    finally { this.busy = false; await this.refresh(); }
   }
 
   /**
@@ -816,13 +801,6 @@ export class StartPage {
     if (stillWanted && !stillWanted()) throw new AccountError("entry_changed", "활동 연결을 취소했어요. 선택한 활동을 계속 사용하세요.");
     if (!this.candidate || this.candidate.token !== activated.token) throw new AccountError('pass_profile_unavailable', '이용권 정보를 확인하지 못했어요. 새로고침 후 다시 선택해 주세요.');
     this.candidate.accountPass = activated.binding;
-    // An existing grant is not a checkout. Reveal its confirmation card after activation.
-    // A real order being claimed keeps its own connecting/error recovery lifecycle.
-    if (this.purchaseStage === "choosing" && !this.order) {
-      this.purchaseStage = undefined;
-      this.purchaseMessage = undefined;
-      this.purchasePick = undefined;
-    }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -834,7 +812,6 @@ export class StartPage {
     // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
     const running = this.candidate ? null : p;
     this.freeSeatNow = isFreeSeat(running);
-    this.freeNewcomer = !p && this.freeStartOn();
     const freeStart = this.freeStartView(running);
     const state: StartState = {
       automationsEnabled: !this.candidate && p?.automations?.enabled === true,
@@ -842,12 +819,13 @@ export class StartPage {
       legacyHistory,
       activities,
       checking: this.busy,
+      personalReflectionPending: !!this.reflectionEntry,
       started: !this.candidate && this.started && !!p,
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
-      // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
       // The free card states a free seat's end itself (freeStart.ended), so its failure sentence is not repeated.
-      error: withTrialPassPointer(this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
+      error: this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined),
+      ...(this.error !== undefined && this.errorAtCode ? { errorAt: "code" as const } : {}),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
@@ -867,12 +845,6 @@ export class StartPage {
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
-    // studio-funnel-events — the pass offer is on screen: the choice list shows it while no activity card is.
-    if (this.panel && state.purchase?.available && !state.profile) this.chat.funnelEmit?.({ type: "offer_viewed", surface: "start_page" });
-    // CONV-FUNNEL-R-006 — the pass list appears on screen (each open, and each return to it from another stage).
-    const listShown = !!this.panel && this.purchaseStage === "choosing" && !!this.products?.length && !this.order;
-    if (listShown && !this.passListShown) this.purchasePathEvent("pass_list_viewed");
-    this.passListShown = listShown;
     await this.panel?.webview.postMessage({ type: "startState", state });
     if (this.panel) this.maybeRefill(running);
   }
@@ -900,8 +872,12 @@ export class StartPage {
     } finally { await this.chat.setConnectionChanging(false); }
   }
 
-  private async handle(msg: StartRequest, continuation?: () => boolean): Promise<void> {
+  private async handle(msg: StartRequest, continuation?: () => boolean, reflection?: ReflectionEntry): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.type === 'openPersonalReflection') { await this.openPersonalReflectionEntry(); return; }
+    if (msg.type === 'accountActivate' && this.reflectionEntry) { await this.continuePersonalReflection(msg.passId); return; }
+    if (!continuation && !['startReady', 'accountRefresh', 'accountReopen', 'accountCopyLink'].includes(msg.type)) this.reflectionEntry = undefined;
+    if (msg.type === 'cancelPersonalReflection') { if (this.accounts?.view().status === 'waiting' || this.accounts?.view().busy) this.accounts.cancel(); await this.refresh(); return; }
     if (!continuation && !["startReady", "accountRefresh", "accountReopen", "accountCopyLink"].includes(msg.type)) this.accountEntryRevision++;
     if (!["startReady", "accountSignIn", "accountReopen", "accountCopyLink", "accountRefresh"].includes(msg.type)) this.useGrantAfterSignIn = false;
     if (msg.type.startsWith("account")) {
@@ -945,11 +921,6 @@ export class StartPage {
       this.error = undefined;
       try {
         if (msg.type === "accountSignIn") {
-          if (this.loginGate() === "signIn") {
-            this.notePurchasePick(msg.productId);
-            // CONV-FUNNEL-R-006 — the purchase-time sign-in begins from the pass list.
-            if (this.purchaseStage === "choosing" && !this.order && this.freeSeatNow) { this.purchaseSignIn = this.passListSurface; this.purchasePathEvent("sign_in_started"); }
-          }
           this.useGrantAfterSignIn = true;
           await this.accounts.start();
           if (this.accounts.view().status === "signedIn") await this.finishAccountSignIn();
@@ -982,19 +953,17 @@ export class StartPage {
         const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
         await Promise.race([this.loadTrialOffer(), bound]);
       }
-      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
+      await this.refresh(); void Promise.all([this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
     if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
     if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
     if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
     if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
     if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
-    // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
-    if (msg.type === "purchaseOpen") { this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" }); this.passListSurface = "start_page"; }
-    if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
+    if (msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
+    if (msg.type === "inboxAnswer") { await this.chat.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return; }
     if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
     if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start_page"); return; }
     if (msg.type === "openSkillStore") { await vscode.commands.executeCommand("hypeproof-chat.skillStore"); return; }
@@ -1029,7 +998,12 @@ export class StartPage {
     if (msg.type === "continueFromGithub" || msg.type === "startNew") { await this.startFromGithubChoice(msg); return; }
     if (this.busy) return;
     const connections = activityConnections(this.context);
-    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    if (this.chat.hasActiveStream()) {
+      // DES-SHELL-04 — a code submitted during a turn is refused under the code field like any other code refusal.
+      const turnRunning = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요.";
+      if (msg.type === "connectCourse") this.refuseCode(turnRunning); else this.error = turnRunning;
+      await this.refresh(); return;
+    }
     if (msg.type === "openLocalFolder") {
       if (this.choosingFolder) return;
       this.choosingFolder = true;
@@ -1135,6 +1109,8 @@ export class StartPage {
           await verifyActivity({proxyUrl:candidate?.proxyUrl ?? vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token},profile.activity_id ?? '');
         }
         const commit = async (directory?: string) => {
+          if (reflection) await this.assertReflectionEntry(reflection);
+          if (continuation && !continuation()) throw new ActivityConnectionError('활동 열기를 취소했어요. 기존 작업은 유지됩니다.');
           if (!this.panel || (candidate && !committed && this.candidate !== candidate)) throw new Error("Activity entry was cancelled");
           if (!candidate || committed) return;
           previous = await this.context.secrets.get(TOKEN_KEY);
@@ -1145,12 +1121,14 @@ export class StartPage {
             // REQ-L12 ⑫ — read who held this folder before the pass takes it over (carry-over offer).
             const previousHolder = carryoverAdvertised(profile) ? await connections.forWorkspace(root).catch(() => undefined) : undefined;
             rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass,candidate.replacesFree ? { replacesFree: candidate.replacesFree } : undefined);
+            if (reflection && this.reflectionEntry === reflection) { reflection.activity = connections.current?.id; reflection.workspace = connections.current?.workspace; }
             await this.recordCarryoverOffer(profile!, root, previousHolder, !!candidate.replacesFree && previousHolder?.id === candidate.replacesFree);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
           this.chat.invalidateProfile();
           if (vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           if (!await this.chat.ensureProfile(true)) throw new Error('connection validation failed');
+          if (reflection) await this.assertReflectionEntry(reflection);
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           // REQ-L12 ⑦ — the purchased activity is entered and verified; the order record has done its job.
           // Retired only now: a check above that fails rolls the entry back and must leave 다시 연결 possible.
@@ -1158,10 +1136,26 @@ export class StartPage {
           this.candidate = undefined;
         };
         const selectedWorkspace = candidate?.workspace ?? (connections?.matchesService && connections.current?.serverId === profile.activity_id ? connections.current?.workspace : undefined);
-        if (await this.begin(profile, commit, selectedWorkspace)) return; // workspace switch reloads the window
+        if (reflection) await this.assertReflectionEntry(reflection);
+        if (await this.begin(profile, commit, selectedWorkspace, reflection?.accountId && reflection.sessionId ? { accountId: reflection.accountId, sessionId: reflection.sessionId } : undefined, reflection ? () => this.assertReflectionEntry(reflection) : undefined)) {
+          // The validated activity-resume marker now owns this one explicit navigation.
+          if (reflection && this.reflectionEntry === reflection) this.reflectionEntry = undefined;
+          return;
+        }
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
+        if (reflection) { await this.assertReflectionEntry(reflection); reflection.opening = true; }
         await this.openChat();
+        if (reflection) {
+          // Admission is complete. A later question refusal must not roll back the activity
+          // after the person has already changed tasks or started work in its chat.
+          try {
+            await this.chat.setConnectionChanging(false);
+            await this.chat.refreshConfig(); await this.assertReflectionEntry(reflection);
+            await this.chat.openPersonalReflection(() => this.reflectionStillWanted(reflection));
+          } catch (error) { await this.reflectionEntryFailed(reflection, error); }
+          if (this.reflectionEntry === reflection) this.reflectionEntry = undefined;
+        }
       } catch (error) {
         let restoreFailed = false;
         if (committed) {
@@ -1178,6 +1172,7 @@ export class StartPage {
           ? '활동 연결 복구를 완료하지 못했습니다. 파일은 삭제하지 않았습니다. 앱을 다시 열어 현재 활동을 확인해 주세요.'
           : entryError(error);
       } finally {
+        if (reflection && this.reflectionEntry === reflection) this.reflectionEntry = undefined;
         this.busy = false; await this.chat.setConnectionChanging(false);
         await this.refresh();
       }
@@ -1185,9 +1180,9 @@ export class StartPage {
     }
     if (msg.type !== "connectCourse" || typeof msg.token !== "string") return;
     const token = sanitizeWorkshopToken(msg.token);
-    if (!token) { this.error = "수업 참여 코드를 입력하세요."; await this.refresh(); return; }
+    if (!token) { this.refuseCode("수업 참여 코드를 입력하세요."); await this.refresh(); return; }
     if (looksLikeIssuerTokenUnverified(token)) {
-      this.error = "강사용 코드입니다. 수강생 참여 코드를 입력하세요."; await this.refresh(); return;
+      this.refuseCode("강사용 코드입니다. 수강생 참여 코드를 입력하세요."); await this.refresh(); return;
     }
     // REQ-STUDIO-JOIN-LINK — only the form that shows the link's class is constrained by it. A code
     // from any other form (the learner left the link's form) drops the stale link. On the link's
@@ -1196,7 +1191,7 @@ export class StartPage {
     if (this.joinLink && msg.joinClass !== this.joinLink.classId) this.joinLink = undefined;
     const codeClass = this.joinLink ? classOfCode(token) : undefined;
     if (this.joinLink && codeClass && codeClass !== this.joinLink.classId) {
-      this.error = JOIN_LINK_COPY.mismatch; await this.refresh(); return;
+      this.refuseCode(JOIN_LINK_COPY.mismatch); await this.refresh(); return;
     }
     const entryPanel=this.panel;
     this.busy = true; this.error = undefined;
@@ -1205,10 +1200,10 @@ export class StartPage {
       await this.refresh();
       const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
       const result = await fetchProfileResult({ proxyUrl, token });
-      if (!result.ok) { this.error = result.failure.friendly; return; }
+      if (!result.ok) { this.refuseCode(result.failure.friendly); return; }
       const p = result.profile;
       if (!p?.profile_id || !p.display_name || !p.ux?.coach || !p.welcome) {
-        this.error = "수업 정보 응답을 읽지 못했습니다. 잠시 후 다시 연결하세요."; return;
+        this.refuseCode("수업 정보 응답을 읽지 못했습니다. 잠시 후 다시 연결하세요."); return;
       }
       if (!entryPanel || this.panel!==entryPanel) return;
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
@@ -1223,7 +1218,7 @@ export class StartPage {
       else this.github = undefined;
     } catch (error) {
       console.error('[startPage] connectCourse failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
-      this.error = "수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";
+      this.refuseCode("수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.");
     } finally {
       this.busy = false; await this.chat.setConnectionChanging(false);
       await this.refresh();

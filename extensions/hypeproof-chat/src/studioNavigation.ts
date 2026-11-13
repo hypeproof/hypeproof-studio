@@ -19,6 +19,8 @@ export const RESUME_MAX_AGE_MS = 10 * 60_000;
 export interface ActivityResume {
   version: 1; id: string; service: string; workspace: string; ref: string; at: number;
   state?: Record<string, unknown>;
+  /** Explicit question entry only; these are identity references, never credentials. */
+  personalReflection?: { accountId: string; sessionId: string };
 }
 const canonical = canonicalRoot;
 export function resumeKey(root: string): string {
@@ -87,7 +89,7 @@ export function activityCheckpoint(context: vscode.ExtensionContext, record: Act
   }));
 }
 export async function consumeActivityResume(context: vscode.ExtensionContext, record: ActivityRecord | undefined, service: string,
-  root: string | undefined): Promise<ReturnType<typeof resumeDecision>> {
+  root: string | undefined, onReflection?: (intent: NonNullable<ActivityResume['personalReflection']>) => void): Promise<ReturnType<typeof resumeDecision>> {
   const key = root ? resumeKey(root) : undefined;
   const marker = key ? context.globalState.get<ActivityResume>(key) : undefined;
   const decision = resumeDecision(marker, record, service, root);
@@ -104,5 +106,10 @@ export async function consumeActivityResume(context: vscode.ExtensionContext, re
       await context.globalState.update(WORKSPACE_SWITCH_ATTEMPT_KEY, undefined);
   }
   if (marker && key) await context.globalState.update(key, undefined);
+  // The existing validated activity/workspace marker is consumed before continuation. An
+  // absent/expired/mismatched marker never revives a question from a different launch.
+  const question = marker?.personalReflection;
+  if (decision === 'valid' && question && typeof question.accountId === 'string' && question.accountId.length > 0
+      && typeof question.sessionId === 'string' && question.sessionId.length > 0) onReflection?.(question);
   return decision;
 }

@@ -43,9 +43,7 @@ try {
  connections.accountToken=b=>accounts.resolvePass(b);
  const chat={ensureProfile:async()=>connections.current?profile:null,profileFailure:()=>null,coachDisplayName:()=> 'Coach',coachNameIsChosen:()=>true,hasActiveStream:()=>recoveryBusy,setConnectionChanging:async()=>{},invalidateProfile(){},refreshConfig(){},openInEditor:async()=>{}};
  const page=new StartPage(scoped,chat,async(_p,commit)=>{await commit(root);return false},undefined,accounts);page.panel={webview:{postMessage:async msg=>states.push(msg)}};
- page.purchaseStage='choosing';
  await page.handle({type:'accountActivate',passId:ID});
- assert.equal(page.purchaseStage,undefined,'existing account pass exits the purchase list to show activation confirmation');
  assert.equal(connections.current.ref,old,'preview preserves current classroom binding');
  assert.equal(page.candidate.accountPass.sessionId,'session-1');
  await page.handle({type:'beginCourse'});
@@ -54,10 +52,10 @@ try {
  assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),'pass-secret-1','the same SecretStorage read used by handleSend/SDK renews the pass');
  assert.equal(rotations,1);
  page.panel={webview:{postMessage:async msg=>states.push(msg)}};
+ // 2026-11-13 (REQ-L12 ①–④ removed): a signed-in account cannot start a purchase from the start page.
  await page.handle({type:'purchaseOpen'});await page.handle({type:'purchaseStart',productId:'pass'});
- assert.equal(calls.find(c=>c.p==='/v1/purchase/orders').auth,'Bearer new-account-secret');
- assert.equal(JSON.parse(secrets.get('hypeproofChat.pendingPurchase')).accountOwned,true);
- await page.purchaseTick();assert.equal(calls.filter(c=>c.p.endsWith('/claim')).length,0,'owned purchases never use anonymous claim');
+ assert.equal(calls.filter(c=>c.p.startsWith('/v1/purchase')).length,0,'no catalogue read and no order');
+ assert.equal(secrets.has('hypeproofChat.pendingPurchase'),false);
  const exposed=JSON.stringify(states);for(const secret of ['account-secret','refresh-secret','pass-secret',SECRET])assert.equal(exposed.includes(secret),false);
  service='http://127.0.0.1:8999/v1';const before=calls.length;await page.handle({type:'accountActivate',passId:ID});assert.equal(calls.length,before,'changed Service receives no account token');service=SERVICE;
  revoked=true;await accounts.refreshView();assert.equal(stops,1);assert.equal(connections.current,undefined);assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),undefined);assert.equal(secrets.has(old),true,'classroom credential is retained');assert.equal(fs.existsSync(root),true);
@@ -65,7 +63,7 @@ try {
  revoked=false;superGrant=true;
  secrets.set(ACCOUNT_SECRET_KEY,JSON.stringify({service:SERVICE,accessToken:'account-secret',refreshToken:'refresh-secret',sessionId:'session-1',expiresAt:now+3600000}));
  await accounts.refreshView();
- page.order=undefined;page.purchaseStage='choosing';page.candidate=undefined;
+ page.order=undefined;page.purchaseStage=undefined;page.candidate=undefined;
  const ordersBefore=calls.filter(c=>c.p==='/v1/purchase/orders').length;
  const freeProfile={...profile,activity_id:'c'.repeat(64),profile_id:'studio-open-trial',pass:undefined};
  await connections.commit('free-secret',freeProfile,root);
@@ -120,5 +118,5 @@ try {
  await unavailable.handle({type:'accountSignIn'});
  assert.deepEqual(updates,[['accountsEnabled',true,1]]);
  assert.equal(commands.at(-1),'workbench.action.reloadWindow');
- accounts.dispose();console.log('PASS real start host: preview rollback, bound runtime refresh, account purchase bearer, no anonymous claim, no token view leaks, origin pinning and targeted revoke');
+ accounts.dispose();console.log('PASS real start host: preview rollback, bound runtime refresh, no account purchase, no token view leaks, origin pinning and targeted revoke');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}

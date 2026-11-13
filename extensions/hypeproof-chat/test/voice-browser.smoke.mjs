@@ -6,6 +6,10 @@
 //     inside the viewport and clear of the composer at 320 and 480
 //   - a real MediaRecorder clip goes to the host as WebM/Opus, base64, under 2 MiB, and the transcript the
 //     host answers lands in the composer without a send
+//   - the read-aloud control (CGP-CHAT-D-009, CGP-CHAT-D67) at 320 px in both seats and themes: 읽어 주기 with
+//     the speaker glyph; pressed, it is aria-pressed, says 그만 읽기, draws the level glyph and a fill; the
+//     glyph never animates (no-preference, OS reduced motion, data-reduced-motion); the second answer takes
+//     over and one control is pressed at a time; forced colours keep the pressed state
 // Run: node --experimental-strip-types test/voice-browser.smoke.mjs   (FOCUS_REQUIRE_BROWSER=1 fails without a browser)
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -28,6 +32,10 @@ const send = async (data) => { await b.evaluate(`window.dispatchEvent(new Messag
 const host = (mic) => `window.__posts=[];if(!crypto.randomUUID){let n=0;crypto.randomUUID=()=>'00000000-0000-4000-8000-'+String(++n).padStart(12,'0');}
 window.acquireVsCodeApi=()=>({postMessage:m=>window.__posts.push(m),getState:()=>undefined,setState:()=>{}});
 window.__mic=${JSON.stringify(mic)};window.__media=0;
+// A synthesizer that records and never finishes on its own, so a reading stays on until it is stopped. No voices:
+// the App then speaks with the default voice (a plain object is not a SpeechSynthesisVoice).
+window.__spoken=[];window.__cancels=0;
+Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{speak:u=>window.__spoken.push(u.text),cancel:()=>{window.__cancels++;},getVoices:()=>[]}});
 // The VS Code webview is a secure context and has mediaDevices; a page loaded into about:blank may not.
 if(!navigator.mediaDevices)Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{}});
 navigator.mediaDevices.getUserMedia=async()=>{window.__media++;if(window.__mic==='denied'){const e=new Error('denied');e.name='NotAllowedError';throw e;}
@@ -52,6 +60,15 @@ const configFor = (seat, voice) => chatConfig(3, {
   taskWorkspace: seat === 'personal' ? workspace : undefined, access: seat === 'classroom' ? { status: 'unavailable' } : undefined,
 });
 const MESSAGES = [{ id: 'u1', role: 'user', content: '안녕', createdAt: 1 }, { id: 'm1', role: 'assistant', content: '안녕하세요. 무엇을 만들어 볼까요?', createdAt: 2 }];
+const TWO_ANSWERS = [...MESSAGES, { id: 'u2', role: 'user', content: '또 알려 줘', createdAt: 3 }, { id: 'm2', role: 'assistant', content: '두 번째 답이에요.', createdAt: 4 }];
+/** Every read-aloud button: state, words, glyph, and computed box and paint (font-independent reads only). */
+const listenState = () => b.evaluate(`[...document.querySelectorAll('.hps-voice-listen')].map(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el),svg=el.querySelector('svg[data-icon]');
+return {pressed:el.getAttribute('aria-pressed'),label:el.getAttribute('aria-label'),text:el.textContent.trim(),icon:svg&&svg.getAttribute('data-icon'),w:r.width,h:r.height,fs:parseFloat(s.fontSize),bg:s.backgroundColor,ink:s.color}})`);
+/** The pressed control's glyph: computed animation names of the svg and every shape, and anything running on it. */
+const glyphMotion = () => b.evaluate(`(()=>{const svg=document.querySelector('.hps-voice-listen[aria-pressed="true"] svg[data-icon="level"]');if(!svg)return null;
+return {names:[svg,...svg.querySelectorAll('*')].map(n=>getComputedStyle(n).animationName),running:svg.getAnimations({subtree:true}).length}})()`);
+/** The page's emulated media: the theme's colour scheme, no forced colours, motion allowed, unless overridden. */
+const media = (dark, overrides = {}) => b.send('Emulation.setEmulatedMedia', { features: Object.entries({ 'forced-colors': 'none', 'prefers-color-scheme': dark ? 'dark' : 'light', 'prefers-reduced-motion': 'no-preference', ...overrides }).map(([name, value]) => ({ name, value })) });
 
 /** Geometry of the voice surfaces: every number is read from the computed layout. */
 const measure = (selectors) => b.evaluate(`(()=>{const out={vw:innerWidth,vh:innerHeight,scrollX:document.documentElement.scrollWidth>document.documentElement.clientWidth,items:{}};
@@ -90,6 +107,55 @@ try {
     assert.ok(!m.scrollX, `${label}: no sideways scroll`);
     assert.equal(await b.evaluate(`!!document.querySelector('.hps-input[data-addon]')`), true, `${label}: composer marked`);
     states++;
+
+    // 2b. The read-aloud control (CGP-CHAT-D-009, CGP-CHAT-D67), two answers, at the narrowest width.
+    if (width === 320) {
+      await load();
+      await send({ type: 'config', config: configFor(seat, VOICE) }); await send({ type: 'history', messages: TWO_ANSWERS });
+      await send({ type: 'voiceDisclosureState', acknowledged: [V1] });
+      const words = (list) => list.map((x) => [x.pressed, x.label, x.text, x.icon].join('|'));
+      const IDLE = 'false|읽어 주기|읽어 주기|speaker', PLAYING = 'true|그만 읽기|그만 읽기|level';
+      let st = await listenState();
+      assert.deepEqual(words(st), [IDLE, IDLE], `${label}: one idle 읽어 주기 control per answer, speaker glyph`);
+      const idle = st[0];
+      await b.evaluate(`document.querySelectorAll('.hps-voice-listen')[0].click()`); await settle();
+      assert.deepEqual(await b.evaluate(`window.__spoken`), ['안녕하세요. 무엇을 만들어 볼까요?'], `${label}: the first answer is spoken (the stub is in place)`);
+      st = await listenState();
+      assert.deepEqual(words(st), [PLAYING, IDLE], `${label}: pressed, 그만 읽기, the level glyph`);
+      assert.notEqual(st[0].bg, idle.bg, `${label}: the pressed control has a fill (${st[0].bg} vs ${idle.bg})`);
+      assert.ok(st[0].h >= 43.5 && st[0].w >= 43.5 && st[0].fs >= 13.99, `${label}: pressed control ${st[0].w}x${st[0].h}, ${st[0].fs}px text`);
+      // The indicator is still: no animation on the glyph or its shapes, and nothing running on it, in every motion mode.
+      for (const [mode, apply] of [
+        ['motion allowed', () => media(dark)],
+        ['OS reduced motion', () => media(dark, { 'prefers-reduced-motion': 'reduce' })],
+        ['workbench.reduceMotion on', async () => { await media(dark); await b.evaluate(`document.documentElement.setAttribute('data-reduced-motion','true')`); }],
+      ]) {
+        await apply(); await settle();
+        const motion = await glyphMotion();
+        assert.ok(motion, `${label} ${mode}: the level glyph is drawn`);
+        assert.ok(motion.names.length >= 2 && motion.names.every((n) => n === 'none'), `${label} ${mode}: the glyph is not animated (${motion.names.join(',')})`);
+        assert.equal(motion.running, 0, `${label} ${mode}: nothing runs on the glyph`);
+      }
+      await b.evaluate(`document.documentElement.removeAttribute('data-reduced-motion')`); await media(dark);
+      // Forced colours: the pressed state survives as the system selection pair.
+      await media(dark, { 'forced-colors': 'active' }); await settle();
+      const forced = await listenState();
+      assert.notEqual(forced[0].bg, forced[1].bg, `${label} forced colours: pressed and idle differ (${forced[0].bg} vs ${forced[1].bg})`);
+      await media(dark); await settle();
+      // One at a time: the second answer takes over and releases the first.
+      const cancels = await b.evaluate(`window.__cancels`);
+      await b.evaluate(`document.querySelectorAll('.hps-voice-listen')[1].click()`); await settle();
+      st = await listenState();
+      assert.deepEqual(words(st), [IDLE, PLAYING], `${label}: the second answer takes over, the first is released`);
+      assert.equal(st.filter((x) => x.pressed === 'true').length, 1, `${label}: one control pressed at a time`);
+      assert.ok((await b.evaluate(`window.__cancels`)) > cancels, `${label}: the first reading was cancelled`);
+      assert.equal(await b.evaluate(`window.__spoken.at(-1)`), '두 번째 답이에요.', `${label}: the second answer is spoken`);
+      await shot(`${label.replaceAll(' ', '-')}-read-aloud`);
+      await b.evaluate(`document.querySelectorAll('.hps-voice-listen')[1].click()`); await settle();
+      assert.deepEqual(words(await listenState()), [IDLE, IDLE], `${label}: the pressed control stops its own reading`);
+      assert.equal(await b.evaluate(`window.__posts.filter(m=>/^voice/.test(m.type)&&m.type!=='voiceDisclosureRead').length`), 0, `${label}: read-aloud sends the host nothing`);
+      states++;
+    }
 
     // 3. Recovery cards: permission denied, recording, recovered text, at the narrow widths.
     if (width <= 480) {
@@ -176,5 +242,5 @@ try {
       states++;
     }
   }
-  console.log(`PASS actual App voice surfaces in ${states} seat/theme/width states: not mounted without a voice block; 44px targets, 14px text, no overlap at 320/480/800; recorder, permission, refusal, disclosure and class-off states`);
+  console.log(`PASS actual App voice surfaces in ${states} seat/theme/width states: not mounted without a voice block; 44px targets, 14px text, no overlap at 320/480/800; recorder, permission, refusal, disclosure and class-off states; read-aloud control pressed state, still glyph in three motion modes, one pressed at a time`);
 } finally { await b.close(); }

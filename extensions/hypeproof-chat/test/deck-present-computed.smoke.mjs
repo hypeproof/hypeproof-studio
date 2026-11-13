@@ -39,6 +39,14 @@ if (!bin) {
 const evidence = process.env.DECK_PRESENT_EVIDENCE;
 if (evidence) mkdirSync(evidence, { recursive: true });
 const browser = await launch(bin);
+const diagnostic = { browser: { path: bin, ...await browser.send("Browser.getVersion") }, events: [] };
+let snapshotFrame;
+const stopEvents = browser.onEvent((event) => {
+  if (["Target.attachedToTarget", "Runtime.exceptionThrown", "Log.entryAdded"].includes(event.method)) {
+    diagnostic.events.push(event);
+    if (diagnostic.events.length > 30) diagnostic.events.shift();
+  }
+});
 const delay = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 const KEYS = { ArrowRight: 39, ArrowLeft: 37, PageDown: 34, PageUp: 33, Escape: 27, " ": 32 };
 // `inputSession` is set while the deck runs in its own (out-of-process) target: input is then delivered to that target
@@ -182,31 +190,47 @@ try {
   // Wait on the condition, not a fixed pause. Bounded at 15 s; the failure says which step never happened.
   const until = async (fn, what, ms = 15000) => {
     const end = Date.now() + ms;
+    let lastError;
     for (;;) {
-      try { const v = await fn(); if (v) return v; } catch { /* frame or context not ready yet: poll again */ }
-      if (Date.now() > end) throw new Error(`timed out after ${ms} ms waiting for ${what}; frame tree: ${JSON.stringify((await browser.send("Page.getFrameTree").catch(() => ({}))).frameTree, (k, v) => (k === "frame" ? { url: v.url, id: v.id } : v))}`);
+      try { const v = await fn(); if (v) return v; } catch (error) { lastError = String(error); }
+      if (Date.now() > end) throw new Error(`timed out after ${ms} ms waiting for ${what}; last error: ${lastError ?? "none"}; frame tree: ${JSON.stringify((await browser.send("Page.getFrameTree").catch(() => ({}))).frameTree, (k, v) => (k === "frame" ? { url: v.url, id: v.id } : v))}`);
       await delay(100);
     }
   };
   const target = await attached;
+  diagnostic.target = target?.params;
   let child, sessionId = target?.params.sessionId, executionContextId;
   if (!sessionId) child = await until(async () => (await browser.send("Page.getFrameTree")).frameTree.childFrames?.[0]?.frame?.id, "the deck frame to attach");
   assert.ok(sessionId || child, "the deck frame loaded");
   const inFrame = async (expr) => {
     const x = sessionId ? await browser.send("Runtime.evaluate", { expression: expr, returnByValue: true }, sessionId) : await browser.send("Runtime.evaluate", { expression: expr, contextId: executionContextId, returnByValue: true });
-    if (x.exceptionDetails) throw new Error(x.exceptionDetails.text);
+    if (x.exceptionDetails) throw new Error(x.exceptionDetails.exception?.description ?? x.exceptionDetails.text);
     return x.result.value;
   };
-  // The deck is ready once its own script has wired the 발표하기 button.
+  snapshotFrame = () => inFrame(`({url:location.href,readyState:document.readyState,focus:document.hasFocus(),events:globalThis.__deckInputEvents,state:{...${READ},text:undefined}})`);
+  if (sessionId) { await browser.send("Runtime.enable", {}, sessionId); await browser.send("Log.enable", {}, sessionId); }
+  // DOM readiness alone does not prove that the iframe can receive pointer input.
   await until(async () => {
     if (!sessionId) executionContextId = (await browser.send("Page.createIsolatedWorld", { frameId: child, worldName: "deck-present-probe" })).executionContextId;
-    return inFrame(`!!document.getElementById('present-open')&&document.readyState!=='loading'`);
+    return inFrame(`location.href===${JSON.stringify(`http://127.0.0.1:${server.address().port}/deck`)}&&!!document.getElementById('present-open')&&document.readyState!=='loading'`);
   }, "the deck inside the frame to finish loading");
   inputSession = sessionId;
-  const fat = await inFrame(`(()=>{const r=document.getElementById('present-open').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]})()`);
+  await inFrame(`(()=>{globalThis.__deckInputEvents=[];for(const type of ['pointermove','pointerdown','pointerup','click'])document.addEventListener(type,e=>{__deckInputEvents.push({type:e.type,target:e.target.id,trusted:e.isTrusted,x:e.clientX,y:e.clientY});if(__deckInputEvents.length>12)__deckInputEvents.shift();},true);return true})()`);
+  diagnostic.input = { sessionId, child, executionContextId };
+  // Observe a real pointer reaching the visible hit target before the single click. This keeps
+  // input trusted and diagnoses routing/readiness separately from the product's click handler.
+  const fat = await until(async () => {
+    const at = await inFrame(`(()=>{const b=document.getElementById('present-open');if(!b||b.disabled||!b.checkVisibility({visibilityProperty:true}))return null;const r=b.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;return r.width>0&&r.height>0&&document.elementFromPoint(x,y)===b?[x,y]:null})()`);
+    if (!at) return false;
+    diagnostic.input.at = at;
+    await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: at[0], y: at[1] }, inputSession);
+    return await inFrame(`__deckInputEvents.some(e=>e.type==='pointermove'&&e.trusted&&e.target==='present-open'&&Math.abs(e.x-${at[0]})<1&&Math.abs(e.y-${at[1]})<1)`) ? at : false;
+  }, "a trusted pointer to reach the visible 발표하기 button");
   await click(fat[0], fat[1]);
-  await until(async () => (await inFrame(READ)).presenting, "present mode to start inside the preview frame", 3000).catch(() => {});
+  await until(() => inFrame(`__deckInputEvents.some(e=>e.type==='click'&&e.trusted&&e.target==='present-open')`), "the trusted click to reach 발표하기", 3000);
+  await until(async () => (await inFrame(READ)).presenting, "present mode to start inside the preview frame", 3000);
   const fr = await inFrame(READ);
+  diagnostic.presented = { ...fr, text: undefined };
   assert.equal(fr.presenting, true, `present mode works inside the preview frame (state: ${JSON.stringify({ ...fr, text: undefined })})`);
   assert.equal(fr.full, false);
   assert.equal(fr.toast, "전체 화면을 열 수 없어 이 창을 가득 채워 발표해요.", "a refused fullscreen is said, not silent");
@@ -220,6 +244,14 @@ try {
   } finally { server.close(); }
 
   console.log(`PASS deck present: ${cases} cases (dark/light × 1420/800, forced colours, preview iframe) — keys, buttons, n / total, notes hidden, letterbox fit, idle hide, Esc, fullscreen refusal`);
+} catch (error) {
+  diagnostic.failure = { message: error.message, stack: error.stack };
+  throw error;
 } finally {
-  await browser.close();
+  if (snapshotFrame) diagnostic.frame = await snapshotFrame().catch((error) => ({ error: String(error) }));
+  stopEvents();
+  try {
+    console.log(`deck present diagnostics: ${JSON.stringify(diagnostic)}`);
+    if (evidence) writeFileSync(`${evidence}/diagnostics.json`, JSON.stringify(diagnostic, null, 2) + "\n");
+  } finally { await browser.close(); }
 }

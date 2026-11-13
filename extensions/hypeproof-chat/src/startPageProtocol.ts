@@ -15,6 +15,7 @@ export interface ActivitySummary {
 export interface StartState {
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
+  personalReflectionPending?: boolean;
   /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
   skillStore?: boolean;
   activities?: ActivitySummary[];
@@ -25,6 +26,11 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
+  /**
+   * DES-SHELL-04 — `error` is the refusal of the code the learner just submitted, so the start page
+   * draws it under the code field. Absent: any other error, drawn in the card's error area.
+   */
+  errorAt?: "code";
   profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string;
     /** Free start (SPEC iteration 4 §2.4) — the free allowance seat: labels say 무료 사용, never 체험. */
     free?: boolean };
@@ -99,14 +105,13 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  /** MPER-02/04: explicit personal-question intent, never an AI turn. */
+  | { type: "openPersonalReflection" }
+  | { type: "cancelPersonalReflection" }
   /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
   | { type: "startUpdateInstall" }
   | { type: "startUpdateDismiss"; version: string }
-  /**
-   * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
-   * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
-   */
-  | { type: "accountSignIn"; productId?: string }
+  | { type: "accountSignIn" }
   | { type: "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
   | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
@@ -129,13 +134,11 @@ export type StartRequest =
   | { type: "joinLinkDismiss" }
   | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
-  | { type: "purchaseOpen" }
-  | { type: "purchaseStart"; productId: string; guardian?: boolean }
-  | { type: "purchasePayer"; adult: boolean }
   | { type: "freeStartAge"; answer: "14+" | "under14" }
   | { type: "freeStartClaim" }
   | { type: "freeStartGuardian" }
   | { type: "freeStartUpdate" }
+  /** REQ-L12 ⑤ — recovery of an order an older build started. There is no intent that starts an order. */
   | { type: "purchaseReopen" }
   | { type: "purchaseRetry" }
   | { type: "purchaseCancel" }
@@ -143,5 +146,6 @@ export type StartRequest =
   | { type: "continueFromGithub"; repo: string }
   | { type: "startNew" }
   | { type: "inboxOpen"; objectId: string; generation: number }
-  | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" };
+  | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer };
 export type StartResponse = { type: "startState"; state: StartState };

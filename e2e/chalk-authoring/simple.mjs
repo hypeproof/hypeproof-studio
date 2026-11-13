@@ -5,8 +5,9 @@ import {once} from 'node:events';
 import {mkdirSync} from 'node:fs';
 import {chromium} from '@playwright/test';
 import {localAuthoring} from '@hypeproof/service-testkit/test/harness/dental-authoring.mjs';
+import { signInChalk, withHeaderConnection } from '../../chalk/test/harness/connect.mjs';
 const local=await localAuthoring();
-const {default:chalk}=await import('../../chalk/src/index.ts');
+const chalk = withHeaderConnection((await import('../../chalk/src/index.ts')).default);
 const {TEST_SECRET}=await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const env={...local.env,HPS_SIGNING_SECRET:TEST_SECRET,ENVIRONMENT:'dev',HPS_SERVICE_ORIGIN:local.origin};
 const realFetch=globalThis.fetch;
@@ -14,11 +15,11 @@ globalThis.fetch=(url,options)=>String(url).startsWith(local.origin)?local.fetch
 const preview=process.argv.includes('--preview');
 const server=createServer(async(req,res)=>{try{
  const chunks=[];for await(const c of req)chunks.push(c);const body=Buffer.concat(chunks);
- const r=await chalk.fetch(new Request('http://localhost'+req.url,{method:req.method,headers:req.headers,body:body.length?body:undefined}),env,{});
+ const r=await chalk.fetch(new Request('http://localhost'+req.url,{method:req.method,headers:preview?{...req.headers,'x-test-chalk-issuer':local.token}:req.headers,body:body.length?body:undefined}),env,{});
  res.writeHead(r.status,Object.fromEntries(r.headers));
  if(preview&&req.url==='/authoring'){
  let html=await r.text();html=html.replace('<nav>',`<aside style="padding:12px;background:#f4e8cb;border-radius:8px">로컬 체험판 · 실제 운영 서버와 연결되지 않습니다. 종료하면 테스트 강의는 사라집니다. <button id="trial-connect">테스트 강사로 연결</button></aside><nav>`);
- html=html.replace('</html>',`<script>document.getElementById('trial-connect').onclick=()=>{document.getElementById('token').value=${JSON.stringify(local.token)};document.getElementById('connect').click();};</script></html>`);res.end(html);
+ html=html.replace('</html>',`<script>document.getElementById('trial-connect').onclick=()=>{document.getElementById('connect').click();};</script></html>`);res.end(html);
  }else res.end(Buffer.from(await r.arrayBuffer()));
  }catch(e){res.writeHead(500);res.end('Local preview failure');console.error(e.message);}});
 server.listen(preview?8896:0,'127.0.0.1');await once(server,'listening');
@@ -29,7 +30,7 @@ else{
  try{
  browser=await chromium.launch(process.env.HPS_BROWSER_CHANNEL ? {channel:process.env.HPS_BROWSER_CHANNEL} : {});const page=await browser.newPage({viewport:{width:1280,height:900}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
- await page.goto(origin+'/authoring');await page.locator('#token').fill(local.token);await page.locator('#connect').click();
+ await page.goto(origin+'/authoring');await signInChalk(page, local.token);await page.locator('#connect').click();
  await page.locator('#connection-status').filter({hasText:'연결되었습니다'}).waitFor();
  assert.equal(await page.locator('#profile').inputValue(),local.profileId);
  assert.equal(await page.locator('#cohort').isVisible(),false);
@@ -50,9 +51,9 @@ else{
  mkdirSync('test-results/chalk-simple',{recursive:true});
  for(const width of [1280,390]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'test-results/chalk-simple/authoring-'+width+'.png',fullPage:true});}
  // Reload and reopen with existing escape hatch; automatic IDs must remain recoverable.
- await page.reload();await page.locator('#token').fill(local.token);await page.locator('#connect').click();await page.locator('#connection-status').filter({hasText:'연결되었습니다'}).waitFor();await page.getByText('저장한 강의 열기 · 파일 가져오기',{exact:true}).click();await page.locator('#course').fill(id);await page.locator('#load').click();await page.locator('#status').filter({hasText:'revision 2'}).waitFor();assert.equal(await page.locator('#title').inputValue(),'수정한 강의');
+ await page.reload();await signInChalk(page, local.token);await page.locator('#connect').click();await page.locator('#connection-status').filter({hasText:'연결되었습니다'}).waitFor();await page.getByText('저장한 강의 열기 · 파일 가져오기',{exact:true}).click();await page.locator('#course').fill(id);await page.locator('#load').click();await page.locator('#status').filter({hasText:'revision 2'}).waitFor();assert.equal(await page.locator('#title').inputValue(),'수정한 강의');
  // Syntactically valid but forged credential must never produce trusted choices.
- const forged=local.token.slice(0,-10)+'AAAAAAAAAA';await page.locator('#token').fill(forged);await page.locator('#connect').click();await page.locator('#status').filter({hasText:'HTTP 401'}).waitFor();assert.equal(await page.locator('#setting-label').isVisible(),false);assert.equal(await page.locator('#cohort').inputValue(),'');assert.equal(await page.locator('#title').inputValue(),'수정한 강의');
+ const forged=local.token.slice(0,-10)+'AAAAAAAAAA';await signInChalk(page, forged);await page.locator('#connect').click();await page.locator('#status').filter({hasText:'HTTP 401'}).waitFor();assert.equal(await page.locator('#setting-label').isVisible(),false);assert.equal(await page.locator('#cohort').inputValue(),'');assert.equal(await page.locator('#title').inputValue(),'수정한 강의');
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.deepEqual(errors,[]);
  console.log('PASS: verified settings, cleared-setting target removal and edit preservation, automatic IDs, real SQLite save/freeze/reopen, fresh versions, forged token denial, mobile layout, no credential storage');
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));globalThis.fetch=realFetch;local.close();}

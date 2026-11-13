@@ -20,6 +20,7 @@ import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
 import { StyleTweakPanel } from "./StyleTweakPanel";
 import { storedShell } from "../../src/shellDisplay";
+import { ShellRow } from "./ShellRow";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
@@ -61,12 +62,14 @@ import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions,
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
-import { QuoteAction, useAnswerQuote } from './QuoteAction';
-import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
+import { QuoteAction, QuoteChip, useAnswerQuote } from './QuoteAction';
+import { QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, withQuote, type AnswerQuote } from './quoteReply';
 import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerOffered, steerPress, STEER_LABEL, STEER_OFFLINE_NOTE, STEER_SENDING_MARK, STEER_STOP_FAILED_NOTE, STEER_STOP_TIMEOUT_MS, STEER_STOPPED_MARK, STEER_STOPPING_LABEL, type SteerMark } from './steerNow';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
+import { placeLessonSettingsLines } from '../../src/lessonSettingsChange';
+import { LessonSettingsChangeLine, useLessonSettingsAnnouncement } from './LessonSettingsChange';
 import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
@@ -82,7 +85,6 @@ import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, freeSeatEnded, freeSeatEndedNote, trialHeaderLine } from "./activityLabel";
 import { RefusalBanner } from "./RefusalBanner";
 import { errorBannerPresentation } from "./errorBannerPresentation";
-import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -231,12 +233,10 @@ interface Props {
   activityUnavailable?: ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
-  /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
+  /** TUX-COND-07 (retired 2026-11-13) — an end-of-trial card from an older host. Never drawn; it only marks a trial ending. */
   trialEndCard?: import("../../src/protocol").TrialEndCardView | null;
   /** REQ-CGP-LEARN-13 — a moderation block for this turn ending; drawn instead of every other ending card. */
   safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView | null;
-  /** TUX-COND-07 — the card's Primary. The host opens the start page's pass list; nothing else does. */
-  onTrialEndCardPasses?: () => void;
   canRetryLast: boolean;
   sendPending?: boolean;
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
@@ -919,11 +919,12 @@ export function ChatPanel(props: Props) {
   const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
+  // CGP-CHAT-D-007 — it joins as the quote chip (the draft's first part); what the learner typed stays as it is.
   const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
   const quoteAnswer = (quote: AnswerQuote) => {
     if (unavailable || composing) return;
     lastReplyChoice.current = null;
-    setDraft(current => mergeQuoteIntoDraft(current, quote.block));
+    setDraftParts(previous => withQuote(previous, quote.block, ++pasteId.current));
     dropAnswerQuote();
     document.getSelection?.()?.removeAllRanges?.();
     requestAnimationFrame(() => {
@@ -992,7 +993,10 @@ export function ChatPanel(props: Props) {
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
+  // CGP-SHELL-R-024 / D-023 — an instructor's settings change is read out once through this same region; the reconnect line
+  // stays last, so it still wins when both change in one render.
+  const lessonAnnouncement = useLessonSettingsAnnouncement(props.instructor ? undefined : config?.lessonSettingsChanges);
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, lessonAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
   // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.
@@ -1070,7 +1074,8 @@ export function ChatPanel(props: Props) {
   const addon = !props.instructor ? props.composerAddon ?? null : null;
   const AddonScope = addon?.Scope ?? PassThrough;
   const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const quotePart = draftParts.find(part => part.quote);
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || !!quotePart || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // CGP-AGENT-R-002 — the lesson's approval preset, read-only next to the send button; it changes only between turns.
   const approvalPreset = useTurnBoundaryPreset(servedApprovalPreset(config?.profile), streaming);
@@ -1562,6 +1567,8 @@ export function ChatPanel(props: Props) {
       stillValid: () => !undoSubject.current.page || undoSubject.current.page === page,
     });
   };
+  // CGP-CHAT-D-007 — × on the quote chip; the typed draft and its caret stay (the learner can quote again, so no undo).
+  const removeQuote = (id: number) => { recoverToComposer(() => setDraftParts(previous => changePaste(previous, id, null))); };
   const removePaste = (id: number) => {
     const before = draftParts, after = changePaste(before, id, null);
     setDraftParts(after);
@@ -1697,6 +1704,8 @@ export function ChatPanel(props: Props) {
   // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
   const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
   const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  // CGP-SHELL-R-024 / D-023 — the instructor's settings changes, as system lines among the messages (classroom seats only).
+  const lessonLines = placeLessonSettingsLines(props.instructor ? undefined : config?.lessonSettingsChanges, shown.items.map(m => m.id), config?.taskWorkspace?.activeTaskId ?? null);
   const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
   // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
   const questionList = myQuestions(shown.items);
@@ -1793,9 +1802,6 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" temporary={inTemporaryTask} />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
-        {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
-            end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
-        {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
         {/* An automation conversation shows usage inside its settings disclosure; a second header row would squeeze the chat. */}
@@ -2062,6 +2068,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
+          {i === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
@@ -2119,7 +2126,7 @@ export function ChatPanel(props: Props) {
               wikiScope={JSON.stringify([activityId, taskId])}
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
-              quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
+              quoteAction={answerQuote?.messageId === m.id && m.role === 'assistant' && !(streaming && m.id === streamingId) ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
               elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
               memoryUse={!props.instructor && m.role === "assistant" && !(streaming && m.id === streamingId) ? props.memoryUse?.[m.id] : undefined}
             />
@@ -2146,7 +2153,10 @@ export function ChatPanel(props: Props) {
                 disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
+          {lessonLines.after.get(m.id)?.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
           </Fragment>}</TurnBoundary>)}
+        {shown.items.length === 0 && lessonLines.top.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
+        {lessonLines.bottom.map(n => <LessonSettingsChangeLine key={n.id} notice={n} />)}
         </CodeBlockScope>
 
         {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}
@@ -2273,9 +2283,7 @@ export function ChatPanel(props: Props) {
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
-        ) : statusScreen ? null : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
-        ) : error && (
+        ) : statusScreen ? null : error && (
           <ErrorBanner
             message={error}
             requestId={props.errorRequestId}
@@ -2479,8 +2487,8 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
-        {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
-          {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
+        {draftParts.some(part => part.id !== undefined && !part.quote) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
+          {draftParts.filter(part => part.id !== undefined && !part.quote).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
             onChange={text => {
               if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
               setDraftParts(previous => changePaste(previous, part.id!, text));
@@ -2496,7 +2504,6 @@ export function ChatPanel(props: Props) {
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
           onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus>}
         {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
         {planFirst.plan && !streaming && <PlanCard plan={planFirst.plan} />}
@@ -2506,7 +2513,7 @@ export function ChatPanel(props: Props) {
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
-          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
+          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) ? "true" : undefined}
           data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
           data-activity-status={statusScreen ? "true" : undefined}
@@ -2517,7 +2524,8 @@ export function ChatPanel(props: Props) {
           {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}
           {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
               CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
-          {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+          {!folderMissing && (props.fileAttachment || props.fileAttachNotice || quotePart) && <div className="hps-file-context-stack">
+            {quotePart && <QuoteChip part={quotePart} disabled={unavailable} onRemove={() => removeQuote(quotePart.id!)} />}
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
@@ -2672,6 +2680,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
+        {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
@@ -3182,12 +3192,7 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;
   const shell = t.shell ?? storedShell(t.label);
-  if (shell) return <div className={`hps-shell-row hps-tool-${t.state}`}>
-    <p className="hps-shell-purpose">{shell.purpose}</p>
-    <details open={!shell.collapsed}><summary>실행 명령 · {t.state === 'running' ? '처리 중' : t.state === 'error' ? '실패' : '완료'}</summary>
-      <pre><code>{`$ ${shell.command}`}</code></pre>{shell.folder !== undefined && <p className="hps-shell-folder">폴더: {shell.folder}</p>}
-    </details>
-  </div>;
+  if (shell) return <ShellRow shell={shell} state={t.state} />;
   const thinking = /^think-\d+$/.test(message.id);
   if (thinking && t.state === 'done') {
     return (
@@ -3759,6 +3764,17 @@ function renderInlineMd(md: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+// CGP-SHELL-R-003 (REQ-SHELL-03) — the cohort's update freeze in the classroom settings dialog. Icon + text.
+export function UpdateFreezeLine({ until }: { until: string }) {
+  const [, m, d] = until.split('-').map(Number);
+  return (
+    <p className="hps-update-freeze" role="note">
+      <ChatIcon kind="lock" size={16} />
+      <span>선생님이 업데이트 시점을 정했어요. {m}월 {d}일까지 지금 버전을 써요.</span>
+    </p>
+  );
+}
+
 // #72: in-app update banner. Sits between header and message list. Compact
 // (kid-friendly UX shouldn't be dominated by an update card), with the full
 // release notes hidden behind a "자세히" toggle to keep visual noise low.
@@ -3780,7 +3796,7 @@ function UpdateBanner({
     return (
       <div className="hps-update-line" role="status">
         <ChatIcon kind="upload" size={16} />
-        <span className="hps-update-line-version">새 버전 v{offer.version}</span>
+        <span className="hps-update-line-version">{offer.securityCritical ? '보안 업데이트' : '새 버전'} v{offer.version}</span>
         <span className="hps-update-line-verb">수업이 끝나면 설치할 수 있어요.</span>
       </div>
     );
@@ -3791,7 +3807,7 @@ function UpdateBanner({
       <div className="hps-update-banner-icon"><ChatIcon kind="upload" size={24} /></div>
       <div className="hps-update-banner-body">
         <div className="hps-update-banner-title">
-          새 버전 v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
+          {offer.securityCritical ? '보안 업데이트' : '새 버전'} v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
         </div>
         <div className="hps-update-banner-sub">
           업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요.

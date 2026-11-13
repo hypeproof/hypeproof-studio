@@ -47,6 +47,7 @@ interface Props {
   materials?: boolean;
   /** CGP-KNOW-D-002 — the activity's name, drawn as the title above the 작업/자료 tabs (only where the tabs are). */
   activityTitle?: string;
+  personalReflection?: boolean;
   /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
   taskMove?: TaskMoveView;
   children: ReactNode;
@@ -103,7 +104,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, taskMove, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, personalReflection = false, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
@@ -623,6 +624,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
+      {personalReflection && <button type="button" className="tw-quiet" data-testid="personal-reflection-entry" disabled={blocked} onClick={() => postToHost({ type: 'openPersonalReflection' })}><ChatIcon kind="message" size={20} />나의 질문</button>}
       {/* CGP-KNOW-D-002 — the segmented control sits under the activity title; one line, the full name in the tooltip. */}
       {materials && homeTitle && <h2 id="tw-activity-title" className="tw-activity-title" dir="auto" data-hp-tooltip={homeTitle}>{homeTitle}</h2>}
       {/* CGP-KNOW-R-002 — 작업/자료: one tab stop, arrow keys move between the two views (automatic activation). */}
