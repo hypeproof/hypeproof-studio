@@ -1525,6 +1525,24 @@ collection contract.
 
 **NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu 글꼴로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 배포된 Chalk Worker(Cloudflare)에서의 GitHub 읽기와 그 사용 한도, 운영 배포.
 
+<a id="adm-14-deletion-request-run"></a>
+
+## 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)
+
+요구: [계정과 데이터 삭제 요청](../requirements/classroom-admin.md#adm-14-deletion-request), Studio REQ-STUDIO-DATA-DELETION-REQUEST. Service 계약: hypeproof/hypeproof-service#440. 실행: snts(Ubuntu 24.04, Node 22), 합성 좌석만.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| Service `worker/test/data-deletion-requests.test.mjs` | 꺼짐(값 없음·빈 값·`true`·`Enabled`)이면 모든 경로 404, 프로필에 키 없음 · 켜지면 학습자 좌석에 `data_deletion` · 요청 201, 다시 요청하면 같은 열린 요청 200 · 학습자 보기에 좌석 id·계정·운영자 없음 · 강사 토큰 403, 토큰 없음·틀림·회수 401, 정확하지 않은 본문 400 · 운영자 목록(ADM-14 공유 기록 수)과 접수→처리 중→보류(사유)→완료, 사유 없는 보류·마크업·방향 제어 문자·200자 초과 거절, 완료 뒤 이동 409 · 강사 토큰은 운영자 목록을 못 읽음 · 공유 기록은 그대로(삭제 없음) · 로그에 사용자 id·수업·사유 없음 | head 8/8 통과. base(`origin/main`)에서는 모듈이 없어 실패(빨강) |
+| Service 검증 보강(2026-11-14) | migration 0087(열린 #427이 0086)을 두 번 적용해도 안전 · 한 좌석의 31번째 호출은 429 · 좌석 토큰은 상태를 못 바꿈(학습자 경로 404, 운영자 경로 401) · 계정 좌석의 `shared_records`는 0이 아니라 `null` | 12/12 통과. 돌연변이 4개(호출 제한 끄기, 학습자 상태 경로 추가, `IF NOT EXISTS` 빼기, 계정 좌석을 0으로 세기) 모두 실패로 잡힘 |
+| Service 전체 `npm test`, `tsc --noEmit` | 다른 경로 회귀 | 거듭 merge한 head에서 모든 독립 명령 통과, typecheck 통과 |
+| `extensions/hypeproof-chat/test/data-deletion-request-flow.test.tsx` | 실제 상태를 가진 줄(최소 DOM, 기록하는 브리지): 열 때 `load` 한 번, 확인 단계를 열거나 `취소`해도 `submit` 없음, `요청 보내기`만 정확히 한 번, 보내는 중 잠김 · 이 기능의 CSS 규칙에 물리 상자 속성(`margin-top`·`width` 등) 없음(`logical-css-lint.mjs`는 가로축 속성만 세므로 `margin-top`을 못 잡는다) | 4/4 통과. 돌연변이 2개(확인 단계 건너뛰고 바로 보내기, `margin-top` 넣기) 모두 실패로 잡힘 |
+| `extensions/hypeproof-chat/test/data-deletion-request.test.tsx` | 광고가 정확히 `available: true`일 때만 줄 · Service 보기 해석(모르는 키 버림, 깨진 값 거절, 사유는 보류일 때만) · 한국 날짜 · 상태마다 칩 아이콘 + 글(아이콘은 `aria-hidden`) · 보류 사유는 줄 안의 글(마크업 아님) · 확인 단계(`취소` 먼저, 이 컴퓨터 파일 문장) · 보내는 중 버튼 잠김 · 열린 요청엔 버튼 없음, 완료 뒤 `다시 요청하기` · 불러오기·오류(알던 상태 유지) · 가짜 fetch로 경로·본문·자격·redirect 금지·Service 한국어 문장 · 호스트 게이트와 처리기(파일을 건드리지 않음, 로그 없음) · 두 설정 창에 장착 · 44px·14px·논리 속성·강제 색상 | head 13/13 통과. base에서 모듈이 없어 번들 실패(빨강) |
+| 확장 `tsc --noEmit`, webview `npm run build` | 타입·번들 | 통과 |
+| 확장 `npm test` 전체(조각마다 따로, 스모크·`npm run` 묶음·렌더 시험) | 회귀 | head `9b8e1bda6` 745개 중 실패 4개, base `10f467bb9` 744개 중 실패 3개(`model-selection.smoke`·`sdk-result-drift.smoke`·렌더 `panel-boundary`, 둘 다 같은 실패). head에만 있던 `work-power.smoke`는 head와 base를 동시에 돌린 탓의 타이밍 실패로, 혼자 다시 돌리니 통과 |
+
+**NOT RUN**: 실제 Studio 앱 화면(설정 창을 열고 누르기), 실제 화면 읽기 프로그램, 배포된 Service, 실제 운영자 처리, 보호자 경로(DEC-23 대기).
+
 <a id="adm-11-update-freeze-run"></a>
 
 ## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)

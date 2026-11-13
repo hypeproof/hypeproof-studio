@@ -8406,6 +8406,30 @@ with stubbed dialogs, and the real provider in personal, trial, classroom and in
 folder dialog and notification are owner-run checks.
 
 
+## Account and data deletion request (CGP-SHELL-R-027)
+
+`REQ-STUDIO-DATA-DELETION-REQUEST` implements REQ-SHELL-27 / CGP-SHELL-061 and DES-SHELL-26 /
+CGP-SHELL-D-026; contract in [classroom-admin.md](requirements/classroom-admin.md#adm-14-deletion-request).
+Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; DEC-23 is not decided): the row exists only when the seat's `/v1/profile`
+carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`).
+
+1. Both chat settings dialogs (personal workspace and classroom) show `계정과 데이터 삭제 요청` with what
+   happens and `이 컴퓨터의 작업 폴더와 파일은 지우지 않아요.`. It reads the seat's latest request each
+   time the dialog opens (`dataDeletion` `load`).
+2. `삭제 요청하기` opens an in-place confirm group (`정말 삭제를 요청할까요?`, `취소` focused first,
+   `요청 보내기`). Only `요청 보내기` sends (`dataDeletion` `submit`); the host re-checks the profile
+   advertisement and calls `POST /v1/data-deletion/requests` with the seat's own credential. While a
+   request is open there is nothing to press; after `완료` the button reads `다시 요청하기`.
+3. Status row: one chip with an icon and a word (`접수` flag, `처리 중` clock, `완료` check, `보류` alert),
+   `요청한 날 <Korea date>`, `바뀐 날 <date>` after the first change, and the hold reason inline as text.
+   A failed refresh keeps the last known status and shows the Service's Korean sentence (`role="alert"`).
+4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
+   The host logs nothing about it and touches no file.
+
+Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
+`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
+credential expired, a live-app run.
+
 ## Desktop-first mobile companion (DMC-01–15)
 
 The [companion REA](requirements/desktop-mobile-companion.md) and
