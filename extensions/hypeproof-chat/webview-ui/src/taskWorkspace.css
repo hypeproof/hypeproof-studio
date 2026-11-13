@@ -88,6 +88,8 @@
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
 .tw-heading h1 { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); margin: 0; min-width: 0; flex: 1; }
+.tw-making-entry { padding: var(--ds-c-studio-taskworkspace-space-1) var(--ds-c-studio-taskworkspace-space-5); }
+.tw-making-entry .tw-quiet { max-width: 100%; white-space: normal; }
 .tw-title-button { background: transparent; border: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-3); padding: var(--ds-c-studio-taskworkspace-space-12) 0; max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; color: inherit; }
 .tw-title-button span { margin-left: var(--ds-c-studio-taskworkspace-space-7); color: var(--tw-muted); }
 .tw-quiet { background: transparent; color: inherit; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); padding: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-7); white-space: nowrap; }
