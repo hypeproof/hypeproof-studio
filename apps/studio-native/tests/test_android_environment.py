@@ -44,7 +44,7 @@ class AndroidEnvironment(unittest.TestCase):
     def test_foreground_error_dialog_is_not_ready(self):
         self.assertEqual(module.inspect(WINDOW.replace("com.google.android.apps.nexuslauncher/.NexusLauncherActivity", "Application Error: fixture.package"), AWAKE)["reason"], "foreground_error_dialog")
 
-    def script_case(self, ready, serial="emulator-5554"):
+    def script_case(self, ready, serial="emulator-5554", failure=None):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             scripts = root / "scripts"; scripts.mkdir()
@@ -66,6 +66,10 @@ elif args==['shell','dumpsys','power']:print('  mWakefulness=Awake')
 elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
 """,
             }
+            if failure == "build":
+                fixtures["gradle"] = "#!/bin/sh\nexit 23\n"
+            if failure == "artifacts":
+                fixtures["adb"] += "\nif args[:1]==['pull']:sys.exit(24)\n"
             for name, content in fixtures.items():
                 file = commands / name; file.write_text(content); file.chmod(0o755)
             window = WINDOW if ready else WINDOW.replace("com.google.android.apps.nexuslauncher/.NexusLauncherActivity", "Application Not Responding: com.google.android.apps.nexuslauncher")
@@ -74,6 +78,7 @@ elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
             result = subprocess.run(["bash", str(scripts / "android-verify.sh")], env=env, capture_output=True, text=True, timeout=15)
             observed = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
             diagnostics = root / "evidence/android/failure-environment.json"
+            self.verification = json.loads((root / "evidence/android/verification.json").read_text())
             return result, observed, json.loads(diagnostics.read_text()) if diagnostics.exists() else None
 
     def test_actual_shell_will_not_start_instrumentation_behind_foreign_anr(self):
@@ -82,12 +87,25 @@ elif args[:3]==['shell','am','instrument']:print('OK (1 test)')
         self.assertFalse(any(call[:3] == ["shell", "am", "instrument"] for call in calls))
         self.assertEqual(diagnostic["reason"], "foreign_anr")
         self.assertTrue(all("force-stop" not in call for call in calls))
+        self.assertEqual(self.verification["phases"], {"build": "PASS", "readiness": "FAIL", "instrumentation": "NOT_RUN", "artifacts": "NOT_RUN"})
 
     def test_ready_fixture_starts_instrumentation_once_without_retry(self):
         result, calls, diagnostic = self.script_case(True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(sum(call[:3] == ["shell", "am", "instrument"] for call in calls), 1)
         self.assertIsNone(diagnostic)
+        self.assertTrue(all(value == "PASS" for value in self.verification["phases"].values()))
+
+    def test_build_failure_and_post_test_failure_remain_separate(self):
+        result, calls, _ = self.script_case(True, failure="build")
+        self.assertEqual(result.returncode, 23); self.assertEqual(calls, [])
+        self.assertEqual(self.verification["phases"]["build"], "FAIL")
+        self.assertEqual(self.verification["phases"]["instrumentation"], "NOT_RUN")
+        result, calls, _ = self.script_case(True, failure="artifacts")
+        self.assertEqual(result.returncode, 24)
+        self.assertEqual(self.verification["phases"]["instrumentation"], "PASS")
+        self.assertEqual(self.verification["phases"]["artifacts"], "FAIL")
+        self.assertEqual(sum(call[:3] == ["shell", "am", "instrument"] for call in calls), 1)
 
     def test_physical_serial_is_refused_before_device_mutation(self):
         result, calls, _ = self.script_case(True, serial="physical-fixture-only")

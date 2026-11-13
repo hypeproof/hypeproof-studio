@@ -28,16 +28,23 @@ class AcceptanceContract(unittest.TestCase):
         (self.native / "scripts").mkdir(parents=True)
         for spec in adapter.PLATFORMS.values():
             (self.native / "scripts" / spec["script"]).write_text("# synthetic recipe, never executed\n")
+        for name in ("android-verify.sh", "android-environment.py"):
+            (self.native / "scripts" / name).write_text("# synthetic delegated recipe\n")
         self.identity = patch.object(adapter, "source_identity", return_value=dict(SOURCE))
         self.identity.start()
         self.addCleanup(self.identity.stop)
-        env = patch.dict(os.environ, {"ANDROID_SERIAL": "emulator-5554"})
+        env = patch.dict(os.environ, {"ANDROID_SERIAL": "emulator-5554", "ANDROID_SDK_ROOT": "/synthetic/sdk"})
         env.start()
         self.addCleanup(env.stop)
 
     def command(self, platform, code=0, mutate=None):
         def execute(argv, workspace, log, timeout):
-            self.assertEqual(argv, ["/bin/bash", str(self.native / "scripts" / (platform + "-verify.sh"))])
+            if platform == "android":
+                self.assertEqual(argv, [adapter.sys.executable, str(self.native / "scripts/android-emulator.py"),
+                                       "--sdk-root", "/synthetic/sdk", "--work-dir", str(self.native / "evidence/foundry/android/work"),
+                                       "--port", "5554", "--adb-port", "5047"])
+            else:
+                self.assertEqual(argv, ["/bin/bash", str(self.native / "scripts" / (platform + "-verify.sh"))])
             self.assertEqual(workspace, self.root)
             log.write_bytes(b"SYNTHETIC subprocess output\n")
             for relative in adapter.PLATFORMS[platform]["required"]:
@@ -46,6 +53,12 @@ class AcceptanceContract(unittest.TestCase):
                     target /= "synthetic-content.bin"
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(b"SYNTHETIC native artifact, not a real application")
+                if relative.endswith("bootstrap/receipt.json"):
+                    target.write_text(json.dumps({"schema": "hps-android-bootstrap/1", "exit_code": code,
+                                                  "phases": dict.fromkeys(("adb", "bootstrap", "verification", "cleanup"), "PASS")}))
+                if relative.endswith("verification.json"):
+                    target.write_text(json.dumps({"schema": "hps-android-verification/1", "exit_code": code,
+                                                  "phases": dict.fromkeys(("build", "readiness", "instrumentation", "artifacts"), "PASS")}))
             if mutate:
                 mutate()
             return {"exit_code": code, "timed_out": code == 124, "elapsed_seconds": 0.01}
@@ -63,6 +76,9 @@ class AcceptanceContract(unittest.TestCase):
                 native = root / adapter.NATIVE
                 (native / "scripts").mkdir(parents=True)
                 (native / "scripts" / (platform + "-verify.sh")).write_text("# fixture\n")
+                if platform == "android":
+                    for name in ("android-emulator.py", "android-environment.py"):
+                        (native / "scripts" / name).write_text("# fixture\n")
                 old_root, old_native = self.root, self.native
                 self.root, self.native = root, native
                 try:
@@ -157,6 +173,32 @@ class AcceptanceContract(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("recipe SHA256 mismatch", receipt["reason"])
         command.assert_not_called()
+
+    def test_android_recipe_pin_covers_entrypoint_and_delegated_verifier(self):
+        before = adapter.recipe_record(self.root, "android")
+        self.assertEqual(len(before["files"]), 3)
+        (self.native / "scripts/android-verify.sh").write_text("# changed verifier\n")
+        self.assertNotEqual(before["sha256"], adapter.recipe_record(self.root, "android")["sha256"])
+        with patch.object(adapter, "invoke") as command:
+            code, receipt = adapter.accept(self.root, "android", expected_script=before["sha256"])
+        self.assertEqual(code, 2); command.assert_not_called()
+
+    def test_unexpected_owned_adapter_exception_after_zero_exit_cannot_pass(self):
+        with patch.object(adapter, "invoke", side_effect=self.command("android")), patch.object(adapter, "collect", side_effect=RuntimeError("synthetic final inventory failure")):
+            code, receipt = adapter.accept(self.root, "android")
+        self.assertEqual((code, receipt["verdict"]), (2, "FAIL"))
+        self.assertEqual(receipt["command"]["exit_code"], 0)
+        self.assertIn("inventory failure", self.receipt("android")["reason"])
+
+    def test_child_zero_cannot_hide_failed_cleanup_receipt(self):
+        def fail_cleanup():
+            target = self.native / "evidence/android/bootstrap/receipt.json"
+            proof = json.loads(target.read_text()); proof["phases"]["cleanup"] = "FAIL"
+            target.write_text(json.dumps(proof))
+        with patch.object(adapter, "invoke", side_effect=self.command("android", mutate=fail_cleanup)):
+            code, receipt = adapter.accept(self.root, "android")
+        self.assertEqual((code, receipt["verdict"]), (2, "FAIL"))
+        self.assertIn("owned lifecycle did not pass", receipt["reason"])
 
     def test_subprocess_does_not_receive_provider_or_signing_secrets(self):
         process = Mock(pid=12345)
@@ -274,6 +316,8 @@ class RealGitSourceContract(unittest.TestCase):
         (native / "scripts").mkdir()
         for spec in adapter.PLATFORMS.values():
             (native / "scripts" / spec["script"]).write_text("# synthetic; never run\n")
+        for name in ("android-verify.sh", "android-environment.py"):
+            (native / "scripts" / name).write_text("# synthetic delegated recipe\n")
         adapter.git(self.root, "add", ".")
         adapter.git(self.root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                     "-c", "commit.gpgsign=false", "commit", "-qm", "synthetic recipes")
