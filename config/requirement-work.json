@@ -178,7 +178,7 @@
         "VO-47"
       ],
       "inline_prefixes": [],
-      "sha256": "0b789df46a41bb87d3168cb3a11de9f0fe1f77b91820e48e65510f55ce7828f9",
+      "sha256": "8c6a7a4e79348f608b53c5992e0251c212189cbd35b2d7e85a8aefe8faeaa184",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/voice-conversation.md",

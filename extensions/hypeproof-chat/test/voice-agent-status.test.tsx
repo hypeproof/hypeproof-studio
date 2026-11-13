@@ -17,6 +17,7 @@
 //   - voice not served: the line is drawn from the same events but nothing touches the synthesizer.
 // Text checks read DOM text and attributes only (no layout), so fonts cannot change a verdict.
 // Run: node scripts/run-tsx-tests.mjs voice-agent-status
+import { readFileSync } from "node:fs";
 import { act as reactAct, createElement, useState } from "react";
 import { click, document, mountPoint } from "./fixtures/mini-dom.mjs";
 import { createRoot } from "react-dom/client";
@@ -60,6 +61,9 @@ const S = "stream-1";
 const start = (streamId = S) => hostSays({ type: "streamStart", streamId, messageId: `m-${streamId}` });
 const chunk = (delta: string, streamId = S) => hostSays({ type: "streamChunk", streamId, delta });
 const tool = (id: string, state: "running" | "done" | "error", label = "파일 고치기 index.html", icon = "✍️", streamId = S) =>
+  hostSays({ type: "toolLog", streamId, id, icon, label, state, at: Date.now(), kind: "tool" });
+/** A toolLog line that is NOT a tool call, exactly as the host posts it (no `kind`). */
+const hostLine = (id: string, icon: string, label: string, state: "running" | "done" | "error", streamId = S) =>
   hostSays({ type: "toolLog", streamId, id, icon, label, state, at: Date.now() });
 const approval = (waiting: boolean) => hostSays({ type: "approvalWait", waiting });
 const end = (failed = false, streamId = S) => hostSays({ type: "streamEnd", streamId, ...(failed ? { failed: true } : {}) });
@@ -175,6 +179,79 @@ t("negative control: prose claiming 파일을 저장했어요 with no tool event
   eq(spokenTexts(), [], "still nothing read");
   const statusTexts = [line(), announcer()].join(" ");
   ok(!/저장|만들었|끝났어요/.test(statusTexts), `no status repeats the prose: ${statusTexts}`);
+});
+
+// ---- Host toolLog lines that are not tool calls (chatPanelProvider: thinking, notices, compaction, pending) ----
+const nothingSaid = (what: string) => {
+  eq(line(), "생각 중", `${what}: the line still says only that a stream is open`);
+  eq(announcer(), "", `${what}: nothing announced`);
+  eq(spokenTexts(), [], `${what}: nothing read`);
+  ok(!everything().includes("끝났어요"), `${what}: nothing called finished`);
+};
+
+t("negative control: the adult thinking block (💭 think-N, model prose) makes no status", async () => {
+  await mount();
+  await start();
+  await hostLine("think-0", "💭", "응답 준비 중 · 120 토큰", "running");
+  await hostLine("think-0", "💭", "I saved the file index.html for the user. 파일을 저장했어요", "done");
+  nothingSaid("thinking");
+  ok(!everything().includes("saved"), "the prose never reaches the panel");
+});
+
+t("negative control: busy and orchestrator notices (⏳ notice:…) make no status", async () => {
+  await mount();
+  await start();
+  await hostLine("notice:abc", "⏳", "지금 사용하는 사람이 많아 잠시 기다리고 있어요", "done");
+  await hostLine("notice:def", "⏳", "도우미가 일을 나눠서 하고 있어요", "done");
+  nothingSaid("notices");
+});
+
+t("negative control: the compaction note makes no status", async () => {
+  await mount();
+  await start();
+  await hostLine(`compact-${S}`, "", "대화가 길어져서 AI가 앞 대화를 짧게 줄여서 기억하고 있어요. 중요한 건 다시 말해 주세요.", "done");
+  nothingSaid("compaction");
+});
+
+t("negative control: the pending placeholder and its 생각했어요 / 고쳤어요 close make no status", async () => {
+  await mount();
+  await start();
+  await hostLine(`pending-${S}`, "…", "다음 단계를 준비하는 중…", "running");
+  await hostLine(`pending-${S}`, "✍️", "생각했어요", "done");
+  await hostLine(`pending-${S}`, "…", "다음 단계를 준비하는 중…", "running");
+  await hostLine(`pending-${S}`, "✍️", "고쳤어요", "done");
+  nothingSaid("pending");
+});
+
+t("non-tool lines between real calls change nothing; the real result still says 끝났어요", async () => {
+  await mount();
+  await start();
+  await tool("toolu_1", "running");
+  await hostLine("think-0", "💭", "Now I will tell the user it is done.", "done");
+  await hostLine(`pending-${S}`, "✍️", "고쳤어요", "done");
+  eq(line(), "만드는 중 · 파일 고치기 index.html", "still the running call");
+  eq(rig.spoken.length, 1, "only the real start was read");
+  await tool("toolu_1", "done");
+  eq(line(), "파일 고치기 index.html 끝났어요", "the real result");
+});
+
+t("a tool result for a call never seen starting is not called finished", async () => {
+  await mount();
+  await start();
+  await tool("toolu_9", "done");
+  eq([line(), announcer(), spokenTexts()], ["생각 중", "", []], "no 끝났어요 without its start");
+});
+
+t("host: only tool_use / tool_result / browser-loop lines carry kind \"tool\"", async () => {
+  // The runner runs from the extension root.
+  const src = readFileSync("src/chatPanelProvider.ts", "utf8").split("\n");
+  const tagged = src.filter((l) => /kind: ['"]tool['"]|"running", "tool"|"done", "tool"|^\s*"tool",\s*$/.test(l));
+  ok(tagged.length >= 8, `real tool posts are tagged (${tagged.length})`);
+  for (const marker of ["think-", "notice:", "compactionLineId", "PENDING_ID", "다음 단계를 준비하는 중"]) {
+    const lines = src.filter((l) => l.includes(marker) && /postToolLog|log\(/.test(l));
+    ok(lines.length > 0, `found the ${marker} post`);
+    for (const l of lines) ok(!/kind|"tool"/.test(l), `a ${marker} line is tagged as a tool: ${l.trim()}`);
+  }
 });
 
 t("a call with no result event is never called finished, even when the turn ends", async () => {

@@ -30,6 +30,12 @@ export interface ToolEntry {
   /** REQ-STUDIO-LONG-STEP-HINT — the step in learner words and when it began (host clock, ms). */
   step?: string;
   since?: number;
+  /**
+   * CGP-VOICE-R-007 — set only where the line is a real tool call or its result (an SDK tool_use /
+   * tool_result, a browser-loop call). Thinking, notices, compaction and the pending line carry none.
+   * Sent to the webview; never persisted in the timeline.
+   */
+  kind?: "tool";
 }
 
 export interface TimelineState {

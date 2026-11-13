@@ -1,11 +1,15 @@
 // CGP-VOICE-R-007 / CGP-VOICE-D-006 (REQ-CGPV-08 / DES-CGPV-08, VO-18 / VO-20): the agent-status
 // line of the voice panel.
 //
-// Every line comes from one host event that actually arrived on the chat channel: a tool line the host
-// posted (`toolLog`, keyed by the SDK's tool_use id), the approval wait (`approvalWait`) and the turn's
+// Every line comes from one host event that actually arrived on the chat channel: a real tool call or its
+// result (`toolLog` marked `kind: "tool"`, keyed by the SDK's tool_use id or the browser-loop call id),
+// the approval wait (`approvalWait`) and the turn's
 // own start, stop, end and error. The coach's prose (`streamChunk`) is never read: a reply that says
-// "파일을 저장했어요" with no tool result makes no line. `끝났어요` is written only for a tool whose
-// result event (`toolLog` state `done`) arrived. A tool still running when the turn ends is dropped,
+// "파일을 저장했어요" with no tool result makes no line. The host also posts `toolLog` lines that are not
+// tool calls: the coach's thinking text (`💭`, `think-N`), busy and orchestrator notices (`⏳`), the
+// compaction note and the pending placeholder (`다음 단계를 준비하는 중…` / `생각했어요` / `고쳤어요`).
+// They carry no `kind` and are ignored: thinking is model prose. `끝났어요` is written only for a tool
+// call this reducer saw start and whose result event (`toolLog` state `done`) arrived. A tool still running when the turn ends is dropped,
 // never called finished. Nothing estimates time or predicts what comes next.
 //
 // The words are the chat header's coach run state (coachRunState.ts) plus the host's own tool label
@@ -48,7 +52,7 @@ export const initialAgentStatus = (): AgentStatusState => ({ streamId: null, run
 export type AgentStatusEvent =
   | { type: "streamStart"; streamId: string }
   | { type: "streamChunk"; streamId: string; delta: string }
-  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error" }
+  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; kind?: "tool" }
   | { type: "approvalWait"; waiting: boolean }
   | { type: "streamEnd"; streamId: string; failed?: true }
   | { type: "streamStopped"; streamId: string }
@@ -84,6 +88,8 @@ export function agentStatusTransition(s: AgentStatusState, event: AgentStatusEve
     }
     case "toolLog": {
       if (otherStream(s, event.streamId)) return s;
+      // Only a real tool call or its result: thinking, notices, compaction and the pending line carry no kind.
+      if (event.kind !== "tool") return s;
       const id = str(event.id), icon = str(event.icon), label = str(event.label);
       if (!id) return s;
       const streamId = s.streamId ?? (str(event.streamId) || null);
@@ -102,6 +108,8 @@ export function agentStatusTransition(s: AgentStatusState, event: AgentStatusEve
         return { ...s, streamId, running, seq, line: s.approval ? s.line : runningLine(tool, true, seq) };
       }
       if (event.state === "done" || event.state === "error") {
+        // A result for a call never seen starting is not called finished (a failure is still said).
+        if (event.state === "done" && !known) return s;
         const running = s.running.filter((t) => t.id !== id);
         const seq = s.seq + 1;
         const detail = label.trim();

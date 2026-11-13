@@ -322,17 +322,17 @@ reducers, under a served-voice profile (read-aloud served, disclosure read) with
 synthesizer and a real answer read-aloud button, on the minimal DOM. Host events arrive as window
 `message` events through `onHostMessage`, in the shapes `chatPanelProvider` posts (`streamStart`,
 `streamChunk`, `toolLog` with a tool_use id going running to done or error, `approvalWait`,
-`streamEnd`, `streamStopped`, `streamError`). Sixteen cases: a start is shown with the run-state word
+`streamEnd`, `streamStopped`, `streamError`). Real tool lines carry the host's `kind: "tool"`; the non-tool lines are posted exactly as the host posts them, without it. Twenty-three cases: a start is shown with the run-state word
 and the host's label, announced once and read once; a step update of the same call is not announced
 or read again; `끝났어요` appears only after that call's result event; the negative control (prose
 `파일을 저장했어요` and `끝났어요!` with no tool event) leaves `생각 중`, then `준비됨`, with nothing
-announced or read; a call with no result is never called done; a tool failure and a failed reading
+announced or read; negative controls for every non-tool `toolLog` the host posts (the adult thinking block `💭 think-N` with prose claiming a save, `⏳ notice:` busy and orchestrator notices, the compaction note, the pending placeholder and its `생각했어요` / `고쳤어요` close) each leave `생각 중` with nothing announced, read or called finished, also between real calls; a result for a call never seen starting is not called done; a source check that only the tool_use / tool_result / browser-loop posts in `chatPanelProvider.ts` carry `kind: "tool"`; a call with no result is never called done; a tool failure and a failed reading
 are separate lines, and a failed reading never turns a success into a failure; `소리 끄기` holds every
 reading and stops a running one; an answer reading is never cut off; approval holds its line; another
 stream's events are ignored; stop and errors; pacing at the interval; collapse and expand repeat
 nothing; with voice not served nothing touches the synthesizer; the reducer leaves its state object
-unchanged for prose and malformed messages. Red on main: the 15 behavioural cases fail (no line);
-the reducer case cannot bundle.
+unchanged for prose and malformed messages. Red on main: the file cannot bundle (no reducer). Red on 5be2029c8 (before the `kind` marker): the six
+non-tool and no-start cases and the source check fail (7 of 23).
 
 `test/voice-agent-status.smoke.mjs` drives the same panel in headless Chromium, dark and light at
 1420 and 320, with and without reduced motion, and forced colours, posting the same host messages

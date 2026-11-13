@@ -19192,6 +19192,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatTimeline.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
