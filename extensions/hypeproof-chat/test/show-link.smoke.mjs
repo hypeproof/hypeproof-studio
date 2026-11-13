@@ -98,7 +98,8 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 // ---------------------------------------------------------------------------------------------------------------
 // 4. Host (vscode stubbed) with a recording Service
 {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-link-")));
+  // Match canonicalFolder: Windows temp paths can have short-name aliases.
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-link-")));
   fs.mkdirSync(path.join(root, "art")); fs.writeFileSync(path.join(root, "art", "drawing.png"), PNG);
   let panel, picks = [];
   const Uri = { file: (p) => ({ scheme: "file", fsPath: p, toString: () => "file://" + p }), joinPath: (u, ...p) => Uri.file(path.join(u.fsPath, ...p)) };
