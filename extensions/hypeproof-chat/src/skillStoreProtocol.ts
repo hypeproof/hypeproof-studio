@@ -67,16 +67,27 @@ export interface StoreInstallView {
   refundable: boolean;
   refund_until: number | null;
 }
+/** One of the buyer's own purchases, refunded ones included (#3774). */
+export interface StoreBuyerOrderView {
+  order_id: string;
+  item_id: string;
+  title: string;
+  amount: number;
+  state: "paid" | "refunding" | "refunded";
+  paid_at: number;
+  refunded_at: number | null;
+}
+/**
+ * One sale as the seller sees it (Jay 2026-11-13): the sale price, the PG fee and the seller's own
+ * 80%, nothing else. The Service's row also carries HypeProof's 20% and the partner/instructor
+ * referral parts inside it; `sellerSaleView` drops them before the row reaches the webview.
+ */
 export interface StoreSaleView {
   order_id: string;
   title: string;
   gross: number;
   pg_fee: number;
   seller: number;
-  commission: number;
-  partner: number;
-  instructor: number;
-  hypeproof: number;
   seller_net: number;
   policy_version: string;
   paid_at: number;
@@ -87,6 +98,8 @@ export interface StoreSellerView {
   tier: "none" | "new" | "standard" | "verified" | "minor";
   cap_krw: number;
   identity_verified: boolean;
+  /** A course that does not sell (every youth course) keeps this account from listing or selling (#3772). */
+  course_blocked?: boolean;
   /** The partner and instructor the seller registered at their first publication (names only; policy v2 `attribution.*`). */
   attribution: StoreAttributionView;
   items: { id: string; title: string; price_krw: number; status: string; report_count: number }[];
@@ -103,13 +116,16 @@ export interface StoreAttributionView {
   instructor: { name: string } | null;
   source: "seller" | "operator" | null;
   seller_editable: boolean;
+  /** The referral consent version a code registration must carry, and the one this seller gave (null: none). */
+  consent_version: string;
+  consent_given: string | null;
 }
 /** `due`: the payable balance reached `payout.account_prompt_krw`, so the account is asked for. Never the number itself. */
 export type StorePayoutAccountView =
   | { state: "not_due" | "due"; prompt_at_krw: number; holder: "self" | "linked_adult"; linked_adult_required: boolean }
   | { state: "on_file"; prompt_at_krw: number; holder: "self" | "linked_adult"; linked_adult_required: boolean; masked: string; holder_check: "sandbox_matched" | "not_run" };
 /** What the seller typed at the first publication: codes, or none. */
-export type StoreAttributionInput = { partner_code?: string; instructor_code?: string } | { none: true };
+export type StoreAttributionInput = { partner_code?: string; instructor_code?: string; consent: { version: string; granted: true } } | { none: true };
 /** The names the Service resolved for the typed codes, shown before the seller confirms. */
 export interface StoreAttributionPreview {
   partnerCode: string;
@@ -125,6 +141,8 @@ export interface StoreState {
   items: StoreItemView[];
   ageGroup: "adult" | "minor" | "unknown";
   installs: StoreInstallView[];
+  /** The buyer's purchase history with receipts. */
+  orders?: StoreBuyerOrderView[];
   seller?: StoreSellerView;
   /** The order the buyer is paying for in the browser. */
   checkout?: { itemId: string; title: string; amount: number };
@@ -142,6 +160,8 @@ export interface StoreState {
   /** A seller update that adds connections, tools or outputs waits for this consent (F5). */
   consent?: { itemId: string; widened: string[] };
   attributionPreview?: StoreAttributionPreview;
+  /** A mobile identity verification the seller opened in the browser; the panel waits for its outcome. */
+  identity?: { sessionId: string; sandbox: boolean };
 }
 /** The App's single-step draft. The Service checks the text, seals it and never returns it. */
 export interface StorePublishDraft {
@@ -165,6 +185,9 @@ export type StoreRequest =
   | { type: "storeSearch"; query: string }
   | { type: "storePublishQuest"; title: string; summary: string; price_krw: number; attribution?: StoreAttributionInput }
   | { type: "storeResolveCodes"; partnerCode: string; instructorCode: string }
+  | { type: "storeVerifyIdentity" }
+  | { type: "storeReceipt"; orderId: string }
+  | { type: "storeCancelIdentity" }
   | { type: "storeSavePayoutAccount"; bankCode: string; accountNumber: string; holderName: string }
   | { type: "storeRun"; itemId: string }
   | { type: "storeOverlayOpen"; itemId: string }

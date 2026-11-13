@@ -17,7 +17,6 @@ export const INSTALL_ID_KEY = "hypeproofChat.installId.v1";
 /** globalState key for the age answer. Never sent anywhere except as `age_ok` on the claim. */
 export const AGE_KEY = "hypeproofChat.freeStart.age.v1";
 /** globalState key for "the person paying is 19 or older" on a free seat (§2.5). */
-export const PAYER_ADULT_KEY = "hypeproofChat.freeStart.payerAdult.v1";
 
 export type AgeAnswer = "14+" | "under14";
 export const isAgeAnswer = (v: unknown): v is AgeAnswer => v === "14+" || v === "under14";
@@ -29,11 +28,10 @@ export const FREE_START_COPY = {
   ageNo: "아니요, 만 14세 미만입니다",
   readyTitle: "바로 시작할 수 있습니다",
   readyBody: "로그인 없이 바로 시작합니다.",
-  footer: "만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.",
+  footer: "만든 파일과 대화는 이 컴퓨터에 남습니다.",
   start: "바로 시작하기",
   preparing: "작업 공간을 준비하고 있습니다.",
   codeLink: "참여 코드가 있어요",
-  passLink: "이용권으로 시작하기",
   codeLabel: "참여 코드",
   codeFooter: "강사나 운영자에게 받은 코드를 붙여 넣으세요.",
   network: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.",
@@ -50,24 +48,18 @@ export const FREE_START_COPY = {
   guardianLink: "보호자 안내 보기",
   endedTitle: "무료 사용이 끝났습니다",
   endedExpired: "무료 사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
-  endedPass: "이어서 하려면 이용권으로 시작하기",
-  payerQuestion: "결제하는 분이 만 19세 이상인가요?",
-  payerYes: "네",
-  payerNo: "아니요",
-  guardianPay: "보호자에게 결제 요청하기",
-  guardianPayHelp: "결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.",
 } as const;
 
 /** Refusal sentences the Service sends (SPEC §1.2). Used only when its answer carries no readable sentence. */
 export const FREE_CLAIM_REFUSALS: Record<string, string> = {
   invalid_body: "요청을 처리하지 못했습니다. Studio를 다시 열어 주세요.",
   under_14: "만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다. 보호자와 함께 안내 페이지를 확인해 주세요.",
-  allowance_revoked: "이 컴퓨터의 무료 사용량은 더 이상 쓸 수 없습니다. 이어서 쓰려면 이용권을 확인해 주세요.",
+  allowance_revoked: "이 컴퓨터의 무료 사용량은 더 이상 쓸 수 없습니다. 이어서 쓰려면 참여 코드나 내 계정을 확인해 주세요.",
   app_too_old: "이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요.",
-  network_limit: "이 네트워크에서 오늘 시작할 수 있는 횟수를 모두 사용했습니다. 내일 다시 시도하거나, 참여 코드나 이용권으로 시작해 주세요.",
+  network_limit: "이 네트워크에서 오늘 시작할 수 있는 횟수를 모두 사용했습니다. 내일 다시 시도하거나, 참여 코드나 내 계정으로 시작해 주세요.",
   rate_limited: "요청이 많아 잠시 기다려야 합니다. 1분 뒤 다시 시도해 주세요.",
   claim_busy: "이전 요청을 마무리하고 있습니다. 잠시 뒤 다시 시도해 주세요.",
-  daily_cap_reached: "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 시작할 수 있습니다. 참여 코드나 이용권이 있다면 지금 바로 시작할 수 있습니다.",
+  daily_cap_reached: "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 시작할 수 있습니다. 참여 코드가 있거나 내 계정에 받은 이용 권한이 있다면 지금 바로 시작할 수 있습니다.",
   paused: "지금은 무료 사용을 잠시 멈췄습니다. 잠시 뒤 다시 시도해 주세요.",
   free_start_unavailable: "지금은 바로 시작하기를 쓸 수 없습니다. 잠시 뒤 다시 시도해 주세요.",
 };

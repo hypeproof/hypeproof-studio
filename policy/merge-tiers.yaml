@@ -1,0 +1,235 @@
+version: 1
+
+# Risk-tiered merge (hypeproof-harness#385; owner decision 2026-10-22, re-confirmed
+# 2026-11-12).
+#
+#   Tier A  a changed path matches a `tier_a` glob below (after `exempt`). The PR
+#           needs one approval from a human approver below, on its head commit, by
+#           someone who is neither the author nor the last pusher. No bot merges
+#           it: not hype-merge, not the loop, not `hype-pr --auto-merge`.
+#   Tier B  everything else. It merges when the repository's required checks are
+#           green and the latest hype-review has no blocker. No human approval.
+#
+# A PR's tier is the riskiest tier of its files. A file list that cannot be read in
+# full, an empty one, or a repository missing below is a classification error, and
+# every consumer of this file treats an error as "not tier B" (fail closed).
+#
+# Readers: scripts/merge-tier/merge_tier.py (the classifier and the `merge-tier`
+# check), scripts/hype-merge, scripts/hype-pr (`--auto-merge`), scripts/loop/merge.py
+# and scripts/merge-digest. scripts/sync.sh vendors this file to consumer repos as
+# policy/merge-tiers.yaml next to scripts/merge-tier/.
+#
+# Globs: a trailing `/**` matches the directory and everything under it; otherwise
+# fnmatch, case-sensitive, where `*` also crosses `/`; a leading `**/` also matches
+# at the root. Paths were derived from each repository's `origin/main` tree on
+# 2026-11-12 (`git ls-tree -r --name-only origin/main`). A glob that matches nothing
+# today is allowed only when its comment says why.
+#
+# This file is itself control plane (policy/** in policy/control-plane.yaml) and is
+# tier A in every repository through `common` below.
+
+# Who may give the tier-A approval. Mirrors policy/control-plane.yaml
+# human_approvers and the members.yaml admins; tests/merge_tier keeps the three equal.
+human_approvers:
+  - jayleekr
+  - JeHyeong2
+
+# Never human, whatever they approve. Mirrors policy/control-plane.yaml.
+automation_actors:
+  - hypeproof-automation
+  - hypeproof-agent[bot]
+  - app/hypeproof-agent
+
+# Tier A in every repository below. A repository may not have every one of these
+# paths yet (sync.sh vendors policy/ and scripts/merge-tier/ later); a PR that adds
+# one is tier A from then on.
+common:
+  tier_a:
+    - {path: ".github/workflows/**", reason: CI workflows}
+    - {path: ".github/CODEOWNERS", reason: control plane}
+    - {path: ".githooks/**", reason: CI workflows}
+    - {path: "policy/merge-tiers.yaml", reason: control plane}
+    - {path: "scripts/merge-tier/**", reason: control plane}
+    - {path: "scripts/repo-governance/**", reason: control plane}
+    - {path: "scripts/security/check-secrets.sh", reason: auth/secrets}
+    - {path: "CLAUDE.md", reason: control plane}
+    - {path: "AGENTS.md", reason: control plane}
+    - {path: "SECURITY.md", reason: control plane}
+
+repos:
+  # Harness reuses its control plane: protected_paths are tier A, exempt_paths are
+  # exempt (policy/members.yaml stays tier B, as decided 2026-08-18).
+  "hypeproof/hypeproof-harness":
+    from_control_plane: policy/control-plane.yaml
+
+  "hypeproof/hypeproof-studio":
+    tier_a:
+      # payments and passes
+      - {path: "extensions/hypeproof-chat/src/passPurchase.ts", reason: payments/passes}
+      - {path: "extensions/hypeproof-chat/src/purchaseReturnHelpers.ts", reason: payments/passes}
+      - {path: "extensions/hypeproof-chat/src/accessClient.ts", reason: payments/passes}
+      - {path: "extensions/hypeproof-chat/webview-ui/src/purchaseChoice.ts", reason: payments/passes}
+      # auth, secrets, tokens
+      - {path: "extensions/hypeproof-chat/src/accountSession.ts", reason: auth/secrets}
+      - {path: "extensions/hypeproof-chat/src/accountLock.ts", reason: auth/secrets}
+      - {path: "extensions/hypeproof-chat/src/signInLink.ts", reason: auth/secrets}
+      - {path: "extensions/hypeproof-chat/src/mintStudentToken*.ts", reason: auth/secrets}
+      - {path: "extensions/hypeproof-chat/src/publish/githubAuth.ts", reason: auth/secrets}
+      - {path: "apps/studio-native/ios/Sources/StudioCore/AccountCredential.swift", reason: auth/secrets}
+      - {path: "apps/studio-native/ios/App/*.entitlements", reason: auth/secrets}
+      - {path: "chalk/src/lib/connect.ts", reason: auth/secrets}
+      - {path: "chalk/src/routes/lab-tokens.ts", reason: auth/secrets}
+      - {path: "proxy-poc/*token*.py", reason: auth/secrets}
+      - {path: "scripts/dev-secrets.sh", reason: auth/secrets}
+      - {path: "scripts/review-pr-issue-token.sh", reason: auth/secrets}
+      # deploy and release configuration
+      - {path: "release.json", reason: deploy/release config}
+      - {path: "chalk/release.json", reason: deploy/release config}
+      - {path: "chalk/wrangler*.toml", reason: deploy/release config}
+      - {path: "config/release-platforms.json", reason: deploy/release config}
+      - {path: "config/service-deployment.json", reason: deploy/release config}
+      - {path: "scripts/deploy-worker.sh", reason: deploy/release config}
+      - {path: "scripts/release-freeze-gate.sh", reason: deploy/release config}
+      - {path: "scripts/release/promote.mjs", reason: deploy/release config}
+      - {path: "scripts/release/publish-gate.mjs", reason: deploy/release config}
+      # Release-record merge enrollment (policy/release-merge-authority.json). Not on
+      # main yet; tier A from the PR that creates it.
+      - {path: "config/release-automation.json", reason: control plane}
+      # pricing and terms
+      - {path: "config/usage-prices/**", reason: pricing/terms}
+      - {path: "scripts/publish-approved-usage-price.mjs", reason: pricing/terms}
+      # control plane
+      - {path: "config/traceability.json", reason: control plane}
+    # releases/vX.Y.Z.md stays tier B on purpose: the delegated machine release-record
+    # lane (policy/release-merge-authority.json) merges those without a human.
+
+  "hypeproof/hypeprooflab":
+    tier_a:
+      # payments and passes
+      - {path: "web/src/app/studio/checkout/**", reason: payments/passes}
+      - {path: "web/src/lib/studioCheckout.ts", reason: payments/passes}
+      - {path: "web/src/lib/studioWebPurchase.ts", reason: payments/passes}
+      - {path: "web/src/app/api/studio-account/**", reason: payments/passes}
+      - {path: "business/settlement/**", reason: payments/passes}
+      # auth, secrets, tokens
+      - {path: "web/src/lib/auth.ts", reason: auth/secrets}
+      - {path: "web/src/lib/mcpAuth.ts", reason: auth/secrets}
+      - {path: "web/src/proxy.ts", reason: auth/secrets}
+      - {path: "web/src/app/api/auth/**", reason: auth/secrets}
+      - {path: "web/src/app/auth/**", reason: auth/secrets}
+      - {path: "web/src/components/auth/**", reason: auth/secrets}
+      - {path: "web/src/types/next-auth.d.ts", reason: auth/secrets}
+      - {path: "web/src/app/admin/**", reason: auth/secrets}
+      - {path: "web/src/app/members/admin/**", reason: auth/secrets}
+      - {path: "web/src/app/api/*/admin/**", reason: auth/secrets}
+      - {path: "web/src/app/api/studio-invite/**", reason: auth/secrets}
+      - {path: "web/src/app/api/workshop/boa-tokens/**", reason: auth/secrets}
+      - {path: "web/.env*", reason: auth/secrets}
+      - {path: "scripts/bot/app-token.sh", reason: auth/secrets}
+      - {path: "scripts/security/**", reason: auth/secrets}
+      # DB migrations
+      - {path: "web/supabase/**", reason: DB migrations}
+      # deploy configuration
+      - {path: "web/vercel.json", reason: deploy/release config}
+      - {path: "web/next.config.ts", reason: deploy/release config}
+      - {path: "web/scripts/deploy.sh", reason: deploy/release config}
+      - {path: "scripts/deploy-column.sh", reason: deploy/release config}
+      # customer-facing pricing and terms
+      - {path: "web/src/lib/pricing.ts", reason: pricing/terms}
+      - {path: "web/src/app/studio/pricing/**", reason: pricing/terms}
+      - {path: "web/src/app/studio/terms/**", reason: pricing/terms}
+      - {path: "web/src/app/studio/refund/**", reason: pricing/terms}
+      - {path: "web/src/app/studio/account-terms/**", reason: pricing/terms}
+      - {path: "web/src/app/privacy-policy/**", reason: pricing/terms}
+
+  "hypeproof/hypeproof-service":
+    tier_a:
+      # payments and passes
+      - {path: "worker/src/lib/purchase.ts", reason: payments/passes}
+      - {path: "worker/src/routes/purchase.ts", reason: payments/passes}
+      - {path: "worker/src/lib/store-payout.ts", reason: payments/passes}
+      - {path: "worker/src/lib/account-commerce-retention.ts", reason: payments/passes}
+      - {path: "worker/src/lib/access-contracts.ts", reason: payments/passes}
+      - {path: "worker/src/routes/access.ts", reason: payments/passes}
+      - {path: "worker/src/lib/native-trial-grants.ts", reason: payments/passes}
+      - {path: "worker/src/lib/super-access.ts", reason: payments/passes}
+      - {path: "worker/src/lib/budget-admission.ts", reason: payments/passes}
+      - {path: "worker/src/lib/budgets.ts", reason: payments/passes}
+      - {path: "worker/src/middleware/native-trial-budget.ts", reason: payments/passes}
+      - {path: "worker/src/lib/invites.ts", reason: payments/passes}
+      # auth, secrets, tokens
+      - {path: "worker/src/lib/agent-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/instructor-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/owner-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/intake/auth.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/intake/device-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/routes/agent-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/routes/intake-device-auth.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/tokens.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/curriculum/session-token.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/scrub-secrets.ts", reason: auth/secrets}
+      - {path: "worker/src/lib/accounts.ts", reason: auth/secrets}
+      - {path: "worker/src/middleware/account-session.ts", reason: auth/secrets}
+      - {path: "worker/src/middleware/signing-secret.ts", reason: auth/secrets}
+      - {path: "worker/src/routes/admin.ts", reason: auth/secrets}
+      - {path: "worker/src/routes/accounts-admin.ts", reason: auth/secrets}
+      - {path: "worker/src/routes/curriculum-admin.ts", reason: auth/secrets}
+      - {path: "worker/scripts/issue-token.ts", reason: auth/secrets}
+      - {path: "worker/scripts/issue-issuer-token.ts", reason: auth/secrets}
+      - {path: "worker/.dev.vars.example", reason: auth/secrets}
+      - {path: "scripts/intake-client/device_login.py", reason: auth/secrets}
+      # DB migrations
+      - {path: "worker/migrations/**", reason: DB migrations}
+      - {path: "worker/intake-migrations/**", reason: DB migrations}
+      - {path: "worker/migrations-pending/**", reason: DB migrations}
+      - {path: "worker/schema.sql", reason: DB migrations}
+      # deploy and release configuration
+      - {path: "release.json", reason: deploy/release config}
+      - {path: "release-worker/**", reason: deploy/release config}
+      - {path: "worker/wrangler*.toml", reason: deploy/release config}
+      - {path: "worker/scripts/release-deploy.mjs", reason: deploy/release config}
+      - {path: "worker/scripts/intake-deploy.mjs", reason: deploy/release config}
+      - {path: "worker/intake-production.json", reason: deploy/release config}
+      - {path: "worker/intake-routing-policy.json", reason: deploy/release config}
+      - {path: "worker/intake-edge-policy.json", reason: deploy/release config}
+      - {path: "worker/data/intake-openai-policy.json", reason: deploy/release config}
+      # pricing
+      - {path: "worker/config/usage-prices/**", reason: pricing/terms}
+      - {path: "worker/scripts/publish-approved-usage-price.mjs", reason: pricing/terms}
+      - {path: "worker/scripts/verify-access-publication.mjs", reason: pricing/terms}
+
+  "hypeproof/sediment":
+    tier_a:
+      # payments
+      - {path: "services/sediment/applications/sediment_platform/routers/billing.py", reason: payments/passes}
+      # auth, secrets, tokens, tenant isolation
+      - {path: "services/sediment/applications/sediment_platform/routers/auth.py", reason: auth/secrets}
+      - {path: "services/sediment/applications/sediment_platform/routers/admin.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/auth.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/settings.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/cors.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/rls_guard.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/tenant_middleware.py", reason: auth/secrets}
+      - {path: "services/sediment/lab_lib/sealed_tenants.py", reason: auth/secrets}
+      - {path: "services/sediment/data/tenants.json", reason: auth/secrets}
+      - {path: "services/sediment-cli/src/auth_flow.rs", reason: auth/secrets}
+      - {path: "services/sediment-cli/src/token.rs", reason: auth/secrets}
+      - {path: "frontend/app/auth.ts", reason: auth/secrets}
+      - {path: "frontend/app/tenant.ts", reason: auth/secrets}
+      - {path: "frontend/app/api/auth/**", reason: auth/secrets}
+      - {path: "frontend/app/sediment/AuthBridge.tsx", reason: auth/secrets}
+      - {path: "harness/scripts/check-secrets.sh", reason: auth/secrets}
+      # DB migrations
+      - {path: "infra/migrations/**", reason: DB migrations}
+      - {path: "infra/init.sql", reason: DB migrations}
+      - {path: "infra/supabase-bootstrap.sql", reason: DB migrations}
+      - {path: "services/sediment/lab_lib/migrations.py", reason: DB migrations}
+      - {path: "services/sediment/scripts/apply_migrations.py", reason: DB migrations}
+      # deploy configuration
+      - {path: "infra/deploy/**", reason: deploy/release config}
+      - {path: "infra/github-actions/**", reason: CI workflows}
+      - {path: "harness/scripts/deploy-check.sh", reason: deploy/release config}
+      - {path: "harness/scripts/verify-deploy.sh", reason: deploy/release config}
+      - {path: "harness/scripts/fly-exec.sh", reason: deploy/release config}
+      # pricing
+      - {path: "frontend/app/sediment/pricing/**", reason: pricing/terms}

@@ -9,9 +9,6 @@ struct StudioHome: View {
     @StateObject private var voice = VoiceController()
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var composerFocused: Bool
-    @State private var showVoiceConsent = false
-    @State private var voiceConsentProject: String?
-    @State private var voiceConsentAccepted = false
     @State private var showConsent = false
     @State private var showIntent = false
     @State private var showHistory = false
@@ -106,11 +103,11 @@ struct StudioHome: View {
                                 .lineLimit(1...5).padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("thoughtInput")
                                 .focused($composerFocused)
                                 .disabled(voice.isCapturing)
-                            Button { leaveComposer(); model.send() } label: { Image(systemName: "arrow.up").font(.headline).padding(14) }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground))
+                            Button { leaveComposer(); model.send() } label: { if model.connected { Image(systemName: "arrow.up").font(.headline).padding(14) } else { Text("기록만 저장").font(.callout).padding(6) } }.buttonStyle(.borderedProminent).foregroundStyle(Color(uiColor: .systemBackground))
                                 .accessibilityLabel(model.connected ? "생각 보내기" : "생각 기록하기").accessibilityIdentifier("sendThought")
                                 .disabled(model.busy || voice.isCapturing || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
                         }
-                        Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "AI 연결 전에는 이 기기에만 기록해요.").font(.caption2).foregroundStyle(.secondary)
+                        Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "여기는 이 기기의 보관함이에요. 답변을 받으려면 질문 탭에서 계정으로 시작해 주세요.").font(.caption2).foregroundStyle(.secondary)
                     }.padding(.horizontal, 20).padding(.vertical, 12).background(.regularMaterial)
                 }
             }
@@ -135,34 +132,6 @@ struct StudioHome: View {
             } else { voice.fail("답변을 받지 못했어요. 기록을 확인하고 글로 계속할 수 있어요.") }
         }
         .onDisappear { stopVoice() }
-        .sheet(isPresented: $showVoiceConsent, onDismiss: {
-            let accepted = voiceConsentAccepted && voiceConsentProject == model.active
-            voiceConsentAccepted = false
-            voiceConsentProject = nil
-            // Wait for this sheet to leave before opening AI consent or the
-            // operating-system microphone dialog. A dismissal is not consent.
-            if accepted { beginVoice(.conversation) }
-        }) {
-            NavigationStack {
-                Form {
-                    Section {
-                        Text("인식이 끝난 글을 현재 대화의 AI에 자동으로 보내고 답변을 소리 내어 읽어요. 다음 말은 ‘다시 말하기’를 눌러 시작해요. 무료 AI 사용 한도가 적용돼요. 언제든 ‘음성 멈춤’으로 끝낼 수 있어요.")
-                    }
-                    Section {
-                        Button("음성 대화 시작") {
-                            guard let pending = voiceConsentProject, pending == model.active else { return }
-                            voiceConsentAccepted = true
-                            showVoiceConsent = false
-                        }.accessibilityIdentifier("startVoiceConsent")
-                        Button("나중에", role: .cancel) {
-                            voiceConsentAccepted = false
-                            voiceConsentProject = nil
-                            showVoiceConsent = false
-                        }.accessibilityIdentifier("cancelVoiceConsent")
-                    }
-                }.navigationTitle("말로 대화할까요?").navigationBarTitleDisplayMode(.inline)
-            }.presentationDetents([.medium, .large])
-        }
         .sheet(isPresented: $showConsent) {
             NavigationStack {
                 Form {
@@ -204,7 +173,6 @@ struct StudioHome: View {
         stopVoice()
     }
     private func stopVoice() {
-        showVoiceConsent = false; voiceConsentProject = nil; voiceConsentAccepted = false
         if voice.turn.phase == .waiting { model.cancel() }
         voice.stop()
     }
@@ -218,7 +186,10 @@ struct StudioHome: View {
             }
         }
         let prefix = model.draftText
-        voice.start(projectID: id, mode: mode, transcript: { text in
+        voice.start(projectID: id, mode: mode, nextTurn: {
+            guard scenePhase == .active, model.active == id, model.canUseAI, !model.busy, model.draftText.isEmpty else { voice.stop(); return }
+            beginVoice(.conversation)
+        }, transcript: { text in
             guard model.active == id else { return }
             model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
         }, final: { _, mode in
@@ -232,16 +203,13 @@ struct StudioHome: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 if voice.isActive {
-                    if voice.turn.phase == .listening { Button("말하기 끝") { voice.endSpeech() }.accessibilityIdentifier("finishVoice") }
+                    Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: "waveform")
                     Spacer()
                     Button("음성 멈춤") { stopVoice() }.accessibilityIdentifier("stopVoice")
                 } else {
                     Button { beginVoice(.dictation) } label: { Label("말로 적기", systemImage: "mic") }.accessibilityIdentifier("dictateVoice")
                     Spacer()
-                    Button(voice.turn.phase == .ready && voice.turn.mode == .conversation ? "다시 말하기" : "음성 대화") {
-                        if voice.turn.phase == .ready && voice.turn.mode == .conversation { beginVoice(.conversation) }
-                        else { leaveComposer(); voiceConsentProject = model.active; showVoiceConsent = true }
-                    }.accessibilityIdentifier("voiceConversation")
+                    Button("대화하기") { beginVoice(.conversation) }.accessibilityIdentifier("voiceConversation")
                 }
             }.buttonStyle(.bordered).controlSize(.large).disabled(model.readOnly || (model.busy && !voice.isActive))
             if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("voiceStatus") }

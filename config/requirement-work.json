@@ -40,7 +40,7 @@
         "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "fdf5adc59ddc082db1dd88edf305948adb36f5bd57d9f170d45bd66fee063401",
+      "sha256": "81bbfb00a8ebe5ea48bee74729f5072dc64bd66306ee078cb9c65416730251f5",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",
@@ -178,7 +178,7 @@
         "VO-47"
       ],
       "inline_prefixes": [],
-      "sha256": "528d874f79c5680ba3e032c7f0aa884dc77c6f225f21bcec73b863058afd0d63",
+      "sha256": "6700e2aeea78d96feea918b16c3d69ef1d75292169a75f6343eca255b4cc18ac",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/voice-conversation.md",
@@ -226,7 +226,7 @@
         "AB-18"
       ],
       "inline_prefixes": [],
-      "sha256": "88ec885c04cee1146bf28433119cfd5d4645fa63bb15c90e70833106f968b636",
+      "sha256": "4199e94d29b2901c338b87b538c3b30cbe40ddae7f3ee2ad52efe298667ad3da",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/access-budget-settlement.md",
@@ -253,6 +253,7 @@
         "CH-08",
         "CH-09",
         "CH-10",
+        "CH-11",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -294,7 +295,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "9727acfd579ace0bf221f7cab3bde02384b68a563d6abf3c1c241885610453d2",
+      "sha256": "8f0949ad39b0000fb02f6088c9aae150517281554ff9abfe8ad48f9b827ec511",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -388,10 +389,22 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "fe4bdcaba96059fa9f15e4f4cd05169af63ed68d78655ae33d0d56ab0a8fb4ff",
+      "sha256": "050962daddcfbbb0bb85b97386d2a7c9e4bb83a397a09a6a9a67275d8286ad25",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
+      "test": "docs/testing/classroom-admin.md"
+    },
+    {
+      "path": "docs/requirements/classroom-join-code.md",
+      "ids": [
+        "ADM-15"
+      ],
+      "inline_prefixes": [],
+      "sha256": "45b3f8161d187115baa346e5e16c70005968ab9ca4e0e589e0fb066e3e8a0281",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/classroom-join-code.md",
       "test": "docs/testing/classroom-admin.md"
     },
     {
@@ -465,34 +478,11 @@
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "d9ee86f93b8d83981aaed7efd674d737902d984b1dbdf0e7159752fe1a25f8af",
+      "sha256": "2e71d52fa3ac78a9bf046b1863b97ae48c13426f1ed04f5f716fa9ad0f9e8855",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
       "test": "docs/testing/studio-native-trial-ux.md"
-    },
-    {
-      "path": "docs/requirements/classroom-design.md",
-      "ids": [
-        "DES-01",
-        "DES-02",
-        "DES-03",
-        "DES-04",
-        "DES-05",
-        "DES-06",
-        "DES-07",
-        "DES-08",
-        "DES-09",
-        "DES-10",
-        "DES-11",
-        "DES-12"
-      ],
-      "inline_prefixes": [],
-      "sha256": "f7306e50dc1bdf735c4c495371251250236f30f3a2c112d932c30b7979bc23be",
-      "owner": "jayleekr",
-      "intent": "docs/PRODUCT-INTENT.md",
-      "design": "docs/requirements/classroom-design.md",
-      "test": "docs/testing/classroom-admin.md"
     },
     {
       "path": "docs/requirements/capability-model-contract.md",
@@ -512,6 +502,18 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/philosophy-alignment-2026-09-08.md",
       "test": "docs/testing/capability-and-access.md"
+    },
+    {
+      "path": "docs/requirements/invite-seat.md",
+      "ids": [
+        "INV-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "15f590726ae90922e66dc9b3b893a9d35bdd0bcf371e9045362b0c19183131eb",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/invite-seat.md",
+      "test": "docs/requirements/invite-seat.md"
     },
     {
       "path": "docs/requirements/independent-course.md",
@@ -683,7 +685,7 @@
       "inline_prefixes": [
         "SX"
       ],
-      "sha256": "6fece3ab5c2a3d7fd862b9888c139a8f4c43be000203bb160255fa372e994672",
+      "sha256": "c819235b8a14bf0b374b344f3ca23545cf783b145efc69e328a06b39e36cfe31",
       "owner": "jayleekr",
       "intent": "docs/intents/studio-learning-experience.md",
       "design": "docs/design/studio-learning-experience.md",
@@ -800,14 +802,50 @@
         "PRA-12",
         "PRA-13",
         "PRA-14",
-        "PRA-15"
+        "PRA-15",
+        "PRA-16"
       ],
       "inline_prefixes": [],
-      "sha256": "1ca6952bc8b5ea4bd0a24336b57ab1ee1834ea7f92a3cef764b2a3ed5863078e",
+      "sha256": "907515f10f76f54061ee1f950f83570a32f33e90538fc978a445344cc4eefb2c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
       "test": "docs/requirements/private-release-access.md"
+    },
+    {
+      "path": "docs/requirements/guardian-child-profile.md",
+      "ids": [
+        "GRD-01",
+        "GRD-02",
+        "GRD-03",
+        "GRD-04",
+        "GRD-05",
+        "GRD-06",
+        "GRD-07",
+        "GRD-08",
+        "GRD-09",
+        "GRD-10",
+        "GRD-11",
+        "GRD-12",
+        "GRD-13",
+        "GRD-14",
+        "GRD-15",
+        "GRD-16",
+        "GRD-17",
+        "GRD-18",
+        "GRD-19",
+        "GRD-20",
+        "GRD-21",
+        "GRD-22",
+        "GRD-23",
+        "GRD-24"
+      ],
+      "inline_prefixes": [],
+      "sha256": "2b13a39c8c915373efa68dfe3ff34a71b4b204f208a14d3a59196b2100bb8c6b",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/guardian-child-profile.md",
+      "test": "docs/requirements/guardian-child-profile.md"
     },
     {
       "path": "docs/requirements/email-automation.md",
@@ -905,34 +943,64 @@
     {
       "path": "docs/requirements/mobile-growth-roadmap.md",
       "ids": [
-        "MREF-01",
-        "MREF-02",
-        "MREF-03",
-        "MREF-04",
-        "MREF-05",
-        "MVOICE-01",
-        "MVOICE-02",
-        "MVOICE-03",
-        "MVOICE-04",
-        "MVOICE-05",
+        "MADR-01",
+        "MADR-02",
+        "MADR-03",
+        "MADR-04",
+        "MADR-05",
+        "MFR-01",
+        "MFR-02",
+        "MFR-03",
+        "MFR-04",
+        "MFR-05",
+        "MFR-06",
+        "MIRS-01",
         "MPER-01",
         "MPER-02",
         "MPER-03",
         "MPER-04",
         "MPER-05",
-        "MIRS-01",
-        "MADR-01",
-        "MADR-02",
-        "MADR-03",
-        "MADR-04",
-        "MADR-05"
+        "MREF-01",
+        "MREF-02",
+        "MREF-03",
+        "MREF-04",
+        "MREF-05",
+        "MTF-01",
+        "MVOICE-01",
+        "MVOICE-02",
+        "MVOICE-03",
+        "MVOICE-04",
+        "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "d6f8641253f1eb848ab279313244ea1bc8ad30bc169e1d4d3de861363a131942",
+      "sha256": "4f7e53b4c6bd731ba263b3abbe1b9af0b721d1e2affb4a398a692d65c6e68ff3",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
       "test": "docs/testing/native-mobile-growth.md"
+    },
+    {
+      "path": "docs/requirements/classroom-design.md",
+      "ids": [
+        "DES-01",
+        "DES-02",
+        "DES-03",
+        "DES-04",
+        "DES-05",
+        "DES-06",
+        "DES-07",
+        "DES-08",
+        "DES-09",
+        "DES-10",
+        "DES-11",
+        "DES-12"
+      ],
+      "inline_prefixes": [],
+      "sha256": "c3c5df496a30e0075d9376e94af12672fbed55dfb44d3b49c48de716ba07e38f",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/classroom-design.md",
+      "test": "docs/testing/classroom-admin.md"
     }
   ],
   "work_items": [
@@ -1330,7 +1398,8 @@
             "ENV-07",
             "CH-08",
             "CH-09",
-            "CH-10"
+            "CH-10",
+            "CH-11"
           ]
         }
       ],
@@ -1438,6 +1507,140 @@
         "docs/testing/classroom-admin.md",
         "docs/requirements/classroom-admin.md",
         "docs/plan/learning-agent-experience-epics.md"
+      ]
+    },
+    {
+      "id": "e5-class-join-code",
+      "title": "재직자 수업: 수업 코드 하나로 좌석 연결",
+      "issue": 3778,
+      "kind": "implementation",
+      "feature_ids": [
+        "deliver-operate"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-join-code.md",
+          "ids": [
+            "ADM-15"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Service 수업 코드(hypeproof-service E5)와 App 8자리 입력, Chalk 코드 만들기·폐기를 함께 낸다. Mac dev host 종단 검증은 #3779.",
+      "design_delta": "기존 /connect 연결 생성(connectSeat)을 재사용하고, 코드는 해시만 저장하며 학습 토큰이 좌석을 정한다.",
+      "positive_control": "명단에 있는 수강생 두 명이 같은 수업 코드로 각자 좌석에 연결되고 두 번째 창이 첫 창을 대체한다.",
+      "negative_control": "코드만으로 연결·다른 수업 토큰·좌석 없는 handle·폐기된 강사의 코드·만료/폐기/대체 코드를 구분하는 응답 금지.",
+      "evidence_required": "Service·App·Chalk SHA, 테스트 명령과 결과, dev host 화면. NOT RUN과 합성/실기 증거를 구분한다.",
+      "implementation_paths": [
+        "chalk/src",
+        "extensions/hypeproof-chat/src"
+      ],
+      "verification_inputs": [
+        "docs/requirements/classroom-join-code.md",
+        "docs/testing/classroom-admin.md"
+      ]
+    },
+    {
+      "id": "guardian-contract",
+      "title": "보호자 계정·자녀 프로필: Service 계약 확정",
+      "issue": 3847,
+      "kind": "design",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "ids": [
+            "GRD-01",
+            "GRD-02",
+            "GRD-03",
+            "GRD-04",
+            "GRD-05",
+            "GRD-06",
+            "GRD-07",
+            "GRD-08",
+            "GRD-09",
+            "GRD-10",
+            "GRD-11",
+            "GRD-12",
+            "GRD-13",
+            "GRD-14",
+            "GRD-15",
+            "GRD-16",
+            "GRD-17",
+            "GRD-18",
+            "GRD-19",
+            "GRD-20",
+            "GRD-21",
+            "GRD-22",
+            "GRD-23",
+            "GRD-24"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "초안 검토(TJ-kr, jayleekr) 뒤 열린 질문 Q1–Q11의 답을 문서에 반영하고, hypeproof-service에 계약 이슈를 열어 엔드포인트·저장·스위치·자녀 좌석 프로필을 확정한다. 동의 확인 방법과 약관 조항은 법률 검토를 받는다.",
+      "design_delta": "보호자는 초대받은 계정에 보호자 등록을 더한 것이고, 아이는 계정 없이 자녀 프로필로만 있다. 자녀 좌석은 기존 좌석 원장·예산 미들웨어·minor_cohort 자세를 재사용하고 보호자의 월 상한을 함께 쓴다.",
+      "positive_control": "확정 계약으로 보호자 등록 → 동의 → 자녀 프로필 → 아이 기기 연결 → 아이 요청 → 보호자 보기·삭제가 합성 Service에서 끝까지 통과한다.",
+      "negative_control": "보호자 등록·동의 없이 자녀 프로필 생성, 만 14세 이상 생일, 금지 필드, 아이 자격으로 보호자 route, 철회 뒤 요청, 자녀 좌석의 연결·공개·스토어·초대 요청은 모두 거절된다.",
+      "evidence_required": "확정 계약 문서의 SHA, Service 계약 이슈·PR, 법률 검토 기록. 문서 검토만으로 구현 완료를 주장하지 않는다.",
+      "implementation_paths": [
+        "docs/requirements/guardian-child-profile.md"
+      ],
+      "verification_inputs": [
+        "docs/requirements/guardian-child-profile.md"
+      ]
+    },
+    {
+      "id": "guardian-child-profile",
+      "title": "보호자 계정·자녀 프로필: Service·Lab·Studio 구현과 세바시 PoC 전 인수",
+      "issue": 3847,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "ids": [
+            "GRD-01",
+            "GRD-02",
+            "GRD-03",
+            "GRD-04",
+            "GRD-05",
+            "GRD-06",
+            "GRD-07",
+            "GRD-08",
+            "GRD-09",
+            "GRD-10",
+            "GRD-11",
+            "GRD-12",
+            "GRD-13",
+            "GRD-14",
+            "GRD-15",
+            "GRD-16",
+            "GRD-17",
+            "GRD-18",
+            "GRD-19",
+            "GRD-20",
+            "GRD-21",
+            "GRD-22",
+            "GRD-23",
+            "GRD-24"
+          ]
+        }
+      ],
+      "depends_on": [
+        "guardian-contract"
+      ],
+      "next_action": "Service 계약 구현(스위치 꺼짐 기본) 뒤 Lab 보호자 화면과 Studio 자녀 프로필 모드, 수업 끝 집에서 이어 하기 코드를 낸다. 2027-01 PoC 전에 보호자 한 명이 처음부터 끝까지 해 본다.",
+      "design_delta": "Studio는 자녀 좌석에서 계정·연결·공개·스토어·초대 메뉴를 그리지 않고 기기 안 미리보기만 둔다. 보호자로 돌아가기는 Service가 확인하는 보호자 확인 번호로만 풀린다.",
+      "positive_control": "보호자 기기와 아이 기기 각각에서 자녀 프로필로 이어 만들기가 되고, 보호자 화면에서 보기·항목별 삭제·전체 삭제가 반영된다. 수업 작업 가져오기로 아이 작업 파일만 온다.",
+      "negative_control": "오프라인에서 보호자 쪽으로 풀리지 않음, 끊은 기기 401, 삭제 뒤 410, 만 14세 다음 달 새 요청 거절, 한도 거절에 금액 없음, 수업 로그가 집으로 오지 않음, 스위치 꺼짐에서 기존 동작 불변.",
+      "evidence_required": "Service·Lab·Studio SHA, 테스트 명령과 결과, 실제 Mac 화면, 보호자 한 명의 끝까지 확인. 합성·실기·사람 결과를 나눠 적는다.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src",
+        "extensions/hypeproof-chat/webview-ui/src"
+      ],
+      "verification_inputs": [
+        "docs/requirements/guardian-child-profile.md"
       ]
     },
     {
@@ -4355,6 +4558,34 @@
       ]
     },
     {
+      "id": "invite-seat-acceptance",
+      "title": "초대 좌석(INV-01)의 출시된 앱 행별 대조",
+      "issue": 3849,
+      "kind": "validation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "ids": [
+            "INV-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "초대받은 계정으로 출시된 Studio에 로그인해 이용권 카드·시작, 월 한도에 닿은 계정의 거절 문장, super와 초대를 함께 가진 계정을 확인하고 결과를 #3849에 남긴다.",
+      "design_delta": "새 동작 없음. 이미 출시된 앱과 Service #394·#403의 동작을 INV-01 한 행으로 고정한다. “무제한” 문구는 Jay 2026-11-13 결정으로 그대로 둔다.",
+      "positive_control": "초대받은 계정이 super 이용권 카드로 시작하고, 한도에 닿으면 Service 문장 그대로 멈추며 다음 KST 달에 다시 쓴다.",
+      "negative_control": "한도 거절에 금액·남은 금액·구매 카드·하루 다시 채움 문구가 없고, super 계정은 초대 좌석으로 내려가지 않으며, 앱이 초대 코드를 입력받지 않는다.",
+      "evidence_required": "Studio 앱 버전, Service SHA, 계정 종류(합성/실제), 화면과 응답 코드. 합성 Service 결과를 운영 결과로 주장하지 않는다.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx",
+        "extensions/hypeproof-chat/src/trialEndCard.ts"
+      ],
+      "verification_inputs": [
+        "docs/requirements/invite-seat.md"
+      ]
+    },
+    {
       "id": "personal-claude-customer-continuation",
       "title": "Preserve personal work through reviewed official Claude Code handoff",
       "issue": 2485,
@@ -4385,8 +4616,7 @@
         "extensions/hypeproof-chat/src/personalContinuation",
         "extensions/hypeproof-chat/src/personalContinuationHost.ts",
         "extensions/hypeproof-chat/src/personalContinuationView.ts",
-        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
-        "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/personal-continuation-core.smoke.mjs",
@@ -4497,7 +4727,7 @@
     },
     {
       "id": "mobile-voice-v1",
-      "title": "Native on-device voice with explicit send and stop boundaries",
+      "title": "Native on-device voice with continuous conversation and stop boundaries",
       "issue": 3687,
       "kind": "implementation",
       "feature_ids": [],
@@ -4514,14 +4744,16 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Verify native source and lifecycle, publish a separately identified candidate, then observe five Korean turns and offline/permission recovery on both physical platforms.",
-      "design_delta": "Two optional modes; on-device-only recognition; explicit conversation consent; visible next-turn tap; shared Service admission and no mobile policy fork.",
-      "positive_control": "A person dictates, reviews, then explicitly starts a conversation and can stop while keeping recognized words.",
-      "negative_control": "Stale permission/final callbacks, changed project, expired access or unsent draft never auto-send or reopen capture.",
-      "evidence_required": "Exact-source unit/native checks and independent review; physical five-turn Korean/offline tests separately required.",
+      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
+      "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
+      "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
+      "evidence_required": "Exact-source unit/native checks against revised MVOICE-02/03 and independent review; physical five-turn Korean/offline tests separately required. Android alignment and iPhone legacy notebook journey acceptance remain open.",
       "implementation_paths": [
         "apps/studio-native/ios/App/VoiceController.swift",
         "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
         "apps/studio-native/ios/App/HPStudioApp.swift",
         "apps/studio-native/ios/App/StudioModel.swift",
         "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeVoice.java",
@@ -4530,6 +4762,7 @@
       ],
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/VoiceTurnTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/VoiceSessionTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/StudioJourneyTest.java"
@@ -4607,6 +4840,151 @@
       "verification_inputs": [
         "apps/studio-native/ios/Tests/StudioCoreTests/AccountCredentialTests.swift",
         "apps/studio-native/ios/UITests/StudioShellTests.swift"
+      ]
+    },
+    {
+      "id": "native-first-answer-friction-v1",
+      "title": "Code-free iPhone login and continuous voice with full-journey release evidence",
+      "issue": 3771,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MFR-01",
+            "MFR-02",
+            "MFR-03",
+            "MFR-04",
+            "MFR-05",
+            "MFR-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify Service405/Lab1590 native auth and exact-source native journeys; distribute TestFlight then collect live sign-in and physical Korean audio evidence.",
+      "design_delta": "Minimum intervention: same-device sign-in, durable Send through sync, persistent errors, silence endpoints and foreground-only next turn.",
+      "positive_control": "Sign in without codes, dictate then send, and receive an answer with no desktop; conversation continues until stopped.",
+      "negative_control": "Missing or skipped journeys, stale capture, expired login and uncertain requests cannot become acceptance or duplicate submissions.",
+      "evidence_required": "Exact source, simulator case identities, backend/browser proof and physical version/build separately.",
+      "implementation_paths": [
+        "apps/studio-native/ios/App/SharedConversationModel.swift",
+        "apps/studio-native/ios/App/SharedConversationView.swift",
+        "apps/studio-native/ios/App/NativeBrowserSignIn.swift",
+        "apps/studio-native/ios/App/VoiceController.swift",
+        "apps/studio-native/ios/Sources/StudioCore/NativeAccountAuth.swift",
+        "apps/studio-native/ios/Sources/StudioCore/VoiceTurn.swift",
+        "apps/studio-native/ios/Sources/StudioCore/ConversationSync.swift"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/ios/UITests/StudioShellTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/NativeAccountAuthTests.swift",
+        "apps/studio-native/ios/Tests/StudioCoreTests/VoiceEndpointTests.swift",
+        "apps/studio-native/ios/App/NativeJourneyFixture.swift",
+        "apps/studio-native/scripts/collect-native-journeys.py",
+        "apps/studio-native/tests/test_native_journey_evidence.py"
+      ]
+    },
+    {
+      "id": "native-deployment-receipt-v1",
+      "title": "Bind TestFlight requests and upload receipts to exact source",
+      "issue": 3768,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MTF-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the contract and independently inspect an authorized exact-source workflow receipt; Apple processing, tester availability and physical acceptance remain separate.",
+      "design_delta": "Reuse existing native-CI and Apple environment gates; optional all-or-none Harness correlation and credential-free upload observation.",
+      "positive_control": "One complete request carries the same source/operation/digest through the gate and successful command receipt with actual package hash.",
+      "negative_control": "Partial/malformed request, moved source, an older release-attempt gate or failed archive/validation/upload cannot emit a success receipt or claim tester availability.",
+      "evidence_required": "Focused synthetic contract and shell controls, unchanged native-gate regressions, exact trusted workflow/Harness evidence separately.",
+      "implementation_paths": [
+        ".github/workflows/studio-apple-testflight.yml",
+        "apps/studio-native/scripts/verify-native-candidate.py",
+        "apps/studio-native/scripts/apple-upload.sh"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/tests/test_native_deployment_contract.py",
+        "apps/studio-native/tests/test_verify_native_candidate.py"
+      ]
+    },
+    {
+      "id": "personal-reflection-desktop-entry",
+      "title": "Visible first-screen and restored personal question entry",
+      "issue": 3798,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MPER-02",
+            "MPER-04"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Independently verify exact source and the unseeded first-entry/reload journey; then record separately authorized desktop candidate evidence. No installed/live acceptance inferred from source controls.",
+      "design_delta": "Connect visible existing StartPage and personal task navigation to existing account/pass/activity/store preparation, with one-shot account/session-bound workspace continuation.",
+      "positive_control": "An unseeded signed-out first screen reaches the existing reflection task through actual login/admission; a normal pass chooser and real folder reload retain only the explicit question intent.",
+      "negative_control": "Canceled or denied login/admission, account/task/activity change, duplicate entry, draft/stream and failed marker persistence cannot redirect late, lose work or dispatch a model/tool turn.",
+      "evidence_required": "Pinned source, focused rendered UI/host/disk evidence, independent review and separately identified actual desktop/Service evidence.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/src/startPageProtocol.ts",
+        "extensions/hypeproof-chat/src/studioNavigation.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-reflection-entry.test.tsx",
+        "extensions/hypeproof-chat/test/personal-entry-harness.mjs",
+        "extensions/hypeproof-chat/test/initial-surface.smoke.mjs",
+        "extensions/hypeproof-chat/test/activity-resume.test.mjs",
+        "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs",
+        "extensions/hypeproof-chat/test/mobile-conversation-host.test.mjs"
+      ]
+    },
+    {
+      "id": "windows-advertised-runtime-delivery",
+      "title": "Advertised Windows updater delivers the verified App and native SDK",
+      "issue": 3865,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-16"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Review and merge the updater change, then run BB-026 and BB-038 on a native Windows host using the candidate release. Keep clean-install and upgrade NOT RUN until observed.",
+      "design_delta": "Pin App, SDK and canonical seeder digests before setup; publish the candidate-source seeder and return success only after both App and SDK preparation.",
+      "positive_control": "Generated Windows PowerShell installs synthetic setup and invokes the pinned seeder with the matching version and tarball; actual clean install reaches first answer, save and preview.",
+      "negative_control": "Corrupt or missing assets prevent setup; setup and seeding failures cannot report completion; running App blocks without killing unrelated processes.",
+      "evidence_required": "Exact source and package digests, Windows fixture CI, and separate clean-install/previous-release upgrade observations preserving work. CI fixtures alone do not prove native acceptance.",
+      "implementation_paths": [
+        "scripts/release/install-kit.mjs",
+        "scripts/release/templates/update-windows.cmd",
+        ".github/workflows/verify-unified-release.yml"
+      ],
+      "verification_inputs": [
+        "scripts/release/test/install-kit.test.mjs",
+        "scripts/release/test/windows-delivery.smoke.mjs",
+        "docs/operations/release-casebook/cases.yaml"
       ]
     },
     {

@@ -56,13 +56,17 @@ async function connectedRequest(request, issuer) {
  * keep their Bearer. A header with no usable token (Basic, bare "Bearer") is left
  * as is, so Chalk's refusal of client-sent credentials is still what answers.
  */
+// The harness env: the connect secret, and no GitHub read for the latest Studio release (CGP-SHELL-R-034, DEC-24) unless a
+// test names one, so a browser test that opens /manage never depends on GitHub.
+const harnessEnv = (env, secret) => ({ ...env, HPS_CHALK_CONNECT_SECRET: env.HPS_CHALK_CONNECT_SECRET ?? secret, HPS_STUDIO_LATEST_RELEASE: env.HPS_STUDIO_LATEST_RELEASE ?? "off" });
+
 export function withBearerAsConnection(app, secret = TEST_CONNECT_SECRET) {
   return {
     async fetch(request, env = {}, ctx) {
       const m = /^Bearer\s+(\S+)$/i.exec((request.headers.get("authorization") ?? "").trim());
       const path = new URL(request.url).pathname;
       const next = m && !STUDENT_PATH.test(path) ? await connectedRequest(request, m[1]) : request;
-      return app.fetch(next, { ...env, HPS_CHALK_CONNECT_SECRET: env.HPS_CHALK_CONNECT_SECRET ?? secret }, ctx);
+      return app.fetch(next, harnessEnv(env, secret), ctx);
     },
   };
 }
@@ -90,7 +94,7 @@ export function withHeaderConnection(app, secret = TEST_CONNECT_SECRET) {
         const body = /^(GET|HEAD)$/i.test(request.method) ? undefined : await request.arrayBuffer();
         next = new Request(target, { method: request.method, headers, body, redirect: request.redirect });
       }
-      return app.fetch(next, { ...env, HPS_CHALK_CONNECT_SECRET: env.HPS_CHALK_CONNECT_SECRET ?? secret }, ctx);
+      return app.fetch(next, harnessEnv(env, secret), ctx);
     },
   };
 }

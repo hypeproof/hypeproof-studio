@@ -152,7 +152,7 @@ function workspacePreview(f) {
   f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: f.root } }];
   f.h.emitArtifactChanged = () => {};
   f.h.isLiveServerPreview = () => false;
-  f.h.preview = { show: async html => { shown.push(html); } };
+  f.h.preview = { show: async (html, base) => { shown.push({ html, base }); } };
   const reveal = f.h.revealBuilt.bind(f.h);
   f.h.revealBuilt = (...args) => { const running = reveal(...args); reveals.push(running); return running; };
   return { reveals, shown, written, index };
@@ -183,17 +183,18 @@ test('browser-only streamed HTML cannot overwrite a page or save instructions; e
   }
 });
 
-test('browser-only successful HTML Write events cannot trigger delayed preview; explicit authoring still does', async t => {
+test('a successful HTML Write previews its own page without overwriting the home page, except on browser-only turns', async t => {
   for (const [text, browserOnly] of [[browserOnlyText, true], [authoredPageText, false]]) {
-    const f = fixture(t), page = workspacePreview(f), authored = path.join(f.root, 'page.html');
+    const f = fixture(t), page = workspacePreview(f), authored = path.join(f.root, 'reports', 'page.html');
     const delayedReveals = [], revealWritten = f.h.revealWrittenHtml.bind(f.h);
     f.h.revealWrittenHtml = (...args) => { const running = revealWritten(...args); delayedReveals.push(running); return running; };
-    fs.writeFileSync(authored, generatedHtml);
+    fs.mkdirSync(path.dirname(authored));
     t.after(() => clearTimeout(f.h.revealTimer));
     f.runtime.sdk = async args => {
       f.calls.sdk.push(args);
       // An observed success event must not itself authorize another preview/write.
       args.onActivity({ kind: 'tool_use', id: 'html-write', name: 'Write', input: { file_path: authored, content: generatedHtml } });
+      fs.writeFileSync(authored, generatedHtml);
       args.onActivity({ kind: 'tool_result', id: 'html-write', isError: false });
       return { kind: 'success' };
     };
@@ -206,8 +207,12 @@ test('browser-only successful HTML Write events cannot trigger delayed preview; 
     assert.equal(delayedReveals.length, browserOnly ? 0 : 1, text);
     assert.equal(page.reveals.length, browserOnly ? 0 : 1, text);
     assert.equal(page.shown.length, browserOnly ? 0 : 1, text);
-    assert.equal(page.written.length, browserOnly ? 0 : 1, text);
-    assert.equal(fs.readFileSync(page.index, 'utf8'), browserOnly ? 'PRESERVE EXISTING WORK' : generatedHtml, text);
+    if (!browserOnly) {
+      assert.equal(page.shown[0].html, generatedHtml);
+      assert.equal(fs.realpathSync(page.shown[0].base.fsPath), fs.realpathSync(path.dirname(authored)));
+    }
+    assert.deepEqual(page.written, [], 'the preview does not write a second file');
+    assert.equal(fs.readFileSync(page.index, 'utf8'), 'PRESERVE EXISTING WORK');
     assert.equal(f.calls.network, 0);
   }
 });

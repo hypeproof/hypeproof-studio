@@ -36,7 +36,7 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 25
+    timeout-minutes: 30 # leave room for bounded simulator cleanup and evidence upload
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,15 +68,15 @@ jobs:
           gradle-version: '8.9'
       - name: Enable emulator acceleration on the disposable runner
         run: sudo chmod a+rw /dev/kvm
+      - name: Provision the existing Android 35 emulator recipe
+        run: |
+          # yes may receive SIGPIPE after sdkmanager has consumed the licenses.
+          set +o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          set -o pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platform-tools' 'platforms;android-35' 'emulator' 'system-images;android-35;google_apis;x86_64' --channel=0
       - name: Native Android record and speech handoff journeys
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          script: ANDROID_SERIAL=emulator-5554 bash apps/studio-native/scripts/android-verify.sh
+        run: python3 apps/studio-native/scripts/android-emulator.py --sdk-root "$ANDROID_HOME" --work-dir "$RUNNER_TEMP/studio-native-android"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

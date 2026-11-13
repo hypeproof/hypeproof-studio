@@ -38,7 +38,7 @@ const hostSays = (data: Record<string, unknown>) => act(() => { g.window.dispatc
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
 // ---- scripted browser objects ----
-interface Rig { speechEnvCalls: number; recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; cancels: number; inserted: string[]; insertOk: boolean }
+interface Rig { speechEnvCalls: number; recorders: FakeRecorder[]; mediaCalls: number; tracksStopped: number; spoken: Array<{ text: string; lang: string; voice: unknown }>; utterances: Array<{ onend: (() => void) | null }>; cancels: number; inserted: string[]; insertOk: boolean }
 class FakeRecorder {
   static supported = ["audio/webm;codecs=opus"];
   static isTypeSupported(m: string) { return FakeRecorder.supported.includes(m); }
@@ -60,12 +60,13 @@ const dictEnv = () => ({
   clearTimeout: (id: unknown) => { const i = timers.findIndex((x) => x.id === id); if (i >= 0) timers.splice(i, 1); },
 });
 const speechEnv = () => (rig.speechEnvCalls++, {
-  synth: { speak: (u: { text: string; lang: string; voice: unknown }) => rig.spoken.push({ text: u.text, lang: u.lang, voice: u.voice }), cancel: () => { rig.cancels++; }, getVoices: () => [{ lang: "ko-KR", localService: true, name: "Yuna" }] },
+  synth: { speak: (u: { text: string; lang: string; voice: unknown; onend: (() => void) | null }) => { rig.spoken.push({ text: u.text, lang: u.lang, voice: u.voice }); rig.utterances.push(u); }, cancel: () => { rig.cancels++; }, getVoices: () => [{ lang: "ko-KR", localService: true, name: "Yuna" }] },
   makeUtterance: (text: string) => ({ text, lang: "", rate: 1, voice: null, onend: null, onerror: null }),
 });
 const noSpeech = () => (rig.speechEnvCalls++, { synth: undefined, makeUtterance: () => ({}) as never });
 
-function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }: { profile: unknown; scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; insertOk?: boolean }) {
+const ANSWER = "안녕하세요. 답이에요.\n```\ncode()\n```";
+function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true, content = ANSWER }: { profile: unknown; scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; insertOk?: boolean; content?: string }) {
   const controller = useVoiceController(profile as never, scope, true);
   const addon = dictationAddonFor(controller.value.availability);
   const api = { insert: (text: string) => { if (insertOk) rig.inserted.push(text); return insertOk; }, disabled: false };
@@ -74,12 +75,12 @@ function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true }:
       createElement(SpeechEnvContext.Provider, { value: speech as never },
         createElement("div", { className: "frame" },
           addon ? createElement(addon.Scope, { api }, createElement("div", { className: "composer" }, createElement(addon.Notice), createElement(addon.Control))) : null,
-          createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content: "안녕하세요. 답이에요.\n```\ncode()\n```" }))))));
+          createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content }))))));
 }
 const profileOn = (extra: Record<string, unknown> = {}) => ({ profile_id: "p", voice: { dictation: true, read_aloud: true, policy_version: V1, ...extra } });
 
-async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean } = {}) {
-  rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], cancels: 0, inserted: [], insertOk: true };
+async function mount(profile: unknown, opts: { scope?: string; speech?: () => ReturnType<typeof speechEnv> | ReturnType<typeof noSpeech>; acked?: boolean; insertOk?: boolean; content?: string } = {}) {
+  rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], utterances: [], cancels: 0, inserted: [], insertOk: true };
   timers.length = 0; clock = 0; denyMic = false; g.__posted.length = 0;
   await act(() => root.render(createElement(Harness, { profile, ...opts, key: Math.random() })));
   if (opts.acked && posted("voiceDisclosureRead").length) await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
@@ -99,16 +100,16 @@ t("a seat with no voice block draws nothing and asks the host nothing", async ()
 t("voice on: the mic button and the read-aloud button draw, and the host is asked what was read", async () => {
   await mount(profileOn());
   ok(byLabel("받아쓰기"), "mic button named 받아쓰기");
-  ok(byLabel("소리로 듣기"), "read-aloud button named 소리로 듣기");
+  ok(byLabel("읽어 주기"), "read-aloud button named 읽어 주기");
   eq(posted("voiceDisclosureRead").length, 1, "one disclosure read");
   eq(byLabel("받아쓰기").getAttribute("aria-keyshortcuts"), "Alt+Shift+M", "the in-app key is declared");
 });
 
 t("each half is its own switch", async () => {
   await mount(profileOn({ read_aloud: false }));
-  ok(byLabel("받아쓰기") && !byLabel("소리로 듣기"), "dictation only");
+  ok(byLabel("받아쓰기") && !byLabel("읽어 주기"), "dictation only");
   await mount(profileOn({ dictation: false }));
-  ok(!byLabel("받아쓰기") && byLabel("소리로 듣기"), "read-aloud only");
+  ok(!byLabel("받아쓰기") && byLabel("읽어 주기"), "read-aloud only");
 });
 
 t("disclosure gates the first use: sheet, then 시작하기 remembers and starts; Escape does not start", async () => {
@@ -135,13 +136,13 @@ t("disclosure gates the first use: sheet, then 시작하기 remembers and starts
 
 t("an acknowledged version skips the sheet; read-aloud is gated too until then", async () => {
   await mount(profileOn());
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   ok(all((e) => e.tagName === "DIALOG")[0], "read-aloud opens the sheet first");
   eq(rig.spoken.length, 0, "nothing is spoken before 시작하기");
   await act(() => click(byText("시작하기") as never));
   ok(rig.spoken.length > 0, "speaks after 시작하기");
   await mount(profileOn(), { acked: true });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   eq(all((e) => e.tagName === "DIALOG").length, 0, "no sheet once this version was read");
   ok(rig.spoken.length > 0, "speaks at once");
 });
@@ -237,7 +238,7 @@ t("a class that turned voice off mid-session shows the disabled state with its r
   ok(mic && mic.hasAttribute("disabled"), "the mic button is disabled");
   ok(mic.getAttribute("aria-label")!.includes("이 수업에서는 쓸 수 없어요"), "its name carries the reason");
   ok(all((e) => e.textContent.includes("이 수업에서는 쓸 수 없어요")).length > 0, "the reason is also text, not only a grey button");
-  const listen = all((e) => e.tagName === "BUTTON" && (e.getAttribute("aria-label") ?? "").startsWith("소리로 듣기"))[0];
+  const listen = all((e) => e.tagName === "BUTTON" && (e.getAttribute("aria-label") ?? "").startsWith("읽어 주기"))[0];
   ok(listen && listen.hasAttribute("disabled"), "read-aloud is disabled too");
   await act(() => click(mic as never));
   eq(rig.mediaCalls, 0, "a disabled control starts nothing");
@@ -280,14 +281,43 @@ t("the in-app key Alt+Shift+M starts and ends dictation; it is not a global shor
 
 t("read-aloud: speaks the answer in Korean on the device, skips code and says so, one press stops it, no fetch", async () => {
   await mount(profileOn(), { acked: true });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   ok(rig.spoken.length > 0 && rig.spoken.every((u) => u.lang === "ko-KR"), "ko-KR utterances");
   ok(rig.spoken.every((u) => !u.text.includes("code()")), "code is not read");
   ok(all((e) => e.textContent.includes("코드는 건너뛰었어요")).length > 0, "the skipped code is announced");
-  ok(byLabel("읽기 멈추기"), "the same button now stops it");
-  await act(() => click(byLabel("읽기 멈추기") as never));
+  ok(byLabel("그만 읽기"), "the same button now stops it");
+  eq(byLabel("그만 읽기").getAttribute("aria-pressed"), "true", "pressed while it reads (CGP-CHAT-D-009)");
+  await act(() => click(byLabel("그만 읽기") as never));
   ok(rig.cancels >= 1, "stop cancels the synthesizer");
-  ok(byLabel("소리로 듣기"), "and offers it again");
+  ok(byLabel("읽어 주기"), "and offers it again");
+  eq(byLabel("읽어 주기").getAttribute("aria-pressed"), "false", "released once stopped");
+  eq(tripwire, [], "no network");
+});
+
+// CGP-CHAT-D-009: the control follows real playback. A reading that ends by itself (the synthesizer's
+// end event on the last utterance, not a press) releases the control, without cancelling anything.
+// The answer is long enough to be read in several utterances, so an earlier part ending is exercised too.
+const LONG_ANSWER = Array.from({ length: 8 }, (_, i) => `${i + 1}번째 문장은 고양이 페이지를 만들 때 무엇을 먼저 확인할지 차근차근 설명해요.`).join(" ");
+t("read-aloud: a reading that ends by itself releases the control and offers 읽어 주기 again", async () => {
+  await mount(profileOn(), { acked: true, content: LONG_ANSWER });
+  await act(() => click(byLabel("읽어 주기") as never));
+  eq(byLabel("그만 읽기")?.getAttribute("aria-pressed"), "true", "pressed while it reads");
+  ok(rig.utterances.length >= 2, `the answer is read in at least two utterances (got ${rig.utterances.length})`);
+  const cancelsBefore = rig.cancels;
+  for (const u of rig.utterances.slice(0, -1)) {
+    await act(() => { u.onend?.(); });
+    const stop = byLabel("그만 읽기");
+    ok(stop, "an earlier part ending keeps the stop control");
+    eq(stop.getAttribute("aria-pressed"), "true", "an earlier part ending does not release it");
+    eq(stop.textContent.trim(), "그만 읽기", "the visible label stays 그만 읽기 while later parts remain");
+  }
+  await act(() => { rig.utterances[rig.utterances.length - 1].onend?.(); });
+  ok(!byLabel("그만 읽기"), "no stop control once the reading has ended");
+  const listen = byLabel("읽어 주기");
+  ok(listen, "읽어 주기 is offered again after a natural end");
+  eq(listen.getAttribute("aria-pressed"), "false", "released after a natural end");
+  eq(listen.textContent.trim(), "읽어 주기", "the visible label is back to 읽어 주기");
+  eq(rig.cancels, cancelsBefore, "a natural end cancels nothing");
   eq(tripwire, [], "no network");
 });
 
@@ -299,7 +329,7 @@ t("read-aloud without a synthesizer is a disabled button with a reason, not a si
 
 t("a profile that stops serving voice stops a reading in progress", async () => {
   await mount(profileOn(), { acked: true, scope: "k" });
-  await act(() => click(byLabel("소리로 듣기") as never));
+  await act(() => click(byLabel("읽어 주기") as never));
   const before = rig.cancels;
   await act(() => root.render(createElement(Harness, { profile: { profile_id: "p" }, scope: "other" })));
   ok(rig.cancels > before, "cancelled");

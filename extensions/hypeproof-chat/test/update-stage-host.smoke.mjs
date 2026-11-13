@@ -13,14 +13,14 @@ const bundle = await build({ entryPoints: ['src/updateChecker.ts'], bundle: true
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-update-host-'));
 try {
   for (const platform of ['darwin', 'win32']) {
-    for (const scenario of ['later', 'cancel', 'running', 'class', 'bad-digest', 'tampered', 'restart', 'newer-installed', 'same-installed', 'wrong-platform', 'other-installation', 'spawn-error', 'late-running', 'restart-busy', 'stale-lease']) {
+    for (const scenario of ['later', 'cancel', 'running', 'class', 'bad-digest', 'tampered', 'restart', 'newer-installed', 'same-installed', 'wrong-platform', 'other-installation', 'spawn-error', 'late-running', 'restart-busy', 'stale-lease', ...(platform === 'darwin' ? ['signature-rejected', 'verification-timeout'] : [])]) {
       const dir = path.join(root, platform, scenario); fs.mkdirSync(dir, { recursive: true });
       const app = path.join(dir, 'Studio.app');
       const pkg = path.join(app, 'Contents/Resources/app/extensions/hypeproof-chat/package.json');
       fs.mkdirSync(path.dirname(pkg), { recursive: true }); fs.writeFileSync(pkg, JSON.stringify({ version: '0.1.50' }));
       const context = { globalStorageUri: { fsPath: path.join(dir, 'storage') } };
       const spawned = [], commands = [], timers = [], notices = [];
-      let allowed = true, downloaded, verified = false, installChecks = 0;
+      let allowed = true, downloaded, verified = false, signed = false, installChecks = 0;
       const bytes = Buffer.from('fixture verified archive bytes');
       const info = { available: true, sizeBytes: bytes.length, version: '0.1.51', downloadUrl: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', digest: 'sha256:' + createHash('sha256').update(scenario === 'bad-digest' ? 'wrong' : bytes).digest('hex') };
       const vscode = {
@@ -32,6 +32,7 @@ try {
             notices.push(message);
             if (!options?.modal) return;
             assert.equal(verified, true, 'confirmation only after download');
+            if (platform === 'darwin') assert.equal(signed, true, 'confirmation only after Apple signing and Gatekeeper verification');
             if (scenario === 'running' || scenario === 'class') allowed = false;
             return ['late-running', 'restart', 'restart-busy', 'stale-lease'].includes(scenario) || scenario === 'running' || scenario === 'class' ? '재시작하고 업데이트' : scenario === 'cancel' ? undefined : '나중에';
           },
@@ -45,6 +46,19 @@ try {
           const next = path.join(work, 'new.app'); fs.mkdirSync(next); fs.writeFileSync(path.join(next, 'version'), info.version);
         },
         execFile: () => { throw new Error('No external credentials in tests'); },
+        execFileSync: (exe, args, options) => {
+          assert.equal(exe, '/bin/bash');
+          assert.equal(args[0], '-c');
+          assert.match(args[1], /\/usr\/bin\/codesign --verify --deep --strict --all-architectures/);
+          assert.match(args[1], /RZBNT9ZB67/);
+          assert.match(args[1], /Notarized Developer ID/);
+          assert.equal(args[2], 'hps-update-verification');
+          assert.equal(args[3], path.join(path.dirname(downloaded), 'new.app'));
+          assert.equal(options.timeout, 60_000);
+          if (scenario === 'signature-rejected' || scenario === 'verification-timeout') throw new Error(scenario);
+          signed = true;
+          return '';
+        },
         spawn: (exe, args) => {
           spawned.push({ exe, args }); const child = new EventEmitter(); child.unref = () => {}; child.pid = scenario === 'restart' ? process.pid : 2147483647;
           queueMicrotask(() => scenario === 'spawn-error' ? child.emit('error', new Error('spawn failed')) : child.emit('spawn')); return child;
@@ -69,10 +83,13 @@ try {
         fs.mkdirSync(leaseDir, { recursive: true });
         fs.writeFileSync(path.join(leaseDir, 'installer-pid.json'), JSON.stringify({ pid: process.pid, nonce: '00000000-0000-4000-8000-000000000000', startedAt: Date.now() - (scenario === 'stale-lease' ? 11 : 1) * 60_000 }));
       }
-      if (scenario === 'bad-digest') {
+      if (['bad-digest', 'signature-rejected', 'verification-timeout'].includes(scenario)) {
         await assert.rejects(runUpdate(info, { context, canInstall: () => allowed }));
         assert.equal(await installStagedUpdate(context, () => true), false);
-        assert.equal(spawned.length, 0); continue;
+        assert.equal(spawned.length, 0);
+        assert.deepEqual(commands, [], 'failed verification cannot quit Studio');
+        assert.deepEqual(notices, [], 'failed verification cannot offer a restart');
+        continue;
       }
       await runUpdate(info, { context, canInstall: () => { if (scenario === 'late-running' && ++installChecks > 1) allowed = false; return allowed; } });
       if (scenario === 'late-running' || scenario === 'restart-busy') {

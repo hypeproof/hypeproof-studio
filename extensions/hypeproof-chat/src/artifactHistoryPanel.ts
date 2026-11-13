@@ -93,7 +93,7 @@ export class ArtifactHistoryPanel {
         if (!await captureArtifactVersion(this.context.store, this.context.root, this.context.rel, 'unknown', this.head.files[0].sha256, () => this.valid())) throw new Error('changed');
         const before = await readArtifactVersion(this.context.store, selected.id, this.context.rel);
         const after = await readArtifactVersion(this.context.store, this.head.id, this.context.rel);
-        if (!before || !after || !this.valid()) throw new Error('unavailable');
+        if (before === null || after === null || !this.valid()) throw new Error('unavailable');
         const left = vscode.Uri.parse(`${this.scheme}:/${selected.id}/before`), right = vscode.Uri.parse(`${this.scheme}:/${this.head.id}/current`);
         this.content.set(left.toString(), before); this.content.set(right.toString(), after);
         this.compareUris = [left, right];

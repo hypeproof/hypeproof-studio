@@ -65,7 +65,7 @@ import {
   registerPublicUpdateSignal,
 } from "./updateChecker";
 import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
-import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
+import { CLASS_UPDATE_HOLD_COPY, updateFreezeCopy } from "./updateCheckerHelpers";
 import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
 import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
@@ -118,7 +118,8 @@ export async function activate(context: vscode.ExtensionContext) {
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
-  const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
+  let reflectionResume: ActivityResume['personalReflection'];
+  const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot, intent => { reflectionResume = intent; }).catch(() => {
     void vscode.window.showWarningMessage('저장된 입력과 대화 복원을 완료하지 못했습니다. 원래 폴더의 기록은 보존됩니다. 앱을 다시 열어 복구를 시도해 주세요.');
     return 'mismatch' as const;
   });
@@ -306,7 +307,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try{await provider.beginPersonalMaking();}catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'제작 초안을 열지 못했어요.');}finally{showMaking();}
   }));
   context.subscriptions.push(reflectionStatus,{dispose:()=>clearInterval(reflectionTimer)},vscode.commands.registerCommand('hypeproof-chat.personalReflection',async()=>{
-    try { await provider.openPersonalReflection(); showMaking(); }
+    try { await initialSurfaceReady; await startPage.openPersonalReflectionEntry(); showMaking(); }
     catch(error){await vscode.window.showWarningMessage(error instanceof Error?error.message:'질문 대화를 열지 못했어요.');}
   }));
   // Epic #3418 — public skill store. Needs a personal account; a classroom code never reaches it.
@@ -336,8 +337,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // A mail skill runs from the buyer's roster (no chat task), and still shows the buyer's quest first.
     showQuest: (skill) => showStoreQuest(skill),
   });
-  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
-    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
+  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory, reflection, validateEntry) => {
+    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory, reflection, validateEntry);
   }, provider.githubContinueSource(), accounts);
   // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
   // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
@@ -376,8 +377,6 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
-  // TUX-COND-07 — only the end-of-trial card's Primary calls this; the person pressed it.
-  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.showPasses", (surface?: unknown) => startPage.showPurchase(surface)));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
   // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
   provider.setProjectOpener(async (folder) => {
@@ -415,6 +414,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (target?.scheme === "file") await provider.openArtifactHistoryPanel(target.fsPath);
   }));
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.takeMyWork", () => provider.takeMyWork()));
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.showWhatIMade", () => provider.showWhatIMade()));
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.exportMyWork", () => provider.exportMyWork()));
   provider.setActivityTrashPanel(registerActivityTrash(context, {
     active: () => !!provider.activityTrashBinding,
@@ -504,6 +504,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.classroomDisconnect", () => classroomOps.disconnectInteractively()),
     vscode.commands.registerCommand("hypeproof-chat.classroomNotes", () => classroomOps.showCoachingNotes()),
     vscode.commands.registerCommand("hypeproof-chat.classroomCollectionConsent", () => classroomOps.collectionConsentInteractively()),
+    vscode.commands.registerCommand("hypeproof-chat.classroomParticipationConsent", () => classroomOps.participationConsentInteractively()),
     vscode.commands.registerCommand("hypeproof-chat.classroomApproveArtifact", () => provider.approveArtifactInteractively()),
 
     vscode.commands.registerCommand("hypeproof-chat.clearHistory", async () => {
@@ -828,9 +829,14 @@ export async function activate(context: vscode.ExtensionContext) {
             notes: info.notes,
             releaseUrl: info.releaseUrl,
             sizeBytes: info.sizeBytes,
+            ...(info.securityCritical ? { securityCritical: true } : {}),
           });
+          // CGP-SHELL-R-003 — inside the cohort's freeze the update UI says who decided, not how to install.
+          const freeze = provider.updateFreezeState();
           vscode.window.showInformationMessage(
-            provider.isClassUpdateHeld()
+            freeze && provider.isUpdateFrozen(info)
+              ? updateFreezeCopy(freeze)
+              : provider.isClassUpdateHeld()
               ? `새 버전 v${info.version} 발견. ${CLASS_UPDATE_HOLD_COPY}`
               : `새 버전 v${info.version} 발견. 채팅 패널 상단의 배너에서 설치할 수 있어요.`,
           );
@@ -847,7 +853,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.installUpdate", async () => {
       // CGP-SHELL-R-001: no download, install or restart while a class seat is active.
       if (provider.isClassUpdateHeld()) {
-        void vscode.window.showInformationMessage(CLASS_UPDATE_HOLD_COPY);
+        // CGP-SHELL-R-003: inside the cohort's freeze the answer says who decided (the offer's security marker decides).
+        const freeze = provider.updateFreezeState();
+        void vscode.window.showInformationMessage(freeze && provider.isUpdateFrozen() ? updateFreezeCopy(freeze) : CLASS_UPDATE_HOLD_COPY);
         return;
       }
       // REQ-STUDIO-QUIT-GUARD: the install ends in a quit, which the quit guard would question.
@@ -862,6 +870,12 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!info.available) {
           provider.setAvailableUpdate(null);
           vscode.window.showInformationMessage("최신 버전이라 업데이트 안 해도 됩니다.");
+          return;
+        }
+        // CGP-SHELL-R-003 — the cohort's freeze holds any release that is not security-critical.
+        const freeze = provider.updateFreezeState();
+        if (freeze && provider.isUpdateFrozen(info)) {
+          void vscode.window.showInformationMessage(updateFreezeCopy(freeze));
           return;
         }
         await runUpdate(info, {
@@ -1016,7 +1030,8 @@ export async function activate(context: vscode.ExtensionContext) {
     scheduleUpdateChecks({
       context,
       autoUpdate: autoUpdateEnabled,
-      classHeld: () => provider.isClassUpdateHeld(),
+      // CGP-SHELL-R-003 — the cohort's freeze also holds background staging, unless the release is security-critical.
+      classHeld: (info) => provider.isClassUpdateHeld() || provider.isUpdateFrozen(info ?? null),
       currentVersion: currentBundleVersion(),
       pushUpdateBanner: (info) => {
         if (!info) {
@@ -1028,6 +1043,7 @@ export async function activate(context: vscode.ExtensionContext) {
           notes: info.notes,
           releaseUrl: info.releaseUrl,
           sizeBytes: info.sizeBytes,
+          ...(info.securityCritical ? { securityCritical: true } : {}),
         });
       },
     }),
@@ -1046,6 +1062,9 @@ export async function activate(context: vscode.ExtensionContext) {
     showStart: options => startPage.show(options),
     ensureProfile: () => provider.ensureProfile(true),
     openChat: () => startPage.openChat(),
+  }).then(async () => {
+    const intent = reflectionResume; reflectionResume = undefined;
+    if (intent) await startPage.resumePersonalReflection(intent);
   });
 
   // E2E backdoor for REQ-E1/E2 manual-approve modal. Fires a synthetic
@@ -1208,6 +1227,8 @@ export async function ensureWorkspace(
   isTestRun = false,
   commit: (directory?: string) => Promise<void> = async () => {},
   selectedDirectory?: string,
+  reflection?: ActivityResume['personalReflection'],
+  validateEntry?: () => Promise<void>,
 ): Promise<boolean> {
   const desiredRoot = selectedDirectory ? resolveWorkspaceRoot(selectedDirectory)
     : profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
@@ -1257,7 +1278,7 @@ export async function ensureWorkspace(
     console.warn(`[workspace] cohort folder differs — switching ${decision.from} → ${decision.to}`);
     // Record BEFORE the reload: if the open fails we must not try again.
     await context?.globalState.update(WORKSPACE_SWITCH_ATTEMPT_KEY, decision.to);
-    try { return await openWorkspaceFolder(decision.to, profile, commit, context); }
+    try { return await openWorkspaceFolder(decision.to, profile, commit, context, reflection, validateEntry); }
     catch (error) { await clearWorkspaceSwitchAttempt(context); throw error; }
   }
 
@@ -1265,7 +1286,7 @@ export async function ensureWorkspace(
   // and guarantees an absolute path (a relative workspace_root resolves to null).
   const resolved = desiredRoot;
   const dir = resolved ?? path.join(os.homedir(), LEGACY_WORKSPACE_DIRNAME);
-  return await openWorkspaceFolder(dir, profile, commit, context);
+  return await openWorkspaceFolder(dir, profile, commit, context, reflection, validateEntry);
 }
 
 /**
@@ -1282,6 +1303,8 @@ async function openWorkspaceFolder(
   profile: ResolvedProfile | null | undefined,
   commit: (directory?: string) => Promise<void>,
   context?: vscode.ExtensionContext,
+  reflection?: ActivityResume['personalReflection'],
+  validateEntry?: () => Promise<void>,
 ): Promise<boolean> {
   // REQ-STUDIO-TRUST-OWN-FOLDERS - only a leaf folder this call makes (non-recursive mkdir) is recorded.
   let createdFolder: StudioFolder | undefined;
@@ -1305,16 +1328,18 @@ async function openWorkspaceFolder(
     ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
   if (context) await syncStudioFolderRecord(context.globalState, createdFolder);
+  await validateEntry?.();
 
   // Binding is committed first; the marker grants no authority and contains no credential.
   const record = context && activityConnections(context)?.current;
   const key = context && record ? resumeKey(dir) : undefined;
   if (context && key && record) {
     await context.globalState.update(key, {
-      version: 1, id: record.serverId, service: record.service, workspace: fs.realpathSync(dir), ref: record.ref, at: Date.now(), ...(checkpoint ? { state: checkpoint } : {}),
+      version: 1, id: record.serverId, service: record.service, workspace: fs.realpathSync(dir), ref: record.ref, at: Date.now(), ...(checkpoint ? { state: checkpoint } : {}), ...(reflection ? { personalReflection: reflection } : {}),
     } satisfies ActivityResume);
   }
   try {
+    await validateEntry?.();
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceReuseWindow: true });
   } catch (error) {
     if (context && key) await context.globalState.update(key, undefined);

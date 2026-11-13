@@ -111,3 +111,70 @@ Discord uses the webhook's configured name; the old hardcoded `Sediment` default
 is not sent. Other transports retain their existing call contract and do not
 receive the Discord-only display-name option. The regression test mocks HTTP and
 sends no real notification (`tests/notify/test_bot_name.py`).
+
+## Stakeholder decision cards (`stakeholders.py`, #574)
+
+When a PR waits on a person, `stakeholders.py` tells exactly the people it concerns, in at
+most five plain lines shaped like an AskUserQuestion prompt:
+
+```
+[HypeProof] hypeproof-harness #570 — JeHyeong님께
+바뀌는 점: <one line on what changes for users, authored in the card>
+받는 이유: <why this person, and what is blocked on them>
+질문: <one question>  ① <recommended> (추천)  ② …  ③ …
+https://github.com/hypeproof/hypeproof-harness/pull/570
+```
+
+- **Recipients are data, not guesses.**
+  - The human approvers a gate still needs: hype-merge `policy_required_non_author_approvals:k/n` and the control-plane gate's eligible reviewers, through the approval inbox's `GitHubProvider.snapshot`.
+  - Owners of the criteria nodes whose sources the PR changes (`config/traceability.json` at the head).
+  - The closing issue's author and assignees.
+  - Bots and the PR author are never asked. Names come from hypeprooflab `data/members.json`.
+  - **Jay last** (Jay, 2026-11-12): when another eligible approver exists, Jay's card is scheduled 4 hours later. If another approver answers first, Jay's card is dropped. When Jay is the only eligible approver, he is asked directly.
+- **The card is authored** by the agent that asks (`--card card.json`: `change_ko`, optional `question_ko`, optional `options` mapping answer ids to labels). Nothing is generated or guessed here. Gate approvers always get the answers ① 승인하기 (추천) ② 질문 남기기 ③ 이번엔 보류 (ids `approve`, `ask`, `hold`). Those are the same buttons a later Studio inbox shows (Studio epic #3767).
+- **Escalation**, per (PR, head SHA, person, step), only for people a gate waits on:
+  1. a `#team` post by the existing Discord bot (Mother) that may ping only that person, plus an English GitHub mention as the durable record. GitHub then emails the person through their own notification settings, so email needs no credential of ours.
+  2. a Discord DM from the same bot after 4 hours without a response;
+  3. one last `#team` reminder after 24 hours.
+
+  A review or comment by the person, a resolved gate, a new head or a closed PR stops it. Stakeholders who block nothing get one `#team` note. Nothing is sent 22:00–09:00 KST.
+- **Private registry** (0600, outside every repository, refused otherwise). It reuses existing credentials only:
+
+  ```json
+  {"contacts": {"<github login>": {"discord_id": "<snowflake>", "email": "<address>"}},
+   "discord": {"bot_token": "<the existing bot token>", "team_channel_id": "<#team, from Lab CLAUDE.md>"}}
+  ```
+
+  An optional `"email": {"enabled": true, "account_id": …, "token": …, "from": …}` adds Cloudflare Email Sending to step 2. It is off by default.
+
+  `plan` prints whether each channel exists, never the contact. GitHub writes go through `with-agent-identity.sh` as `hypeproof-agent[bot]`.
+- **Email** is covered by GitHub's own notification of the mention. `transports/email_cloudflare.py` (Cloudflare Email Sending) stays available but off. On Workers Free it reaches only verified addresses.
+
+```bash
+python3 scripts/notify/stakeholders.py plan --repo hypeproof/hypeproof-harness --pr 570 --card card.json
+python3 scripts/notify/stakeholders.py request --repo … --pr … --card card.json --registry ~/.config/hypeproof/notify/registry.json --state ~/.local/state/hypeproof/notify/ledger.db [--only LOGIN] --apply
+python3 scripts/notify/stakeholders.py tick --registry … --state … --discord-env ~/.claude/channels/discord/.env --team-channel <#team id> --apply   # the escalation runner
+```
+
+Without `--apply`, nothing is sent. Tests: `tests/notify/test_stakeholders.py`.
+
+### One card, every channel (`hps-decision-card/1`)
+
+`plan` emits one channel-agnostic card per person:
+
+- `id`: `DC-` plus 16 hex digits, stable per (repo, PR, head, person); a new head is a new card.
+- `to`, `role`, `blocking`, `change_ko`, `why_ko`, `question_ko`.
+- `options`: each has an `id`, `label_ko`, `recommended` and `github_action`.
+- `answer`: `{card_id, by: "recipient_own_github_authorization", studio_url}`.
+
+Discord and email render the five text lines (`render_text`). GitHub renders an English record that carries the card id (`render_github`). The ledger stores the card as JSON. Approving is offered only to people a gate waits on (`review:APPROVE`). Stakeholders get comment or none.
+
+### Studio inbox v2 (not built)
+
+A member-only inbox in HP Studio can show the same cards and take answers in AskUserQuestion style. It would need:
+
+1. **Source**: the approval inbox (#551). A card becomes an inbox request, the inbox state replaces the local ledger, and the inbox's `list`/`get` by member serve the cards. Cards are never read from GitHub.
+2. **Stable answer address**: `answer.studio_url` set to a member-only route keyed by `card.id`, for example `/studio/inbox/<card id>`. The card id is bound to (repo, PR, head, person), so an answer to an old head is refused as stale.
+3. **The person's own GitHub authorization**: choosing `approve` or `question` becomes that member's own GitHub review on the exact head. Use the inbox's exact-head review path with a credential the member granted (GitHub OAuth for their account). The bot never approves for a human, and a Studio session alone is not a GitHub identity.
+4. **Signed decisions**: Studio is a registered inbox adapter. Its answer is the signed decision envelope from `docs/AGENT-APPROVAL-INBOX.ko.md`, carrying an actor, a nonce, an expiry and a one-time receipt. `hold` is recorded and changes nothing on GitHub.
+5. **Escalation stops**: an inbox answer counts as a response, and `stakeholders.py tick` closes the request the same way a GitHub review does.

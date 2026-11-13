@@ -7,10 +7,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useDialogFocus } from "./dialogFocus";
+import { imeComposing } from "./imeGuard";
 import type { PublishForm, PublishView } from "../../src/publishView";
 import { EXPIRY_CHOICES, METHOD_CHOICES, SHARING_UNKNOWN } from "../../src/publishView";
 
 import { activePublishLink, publishSharing } from "../../src/publishSharing";
+import { PUBLISH_NOTICE_ACK, PUBLISH_NOTICE_LINES, PUBLISH_NOTICE_TITLE } from "../../src/publishNotice";
 
 const VERIFIED_LINE: Record<PublishView["verification"]["state"], string> = {
   verified: "검증됨 · 이 버전은 기대 조건을 모두 통과했어요",
@@ -36,6 +38,30 @@ function ExpiryPicker(props: { value: number | null; onChange(v: number): void; 
   );
 }
 
+/**
+ * CGP-ART-D-012: the responsibility notice, drawn where the learner pressed publish. 알겠어요 sends
+ * the pending action with the notice version; 취소 sends nothing. Focus moves to 알겠어요 when it
+ * opens and back to the control that opened it when it closes.
+ */
+export function PublishNoticeSheet(props: { onAcknowledge(): void; onCancel(): void; busy: boolean }) {
+  const ack = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  useEffect(() => { ack.current?.focus(); }, []);
+  return (
+    <div className="hps-publish-notice" role="group" aria-labelledby={titleId} data-testid="publish-notice"
+      onKeyDown={(e) => { if (e.key === "Escape" && !imeComposing(e)) { e.stopPropagation(); props.onCancel(); } }}>
+      <strong id={titleId}>{PUBLISH_NOTICE_TITLE}</strong>
+      <ul>
+        {PUBLISH_NOTICE_LINES.map((line) => <li key={line} data-testid="publish-notice-line">{line}</li>)}
+      </ul>
+      <div className="hps-publish-notice-actions">
+        <button type="button" ref={ack} className="hps-publish-notice-ack" data-testid="publish-notice-ack" disabled={props.busy} onClick={props.onAcknowledge}>{PUBLISH_NOTICE_ACK}</button>
+        <button type="button" className="hps-publish-notice-cancel" data-testid="publish-notice-cancel" onClick={props.onCancel}>취소</button>
+      </div>
+    </div>
+  );
+}
+
 export function PublishPanel(props: {
   view: PublishView;
   error: string | null;
@@ -44,7 +70,7 @@ export function PublishPanel(props: {
   busy: boolean;
   onManifest(paths: string[]): void;
   onSubmit(form: PublishForm): void;
-  onLink(experimentId: string, channel: string, expiresInDays: number): void;
+  onLink(experimentId: string, channel: string, expiresInDays: number, noticeVersion?: string): void;
   onRevoke(linkId: string): void;
   onCopy?(versionId: string): void;
   onRefresh?(): void;
@@ -105,7 +131,36 @@ export function PublishPanel(props: {
   const disabled = props.busy || !view.available;
   const criteriaList = criteria.split("\n").map((s) => s.trim()).filter(Boolean);
   const canSubmit = !disabled && !!view.version.id && expiry !== null && !!question.trim() && criteriaList.length > 0 && (!!hypothesisId || !!hypothesis.trim());
-  const submit = () =>
+  // CGP-ART-R-012: a new link waits for the notice until this learner acknowledged its version.
+  // The host refuses on its own; this only decides whether to show the sheet first.
+  const [pendingNotice, setPendingNotice] = useState<{ kind: "submit" } | { kind: "link"; experimentId: string } | null>(null);
+  const noticeOpener = useRef<HTMLElement | null>(null);
+  const needsNotice = !!view.publish_notice && !view.publish_notice.acknowledged;
+  const askNotice = (pending: NonNullable<typeof pendingNotice>, opener: HTMLElement | null) => {
+    noticeOpener.current = opener;
+    setPendingNotice(pending);
+  };
+  const closeNotice = () => {
+    setPendingNotice(null);
+    const opener = noticeOpener.current;
+    noticeOpener.current = null;
+    // The opener stays mounted (the sheet is drawn beside it), so focus can return at once.
+    opener?.focus?.();
+  };
+  const acknowledgeNotice = () => {
+    const pending = pendingNotice;
+    const version = view.publish_notice?.version;
+    setPendingNotice(null);
+    noticeOpener.current = null;
+    if (!pending || !version) return;
+    if (pending.kind === "submit") submit(version);
+    else {
+      const expiry = more[pending.experimentId]?.expiry ?? null;
+      if (expiry !== null) props.onLink(pending.experimentId, more[pending.experimentId]?.channel ?? "", expiry, version);
+    }
+  };
+  const noticeSheet = <PublishNoticeSheet busy={props.busy} onAcknowledge={acknowledgeNotice} onCancel={closeNotice} />;
+  const submit = (noticeVersion?: string) =>
     props.onSubmit({
       ...(hypothesisId ? { hypothesis_id: hypothesisId } : { hypothesis: hypothesis.trim() }),
       question: question.trim(),
@@ -117,6 +172,7 @@ export function PublishPanel(props: {
       ...(repeatedUse ? { repeated_use: true } : {}),
       ...(labels.trim() ? { labels: labels.split("\n").map((s) => s.trim()).filter(Boolean) } : {}),
       manifest: view.version.manifest_added,
+      ...(noticeVersion ? { notice_version: noticeVersion } : {}),
     });
 
   return (
@@ -225,11 +281,12 @@ export function PublishPanel(props: {
             </fieldset>
             <ExpiryPicker value={expiry} onChange={setExpiry} name="publish-expiry" />
             <div className="hps-publish-actions">
-            <button type="button" data-testid="publish-submit" disabled={!canSubmit} onClick={submit}>
+            <button type="button" data-testid="publish-submit" disabled={!canSubmit} onClick={(ev) => (needsNotice ? askNotice({ kind: "submit" }, ev.currentTarget) : submit())}>
               공개하고 테스트 시작
             </button>
             {sharingPill}
             </div>
+            {pendingNotice?.kind === "submit" && noticeSheet}
           </div>
 
           {props.shareUrl && (
@@ -283,9 +340,10 @@ export function PublishPanel(props: {
                 <div className="hps-publish-more">
                   <input value={more[e.id]?.channel ?? ""} onChange={(ev) => setMore((m) => ({ ...m, [e.id]: { channel: ev.target.value, expiry: m[e.id]?.expiry ?? null } }))} placeholder="다른 채널 이름 (예: 1:1 메시지)" aria-label="다른 채널" maxLength={40} />
                   <ExpiryPicker value={more[e.id]?.expiry ?? null} onChange={(v) => setMore((m) => ({ ...m, [e.id]: { channel: m[e.id]?.channel ?? "", expiry: v } }))} name={`publish-more-${e.id}`} />
-                  <button type="button" disabled={disabled || (more[e.id]?.expiry ?? null) === null} onClick={() => props.onLink(e.id, more[e.id]?.channel ?? "", more[e.id]!.expiry!)}>
+                  <button type="button" disabled={disabled || (more[e.id]?.expiry ?? null) === null} onClick={(ev) => (needsNotice ? askNotice({ kind: "link", experimentId: e.id }, ev.currentTarget) : props.onLink(e.id, more[e.id]?.channel ?? "", more[e.id]!.expiry!))}>
                     링크 하나 더 만들기
                   </button>
+                  {pendingNotice?.kind === "link" && pendingNotice.experimentId === e.id && noticeSheet}
                 </div>
               )}
             </div>

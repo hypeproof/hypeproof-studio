@@ -7,6 +7,7 @@
 //   node scripts/release/select-cases.mjs --out DIR                        # writes DIR/cases.md and DIR/cases.json
 //   node scripts/release/select-cases.mjs --today 2026-10-20               # fixes the escaped-bug window
 //   node scripts/release/select-cases.mjs --pr 2210 --json                 # range from a release PR body
+//   node scripts/release/select-cases.mjs --target ios --baseline <sha> --candidate <sha>
 //
 // A case is selected when any of these holds (reasons are recorded per case):
 //   p0        its priority is P0 (every journey)
@@ -22,7 +23,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {REQ_ID, loadCasebook} from './casebook.mjs';
+import {REQ_ID, appliesToTarget, caseTargets, loadCasebook, validateTarget} from './casebook.mjs';
 
 export const ESCAPED_WINDOW_DAYS = 14;
 export const REQUIREMENT_DOCS = ['docs/studio-requirements.md', 'docs/requirements/', 'docs/dev/04-requirements.md'];
@@ -52,11 +53,13 @@ export function isRecentEscape(c, today, days = ESCAPED_WINDOW_DAYS) {
   return age >= 0 && age < days;
 }
 
-export function selectCases({cases}, {touched = [], today}) {
+export function selectCases({cases}, {touched = [], today, target = 'desktop'}) {
   if (!today) throw new Error('today is required');
+  validateTarget(target);
   const touchedSet = new Set(touched);
   const selected = [];
   for (const c of cases) {
+    if (!appliesToTarget(c, target)) continue;
     if (c.status === '자동화됨') continue;
     const reasons = [];
     if (c.priority === 'P0') reasons.push('p0');
@@ -70,10 +73,12 @@ export function selectCases({cases}, {touched = [], today}) {
 
 const REASON_LABEL = r => r === 'p0' ? 'P0' : r.startsWith('touched:') ? `변경 ${r.slice(8)}` : `유출 버그 ${r.slice(8)}`;
 
-export function renderMarkdown({journeys}, selected, {touched = [], baseline, candidate} = {}) {
+export function renderMarkdown({journeys}, selected, {touched = [], baseline, candidate, target = 'desktop'} = {}) {
+  validateTarget(target);
   const lines = [];
   const p0 = selected.filter(c => c.priority === 'P0').length;
   lines.push(`블랙박스 케이스 ${selected.length}건 (P0 ${p0}건) — \`docs/operations/release-casebook/\`. P0 하나라도 FAIL 이면 승인하지 않습니다.`);
+  lines.push(`대상 \`${target}\``);
   if (baseline || candidate) lines.push(`범위 \`${baseline ?? '?'}..${candidate ?? '?'}\``);
   lines.push('');
   for (const j of journeys) {
@@ -92,12 +97,13 @@ export function renderMarkdown({journeys}, selected, {touched = [], baseline, ca
   return lines.join('\n');
 }
 
-export function renderJson(selected, {touched = [], baseline, candidate, today}) {
+export function renderJson(selected, {touched = [], baseline, candidate, today, target = 'desktop'}) {
+  validateTarget(target);
   return {
-    schema: 'hps-release-cases/1', baseline: baseline ?? null, candidate: candidate ?? null, today,
+    schema: 'hps-release-cases/1', baseline: baseline ?? null, candidate: candidate ?? null, today, target,
     touched_requirements: touched,
     cases: selected.map(c => ({id: c.id, journey: c.journey, priority: c.priority, title: c.title,
-      requirements: c.requirements, reasons: c.reasons})),
+      requirements: c.requirements, reasons: c.reasons, targets: caseTargets(c)})),
   };
 }
 
@@ -113,7 +119,8 @@ export function lastStableTag(git) {
   return git('tag', '-l', 'v*', '--sort=-v:refname').split('\n').find(t => t && !t.includes('-')) ?? null;
 }
 
-export function run({root, baseline, candidate = 'origin/main', today, out, dir}) {
+export function run({root, baseline, candidate = 'origin/main', today, out, dir, target = 'desktop'}) {
+  validateTarget(target);
   const git = (...a) => execFileSync('git', ['-C', root, ...a], {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024}).trim();
   const base = baseline ?? lastStableTag(git);
   if (!base) throw new Error('no stable v tag to compare against; pass --baseline');
@@ -121,8 +128,8 @@ export function run({root, baseline, candidate = 'origin/main', today, out, dir}
   const touched = touchedRequirements(git, base, cand);
   const book = loadCasebook(dir);
   const day = today ?? new Date().toLocaleDateString('sv-SE', {timeZone: 'Asia/Seoul'});
-  const selected = selectCases(book, {touched, today: day});
-  const meta = {touched, baseline: base, candidate: cand.slice(0, 8), today: day};
+  const selected = selectCases(book, {touched, today: day, target});
+  const meta = {touched, baseline: base, candidate: cand.slice(0, 8), today: day, target};
   const markdown = renderMarkdown(book, selected, meta);
   const json = renderJson(selected, meta);
   if (out) {
@@ -152,11 +159,13 @@ export function parseReleasePrBody(body = '') {
 const CLI_OPTIONS = {
   pr: {type: 'string'}, baseline: {type: 'string'}, candidate: {type: 'string'},
   today: {type: 'string'}, out: {type: 'string'}, json: {type: 'boolean'},
+  target: {type: 'string'},
 };
 
 // Strict: an unknown option, a stray argument or a missing value throws instead of being ignored.
 export function parseCliArgs(argv) {
   const {values} = parseArgs({args: argv, options: CLI_OPTIONS, strict: true, allowPositionals: false});
+  if (values.target !== undefined) validateTarget(values.target);
   if (values.pr !== undefined) {
     if (!/^[1-9]\d*$/.test(values.pr)) throw new Error(`--pr needs a PR number, got "${values.pr}"`);
     if (values.baseline !== undefined || values.candidate !== undefined) {
@@ -181,7 +190,7 @@ function main() {
     const opts = parseCliArgs(process.argv.slice(2));
     const range = opts.pr !== undefined ? rangeForPr(opts.pr) : {baseline: opts.baseline, candidate: opts.candidate};
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-    const {markdown, json} = run({root, ...range, today: opts.today, out: opts.out});
+    const {markdown, json} = run({root, ...range, today: opts.today, out: opts.out, target: opts.target});
     if (opts.json) console.log(JSON.stringify(json, null, 2));
     else console.log(markdown);
   } catch (e) {

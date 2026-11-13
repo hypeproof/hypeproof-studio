@@ -4,6 +4,7 @@
 //
 // Pure and DOM-free: the synthesizer and the utterance constructor come in through `SpeechEnv`.
 import { READ_ALOUD_CODE_SKIPPED } from "./voiceCopy.ts";
+import type { OutputMute } from "./voiceOutputMute.ts";
 
 export const READ_ALOUD_LANG = "ko-KR";
 /** One utterance per chunk: long utterances are cut off by some engines. */
@@ -77,6 +78,9 @@ export interface ReadAloudStartResult { started: boolean; skippedCode: boolean; 
 /**
  * One playback at a time across every answer. `play` for another answer stops the first; `stop` is
  * immediate. Late events from a stopped playback are ignored (a generation counter).
+ *
+ * CGP-VOICE-R-002: with an `output` switch, muting it stops a reading in the same call and a muted
+ * hub starts nothing. The switch is never written here: the microphone and this hub do not touch it.
  */
 export class ReadAloud {
   private status: ReadAloudStatus = { kind: "idle" };
@@ -84,7 +88,16 @@ export class ReadAloud {
   private listeners = new Set<() => void>();
 
   private readonly env: SpeechEnv;
-  constructor(env: SpeechEnv) { this.env = env; }
+  private readonly output: OutputMute | undefined;
+  private readonly unsubscribeOutput: () => void;
+  constructor(env: SpeechEnv, output?: OutputMute) {
+    this.env = env;
+    this.output = output;
+    this.unsubscribeOutput = output ? output.subscribe(() => { if (output.getMuted()) this.stop(); }) : () => {};
+  }
+
+  /** Stop listening to the output switch (a replaced hub must never cancel a newer one's reading). */
+  dispose(): void { this.unsubscribeOutput(); }
 
   get available(): boolean { return !!this.env.synth; }
   getStatus = (): ReadAloudStatus => this.status;
@@ -95,6 +108,7 @@ export class ReadAloud {
   play(id: string, markdown: string): ReadAloudStartResult {
     const synth = this.env.synth;
     if (!synth) return { started: false, skippedCode: false, note: null };
+    if (this.output?.getMuted()) return { started: false, skippedCode: false, note: null };
     const { text, skippedCode } = speakableText(markdown);
     const note = skippedCode ? READ_ALOUD_CODE_SKIPPED : null;
     this.stop();

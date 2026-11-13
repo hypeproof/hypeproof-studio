@@ -7,7 +7,7 @@
 //   2. If banner is appropriate (not dismissed for this version), push to
 //      webview via ChatPanelProvider.setAvailableUpdate().
 //   3. On user "Install Now" (from banner → openInstallUpdate webview msg),
-//      runUpdate() downloads → unzips → strips quarantine → writes
+//      runUpdate() downloads → unzips → verifies Apple signing/notarization → writes
 //      installer.sh → spawns detached → tells extension host to quit.
 //   4. installer.sh handles the actual .app swap + re-launch (defined in
 //      renderInstallerScript()).
@@ -49,6 +49,8 @@ import {
   detectAppBundle,
   installerEnv,
   renderInstallerScript,
+  renderMacUpdateVerification,
+  MAC_UPDATE_BUNDLE_ID,
   shouldShowBanner,
   hasFreeDisk,
   pickInflight,
@@ -68,7 +70,6 @@ import {
   type UpdateInfo,
 } from "./updateCheckerHelpers";
 
-const EXPECTED_BUNDLE_ID = "ai.hypeproof.studio";
 // #3411: every 4 hours (was 24 h), so a release reaches a running Studio the same day.
 const CHECK_INTERVAL_MS = AUTO_UPDATE_CHECK_INTERVAL_MS;
 const INITIAL_DELAY_MS = 30 * 1000;
@@ -375,10 +376,16 @@ async function prepareMacUpdate(info: UpdateInfo, context: vscode.ExtensionConte
     throw new Error("zip 안에서 .app 번들을 찾지 못했어요.");
   }
 
-  report("검역 속성 제거…");
+  report("앱 서명과 보안 확인 중…");
   try {
-    cp.execSync(`xattr -dr com.apple.quarantine ${shellQuote(newAppPath)}`);
-  } catch { /* xattr returns non-zero if no attrs to strip — that's fine */ }
+    // Use OS tools at fixed paths. The candidate cannot choose its team or a
+    // verification executable. Do not require Xcode/CLT on a learner's Mac.
+    cp.execFileSync("/bin/bash", ["-c", `${renderMacUpdateVerification()}\nverify_signed_update "$1"`, "hps-update-verification", newAppPath], {
+      timeout: 60_000, encoding: "utf8", env: installerEnv(process.env),
+    });
+  } catch {
+    throw new Error("새 앱의 서명 또는 Apple 보안 확인에 실패했어요. 현재 앱은 그대로 유지됩니다.");
+  }
 
   report("설치 스크립트 준비…");
 
@@ -391,7 +398,7 @@ async function prepareMacUpdate(info: UpdateInfo, context: vscode.ExtensionConte
   const logPath = path.join(logDir, `update-${info.version}.log`);
 
   const currentVersion = currentBundleVersion(appPath);
-  const scriptInput = { newAppPath, oldAppPath: appPath, expectedBundleId: EXPECTED_BUNDLE_ID,
+  const scriptInput = { newAppPath, oldAppPath: appPath, expectedBundleId: MAC_UPDATE_BUNDLE_ID,
     newVersion: info.version, oldVersion: currentVersion, logPath };
   fs.writeFileSync(installerPath, renderInstallerScript(scriptInput), { mode: 0o755 });
   const quitInstaller = path.join(workDir, "install-on-quit.sh");
@@ -724,8 +731,8 @@ export interface SchedulerDeps {
   currentVersion: string;
   /** #3411: stage found updates silently. Absent or false keeps the banner flow. */
   autoUpdate?: () => boolean;
-  /** CGP-SHELL-R-001: a class seat downloads nothing; the banner shows the held line. */
-  classHeld?: () => boolean;
+  /** CGP-SHELL-R-001: a class seat downloads nothing; the banner shows the held line. CGP-SHELL-R-003: gets the found release, so a cohort freeze can hold it unless it is security-critical. */
+  classHeld?: (info?: UpdateInfo) => boolean;
   /** Test seams; default to the real staging. */
   stagedVersion?: () => string | null;
   stage?: (info: UpdateInfo) => Promise<boolean>;
@@ -764,7 +771,7 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
     // #3411: with auto-update on, a found release is downloaded and staged with no prompt;
     // the banner stays the fallback (auto off, class seat, or a failed/impossible staging).
     if (deps.autoUpdate?.() === true) {
-      const classHeld = deps.classHeld?.() === true;
+      const classHeld = deps.classHeld?.(info) === true;
       let stagedVersion: string | null = null;
       try { stagedVersion = (deps.stagedVersion ?? (() => stagedUpdate(deps.context).stagedVersion()))(); } catch { stagedVersion = null; }
       if (stagedVersion === info.version && !classHeld) { deps.pushUpdateBanner(null); return; }

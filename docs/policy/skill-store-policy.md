@@ -90,6 +90,11 @@ Chosen by the Delivery Captain on 2026-11-12; they need sponsor confirmation.
 Code format: a kind letter (`P` partner, `I` instructor) and ten Crockford base32 characters, shown as `P-ABCDE-FGHJK`. The Service stores only a keyed hash of the code (keyed with the Service signing secret, so a rotation of that secret means reissuing every code).
 
 How the rows apply:
+- Registering a code needs the seller's consent (version `store-referral-2026-11-12`, recorded with its time) to provide their display name and sale amounts to that partner and instructor for settlement. Without it the seller registers no code and HypeProof keeps the whole commission. An operator binds a referrer only for a seller whose consent is recorded. Referral statements carry no seller field outside that consent.
+- Referral statements are the settlement document of a partnership (Studio passes were discontinued on 2026-11-12, so store referrals are the only Studio income for partners and instructors). Each carries the period, sales and refunded counts, gross, PG fee, the share earned, reversed and net, confirmed and in-window amounts, and policy versions, and exports as CSV.
+- `store.sell` (course profile): a youth course never sells (partner proposals promise it). Its seats and accounts marked as coming from it cannot list or sell; buying and installing stay allowed.
+- Mobile identity verification (`tier.new`) is self-service: the provider's birth date sets the verified age group and replaces the self-declared year, and one person verifies one store account. Until the provider contract (#3419) the provider is a sandbox: no real verification happens.
+- `pg.fee_rate_bps` is a placeholder: every screen and statement labels the PG fee as an estimate (예상) until the contract rate (#3419 step 6).
 - The binding in force at payment time decides an order's referral lines; a paid sale is never recomputed after a rebind.
 - If an operator binds a seller before their first publication, that binding stands and the seller is not asked again.
 - Referral statements are per payment month (KST). A refund after that month was paid out nets against the next payout (`refund.after_split`), which ships with the payout run after #3419.

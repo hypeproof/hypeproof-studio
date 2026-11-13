@@ -971,10 +971,11 @@ def board_done(repository, issue):
         return {'ok': True, 'detail': f'{repository} has no HypeProof project board'}
     for root in harness_candidates():
         board = root / 'scripts/board/board.py'
-        if board.is_file():  # board writes carry the bot identity, like every agent write
+        if board.is_file():  # board writes carry the bot identity, with its board-scoped token (harness#565)
             proc = subprocess.run(['bash', str(root / 'scripts/agent-identity/with-agent-identity.sh'), sys.executable,
                                    str(board), 'set', f'https://github.com/{repository}/issues/{issue}', '--state', 'done'],
-                                  capture_output=True, text=True, check=False)
+                                  capture_output=True, text=True, check=False,
+                                  env={**os.environ, 'HYPEPROOF_AGENT_BOARD': '1'})
             return {'ok': proc.returncode == 0, 'detail': (proc.stdout or proc.stderr).strip()[-300:]}
     return {'ok': False, 'detail': 'no Harness checkout with scripts/board/board.py; set HYPEPROOF_HARNESS'}
 

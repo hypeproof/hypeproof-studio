@@ -53,6 +53,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # verify the source build's immutable Mac signing receipt
 
 concurrency:
   group: mirror-release-${{ inputs.tag || github.event.release.tag_name }}
@@ -189,7 +190,7 @@ jobs:
           GH_TOKEN="$GITHUB_TOKEN_SOURCE" gh release download "$TAG" --repo "$SOURCE_REPO" --dir dist
           # Manual dispatch and partial-asset overrides cannot bypass acceptance.
           git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
-          node scripts/check-unified-release.mjs dist "$(git rev-parse "$TAG^{commit}")" "${TAG#v}"
+          GH_TOKEN="$GITHUB_TOKEN_SOURCE" node scripts/check-unified-release.mjs dist "$(git rev-parse "$TAG^{commit}")" "${TAG#v}"
           # studio-public-sdk-seed: releases published since that change carry the
           # native SDK seed (claude-agent-sdk-<platform>-<version>.tgz + .sha256 +
           # sdk-seed.json), mirrored with dist/* below. Re-check the bytes so the
@@ -223,6 +224,11 @@ jobs:
           - \`HypeProof-Studio-darwin-arm64.zip\`
 
           EOF
+          # CGP-SHELL-R-003: carry the security-critical marker line. Studio's update checker reads the
+          # member mirror's notes too, and a cohort's update freeze must not hold a marked release there.
+          if jq -r '.body // ""' source-release.json | grep -qE '^[[:space:]]*<!-- hps-update: security-critical -->[[:space:]]*$'; then
+            printf '%s\n\n' '<!-- hps-update: security-critical -->' >> mirror-release-notes.md
+          fi
           # Per-release installer (verify-unified-release.yml): dist/* already carries
           # install-mac.sh and the Test Kit zip. The one-liner points at the public
           # source release, which needs no GitHub login and is not quarantined.

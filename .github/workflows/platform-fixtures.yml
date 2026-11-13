@@ -65,6 +65,9 @@ jobs:
         run: |
           node --experimental-strip-types test/update-installer.smoke.mjs
           node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
+      - name: Verify generated Windows App and SDK delivery
+        if: runner.os == 'Windows'
+        run: node scripts/release/test/windows-delivery.smoke.mjs
       - name: Verify private email installer in Windows PowerShell 5.1
         if: runner.os == 'Windows'
         shell: powershell
@@ -98,3 +101,23 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: |
           node --experimental-strip-types --test test/google-automation.smoke.mjs test/automation-panel-ledger.smoke.mjs test/automation-store-client.smoke.mjs
+
+      - name: Locate Windows Chrome for required feature rendering checks
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $chrome = Join-Path ${env:ProgramFiles} 'Google/Chrome/Application/chrome.exe'
+          if (-not (Test-Path -LiteralPath $chrome)) { throw 'Windows Chrome is required for feature rendering checks' }
+          "HEADLESS_CHROMIUM=$chrome" >> $env:GITHUB_ENV
+          'FOCUS_REQUIRE_BROWSER=1' >> $env:GITHUB_ENV
+
+      - name: Verify recent desktop feature contracts on the actual platform
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          failed=0
+          for f in test/show-what-i-made.smoke.mjs test/voice-read-aloud.smoke.mjs test/classroom-inbox.smoke.mjs test/lesson-settings-change.test.mjs test/lesson-settings-change-host.smoke.mjs test/personal-reflection.test.mjs test/mobile-conversation.test.mjs test/mobile-conversation-host.test.mjs test/work-export.smoke.mjs test/studio-folder-trust.smoke.mjs; do
+            echo "— $f"
+            node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::feature regression failed"; failed=1; }
+          done
+          exit "$failed"

@@ -74,7 +74,7 @@ for (const [seat, cfgOf] of SEATS) {
     ok(seat === "classroom" || bare.includes(":R:"), "the id normaliser matched something, so it is not hiding a difference by accident");
     ok(sha(bare) === sha(wired), `wiring changed the markup (sha ${sha(bare).slice(0, 12)} vs ${sha(wired).slice(0, 12)})`);
     ok(bare === wired, "byte-identical");
-    for (const needle of ["hps-voice", "data-addon", "받아쓰기", "소리로 듣기", "음성", "이 수업에서는 쓸 수 없어요"]) ok(!bare.includes(needle), `unexpected ${needle}`);
+    for (const needle of ["hps-voice", "data-addon", "받아쓰기", "읽어 주기", "음성", "이 수업에서는 쓸 수 없어요"]) ok(!bare.includes(needle), `unexpected ${needle}`);
   });
 
   t(`${seat}: a voice block that is off (both halves false, or an unknown policy version) is the same bytes as no block`, () => {
@@ -89,17 +89,53 @@ for (const [seat, cfgOf] of SEATS) {
     const html = renderToStaticMarkup(createElement(Wired, { voice: VOICE, inner: (addon) => panel(cfgOf(VOICE), { composerAddon: addon }) }));
     ok(html.includes("hps-voice-mic") && html.includes('aria-label="받아쓰기"'), "mic button");
     ok(html.includes('data-addon="true"'), "the composer marks the addon");
-    ok(html.includes("hps-voice-listen") && html.includes('aria-label="소리로 듣기"'), "read-aloud on the answer");
+    ok(html.includes("hps-voice-listen") && html.includes('aria-label="읽어 주기"'), "read-aloud on the answer");
     ok(/data-icon="mic"/.test(html) && /data-icon="speaker"/.test(html), "stroke icons, not emoji");
     ok(!/\p{Extended_Pictographic}/u.test(html.replace(/[\u{1F300}-\u{1FAFF}]/gu, "")), "no emoji in the voice markup");
-    ok((html.match(/aria-label="소리로 듣기"/g) ?? []).length === 1, "once, on the one answer");
+    ok((html.match(/aria-label="읽어 주기"/g) ?? []).length === 1, "once, on the one answer");
   });
 
   t(`${seat}: read-aloud only, no mic button and no composer marker`, () => {
     const voice = { dictation: false, read_aloud: true, policy_version: "hps-voice-policy/1" };
     const html = renderToStaticMarkup(createElement(Wired, { voice, inner: (addon) => panel(cfgOf(voice), { composerAddon: addon }) }));
     ok(!html.includes("hps-voice-mic") && !html.includes("data-addon"), "no mic, no addon marker");
-    ok(html.includes('aria-label="소리로 듣기"'), "read-aloud only");
+    ok(html.includes('aria-label="읽어 주기"'), "read-aloud only");
+  });
+}
+
+// CGP-CHAT-D-009 (CGP-CHAT-D67): the read-aloud control in the real ChatPanel, served voice, two answers.
+// Idle: speaker glyph and 읽어 주기, aria-pressed false. Playing: aria-pressed true, 그만 읽기 and the level
+// glyph. Starting the second answer releases the first, so one button is pressed at a time, and the
+// pressed button stops its own reading.
+const TWO_ANSWERS = [
+  { id: "u1", role: "user" as const, content: "안녕", createdAt: 1 },
+  { id: "m1", role: "assistant" as const, content: "첫 번째 답이에요.", createdAt: 2 },
+  { id: "u2", role: "user" as const, content: "또 알려 줘", createdAt: 3 },
+  { id: "m2", role: "assistant" as const, content: "두 번째 답이에요.", createdAt: 4 },
+];
+type DomEl = { tagName: string; textContent: string; getAttribute(n: string): string | null; findAll(f: (e: DomEl) => boolean): DomEl[] };
+for (const [seat, cfgOf] of SEATS) {
+  t(`${seat}: read-aloud control: 읽어 주기, then pressed 그만 읽기 with the level mark; one answer pressed at a time (real ChatPanel)`, async () => {
+    const host = mountPoint() as unknown as DomEl;
+    const root = createRoot(host as never);
+    await act(() => root.render(createElement(Wired, { voice: VOICE, inner: (addon) => panel(cfgOf(VOICE), { composerAddon: addon, messages: TWO_ANSWERS }) })));
+    // The host answers that this policy version's disclosure was read, so a press reads at once.
+    await act(() => { (globalThis as unknown as { window: { dispatchEvent(e: unknown): void } }).window.dispatchEvent({ type: "message", data: { type: "voiceDisclosureState", acknowledged: ["hps-voice-policy/1"] }, bubbles: false }); });
+    const buttons = () => host.findAll((e) => e.tagName === "BUTTON" && (e.getAttribute("class") ?? "").split(/\s+/).includes("hps-voice-listen"));
+    const glyph = (b: DomEl) => b.findAll((e) => e.getAttribute("data-icon") !== null).map((e) => e.getAttribute("data-icon")).join(",");
+    const state = () => buttons().map((b) => [b.getAttribute("aria-pressed"), b.getAttribute("aria-label"), b.textContent.trim(), glyph(b)].join("|"));
+    const IDLE = "false|읽어 주기|읽어 주기|speaker", PLAYING = "true|그만 읽기|그만 읽기|level";
+    const same = (want: string[], m: string) => ok(JSON.stringify(state()) === JSON.stringify(want), `${m}: ${JSON.stringify(state())}`);
+    ok(buttons().length === 2, `one control per answer, got ${buttons().length}`);
+    same([IDLE, IDLE], "idle");
+    await act(() => click(buttons()[0] as never));
+    same([PLAYING, IDLE], "the first answer is read");
+    await act(() => click(buttons()[1] as never));
+    same([IDLE, PLAYING], "the second answer takes over and the first is released");
+    ok(state().filter((s) => s.startsWith("true|")).length === 1, "exactly one control is pressed");
+    await act(() => click(buttons()[1] as never));
+    same([IDLE, IDLE], "the pressed control stops its own reading");
+    await act(() => root.unmount());
   });
 }
 

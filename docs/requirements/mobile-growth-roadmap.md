@@ -62,6 +62,7 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 | P1 / M3 | `ST-REQ-MOBILE-COHORT` | https://github.com/hypeproof/hypeproof-studio/issues/3696 |
 | P0 / M1 | `ST-REQ-MOBILE-CD-GATE` | https://github.com/hypeproof/hypeproof-studio/issues/3697 |
 | P1 / M1 | `ST-REQ-MOBILE-CD-OPS` | https://github.com/hypeproof/hypeproof-studio/issues/3698 |
+| P0 / M1 | `ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` | https://github.com/hypeproof/hypeproof-studio/issues/3768 |
 | P0 / M1 | `ST-TEST-MOBILE-MILESTONE` | https://github.com/hypeproof/hypeproof-studio/issues/3699 |
 | P0 / M1 | `LAB-REQ-PHILOSOPHY-PROTOCOL` | https://github.com/hypeproof/hypeprooflab/issues/1542 |
 | P1 / M3 | `LAB-REQ-COHORT-LEARNING` | https://github.com/hypeproof/hypeprooflab/issues/1543 |
@@ -78,6 +79,41 @@ Foundry's active Ubuntu control plane and registered desktop runner are owned by
 | MREF-04 | Reflection-only projects are distinguishable and searchable; visible unsaved text remains exportable. | Library journey and export round-trip regression.  MREF-T04. |
 | MREF-05 | Native controls remain usable with keyboard, system theme and accessibility; exact candidate CI is retained before a testing build. | Native iOS/Android evidence; physical-device accessibility remains a separate acceptance.  MREF-T05. |
 
+## Correlated native deployment — MTF-01
+
+### MTF-01
+
+MTF-01 refines the existing mobile CD gate/operations direction for Studio #3768.
+Optional Harness request inputs are all-or-none and bind expected source,
+operation and request digest to the trigger, clean checkout, successful native
+CI and upload run/attempt. The upload consumes the exact current-attempt gate
+artifact and revalidates its source, request and native identity before signing
+and receipt emission. An older successful gate retained by a failed-job-only
+rerun is refused; rerun all jobs to create a fresh gate. A mismatch stops before
+signing. Existing no-input
+manual/push runs and the `apple-native-preview` environment remain intact.
+
+Studio #3866 separates the immutable app candidate from a pinned trusted-main
+workflow source when the fourth `expected_workflow_sha` request input is present.
+All four fields bind a v2 request; original three-field and no-input calls retain
+v1 equal-source behavior. App source remains the exact native-CI candidate; no
+native-tree equivalence can substitute another full source SHA. Control helpers
+run from the clean workflow checkout, while Xcode inputs come from the clean
+candidate checkout. Trusted same-repository GET ancestry proofs require candidate
+→ workflow → current main at admission and before signing. Ordinary main advances
+preserve both pinned identities; rewritten ancestry or moved workflow identity
+refuses signing. Gate/upload receipts distinguish app and workflow source while
+retaining exact run/attempt, artifact, request and native-CI provenance. This is a
+transport contract, not Apple availability or installed-device acceptance.
+
+After archive/export/validation/upload succeed, preserve a credential-free
+receipt with the actual app/build identity and IPA digest. Uploaded, Apple
+processing, tester availability and physical acceptance remain separate facts.
+No success receipt means an uncertain outcome to reconcile, never automatic
+permission to resend. This adds no approval engine, desktop build or bypass of
+the existing environment and source-CI gates. MTF-T01 covers the contract; live
+trusted workflow and Harness consumption remain distinct acceptance evidence.
+
 
 ## Native voice client slice — #3687
 
@@ -87,26 +123,38 @@ voice do not measure learning. The shared Service remains responsible for
 question policy, model routing and financial admission. This client slice does
 not assert that the separate Service policy/measurement work is integrated.
 
+The interaction target below incorporates the 2026-11-12 correction in MFR-03:
+one deliberate start, automatic turn boundaries and an always-available stop.
+Earlier requirements for a separate voice confirmation sheet, manual end-speech
+or a next-turn tap are superseded. The current iPhone account-conversation source
+implements that target. The iPhone legacy notebook also uses the shared automatic
+voice controls but still needs verification against these revised cases. Android
+retains manual controls and needs alignment under #3687. Neither platform is
+accepted from this document or source presence alone.
+
 | ID | Requirement | Verification boundary |
 |---|---|---|
 | MVOICE-01 | Dictation appends a Korean transcript to the selected project's editable draft and never automatically sends or confirms intent. | Native control/persistence regressions; actual Korean ASR separately.  MVOICE-T01. |
-| MVOICE-02 | Conversation starts only after explicit disclosure of final-transcript auto-send and read-aloud. Unsent draft, expired access and changed project block auto-send. | Native consent/expiry/draft tests and generation-token checks.  MVOICE-T02. |
-| MVOICE-03 | Final transcript sends at most once through existing Service admission; read-aloud ends with a visible next-turn button. Microphone never reopens automatically. | State/duplicate callback regression; five spoken turns on each physical platform remain required.  MVOICE-T03. |
+| MVOICE-02 | A deliberate conversation-microphone action starts the foreground interaction after required OS permissions and existing AI/storage consent. Explain auto-send and read-aloud in the interface without a recurring app confirmation sheet. Unsent draft, expired access and changed account/conversation block auto-send. | Native permission/expiry/draft tests and generation-token checks; iPhone also MFR-T03. MVOICE-T02. |
+| MVOICE-03 | Stable speech plus acoustic silence finalizes one transcript through existing Service admission. After its matching reply is read, the still-active foreground conversation resumes listening without an end-speech or next-turn tap. Stop or an invalidated session prevents reopening. | State/duplicate callback and matching-reply regressions; five spoken turns on each physical platform remain required. MVOICE-T03. |
 | MVOICE-04 | Stop, background, project change, audio interruption and late permission callbacks release/fence microphone, playback and pending client work. Partial words remain recoverable. | Native lifecycle/permission tests plus physical interruption check.  MVOICE-T04. |
 | MVOICE-05 | Require platform on-device recognition; no network recognizer fallback or paid voice API. Missing engine, permission, voice or network keeps text usable. | Capability/error paths and source review; offline physical Korean recognition is not inferred from a simulator.  MVOICE-T05. |
 
-Interaction: '말로 적기' keeps text for review. '음성 대화' explains final-transcript
-transmission before starting. '말하기 끝' bounds capture/finalization; '음성 멈춤'
-stops the local turn. Read-aloud finishes at '다시 말하기', which rechecks current
-project, access and pending draft. Keyboard use remains available outside capture;
-recording never continues behind another screen. A failed or cancelled service
-reply preserves the already saved human message; it is not automatically replayed.
+Interaction: '말로 적기' keeps text for review and explicit Send. A deliberate
+conversation-microphone action starts automatic listening, finalization and
+read-aloud; the interface makes the active microphone and stop action clear.
+Each next capture rechecks the original account/conversation, access, foreground
+state and pending draft. Stop, leaving the conversation or returning from the
+background requires a new deliberate start. Keyboard use remains available
+outside capture. A failed or cancelled service reply preserves the already saved
+human message; it is not automatically replayed. Silence without words cannot
+send a turn.
 
 Capture is bounded (iOS 30 seconds, Android 60 seconds) with finalization timeouts.
 No raw audio is written to files or uploaded by the app. Optional self-listening
 retains a bounded in-memory clip until stop or navigation. Recognized text is a local draft,
 then follows existing project-scoped AI consent/admission when explicitly sent or
-when a consented conversation finalizes. On-device speech may be unavailable
+when an explicitly started conversation finalizes. On-device speech may be unavailable
 because of OS/language assets; the text path is always the recovery route.
 There are zero added hosted ASR/TTS calls; device energy, human time, existing AI
 inference, and native CI are still costs. No monetary savings or efficacy is
@@ -164,9 +212,9 @@ An example path is: install and use the same account → “요즘 어떤 일에
 | ID | Requirement | Verification |
 |---|---|---|
 | MPER-01 | iPhone starts with an optional everyday question and existing voice/text composer. No desktop pairing code or running desktop is required for the personal conversation. Existing account browser authentication remains. | Native UI shell and real installed-device flow. |
-| MPER-02 | Same-account personal messages appear in the existing desktop task store; selecting another task does not create a new reflection identity or turn this conversation into a tool runner. | Host/store tests and two-device acceptance. |
+| MPER-02 | Same-account personal messages appear in the existing desktop task store. A visible “나의 질문” action on the default first screen and restored personal task navigation works without a command palette or status bar. Selecting another task does not create a new reflection identity or turn this conversation into a tool runner. | Rendered first-entry → account/admission → real host/store tests, workspace-reload controls and separate two-device acceptance. |
 | MPER-03 | Preserve drafts and submitted words on failure; retry the same uncertain ID without repeating AI. Stale/account-switched snapshots and reserved message-ID collisions are refused. | Native cache, host, account and Service negative controls. |
-| MPER-04 | Account/AI storage disclosure precedes first use; existing entitlement and monetary ceiling apply; cancellation cannot promise a dispatched provider call is unbilled. | Account tests, Service gate evidence and release smoke. |
+| MPER-04 | Account/AI storage disclosure precedes first use; existing entitlement and monetary ceiling apply. Explicit question intent survives existing login and personal-pass selection, but canceled login, sign-out, a different account/activity/task or an invalid reload marker cannot redirect later. Classroom activities never silently become personal. Cancellation cannot promise a dispatched provider call is unbilled. | Account/admission negative controls, source-bound reload evidence, Service gates and separate release smoke. |
 | MPER-05 | A clear making request is acknowledged without completing self-introduction; guide to an existing desktop task. The desktop action lets the person review their own words and creates an ordinary unsent task draft atomically, without copying the whole conversation or running tools. Cancel, account change and failed persistence preserve the original conversation. | Prompt/policy review, real task-store controls and actual conversation review before broader rollout. |
 
 Delivery: Studio #3725 is the bounded iPhone/existing-desktop slice, under #3690. Service reflection-api@1 and migration 0073 are release prerequisites. Input uses recent conversation (20 messages / 24,000 UTF-16 units), not an inferred permanent personality. The display shows the latest 80 messages; account export retains older rows. New free-account entitlement, Android account sync, scheduled push questions, approved durable personal context and an automatic Foundry handoff remain follow-up work; existing local notebooks remain available. The broader iOS/Android goal is unchanged.
@@ -191,6 +239,32 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+### Desktop visible question entry (Studio #3798)
+
+This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,
+pass activation, activity validation, workspace preparation and ChatPanelProvider
+reflection method. A normal pass is selected with its existing explicit button;
+only the existing eligible super grant follows its existing immediate-entry rule.
+No entitlement, checkout, provider call, new Mac app or account store is added.
+Missing/denied access explains the existing account/pass choice and preserves work.
+
+One in-memory intent owns login/preparation in the current window. A folder reload
+carries only account/session identity on the existing activity-resume marker, already
+bound to Service, activity, credential generation, physical folder and expiry. The
+marker is consumed before account revalidation and can continue only once. Failed
+storage, an invalid marker, account/session change or another navigation never creates
+an inferred approval or an automatic retry. Once admission opens the chat, a refused
+late question snapshot cannot roll back the person's selected activity or task.
+Concurrent configuration reads await the
+same durable TaskWorkspaceStore initialization before reflection can open. A current
+draft or stream retains the existing refusal/stop boundary. Existing reflection
+storage disclosure precedes its first GET/import; entry sends no AI turn or tool call.
+
+Cost: existing bounded account/profile/activity reads and one reflection snapshot
+read; zero hosted AI calls from entry. Local focused tests use synthetic HTTP and
+actual disk stores. Build/test success does not prove installation, live access or
+question quality; those require separate exact-package evidence.
+
 ## iPhone credential continuity (MIRS-01, Studio #3736)
 
 | ID | Requirement | Evidence |
@@ -200,3 +274,28 @@ separate acceptance gates. Source/build tests are not those observations.
 MIRS-01 refines MPER-03 for the existing native iPhone account path: before a one-use refresh token is dispatched, atomically persist a refresh-pending state in the same Keychain item. A failed write sends no request. Restoring a pending item requires fresh login, while conversation files and drafts remain unchanged. Only active `/v1/me` identity matching both the prior account and the acquired session may install rotated credentials. A mismatched or uncertain result cannot be adopted; acquired unusable credentials receive best-effort logout. Legacy items without the new flag decode as idle and retain their account-owned records.
 
 This is a client recovery correction, not an authentication provider, entitlement, retention or account-policy change. Studio #3263 / PR #3298 remains the separate experimental iOS foundation; this slice changes only the current `apps/studio-native/ios` product. Exact approval-URL validation, redirect/stream-size enforcement and sleep-inclusive challenge expiry remain transport follow-up work and are not claimed by this slice.
+
+
+## Native login and conversation friction correction — MFR-01–06 (Studio #3771)
+
+The 2026-11-12 owner feedback supersedes the earlier manual end-speech and
+per-conversation confirmation-sheet design for iPhone. Product Intent: minimum
+necessary intervention and useful work first. A person should explore their own
+thought, not operate an agent protocol. This change does not assert a learning
+outcome or change account eligibility, financial limits or desktop tool authority.
+
+| ID | Required behavior | Evidence |
+|---|---|---|
+| MFR-01 | One account-login entry opens the OS authentication session, preserves existing sign-up/invitation rules and returns to the initiating app without manual codes. Random state, S256 PKCE, short-lived one-use exchange, fixed destination and durable Keychain identity remain mandatory. A cancelled/expired exchange exits waiting and cannot automatically replay. | MFR-T01; real browser/provider separately. |
+| MFR-02 | Typed/dictated Send persists exactly one outbox request even during background synchronization. An AI admission/network failure stays visible after successful history refresh and app restart. Personal reflection remains independent of desktop availability. Old local-only notebooks visibly say they only save. | MFR-T02 / MFR-T05. |
+| MFR-03 | A deliberate conversation-microphone action starts capture after required OS permissions; stable transcript plus acoustic silence finalizes once, receives its own reply, and resumes listening while the foreground conversation is still active. No repeated app confirmation, end-speech or next-turn button is required. Dictation remains a draft until Send. | MFR-T03; five-turn Korean physical audio separately. |
+| MFR-04 | Stop, navigation, background, account/conversation change and interruption invalidate old callbacks, stop microphone/playback and prevent late sends. Silence without words cannot send; capture remains bounded to 30 seconds. | MFR-T04; actual microphone indicator separately. |
+| MFR-05 | Tests cover the full visible login-to-answer path with a deterministic transport, including desktop-off, denied access, offline/uncertain send and restart. Fixtures cannot replace app identity/outbox logic or reach live providers. | MFR-T05. |
+| MFR-06 | Release evidence lists required simulator journeys by exact name and marks absent/skipped/failed cases honestly. Package availability, simulator evidence, live sign-in and physical-device acceptance are separate. Unverified TestFlight candidates may be distributed for testing but cannot be reported as accepted. | MFR-T06; existing Foundry and Harness receipts. |
+
+Cost: no new hosted ASR/TTS calls. Existing Service money limits and routing apply
+to each automatically submitted conversation turn. Device energy, CI minutes and
+human time remain costs. Endpoint thresholds require physical Korean/noisy-room
+validation; synthetic silence controls are not speech-quality evidence. Speech
+recognition and microphone OS permissions may both be required by iOS; app-level
+repeat approvals are removed, OS consent is not bypassed.

@@ -33,7 +33,7 @@ def hashes(mapping):
 def bundle(source, name):
     result = files(source / 'skills' / name)
     if name == 'hype-release':
-        result.update({'runtime/' + k: v for k, v in files(source / 'scripts/hype-release').items() if k.endswith(('.py', '.json'))})
+        result.update({'runtime/' + k: v for k, v in files(source / 'scripts/hype-release').items() if k.endswith(('.py', '.json', '.mjs'))})
     return result
 
 

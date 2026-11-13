@@ -8,8 +8,10 @@
 // 이 파일이 **주장하지 않는 것**: 음성이 동작한다. 여기에는 `getUserMedia` 도
 // 오디오 재생도 없다 — 실제 연결은 UI-2(#898 V0 전송 ADR · #901 V4 예산) 이후다.
 // 그때까지 `voiceStartGate` 가 시작을 막으므로 학생에게 이 패널은 열리지 않는다.
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { MIC_MUTE_LABEL, MIC_OFF, MIC_ON, OUTPUT_MUTE_LABEL, OUTPUT_OFF, OUTPUT_ON } from "../../src/voiceCopy";
+import { type OutputMute, windowOutputMute } from "../../src/voiceOutputMute";
 
 import {
   COMPACT_CONTROLS,
@@ -56,6 +58,11 @@ export interface VoicePanelProps {
   onStopSpeaking(): void;
   onDismiss(kind: DismissKind): void;
   onRetry(): void;
+  /**
+   * The speaker switch (CGP-VOICE-R-002). Defaults to this window's; tests inject their own. The
+   * microphone switch is the session's (`onToggleMute`); the panel never lets one write the other.
+   */
+  outputMute?: OutputMute;
   /**
    * Where the compact control's corner is remembered (CGP-VOICE-R-008). Defaults to this
    * window's webview sessionStorage; tests inject their own. Read and write may throw.
@@ -147,6 +154,49 @@ function ShowThisMenu({ showThis }: { showThis: NonNullable<VoicePanelProps["sho
   );
 }
 
+/**
+ * CGP-VOICE-R-002 / CGP-VOICE-D-001: the microphone and speaker switches, two icon buttons with their
+ * own names, the same in the big panel and the compact control. A name never changes while pressed
+ * (aria-pressed carries the state); the off states are written out beside them and every change is
+ * announced in its own words.
+ */
+function MuteSwitches({ micOff, outputOff, onToggleMic, onToggleOutput }: { micOff: boolean; outputOff: boolean; onToggleMic(): void; onToggleOutput(): void }) {
+  return (
+    <>
+      <button type="button" className="hps-voice-mute" data-switch="mic" aria-label={MIC_MUTE_LABEL} aria-pressed={micOff} data-hp-tooltip={MIC_MUTE_LABEL} onClick={onToggleMic}>
+        <ChatIcon kind={micOff ? "mic-off" : "mic"} size={20} />
+      </button>
+      <button type="button" className="hps-voice-mute" data-switch="output" aria-label={OUTPUT_MUTE_LABEL} aria-pressed={outputOff} data-hp-tooltip={OUTPUT_MUTE_LABEL} onClick={onToggleOutput}>
+        <ChatIcon kind={outputOff ? "speaker-off" : "speaker"} size={20} />
+      </button>
+    </>
+  );
+}
+
+/** The off states in words, so they are not only a glyph. Nothing is drawn while both are on. */
+function MuteStateLine({ micOff, outputOff }: { micOff: boolean; outputOff: boolean }) {
+  if (!micOff && !outputOff) return null;
+  return (
+    <span className="hps-voice-mute-state">
+      {micOff && <span>{MIC_OFF}</span>}
+      {outputOff && <span>{OUTPUT_OFF}</span>}
+    </span>
+  );
+}
+
+/** Announces a change of either switch, after it happened, in that switch's own words. */
+function useMuteAnnouncement(micOff: boolean, outputOff: boolean): string {
+  const last = useRef({ micOff, outputOff });
+  const [said, setSaid] = useState("");
+  useEffect(() => {
+    const prev = last.current;
+    last.current = { micOff, outputOff };
+    if (prev.micOff !== micOff) setSaid(micOff ? MIC_OFF : MIC_ON);
+    else if (prev.outputOff !== outputOff) setSaid(outputOff ? OUTPUT_OFF : OUTPUT_ON);
+  }, [micOff, outputOff]);
+  return said;
+}
+
 /** 미터 막대. 관측이 없으면(`level === null`) **정지한 모양**을 그린다 (VO-38). */
 function Meter({ meter }: { meter: MeterView }) {
   const level = meter.animated ? (meter.level ?? 0) : 0;
@@ -185,6 +235,16 @@ export function VoicePanel(props: VoicePanelProps) {
   const { popup, session, meter } = props;
   const panelRef = useRef<HTMLDivElement | null>(null);
   const store = props.cornerStore ?? sessionCornerStore;
+  const output = props.outputMute ?? windowOutputMute;
+  // The panel's own state lives outside it, so collapsing and expanding keeps both switches.
+  const outputOff = useSyncExternalStore(output.subscribe, output.getMuted, output.getMuted);
+  const micOff = props.popup.userMuteIntent || session.state === "muted";
+  const muteSaid = useMuteAnnouncement(micOff, outputOff);
+  // Ending the conversation (and leaving the window's chat) turns sound back on: the switch must not
+  // outlive the panel that shows it, or read-aloud would stay held with no 소리 끄기 on screen.
+  useEffect(() => () => output.set(false), [output]);
+  const dismiss = (kind: DismissKind) => { output.set(false); props.onDismiss(kind); };
+  const toggleOutput = () => { output.toggle(); };
   const [corner, setCorner] = useState<CompactCorner>(() => readCorner(store));
   const [moved, setMoved] = useState<string>("");
   const helpId = useId();
@@ -220,13 +280,13 @@ export function VoicePanel(props: VoicePanelProps) {
     if (e.key !== "Escape") return;
     // 축소 상태에서도 Escape 는 종료다. 작업 영역의 키 입력은 가로채지 않는다.
     e.stopPropagation();
-    props.onDismiss("escape");
+    dismiss("escape");
   };
 
   if (popup.presentation === "hidden") return null;
 
-  const muted = popup.userMuteIntent || session.state === "muted";
   const controls = new Set<string>(COMPACT_CONTROLS);
+  const switches = <MuteSwitches micOff={micOff} outputOff={outputOff} onToggleMic={props.onToggleMute} onToggleOutput={toggleOutput} />;
 
   if (popup.presentation === "compact") {
     return (
@@ -236,16 +296,14 @@ export function VoicePanel(props: VoicePanelProps) {
           <span className={`hps-voice-dot${session.captureOpen ? " hps-voice-dot-on" : ""}`} aria-hidden="true" />
           {popup.awaitingResume ? "일시중지됨" : meter.statusName}
         </span>
-        {controls.has("mute") && (
-          <button type="button" onClick={props.onToggleMute} aria-pressed={muted}>
-            {muted ? "음소거 해제" : "음소거"}
-          </button>
-        )}
+        {/* The status name already says 마이크 꺼짐 when the session is muted: the line adds only what it does not. */}
+        <MuteStateLine micOff={micOff && meter.statusName !== MIC_OFF} outputOff={outputOff} />
+        {controls.has("mute") && controls.has("output_mute") && switches}
         {popup.awaitingResume && (
           <button type="button" onClick={props.onResume}>다시 시작</button>
         )}
         {controls.has("stop") && (
-          <button type="button" onClick={() => props.onDismiss("stop_button")}>종료</button>
+          <button type="button" onClick={() => dismiss("stop_button")}>종료</button>
         )}
         {controls.has("expand") && (
           <button type="button" onClick={props.onExpand}>펼치기</button>
@@ -256,6 +314,7 @@ export function VoicePanel(props: VoicePanelProps) {
         </button>
         <span id={helpId} className="hps-sr-only">{COMPACT_MOVE_HELP}</span>
         <span className="hps-sr-only" role="status">{moved}</span>
+        <span className="hps-sr-only" role="status">{muteSaid}</span>
       </div>
     );
   }
@@ -275,7 +334,7 @@ export function VoicePanel(props: VoicePanelProps) {
         <h2>{voicePanelTitle(props.coachName)}</h2>
         <div className="hps-voice-head-buttons">
           <button type="button" onClick={props.onMinimize} aria-label="음성 대화 축소">축소</button>
-          <button type="button" onClick={() => props.onDismiss("panel_close")} aria-label="음성 대화 종료"><ChatIcon kind="close" size={16} /></button>
+          <button type="button" onClick={() => dismiss("panel_close")} aria-label="음성 대화 종료"><ChatIcon kind="close" size={16} /></button>
         </div>
       </header>
 
@@ -326,15 +385,15 @@ export function VoicePanel(props: VoicePanelProps) {
       {props.showThis && <ShowThisMenu showThis={props.showThis} />}
 
       <div className="hps-voice-actions">
-        <button type="button" onClick={props.onToggleMute} aria-pressed={muted}>
-          {muted ? "음소거 해제" : "음소거"}
-        </button>
+        {switches}
+        <MuteStateLine micOff={micOff} outputOff={outputOff} />
         <button type="button" onClick={props.onStopSpeaking} disabled={session.state !== "speaking" && session.state !== "preparing"}>
           말 멈추기
         </button>
-        <button type="button" className="hps-voice-to-text" onClick={() => props.onDismiss("switch_to_text")}>
+        <button type="button" className="hps-voice-to-text" onClick={() => dismiss("switch_to_text")}>
           텍스트로 전환
         </button>
+        <span className="hps-sr-only" role="status">{muteSaid}</span>
       </div>
     </div>
   );

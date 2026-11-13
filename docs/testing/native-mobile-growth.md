@@ -13,10 +13,17 @@ inferred from UI use or passing these tests.
 | MREF-T04 | MREF-04 | Locate a reflection-only project by its own display title/search; export round-trips unsaved visible text. |
 | MREF-T05 | MREF-05 | Native keyboard, large text, screen reader and light/dark controls remain operable on each physical platform; successful CI alone is insufficient. |
 | MVOICE-T01 | MVOICE-01 | Dictation preserves pre-existing draft prefix, persists partial/final words, and creates no AI request or intent confirmation. Native transcript fixtures prove storage only. |
-| MVOICE-T02 | MVOICE-02 | Decline voice auto-send consent; change project or expire access before completion; preserve unsent text and send no request. |
-| MVOICE-T03 | MVOICE-03 | Duplicate final and stale callback produce at most one send; read-aloud finishes with microphone off. Then observe five actual Korean spoken turns on each phone. |
+| MVOICE-T02 | MVOICE-02 | Start through the conversation microphone without a recurring app confirmation sheet. Deny OS permission, change account/conversation or expire access before completion; preserve unsent text and send no request. Existing AI/storage consent remains required. |
+| MVOICE-T03 | MVOICE-03 | Speech followed by silence sends once; duplicate finals and stale callbacks cannot submit twice. Only the matching reply may resume capture in the still-active foreground conversation. Stop, background or identity change prevents reopening. Observe five actual Korean turns on each phone without manual end/next-turn taps. |
 | MVOICE-T04 | MVOICE-04 | Deny actual OS microphone permission, background capture, change project, stop while waiting/read-aloud, and inject late callback; partial words survive and no capture/transfer resumes. Physical route changes remain a separate hardware check. |
 | MVOICE-T05 | MVOICE-05 | Unsupported recognition/voice returns to text. Observe recognition with network disabled on a supported physical Korean device; reconnection never replays automatically. Fixtures cannot prove offline ASR. |
+
+MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
+a confirmation sheet or manual next-turn tap prove only the previous behavior
+and cannot satisfy these revised cases. Android alignment remains open under
+#3687. The iPhone legacy notebook uses shared automatic controls but needs its
+own revised journey verification; the account-conversation journeys below do
+not establish that acceptance. No native or physical pass is recorded here.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and
@@ -118,3 +125,140 @@ Signed acceptance: open the existing iPhone personal conversation, preserve a dr
 Run43137056162/1 failed all9 Android UI tests while the captured foreground was `Application Not Responding: com.google.android.apps.nexuslauncher`; the original PNG showed the Pixel Launcher ANR dialog, with the emulator awake and unlocked. This evidence identifies the foreground obstruction, not a passing app test or a proven emulator root cause. Preserve that failed run.
 
 The native Android script now records bounded read-only window/power observations after installation and before instrumentation. Missing state, sleep, keyguard or a foreground ANR/error dialog cannot start UI tests. Failure capture adds a machine-readable diagnosis and input hashes while retaining the original nonzero exit code, logs and screenshot. Studio ANRs remain distinct from foreign ANRs. No dialogs are dismissed, failed tests skipped, or acceptance rules relaxed. Readiness permits starting tests only; full native test completion is still required. Actual Foundry profile adoption remains separately NOT RUN.
+
+Runs43253872173/1 and43321849035/1 retained the same launcher input-dispatch ANR before the Studio script began. In both, the pinned emulator action sent MENU immediately after `sys.boot_completed`; the window manager recorded a missing focused window during that command. This identifies a repeatable startup boundary, not a proven emulator-internal cause. CI now uses `scripts/android-emulator.py` to own one fresh AVD, omit MENU, and require three consecutive stable awake/unlocked focus observations before invoking the unchanged native verifier once. API35, Google APIs x86_64, Pixel6 and KVM remain the same. The 180-second boot/focus and 600-second test deadlines fit the existing 20-minute job cap. Actual Android completion after this correction remains NOT RUN until a fresh source-bound CI receipt exists.
+
+The bootstrap preserves per-observation hashes, emulator output/configuration and failure window/activity/input/logcat/screenshot evidence. ANRs fail before preparation; absent focus, child exit or timeout cannot start tests. Only its own process groups are terminated and waited for on success, failure or interruption; occupied ports and foreign AVD identities are refused. Stateful SDK-boundary subprocess tests exercise these controls, failure propagation and TERM with a surviving peer. These controls are not real Android or physical-device acceptance.
+
+## Required first-person iPhone journeys — MFR-T01–T06 / Studio #3771
+
+The reported installed-app failures were indefinite account checking, dictated
+words producing no reply, and repeated voice consent/end-of-speech controls.
+A build and the previous Keychain/local-notebook tests did not cover those
+journeys. Preserve those failures as the regression baseline; do not describe
+the new fixtures as a successful physical retest.
+
+| Contract | Required observation | Failure that must remain visible |
+| --- | --- | --- |
+| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the unsent request intact and no free-access fallback. |
+| MFR-T02 | Dictation appends to an existing draft without sending; explicit Send creates one personal-reflection request and displays its answer without a running desktop. | A cleared composer or locally recorded text is not an AI answer. |
+| MFR-T03 | Start voice once, receive a reply and resume capture for the next turn without a recurring consent sheet or pressing an end-of-speech button. | Silence/no transcript cannot create an empty send. Stop cancels the held next capture and retains its partial draft; no second request. |
+| MFR-T03-queued | During a delayed history refresh, finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST or manual retry to make the test pass. |
+| MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
+| MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T06 | Collect actual native build/test exits and exact log hashes. All eight named simulator cases execute once and pass. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+
+`StudioJourneyTests` in the existing Xcode-wired `StudioShellTests.swift` covers
+these cases. `NativeJourneyFixture` replaces only external transport and supplies
+structured trace plus screenshot attachments; account adoption, persistence,
+UI actions and voice-turn handling remain real. Its empty desktop list and
+rejected desktop request routes prove that these simulated personal turns do
+not depend on desktop work. Its eligible account is synthetic; current Service
+admission policy is not changed or accepted by a successful login fixture.
+
+After the actual native commands finish, the iOS script invokes:
+
+```sh
+python3 apps/studio-native/scripts/collect-native-journeys.py \
+  --source-sha FULL_SOURCE_SHA \
+  --build-log apps/studio-native/evidence/device-build.log --build-exit 0 \
+  --simulator-log apps/studio-native/evidence/simulator-test.log --test-exit 0 \
+  --output apps/studio-native/evidence/native-journeys.json
+```
+
+Replace both exit arguments with the observed command statuses, including
+failures. The collector's unit tests validate refusal and evidence retention;
+they do not execute simulator journeys. Run through the existing resource
+wrapper. Keep native CI/Foundry provenance and source binding outside the
+collector; it cannot invent trusted execution from a supplied log.
+
+Evidence has four distinct levels: compile/build, simulator journeys, signed
+upload/Apple processing, and installed-device observations. The simulator
+receipt always records physical device, real authentication and live ASR as
+NOT_RUN. That absence does not block distribution of a test candidate. It does
+not permit a claim that the user experience works on an installed iPhone.
+
+For a physical test candidate, record source, exact TestFlight build, iPhone/iOS,
+account admission state (no token or personal transcript), and the outcome of
+first login → first question, desktop-off dictation → answer, hands-free next
+turn, Stop, background/relaunch and one recoverable failure/retry. Attach bounded
+redacted observations. When a user reports a failure, preserve the original
+build and observation, add a reproducing journey or state control, fix the
+smallest boundary, run exact-source simulator/native checks, distribute a test
+candidate, then ask for the specific installed retest. Do not close physical or
+live-provider acceptance from mocked transport, CI or upload success alone.
+
+## TestFlight request and receipt — MTF-T01
+
+For MTF-01 / Studio #3768, run `python3 -m unittest discover -s
+apps/studio-native/tests -p 'test_*.py' -v`. Deployment contract controls check
+legacy input, every partial request, malformed/newline values, SHA movement,
+gate artifact binding, invocation outside the checkout, and the real shell's
+pre-signing refusal. A gate from another release attempt must stop the actual
+upload shell before signing configuration and cannot be relabeled by receipt
+emission. Matching correlated and no-input gates remain valid; source, native
+identity and request mismatches are refused. The archive/export/validation/upload tail executes with
+synthetic tools: any nonzero phase stops before a success receipt; a complete
+run binds package bytes and app/run identity without claiming availability.
+Existing native-gate controls still reject stale or mismatched CI artifacts.
+These controls perform no signing, Apple call or workflow dispatch.
+
+For Studio #3866, `test_native_workflow_source.py` adds two-source contract and
+real CLI/shell controls. A candidate containing an obsolete helper must use the
+separate trusted control checkout. Main may advance normally without changing
+app identity; mismatched workflow/ref/event, partial v2 inputs, unrelated ancestry,
+dirty/wrong checkout and stale v1/attempt/workflow gate documents refuse. The
+actual upload shell re-reads ancestry before any signing material. Original
+exact-head CI and upload failure controls remain unchanged. v2 gate/upload
+receipts name `workflow_source_sha`; their app source fields still name the
+candidate. An actual v2 signed upload and Harness reconciliation remain required
+before claiming live compatibility.
+
+Authorized deployment acceptance: supply one Harness request, verify the run
+name and gate `deployment_request` match its exact digest/source, then inspect
+that run attempt's `upload-receipt.json` and IPA digest. A missing receipt stays
+uncertain until the original provider operation is reconciled. Observe Apple
+processing/tester availability separately and record the exact installed version.
+The existing no-input manual path emits `deployment_request: null`; Harness
+must not attach that uncorrelated receipt to one of its own operations.
+
+
+## Desktop visible question entry (#3798)
+
+`personal-reflection-entry.test.tsx` renders the actual StartPage and sends its typed
+messages to the actual StartPage host, AccountSession, ActivityConnections,
+ensureWorkspace and reflection/task-store implementation. The fixture supplies
+VS Code services, presentation/configuration lifecycle seams and synthetic HTTP
+responses; first entry has no seeded account
+credential, activity binding, task or history. The source proof is separate from the
+installed desktop and real Service/Google acceptance below.
+
+- Start with default hidden status/activity bars. Press **나의 질문**, finish the
+  existing browser account flow and eligible grant, confirm storage disclosure, then
+  observe original same-account message IDs in the existing task. No AI POST/tool
+  dispatch is an entry side effect.
+- With a normal account pass, the existing **이 이용권으로 시작하기** choice retains
+  question intent. Missing access or a refused activation shows the account/pass
+  reason; no automatic purchase/free fallback or workspace replacement occurs.
+- Cancel login, leave the account screen, switch accounts during activation, or press
+  entry repeatedly while a snapshot is pending. No late redirect, second reflection
+  task, extra AI turn or foreign-account transcript may appear.
+- Change task/activity while the first snapshot is pending. The selected work and
+  admitted activity remain connected after the stale response is refused. A negative
+  control that restores the old post-admission rollback must fail this assertion.
+- Begin with no active folder and allow the actual workspace router to switch to its
+  prepared folder. Recreate the host, consume the real activity-resume marker, and
+  revalidate account/session. Exactly one continuation is allowed; a second launch,
+  stale/mismatched marker or different account must not revive it.
+- From a restored personal task, use the visible rail action to reuse reflection.
+  Preserve existing draft/active stream refusal. Concurrent config reads must wait
+  for the real durable store initialization rather than reading an empty half-ready
+  store; a negative control that removes the shared wait must fail.
+
+Focused command: `node scripts/run-tsx-tests.mjs personal-reflection-entry` from
+`extensions/hypeproof-chat`. Relevant existing controls are initial-surface,
+activity-resume, studio-folder-navigation, account-start-entry and
+mobile-conversation-host. Evidence must name the exact source, Node/OS, command and
+exit code. Simulator/native tests, physical iPhone, actual Google/account admission,
+installed desktop focus/navigation and live model quality remain **NOT_RUN** unless
+separately observed. A prepared runner or green build is not that observation.

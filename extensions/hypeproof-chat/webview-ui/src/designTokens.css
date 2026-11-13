@@ -3565,6 +3565,8 @@
   --ds-c-chalk-manage-size-53: var(--ds-s-size-53);
   --ds-c-chalk-manage-size-139: var(--ds-s-size-139);
   --ds-c-chalk-manage-type-39: var(--ds-s-type-39);
+  --ds-c-chalk-manage-type-16: var(--ds-s-type-16); /* E5 #3778: class code read off a projector */
+  --ds-c-chalk-manage-typography-18: var(--ds-s-typography-18);
   --ds-c-chalk-manage-boundary-81: var(--ds-s-boundary-81);
   --ds-c-chalk-authoring-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
   --ds-c-chalk-budgets-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */

@@ -2,7 +2,7 @@
 //
 //   GET  /connect/start?next=/console  — state cookie, then 302 to the Lab connect page
 //   GET  /connect/callback?code&state  — check state, trade the code server-to-server, set the session
-//   GET  /connect/status               — { connected, member, expires_at, scopes } (never the issuer)
+//   GET  /connect/status               — { connected, member, instructor_id, expires_at, scopes } (never the issuer token)
 //   POST /connect/disconnect           — clear the session
 import { Hono } from "hono";
 import { resolveLabOrigin, type ChalkEnv } from "../env.ts";
@@ -116,6 +116,9 @@ connect.get("/connect/status", async (c) => {
     connected: true,
     configured,
     member: { name: connection.name, handle: connection.handle || claims?.u || "" },
+    // The issuer id the Service matches run assignments against (E5 #3775), so an instructor refused by a run can tell
+    // its owner which id to add. An id, never the token.
+    instructor_id: typeof claims?.u === "string" ? claims.u : "",
     expires_at: new Date(connection.exp * 1000).toISOString(),
     scopes: claims?.scopes ?? [],
   });

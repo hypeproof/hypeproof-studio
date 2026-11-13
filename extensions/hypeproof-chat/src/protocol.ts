@@ -215,6 +215,8 @@ export interface ChatConfig {
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
+  /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
+  updateFreeze?: { until: string };
   /**
    * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
    * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
@@ -246,6 +248,8 @@ export interface UpdateOffer {
   sizeBytes: number;
   /** CGP-SHELL-R-001: a class seat is active, so the banner offers no install. */
   heldForClass?: boolean;
+  /** CGP-SHELL-R-003: a security-critical release; a cohort's update freeze does not hide it. */
+  securityCritical?: boolean;
 }
 
 export interface CoachInfo {
@@ -597,6 +601,8 @@ export type WebviewMessage = (
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
+  /** MPER-02/04: use the same account/admission entry as the start page. */
+  | { type: 'openPersonalReflection' }
   /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
   | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }
@@ -717,7 +723,7 @@ export type WebviewMessage = (
   | { type: "publishClose" }
   | { type: "publishCopy"; versionId: string }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }
-  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number }
+  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string }
   | { type: "publishRevoke"; linkId: string }
   // cr-evidence — the experiment evidence panel (CR-24–CR-27, CR-69; CR switch only, re-checked by the host).
   | { type: "evidenceOpen"; experimentId?: string }
@@ -792,9 +798,6 @@ export type WebviewMessage = (
   | { type: "doctorNoticeAnswer"; id: string; fix: boolean }
   | { type: "runDoctor" }
   | { type: "problemReportAutoSetting"; enabled: boolean }
-  /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
-  // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
-  | { type: "trialEndCardPasses"; surface?: "header_menu" }
   /** CONV-FUNNEL-R-003 — the person pressed the end card's escape (오늘은 여기까지); the webview closes the card. */
   | { type: "trialEndCardDismiss" }
   | { type: "trialEndCardClaude"; draft: string }
@@ -892,6 +895,8 @@ export type WebviewMessage = (
   | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
+  // E5 (#3776) — the learner pressed 제출 or 건너뛰기 on a question card. Nothing else ever sends an answer.
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
   | { type: "helpRequest" }
   // #751 U1b — the learner opens the approval question for the current index.html (the host asks; nothing is approved or sent by this message).

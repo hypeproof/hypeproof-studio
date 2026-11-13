@@ -20,6 +20,8 @@ import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntr
 import { PublishReadGate } from "./publishReadGate";
 import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
 import { runWorkTakeaway } from "./workTakeawayHost";
+import { runShowWhatIMade } from "./showWhatIMadeHost";
+import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
@@ -49,8 +51,8 @@ import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
-import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
-import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, trialEndNotice, trialEnding } from "./passPurchase";
+import { endCardAdvertised, notifyOptinOffered } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
@@ -144,6 +146,10 @@ import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllow
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
 import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
 import { PublishSession } from "./publishSession";
+import { PublishNoticeLedger } from "./publishNotice";
+
+/** globalState key: CGP-ART-R-012 responsibility-notice acknowledgments, per owner digest per notice version. */
+const PUBLISH_NOTICE_STATE = "hypeproof-chat.publishNoticeAcks";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
@@ -255,7 +261,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -264,7 +270,7 @@ import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
 import { DOWNLOAD_ACTION_COPY, downloadPolicy, resolveDownloadedFile, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
-import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
+import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, previewPageUrl, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
@@ -282,7 +288,7 @@ import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
 import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
-import { classUpdateHold } from "./updateCheckerHelpers";
+import { chatUpdateOffer, classUpdateHold, freezeHoldsUpdate, updateFreeze } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
 import { DELEGATION_ICON, DelegationTracker, delegationHeader, delegationResultLabel, NO_ANSWER_REASON, TURN_FAILED_REASON } from "./delegationRow";
@@ -566,7 +572,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private attemptWrite?: Promise<void>;
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
-  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
+  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore; ready?: Promise<void> };
   /** Failed turns are not in durable history yet; keep only bounded, task-bound retry metadata. */
   private turnRequests = new Map<string, { scope: string; message: ChatMessage }>();
   /** CGP-CHAT-R-029 — the one removed file/page chip and the one rename that 되돌리기 can still put back. */
@@ -681,14 +687,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if(stillHere())await this.post({type:'history',messages:store.getHistory(b.task)});
   }
 
-  async openPersonalReflection(): Promise<void> {
+  async openPersonalReflection(stillWanted: () => boolean = () => true): Promise<void> {
     const accounts=this.reflectionAccounts,session=await accounts?.conversationSession();
+    if(!stillWanted())return;
     if(!accounts||!session)throw Error('기존 Studio의 개인 계정으로 로그인해 주세요.');
     if(!this.focusEditor())await vscode.commands.executeCommand('hypeproof-chat.focus');
     const scope=this.mobileConversationScope(true);
     if(!scope?.ready)throw Error('개인 작업을 열고 작성 중인 글과 실행 중인 작업을 먼저 마쳐 주세요.');
     const store=this.currentTaskStore()!;
-    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
+    const assertOpeningScope=()=>{const current=this.mobileConversationScope(true);if(!stillWanted()||this.reflectionAccounts!==accounts||this.currentTaskStore()!==store||!current?.ready||current.activity!==scope.activity||current.workspace!==scope.workspace||current.task!==scope.task)throw Error('열린 작업이 바뀌었어요. 현재 작업에서 다시 시작해 주세요.');};
     let b=this.reflectionBindings().find(v=>v.session===session&&v.activity===scope.activity&&v.workspace===scope.workspace&&this.currentTaskStore()?.getTask(v.task));
     if(!b){
       const accepted=await vscode.window.showInformationMessage('내가 보낸 글과 AI 답변을 계정에 저장하고 같은 계정의 iPhone과 공유해요. 최근 대화는 AI 제공자에게 전송되며 기존 AI 이용 한도가 적용됩니다. 컴퓨터를 켜 두지 않아도 이어갈 수 있어요.',{modal:true},'내 이야기 시작하기');
@@ -825,14 +832,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
-    if (this.taskWorkspace?.activityId === activity.id) return;
+    if (this.taskWorkspace?.activityId === activity.id) { await this.taskWorkspace.ready; return; }
     const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
-    this.taskWorkspace = { activityId: activity.id, store };
-    try {
-      await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
-    } catch {
-      // The error view is shown, and sends are blocked. Never replace unreadable history.
-    }
+    const opening = { activityId: activity.id, store, ready: Promise.resolve() };
+    this.taskWorkspace = opening;
+    opening.ready = (async () => {
+      try {
+        await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
+      } catch {
+        // The error view is shown, and sends are blocked. Never replace unreadable history.
+      }
+    })();
+    await opening.ready;
   }
 
   /**
@@ -2479,6 +2490,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly publishSession = new PublishSession({
     previewVisitor: showVisitorPreview,
     confirmOutbound,
+    // Per learner (owner digest, never the identity) per notice version, kept across workspaces.
+    publishNotice: new PublishNoticeLedger(
+      {
+        get: () => this.context.globalState.get<unknown>(PUBLISH_NOTICE_STATE),
+        update: (value) => this.context.globalState.update(PUBLISH_NOTICE_STATE, value),
+      },
+      (token) => crBytesOwner(token),
+    ),
     scopeKey: () => String(this.profileGeneration),
     privateDirectories: () => this.cachedProfile?.learning_wiki?.plan?.dir ? [this.cachedProfile.learning_wiki.plan.dir] : [],
     switchOn: () => this.isCurriculumRuntimeEnabled(),
@@ -2524,7 +2543,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (view.available) { this.lastGoodPublish = { scope, at: Date.now(), view }; return view; }
     const last = this.lastGoodPublish;
     if (!view.read_failed || !last || last.scope !== scope) { if (!view.read_failed) this.lastGoodPublish = null; return view; }
-    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice };
+    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice, publish_notice: view.publish_notice ?? null };
   }
 
   /** CR-17 — the "Publish for user test" command: re-checks the served switch, then opens the panel. */
@@ -2539,7 +2558,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** One publish action from the panel, each behind the served switch (a message can be posted without the panel). */
-  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
+  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.postDenialNotice("lesson");
       await this.post({ type: "publishState", view: null, error: lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()) });
@@ -2567,7 +2586,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message, ...(r.lines ? { errorLines: r.lines } : {}) });
       }
       if (msg.type === "publishLink") {
-        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays });
+        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays, ...(typeof msg.noticeVersion === "string" ? { notice_version: msg.noticeVersion } : {}) });
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message });
       }
       const r = await this.publishSession.revoke(String(msg.linkId ?? ""));
@@ -5158,7 +5177,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
-  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
+  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null>; inboxAnswer?(objectId: string, revision: number, generation: number, answer: unknown): Promise<void> } | null = null;
   private currentClassNoticeId: string | undefined;
   classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
   async postInbox(): Promise<void> {
@@ -6138,16 +6157,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Reveal a freshly-built page. Always persists it to the workspace root
-   * (index.html, GitHub-Pages-ready). Then either:
-   *  - live_server cohorts (#278): serve the workspace root over
-   *    http://127.0.0.1 and open/refresh the native integrated browser — real
-   *    origin, so multi-file, same-origin fetch, storage, and page navigation
-   *    all work; or
-   *  - default: the sandboxed iframe PreviewProvider (existing behavior).
-   * Public so extension.ts (runLastCode) shares the same routing.
-   */
-  /**
    * **Before** a new world is written to index.html, archive the current one as
    * '이전 세상/<title>.html'.
    *
@@ -6473,23 +6482,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * 2026-08-19 — shows the .html the SDK coach saved with Write/Edit in the preview.
-   * It reads the file and hands it to revealBuilt (exactly the same save/reveal
-   * behaviour as the fence path). A missing file, or one that is not HTML, is passed
-   * over silently — so that the coach's next utterance does not stand in for the
-   * screen, a failure leaves only one tool-log line.
-   */
+  /** Preview the page the SDK coach saved. Only an explicit index.html edit takes the home-page build path. */
   private async revealWrittenHtml(filePath: string, streamId?: string): Promise<void> {
     try {
-      const abs = path.isAbsolute(filePath) ? filePath : path.join(this.resolveCoachCwd() ?? "", filePath);
-      const buf = await vscode.workspace.fs.readFile(vscode.Uri.file(abs));
-      const html = Buffer.from(buf).toString("utf8");
-      if (!/<html[\s>]/i.test(html) && !/<!doctype html/i.test(html)) return;
-      await this.revealBuilt(html, { streamId, artifactSource: "assistant_tool" });
-    } catch (e) {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return;
+      const abs = path.resolve(this.resolveCoachCwd() ?? root, filePath);
+      const fromRoot = path.relative(root, abs);
+      // The SDK can return a canonical absolute path even when the folder was opened through a symlink.
+      const rel = (relativeEscapes(fromRoot) ? path.relative(canonicalFolder(root), abs) : fromRoot).split(path.sep).join("/");
+      const page = readPageInFolder(root, rel);
+      if (!page.ok || (!/<html[\s>]/i.test(page.text) && !/<!doctype html/i.test(page.text))) return;
+      await this.revealBuilt(page.text, {
+        streamId,
+        artifactSource: "assistant_tool",
+        writtenPage: rel === "index.html" ? undefined : { path: rel, abs: page.abs },
+      });
+    } catch {
       if (streamId) {
-        this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: `미리보기 열기 실패: ${String(e).slice(0, 80)}`, state: "error" });
+        this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: "미리보기를 열지 못했어요.", state: "error" });
       }
     }
   }
@@ -6523,6 +6534,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Render the build in the live browser or sandbox. Only a home-page build saves to index.html. */
   async revealBuilt(
     html: string,
     opts?: {
@@ -6531,6 +6543,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       spoolTurnId?: string;
       /** Distinguishes a pre-built copy from the student's/AI's edited one, even for identical HTML. */
       artifactSource?: SpoolArtifactSource;
+      /** An existing file already written by the coach. The preview must never save over it or the home page. */
+      writtenPage?: { path: string; abs: string };
       /**
        * The world engine paired with this HTML (#644). When given, it is swapped in
        * **after the archive and just before the save** — reverse the order and the
@@ -6565,12 +6579,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.spool?.recordArtifactSnapshot({
       ...(spoolTurn ? { turnId: spoolTurn } : {}),
       source: opts?.artifactSource ?? (spoolTurn ? "assistant_response" : "manual_preview"),
-      path: "index.html",
+      path: opts?.writtenPage?.path ?? "index.html",
       content: checked.html,
     });
-    // #751 F4 — a real change to the artifact, reported to the class board as digests only (never the HTML).
+    // #751 F4 — the class board follows the approved home page and gets only its digest.
     // CGP-KNOW-R-029 — not for a temporary task's page.
-    if (!this.temporaryWrite?.(spoolTurn)) { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
+    if (!opts?.writtenPage && !this.temporaryWrite?.(spoolTurn)) { const after = createHash("sha256").update(checked.html, "utf8").digest("hex"); this.opsObserver?.artifactChanged(this.opsLastArtifact, after); this.opsLastArtifact = after; }
 
     // 2026-08-17, Windows real device — the screen stayed blank for a long time
     // **even after** the coach said "완성됐어요!". Between the stream ending and the
@@ -6592,6 +6606,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
 
     logReveal("running", "미리보기 여는 중");
+    if (opts?.writtenPage) {
+      const page = opts.writtenPage;
+      const scope = this.turnRequestScope();
+      // If the structural guard repaired the HTML in memory, the disk file still holds the original.
+      if (checked.html !== html || !this.isLiveServerPreview() || !(await this.openInLiveServer(page.path))) {
+        if (scope !== this.turnRequestScope()) return false;
+        await this.preview.show(checked.html, vscode.Uri.file(path.dirname(page.abs)));
+      }
+      logReveal("done", "미리보기를 열었어요");
+      return true;
+    }
     // 2026-08-20 review — the point that actually overwrites the work folder's
     // index.html funnels into this one place (pre-built world · ▶ Run · "보여줘" ·
     // coach fence). With the archive living only inside revealPrebuiltWorld,
@@ -6601,8 +6626,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Kids track only — an '이전 세상' folder appearing in an adult's work folder
     // would be stranger still.
     // When the content is identical, shouldArchiveWorld filters it out so archived
-    // copies do not pile up (the coach's Edit-save path rewrites the file itself, so
-    // it is always filtered here).
+    // copies do not pile up.
     if (isWorldCohort(this.cachedProfile)) {
       this.lastArchivedWorldFile = await this.archiveCurrentWorld(checked.html, opts?.streamId);
     }
@@ -6658,8 +6682,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the native browser at its URL. Returns false on any failure so the caller
    * falls back to the iframe preview.
    */
-  private async openInLiveServer(): Promise<boolean> {
-    return (await this.startLivePreview()) !== null;
+  private async openInLiveServer(pagePath = "index.html"): Promise<boolean> {
+    return (await this.startLivePreview(pagePath)) !== null;
   }
 
   /**
@@ -6713,22 +6737,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }, { address: previewAddress(url) });
   }
 
-  async startLivePreview(): Promise<string | null> {
+  async startLivePreview(pagePath?: string): Promise<string | null> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return null;
     try {
       const base = await this.liveServer.ensure(root);
-      // Avoid stacking preview tabs on the right. The live server binds a fresh
-      // random port on each (re)start (app relaunch, root change), so the URL
-      // can differ from a previously-opened tab — an exact-URL match alone then
-      // fails and every restart opens ANOTHER tab. So we match by "is this a
-      // loopback preview tab" (port-independent): reuse the one already on the
-      // current URL via SSE reload; otherwise close any STALE preview tabs
-      // (dead port from a prior server start) and open exactly one fresh tab.
+      if (root !== vscode.workspace.workspaceFolders?.[0]?.uri.fsPath) return null;
+      const url = pagePath && pagePath !== "index.html"
+        ? previewPageUrl(base, pagePath.split("/").map(encodeURIComponent).join("/"))
+        : base;
+      // Reuse the requested page's tab, or any current preview when no page was requested.
+      // A restarted server gets a new port. Close only stale tabs owned by this session.
       const tabs = this.coachBrowserTabs();
       const isPreviewTab = (u?: string): boolean =>
         !!u && /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(u);
-      const current = tabs.find((t) => t.url?.startsWith(base));
+      const onServer = (t: vscode.BrowserTab) => t.url?.startsWith(base);
+      const current = tabs.find((t) => {
+        if (!onServer(t)) return false;
+        if (!pagePath) return true;
+        const pathname = previewPagePath(t.url).split("?")[0];
+        return pathname === previewPagePath(url) || (pagePath === "index.html" && pathname === "/index.html");
+      });
       // #519 — below, the preview tab is pinned as the coach's drive target. Leaving
       // it as `?.` means that when live_preview_start is the first tool call (no
       // instance yet) the pin is silently lost and the screenshot that follows falls
@@ -6749,7 +6778,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // REQ-STUDIO-PREVIEW-RECOVERY — only tabs on an address this process's own server served are closed; another
         // localhost tool's tab (or one on a port Studio used in an earlier run) is never touched.
         for (const t of tabs) {
-          if (isPreviewTab(t.url) && this.liveServer.servedThisSession(t.url)) {
+          if (!onServer(t) && isPreviewTab(t.url) && this.liveServer.servedThisSession(t.url)) {
             try {
               await t.close();
             } catch {
@@ -6762,13 +6791,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // would open the preview next to that empty group, leaving a blank pane
         // between the chat sidebar and the preview. ViewColumn.One fills the main
         // editor area so the layout is just: chat sidebar | preview.
-        const opened = await vscode.window.openBrowserTab(base, {
+        const opened = await vscode.window.openBrowserTab(url, {
           viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
           preserveFocus: true,
         });
         this.mcpBrowser.setTargetTab(opened);
       }
-      return base;
+      return url;
     } catch {
       return null;
     }
@@ -8383,6 +8412,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
+    if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -8483,10 +8513,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(JSON.stringify(msg.eventIds)!==JSON.stringify(snapshot.events.map(e=>e.id))){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'새 작업 기록이 추가됐습니다. 보낼 내용을 다시 확인해 주세요.'});return;}
         const controller=new AbortController();this.observationAssessment=controller;
         try{
+          const scope = this.writeApprovalScope();
+          const frozen = JSON.stringify(snapshot);
           // REQ-KNOW-09: the ticked box in the panel is the learner's choice; the host still lists recipient, items and sizes
           // for exactly this body and sends nothing on Cancel. `snapshot` is a structuredClone and assessmentBatch is pure,
           // so the confirmed items and the body below are the same bytes (CR-10 pins the body expression literally).
           if(!await confirmOutbound({recipient:`관찰 평가 API (원문은 저장하지 않음) · ${new URL(proxy).host}`,items:observationOutboundItems(assessmentBatch(snapshot).events)})||await this.context.secrets.get(TOKEN_KEY)!==token){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'보내지 않았습니다. 기록은 그대로 있습니다.'});return;}
+          if (controller.signal.aborted || scope !== this.writeApprovalScope()
+              || proxy !== vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')
+              || frozen !== JSON.stringify(this.nativeObservation?.snapshot()) || frozen !== JSON.stringify(recorder.snapshot())) {
+            await this.post({ type: 'observationState', learningPath: this.nativeLearningPath, batch: null,
+              error: '보내지 않았습니다. 현재 작업의 기록과 연결을 다시 확인해 주세요.' });
+            return;
+          }
           const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{...observationHeaders(token),'content-type':'application/json'},body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
           if(!response.ok){const failure=await response.json() as {error?:{code?:string}};throw Error(/^[a-z_0-9]{1,80}$/.test(failure.error?.code??'')?failure.error!.code:'assessment_failed');}
           const result=await response.json() as {findings:unknown;capability_model?:unknown};
@@ -8601,6 +8640,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "checkpointSave": await this.handleCheckpointSave(msg); return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
+      case "inboxAnswer": await this.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
       case "artifactApprove": await this.approveArtifactInteractively(); return;
       case "helpDraft": await this.helpSource?.draft(msg.key, msg.draft); return;
@@ -8956,15 +8996,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "problemReportOfferAnswer":
         void this.post({ type: "problemReportOffer", offer: null });
         if (msg.accept === true && (msg.reason === "repeat" || msg.reason === "frustration")) await this.openProblemReport(msg.reason);
-        return;
-      case "trialEndCardPasses":
-        // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
-        // purchase view (REQ-L12 ②); no order is created until they choose there.
-        // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
-        // list directly and never passes through the start page's purchaseOpen (surface start_page).
-        this.emitEndCardOffer("offer_clicked");
-        // CONV-FUNNEL-R-006 — the pass list it opens is counted as pass_list_viewed on this surface.
-        void vscode.commands.executeCommand("hypeproof-chat.showPasses", msg.surface === "header_menu" ? "header_menu" : "end_card");
         return;
       case "trialEndCardDismiss":
         // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
@@ -10184,9 +10215,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
             if (!a.isError && writeToolIds.has(a.id)) wroteOk = true;
-            // When a tool successfully wrote a .html, read that file and show it in
-            // the preview (the same revealBuilt as the fence path — identical down to
-            // the save, the live server and the native tab).
+            // Preview the file a tool successfully wrote at its own path.
             if (work || line.kind !== "child") showPending();
             if (!a.isError && htmlWrites.has(a.id)) {
               const fp = htmlWrites.get(a.id)!;
@@ -10201,7 +10230,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 if (this.revealTimer) clearTimeout(this.revealTimer);
                 this.revealTimer = setTimeout(() => {
                   this.revealTimer = undefined;
-                  void this.revealWrittenHtml(fp, streamId);
+                  if (!ctrl.signal.aborted && accuracyScope === this.turnRequestScope()) void this.revealWrittenHtml(fp, streamId);
                 }, 900);
               }
             }
@@ -11125,29 +11154,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: 'streamError', streamId, error: err instanceof ProxyAuthError ? err.friendly : sdkErrorDisplayText(err, audience), activityUnavailable: unavailable, requestId, retry: false });
       return;
     }
-    // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
-    // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
-    // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
-    // purchase view, and any other turn ending falls through unchanged.
-    // CONV-ENDCARD-R-005 — an unreadable catalogue is read once more; if it still cannot be read the
-    // card is drawn without pass facts. Only a Service that sells no passes falls back to the banner.
-    if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
-      const card = trialEndCardView({ profile: current.profile, err, products: await endCardCatalogue(current.proxyUrl, { signal: current.signal }), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
-      if (current.signal?.aborted) return;
-      if (card) {
-        void this.post({ type: "streamError", streamId, error: card.text, activityUnavailable: { cause: trialEndReason(err, false) === "expired" ? "expired" : "exhausted", audience }, trialEndCard: card });
-        // CONV-FUNNEL-R-002 — count the card on the grant-scoped funnel route. Only reached when the
-        // card is drawn (never for the banner fallback, a code-issued trial or a pass). The reporter
-        // sends nothing unless the probe turned the route on, and keeps the first view per grant.
-        // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
-        this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
-        this.endCardOfferToken = current.token ?? null;
-        return;
-      }
-    }
+    // TUX-COND-07 — the end-of-trial card was a pass offer. No pass is sold and the app has no purchase
+    // view (2026-11-13, REQ-L12 ①–④ removed), so the host no longer reads the catalogue or draws the
+    // card: a free trial that ran out ends in the calm notice below.
     // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
-    // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
-    // opens the purchase screen or the code box, and leaves the saved code alone.
+    // says the files stay and names no pass. It never opens the code box and leaves the saved code alone.
     // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
     // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
     if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
@@ -11156,12 +11167,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     const ending = trialEnding(err, !!current?.profile?.pass);
     if (ending) {
-      const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
       return;
     }
-    // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
+    // REQ-L12 — a spent pass is not a crash: say what happened (no pass is sold, so no way to buy is named).
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent, activityUnavailable: {cause:"exhausted",audience} }); return; }
     if (unavailable) {
@@ -11580,8 +11590,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const requestId = goalRequestIdOf(msg);
     const echo = requestId ? { requestId } : {};
     // Re-check at execution time: queued writes may outlive an activity or instructor switch.
-    if (msg && typeof msg === "object" && "status" in msg &&
-        (this._instructorMode?.isInstructor || !("activityId" in msg) || msg.activityId !== activity)) {
+    if (msg && typeof msg === "object" &&
+        (!("activityId" in msg) || msg.activityId !== activity ||
+          ("status" in msg && this._instructorMode?.isInstructor))) {
       await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.other_lesson, ...echo });
       return;
     }
@@ -11843,7 +11854,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
-        update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
+        // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
+        update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
+        ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -11908,6 +11921,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CGP-SHELL-R-001 — the active seat is a class, so no update installs now. */
   isClassUpdateHeld(): boolean {
     return classUpdateHold(this.cachedProfile, activityConnections(this.context)?.current);
+  }
+
+  /** CGP-SHELL-R-003 — the cohort's update freeze on the current seat, or null (personal seat, no or past range). */
+  updateFreezeState(): { until: string } | null {
+    return updateFreeze(this.cachedProfile);
+  }
+  /** CGP-SHELL-R-003 — the freeze holds this release (it is not security-critical). */
+  isUpdateFrozen(info?: { securityCritical?: boolean } | null): boolean {
+    return freezeHoldsUpdate(this.updateFreezeState(), info ?? this.availableUpdate);
   }
 
   getAvailableUpdate(): import("./protocol").UpdateOffer | null {
@@ -12095,6 +12117,57 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const stored = this.context.globalState?.get<unknown>(this.learnerNicknameKey());
     const screened = typeof stored === "string" ? screenNickname(stored) : null;
     return screened?.ok ? screened.value : "";
+  }
+
+  /**
+   * REQ-STUDIO-SHOW-WHAT-I-MADE (#3794 slice 1) — "내가 만든 것 보여주기", on by default (Jay, 2026-11-12)
+   * and switchable off with `showWhatIMadeEnabled`. Local only: no Service call, no model call, nothing published.
+   */
+  async showWhatIMade(): Promise<void> {
+    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showWhatIMadeEnabled', true);
+    await runShowWhatIMade(this.context.extensionUri, {
+      enabled,
+      root: () => this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      refusal: (target) => this.folderWriteRefusalFor(target),
+      capturePage: (root, abs) => this.captureShowPageImage(root, abs),
+      noteWrite: (absPath, data) => noteHostWrite([{ absPath, data }], "studio"),
+      // REQ-STUDIO-SHOW-LINK (#3794 slice 2): 링크로 보여주기, off by default until the Service ships it.
+      share: {
+        enabled: () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showLinkEnabled', false),
+        request: () => { const a = this.reflectionAccounts; return a ? (p: string, b?: unknown) => a.showLinkRequest(p, b) : undefined; },
+        production: vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1') === 'https://api.hypeproof-ai.xyz/v1',
+        copy: async (text) => { await vscode.env.clipboard.writeText(text); },
+      },
+    });
+  }
+
+  /** The person's HTML page as a 1920x1080 picture, served and shot by Studio's own browser like savePagePdf. */
+  private async captureShowPageImage(workRoot: string, file: string): Promise<Uint8Array | null> {
+    if (this.pagePdfBusy || this.deckPdfBusy) return null;
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const real = canonicalFolder(file);
+      root = active && isInsideFolder(real, canonicalFolder(active)) ? active : workRoot;
+      if (active && root !== active) return null;
+    } catch { return null; }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(file)).split(path.sep).join("/");
+    const page = resolvePageInFolder(root, rel);
+    if (!page.ok) return null;
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      tab = await vscode.window.openBrowserTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, background: true });
+      channel = await this.deckPdfAttach(tab);
+      return await captureShowPage(channel.send, { expectedUrl: url });
+    } catch {
+      return null;
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+    }
   }
 
   private takeawayBusy = false;

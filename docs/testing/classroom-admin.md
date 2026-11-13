@@ -1505,6 +1505,45 @@ collection contract.
 
 **NOT RUN**: 실제 학생 기기의 도움 요청 전송, 운영 배포. 알림은 10초 갱신 주기라 접수 후 최대 약 10초 뒤(탭이 보일 때)에 뜬다.
 
+<a id="adm-02-seat-version-run"></a>
+
+## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)
+
+요구: [좌석별 Studio 버전](../requirements/classroom-admin.md#adm-02-seat-version). Service 변경 없음. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium, 기본 글꼴 Noto Sans), base `c9e62cd6f`, head `ee798824a` (DEC-24 기준 포함).
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/seat-version.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 페이지의 렌더 함수로(페이지 안에서만, OS 입력·보이는 창 없음): 머리 5칸(`버전`은 4번째)·`col.c-ver` · 보드의 `client_version`이 그대로 보임 · 보드에 없는 좌석·null·형식이 틀린 값은 `확인 불가`(neutral·help 아이콘) · 최소 버전이 없어 `업데이트 필요` 0 · 출시 순서 비교(낮음·같음·높음·`-rc.1`<출시·형식 밖·최소 없음·버전 없음) · 최소 버전을 준 셀은 caution·alert 아이콘 + `업데이트 필요`, 아이콘과 글이 `--ink-warn`, 화면 읽기 글에 버전 · 1420/1280/1024에서 열 96px 이하, 행 44px, 잘림 0, 14px 이상, `확인 불가` 한 줄, 버전과 `업데이트 필요`는 두 줄까지, 표시에 칩 상자 없음 · 글자 간격으로 넓힌 버전은 첫 점 뒤에서만 나뉨(`2026.` / `1111.0`, 숫자 가운데서 끊지 않음, 행 44px) · 실제로 그린 글꼴과 줄 폭을 로그로 남김(snts Noto Sans 85.3px, GitHub runner DejaVu Sans 95.5px, 96px 칸) · `순서`: 낮은 순/높은 순(확인 불가는 양쪽 다 맨 뒤, 같으면 Service 순서), `aria-sort`와 화살표, 다시 그려도 유지, 선택은 그대로, ↓ 키는 보이는 순서로, 선택 상자에 포커스 두고 ↑ 키로 바꿈, `기본 순서`로 복귀, 연결을 끊으면 초기화 · 선택 도구 줄이 있으면 그 줄에(높이 증가 0), 없으면 자기 줄에, 둘 다 44px·14px·화면 안 · 800/600/390 카드 행에서 `버전` 이름표가 좌석 줄 끝, 칸 겹침 0, 카드 높이 증가 0 · 기존 학생 활동 목록에 `· 버전 2026.1111.0`/`· 버전 확인 불가` | head에서 104개 확인 PASS(DEC-24 기준 12개 포함, 아래 줄). 글꼴을 바꿔 다시 돌려도 PASS: DejaVu Sans(CI와 같은 95.5px), Liberation Sans, Ubuntu, NanumGothic. base의 `manage.html`로 돌리면 첫 확인에서 실패(머리에 `버전` 없음). 계측기 확인(각각 실패해야 함, 모두 실패함): 정렬 제거 → 낮은 순 순서, 최소 버전을 `2026.1111.0`으로 → 알려진 버전 값, 열 12rem → 머리 폭, 칩 상자 복원 → 칩 상자 검출, 셀 안쪽 여백 12px → `확인 불가` 두 줄·`-rc.1` 세 줄, `placeSort` 호출 제거 → 순서 선택이 보이지 않음, 카드에서 버전을 셋째 줄로 → 800px 카드가 63→82px, 첫 점 뒤 `<wbr>` 제거 → 두 조각 확인, 카드 칸의 flex 제거 → DejaVu Sans에서 카드가 0.7px 커짐. #3769의 CI가 두 번 실패해서 고쳤다: 첫 실행은 runner의 Chrome에서 `2026.1111.0`이 안쪽 여백 2px의 92px에 들어가지 않아 숫자 가운데서 줄이 바뀌었고(안쪽 여백 0, 첫 점 뒤 줄바꿈), 둘째 실행은 800px 카드에서 라벨·한글 대체 글꼴·아이콘이 한 줄 상자를 나눠 좌석 줄이 0.7px 커졌다(카드 칸을 flex 행으로). 둘 다 snts에서 DejaVu Sans로 재현한 뒤 고쳤다 |
+| `chalk` `npm run typecheck` · `npm test` 전체 | 기존 Chalk 시험 전부(목록 행 44px·아이콘, 고정폭 숫자, 상태 칩, 대비 감사, 도움 요청 등) | head `ee798824a`에서 typecheck 0, `FOCUS_REQUIRE_BROWSER=1 npm test` 0(목록 행 100개 동작 PASS, 고정폭 숫자 396개 PASS, `/manage` 대비 최저 4.81:1) |
+| `e2e/classroom/ops-g1-layout.mjs` (`classroom-ops` 워크플로) | 머리 5칸·행마다 `td` 5개로 갱신. 1280×720 완전한 행 8개, 1024×640 6개, 14px 이상, 가로 넘침 없음 | head에서 PASS: 1280×720 8행, 1024×640 6행(base와 같음, 첫 행 363px). 1280에서 상세를 옆에 연 목록 9행(base와 같음) |
+| `e2e/classroom` ops·g1-wrap·selection·roster·help·results·distribution·lesson-settings·attention-copy | 같은 `/manage`를 쓰는 다른 브라우저 시험이 그대로 | head에서 9개 모두 exit 0 (확장·webview 의존성 설치와 webview 빌드 후, CI `classroom-ops`와 같은 순서) |
+| `chalk/test/seat-version.browser.mjs` (i) DEC-24 기준 | 페이지의 실제 `readLatest()`가 `GET /studio/latest-release`를 읽어: 최신 정식 `2026.1111.0`이면 `2026.1109.0`(이전 출시)·`2026.1111.0-rc.1`(그 출시의 rc)·`0.1.5`(Studio 개발 빌드가 실제로 보내는 package 버전)만 `업데이트 필요`, `2026.1111.0`·`2026.1112.0`·`2026.1111.1-rc.1`·`dev-build`는 아님, 버전 없음은 `확인 불가` · 표시된 칸은 화면 읽기 글에 버전 · 기존 목록 줄에도 `· 업데이트 필요` · 5분 안에는 다시 읽지 않음 · 피드가 끊김·503·null·rc·이상한 답이면 기준을 모름으로 두고 아무도 표시하지 않으며 이전 표시를 지움 · 갱신(`refresh`)이 기준을 읽음 | head에서 PASS. 이전 head `d9fc8044f`의 `manage.html`로 돌리면 실패(`readLatest is not defined`). 계측기 확인(모두 실패함): 기준을 null로, 실패 때 이전 기준 유지, rc를 기준으로 받기, 5분 제한 제거, 갱신에서 읽기 제거 |
+| `chalk/test/latest-release.test.mjs` (`node --test`, `chalk` `npm test`에 포함) | 심은 GitHub 답으로(네트워크 없음): `x.y.z` 정식만 기준(rc 태그·prerelease·draft·플래그 없는 본문·이상한 값은 null) · 요청은 공개 API 주소 하나, 헤더는 accept와 user-agent뿐(자격 증명 없음), 5초 제한, `redirect: error`, edge 캐시 10분 · 성공 10분 재사용 · 403 사용 한도·429·404·503·네트워크 오류·시간 초과·HTML·rc 최신은 null이고 이전 기준을 남기지 않으며 1분 뒤 다시 읽음 · `GET /studio/latest-release`는 연결 없이 `{version, checked_at, source}` · 운영이 아니면 `HPS_STUDIO_LATEST_RELEASE`(`off`·`x.y.z`, rc는 무시)가 GitHub 없이 답하고 두 e2e 묶음 래퍼가 기본 `off`, 운영은 이 값을 무시하고 GitHub를 읽음 | 5개 시험 PASS. 계측기 확인(모두 실패함): prerelease 허용, rc 태그 허용, 실패 때 이전 기준 유지, authorization 헤더 추가 |
+| 실제 읽기 한 번 (snts, 2026-11-12) | `latestFormalRelease()`가 익명으로 공개 출시를 읽음 | `{"version":"2026.1109.0"}` (비공개 미러 `hypeproof-studio-releases`의 latest와 같음) |
+
+**측정해서 정한 것**: 표 머리는 36px이다. 머리에 44px 버튼을 넣으면 8px 이상 커지는데 base의 1280×720은 첫 행 363px, 8번째 행 끝 715px로 여유가 5px뿐이라 정렬은 머리 버튼이 아니라 `순서` 선택이다. 버전을 카드의 셋째 줄에 두었던 첫 시도는 1280에서 상세를 옆에 연 목록(606px, 카드 행)의 보이는 행을 9개에서 7개로 줄여서 좌석 줄 끝으로 옮겼다.
+
+**NOT RUN**: 실제 강사 브라우저(macOS·Windows 글꼴에서 `2026.1111.0` 한 줄 여부는 Ubuntu 글꼴로만 쟀다), 실제 화면 읽기 프로그램의 `aria-sort` 낭독, 실제 학생 기기의 heartbeat 버전, 배포된 Chalk Worker(Cloudflare)에서의 GitHub 읽기와 그 사용 한도, 운영 배포.
+
+<a id="adm-11-update-freeze-run"></a>
+
+## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
+
+요구: [수업별 Studio 업데이트 고정](../requirements/classroom-admin.md#adm-11-update-freeze), Studio REQ-I21. Service 계약: hypeproof/hypeproof-service#428. 실행: snts(Ubuntu 24.04, Node 22, headless Chromium), Studio base `5c6eb4dab`(이후 `main` 위로 rebase), Service base `6c7e517`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| Service `worker/test/update-freeze.test.mjs` | 한국 날짜 범위 규칙(마지막 날 자정까지, 지난·거꾸로·60일 초과·없는 날짜 거절) · `can_start_session` 없는 연결·다른 수업·학생 토큰은 쓰기 403 · 저장·풀기 · Chalk 상태 읽기의 `update_freeze` · `/v1/profile`은 그 수업 좌석에만, 강사 이름 없이, 나머지 응답은 그대로 · 지난 범위·깨진 키는 고정 아님 · 좌석 제한: 실제 체험 좌석과 실제 이용권 좌석을 `/v1/profile`로 읽고(200), 그 좌석의 수업 id에 고정을 심어도 `update_freeze`가 없음 · 계정(개인) 좌석은 접근 계약 저장소 없이는 `/v1/profile`을 읽을 수 없어 경로가 부르는 판정 함수 `servesUpdateFreeze`로만 확인 | 처음 head `bac4d36`의 계정 좌석 확인은 401을 받아 건너뛰어졌고 체험·이용권 좌석은 없었다(검증자 지적, 좌석 돌연변이 3개 생존). 고친 head에서 5/5 통과, 좌석 돌연변이 3개(`!account` 제거, `!native_trial` 제거, 조건 `true`) 모두 실패로 잡힘 |
+| `extensions/hypeproof-chat/test/cohort-update-freeze.test.tsx` | `updateFreeze`(수업 좌석 + 범위 안만; 개인·체험·이용권·지남·시작 전·깨짐은 아님) · 보안 표시 줄은 단독 줄만, 노트에서 지움 · 고정은 보안 출시를 막지 않음 · 문구 · 설정 창 한 줄(자물쇠 + 글, 버튼 없음) · 고정 중 배너 없음, 보안 출시는 `보안 업데이트 v…` 수업 줄 · 확인·설치 명령, 백그라운드 내려받기, 시작 화면 연결 | head 통과. base에서 빌드 실패(내보내기 없음, 빨강) |
+| `cohort-update-freeze.test.tsx` 추가분 | 보안 출시의 전체 배너(수업 밖)도 `보안 업데이트 v… 나왔어요`와 설치 버튼 · `chatUpdateOffer`: 고정 중 보안 출시도 수업 좌석이면 `heldForClass: true` | 돌연변이 2개(전체 배너 문구 되돌리기, 보안 출시에서 수업 보류 빼기) 모두 실패로 잡힘 |
+| `extensions/hypeproof-chat/test/start-update-notice.smoke.mjs` | 고정 중 시작 화면 알림 없음, 보안 출시는 수업 줄로 다시 보임 | head PASS, base `frozen: no notice` 실패(빨강) |
+| `chalk/test/update-freeze-forward.test.mjs` | `PUT`/`DELETE …/update-freeze`만 강사 연결 issuer로 Service에 감, 다른 메서드·경로는 404로 Service에 안 감, Service 판정 유지 | head 통과, base 실패(빨강) |
+| `chalk/test/latest-release.test.mjs` | `security_critical`: 정식 출시의 노트 표시 줄만, rc·실패·모르는 출시는 false, 캐시와 함께 재사용, 시험용 `HPS_STUDIO_LATEST_RELEASE_SECURITY` | head 7/7 통과 |
+| `chalk/test/update-freeze.browser.mjs` (`chalk` `npm test`에 포함) | 실제로 서빙한 `/console`, 1280·390px: 수업 줄 배지 글·자물쇠·`--hp-warn`·1px 테두리·14px·대비, 조회 전용 연결은 배지만, 보안 출시 표시, 이름표 붙은 날짜 입력 2개가 범위 글을 가리킴(`aria-live`), Tab으로 닿고 ↑ 키로 날짜가 바뀌면 범위 글이 따라감, 44px·14px, 가로 넘침 없음, Service 거절 문구, 저장 `PUT {from, until}` 뒤 배지 갱신, 61일 이상은 보내기 전에 막음, 풀기 `DELETE` 뒤 배지 없음 | head PASS. base에서 고정 칸이 없어 실패(빨강) |
+| 전체 | Studio 확장 `npm test`의 모든 조각(첫 실패에서 멈추지 않게 하나씩: 스모크 전부, `npm run` 묶음, 렌더 시험 전부 = 617개), `chalk` typecheck·`FOCUS_REQUIRE_BROWSER=1 npm test`, 확장·webview typecheck, `next-work.py --check` | rebase 전 head에서 617개 모두 exit 0(알려진 base 실패 `learning-block-caption-computed`·`model-selection`·`sdk-result-drift`도 이번엔 통과), `chalk` `npm test` 0, typecheck 3개 0, `next-work.py --check` 0. 측정: 배지 10.57:1, 14px, 28.4px 높이, 날짜 입력 46px, 버튼 50~52px(1280·390). 첫 `chalk` 전체 실행에서 `console-duration` 시험의 고정 응답이 새 `/studio/latest-release` 읽기를 몰라 실패했다. 그래서 그 읽기는 고정이 있을 때만 하도록 고쳤다. 확장 `design-tokens` 스모크가 16px·rem 값을 잡아 토큰과 `ch`로 바꿨다. `main`(`96cf59519`) 위로 rebase 한 head `62e8130e0`에서 Chalk typecheck·`npm test`, 확장 typecheck·build, 업데이트 관련 스모크 16개와 렌더 시험 전부를 다시 돌려 모두 0 |
+
+**NOT RUN**: 실제 강사 브라우저(macOS·Windows), 실제 화면 읽기 프로그램, 보안 표시가 있는 실제 출시와 회원 미러 복사(`mirror-release.yml`은 출시 때만 돈다), KV 전파 시간, 배포된 Service·Chalk, 실제 학생 기기.
+
 <a id="adm-01-roster-csv-run"></a>
 
 ## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
@@ -1520,6 +1559,23 @@ collection contract.
 | 검증 후속 (CGP-SHELL-D-031) | 브라우저: s02의 이름이 마크업(`<img … onerror=…>이서준`)이어도 미리 보기 표와 결과 줄에 글자 그대로 보이고, `img` 요소가 생기지 않으며 스크립트가 돌지 않는다. 본문에 이름·마크업 없음 | PASS (두 폭). 변이: 표 칸·결과 줄 이름을 `innerHTML`로 바꾸면 실패 |
 
 **NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
+
+<a id="e5-instructor-ops-run"></a>
+
+## 재직자 수업의 강사 운영 · 2026-11-12 (E5 · #3775–#3778)
+
+요구: [재직자 수업의 강사 운영](../requirements/classroom-admin.md#e5-instructor-ops). 모든 시험은 실제 Chalk `/manage`와 그 스크립트(Chromium), Chalk worker와 전달 경로, Service testkit의 라우터 + SQLite로 돈다. 공통 준비는 `e2e/classroom/e5-chalk.mjs`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `e2e/classroom/ops-run-team.mjs` (`npm run test:classroom-ops-run-team`, #3775) | 배정 없는 fixture(`ownership: 'strict'`). 담당 강사가 화면에서 명단과 네 가지 기능을 저장(질문 카드 → 학생에게 보내기 자동 켜짐, 보내기 끄면 질문 카드 꺼짐)하고 DB `flags_json`에 네 값이 들어간다. 운영 강사 칸·내 강사 ID 복사(클립보드 값 확인). 배정 안 된 강사 B: 학생 0명, `not_run_instructor` 문구와 담당 강사 ID, 자기 ID. 담당 강사가 B를 추가 → B가 명단을 보고 공동 강사로 표시, 추가 양식 없음·나가기 있음, 낡은 화면의 추가 시도는 `owner_only` 문구. B가 나가고, 담당 강사가 다시 추가한 뒤 뺀다(DB에 removed). override 강사: “관리자 열람 — 기록이 남습니다”와 `instructor_override` 감사. 좌석 A1의 동의를 운영 자격증명으로 기록하면 A1 “동의함”, A2·A3 “동의 전”, 세 좌석 모두 보인다 | 2026-11-12 7/7 PASS |
+| `e2e/classroom/ops-question-card.mjs` (`npm run test:classroom-ops-question-card`, #3776) | 질문 카드가 꺼진 수업에는 작성란이 없고, 화면에서 켜고 저장하면 생긴다. 보기 1개·중복 보기는 화면이 막고, 미리 보기와 확인 단계(확인 전 `/contents`·`/distributions` 요청 0건). ‘모든 좌석’은 명단 3석 전부가 대상(DB `targets_json`). 기기 쪽은 Service sync 규약을 직접 몬다: A1 기기가 받아 두면 전달됨, 질문 카드를 모르는 앱 A2는 “앱 업데이트 필요”, 미연결 A3는 “미연결 — 연결되면 전달” → 연결 뒤 대기하던 카드를 받아 전달됨. 동의 뒤 A1 답(2번)·A3 건너뜀 → 답함·보기별 수·요약. 선택한 좌석에만 짧은 답 카드, `<img onerror>` 답은 글자 그대로(img 0개, 스크립트 실행 없음), 회수(DB `revoked_at`) 뒤에도 받은 답은 남고 새 답은 `withdrawn`. 질문 화면 어디에도 열람·읽음 문구 없음 | 2026-11-12 6/6 PASS |
+| `chalk/test/instructor-names.test.mjs` (`chalk` `npm test`에 포함, #3777) | 페이지에 그대로 들어가는 kit: `handle,name` 미리 보기 → 코호트별 저장·읽기, 이름 없는 줄·잘못된 handle은 바뀌지 않음, 다른 코호트는 0명, 지우기 뒤 저장소 0. 깨진 JSON·배열·bidi/zero-width·41자·제어 문자·잘못된 id·문자열 아닌 값은 버리고, 예외를 던지는 저장소는 빈 값·실패로 답한다. `/manage`가 kit 두 개를 그대로 싣는다 | 2026-11-12 3/3 PASS |
+| `e2e/classroom/ops-names.mjs` (`npm run test:classroom-ops-names`, #3777) | 붙여넣은 `handle,name`(수식 줄 1개 ‘확인 필요’) 저장 → 좌석 칸 “A1 김민지 student-a”, `<b>박</b>하늘`은 글자 그대로(b 요소 0개), 이름 없는 A4는 handle. 찾기에서 이름으로 1명. 질문 카드 답 화면 “김민지 (student-a)” · A4 “student-d”. 다시 불러와도 이 기기에 남고, 실행 중 페이지 요청 29건의 URL·본문과 Service 감사 기록 어디에도 이름이 없다. 지우기 뒤 화면·저장소 모두 비어 있다 | 2026-11-12 4/4 PASS |
+| 기존 계약 보정 (#3777) | `chalk/test/classroom.test.mjs`·`classroom-ops.test.mjs`의 “/manage 스크립트에 브라우저 저장소 없음” 검사는 이름 접근자 `namesStore`와(#3778부터) 탭 보관 접근자 `tabStore`만 빼고 그대로 본다(각 접근자가 정확히 한 번 있어야 하고, 뺀 나머지에 `localStorage`·`sessionStorage`가 없어야 한다). 티켓·토큰을 저장하지 않는다는 뜻은 그대로다 | PASS |
+| `e2e/classroom/ops-join-code.mjs` (`npm run test:classroom-ops-join-code`, #3778) | ‘수업 코드’ → 30분 → 만들기: `XXXX-XXXX`(혼동 문자 없음), 글자 크기 32px 이상, 만료·“이 수업 명단에 있는 수강생만 연결됩니다”·연결 0회, DB 만료가 30분. 평문은 그 탭 `sessionStorage`에만 있고 `localStorage`에는 없다. 명단의 학습 토큰 두 개가 코드로 연결(소문자·하이픈 없는 입력 포함) → 연결 2회, 명단 밖 handle은 `seat_not_found`. 같은 탭을 다시 불러오면 코드가 다시 보이고, 다른 탭은 코드 없이 “만든 탭에서만” 안내. 다른 탭에서 새 코드 → 이전 코드 `code_invalid`, 첫 탭은 보관값을 지움. 폐기 → 활성 코드 0, 그 코드도 `code_invalid`. 좌석 상세의 12자리 코드 발급은 그대로 | 2026-11-12 5/5 PASS |
+
+**NOT RUN**: 실제 Studio 앱(이 체크아웃의 앱은 아직 `inbox_question`을 선언하지 않아 기기는 Service sync 규약으로 대신 몰았다), 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
 
 <a id="help-queue-keyboard-triage-run"></a>
 

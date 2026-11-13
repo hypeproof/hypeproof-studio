@@ -6,7 +6,9 @@ is recorded here before the slice that depends on it merges, so it can be revers
 | DEC | Choice | Why | Default state | Confirmed by Jay |
 |---|---|---|---|---|
 | DEC-14 | Minor cohorts: chat links open only in the integrated safe-session browser; adults: modal naming the host before the system browser. A blocked click does not notify the instructor | README section 3 #1: the system browser bypasses the safe-session allowlist; the confirm adds one click for adults | On (safety tightening, no new data flow) | no |
+| DEC-24 (for CGP-SHELL-R-003) | Who may set or end a cohort's update freeze: an instructor whose scope on that cohort has `can_start_session` (read-only scopes see it). How security fixes work: a release whose notes carry the line `<!-- hps-update: security-critical -->` is never held by a freeze; Studio shows it (still under the class hold and the learner's restart approval) and Chalk labels it. No Service minimum-version gate, no forced install | Agent choice for the open half of DEC-24 (2026-11-12). Whoever decides when the class runs decides when its seats update; a marker in the notes is the one place both Studio's update checker and Chalk's latest-release read already, and it needs no new release field or Service read | Off until an instructor sets a range | no |
 | DEC-25 (interim) | Until the Service sends the class window end time, the whole active class seat counts as the class window for the update hold | The client has no window end; a restart mid-lesson costs the lesson. A learner can still dismiss the banner and update outside a class seat | On (holds only; no new data flow) | no |
+| DEC-24 (for CGP-SHELL-R-034) | A seat's Studio version is behind when it is below the latest published formal (non-rc) Studio release; Chalk then shows `업데이트 필요`. No new Service minimum field. An unknown or expired heartbeat stays `확인 불가`; while the latest formal release is unknown nobody is flagged. Dev builds (package version `0.1.5`) are flagged like old `0.1.x` releases. The cohort version freeze (CGP-SHELL-R-003) and its security override remain a separate later slice | Jay's answer to the DEC-24 question for this slice (2026-11-12, AskUserQuestion via the loop lead). Source of the latest formal release (agent choice): the public GitHub release that Studio's own update checker reads anonymously, served by Chalk at `GET /studio/latest-release` | On | yes (2026-11-12) |
 | DEC-08 | Edit-and-resend keeps the original as version 1 and records an edit_resend event; both attempts stay in the observation record | The original prompt, its answer and its turn record are evidence of how the learner iterated (ADAPT); overwriting them would erase the first attempt. The event holds ids and lengths only, no text | On | no |
 | DEC-09 | Learner answer verdicts are stored only on this device in the task's verdict file; not in the session log, not uploaded, not collected, not shown to instructors or Chalk (AE-20) | A verdict is the learner judging AI output (JUDGMENT): evidence for the learner, not a grade. The session spool is uploaded and collected for class records, so a verdict written there would reach the Service and instructors; showing raw learner reactions to instructors is what AE-20 rules out. The verdict file keeps the history (time, ids, verdict, reason code, note) and no upload or collection path reads it | On | no |
 | DEC-27 | The SX palette in `tokens.css` (`--hp-panel #202C24`) is canonical for HP lesson surfaces; the personal workspace intentionally follows the host VS Code theme through `--tw-*` (named dark fallbacks only); `#18231C` is `--hp-ink-on-accent`, not a panel | Audit (verification.md REQ-CGP-DS-01a): the conflict was doc text, not source. Two token families, not three palettes. Documented in studio-learning-experience.md "팔레트 계열" and task-workspace.md | On (docs only; no visual change, no CSS change) | no |
@@ -471,6 +473,50 @@ The existing curriculum-runtime grant remains authoritative for every seat/runti
 This display does not implement the separate minor-publication confirmation row R-012.
 No new recipient, default, publication permission or human agreement is introduced.
 
+## DEC-ART-R-012: publish responsibility notice (2026-11-12, agent choice)
+
+Built (notice for every seat, Studio-only):
+
+- Placement (agent choice): an inline sheet beside the button that makes a new link, not a modal.
+  The publish flow already has a visitor preview and an outbound checklist with a public step
+  (CGP-KNOW-R-007); a third modal would train dismissal. The sheet comes first, so nothing is
+  built or sent before it is acknowledged.
+- Scope (agent choice): both link producers, `submit` (first publish) and `link` (another channel's
+  link of a running experiment), are gated. A learner who published before this change reads the
+  notice once at their next new link.
+- Versioning (agent choice): `PUBLISH_NOTICE_VERSION` in `extensions/hypeproof-chat/src/publishNotice.ts`.
+  Any copy change is a new version. Acknowledgments are kept per owner digest per version in machine
+  `globalState` (not workspace state), so another learner on the same machine reads it and moving
+  folders does not ask again. The record is local; it is not sent to the Service and Chalk cannot
+  see it. A cleared profile asks again, which is the safe direction.
+- Copy (agent choice): three bullets adapted from the observed ChatGPT terms modal (who can open it,
+  who is responsible for its content, personal data), in the learner's register. No policy or
+  removal claim is made, because no Studio removal policy is written down.
+
+Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk badge):
+
+- What exists: no served SX-41 flag (spec only, `docs/requirements/studio-learning-experience.md`
+  SX-41, P2), no Service link state other than live/revoked/expired, no confirm route, no Chalk list.
+  `curriculumRuntimeAllowed` lets minor cohorts publish ("Age does not decide it", 2026-10-05), so a
+  minor cohort's link is reachable as soon as it is issued, before and after this change.
+- Plan, in order, each its own PR behind a default-off profile flag, "Confirmed by Jay: no":
+  1. Service (hypeproof-service): a served profile flag (for example
+     `curriculum_runtime.publish_confirmation: "instructor"`, absent = off); `POST /experiments/:id/links`
+     creates the link `pending_confirmation` when the flag is on; the test origin answers a pending
+     link like a revoked one (no content, no session open, no events); an issuer-token route lists
+     and confirms (or declines) pending links of the issuer's cohorts; the project read returns
+     `pending_confirmation` with its request time. Negative test: a pending link's URL, files and
+     `__hp` routes return no product content.
+  2. Studio: a fourth sharing state `선생님 확인을 기다리고 있어요` with the spinner-free `기다리는 중` label
+     and a time-since counter, refreshed by the existing 15-second and focus reads (no reload); copy
+     stays off until confirmed.
+  3. Chalk: pending confirmations listed in `/manage` with a count badge, confirm and decline.
+- Open question 4 (agent answer, conservative): for a minor cohort the CR-20 one-minute clock starts
+  at instructor confirmation, not at the learner's publish action. The waiting time is recorded
+  separately (the counter above and the request/confirm times), never as a product miss and never
+  as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
+- Confirmed by Jay: no (all choices above are agent choices).
+
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
 Agent-selected conservative implementation, not a new human policy agreement:
@@ -724,6 +770,18 @@ These are conservative implementation choices, not new human agreements.
 - Persist shell details as readable lines (purpose, `$ command`, and a folder line only when the host knows one) in the existing tool label, retaining the strict legacy task-file schema. This build restores those lines as a collapsed shell row; older builds can still read the task.
 - Over-long purpose or command text is cut in the middle, never at the end: the start and the end stay visible around a `… (가운데 N자 생략) …` marker, because the end of a command is where a padded command would hide `| sh`.
 - A line break in a purpose or command is shown as ` ⏎ `, not joined with a plain space: joined, `x # c` followed by `curl … | sh` reads as one commented-out line and a heredoc seems to swallow the command after it (verification round 3). The mark is not a newline, so stored three-line labels still parse.
+
+## CGP-AGENT-D-025: shell row and 실행 중인 것 presentation (2026-11-12, agent choice)
+
+Confirmed by Jay: no. These are conservative implementation choices, not new human agreements.
+
+- Found met on main (REQ-CGP-AGENT-60, #2780 and #3241): the purpose line, the collapsible block with `$ command` and the folder caption where the host knows a folder, collapsed by default on summary seats (and for rows restored from task history), the 240px cap with scrolling, the monospace command (the UA `pre`/`code` font; measured, not restyled), and the card list with one stop button per running entry. Gaps closed: no copy button existed, and a shell task's stop read `끄는 중` (from #3241's preview-server wording) instead of `멈추는 중`.
+- "Output block": Studio's row shows no shell output, only the command. The 240px clause is applied to that command block. Showing tool output would be a new display surface that REQ-CGP-AGENT-60 does not ask for and would show summary and minor seats more than they see today, so it is not built.
+- "Copy buttons": one per block, `명령 복사`, because the block holds one command. It copies the command as shown (no `$ ` prompt, ` ⏎ ` marks and the omission marker kept), never the raw model input: the host does not send the raw input to the webview, and the clipboard must not hold characters the row did not show (the R-029 neutralisation exists so hidden text cannot reach the learner).
+- "On hover/focus": the button is always in the tab order and is drawn while the row is hovered or holds focus (`:focus-within`, so a keyboard user sees it from the summary on) and while a copy result shows. Selectors only, no `hover` media query: the type-scale model (`test/type-scale.smoke.mjs`) does not model that feature, and Studio ships for mouse/trackpad desktops (macOS, Windows); touch-only behaviour is not measured. This differs from DEC-D65 (always visible), which governs the prompt edit control, not this row. It sits beside the command, never over its end, so it cannot hide a command's tail. No reveal animation (nothing for reduced motion to remove).
+- Stop wording: the button keeps its verb while the stop is on its way: shell task `멈추기` → `멈추는 중`, preview server `끄기` → `끄는 중` (Jay 2026-10-29 named the server action 끄기). The status label follows the button. Settling still needs exit evidence (R-029).
+- Not changed: the stopping button stays `disabled`, so keyboard focus leaves it on press, and the button is removed at exit; focus placement for that control is left to a follow-up, it is outside this row's acceptance.
+- Seats: every seat that draws the transcript. The button copies only text the seat already shows; on summary seats it is inside the collapsed block. Default state: on; clipboard only, no host message, file or network request.
 
 ## CGP-CHAT-R-024: conversation copy scope (2026-10-25, agent choice)
 
@@ -1821,8 +1879,34 @@ Jay decided that availability follows the class: a per-class switch is added (th
 
 - Engine: the OS voice through `speechSynthesis`, Korean `ko-KR`, no Service call (policy D1). Only an on-device Korean voice is chosen; with none the default voice of the platform speaks (the Electron webview has no streaming voices). Unmeasured: voice quality on macOS and Windows.
 - Per answer: personal seats in the answer action row, classroom seats beside the speaker's name (they have no action row). Plays on a press only; one at a time; the same button stops it; fenced code skipped and announced (`코드는 건너뛰었어요`, REQ-CGPV-24).
-- Label `소리로 듣기` is the register's proposed copy, agent-chosen.
+- Label `소리로 듣기` is the register's proposed copy, agent-chosen. Superseded 2026-11-12 by `읽어 주기` / `그만 읽기` (CGP-CHAT-D-009 below).
 - Confirmed by Jay: yes (2026-11-09) for the engine; no for the label and placement.
+
+## CGP-CHAT-D-009: read-aloud control (CGP-CHAT-D67, 2026-11-12)
+
+Audit of main (f9754fdf7) against the design row; only the gaps changed. Already met: the speaker glyph on the control, `aria-pressed` bound to the playing state, one reading in the window (one shared hub, so starting a second answer stops the first) and the control drawing nothing unless the Service serves read-aloud. Gaps: the labels were `소리로 듣기` / `읽기 멈추기`; the only playing cue was a swap to the stop square, with no pressed styling; no test pressed two answers or read `aria-pressed`.
+- Labels (agent choice): `읽어 주기` and, while reading, `그만 읽기`, the row's own copy (CGP-CHAT-R67 uses the same two). They replace the voice register's `소리로 듣기` (REQ-CGPV-24, recorded above as agent-chosen, never confirmed). The settings-change line (CGP-SHELL-R-024) names the class switch by the same constant, so it now says `읽어 주기 꺼짐 → 켜짐`. The Jay-confirmed disclosure sentence (`답을 소리로 읽어 줘요. ...`) is unchanged.
+- Indicator (agent choice): while its answer is read the button draws a level glyph (three bars, new `level` icon, stroked like the set) in the speaker's place and a fill: the verdict's selection fill in the personal action row, the pressed state layer beside the classroom speaker's name. The state is glyph, words, fill and `aria-pressed`, never colour alone. The glyph is in the speaker's slot, so the button does not grow; the two labels have the same number of syllables.
+- Motion (agent choice): the indicator never animates, in any motion mode. The row only asks that it is still under reduced motion; a looping animation would last as long as a reading (minutes) and the motion rules allow loops only for bounded pending indicators. Still everywhere meets the clause without a second code path. `voice.css` also sets `animation: none; transition: none` on the pressed glyph.
+- Forced colours: no new rule; the global `[aria-pressed="true"]` rule (CGP-DS-R-016) draws the pressed control in the system selection pair.
+- Not changed: when voice is not served nothing is drawn (byte-identical markup, `voice-mount.test.tsx`), no flag or policy, minors follow the served block, nothing is stored or logged, and no message goes to the host. Classroom seats keep the control beside the speaker's name (they have no action row, 2026-11-09 placement). Not part of this row and not changed: the voice register's loading and replay states (DES-CGPV-24) and CGP-CHAT-R67's "starting a new send stops playback" (on main a reading stops on a press, another answer, the answer unmounting or voice going off; no send hook was found in `ReadAloudButton.tsx` or `VoiceProvider.tsx`).
+- Not covered: a real Korean voice, a screen reader announcing the pressed state, and the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-VOICE-R-002 / CGP-VOICE-D-001: microphone and speaker mute (2026-11-13, agent-selected)
+
+Audit of main (0ae2a1485) against both rows; only the gaps changed. Found: one text button `음소거` / `음소거 해제` (`VoicePanel.tsx` big panel and compact control) that sent the session's `mute`, i.e. the microphone; no speaker or output mute anywhere; read-aloud (`ReadAloudButton.tsx`, `src/voiceReadAloud.ts`) obeyed no mute. R-002: MISSING. D-001: MISSING (one control, text only, no glyph).
+- Two switches, two owners (agent choice). The microphone stays the session's mute (`popupTransition` `user_mute` -> `mute`, capture closed). The speaker is a new window-level switch, `src/voiceOutputMute.ts`: memory only, one per webview, never stored, logged or sent to the host. It is outside the panel, so collapse and expand keep it; neither switch writes the other.
+- What speaker mute silences: read-aloud today (the only output that ships). Muting stops a reading in the same press (the hub subscribes to the switch and cancels the synthesizer synchronously); while muted a press speaks nothing and the read-aloud button is disabled, named `읽어 주기, 소리 꺼짐`, tooltip `소리를 꺼 두었어요. 음성 대화에서 소리를 켜면 들을 수 있어요` (agent-written). The realtime reply will obey the same switch when the transport ships; there is no playback code to wire today.
+- Kept, not changed: the VO state-table rule that a microphone mute also stops the AI's reply in progress (`voiceSessionHelpers` `mute` empties the playback queue). That is a session fact; it does not touch the speaker switch, which is what REQ-CGPV-02 asks ("mic mute ... without changing output mute"). A read-aloud reading is not the session's reply and keeps going on a microphone mute. The state table in `voice-conversation.md` now says both.
+- Reset (agent choice): ending the conversation (종료, X, Escape, 텍스트로 전환) and the panel leaving the window turn sound back on. Without it read-aloud could stay held after the panel that shows `소리 끄기` is gone.
+- Names and words (agent choice): accessible names `마이크 끄기` / `소리 끄기`, constant while pressed (`aria-pressed` carries the state, the ARIA toggle-button pattern); the off words `마이크 꺼짐` / `소리 꺼짐` (DES-CGPV-02's) are written beside the buttons and announced on a change with `마이크 켜짐` / `소리 켜짐`. In the compact control the line adds only `소리 꺼짐` when the status name already says `마이크 꺼짐`. The read-aloud control (CGP-CHAT-D-009) keeps its own changing label; it is a different control.
+- Glyphs (agent choice): new `mic-off` (the microphone struck through) and `speaker-off` (the speaker with a cross instead of waves), stroked like the set, 20px. Pressed also takes the pressed fill, primary ink and `--hp-border-control-selected` as the edge; forced colours use the global pressed rule.
+- Sizes: 44px targets and 14px text win over DES-CGPV-02's 32px (as for CGP-VOICE-R-008). Contrast of the label and glyph pairs is not measured by this row beyond the existing theme suites.
+- `COMPACT_CONTROLS` is now `mute`, `output_mute`, `stop`, `expand`.
+- Default state: n/a. VoicePanel is still unmounted and read-aloud draws nothing unless the Service serves it, so every seat renders as before; no flag, policy or minor-seat change; minors follow the served block.
+- Not covered: a real Korean voice, a screen reader announcing the pressed state and the change line, the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
 
 ## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
 
@@ -1939,3 +2023,107 @@ Audit of main (7aab55fb3) against the two design rows; only the gaps changed. CG
 - Not changed: the register's "이 부분 질문하기" label stays `인용하기` (the merged R-007 copy), and code blocks are still quotable (R-007 records that deviation).
 - Not covered: real-app (packaged Studio) validation is NOT RUN; the headless Chromium smoke drives the real App bundle with CDP mouse and key input.
 - Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-SHELL-D-004: join screen code field (DES-SHELL-04, 2026-11-12)
+
+Audit of main (908ad7854) against the design row; only the gaps changed. Already met: the class line above the field, the empty field and its focus on every link press (REQ-STUDIO-JOIN-LINK), a password field, no toast for a refused code. Gaps: the field drew 48.8px with 13px text; the refusal sat at the card's end (after the buttons and the saved activities) in 12px text.
+- Height (agent-selected): `min-block-size: var(--hp-control-min)` (44px, the DES-06 learner floor) with no block padding, on every start-page code form, not only the link's. The control centres its own text, so the height does not depend on the font. The text is 14px (the DES-02 floor) instead of 13px; the label and help line keep their sizes (not in this row).
+- IME (agent finding, no new attribute): `type="password"` already keeps the Korean IME out. Chromium (Electron and the VS Code webview) restricts a focused password field to ASCII-capable input sources on macOS (`ui/base/cocoa/secure_password_input.mm`) and disables the IME on Windows (TSF) and Linux. The register's `inputmode=latin` is not an HTML value; `inputmode` steers on-screen keyboards only, and `lang`, `autocapitalize` and CSS `ime-mode` do nothing for a desktop IME in Chromium, so none was added. The field must stay a password field; the new smoke fails if it does not. Hardening (coordinator request after verification): if a composition is open anyway, Enter belongs to it and does not submit the half-typed code (the shared `imeComposing` guard, CGP-DS-R-027); the smoke forces a composition through CDP. Real IME behaviour in the packaged app: NOT RUN (headless Chromium has no OS IME).
+- Paste (already met, now tested): no handler cancels the paste event or Ctrl/Cmd+V; pasted text is what is submitted. The host still strips whitespace and wrappers (`sanitizeWorkshopToken`).
+- Error under the field (agent-selected): the host marks the refusal of a submitted code (`errorAt: "code"`: empty, 강사용 code, another class's code, Service refusal, unreadable profile, connection failure, a turn in progress), and the page draws it directly under the field, before the help line and 코드 확인하기, as an in-flow `role="alert"` box at 14px, with `aria-invalid` on the field. Any other error (a settings save, a saved-activity switch) and a refusal after the learner has left the form stay in the card's error area, so there is still one error line. Any later assignment of the host's error clears the mark (a setter), so a stale mark cannot move another error under the field.
+- Not changed: the class is shown by its id, not a name (no credential-free class lookup; a name carried in the link would be untrusted text, and the link format is Chalk's). "Unknown class → neutral start screen" stays not built (REQ-STUDIO-JOIN-LINK).
+- Not covered: the packaged app with a real Korean IME on macOS and Windows: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-SHELL-R-034 / CGP-SHELL-D-033: Chalk seat version column (2026-11-12, DEC-24 floor confirmed by Jay; other choices agent-selected)
+
+No Service change. Studio already sends its version on every 45 s heartbeat (`x-hps-client-version`, `extensions/hypeproof-chat/src/chatPanelProvider.ts` `postLivenessEvent`), the Service keeps it in the seat's heartbeat record (15-minute TTL) and the board read already returns it per seat as `client_version` (Service `worker/src/routes/chalk-board.ts`, `worker/src/lib/board-verdict.ts`). `/manage` reads that board on every refresh; this slice only draws it. Requirement: `docs/requirements/classroom-admin.md#adm-02-seat-version`.
+
+- The floor (DEC-24, Jay 2026-11-12, confirmed): the latest published formal Studio release. No cohort, profile or Service minimum field exists, and none is added. The free-start floor `HPS_FREE_START_MIN_APP_VERSION` is not used: it gates personal free start, is not per cohort and Chalk cannot read it.
+- Floor source (agent choice): `GET https://api.github.com/repos/hypeproof/hypeproof-studio/releases/latest`, the public release Studio's own update checker reads anonymously (`extensions/hypeproof-chat/src/updateTransport.ts` `PUBLIC_RELEASES_API`, `fetchPublicLatestRelease`). GitHub's latest skips drafts and prereleases, and the release pipeline marks every hyphen tag as a prerelease (`scripts/tag-is-prerelease.sh`). On 2026-11-12 it named `v2026.1109.0`, the same as the private mirror `hypeproof-studio-releases`. Chalk (`chalk/src/lib/latest-release.ts`) accepts only a plain `x.y.z` tag with `draft:false` and `prerelease:false`, sends no credential (accept and user-agent headers only), times out after 5 s, reuses a good answer for 10 minutes (per isolate, and edge-cached per colo with `cf.cacheTtl`) and a failure for 1 minute, and never keeps an old floor after a failed read (a 403/429 rate limit is such a failure, so for that minute refreshes do not reach GitHub). `GET /studio/latest-release` serves `{version, checked_at, source}`; it is deliberately public and read-only (public information, no class or instructor data), so it needs no instructor connection. Outside production `HPS_STUDIO_LATEST_RELEASE` answers instead ("off" or an `x.y.z`); the e2e harness sets "off", so CI never reads GitHub.
+- Page use (agent choice): `/manage` reads `/studio/latest-release` from its refresh at most every 5 minutes (`readLatest`) and uses it as `verMinimum()`. An older release or an rc of the latest is below it and flagged; the latest itself, a newer release or rc and a string that is not a release version are not. A Studio dev build (F5, Studio Dev) sends the extension package version (`0.1.5`), not a calendar tag, so it is below every calendar release and flagged (lead decision 2026-11-12 after the #3769 verify): harmless on developer seats, and a version string cannot tell it from an old `0.1.x` release (e.g. `v0.1.56`), whose seats must be flagged. While the floor is unknown (not read yet, GitHub down or rate limited, a 503, a null, an rc or junk answer) nobody is flagged and earlier flags clear. Anonymous GitHub API reads from Cloudflare's shared egress can be rate limited; that degrades to no flag, never to a false `업데이트 필요`.
+- Comparison (agent choice): Studio's release order (`x.y.z[-pre]`, a prerelease below its release), the same rule as `compareVersions` in `extensions/hypeproof-chat/src/freeStart.ts`. A value that is not a release version is shown but never called outdated.
+- Unknown (agent choice): no board row for the seat, a null version (heartbeat older than 15 minutes, or an app that sends no version) and a malformed value all read `확인 불가` with the help icon. Without a seat prefix the board reads only seats that asked in this session, so a seat that has not asked reads `확인 불가` too; with the prefix every roster seat is read.
+- Which list (agent choice): the G1 student table (the dense comparison view, #751) gets the column, between `지금 상태` and `근거·조치`. The legacy activity list (seats outside the roster, or every seat when remote operations are off) appends `· 버전 <version>` to its usage line instead of a column, because it is a card list.
+- Cell look (agent choice): the version as plain text; `확인 불가` and `업데이트 필요` are bare status marks (16px icon + words, the chip's intent colour, no chip edge or padding). Measured in headless Chromium: with the chip box, `확인 불가` wraps inside 96px and the row grows past 44px; bare, it is one line. The cell has no inline padding (the neighbouring cells keep the gap), so `2026.1111.0` in tabular figures (85px in Noto Sans) fits on one line; where a wider font does not fit it (the GitHub runner's Chrome did not fit it in 92px on the first CI run of #3769), it breaks only after the first dot (`2026.` / `1111.0`, a `<wbr>`), never inside a number. `업데이트 필요` and `-rc.N` versions take two lines and the row stays 44px. Amber is the page's warn ink (`--ink-warn`), the same as the row's caution text.
+- Card rows (agent choice): at 760px and below (also the list beside the open detail at 1280px, 606px wide) the version, labelled `버전`, sits at the end of the seat line and the status line spans under it, so a card is exactly as tall as before (measured 63/61/128px at 800/600/390, base and head). A first attempt on its own third line cost two of the nine rows visible beside the open detail. In card rows the cell is a flex row (label, then the mark or number), capped at 12rem: on one shared line box the label, the Hangul fallback font and the icon made the seat line 0.7px taller in DejaVu Sans (second CI run of #3769).
+- Sorting control (agent choice): a native `순서` select (`기본 순서` / `버전 낮은 순` / `버전 높은 순`) instead of a header button. A 44px button in the table header (36px tall, measured) would grow it by at least 8px, and the G1 layout gate has 5px to spare at 1280x720 (base measure: first row at 363px, 8th row ends at 715px), so the 8th complete row would be lost. With this slice the header stays 36px. The select rides on the selection tools' row, which is already as tall as its controls (the test measures zero added height), and moves to its own row above the table when that row is hidden (a class with no remote action, where there is room). The header gets `aria-sort` and an arrow while sorted.
+- Sort order (agent choice): release versions ascending or descending, then other version text, then unknown last in both directions; ties keep the Service's order. `기본 순서` is the Service's order. The choice survives a refresh and resets on disconnect; it never changes the selection or the action targets.
+- Not covered: a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu), a real screen reader, staging or production data, the GitHub read from a deployed Chalk Worker.
+- Confirmed by Jay: yes for the DEC-24 floor rule (2026-11-12); no for the agent-selected choices above (floor source, cache times, sorting, placement, look).
+
+## CGP-DS-R-004: webviews follow the host theme kind (REQ-CGP-DS-03, 2026-11-12, agent decision)
+
+Audit of main (4f1602fb2). The extension creates one webview view and twelve webview panels (`grep -rn "createWebviewPanel\|registerWebviewViewProvider" extensions/hypeproof-chat/src`). Already met: the chat and the four panels on the same bundle (start, automation, local review, skill store) map all four kinds through `tokens.css` (CGP-DS-D-002 roles, the light-kind muted mix, CGP-DS-R-012 elevation with HC flat plus a 1px edge); the start and disconnected screens stay forest; the seven inline-HTML panels read `--vscode-*` directly and five of them already passed. Gaps: the preview shell painted a fixed `#1b1b2a` page with `#ddd` text in every kind, and dimmed its placeholder and review notice with `opacity` (3.2:1 and 4.4:1 on Light+); the slide studio's `--muted` was Light+ `#717171` on its `#F3F3F3` card (4.4:1). No test loaded the four body classes over every surface on the computed cascade, and there were no screenshots at 320/390/1280.
+
+- Preview shell page (agent choice): `var(--vscode-editor-background)` / `var(--vscode-foreground)`, with the old `#1b1b2a` / `#ddd` as fallbacks. Under the HypeProof Studio theme the empty preview is now the forest editor surface instead of a blue-black one.
+- Secondary text in the inline panels (agent choice): the theme's `descriptionForeground` for the preview placeholder and notice, never the foreground at reduced opacity; on light kinds the slide studio mixes it 80% with the foreground, the same rule `tokens.css` uses (CGP-DS-D-002).
+- "Token set per kind" (agent reading of the acceptance): the chat's text, app, ring and CTA roles equal the theme's own keys and the elevation follows the kind; inline panels have no token layer, so for them it means the painted page is the theme's editor surface and every text pair passes.
+- Contrast measure (agent choice): computed colours composited over every painted layer, colours normalised through a canvas; no glyph sampling, so CI and the Ubuntu worker agree whatever fonts are installed. Gradient stops count as possible backgrounds.
+- Not changed: Chalk (REQ-CGP-DS-03 says Both, but Chalk is a dark-only web page with no host theme kind); forced colors (forced-colors-computed); the learner's own page inside the preview frame.
+- Not covered: the packaged app in a real VS Code high-contrast theme on macOS or Windows: NOT RUN. The default-theme variables come from the recorded table plus colour-registry defaults, not from a live VS Code.
+- Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-SHELL-R-003 / CGP-SHELL-D-002: cohort Studio update freeze (2026-11-12, agent-selected)
+
+Service PR hypeproof/hypeproof-service#428 adds the contract; this slice draws it in Chalk and obeys it in Studio. Requirement: `docs/requirements/classroom-admin.md#adm-11-update-freeze`; Studio: `docs/studio-requirements.md` REQ-I21.
+
+- Storage (agent choice): one KV key per cohort, `update_freeze:<cohort>` = `{from, until, set_by, set_at}`, expiring a day after the range. The read rides on the Chalk state read Chalk already makes (`update_freeze`), so there is no second read path. KV propagation means a change can take about a minute to reach every seat; Chalk says so.
+- Dates (agent choice): Korea calendar days (Asia/Seoul, no daylight saving time). The range is `from` 00:00 KST up to the day after `until` 00:00 KST. Instructors pick days, not times, and every cohort today is in Korea.
+- Limits (agent choice): at most 60 days, `until` not in the past, `from` ≤ `until`. A freeze is meant for a course run, not a permanent pin; an instructor can extend it.
+- Authority (agent choice, DEC-24 row above): `can_start_session` on the cohort. An operator with only Basic or Access credentials cannot set it through this route (issuer Bearer only).
+- Who receives it (agent choice): classroom seats of the cohort only (`/v1/profile`, not native trial, not account). Studio re-checks the seat kind and the range against its own clock, so a profile cached before the range ended does not keep freezing.
+- What the freeze does in Studio (agent choice): no chat banner (the class line included), no start-page notice, no background staging; the manual check and install commands and the classroom settings dialog say "선생님이 업데이트 시점을 정했어요. M월 D일까지 지금 버전을 써요." VS Code's native About dialog is not Studio's and is unchanged; the "About/update UI" of the row is the update commands and the settings dialog.
+- Security marker (agent choice): the notes line `<!-- hps-update: security-critical -->`, read by `isSecurityCriticalRelease` in Studio (`updateCheckerHelpers.ts`) and in Chalk (`latest-release.ts`). Hidden by GitHub's renderer and stripped from the notes Studio shows. `mirror-release.yml` copies it, because the member mirror writes its own notes. It copies only when it runs: marking a release after it was mirrored needs a manual `mirror-release` re-dispatch for that tag (the workflow re-edits the notes), or member-mirror installs keep treating it as an ordinary release. A security release still waits for the class hold (REQ-I16) and the learner's restart approval: the row asks that the freeze not block it, not that it install silently.
+- Chalk forwarder (agent choice): Chalk pins service-contracts 0.1.5 (0.1.2 when this slice started), whose tarball does not admit the new path, so `forward.ts` names `PUT`/`DELETE /admin/cohorts/:id/update-freeze` explicitly, with the same Lab-connection issuer as every write. Bumping the pin is a separate change.
+- Look (agent choice): the badge sits in the cohort block's legend on `/console`, amber page warn ink with a lock icon and a 1px edge in the same colour; a range that has not started reads `업데이트 고정 예정 M/D~M/D`. The control is two native date inputs (keyboard-operable by the browser) whose range sentence is their description and a polite live region.
+- Not covered: a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu), a real screen reader, staging or production data, a real security-marked release, the KV propagation time.
+- Confirmed by Jay: no.
+
+## CGP-ART-R-004 / CGP-ART-D-004: 이 부분 고치기 in the Chalk plan view (2026-11-13)
+
+Jay approved building it on 2026-11-13. It is an extension of the authoring assistant (CGP-AGENT-R-014), and the approval allows one new Haiku prompt, for this scope only, under these constraints:
+- the same `HPS_AUTHORING_ASSISTANT` flag;
+- the same US$0.20 per instructor per KST day cap;
+- metadata-only logs;
+- the Service, not the model, splices the result back, so every byte outside the section stays unchanged;
+- a Chalk plan view with 이 부분 고치기.
+
+The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed by Jay: yes (2026-11-13) for the approved scope and constraints above. Confirmed by Jay: no for the agent-selected choices below.
+
+- **Generator (agent choice, from the plan).** `chalk-plan/1` files are written by Studio instructor mode through the Chalk tools. Neither hps-authoring-batch nor the assistant route writes them. The assistant's existing prompt and key allow-list cover SessionDesign keys only, and its draft projection drops `plan_ref`. So the section revision is a second task beside it: its own prompt, a `{section_html}` output and the chalk-plan validator. It reuses the assistant's flag, price revision, cap, charge ledger, client and log line.
+- **Anchor (agent choice).** The anchor is `{file, section, marker?:{name,value}}`: a whole section, or an element inside it whose marker value is unique in that section.
+  - Cell markers (`data-chalk-field`, `-role`, `-requires`, `-forbids`, `-derived-from`) are not addressable, because their values repeat by design.
+  - The Service locates the element in the stored file with the parser's tokenizer. Chalk uses the same uniqueness rule, so it only offers what the Service will accept.
+- **Save, not proposal (agent choice).** Unlike CH-10, the result is saved as the next draft revision through the PUT /plan save. Reasons:
+  - The existing FB-01 compare is `GET /diff` between saved revisions.
+  - The FB-05 link (`chalk_feedback_revisions`) needs a revision.
+  - Saving server-side keeps the byte-identical splice from passing back through the browser.
+
+  A draft is never what learners get: freeze, rehearsal and confirmation still gate that.
+- **What the Service refuses (agent choice).** With 422 and nothing stored:
+  - a shape change;
+  - anything PUT /plan refuses;
+  - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
+  - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
+  - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
+  - any parser finding (warn or fail) that the stored plan did not already have.
+
+  The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
+
+  Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
+  - the pointer outline is CSS `:hover` on the innermost mark;
+  - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
+  - keyboard focus shows both the outline and the button, and Enter opens the composer, as the row asks.
+
+  Showing the button on hover alone would need that lock changed. That is a design-system decision, not made here.
+- **Rendering (agent choice).** The plan is parsed with `DOMParser`, rebuilt from a closed tag list, and keeps only `data-chalk-*` attributes. It is drawn as light paper (surface white, ink `#242c28`). The outline uses `ink-50`, about 5.9:1 on the paper, and `Highlight` under forced colors.
+- **Forwarder (agent choice).** Chalk admits the path by name until its service-contracts pin moves past 0.1.5, the same pattern as CGP-SHELL-R-003. The forward budget is 45 s for this path only, because the Service waits up to 30 s on Haiku.
+- **Copy.** The section names, the composer wording and the error sentences are the agent's wording.
+- **Not covered:**
+  - a real Haiku answer: NOT RUN, the model is a fake client in tests;
+  - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
+  - a real screen reader;
+  - staging or production.

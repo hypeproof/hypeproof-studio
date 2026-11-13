@@ -3,7 +3,17 @@
 // decides every rule (price caps, age, refund window, fraud block); the App only shows the result
 // and the Service's reason. Custody (design v1 D1): the App receives the public layer of a skill
 // only. A run is composed by the Service on the buyer's chat turn; no call returns the seller's text.
-import type { StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSellerView } from "./skillStoreProtocol.ts";
+import type { StoreBuyerOrderView, StoreAttributionInput, StoreAttributionPreview, StoreAttributionView, StoreInstallView, StoreItemView, StoreOverlaySpec, StoreOverlayView, StorePayoutAccountView, StorePublishDraft, StoreSaleView, StoreSellerView } from "./skillStoreProtocol.ts";
+
+/**
+ * The seller's sales row (Jay 2026-11-13): sale price, PG fee and the seller's own share only.
+ * Whatever else the Service sends (HypeProof's commission, the partner and instructor referral
+ * parts) is dropped here, so it never reaches the webview. The money split itself is the Service's.
+ */
+export function sellerSaleView(row: StoreSaleView): StoreSaleView {
+  const { order_id, title, gross, pg_fee, seller, seller_net, policy_version, paid_at, status, payout_hold_ends } = row;
+  return { order_id, title, gross, pg_fee, seller, seller_net, policy_version, paid_at, status, payout_hold_ends };
+}
 
 export class StoreClientError extends Error {
   readonly code: string;
@@ -80,10 +90,11 @@ export class StoreClient {
     return Array.isArray(r?.items) ? r.items : [];
   }
   me() {
-    return this.call<{ age_group: "adult" | "minor" | "unknown"; installs: StoreInstallView[]; can_buy_paid: boolean }>("/me");
+    return this.call<{ age_group: "adult" | "minor" | "unknown"; installs: StoreInstallView[]; can_buy_paid: boolean; orders?: StoreBuyerOrderView[] }>("/me");
   }
-  seller() {
-    return this.call<StoreSellerView>("/seller");
+  async seller(): Promise<StoreSellerView> {
+    const view = await this.call<StoreSellerView>("/seller");
+    return Array.isArray(view?.sales) ? { ...view, sales: view.sales.map(sellerSaleView) } : view;
   }
   /** Names for the typed partner/instructor codes, before the seller confirms. Rate-limited by the Service. */
   resolveCodes(partnerCode: string, instructorCode: string) {
@@ -102,6 +113,28 @@ export class StoreClient {
    */
   savePayoutAccount(input: { bank_code: string; account_number: string; holder_name: string }) {
     return this.call<Omit<Extract<StorePayoutAccountView, { state: "on_file" }>, "state" | "prompt_at_krw">>("/seller/payout-account", { method: "PUT", body: input });
+  }
+  /** The gateway's receipt page for one of the buyer's purchases; only an https page is ever opened. */
+  async receipt(orderId: string): Promise<string> {
+    const r = await this.call<{ receipt_url: string }>(`/orders/${encodeURIComponent(orderId)}/receipt`);
+    let url: URL | null = null;
+    try { url = new URL(r?.receipt_url); } catch { /* malformed */ }
+    if (!url || url.protocol !== "https:" || url.username || url.password) throw new StoreClientError("receipt_unavailable");
+    return url.toString();
+  }
+  /** Starts a mobile identity verification; only the Service's own verification page is ever opened. */
+  async startIdentity(): Promise<{ session_id: string; verify_url: string; sandbox: boolean }> {
+    const r = await this.call<{ session_id: string; verify_url: string; sandbox: boolean }>("/identity/start", { method: "POST", body: {} });
+    const expected = new URL(this.base() + "/identity/verify");
+    let got: URL | null = null;
+    try { got = new URL(r?.verify_url); } catch { /* malformed */ }
+    if (!got || got.origin !== expected.origin || got.pathname !== expected.pathname || !/^idv_[0-9a-f]{32}$/.test(r?.session_id ?? "") || got.searchParams.get("session") !== r.session_id) throw new StoreClientError("invalid_response");
+    // Open a URL built here from the expected page and the session, never the Service's string as is.
+    expected.searchParams.set("session", r.session_id);
+    return { ...r, verify_url: expected.toString() };
+  }
+  identityState(sessionId: string) {
+    return this.call<{ state: "pending" | "verified" | "failed" | "expired"; failure?: string }>(`/identity/${encodeURIComponent(sessionId)}`);
   }
   declareAge(birthYear: number) {
     return this.call<{ age_group: "adult" | "minor" }>("/me/age", { body: { birth_year: birthYear } });
@@ -193,6 +226,20 @@ export const STORE_COPY = {
   codesHelp: "HypeProof 교육 파트너나 강사에게 받은 코드가 있으면 입력하세요. 처음 올릴 때 한 번만 정하고, 그 뒤에는 운영팀만 바꿀 수 있어요.",
   codesNone: "코드가 없으면 비워 두고 올리면 돼요. 나중에 직접 추가할 수는 없어요.",
   codesCheck: "코드를 확인한 뒤에 올릴 수 있어요.",
+  codesConsent: "정산을 위해 내 판매 실적(판매자 표시명, 판매 금액)이 입력한 코드의 파트너·강사에게 제공되는 것에 동의해요.",
+  codesConsentNeeded: "코드를 쓰려면 제공 동의가 필요해요. 동의하지 않으면 「코드 없이 진행」을 눌러 주세요. 그러면 코드 없이 올라가요.",
+  codesSkip: "코드 없이 진행",
+  courseBlocked: "이 과정에서는 스킬을 팔 수 없어요. 판매를 하지 않는 과정(청소년 과정 등)의 수강생은 스토어에 스킬을 올리거나 팔 수 없고, 스킬을 사거나 설치하는 것은 할 수 있어요. 잘못 표시됐다면 운영팀에 문의해 주세요.",
+  courseBlockedItem: "판매 중지(과정 제한)",
+  identityNeeded: "유료 스킬을 팔려면 휴대폰 본인인증이 필요해요. 한 번만 하면 돼요.",
+  identityButton: "휴대폰 본인인증",
+  identityWaiting: "브라우저에서 본인인증을 마치면 여기에 자동으로 반영돼요.",
+  identitySandbox: "지금은 테스트 본인인증이에요. 실제 인증 기관에 연결되지 않아요.",
+  identityCancel: "기다리지 않기",
+  /** Without a fresh seller view (the Service did not answer) the notice names no amount. */
+  identityDone: (cap?: number) => (cap ? `본인인증을 마쳤어요. 이제 한 개당 최대 ${won(cap)}까지 올릴 수 있어요.` : "본인인증을 마쳤어요. 판매 한도는 「내 스토어」를 다시 열면 보여요."),
+  identityMinor: "만 19세 미만 판매자는 한 개당 최대 10만 원까지 올릴 수 있고, 운영팀이 검토한 뒤 올라가요.",
+  pgFeeEstimate: "결제 수수료는 예상 금액이에요. 실제 요율은 결제사 계약이 끝난 뒤 정해져요.",
   codesFixed: "바꾸려면 운영팀에 문의해 주세요.",
   codesEmpty: "등록한 파트너·강사 코드가 없어요.",
   payoutNotDue: (krw: number) => `정산 대상 금액이 ${won(krw)} 이상이 되면 받을 계좌를 여쭤볼게요.`,
@@ -259,6 +306,16 @@ const ERRORS: Record<string, string> = {
   payout_account_not_due: "아직 계좌가 필요하지 않아요. 정산 대상 금액이 쌓이면 여쭤볼게요.",
   invalid_payout_account: "은행, 계좌번호(숫자 10~16자리), 예금주 이름을 확인해 주세요.",
   holder_mismatch: "예금주와 계좌가 맞지 않아요. 다시 확인해 주세요.",
+  course_store_blocked: STORE_COPY.courseBlocked,
+  receipt_unavailable: "지금은 영수증을 불러올 수 없어요. 잠시 뒤 다시 시도해 주세요.",
+  order_not_found: "이 결제 내역을 찾을 수 없어요.",
+  identity_failed: "본인인증을 하지 못했어요. 정보를 확인한 뒤 다시 시도해 주세요.",
+  identity_expired: "본인인증 시간이 지났어요. 다시 시작해 주세요.",
+  identity_in_use: "이미 다른 계정에서 판매자 인증을 한 정보예요. 한 사람은 한 계정에서만 판매할 수 있어요.",
+  under_minimum_age_identity: "만 14세 미만은 스킬 스토어에서 판매할 수 없어요.",
+  identity_already_verified: "이미 본인인증을 마쳤어요.",
+  referral_consent_required: "코드를 쓰려면 판매 실적 제공에 동의해 주세요. 동의하지 않으면 코드 없이 올릴 수 있어요.",
+  referral_consent_missing: "판매 실적 제공에 동의하지 않은 판매자예요. 운영팀에 문의해 주세요.",
 };
 /** Korean bank codes (금융결제원 표준 코드) the Service accepts for a payout account. */
 export const PAYOUT_BANKS: readonly (readonly [code: string, name: string])[] = [

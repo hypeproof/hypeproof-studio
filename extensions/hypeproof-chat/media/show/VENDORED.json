@@ -1,0 +1,34 @@
+{
+  "purpose": "Offline 'show what I made' compositions and playback (hypeproof/hypeproof-studio#3794). Loaded only from the extension's media folder or the person's show folder; never fetched.",
+  "files": [
+    {
+      "path": "hyperframes-player.global.js",
+      "package": "hyperframes", "version": "0.9.38",
+      "from": "hyperframes@0.9.38 dist/hyperframes-player.global.js (npm integrity sha512-3KC2Nrl5IduLXVdEJhaS5BP5rAX48nIjioaNxRkNGyVsTIffs5pl/0hJFFksI71DreR+2i0DrIWhfluzQMrWcA==)",
+      "license": "Apache-2.0", "license_file": "LICENSE-hyperframes.txt",
+      "sha256": "9219c6900521ded9a9b9daf5a528dc9e418d165dc2e8d6e78ba410a812ee2c02", "bytes": 117381
+    },
+    {
+      "path": "hyperframe.runtime.iife.js",
+      "package": "hyperframes", "version": "0.9.38",
+      "from": "hyperframes@0.9.38 dist/hyperframe.runtime.iife.js (upstream file name kept: the player skips its CDN runtime only when the document names it)",
+      "license": "Apache-2.0; bundles postcss and nanoid (MIT)", "license_file": ["LICENSE-hyperframes.txt", "LICENSE-postcss.txt", "LICENSE-nanoid.txt"],
+      "sha256": "8f9b936eb62505e406c77b2117aeec94e5afba9ef95089b422b64eb80218d4e9", "bytes": 657482
+    },
+    {
+      "path": "anime.umd.min.js",
+      "package": "animejs", "version": "4.5.0",
+      "from": "animejs@4.5.0 dist/bundles/anime.umd.min.js (npm integrity sha512-NQimYX+lz8WaXonGS9zVVoviCIAjONeJayxacUditaivYLqyXgGjFKjuyl0aUUhFKm5MriX9ty1TGovNzoJQWA==)",
+      "license": "MIT", "license_file": "LICENSE-animejs.md",
+      "sha256": "8d5b3a58a1f64023a04a4cedeef135a2263b18da04b35177ac13438a0bad033b", "bytes": 118043
+    },
+    {
+      "path": "NotoSansKR-Korean.woff2",
+      "package": "Noto Sans KR (google/fonts ofl/notosanskr/NotoSansKR[wght].ttf, fetched 2026-11-12)", "version": "variable wght 100-900",
+      "from": "fonttools 4.68.0 pyftsubset --flavor=woff2 --layout-features=* --unicodes=U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-205E,U+20A9,U+3000-303F,U+3131-318E,U+AC00-D7A3,U+FF01-FF5E (all 11,172 Hangul syllables, compatibility jamo, Latin-1, general and CJK punctuation, full-width forms)",
+      "license": "OFL-1.1", "license_file": "OFL-NotoSansKR.txt",
+      "sha256": "2690fda8afe06c7a60e22295d74ac79b76c2870abe1b4b9070274d8ff4b061c4", "bytes": 1059864
+    }
+  ],
+  "not_vendored": "GSAP: its Standard 'no charge' license does not clearly allow redistribution inside the app (2026-11-12). Motion uses Anime.js through the HyperFrames animejs adapter instead."
+}

@@ -13,6 +13,7 @@ import budgetsHtml from './ui/budgets.html';
 //   GET /board                       — instructor live board page (#674)
 //   GET /connect/start|callback|status, POST /connect/disconnect
 //                                    — Lab login connection (no pasted issuer)  src/routes/connect.ts
+//   GET /studio/latest-release       — latest formal Studio release (public, DEC-24)  src/routes/studio-release.ts
 //   GET /admin/cohorts/:id/state     — read-only cohort state (issuer Bearer)   src/routes/state.ts
 //   GET /admin/cohorts/:id/board     — live board JSON (issuer Bearer)          src/routes/board.ts
 //   GET /admin/cohorts/:id/logs      — studio-logs arrival + roster diff (issuer)  src/routes/logs-admin.ts
@@ -36,6 +37,7 @@ import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
 import { makeErrorBody, requestId } from "./middleware.ts";
 import { state } from "./routes/state.ts";
 import { board } from "./routes/board.ts";
+import { studioRelease } from "./routes/studio-release.ts";
 import { labTokens } from './routes/lab-tokens.ts';
 import { logsAdmin } from "./routes/logs-admin.ts";
 import { forwardInstructorWrite } from "./routes/forward.ts";
@@ -50,6 +52,7 @@ import authoringHtml from "./ui/authoring.html";
 import { INSTRUCTION_DIFF_SCRIPT } from "./lib/instruction-diff.ts";
 import { COMPLETION_CHECKLIST_SCRIPT } from "./lib/completion-checklist.ts";
 import { ROSTER_CSV_SCRIPT } from "./lib/roster-csv.ts";
+import { INSTRUCTOR_NAMES_SCRIPT } from "./lib/instructor-names.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import manageHtml from "./ui/manage.html";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -92,8 +95,12 @@ app.get("/board", () => page(renderBoardStatusPage(boardHtml)));
 // The completion checklist kit (CGP-LEARN-R-015) is inlined the same way; the forwarder runs the same kit server-side.
 const authoringPage = (authoringHtml as unknown as string).replace("/*@instruction-diff*/", () => INSTRUCTION_DIFF_SCRIPT).replace("/*@completion-checklist*/", () => COMPLETION_CHECKLIST_SCRIPT);
 app.get("/authoring", () => page(authoringPage));
-app.get("/manage", () => page(renderSafetySignal(renderBoardStatusPage(manageHtml))));
+// /manage reads learner names from a handle,name CSV (the roster CSV kit) and keeps them on the device (E5 #3777).
+const managePage = (manageHtml as unknown as string).replace("/*@roster-csv*/", () => ROSTER_CSV_SCRIPT).replace("/*@instructor-names*/", () => INSTRUCTOR_NAMES_SCRIPT);
+app.get("/manage", () => page(renderSafetySignal(renderBoardStatusPage(managePage))));
 app.get("/budgets", () => page(budgetsHtml));
+// The latest formal Studio release for /manage's 업데이트 필요 mark (DEC-24); public, cached, never a credential.
+app.route("/", studioRelease);
 app.get("/sharing", () => page(sharingHtml));
 app.get('/learn', () => page(learnHtml));
 app.get('/v1/profile', forwardInstructorWrite);

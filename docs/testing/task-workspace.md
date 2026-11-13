@@ -268,6 +268,75 @@ personal header already scrolls by 11px before any popover in this fixture; the 
 prints that as a note). Packaged-app, physical IME and screen-reader acceptance are
 reported separately.
 
+## Read-aloud control (CGP-CHAT-D-009 / CGP-CHAT-D67)
+
+`test/voice-mount.test.tsx` renders the real ChatPanel with served voice and two answers in
+the personal and classroom seats and presses the controls on the minimal DOM: idle
+`읽어 주기` with the speaker glyph; pressed `aria-pressed="true"`, `그만 읽기` and the level
+glyph; the second answer takes over and releases the first (one pressed at a time); the
+pressed control stops its own reading. The same file keeps the unserved markup byte-identical.
+`test/voice-ui.test.tsx` reads `aria-pressed` across play and stop on one answer, and across a
+reading that ends by itself. The answer is read in at least two utterances (the test asserts the
+count): an earlier utterance's end keeps it pressed with `그만 읽기`, and the last utterance's end
+event (no press) releases the control to `aria-pressed="false"` and `읽어 주기` without a cancel.
+
+`test/voice-browser.smoke.mjs` drives the real App bundle in headless Chromium at 320px,
+both seats, dark and light, with a recording synthesizer: the pressed control has a fill that
+the idle one has not, a 44px box and 14px text; the level glyph and its shape compute
+`animation-name: none` and run no animation with motion allowed, with OS reduced motion and
+with `data-reduced-motion="true"`; in forced colours the pressed and idle controls differ; the
+second answer takes over and the first reading is cancelled. These browser-only checks (the
+personal pressed fill, the cancel) must not skip: with `FOCUS_REQUIRE_BROWSER=1`, as the CI smoke
+shards set it, a missing Chromium fails the smoke instead of printing NOT RUN. Every read is a state, a computed style or a minimum box, not a
+text width, so a runner's fonts do not change the verdict. A real Korean voice, screen-reader
+speech of the pressed state and the packaged app are reported separately.
+
+## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)
+
+`test/voice-mute.test.tsx` renders the real VoicePanel, owned by the real popup and session
+reducers, next to a real read-aloud button under a served-voice profile (disclosure read), with a
+scripted synthesizer on the minimal DOM. Both presentations show exactly one `마이크 끄기` and one
+`소리 끄기` button, each with `aria-pressed` and its glyph. `소리 끄기` cancels a reading within the
+press, holds read-aloud (disabled, `읽어 주기, 소리 꺼짐`), sends no session event and leaves capture
+open. `마이크 끄기` sends one `mute`, closes capture and leaves the switch and the reading alone. Both
+are kept across collapse and expand; ending the conversation turns sound back on. Each change is
+announced in a status region. Red on main: all seven cases fail (no such buttons).
+
+`test/voice-read-aloud.smoke.mjs` checks the hub against the switch without React: muting cancels
+synchronously, a muted hub starts nothing, a hub without the switch is unchanged (negative
+control), a disposed hub stops listening. Red on main: the first assertion fails.
+
+`test/voice-mute-controls.smoke.mjs` drives the same composition in headless Chromium, dark and
+light at 1420 and 320 plus forced colours, with real mouse presses: two named toggles per
+presentation, 44px boxes, 20px glyphs, inside the viewport, no sideways scroll, pressed differs by
+glyph, fill and edge (and still differs in forced colours), off words at 14px or more, switches
+independent and kept across collapse and expand. Negative controls run by hand: main's VoicePanel
+fails it (no buttons) and a pressed rule without the edge fails it. Reads are states, computed
+styles and minimum boxes, not text widths, so a runner's fonts do not change the verdict. A real
+voice, a screen reader and the packaged app are reported separately.
+
+## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
+
+- `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell
+  presentation draws the row through ToolLine; the block is open on a detailed seat and has one
+  `명령 복사` button (a real `type="button"`, no tabindex or aria-hidden, after the summary and the
+  command in document order, inside the `<details>`). A click writes the command exactly as shown
+  (no `$ `, the ` ⏎ ` mark kept); `명령을 복사했습니다` only after the write resolves, the refusal
+  wording on a rejected write. A summary-seat row and a row restored from its stored label start
+  collapsed with the button inside. In 실행 중인 것 a shell task reads `멈추기`, then `멈추는 중` in
+  the status and the disabled button until the host reports the exit, then `멈췄어요` and no
+  button; the preview server keeps `끄는 중` (negative control).
+- `test/shell-process-layout.smoke.mjs`: the shipped cascade in headless Chromium, personal and
+  classroom, dark and light, 320/800/1420px, forced colours and both VS Code high-contrast themes.
+  Measured: monospace command (ten `i` and ten `W` equally wide), a long command block at most
+  240px with `overflow-y: auto` and content to scroll, the copy button 44 × 44 with a visible edge,
+  beside the command (no overlap) and inside the row, not drawn at rest, drawn under a forced
+  `:hover` on the row and when Tab from the summary reaches it, no opacity transition, the shared 2px focus ring (inset in the transcript scroll scope). Eleven new
+  injected overrides (proportional font, no cap, clipping, never/always drawn, hover only, out of
+  the tab order, over the command, small target, no edge, a fade) each fail it.
+- Physical IME is not involved (the button binds no key), and packaged-app, touch-device and
+  screen-reader acceptance are separate observations.
+
 ## Activity trash in 내 작품 (CGP-KNOW-D-013)
 
 - `test/activity-trash-panel.smoke.mjs`: the real provider routes the panel's requests into the

@@ -1,6 +1,6 @@
 # HypeProof Delivery Captain 운영
 
-> 갱신일 2026-09-22 · 상태: 활성
+> 작성일 2026-09-14 · 상태: 활성 · 갱신일 2026-09-22
 > 파일명은 consumer 호환성을 위해 유지한다. 5세션 운영은 2026-09-14 실험 실패로 폐기했다.
 > 관련 작업: [Delivery Captain v2 #183](https://github.com/hypeproof/hypeproof-harness/issues/183)
 > 폐기된 작업: [Control plane Epic #166](https://github.com/hypeproof/hypeproof-harness/issues/166)
@@ -54,6 +54,8 @@ Unit 2는 코어 792줄과 테스트 416줄을 만들었지만 UI, adapter, 파�
 - **HAR-DEL-08 실제 완료:** merge, CI, preview, deployment와 실제 제품 관찰을 구분하고 기능 지도에는 관찰된 출시 상태만 적는다.
 - **HAR-DEL-09 알림 watcher:** watcher는 revision별 알림을 한 번만 보내며 댓글, ACK, claim, token, 역할 판단을 만들지 않는다. watcher 실패는 진행 중 구현을 멈추지 않는다.
 
+- **HAR-DEL-10 실패 격리:** 인증·CI·보드·리뷰 실패는 해당 작업에 묶는다. wrapper 누락은 스스로 정정하고, 보류 중에는 이미 승인된 독립 구현·검증을 수행한다. 생성된 PR은 재사용하고 원격 결과가 불확실한 쓰기는 조회로 조정한 후에만 재시도한다. 전체 종료는 남은 요구사항·소유권·실제 차단 근거를 확인한 뒤 판단하며 명시적 중지·예산·안전 경계는 유지한다.
+
 ## 역할과 호출
 
 | 역할 | 스킬 | 기본 모델 | 책임 |
@@ -78,6 +80,10 @@ selected -> active -> reviewable_sha -> verified -> merged -> observed
 코드 diff, 실패 테스트, 재현 결과가 생기면 active다. 새 exact SHA가 검증 가능하면
 reviewable_sha이고, PASS면 verified다. main merge 뒤 실제 제품까지 확인해야
 observed다. session ACK, packet 전송, watcher token은 상태가 아니다.
+`waiting_external`은 그 결과의 상태이며 전체 개발 종료를 뜻하지 않는다.
+도구의 `recovery.scope`와 복구 조건을 기록하고 독립 작업을 계속한다.
+신원 검사와 구조화된 복구 정보는 코드로 검증하지만, 에이전트의 계속 실행은
+공통 스킬·가이드 계약이다. 이 변경이 새 스케줄러나 무중단 실행 보증은 아니다.
 
 ## 출시 흐름
 
@@ -119,13 +125,14 @@ deployment, production URL, 설치 App과 사람 결과는 서로 다른 증거�
 
 ## RC 인계 요구사항
 
-- **HAR-REL-01** 후보 SHA·명시적 PR·버전·RC 태그와 담당자를 공유 상태에 고정한다.
+- **HAR-REL-01** 후보 SHA·명시적 PR과 담당자를 공유 상태에 고정한다. 데스크톱 RC는 버전·RC 태그를, 네이티브 TestFlight는 워크플로·환경·플랫폼·ref를 고정하며 가짜 RC 태그를 만들지 않는다.
 - **HAR-REL-02** 원자적 상태 갱신, 실행 전 예약, UNKNOWN 조정을 통해 중복 실행을 막는다.
 - **HAR-REL-03** 정확한 실행 요청에 묶인 비용 상한과 재시도 한도로 후보 비용을 $1 미만으로 제한한다. 모델 자동 호출은 없다.
 - **HAR-REL-04** 패키지 해시/크기·설치 환경·테스트 기준에 맞는 증거만 재사용한다. 실제 테마와 참여 코드 연결도 검증한다.
 - **HAR-REL-05** 초안 수정 후 URL을 다시 조회하고 동일 패키지로 보고서·체크섬을 생성한다. 담당자가 교대해도 토큰은 공유하지 않는다.
 - **HAR-REL-06** 기존 Studio 서명 검증 엔진과 게시자 권한을 재사용한다. CI 성공·관측 기록은 사람 승인이 아니다.
 - **HAR-REL-07** canonical 스킬을 버전·해시로 설치/점검하며 로컬 수정을 보존한다.
+- **HAR-REL-08** 네이티브 실행은 기존 제품 후보 게이트를 통과해야 한다. 일반 bot 상태 쓰기와 Actions 실행 자격을 분리하고, 요청·소스·현재 실행 차수·업로드 영수증·패키지 해시가 맞을 때만 업로드를 기록한다. Apple 처리·테스터 가용성·기기 인수는 별도 증거다. 응답 유실은 UNKNOWN을 유지하며 재실행하지 않는다.
 
 실행·복구·인계: [hype-release 계약](../.claude/skills/hype-release/references/workflow.md).
 독립 검증은 다른 에이전트가 실제 입력으로 수행한다. 두 담당자·경쟁 쓰기·응답

@@ -2,13 +2,7 @@
 
 Native SwiftUI iPhone and Android clients for HP Studio. The desktop product is the existing HypeProof Studio application and its RC pipeline. A separate mobile-derived Mac Catalyst application is no longer built or distributed.
 
-The current candidate starts iPhone and Android with an everyday question. The
-same account's personal conversation uses Service `reflection-api@1`, independently
-of a running desktop. Existing local notebooks remain in **기기 기록**. Making
-requests lead to the existing desktop's reviewed task flow. The optional iPhone
-linked-task view remains a distinct, desktop-hosted execution experience. This
-source is a candidate; live Service rollout and physical cross-device acceptance
-are required before announcing availability.
+The current iPhone and Android candidate starts with an everyday question in an account-owned personal reflection conversation, including when the desktop is closed. The existing desktop opens the same personal conversation in its task UI. Host-owned build tasks retain their desktop execution boundary; making requests lead to the existing desktop's reviewed task flow. Existing local notebooks remain in **기기 메모** on iPhone and **기기 기록** on Android. Service owns questioning and model admission; no separate mobile prompt or provider bypass is introduced. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
@@ -18,19 +12,30 @@ Philosophy → Product Intent → behavior: introspection, multiple perspectives
 
 ## Boundary and costs
 
-Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The local notebook uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Installation ID remains stable when records are deleted; bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
+Native filesystem, share sheet, and application lifecycle belong to the App layer. HypeProof Service owns admission, model routing, policy, metering and monetary ceilings. The primary personal conversation uses account-scoped `/v1/me/reflection` and `/v1/me/reflection/turns`, protected account credentials and durable request IDs. It does not use a legacy notebook grant as an account-access fallback.
+
+The legacy notebook client uses `/v1/free/claim` and `/v1/messages`, the `hypeproof-fast` alias, low effort and at most 2,048 output tokens. No provider secret is shipped. Its installation ID remains stable when records are deleted; its bearer grant stays in process memory. Reconnect renews access under the same server allowance, not a new free identity. Exact monetary allowance is Service-owned and must not be inferred from token count. CI is manual/change-triggered, capped at 25 macOS and 20 Linux job minutes; no recurring job.
 
 Records stay in app-private storage; iOS uses file protection and excludes notebook backup; Android disables app backup. Sending to AI is opt-in per app session. Local deletion does not delete data already sent to the Service. Exports contain conversations and intentions; only an explicit share action exports them. The local notebook remains device-local. The linked iPhone surface adds explicit opt-in account sync of selected personal conversation text, with a protected local cache and durable request IDs. Files, tool output, temporary chats and classroom records are excluded. Account data is stored through HypeProof Service over TLS; this is not end-to-end encryption. Handwriting, push notifications, Foundry deployment and financial telemetry remain outside this candidate.
 
 ## Native voice and acceptance
 
-The next candidate adds two explicit modes on iOS and Android. **말로 적기**
-appends recognized Korean to an editable project draft without sending. **음성
-대화** discloses final-transcript auto-send and read-aloud before starting. It
-requires current AI consent/access and no unsent draft. After a reply is read,
-**다시 말하기** starts the next turn; the microphone never reopens automatically.
-Stop, background, project switch and audio interruption end the local turn and
-fence stale callbacks. Recognition failures preserve partial draft text.
+**말로 적기** appends recognized Korean to an editable draft without sending;
+explicit Send requests an answer. The iPhone account-conversation candidate starts
+voice through one deliberate microphone action after required OS permissions and
+existing AI/storage consent. Stable speech and silence finalize once; its own
+reply is read before listening resumes in the active foreground conversation.
+No recurring confirmation sheet, end-speech or next-turn tap is required.
+Stop, background, account/conversation change and audio interruption end the
+interaction and fence stale callbacks. Returning to the app does not restart
+capture. Recognition failures preserve partial draft text.
+
+Android voice still contains the older manual controls; alignment remains open
+under #3687. The iPhone legacy notebook uses the shared automatic voice controls
+but still requires its own revised journey and physical verification. Existing
+source and tests do not establish acceptance of continuous conversation. The
+revised shared requirements and first iPhone journeys are in the mobile roadmap and
+`docs/testing/native-mobile-growth.md` (MVOICE-02/03 and MFR-03/04).
 
 Only platform on-device recognition is used. iOS checks both
 [supportsOnDeviceRecognition](https://developer.apple.com/documentation/Speech/SFSpeechRecognizer/supportsOnDeviceRecognition)
@@ -72,17 +77,24 @@ The next vertical slice and dependent work are recorded in [mobile growth roadma
 
 Human device acceptance: launch from the home screen → create observation → force quit/reopen → confirm/revise intention → opt in to AI → observe a real question or accurate refusal → share/export and delete. No Safari work surface should appear. Do not close the physical acceptance gate from CI alone.
 
-## Optional iPhone desktop-task continuity
+## Personal reflection and optional desktop task sharing
+
+The primary personal reflection conversation belongs to the account and runs
+through Service with the desktop closed. Signing into the same account on the
+existing desktop opens that conversation; it is not created by pairing a phone
+to a running task. The following host-owned path is optional and applies only
+to a desktop task deliberately shared with the phone.
 
 On the existing desktop, select a personal task and run **iPhone과 이 대화 연결**.
 The disclosure asks before its user/assistant text is uploaded. Sign in to the
-same account on iPhone through the existing device authorization page, then open
-that conversation. Authentication may open the browser; conversation stays native.
+same account on iPhone through the native browser sign-in flow, then open that
+shared task. Authentication may open the browser; conversation stays native.
 
-Desktop remains the execution host. Its selected task, existing history and coach
+For a shared desktop task, desktop remains the execution host. Its selected task, existing history and coach
 are reused. The phone's durable outbox has one stable request ID. Service claims
 are atomic; a reconnect is a status check, never permission to replay a turn.
-When the computer is asleep or another task is selected, the request waits.
+When the computer is asleep or another task is selected, that task's request waits;
+the account-owned personal reflection conversation remains independent.
 The phone explains pending/running/completed/unknown states. Unknown outcomes
 require checking the computer; they are not automatically retried as new turns.
 
@@ -94,6 +106,31 @@ cache are separated by account. Logout/revocation stop access; cached data delet
 server sharing deletion and original desktop task deletion remain distinct.
 
 ## Signed iPhone delivery
+
+Harness may supply all three optional workflow-dispatch strings: `expected_sha`
+(40 lowercase hex characters), `operation_id` (1–100 ASCII letters, digits,
+periods, underscores or hyphens), and `request_digest` (64 lowercase hex
+characters). The digest is supplied by Harness, not generated by Studio.
+Partial/malformed inputs or a source different from the trigger/checkout stop
+before signing. Existing no-input manual dispatch and release-branch push remain
+supported. Correlated run names are `studio-testflight:<operation_id>:<request_digest>`.
+
+The native gate artifact includes `deployment_request`, `release_run_id` and
+`release_run_attempt`. The upload downloads that exact attempt's gate artifact
+and checks its source, run/attempt, request and native CI identity before signing
+and again before recording a receipt. A failed-job-only rerun cannot reuse an
+older successful gate: rerun all jobs to produce a fresh gate. After successful
+archive, export, validation and upload,
+the existing Apple artifact contains `upload-receipt.json` (`hps-native-upload-receipt/1`):
+source/run/attempt, optional request, verified `native_gate` identity,
+bundle/version/build, IPA SHA-256/size and
+each command's `exit_code`. Its `state: uploaded` records command completion;
+`apple_processing` and `tester_availability` remain `NOT_OBSERVED`. It does not
+authorize a retry, prove Apple processing or mark the app available. A failed or
+uncertain command produces no success receipt; consumers must reconcile the
+original run/attempt instead of dispatching another upload. No credentials or
+signing material are included. Gate/preflight resolution uses the script's
+repository root, independently of the caller's working directory.
 
 `.github/workflows/studio-native-mobile.yml` checks native source and iOS/Android.
 `.github/workflows/studio-apple-testflight.yml` archives **iOS only** after the
