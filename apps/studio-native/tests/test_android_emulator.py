@@ -1,5 +1,6 @@
 """Actual bootstrap subprocess controls with a stateful SDK boundary, not Android acceptance."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MOCK = r'''#!/usr/bin/env python3
@@ -49,6 +51,7 @@ elif tool=='adb':
  args=args[2:]
  if not (s/'name').exists():sys.exit(1)
  if mode=='failed_test_hung_diagnostics' and (s/'verification').exists():
+  (s/'diagnostic-started').touch()
   print('partial failure diagnostic',flush=True);time.sleep(60)
  if args==['emu','avd','name']:print('foreign-avd' if mode=='foreign_serial' else (s/'name').read_text());print('OK')
  elif args==['shell','getprop','ro.kernel.qemu']:print('0' if mode=='not_emulator' else '1')
@@ -322,7 +325,7 @@ m.stop_owned=fail"""
         self.assertEqual(receipt["verification_exit_code"], -15)
         self.assertEqual(receipt["exit_code"], 143)
 
-    def test_adapter_timeout_waits_for_bootstrap_with_hung_diagnostics_and_preserves_peer(self):
+    def test_adapter_signal_waits_for_bootstrap_with_hung_diagnostics_and_preserves_peer(self):
         # invoke intentionally sanitizes the environment; inject only these two
         # synthetic SDK controls into its test-owned subprocess environment.
         script = SCRIPTS / "foundry-native-acceptance.py"
@@ -330,12 +333,36 @@ m.stop_owned=fail"""
         copy.write_text(script.read_text().replace('"PATH", "HOME", "TMPDIR"', '"MOCK_STATE", "MOCK_MODE", "PATH", "HOME", "TMPDIR"'))
         peer = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.children.append(peer)
-        code, receipt, _ = self.finish(self.start("failed_test_hung_diagnostics", adapter_timeout=2, adapter_source=copy), timeout=20)
-        self.assertEqual(code, 124)
+        process = self.start("failed_test_hung_diagnostics", adapter_timeout=30, adapter_source=copy)
+        deadline = time.monotonic() + 5
+        while not (self.state / "diagnostic-started").exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue((self.state / "diagnostic-started").exists(), "fixture never reached diagnostic boundary")
+        process.send_signal(signal.SIGTERM)
+        code, receipt, _ = self.finish(process, timeout=20)
+        self.assertEqual(code, 143, json.dumps(receipt))
         self.assertEqual(receipt["verification_exit_code"], 23)
         self.assertEqual(receipt["exit_code"], 23)
         self.assertEqual(receipt["phases"]["cleanup"], "PASS")
         self.assertIsNone(peer.poll())
+
+    def test_listener_created_during_observation_is_proved_against_fresh_fds(self):
+        spec = importlib.util.spec_from_file_location("bootstrap_listener", SCRIPTS / "android-emulator.py")
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        original = Path.read_text
+        owned = []
+        def observe(path, *args, **kwargs):
+            if path == Path("/proc/net/tcp") and not owned:
+                listener = socket.socket(); owned.append(listener)
+                listener.bind(("127.0.0.1", self.adb_port)); listener.listen()
+            return original(path, *args, **kwargs)
+        try:
+            with patch.object(Path, "read_text", observe):
+                proof = module.adb_listener(os.getpid(), self.adb_port)
+            self.assertEqual(proof["pid"], os.getpid())
+            self.assertEqual(proof["address"], "127.0.0.1")
+        finally:
+            for listener in owned: listener.close()
 
     def assert_descendant_stopped(self):
         pid = int((self.state / "child-pid").read_text())

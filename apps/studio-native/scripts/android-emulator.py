@@ -50,12 +50,6 @@ def adb_listener(pid, port):
     A successful TCP connection alone could belong to a peer that won the bind
     race. Fail closed when procfs ownership evidence is unavailable.
     """
-    sockets = set()
-    for path in Path(f"/proc/{pid}/fd").iterdir():
-        try:
-            sockets.add(path.readlink().as_posix())
-        except FileNotFoundError:
-            pass  # The owned server can close an unrelated FD while inspected.
     listeners = []
     for family in ("tcp", "tcp6"):
         for line in Path("/proc/net", family).read_text().splitlines()[1:]:
@@ -65,6 +59,14 @@ def adb_listener(pid, port):
                 listeners.append((family, address, fields[9]))
     if not listeners:
         return None
+    # Prove ownership after observing the listener: the server may create its
+    # socket between procfs reads. An earlier FD snapshot can falsely reject it.
+    sockets = set()
+    for path in Path(f"/proc/{pid}/fd").iterdir():
+        try:
+            sockets.add(path.readlink().as_posix())
+        except FileNotFoundError:
+            pass  # The owned server can close an unrelated FD while inspected.
     if len(listeners) != 1 or listeners[0][:2] != ("tcp", "0100007F") or f"socket:[{listeners[0][2]}]" not in sockets:
         raise Stopped("adb_listener_not_owned_loopback")
     return {"address": "127.0.0.1", "port": port, "pid": pid, "socket_inode": listeners[0][2]}
