@@ -84,7 +84,8 @@ test('the real PublishSession: never waits for the counts, reads in parallel, ca
     return answer();
   };
   let t = now, changed = 0, tokenThrows = false;
-  const changes = () => new Promise((r) => { const at = changed; const tick = () => (changed > at ? r() : setTimeout(tick, 5)); tick(); });
+  // Resolves on the next redraw request; gives up after 10 s so a regression fails and exits instead of hanging the run.
+  const changes = () => new Promise((r) => { const at = changed, until = Date.now() + 10_000; const tick = () => (changed > at ? r(true) : Date.now() > until ? r(false) : setTimeout(tick, 5)); tick(); });
   const session = new PublishSession({ switchOn: () => true, token: async () => { if (tokenThrows) throw new Error('secret store unavailable'); return 'tok'; }, scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => t, fetchImpl, statsChanged: () => { changed++; } });
 
   // A read that has not answered never holds back the sharing state.
@@ -152,4 +153,40 @@ test('the real PublishSession: never waits for the counts, reads in parallel, ca
     view = await session.view();
     assert.equal(view.stats.v1.state, 'unknown', 'a token lookup that throws makes the version unknown');
   } finally { process.off('unhandledRejection', onUnhandled); }
+});
+
+test('a read that settles after the learner changed is not kept and never shown to the next learner', async () => {
+  const here = fileURLToPath(new URL('..', import.meta.url));
+  const bundle = await build({ stdin: { contents: "export { PublishSession } from './src/publishSession';", resolveDir: here, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent' });
+  const require = createRequire(import.meta.url), module = { exports: {} };
+  vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require, console, Buffer, process, setTimeout, clearTimeout, URL, TextEncoder, TextDecoder, Response, Headers, crypto: globalThis.crypto, AbortSignal, AbortController });
+  const { PublishSession } = module.exports;
+  const state = { project: { id: 'p', title: 'page', members: ['a'] }, test_origin: 'https://test.invalid', versions: [], hypotheses: [], links: [], experiments: [{ id: 'e1', week: 1, question: 'q', method: 'task_test', success_criteria: [], hypothesis_id: null, product_version_id: 'v1', status: 'running' }] };
+  const waiting = [];
+  let token = 'tokA', changed = 0;
+  const fetchImpl = async (url, init) => {
+    if (!/\/evidence$/.test(new URL(url).pathname)) return new Response(JSON.stringify(state), { status: 200 });
+    // The answer names the learner whose token asked, so a leak across learners is visible in the cache and the view.
+    const who = String(init?.headers?.authorization ?? '').replace('Bearer ', '');
+    return new Promise((resolve) => waiting.push(() => resolve(new Response(JSON.stringify({ evidence: { sessions: [{ session_id: `ps_of_${who}`, at: now - DAY_MS, product_version: null, tasks: done, pages: 1, clicks: 1 }] } }), { status: 200 }))));
+  };
+  const settled = () => new Promise((r) => { const at = changed, until = Date.now() + 5_000; const tick = () => (changed > at ? r(true) : Date.now() > until ? r(false) : setTimeout(tick, 5)); tick(); });
+  const session = new PublishSession({ switchOn: () => true, token: async () => token, scopeKey: () => 's', base: () => 'https://api.test/v1/curriculum', root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: (u) => u, now: () => now, fetchImpl, statsChanged: () => { changed++; } });
+  let next = settled();
+  assert.equal((await session.view()).stats.v1.state, 'loading');
+  await new Promise((r) => setTimeout(r, 20));
+  token = 'tokB'; // learner A signs out and learner B signs in while A's read is in flight
+  for (const w of waiting.splice(0)) w();
+  assert.ok(await next, 'the load settled');
+  assert.ok(!session.statsCacheJson().includes('ps_of_tokA'), "A's sessions are not kept after the switch");
+  next = settled();
+  let view = await session.view();
+  assert.equal(view.stats.v1.state, 'loading', "B never sees A's counts; B's own read starts");
+  assert.ok(!JSON.stringify(view).includes('ps_of_tokA'));
+  await new Promise((r) => setTimeout(r, 20));
+  for (const w of waiting.splice(0)) w();
+  assert.ok(await next);
+  view = await session.view();
+  // Compared as JSON: the array comes from the bundle's own realm (vm), whose prototypes differ from this one's.
+  assert.equal(JSON.stringify(view.stats.v1.opened.sources.map((x) => x.session_id)), '["ps_of_tokB"]', 'B sees only B\'s own session');
 });
