@@ -78,7 +78,7 @@ public final class QuestionActivity extends Activity {
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
     @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
-    @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
+    @Override protected void onPause(){foreground=false;if(model!=null)model.suspendQueuedSend();if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
     @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
     @Override protected void onDestroy(){if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
@@ -132,7 +132,7 @@ public final class QuestionActivity extends Activity {
         setContentView(root);root.requestApplyInsets();
     }
     private String voiceScope(){return model.account()==null?"guest-local-draft":model.account();}
-    private boolean canSend(){return !model.readOnly&&!model.busy&&!model.brokenCredentials&&(model.account()!=null||!model.guestReadOnly)&&(model.state==null||!model.state.outstanding())&&!model.draft.trim().isEmpty()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
+    private boolean canSend(){return model.canSend()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
     private boolean canActivatePrimary(){
         if(model.account()!=null)return canSend();
         return !model.readOnly&&!model.guestReadOnly&&!model.busy&&!model.signing&&!model.brokenCredentials
