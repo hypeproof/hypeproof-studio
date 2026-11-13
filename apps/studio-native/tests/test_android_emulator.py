@@ -72,6 +72,7 @@ if [ "$MOCK_MODE" = verify_failure ] || [ "$MOCK_MODE" = failed_test_hung_diagno
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = adb_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/adb-pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = native_and_adb_fail ]; then kill -TERM "$(cat "$MOCK_STATE/adb-pid")"; exit 23; fi
+if [ "$MOCK_MODE" = native_term ]; then kill -TERM $$; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
 exit 0
 '''
@@ -136,8 +137,8 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.children.append(p)
         return p
 
-    def finish(self, process):
-        stdout, stderr = process.communicate(timeout=10)
+    def finish(self, process, timeout=10):
+        stdout, stderr = process.communicate(timeout=timeout)
         path = self.native / "evidence/android/bootstrap/receipt.json"
         self.assertTrue(path.exists(), (stdout + stderr).decode())
         receipt = json.loads(path.read_text())
@@ -315,6 +316,12 @@ m.stop_owned=fail"""
         self.assertEqual(receipt["verification_exit_code"], 23)
         self.assertEqual(receipt["reason"], "adb_server_exited")
 
+    def test_native_signal_records_raw_status_and_normalized_aggregate(self):
+        code, receipt, _ = self.finish(self.start("native_term"))
+        self.assertEqual(code, 143)
+        self.assertEqual(receipt["verification_exit_code"], -15)
+        self.assertEqual(receipt["exit_code"], 143)
+
     def test_adapter_timeout_waits_for_bootstrap_with_hung_diagnostics_and_preserves_peer(self):
         # invoke intentionally sanitizes the environment; inject only these two
         # synthetic SDK controls into its test-owned subprocess environment.
@@ -323,7 +330,7 @@ m.stop_owned=fail"""
         copy.write_text(script.read_text().replace('"PATH", "HOME", "TMPDIR"', '"MOCK_STATE", "MOCK_MODE", "PATH", "HOME", "TMPDIR"'))
         peer = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.children.append(peer)
-        code, receipt, _ = self.finish(self.start("failed_test_hung_diagnostics", adapter_timeout=2, adapter_source=copy))
+        code, receipt, _ = self.finish(self.start("failed_test_hung_diagnostics", adapter_timeout=2, adapter_source=copy), timeout=20)
         self.assertEqual(code, 124)
         self.assertEqual(receipt["verification_exit_code"], 23)
         self.assertEqual(receipt["exit_code"], 23)

@@ -83,10 +83,12 @@ class Bootstrap:
         self.serial = "emulator-" + str(args.port)
         self.env = dict(os.environ, ANDROID_AVD_HOME=str(self.work / "avd"),
                         ANDROID_EMULATOR_HOME=str(self.work / "emulator"), ANDROID_SERIAL=self.serial,
+                        ANDROID_USER_HOME=str(self.work / "android-user"),
                         ANDROID_HOME=str(self.sdk), ANDROID_SDK_ROOT=str(self.sdk),
                         PATH=str(self.sdk / "platform-tools") + os.pathsep + os.environ.get("PATH", ""))
         Path(self.env["ANDROID_AVD_HOME"]).mkdir()
         Path(self.env["ANDROID_EMULATOR_HOME"]).mkdir()
+        Path(self.env["ANDROID_USER_HOME"]).mkdir()
         self.emulator = None
         self.adb_server = None
         self.verifier = None
@@ -331,6 +333,8 @@ def main():
         code = bootstrap.verify()
         bootstrap.receipt["phases"][phase] = "PASS" if code == 0 else "FAIL"
         bootstrap.receipt["verification_exit_code"] = code
+        if code < 0:
+            code = 128 - code
         bootstrap.receipt["state"] = "verified" if code == 0 else "native_verification_failed"
     except Exception as error:
         native_code = bootstrap.receipt.get("verification_exit_code")
