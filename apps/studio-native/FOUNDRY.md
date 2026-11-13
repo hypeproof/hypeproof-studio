@@ -15,7 +15,7 @@ python3 /trusted/pinned/foundry-native-acceptance.py \
   --workspace /absolute/candidate --platform android \
   --expected-source-sha FULL_BASE_COMMIT \
   --expected-patch-sha256 FULL_INDEX_BINARY_PATCH_SHA256 \
-  --expected-script-sha256 ANDROID_VERIFY_SCRIPT_SHA256
+  --expected-script-sha256 ANDROID_RECIPE_SHA256
 ```
 
 Placeholders must be replaced with verified values. Active product targets are `ios` and `android`. The recipe retains its historical
@@ -24,9 +24,13 @@ the retired Mac Catalyst preview and must not be admitted for new work. The
 current Xcode project disables Catalyst. Existing desktop Studio uses its own
 extension checks and RC pipeline, not this mobile recipe. No arbitrary command
 or artifact path is accepted. The
-recipe invokes only the corresponding existing `scripts/*-verify.sh`. The caller
+recipe invokes only the existing platform verification entrypoint. Android uses
+`android-emulator.py`, which owns its private ADB server and disposable emulator
+then calls `android-verify.sh`; other platform commands are unchanged. The caller
 owns the required `hype-resource local_heavy` slot; the recipe never nests one.
-Android requires an explicitly selected disposable emulator. iOS requires full
+Android requires a Linux runner with procfs and an installed API35 Google APIs
+x86_64 SDK. It creates its own disposable emulator; it never attaches a caller's
+running device. iOS requires full
 Xcode and the matching simulator. No build or device test runs in unit tests.
 
 The candidate must have no untracked or unstaged source. A staged reviewed patch
@@ -95,18 +99,42 @@ Foundry runtime admission, signing or release readiness.
 
 ## Android runner routing
 
-The caller must own the selected disposable emulator and ADB server. The recipe
-preserves `ANDROID_SERIAL`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `JAVA_HOME` and
-`GRADLE_USER_HOME`, which the existing Android recipe/build tools consume.
-Explicit `ADB_SERVER_SOCKET` supports only `tcp:127.0.0.1:PORT` or
-`tcp:localhost:PORT`; `ANDROID_ADB_SERVER_PORT` accepts ports 1–65535. Both can be
-set only with matching ports. Malformed, nonloopback and unsupported socket
-forms, and `ANDROID_ADB_SERVER_ADDRESS`, are refused before subprocess execution;
-explicit routing is never silently dropped in favor of port 5037. Without either
-routing variable, ADB retains its ordinary default, so the runner must provision
-and own that default server or supply its dedicated endpoint. Loopback validation
-alone does not establish ownership. No emulator or server is started by this
-adapter. Tests of propagation/refusal use mocked subprocesses only.
+The existing `android-emulator.py` owns one foreground ADB server and emulator.
+CI and this adapter use that same lifecycle. Set `ANDROID_SDK_ROOT` (or
+`ANDROID_HOME`) to the installed SDK. The adapter retains the existing Java and
+Gradle environment. `ANDROID_SERIAL` selects only the new emulator's port
+(default `emulator-5554`), not a device to reuse. Busy emulator or ADB ports are
+refused without stopping their owner. The default private ADB port is5047; use
+matching `ADB_SERVER_SOCKET=tcp:127.0.0.1:PORT` and
+`ANDROID_ADB_SERVER_PORT=PORT` to select another. Direct bootstrap callers can
+use `--adb-port`. Port5037, remote/unsupported routes and conflicting values are
+refused; there is no fallback to a shared daemon.
+
+The bootstrap starts `adb -L tcp:PORT nodaemon server`, proves that exact PID
+owns the loopback-only listening socket through Linux procfs, and supplies both
+client socket and emulator port variables. The numeric loopback client route
+prevents missing-server auto-start in the validated SDK; preserve the actual
+installed-tool negative control when changing SDK versions. Tool versions and
+executable hashes, endpoint, PID, recipe hashes and owned cleanup appear in
+`evidence/android/bootstrap/receipt.json`. Only invocation-owned process groups
+are stopped, including remaining children after their leader exits.
+
+For Android, `--expected-script-sha256` now pins the `recipe_record` digest of
+three ordered file records (bootstrap, verifier, readiness classifier), encoded
+as sorted-key compact JSON and hashed with SHA256. Register all three files in
+the trusted profile. An old verifier-only digest fails closed. Candidate and
+full-index patch checks remain unchanged; recipe changes still require separate
+infrastructure admission before app-feature patches can consume them.
+
+`verification.json` separates build, readiness, instrumentation and artifact
+phases. The bootstrap finalizes its aggregate only after cleanup; exception,
+timeout, interruption or cleanup failure cannot inherit an earlier PASS. The
+adapter requires both receipts' phases to pass as well as its original source
+and artifact checks. These receipts cover only the lifecycle these scripts own.
+A failed enclosing resource/SSH/copy operation remains a separate failed or
+unknown result; these files cannot certify that caller. No failed native journey
+is replayed automatically. Original launcher failures and historical product
+runs remain separate evidence; this change does not complete #3693 admission.
 
 Source binding also rejects Git assume-unchanged and skip-worktree flags. It
 compares actual tracked native input bytes and executable mode directly with the

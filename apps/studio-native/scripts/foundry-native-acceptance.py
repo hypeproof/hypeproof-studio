@@ -11,6 +11,7 @@ import re
 import signal
 import stat
 import subprocess
+import sys
 import time
 
 
@@ -32,8 +33,9 @@ PLATFORMS = {
         "environment": "ios-simulator-and-unsigned-device-build",
     },
     "android": {
-        "script": "android-verify.sh",
+        "script": "android-emulator.py",
         "required": ["evidence/android/build.log", "evidence/android/identity.txt",
+                     "evidence/android/bootstrap/receipt.json", "evidence/android/verification.json",
                      "evidence/android/install.log", "evidence/android/native-ui.log",
                      "evidence/android/screenshots", "android/app/build/outputs/apk/debug/app-debug.apk"],
         "roots": ["evidence/android", "android/app/build/outputs/apk/debug/app-debug.apk"],
@@ -212,6 +214,33 @@ def adb_environment() -> dict[str, str]:
     return result
 
 
+def recipe_record(workspace: Path, platform: str) -> dict:
+    entry = file_record(workspace, workspace / NATIVE / "scripts" / PLATFORMS[platform]["script"])
+    if platform != "android":
+        return entry
+    # The Android entrypoint delegates to two same-source files. Pin the entire
+    # recipe, so an old single-script hash cannot silently authorize the new path.
+    files = [entry] + [file_record(workspace, workspace / NATIVE / "scripts" / name)
+                       for name in ("android-verify.sh", "android-environment.py")]
+    return {"format": "hps-native-recipe/2", "path": entry["path"], "files": files,
+            "sha256": sha(json.dumps(files, sort_keys=True, separators=(",", ":")).encode())}
+
+
+def android_command(script: Path, output: Path) -> list[str]:
+    serial = os.environ.get("ANDROID_SERIAL", "emulator-5554")
+    if not re.fullmatch(r"emulator-[0-9]+", serial):
+        raise Refused("ANDROID_SERIAL must select a disposable emulator port")
+    sdk = os.environ.get("ANDROID_SDK_ROOT") or os.environ.get("ANDROID_HOME")
+    if not sdk or not Path(sdk).is_absolute():
+        raise Refused("Android requires an absolute ANDROID_SDK_ROOT or ANDROID_HOME")
+    routing = adb_environment()
+    port = routing.get("ANDROID_ADB_SERVER_PORT") or routing.get("ADB_SERVER_SOCKET", "tcp:127.0.0.1:5047").rsplit(":", 1)[-1]
+    if "ADB_SERVER_SOCKET" in routing and routing["ADB_SERVER_SOCKET"] != "tcp:127.0.0.1:" + port:
+        raise Refused("Owned Android bootstrap requires a numeric loopback ADB socket")
+    return [sys.executable, str(script), "--sdk-root", sdk, "--work-dir", str(output / "work"),
+            "--port", serial.split("-")[1], "--adb-port", port]
+
+
 def invoke(argv: list[str], workspace: Path, log: Path, timeout: int) -> dict:
     """No resource wrapper here: Foundry already holds local_heavy for this command."""
     env = {k: v for k, v in os.environ.items() if k in {
@@ -240,7 +269,12 @@ def invoke(argv: list[str], workspace: Path, log: Path, timeout: int) -> dict:
             except ProcessLookupError:
                 pass
             try:
-                process.wait(timeout=10)
+                # Bootstrap owns separate verifier/emulator/ADB sessions. Allow
+                # their bounded cleanup (up to ten seconds each), plus a normal
+                # failure's already-running bounded diagnostics (at most15s).
+                # Cancellation itself skips diagnostics. Never kill that owner
+                # before it has had time to reap its independently owned groups.
+                process.wait(timeout=60)
             except subprocess.TimeoutExpired:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
@@ -305,7 +339,7 @@ def accept(workspace: Path, platform: str, expected_source: str | None = None,
         if before["dirty"] and expected_patch is None:
             raise Refused("A staged candidate requires its reviewed patch SHA256")
         script = workspace / NATIVE / "scripts" / spec["script"]
-        receipt["recipe"] = file_record(workspace, script)
+        receipt["recipe"] = recipe_record(workspace, platform)
         if expected_script is not None and receipt["recipe"]["sha256"] != expected_script:
             raise Refused("Platform recipe SHA256 mismatch")
         # Refuse stale outputs, including symlinks, without deleting owner data.
@@ -320,12 +354,10 @@ def accept(workspace: Path, platform: str, expected_source: str | None = None,
             entries = list((workspace / NATIVE / "evidence").iterdir())
             if any(p.name != "foundry" for p in entries):
                 raise Refused("Use a fresh candidate: existing iOS evidence")
-        if platform == "android" and not re.fullmatch(r"emulator-[0-9]+", os.environ.get("ANDROID_SERIAL", "")):
-            raise Refused("ANDROID_SERIAL must select a disposable emulator")
-        argv = ["/bin/bash", str(script)]
+        argv = android_command(script, output) if platform == "android" else ["/bin/bash", str(script)]
         log = output / "command.log"
         receipt["command"] = {"id": "native-preview-" + platform,
-                              "argv": ["/bin/bash", str(NATIVE / "scripts" / spec["script"])],
+                              "argv": argv,
                               "exit_code": None, "status": "STARTING"}
         receipt["command"].update(invoke(argv, workspace, log, timeout), status="COMPLETED")
         receipt["command"]["log"] = file_record(workspace, log)
@@ -337,15 +369,24 @@ def accept(workspace: Path, platform: str, expected_source: str | None = None,
         ] + [spec["required"][-1]]
         receipt["artifacts"] = collect(workspace, roots)
         after = source_identity(workspace)
-        if after != before or file_record(workspace, script) != receipt["recipe"]:
+        if after != before or recipe_record(workspace, platform) != receipt["recipe"]:
             raise Refused("Source or recipe changed during verification")
         if code == 0:
             for relative in spec["required"]:
                 path = safe_path(workspace, workspace / NATIVE / relative)
                 if (path.is_file() and path.stat().st_size == 0) or (path.is_dir() and not any(x.is_file() for x in path.rglob("*"))):
                     raise Refused("Required artifact is empty: " + relative)
+            if platform == "android":
+                for relative, schema, phases in (
+                    ("bootstrap/receipt.json", "hps-android-bootstrap/1", ("adb", "bootstrap", "verification", "cleanup")),
+                    ("verification.json", "hps-android-verification/1", ("build", "readiness", "instrumentation", "artifacts")),
+                ):
+                    proof = json.loads((workspace / NATIVE / "evidence/android" / relative).read_text())
+                    if (proof.get("schema") != schema or type(proof.get("exit_code")) is not int
+                            or proof["exit_code"] != 0 or proof.get("phases") != dict.fromkeys(phases, "PASS")):
+                        raise Refused("Android owned lifecycle did not pass: " + relative)
             receipt["verdict"] = "PASS"
-    except (Refused, OSError, subprocess.SubprocessError) as exc:
+    except Exception as exc:
         receipt["reason"] = str(exc)
         code = code if code else 2
         if receipt["command"] is not None:

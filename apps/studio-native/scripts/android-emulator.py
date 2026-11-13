@@ -44,6 +44,34 @@ def stop_owned(process):
     process.wait(timeout=5)
 
 
+def adb_listener(pid, port):
+    """Linux runner proof: the exact foreground PID owns the only loopback listener.
+
+    A successful TCP connection alone could belong to a peer that won the bind
+    race. Fail closed when procfs ownership evidence is unavailable.
+    """
+    listeners = []
+    for family in ("tcp", "tcp6"):
+        for line in Path("/proc/net", family).read_text().splitlines()[1:]:
+            fields = line.split()
+            address, local_port = fields[1].split(":")
+            if fields[3] == "0A" and int(local_port, 16) == port:
+                listeners.append((family, address, fields[9]))
+    if not listeners:
+        return None
+    # Prove ownership after observing the listener: the server may create its
+    # socket between procfs reads. An earlier FD snapshot can falsely reject it.
+    sockets = set()
+    for path in Path(f"/proc/{pid}/fd").iterdir():
+        try:
+            sockets.add(path.readlink().as_posix())
+        except FileNotFoundError:
+            pass  # The owned server can close an unrelated FD while inspected.
+    if len(listeners) != 1 or listeners[0][:2] != ("tcp", "0100007F") or f"socket:[{listeners[0][2]}]" not in sockets:
+        raise Stopped("adb_listener_not_owned_loopback")
+    return {"address": "127.0.0.1", "port": port, "pid": pid, "socket_inode": listeners[0][2]}
+
+
 class Bootstrap:
     def __init__(self, args):
         self.args = args
@@ -57,15 +85,23 @@ class Bootstrap:
         self.serial = "emulator-" + str(args.port)
         self.env = dict(os.environ, ANDROID_AVD_HOME=str(self.work / "avd"),
                         ANDROID_EMULATOR_HOME=str(self.work / "emulator"), ANDROID_SERIAL=self.serial,
+                        ANDROID_USER_HOME=str(self.work / "android-user"),
+                        ANDROID_HOME=str(self.sdk), ANDROID_SDK_ROOT=str(self.sdk),
                         PATH=str(self.sdk / "platform-tools") + os.pathsep + os.environ.get("PATH", ""))
         Path(self.env["ANDROID_AVD_HOME"]).mkdir()
         Path(self.env["ANDROID_EMULATOR_HOME"]).mkdir()
+        Path(self.env["ANDROID_USER_HOME"]).mkdir()
         self.emulator = None
+        self.adb_server = None
+        self.verifier = None
         self.owned_device = False
         self.receipt = {"schema": "hps-android-bootstrap/1", "state": "starting", "serial": self.serial,
                         "avd": self.name, "work_dir": str(self.work), "verification_started": False,
+                        "phases": {key: "NOT_RUN" for key in ("adb", "bootstrap", "verification", "cleanup")},
                         "source_sha": os.environ.get("GITHUB_SHA"), "commands": [],
                         "recipe": {"api": 35, "target": "google_apis", "arch": "x86_64", "profile": "pixel_6"}}
+        self.receipt["recipe_inputs"] = {name: hashlib.sha256((NATIVE / "scripts" / name).read_bytes()).hexdigest()
+                                        for name in ("android-emulator.py", "android-verify.sh", "android-environment.py")}
 
     def command(self, argv, timeout=10, data=None):
         self.receipt["commands"].append([str(v) for v in argv])
@@ -81,8 +117,52 @@ class Bootstrap:
             stop_owned(process)
 
     def alive(self):
-        if self.emulator.poll() is not None:
+        if self.adb_server is None or self.adb_server.poll() is not None:
+            raise Stopped("adb_server_exited")
+        if self.emulator is not None and self.emulator.poll() is not None:
             raise Stopped("emulator_exited: " + str(self.emulator.returncode))
+
+    def start_adb(self):
+        port = self.args.adb_port
+        # Refuse conflicting routing rather than silently dropping a caller's
+        # route. Numeric loopback clients do not auto-start a missing server.
+        if "ANDROID_ADB_SERVER_ADDRESS" in self.env:
+            raise Stopped("unsupported_adb_server_address")
+        socket_value = self.env.get("ADB_SERVER_SOCKET")
+        if socket_value is not None and socket_value != f"tcp:127.0.0.1:{port}":
+            raise Stopped("conflicting_adb_server_socket")
+        port_value = self.env.get("ANDROID_ADB_SERVER_PORT")
+        if port_value is not None and port_value != str(port):
+            raise Stopped("conflicting_adb_server_port")
+        self.env.update(ADB_SERVER_SOCKET=f"tcp:127.0.0.1:{port}", ANDROID_ADB_SERVER_PORT=str(port))
+        self.receipt["adb_environment"] = {key: self.env[key] for key in ("ADB_SERVER_SOCKET", "ANDROID_ADB_SERVER_PORT")}
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", port))
+        tools = {}
+        for name, relative, flag in (("adb", "platform-tools/adb", "version"), ("emulator", "emulator/emulator", "-version")):
+            path = self.sdk / relative
+            code, output = self.command([str(path), flag])
+            (self.evidence / (name + "-version.txt")).write_bytes(output)
+            if code:
+                raise Stopped(name + "_version_failed")
+            tools[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        self.receipt["tools"] = tools
+        argv = [str(self.sdk / "platform-tools/adb"), "-L", f"tcp:{port}", "nodaemon", "server"]
+        self.receipt["commands"].append(argv)
+        with (self.evidence / "adb-server.log").open("wb") as log:
+            self.adb_server = subprocess.Popen(argv, env=self.env, stdout=log, stderr=subprocess.STDOUT,
+                                               start_new_session=True)
+        self.receipt["adb_server_pid"] = self.adb_server.pid
+        deadline = time.monotonic() + 10
+        while True:
+            self.alive()
+            listener = adb_listener(self.adb_server.pid, port)
+            if listener:
+                self.receipt["adb_listener"] = listener
+                return
+            if time.monotonic() >= deadline:
+                raise Stopped("adb_listener_timeout", 124)
+            time.sleep(.05)
 
     def adb(self, *argv, timeout=5):
         self.alive()
@@ -185,25 +265,26 @@ class Bootstrap:
         self.alive()
         self.receipt["verification_started"] = True
         with (self.evidence / "verification.log").open("wb") as log:
-            process = subprocess.Popen(["bash", str(NATIVE / "scripts/android-verify.sh")], env=self.env,
-                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                deadline = time.monotonic() + self.args.test_timeout
-                while process.poll() is None:
-                    self.alive()
-                    if time.monotonic() >= deadline:
-                        raise Stopped("native_verification_timeout", 124)
-                    time.sleep(0.1)
+            self.verifier = subprocess.Popen(["bash", str(NATIVE / "scripts/android-verify.sh")], env=self.env,
+                                            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            deadline = time.monotonic() + self.args.test_timeout
+            while self.verifier.poll() is None:
                 self.alive()
-                return process.returncode
-            finally:
-                stop_owned(process)
+                if time.monotonic() >= deadline:
+                    raise Stopped("native_verification_timeout", 124)
+                time.sleep(0.1)
+            self.receipt["verification_exit_code"] = self.verifier.returncode
+            self.alive()
+            # Main owns cleanup independently; a cleanup exception must not
+            # overwrite the native command's already observed exit status.
+            return self.verifier.returncode
 
     def capture_failure(self):
-        if not self.owned_device or self.emulator.poll() is not None:
+        if not self.owned_device or self.emulator.poll() is not None or self.adb_server.poll() is not None:
             return
         # Recheck ownership before diagnostics; never interact with a replacement.
-        code, name = self.adb("emu", "avd", "name")
+        deadline = time.monotonic() + 5
+        code, name = self.adb("emu", "avd", "name", timeout=self.remaining(deadline))
         if code or name.decode().splitlines()[:1] != [self.name]:
             return
         for label, command in [("window", ["shell", "dumpsys", "window"]),
@@ -212,10 +293,11 @@ class Bootstrap:
                                ("logcat", ["logcat", "-d", "-b", "main", "-b", "system", "-b", "crash", "-t", "1000"]),
                                ("screen.png", ["exec-out", "screencap", "-p"])]:
             try:
-                code, output = self.adb(*command)
+                code, output = self.adb(*command, timeout=self.remaining(deadline))
                 (self.evidence / ("failure-" + label)).write_bytes(output)
             except (Stopped, OSError) as error:
                 self.receipt.setdefault("diagnostic_errors", []).append(str(error))
+                break
 
 
 def main():
@@ -223,11 +305,14 @@ def main():
     parser.add_argument("--sdk-root", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--port", type=int, default=5554)
+    parser.add_argument("--adb-port", type=int, default=5047)
     parser.add_argument("--boot-timeout", type=float, default=180)
     parser.add_argument("--test-timeout", type=float, default=600)
     parser.add_argument("--poll-interval", type=float, default=1)
     args = parser.parse_args()
-    if not (1024 <= args.port <= 5682 and args.port % 2 == 0 and 0 < args.boot_timeout <= 600
+    if not (1024 <= args.port <= 5682 and args.port % 2 == 0
+            and 1024 <= args.adb_port <= 65535 and args.adb_port not in (5037, args.port, args.port + 1)
+            and 0 < args.boot_timeout <= 600
             and 0 < args.test_timeout <= 900 and 0 < args.poll_interval <= 5):
         parser.error("invalid bounded emulator settings")
     bootstrap = Bootstrap(args)
@@ -236,28 +321,58 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, interrupted)
     code = 2
+    phase = "adb"
     try:
+        bootstrap.receipt["phases"][phase] = "RUNNING"
+        bootstrap.start_adb()
+        bootstrap.receipt["phases"][phase] = "PASS"
+        phase = "bootstrap"
+        bootstrap.receipt["phases"][phase] = "RUNNING"
         bootstrap.start()
+        bootstrap.receipt["phases"][phase] = "PASS"
+        phase = "verification"
+        bootstrap.receipt["phases"][phase] = "RUNNING"
         code = bootstrap.verify()
-        bootstrap.receipt["state"] = "passed" if code == 0 else "native_verification_failed"
-    except (Stopped, OSError) as error:
-        code = error.code if isinstance(error, Stopped) else 2
+        bootstrap.receipt["phases"][phase] = "PASS" if code == 0 else "FAIL"
+        bootstrap.receipt["verification_exit_code"] = code
+        if code < 0:
+            code = 128 - code
+        bootstrap.receipt["state"] = "verified" if code == 0 else "native_verification_failed"
+    except Exception as error:
+        native_code = bootstrap.receipt.get("verification_exit_code")
+        code = native_code if native_code else (error.code if isinstance(error, Stopped) else 2)
+        if code < 0:
+            code = 128 - code
+        bootstrap.receipt["phases"][phase] = "FAIL"
         bootstrap.receipt.update(state="failed", reason=error.reason if isinstance(error, Stopped) else str(error))
     finally:
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, signal.SIG_IGN)
+        bootstrap.receipt["phases"]["cleanup"] = "PASS"
+        def cleanup(name, process):
+            nonlocal code
+            try:
+                stop_owned(process)
+            except Exception as error:
+                code = code or 2
+                bootstrap.receipt["phases"]["cleanup"] = "FAIL"
+                bootstrap.receipt.setdefault("cleanup_errors", {})[name] = str(error)
+                bootstrap.receipt["state"] = "cleanup_failed"
+            bootstrap.receipt[name + "_reaped"] = process is None or process.poll() is not None
+        cleanup("verifier", bootstrap.verifier)
         try:
-            if code:
+            # Cancellation spends its budget reaping owned groups, not issuing
+            # new ADB diagnostics. Normal failure capture has one five-second
+            # deadline (plus at most ten seconds to reap its last command).
+            if code and code not in (124, 130, 143):
                 bootstrap.capture_failure()
-        except (Stopped, OSError) as error:
+        except Exception as error:
             bootstrap.receipt["capture_error"] = str(error)
         finally:
-            try:
-                stop_owned(bootstrap.emulator)
-            except (OSError, subprocess.TimeoutExpired) as error:
-                code = code or 2
-                bootstrap.receipt.update(state="cleanup_failed", cleanup_error=str(error))
-            bootstrap.receipt["emulator_reaped"] = bootstrap.emulator is None or bootstrap.emulator.poll() is not None
+            for name, process in (("emulator", bootstrap.emulator), ("adb_server", bootstrap.adb_server)):
+                cleanup(name, process)
+            if code == 0:
+                bootstrap.receipt["state"] = "passed"
             bootstrap.receipt["exit_code"] = code
             (bootstrap.evidence / "receipt.json").write_text(json.dumps(bootstrap.receipt, indent=2) + "\n")
     return code
