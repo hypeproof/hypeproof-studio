@@ -431,3 +431,11 @@ test('published baseline uses the release API and rejects unavailable or invalid
   assert.throws(() => publishedBaseline(() => { throw new Error('missing or divergent tag'); }, 'candidate', () => JSON.stringify(valid)),
     /missing locally or is not an ancestor/);
 });
+
+test('scheduled gate receives read authentication for published-release lookup', () => {
+  const workflow = fs.readFileSync(path.resolve(here, '../../../.github/workflows/release-cut.yml'), 'utf8');
+  const gate = workflow.split('\n  gate:')[1].split('\n  alarm:')[0];
+  const decisionStep = gate.slice(gate.indexOf('      - name: Decide'));
+  assert.match(decisionStep, /GH_TOKEN: \$\{\{ github.token \}\}/);
+  assert.match(decisionStep, /run: node scripts\/release\/daily-gate\.mjs/);
+});
