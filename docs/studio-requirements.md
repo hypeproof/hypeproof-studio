@@ -9327,3 +9327,18 @@ pins and cap, host against a recording Service: flag and sign-in gates, nothing 
 consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
 and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
 Electron app and a deployed Service; both are NOT RUN in this slice.
+
+
+### Android question-first local draft — Studio #3946
+
+MPER-01/03/04 and MREF-05 apply before Android login too: the existing
+question screen exposes an editable, device-local draft and dictation immediately.
+Cancel, failed login and relaunch preserve it. Only successful explicit login can
+copy it into an empty account draft without an outstanding turn; a collision keeps
+both copies and offers explicit restore after the account composer is cleared.
+Persist the account copy before clearing the guest file. Neither login nor restore
+sends a turn. History and account settings remain secondary, while the native
+composer and normal user/assistant hierarchy support system theme, font scaling
+and the software keyboard. This follows **Human judgment stays visible** and
+**Minimum necessary intervention**: writing is available first and sending remains
+the person's choice. See the existing [mobile checks](testing/native-mobile-growth.md).

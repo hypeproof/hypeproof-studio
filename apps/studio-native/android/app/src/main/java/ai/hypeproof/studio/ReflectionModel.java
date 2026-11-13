@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 /** UI-thread owner. Every asynchronous completion is fenced by account + operation epoch. */
 final class ReflectionModel {
     interface Store {
+        String loadGuestDraft() throws Exception;
+        void saveGuestDraft(String text) throws Exception;
         ReflectionState load(String account) throws Exception;
         void save(ReflectionState value) throws Exception;
         NativeDeviceSignIn.Credentials loadCredentials() throws Exception;
@@ -27,10 +29,12 @@ final class ReflectionModel {
     final Map<String,String> unsavedDrafts=new HashMap<>();
     NativeDeviceSignIn.Credentials credentials;
     ReflectionState state;
-    boolean busy,signing,readOnly,brokenCredentials;
-    String draft="",error="",notice="";
+    boolean busy,signing,readOnly,brokenCredentials,guestReadOnly;
+    String draft="",guestDraft="",error="",notice="";
     ReflectionModel(Store store,NativeDeviceSignIn auth,NativeDeviceSignIn.Transport http,ExecutorService worker,Consumer<Runnable> ui,Runnable changed){this.store=store;this.auth=auth;this.http=http;this.worker=worker;this.ui=ui;this.changed=changed;}
     void restore(){
+        try{guestDraft=store.loadGuestDraft();draft=guestDraft;}
+        catch(Exception e){guestReadOnly=true;error="로그인 전 글을 읽지 못했어요. 원본을 보존하고 덮어쓰지 않아요.";}
         try{credentials=store.loadCredentials();if(credentials!=null)load();}
         catch(Exception e){credentials=null;brokenCredentials=true;error="계정 연결 정보를 읽지 못했어요. 보존한 뒤 다시 연결해 주세요.";}
         changed.run();
@@ -49,8 +53,25 @@ final class ReflectionModel {
         try{ReflectionState next=state.copy();next.draft=draft;edit.apply(next);store.save(next);state=next;draft=next.draft;unsavedDrafts.remove(next.account);notice="이 기기에 저장했어요.";return true;}
         catch(Exception e){error="기록을 저장하지 못했어요. 작성한 글은 화면에 남아 있어요. 다시 저장하거나 내보내 주세요.";return false;}
     }
-    void edit(String text){draft=text;if(account()!=null)unsavedDrafts.put(account(),text);save(next->{});}
-    void retrySave(){save(next->{});changed.run();}
+    private boolean saveGuest(){
+        if(guestReadOnly)return false;
+        try{store.saveGuestDraft(guestDraft);notice="로그인 전 글은 이 기기에만 저장돼요.";return true;}
+        catch(Exception e){error="글을 저장하지 못했어요. 화면의 글을 복사하거나 다시 저장해 주세요.";return false;}
+    }
+    void edit(String text){
+        if(closed||text.length()>4000||text.indexOf('\0')>=0)return;
+        if(account()==null){if(guestReadOnly)return;draft=text;guestDraft=text;saveGuest();}
+        else{draft=text;unsavedDrafts.put(account(),text);save(next->{});}
+    }
+    void retrySave(){if(account()==null)saveGuest();else save(next->{});changed.run();}
+    boolean canRestoreGuest(){return !closed&&!busy&&credentials!=null&&state!=null&&!readOnly&&!guestReadOnly&&!guestDraft.isEmpty()&&draft.isEmpty()&&!state.outstanding();}
+    boolean restoreGuest(){
+        if(!canRestoreGuest())return false;
+        // Persist the account copy first. A later guest-clear failure leaves both copies.
+        try{ReflectionState next=state.copy();next.draft=guestDraft;store.save(next);state=next;draft=next.draft;unsavedDrafts.remove(next.account);
+            store.saveGuestDraft("");guestDraft="";notice="로그인 전 글을 가져왔어요. 보내기를 눌러야 전송돼요.";changed.run();return true;}
+        catch(Exception e){error="로그인 전 글을 모두 옮기지 못했어요. 원본은 남아 있어요. 다시 저장하거나 확인해 주세요.";changed.run();return false;}
+    }
     void login(Consumer<String> approval){
         if(closed||busy||credentials!=null||brokenCredentials)return;
         invalidate();error="";busy=true;signing=true;long ticket=epoch;NativeDeviceSignIn.Cancel operation=new NativeDeviceSignIn.Cancel();cancel=operation;changed.run();
@@ -62,7 +83,7 @@ final class ReflectionModel {
                 if(!live(ticket,null)){if(received!=null)revoke(received);return;}
                 busy=false;signing=false;
                 if(problem!=null){error="로그인을 완료하지 못했어요. 다시 연결할 수 있어요.";changed.run();return;}
-                try{store.saveCredentials(received);credentials=received;load();error=readOnly?error:"";changed.run();refresh();}
+                try{store.saveCredentials(received);credentials=received;load();error=readOnly?error:"";restoreGuest();changed.run();refresh();}
                 catch(Exception e){revoke(received);error="계정 연결을 저장하지 못했어요. 저장 공간을 확인해 주세요.";changed.run();}
             });
         });
@@ -72,7 +93,7 @@ final class ReflectionModel {
     void logout(){
         if(state!=null&&!draft.equals(state.draft)&&!save(next->{})){changed.run();return;}
         NativeDeviceSignIn.Credentials old=credentials;invalidate();
-        try{store.forgetCredentials();credentials=null;state=null;draft="";readOnly=false;error="";if(old!=null)revoke(old);}
+        try{store.forgetCredentials();credentials=null;state=null;draft=guestDraft;readOnly=false;error="";if(old!=null)revoke(old);}
         catch(Exception e){error="기기의 계정 연결을 지우지 못했어요. 다시 시도해 주세요.";}
         changed.run();
     }
@@ -89,7 +110,7 @@ final class ReflectionModel {
                 if(!live(ticket,old.account())){if(result!=null)revoke(result);return;}
                 busy=false;
                 try{if(result==null)throw new Exception("rotation_uncertain");store.saveCredentials(result);credentials=result;next.run();}
-                catch(Exception e){if(result!=null)revoke(result);credentials=null;state=null;draft="";error="계정 연결을 다시 확인해 주세요. 저장된 글은 같은 계정으로 돌아오면 남아 있어요.";changed.run();}
+                catch(Exception e){if(result!=null)revoke(result);credentials=null;state=null;draft=guestDraft;readOnly=false;error="계정 연결을 다시 확인해 주세요. 저장된 글은 같은 계정으로 돌아오면 남아 있어요.";changed.run();}
             });
         });
     }

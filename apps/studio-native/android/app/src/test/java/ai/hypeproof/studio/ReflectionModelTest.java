@@ -13,7 +13,9 @@ public class ReflectionModelTest {
     }
     static final class Store implements ReflectionModel.Store {
         final Map<String,String> records=new HashMap<>();NativeDeviceSignIn.Credentials token=new NativeDeviceSignIn.Credentials("A","session","bearer","refresh",System.currentTimeMillis()+3600000);
-        boolean fail,spent;
+        boolean fail,spent;String guest="";
+        public String loadGuestDraft(){return guest;}
+        public void saveGuestDraft(String text)throws Exception{if(fail)throw new Exception("disk_full");guest=text;}
         public ReflectionState load(String a)throws Exception{return records.containsKey(a)?new ReflectionState(a,records.get(a)):new ReflectionState(a);}
         public void save(ReflectionState s)throws Exception{if(fail)throw new Exception("disk_full");records.put(s.account,s.json().toString());}
         public NativeDeviceSignIn.Credentials loadCredentials(){return token;}

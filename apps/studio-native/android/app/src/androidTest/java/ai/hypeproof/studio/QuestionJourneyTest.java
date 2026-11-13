@@ -32,13 +32,78 @@ public class QuestionJourneyTest {
     @After public void teardown(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
     private void ready()throws Exception{for(int i=0;i<100;i++){java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get())return;Thread.sleep(50);}throw new AssertionError("fixture did not settle");}
     private void screen(String name)throws Exception{Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(pixels);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(pixels.compress(Bitmap.CompressFormat.PNG,100,out));}pixels.recycle();}
-    @Test public void launcherStartsWithQuestionAndConsentCanBeDeclined()throws Exception{
+    @Test public void launcherStartsWithEditableGuestDraftAndConsentCanBeDeclined()throws Exception{
         assertEquals(QuestionActivity.class.getName(),context.getPackageManager().getLaunchIntentForPackage(context.getPackageName()).getComponent().getClassName());
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
         app=ActivityScenario.launch(QuestionActivity.class);
         onView(withText(ReflectionState.OPENING)).check(matches(isDisplayed()));
-        onView(withText("내 계정으로 질문 시작하기")).perform(click());
-        onView(withText("동의하고 계정 연결")).check(matches(isDisplayed()));screen("android-question-consent");
-        onView(withText("나중에")).perform(click());onView(withText("내 계정으로 질문 시작하기")).check(matches(isDisplayed()));assertNull(new ReflectionStorage(context).loadCredentials());screen("android-question-home");
+        onView(withContentDescription("질문 대화 입력")).check(matches(isDisplayed())).perform(replaceText("  로그인 전 내 생각\n다음 줄  "),closeSoftKeyboard());
+        onView(withText("로그인")).perform(click());onView(withText("동의하고 로그인")).check(matches(isDisplayed()));screen("android-question-consent");
+        onView(withText("나중에")).perform(click());assertNull(new ReflectionStorage(context).loadCredentials());
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("  로그인 전 내 생각\n다음 줄  ")));assertEquals("  로그인 전 내 생각\n다음 줄  ",new ReflectionStorage(context).loadGuestDraft());assertEquals(0,calls.get());screen("android-question-home");
+    }
+    @Test public void guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend()throws Exception{
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
+        app=ActivityScenario.launch(QuestionActivity.class);VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText("이미 적은 글"),closeSoftKeyboard());onView(withText("말로 적기")).perform(click());
+        app.onActivity(a->voice.partial("말로 이어 적은 글"));app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+        app.onActivity(a->voice.result("늦게 온 말"));drain();assertFalse(voice.controller.session.active());
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(withText("이미 적은 글\n말로 이어 적은 글")));assertEquals(0,calls.get());
+    }
+    private java.util.concurrent.atomic.AtomicInteger loginTransport(boolean denied){
+        java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            if(path.equals("/auth/device/start"))return new NativeDeviceSignIn.Reply(200,Map.of("device_code","a".repeat(64),"user_code","ABCD-EFGH","verification_uri","https://hypeproof-ai.xyz/studio/connect","verification_uri_complete","https://hypeproof-ai.xyz/studio/connect?code=ABCD-EFGH","expires_in",30,"interval",3));
+            if(path.equals("/auth/device/poll"))return denied?new NativeDeviceSignIn.Reply(403,Map.of("error","access_denied")):new NativeDeviceSignIn.Reply(200,Map.of("access_token","synthetic-access","refresh_token","synthetic-refresh","account_id","test-account","session_id","test-session","expires_in",3600));
+            if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","test-account","session_id","test-session","account_status","active"));
+            if(path.equals("/me/reflection/turns"))sends.incrementAndGet();
+            if(path.equals("/auth/logout"))return new NativeDeviceSignIn.Reply(200,Map.of());
+            return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+        };return sends;
+    }
+    private void approveLogin()throws Exception{
+        androidx.test.espresso.intent.Intents.init();
+        try{
+            androidx.test.espresso.intent.Intents.intending(androidx.test.espresso.intent.matcher.IntentMatchers.hasAction(android.content.Intent.ACTION_VIEW)).respondWith(new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null));
+            onView(withText("로그인")).perform(click());onView(withText("동의하고 로그인")).perform(click());ready();drain();
+        }finally{androidx.test.espresso.intent.Intents.release();}
+    }
+    @Test public void realLoginAdoptsGuestOnlyIntoEmptyAccountAndNeverSends()throws Exception{
+        var sends=loginTransport(false);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("로그인 뒤에도 내가 보낼 글");app=ActivityScenario.launch(QuestionActivity.class);approveLogin();
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("로그인 뒤에도 내가 보낼 글")));assertEquals("",store.loadGuestDraft());assertEquals("로그인 뒤에도 내가 보낼 글",store.load("test-account").draft);assertNull(store.load("test-account").request);assertEquals(0,sends.get());
+    }
+    @Test public void realLoginCollisionAndExplicitRestorePreserveBothFilesWithoutSending()throws Exception{
+        var sends=loginTransport(false);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("로그인 전에 적은 글");ReflectionState previous=new ReflectionState("test-account");previous.draft="계정에 남긴 글";store.save(previous);
+        app=ActivityScenario.launch(QuestionActivity.class);approveLogin();onView(withContentDescription("질문 대화 입력")).check(matches(withText("계정에 남긴 글")));assertEquals("로그인 전에 적은 글",store.loadGuestDraft());onView(withText("로그인 전 글 가져오기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());onView(withText("로그인 전 글 가져오기")).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("로그인 전에 적은 글")));assertEquals("",store.loadGuestDraft());assertEquals("로그인 전에 적은 글",store.load("test-account").draft);assertNull(store.load("test-account").request);assertEquals(0,sends.get());screen("android-guest-restored");
+    }
+    @Test public void deniedLoginAndCorruptGuestFileRemainLocalAndIntact()throws Exception{
+        var sends=loginTransport(true);ReflectionStorage store=new ReflectionStorage(context);store.saveGuestDraft("취소해도 지킬 글");app=ActivityScenario.launch(QuestionActivity.class);approveLogin();assertNull(store.loadCredentials());assertEquals("취소해도 지킬 글",store.loadGuestDraft());app.close();app=null;
+        File file=new File(new File(context.getNoBackupFilesDir(),"reflection"),"guest-draft-v1.json");byte[] corrupt={(byte)0xc3,0x28};Files.write(file.toPath(),corrupt);
+        app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(org.hamcrest.Matchers.not(isEnabled())));assertArrayEquals(corrupt,Files.readAllBytes(file.toPath()));assertEquals(0,sends.get());
+    }
+    @Test public void composerRemainsReachableWithKeyboardAndSystemTheme()throws Exception{
+        app=ActivityScenario.launch(QuestionActivity.class);
+        String text="첫째 줄\n둘째 줄\n셋째 줄\n넷째 줄\n다섯째 줄";
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText(text),click());
+        java.util.concurrent.atomic.AtomicBoolean keyboard=new java.util.concurrent.atomic.AtomicBoolean();
+        for(int i=0;i<80&&!keyboard.get();i++){app.onActivity(a->{android.view.WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();keyboard.set(insets!=null&&insets.isVisible(android.view.WindowInsets.Type.ime()));});if(!keyboard.get())Thread.sleep(50);}
+        assertTrue("actual software keyboard must be visible",keyboard.get());
+        screen("android-first-use-keyboard");
+        app.onActivity(a->{try{
+            var field=QuestionActivity.class.getDeclaredField("composer");field.setAccessible(true);android.widget.EditText edit=(android.widget.EditText)field.get(a);int[] xy=new int[2];edit.getLocationOnScreen(xy);
+            android.view.WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();int keyboardTop=a.getWindowManager().getCurrentWindowMetrics().getBounds().bottom-insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+            var sendField=QuestionActivity.class.getDeclaredField("send");sendField.setAccessible(true);android.widget.Button send=(android.widget.Button)sendField.get(a);int[] sendXY=new int[2];send.getLocationOnScreen(sendXY);
+            JSONObject proof=new JSONObject().put("font_scale",a.getResources().getConfiguration().fontScale).put("ui_mode",a.getResources().getConfiguration().uiMode).put("keyboard_top",keyboardTop).put("composer_y",xy[1]).put("composer_height",edit.getHeight()).put("full_text_retained",edit.getText().toString().equals(text)).put("send_y",sendXY[1]).put("send_height",send.getHeight()).put("send_parent_y",send.getY()).put("compose_height",((android.view.View)send.getParent()).getHeight());
+            File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,"android-first-use-layout.json"))){out.write(proof.toString().getBytes(StandardCharsets.UTF_8));}
+            assertTrue("composer must stay above keyboard",xy[1]+edit.getHeight()<=keyboardTop);assertTrue("composer remains below top controls",xy[1]>insets.getInsets(android.view.WindowInsets.Type.statusBars()).top+48*a.getResources().getDisplayMetrics().density);
+        }catch(Exception e){throw new AssertionError(e);}});
+        onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed())).check(matches(withText(text)));
+        onView(withText("로그인")).check(matches(isCompletelyDisplayed()));
+        onView(withContentDescription("질문 대화 입력")).perform(closeSoftKeyboard());
     }
     @Test public void sameAccountDraftAndVoiceStopSurviveRecreationWithoutLiveNetwork()throws Exception{
         ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));ReflectionState state=new ReflectionState("test-account");state.draft="내가 더 듣고 싶은 이야기";store.save(state);

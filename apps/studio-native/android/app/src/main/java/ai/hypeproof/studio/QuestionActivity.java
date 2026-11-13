@@ -46,11 +46,11 @@ public final class QuestionActivity extends Activity {
         NativeDeviceSignIn.Transport http=BuildConfig.DEBUG&&testTransport!=null?testTransport:new DeviceSignInHttp(target,deadlines);
         model=new ReflectionModel(storage,new NativeDeviceSignIn(target,http,NativeDeviceSignIn.MONOTONIC),http,worker,r->handler.post(r),this::update);
         voice=new NativeVoice(this,new NativeVoice.Host(){
-            public String projectID(){return model.account();}
+            public String projectID(){return voiceScope();}
             public boolean foreground(){return foreground;}
             public boolean allowed(boolean automatic){
-                return !model.readOnly&&model.state!=null&&voiceCredentials!=null&&voiceCredentials.equals(model.credentials)
-                    &&(!automatic||voiceCredentials.expiresAt()>System.currentTimeMillis()+90000);
+                return !model.readOnly&&(model.account()!=null||!model.guestReadOnly)&&Objects.equals(voiceCredentials,model.credentials)
+                    &&(!automatic||(model.state!=null&&voiceCredentials!=null&&voiceCredentials.expiresAt()>System.currentTimeMillis()+90000));
             }
             public boolean nextTurn(){
                 if(model.busy||model.state==null||model.state.outstanding()||!model.draft.trim().isEmpty())return false;
@@ -59,7 +59,7 @@ public final class QuestionActivity extends Activity {
             public void changed(){update();}
             public void failed(String value){voiceTurn=null;model.error=value;update();}
             public void transcript(String id,String value,boolean complete,boolean automatic){
-                if(!Objects.equals(id,model.account()))return;
+                if(!Objects.equals(id,voiceScope()))return;
                 model.edit(voicePrefix.isEmpty()?value:voicePrefix+"\n"+value);
                 if(complete&&automatic){if(model.send()){voiceTurn=model.state.request.optString("id");voiceTicket=voice.session.ticket();voiceWait=SystemClock.elapsedRealtime();}else{voice.stop();model.error="인식한 글을 확인한 뒤 직접 보내 주세요.";}}
                 update();
@@ -67,7 +67,7 @@ public final class QuestionActivity extends Activity {
         });
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
-        if(saved!=null&&model.account()!=null&&model.account().equals(saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
+        if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
         update();
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
@@ -82,23 +82,26 @@ public final class QuestionActivity extends Activity {
     private Button button(String title,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setMinHeight(dp(48));b.setOnClickListener(v->action.run());return b;}
     private void build(){
         boolean dark=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
-        ink=dark?Color.rgb(224,239,231):Color.rgb(28,65,54);paper=dark?Color.rgb(22,32,28):Color.rgb(245,244,239);muted=dark?Color.rgb(180,201,188):Color.rgb(82,101,91);card=dark?Color.rgb(41,59,46):Color.rgb(230,239,230);
+        ink=dark?Color.rgb(230,230,230):Color.rgb(40,40,40);paper=dark?Color.rgb(31,31,31):Color.WHITE;muted=dark?Color.rgb(170,170,170):Color.rgb(100,100,100);card=dark?Color.rgb(54,54,62):Color.rgb(231,231,239);
         shownAccount=model.account();transcriptKey="";root=column();root.setBackgroundColor(paper);root.setPadding(dp(20),dp(8),dp(20),dp(8));
         androidx.core.view.WindowInsetsControllerCompat bars=androidx.core.view.WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView());bars.setAppearanceLightStatusBars(!dark);bars.setAppearanceLightNavigationBars(!dark);
         root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(20),insets.getSystemWindowInsetTop()+dp(8),dp(20),bottom+dp(8));return insets;});
-        LinearLayout header=new LinearLayout(this);header.addView(text("HP Studio",22,true),new LinearLayout.LayoutParams(0,-2,1));header.addView(button("기기 기록",()->{stopVoice();startActivity(new Intent(this,MainActivity.class));}));header.addView(button("메뉴",this::menu));root.addView(header);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout body=column();heading=text(ReflectionState.OPENING,28,true);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);hint=text(ReflectionState.HINT,16,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout header=new LinearLayout(this);header.addView(text("HP Studio",22,true),new LinearLayout.LayoutParams(0,-2,1));header.addView(button("메뉴",this::menu));root.addView(header);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout body=column();heading=text(ReflectionState.OPENING,22,false);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);hint=text(ReflectionState.HINT,16,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         status=text("",13,false);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
         actions=column();root.addView(actions);voiceActions=column();root.addView(voiceActions);
-        LinearLayout compose=new LinearLayout(this);compose.setGravity(Gravity.BOTTOM);composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(48));composer.setMaxLines(4);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});
+        LinearLayout compose=new LinearLayout(this);compose.setBaselineAligned(false);compose.setGravity(Gravity.BOTTOM);composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(48));composer.setMaxLines(getResources().getConfiguration().fontScale>=1.3f?2:4);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});
         composer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){if(!editing){stopVoice();model.edit(s.toString());status.setText(model.error.isEmpty()?model.notice:model.error);send.setEnabled(canSend());handler.post(QuestionActivity.this::update);}}});
-        compose.addView(composer,new LinearLayout.LayoutParams(0,-2,1));send=button("보내기",()->{stopVoice();model.send();});compose.addView(send);root.addView(compose);setContentView(root);root.requestApplyInsets();
+        composer.setOnFocusChangeListener((v,focused)->update());
+        compose.addView(composer,new LinearLayout.LayoutParams(0,-2,1));send=button("보내기",()->{stopVoice();if(model.account()==null)signIn();else model.send();});compose.addView(send);root.addView(compose);setContentView(root);root.requestApplyInsets();
     }
-    private boolean canSend(){return model.state!=null&&!model.readOnly&&!model.busy&&!model.state.outstanding()&&!model.draft.trim().isEmpty()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
+    private String voiceScope(){return model.account()==null?"guest-local-draft":model.account();}
+    private boolean canSend(){return !model.readOnly&&!model.busy&&!model.brokenCredentials&&(model.account()!=null||!model.guestReadOnly)&&(model.state==null||!model.state.outstanding())&&!model.draft.trim().isEmpty()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
     private void update(){
         if(isDestroyed()||model==null)return;
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
-        ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?ReflectionState.HINT:s.hint);
+        ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
+        heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
         String key=s==null?"signed-out":s.messages.toString()+String.valueOf(s.request)+s.earlier;
         if(!key.equals(transcriptKey)){
             transcriptKey=key;messages.removeAllViews();
@@ -113,32 +116,42 @@ public final class QuestionActivity extends Activity {
         }
         if(!composer.getText().toString().equals(model.draft)){editing=true;composer.setText(model.draft);composer.setSelection(composer.length());editing=false;}
         boolean capturing=voice!=null&&(voice.session.phase()==VoiceSession.Phase.LISTENING||voice.session.phase()==VoiceSession.Phase.PERMISSION);
-        composer.setEnabled(s!=null&&!model.readOnly&&!capturing);composer.setVisibility(s==null?View.GONE:View.VISIBLE);send.setVisibility(s==null?View.GONE:View.VISIBLE);send.setEnabled(canSend());
-        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 계정을 확인해 주세요. 연결 코드를 옮겨 적지 않아도 돼요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);
+        composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canSend());
+        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
         actions.removeAllViews();
         if(s==null){
-            if(model.brokenCredentials)actions.addView(button("계정 연결 복구",()->new AlertDialog.Builder(this).setTitle("계정 연결 복구").setMessage("읽지 못한 연결 정보는 이 기기에 보존하고 다시 로그인해요. 대화 파일은 그대로 남아요.").setNegativeButton("취소",null).setPositiveButton("보존 후 다시 연결",(d,w)->{try{storage.preserveBrokenCredentials();model.brokenCredentials=false;model.error="";update();}catch(Exception e){model.error="연결 정보를 보존하지 못했어요.";update();}}).show()));
+            if(model.brokenCredentials)actions.addView(button("로그인 복구",()->new AlertDialog.Builder(this).setTitle("로그인 복구").setMessage("읽지 못한 로그인 정보는 이 기기에 보존하고 다시 로그인해요. 대화 파일은 그대로 남아요.").setNegativeButton("취소",null).setPositiveButton("보존 후 다시 로그인",(d,w)->{try{storage.preserveBrokenCredentials();model.brokenCredentials=false;model.error="";update();}catch(Exception e){model.error="연결 정보를 보존하지 못했어요.";update();}}).show()));
             else if(model.signing)actions.addView(button("로그인 취소",model::cancelLogin));
-            else actions.addView(button("내 계정으로 질문 시작하기",this::signIn));
+
         }else if(s.status().equals("local")&&!model.busy){
             LinearLayout row=new LinearLayout(this);row.addView(button("먼저 대화 확인",model::refresh),new LinearLayout.LayoutParams(0,-2,1));row.addView(button("같은 요청 다시 확인",model::retry),new LinearLayout.LayoutParams(0,-2,1));actions.addView(row);
         }else if(s.outstanding()&&!model.busy){actions.addView(button("응답 수신 멈추기",()->{stopVoice();new AlertDialog.Builder(this).setTitle("응답 수신 멈추기").setMessage("이 답변을 더 받지 않도록 요청해요. 이미 시작된 AI 처리에는 비용이 발생할 수 있어요. 보낸 글은 남아요.").setNegativeButton("계속 기다리기",null).setPositiveButton("멈추기",(d,w)->model.stopResponse()).show();}));}
+        if(s!=null&&!model.guestDraft.isEmpty()){
+            TextView kept=text("로그인 전 글도 남아 있어요. 입력창을 비운 뒤 가져올 수 있어요.",13,false);actions.addView(kept);
+            Button restore=button("로그인 전 글 가져오기",()->{stopVoice();model.restoreGuest();update();});restore.setEnabled(model.canRestoreGuest());actions.addView(restore);
+        }
         voiceActions.removeAllViews();
-        if(s!=null){
+        if(!model.readOnly){
             if(voice.session.active()){
                 VoiceSession.Phase phase=voice.session.phase();voiceActions.addView(text(phase==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":phase==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":phase==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":phase==VoiceSession.Phase.PERMISSION?"마이크 권한 확인 중":"답변을 기다려요 · 마이크 꺼짐",13,true));
                 LinearLayout row=new LinearLayout(this);row.addView(button("음성 멈추기",()->{stopVoice();update();}));voiceActions.addView(row);
-            }else{voiceActions.addView(text("말로 적기는 입력창에만 적어요. 음성 대화는 말이 끝나면 이 계정의 AI 대화로 보내고, 답변을 읽은 뒤 계속 들어요. 음성 멈추기로 끝낼 수 있어요.",12,false));LinearLayout row=new LinearLayout(this);Button dictate=button("말로 적기",()->startVoice(false)),talk=button("음성 대화",()->startVoice(true));dictate.setEnabled(!model.readOnly&&!model.busy);talk.setEnabled(!model.readOnly&&!model.busy&&!s.outstanding());row.addView(dictate,new LinearLayout.LayoutParams(0,-2,1));row.addView(talk,new LinearLayout.LayoutParams(0,-2,1));voiceActions.addView(row);}
+            }else{if(s!=null&&!composer.hasFocus())voiceActions.addView(text("음성 대화는 말이 끝나면 보내고 계속 들어요.",12,false));LinearLayout row=new LinearLayout(this);Button dictate=button("말로 적기",()->startVoice(false));dictate.setEnabled((model.account()!=null||!model.guestReadOnly)&&!model.busy);row.addView(dictate,new LinearLayout.LayoutParams(0,-2,1));if(s!=null){Button talk=button("음성 대화",()->startVoice(true));talk.setEnabled(!model.busy&&!s.outstanding());row.addView(talk,new LinearLayout.LayoutParams(0,-2,1));}voiceActions.addView(row);}
         }
         updateVoiceReply();
     }
-    private void addMessage(String label,String value){LinearLayout box=column();GradientDrawable bg=new GradientDrawable();bg.setColor(card);bg.setCornerRadius(dp(16));box.setBackground(bg);box.setPadding(dp(14),dp(8),dp(14),dp(8));box.addView(text(label,12,true));TextView t=text(value,17,false);t.setTextIsSelectable(true);box.addView(t);LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(12);messages.addView(box,params);}
-    private void signIn(){new AlertDialog.Builder(this).setTitle("내 계정으로 질문 시작하기").setMessage("대화는 HP Studio 서버에 저장되고 같은 계정의 iPhone·Android·기존 데스크톱에서 읽을 수 있어요. 전송 시 AI가 최근 대화를 처리하며 계정의 AI 이용 권한과 비용 한도가 적용돼요. 전송 구간은 암호화되지만 종단 간 암호화는 아니에요. 기기 기록의 원본은 이 기기에 남고, 그 화면의 AI 연결은 별도 동의를 받아요.").setNegativeButton("나중에",null).setPositiveButton("동의하고 계정 연결",(d,w)->model.login(url->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(ActivityNotFoundException e){model.cancelLogin();model.error="로그인할 브라우저를 열지 못했어요.";update();}})).show();}
+    private void addMessage(String label,String value){
+        boolean user=label.equals("나의 생각")||label.equals("전송 확인이 필요한 내 생각");
+        LinearLayout box=column();box.setPadding(dp(14),dp(8),dp(14),dp(8));
+        if(user){GradientDrawable bg=new GradientDrawable();bg.setColor(card);bg.setCornerRadius(dp(16));box.setBackground(bg);}
+        TextView t=text(value,17,false);t.setTextIsSelectable(true);t.setContentDescription(label+": "+value);box.addView(t);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(user?-2:-1,-2);params.gravity=user?Gravity.END:Gravity.START;params.bottomMargin=dp(12);if(user)params.leftMargin=dp(24);messages.addView(box,params);
+    }
+    private void signIn(){stopVoice();composer.clearFocus();new AlertDialog.Builder(this).setTitle("로그인하고 대화하기").setMessage("대화는 HP Studio 서버에 저장되고 같은 계정의 iPhone·Android·기존 데스크톱에서 읽을 수 있어요. 전송 시 AI가 최근 대화를 처리하며 계정의 AI 이용 권한과 비용 한도가 적용돼요. 전송 구간은 암호화되지만 종단 간 암호화는 아니에요. 기기 기록의 원본은 이 기기에 남고, 그 화면의 AI 연결은 별도 동의를 받아요.").setNegativeButton("나중에",null).setPositiveButton("동의하고 로그인",(d,w)->model.login(url->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(ActivityNotFoundException e){model.cancelLogin();model.error="로그인할 브라우저를 열지 못했어요.";update();}})).show();}
     private void stopVoice(){voiceTurn=null;if(voice!=null)voice.stop();}
     private void startVoice(boolean automatic){
-        if(model.state==null||model.busy||model.readOnly)return;
+        if(model.busy||model.readOnly||(model.account()==null&&model.guestReadOnly))return;
         if(automatic&&!model.draft.trim().isEmpty()){model.error="작성 중인 글을 먼저 보내거나 정리해 주세요. 말로 적기는 내용을 덧붙일 수 있어요.";update();return;}
-        if(automatic&&(model.state.outstanding()||model.credentials==null||model.credentials.expiresAt()<=System.currentTimeMillis()+90000)){
+        if(automatic&&(model.state==null||model.state.outstanding()||model.credentials==null||model.credentials.expiresAt()<=System.currentTimeMillis()+90000)){
             model.error="계정 연결을 다시 확인한 뒤 음성 대화를 시작해 주세요. 작성한 글은 남아 있어요.";update();return;
         }
         voicePrefix=model.draft;voiceTurn=null;voiceCredentials=model.credentials;voice.start(automatic);
@@ -151,8 +164,8 @@ public final class QuestionActivity extends Activity {
             if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
-    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제"},(d,w)->{
-        switch(w){case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
+    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인"},(d,w)->{
+        switch(w){case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
     }).show();}
     private void export(){
         if(model.state==null)return;

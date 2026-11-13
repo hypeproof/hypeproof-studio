@@ -25,6 +25,17 @@ final class ReflectionStorage implements ReflectionModel.Store {
         try{out=f.startWrite();out.write(value);f.finishWrite(out);}catch(Exception e){if(out!=null)f.failWrite(out);throw e;}
     }
     private String name(String account) throws Exception {if(!account.matches("[A-Za-z0-9_-]{1,128}"))throw new IOException("invalid_account");return "conversation-"+account+".json";}
+    public String loadGuestDraft() throws Exception {
+        byte[] bytes=read("guest-draft-v1.json",32768);if(bytes==null)return "";
+        JSONObject value=new JSONObject(ReflectionState.decode(bytes));
+        if(ReflectionState.integer(value,"version")!=1)throw new IOException("invalid_guest_draft");
+        return ReflectionState.string(value,"text",4000);
+    }
+    public void saveGuestDraft(String text) throws Exception {
+        JSONObject value=new JSONObject().put("version",1).put("text",text);
+        ReflectionState.string(value,"text",4000);
+        write("guest-draft-v1.json",ReflectionState.encode(value.toString()));
+    }
     public ReflectionState load(String account) throws Exception {byte[] b=read(name(account),4194304);return b==null?new ReflectionState(account):new ReflectionState(account,ReflectionState.decode(b));}
     public void save(ReflectionState state) throws Exception {byte[] bytes=ReflectionState.encode(state.json().toString());if(bytes.length>4194304)throw new IOException("storage_limit");write(name(state.account),bytes);}
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
