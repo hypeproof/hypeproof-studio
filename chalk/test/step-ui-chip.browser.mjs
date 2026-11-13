@@ -36,6 +36,7 @@ const SAVED = {
     { id: 'custom', title: '수치', instructions: '보기', hint: '', acceptance: '말하기', ui: 'metric_board', ui_version: 1, ui_params: { level: 2 } },
     { id: 'hard', title: '수치2', instructions: '보기', hint: '', acceptance: '말하기', ui: 'metric_board', ui_version: 1, ui_params: { level: 3 } },
     { id: 'plain', title: '대화', instructions: '묻기', hint: '', acceptance: '말하기' },
+    { id: 'proto', title: '이상한 값', instructions: '묻기', hint: '', acceptance: '말하기', ui: 'constructor' },
   ],
 };
 
@@ -70,7 +71,7 @@ try {
     await until(`return document.readyState==='complete' && typeof uiChip==='function' && !!window.chalkConnection?.current?.connected`, '/authoring');
     await ev(stub);
     await ev(`document.getElementById('load').click();return 0`);
-    await until(`return !busy && revision===3 && document.querySelectorAll('.step').length===5`, 'the draft');
+    await until(`return !busy && revision===3 && document.querySelectorAll('.step').length===6`, 'the draft');
 
     // 1. Before the catalog is read.
     const before = await ev(chips);
@@ -87,12 +88,13 @@ try {
       custom: { hidden: false, text: 'metric_board · v1 · 직접 설정' },
       hard: { hidden: false, text: 'metric_board · v1 · 도전' },
       plain: { hidden: true, text: '' },
-    }, `${width}px: chips`);
+      proto: { hidden: false, text: 'constructor · 버전은 확정할 때 고정' },
+    }, `${width}px: chips; a stored type named after an Object.prototype member is not a catalog entry`);
     checks += 4;
 
     // 3. Keeping a type keeps its pin; changing it drops the old pin.
     const kept = await ev(`return JSON.stringify(content().steps.map(s=>[s.id,s.ui??null,s.ui_version??null,s.ui_params??null]))`);
-    assert.equal(kept, JSON.stringify([['pinned', 'criterion_form', 1, null], ['fresh', 'decision_form', null, null], ['custom', 'metric_board', 1, { level: 2 }], ['hard', 'metric_board', 1, { level: 3 }], ['plain', null, null, null]]), `${width}px: pins carried unchanged`);
+    assert.equal(kept, JSON.stringify([['pinned', 'criterion_form', 1, null], ['fresh', 'decision_form', null, null], ['custom', 'metric_board', 1, { level: 2 }], ['hard', 'metric_board', 1, { level: 3 }], ['plain', null, null, null], ['proto', 'constructor', null, null]]), `${width}px: pins carried unchanged`);
     await ev(`const f=[...document.querySelectorAll('.step')].find(f=>f.querySelector('[data-field=id]').value==='custom');const s=f.querySelector('[data-ui]');s.value='decision_form';s.dispatchEvent(new Event('change'));return 0`);
     const changed = await ev(`const s=content().steps.find(s=>s.id==='custom');return {ui:s.ui,v:'ui_version' in s,p:'ui_params' in s,chip:${JSON.stringify('')}+[...document.querySelectorAll('.step')].find(f=>f.querySelector('[data-field=id]').value==='custom').querySelector('[data-ui-chip]').textContent,dirty}`);
     assert.deepEqual(changed, { ui: 'decision_form', v: false, p: false, chip: 'decision_form · v2 · 기본 (확정할 때 고정)', dirty: true }, `${width}px: a new type drops the old pin and shows the latest`);
@@ -103,7 +105,7 @@ try {
     // 4. Layout.
     const geo = await ev(`const c=[...document.querySelectorAll('[data-ui-chip]')].filter(e=>!e.hidden);return {overflow:document.scrollingElement.scrollWidth-innerWidth,fonts:c.map(e=>parseFloat(getComputedStyle(e).fontSize)),past:c.filter(e=>e.getBoundingClientRect().right>innerWidth+0.5).length}`);
     assert.ok(geo.overflow <= 0, `${width}px: no horizontal scroll (${geo.overflow})`);
-    assert.ok(geo.fonts.length === 4 && geo.fonts.every((x) => x >= 14), `${width}px: 14px floor ${geo.fonts}`);
+    assert.ok(geo.fonts.length === 5 && geo.fonts.every((x) => x >= 14), `${width}px: 14px floor ${geo.fonts}`);
     assert.equal(geo.past, 0, `${width}px: chips inside the viewport`);
     checks += 3;
   }

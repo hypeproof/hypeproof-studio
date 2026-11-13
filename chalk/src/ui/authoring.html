@@ -657,7 +657,7 @@ function stepTeaching(f,data){
  f.append(box);syncDefault(box,data.help?.default);
  const ul=document.createElement('label');ul.textContent='학생 작업 화면';const us=document.createElement('select');us.dataset.ui='';
  for(const [v,t] of Object.entries(SURFACES))us.append(new Option(t,v));
- if(data.ui&&!(data.ui in SURFACES)){const o=new Option('지원 전 값 유지: '+data.ui+' (Studio에서 아직 열 수 없음)',data.ui);us.append(o);}
+ if(data.ui&&!Object.prototype.hasOwnProperty.call(SURFACES,data.ui)){const o=new Option('지원 전 값 유지: '+data.ui+' (Studio에서 아직 열 수 없음)',data.ui);us.append(o);}
  us.value=data.ui||'';us.onchange=()=>{changed();uiChip(f);};ul.append(us);f.append(ul);
  f.dataset.uiOrig=data.ui||'';const chip=document.createElement('small');chip.className='ui-chip';chip.dataset.uiChip='';f.append(chip);uiChip(f);
 }
@@ -665,11 +665,12 @@ function stepTeaching(f,data){
 // version (carried from a reused or reopened version) is shown as pinned; otherwise the catalog's latest, which the Service
 // pins at confirm. The catalog comes from the features read (step_ui_catalog); before it is read, the chip says so.
 function uiChip(f){const chip=f.querySelector('[data-ui-chip]');if(!chip)return;const ui=f.querySelector('[data-ui]')?.value||'';chip.hidden=!ui;if(!ui){chip.textContent='';return;}
- const id=f.querySelector('[data-field=id]')?.value,carried=carriedStep.get(id)||{},same=(f.dataset.uiOrig??'')===ui,cat=featureCatalogue?.step_ui_catalog?.types?.[ui];
+ const own=(o,k)=>o&&Object.prototype.hasOwnProperty.call(o,k)?o[k]:undefined;// own keys only: 'constructor' is not a block
+ const id=f.querySelector('[data-field=id]')?.value,carried=carriedStep.get(id)||{},same=(f.dataset.uiOrig??'')===ui,cat=own(featureCatalogue?.step_ui_catalog?.types,ui);
  const pinned=same&&Number.isSafeInteger(carried.ui_version)?carried.ui_version:null;
- const latest=cat?Math.max(...Object.keys(cat.versions).map(Number).filter(Number.isSafeInteger)):null,ver=pinned??latest;
+ const vs=cat?Object.keys(cat.versions||{}).map(Number).filter(Number.isSafeInteger):[],latest=vs.length?Math.max(...vs):null,ver=pinned??latest;
  if(ver===null){chip.textContent=ui+' · 버전은 확정할 때 고정';return;}
- const spec=cat?.versions?.[String(ver)],params=same&&carried.ui_params?carried.ui_params:{},eq=(a,b)=>JSON.stringify(Object.entries(a||{}).sort())===JSON.stringify(Object.entries(b||{}).sort());
+ const spec=own(cat?.versions,String(ver)),params=same&&carried.ui_params?carried.ui_params:{},eq=(a,b)=>JSON.stringify(Object.entries(a||{}).sort())===JSON.stringify(Object.entries(b||{}).sort());
  const preset=spec?Object.values(spec.presets||{}).find(p=>eq(p.params,params))?.label??'직접 설정':'기본';
  chip.textContent=ui+' · v'+ver+' · '+preset+(pinned===null?' (확정할 때 고정)':'');}
 function uiChips(){for(const f of document.querySelectorAll('.step'))uiChip(f);}
@@ -709,7 +710,7 @@ const REASON_WORDS={steps_not_visited:'Studio에서 열어 보지 않은 단계�
 const FIELD_WORDS={audience:'대상',objective:'목표',starter:'시작 예제·자료',prerequisites:'선수 조건',duration_minutes:'시간(분)'},STEP_TEXT_WORDS={title:'제목',instructions:'안내',hint:'힌트',acceptance:'완료 기준'};
 function candidateOK(){return bound===identity()&&!!candidateVersion&&!!readiness&&readiness.version===candidateVersion;}
 const helpWords=h=>h?h.allowed.map(m=>HELP_LABELS[m]||m).join('·')+' (처음: '+(HELP_LABELS[h.default]||h.default)+')':'도움 방식 선택 없음';
-const surfaceWords=u=>u===null||u===undefined?SURFACES['']:(SURFACES[u]||u+' (Studio 미지원)');
+const surfaceWords=u=>u===null||u===undefined?SURFACES['']:(Object.prototype.hasOwnProperty.call(SURFACES,u)?SURFACES[u]:u+' (Studio 미지원)');
 function impactLines(i){const out=[];const st=i.steps;
  if(st.added.length)out.push('새로 생기는 단계: '+st.added.join(', '));if(st.removed.length)out.push('없어지는 단계: '+st.removed.join(', ')+' — 그 단계의 진행·제출 기록은 이전 기준 기록으로 남습니다');if(i.order_changed)out.push('단계 순서가 바뀝니다');
  for(const t of i.text||[])out.push((FIELD_WORDS[t.field]||t.field)+': ‘'+t.from+'’ → ‘'+t.to+'’');
