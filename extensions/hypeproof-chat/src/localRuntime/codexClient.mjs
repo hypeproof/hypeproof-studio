@@ -240,8 +240,14 @@ export class CodexLocalClient {
     if (mcp.data?.some((server) => Object.keys(server.tools ?? {}).length > 0))
       throw new Error("codex_tools_not_disabled");
     const list = await this.call("model/list", { includeHidden: false });
-    this.models = list.data.map((m) => ({ id: m.model, label: m.displayName }));
+    this.models = list.data.map((m) => ({ id: m.model, label: m.displayName, isDefault: m.isDefault === true }));
     return { auth: "chatgpt", models: this.models, external_tools: 0 };
+  }
+  // #3939: "default" is not a catalog id. It names the catalog entry flagged isDefault, else the first entry.
+  // Any other id is returned unchanged, so complete() still refuses an id the catalog does not list.
+  resolveModel(requested) {
+    if (requested !== "default" || !this.models?.length) return requested;
+    return (this.models.find((m) => m.isDefault) ?? this.models[0]).id;
   }
   async complete({
     model,

@@ -331,7 +331,7 @@ export async function runLocalCoach(args: {
     try {
       await client.connect();
       return await client.complete({
-        model: args.config.model,
+        model: client.resolveModel(args.config.model),
         messages,
         signal,
         onDelta: args.onDelta,

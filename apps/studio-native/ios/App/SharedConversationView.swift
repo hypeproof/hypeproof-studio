@@ -27,6 +27,22 @@ private enum ConversationStyle {
     static let canvas = Color(uiColor: .systemBackground)
     static let surface = Color(uiColor: .secondarySystemBackground)
 }
+private struct ConversationTimelineLayout: Equatable {
+    let generation: UUID
+    let conversation: String?
+    let tail: SharedMessage?
+    let localRequestID: String?
+    let content: CGRect
+    let viewportHeight: CGFloat
+    var atLatest: Bool { content.maxY - viewportHeight <= 48 }
+}
+private struct ConversationTimelinePreference: PreferenceKey {
+    static let defaultValue: ConversationTimelineLayout? = nil
+    static func reduce(value: inout ConversationTimelineLayout?, nextValue: () -> ConversationTimelineLayout?) {
+        value = nextValue() ?? value
+    }
+}
+
 struct SharedConversationView: View {
     @StateObject private var model = SharedConversationModel()
     @StateObject private var voice = VoiceController()
@@ -44,6 +60,10 @@ struct SharedConversationView: View {
     @State private var showNotebook = false
     @State private var notebookAfterHistory = false
     @State private var showPrivacy = false
+    @State private var timelineGeneration = UUID()
+    @State private var timelineLayout: ConversationTimelineLayout?
+    @State private var timelineFollowing = true
+    @State private var timelineProgrammatic = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
     @Environment(\.colorScheme) private var colorScheme
@@ -75,6 +95,11 @@ struct SharedConversationView: View {
                         }
                         Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
                         Button("대화와 개인정보") { voice.stop(); focused = false; showPrivacy = true }
+#if DEBUG
+                        if NativeJourneyFixture.longHistory {
+                            Button("Simulate remote reply") { NativeJourneyFixture.advanceHistory() }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
+                        }
+#endif
                         Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                         Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
                     } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
@@ -112,6 +137,9 @@ struct SharedConversationView: View {
     }
     var body: some View {
         lifecycleContent
+#if DEBUG
+        .overlay(alignment: .topLeading) { journeyDiagnostics }
+#endif
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
@@ -189,6 +217,7 @@ struct SharedConversationView: View {
         }
     }
     private var timeline: some View {
+        GeometryReader { viewport in
         ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
@@ -215,9 +244,19 @@ struct SharedConversationView: View {
                     }
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
-                            if request.status != "completed" { Text(request.text).textSelection(.enabled) }
+                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" })) {
+                                Text(request.text).textSelection(.enabled)
+                            }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
                             if request.status == "local" { Button("다시 보내기") { model.retry() }.disabled(model.busy || model.syncing).accessibilityIdentifier("sharedRetry") }
+                            if model.isReflection && request.status == "failed" {
+                                Button { voice.stop(); if model.restoreFailedReflectionDraft() { focused = true } } label: {
+                                    Text("입력란에 가져오기").frame(minHeight: 44)
+                                }
+                                .buttonStyle(.bordered).font(.callout)
+                                .disabled(!model.canRestoreFailedReflectionDraft).accessibilityIdentifier("restoreFailedReflectionDraft")
+                                if !model.draftText.isEmpty { Text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
+                            }
                             if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
                                 Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
@@ -227,11 +266,67 @@ struct SharedConversationView: View {
                     status
                     Color.clear.frame(height: 1).id("sharedBottom")
                 }.padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }.scrollDismissesKeyboard(.interactively).accessibilityIdentifier("conversationTimeline")
-                .onChange(of: model.cache.messages.count) { _, _ in
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scroll.scrollTo("sharedBottom", anchor: .bottom) }
+                    .background {
+                        GeometryReader { content in
+                            Color.clear.preference(key: ConversationTimelinePreference.self, value: ConversationTimelineLayout(
+                                generation: timelineGeneration, conversation: model.selected, tail: model.cache.messages.last,
+                                localRequestID: model.cache.request?.status == "local" ? model.cache.request?.id : nil,
+                                content: content.frame(in: .named("conversationTimelineViewport")), viewportHeight: viewport.size.height))
+                        }
+                    }
+            }.coordinateSpace(name: "conversationTimelineViewport")
+                .scrollDismissesKeyboard(.interactively).accessibilityIdentifier("conversationTimeline")
+                .onAppear {
+                    // Cached account data can precede the first layout. A new
+                    // appearance also fences a later account with the same IDs.
+                    timelineGeneration = UUID(); timelineLayout = nil
+                    timelineFollowing = true; timelineProgrammatic = false
+                }
+                .onPreferenceChange(ConversationTimelinePreference.self) { layout in
+                    if let layout { positionTimeline(layout, scroll: scroll) }
+                }
+                .simultaneousGesture(DragGesture().onChanged { _ in
+                    timelineProgrammatic = false; timelineFollowing = false
+                })
+                .overlay(alignment: .bottomTrailing) {
+                    if !timelineFollowing, timelineLayout?.atLatest == false {
+                        Button { latestTimeline(scroll, animated: true) } label: {
+                            Label("최신 메시지", systemImage: "arrow.down").frame(minHeight: 44)
+                        }.buttonStyle(.borderedProminent).font(.callout)
+                            .padding(.trailing, 20).padding(.bottom, 12).accessibilityIdentifier("conversationLatest")
+                    }
                 }
         }
+        }
+    }
+    private func latestTimeline(_ scroll: ScrollViewProxy, animated: Bool = false) {
+        timelineFollowing = true; timelineProgrammatic = timelineLayout?.atLatest != true
+        // Automatic following is instant, like the desktop. Only a deliberate
+        // catch-up press may animate, and Reduce Motion always disables it.
+        withAnimation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil) {
+            scroll.scrollTo("sharedBottom", anchor: .bottom)
+        }
+    }
+    private func positionTimeline(_ next: ConversationTimelineLayout, scroll: ScrollViewProxy) {
+        guard next.generation == timelineGeneration, next.conversation == model.selected,
+              next.viewportHeight > 0, next.content.height > 0 else { return }
+        let old = timelineLayout
+        let changedConversation = old == nil || old?.generation != next.generation || old?.conversation != next.conversation
+        let sent = next.localRequestID != nil && old?.localRequestID != next.localRequestID
+        let changedContent = old?.tail != next.tail || old?.content.height != next.content.height || old?.viewportHeight != next.viewportHeight
+        let moved = old.map { abs($0.content.minY - next.content.minY) > 0.5 } ?? false
+        timelineLayout = next
+        if changedConversation || sent { latestTimeline(scroll); return }
+        if timelineProgrammatic {
+            if next.atLatest { timelineProgrammatic = false }
+            else if changedContent { latestTimeline(scroll) }
+            return
+        }
+        // A stable-layout scroll includes touch, keyboard and accessibility
+        // navigation. Content/keyboard/font changes alone are not reader intent.
+        if moved && !changedContent { timelineFollowing = next.atLatest }
+        if changedContent && timelineFollowing { latestTimeline(scroll) }
+        else if next.atLatest { timelineFollowing = true }
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -346,13 +441,27 @@ struct SharedConversationView: View {
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
         if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
-#if DEBUG
-        if NativeJourneyFixture.enabled {
-            Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace")
-            Text(colorScheme == .dark ? "dark" : "light").accessibilityIdentifier("nativeJourneyAppearance")
-        }
-#endif
     }
+#if DEBUG
+    // Overlay diagnostics never participate in transcript/composer measurement.
+    // Explicit AX values retain the same machine-readable seam without drawing
+    // JSON or appearance words in native screenshots. Release has no overlay.
+    @ViewBuilder private var journeyDiagnostics: some View {
+        if NativeJourneyFixture.enabled {
+            VStack(spacing: 0) {
+                journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
+                if NativeJourneyFixture.longHistory {
+                    journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
+                }
+            }
+        }
+    }
+    private func journeyDiagnostic(_ id: String, label: String, value: String) -> some View {
+        Color.clear.frame(width: 1, height: 1).accessibilityElement(children: .ignore)
+            .accessibilityLabel(label).accessibilityValue(value).accessibilityIdentifier(id)
+    }
+#endif
     private func startLogin() { voice.stop(); focused = false; model.login() }
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {

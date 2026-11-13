@@ -119,12 +119,16 @@ the new fixtures as a successful physical retest.
 
 | Contract | Required observation | Failure that must remain visible |
 | --- | --- | --- |
-| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the unsent request intact and no free-access fallback. |
+| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the recorded failed user event/request intact and no free-access fallback. Explicit restore only creates a local draft, never an automatic retry or new login. |
 | MFR-T02 | Dictation appends to an existing draft without sending; explicit Send creates one personal-reflection request and displays its answer without a running desktop. | A cleared composer or locally recorded text is not an AI answer. |
 | MFR-T03 | Start voice once, receive a reply and resume capture for the next turn without a recurring consent sheet or pressing an end-of-speech button. | Silence/no transcript cannot create an empty send. Stop cancels the held next capture and retains its partial draft; no second request. |
 | MFR-T03-queued | During a delayed history refresh, finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST or manual retry to make the test pass. |
 | MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
+| MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
+| MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
+| MPER-T03-following | Advance a real App's HTTP snapshot beyond 80 messages without growing its window. At the bottom, follow the new tail; while reading old text, preserve a visible passage until explicit latest or Send. | The catch-up control is at least 44pt. Keyboard input remains reachable; only explicit Send creates the one new request. |
 | MFR-T06 | Collect actual native build/test exits and exact log hashes. Every named required simulator case executes once and passes. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
 | MPER-T01-cancel | Type a first thought before login, cancel the real model's pending login, relaunch and read the same words. | No browser callback, credential exchange or AI turn; cancellation cannot consume the guest draft. |
 | MPER-T03-collision | Sign in with an existing account draft and a different guest draft. Keep the account words; relaunch; explicitly empty that draft and restore guest words. | No overwrite, auto-restore on cold launch or automatic AI request. Guest/account persistence failures preserve the original copy. |
@@ -255,3 +259,25 @@ mobile-conversation-host. Evidence must name the exact source, Node/OS, command 
 exit code. Simulator/native tests, physical iPhone, actual Google/account admission,
 installed desktop focus/navigation and live model quality remain **NOT_RUN** unless
 separately observed. A prepared runner or green build is not that observation.
+
+### Conversation position and diagnostic geometry — Studio #3962
+
+Native following uses selected-conversation identity, actual layout and the last
+message identity, not only count. Initial cached history and account/conversation
+entry position at the latest exchange. Keyboard or font size changes follow the
+bottom only while the person is already following. Manual reading pauses following;
+a native latest-message action resumes it. Automatic following is instant; the
+explicit action respects Reduce Motion. The desktop already owns equivalent
+useChatViewport behavior and is not reimplemented in this slice.
+
+All DEBUG fixture JSON and theme diagnostics are out-of-flow 1pt accessibility
+elements with explicit values. The central XCTest reader checks their bounds and
+parses those values; screenshots no longer use a large inline JSON transcript.
+The theme assertion still observes the actual SwiftUI environment. The long-history
+revision barrier reads the actual applied model cache, not a transport completion
+guess. These seams compile out of Release. The existing admission-denied journey
+now models Service persistence before 403 and retains the failed user event, reason
+and identity; its former pre-persistence local-retry shortcut is not evidence.
+
+New App journeys and changed AX diagnostics require actual hosted Xcode execution.
+Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.

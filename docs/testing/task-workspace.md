@@ -346,6 +346,26 @@ sideways. Reads are computed styles and line heights, not text widths, so fonts 
 verdict. Negative control: main's VoicePanel fails it (no line). A real voice, a screen reader and
 the packaged app are reported separately (NOT RUN).
 
+## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)
+
+`test/voice-autoplay-blocked.test.tsx` renders a real read-aloud button under a served-voice profile
+(disclosure read) on the minimal DOM. The scripted synthesizer's utterances are failed by the test with
+`not-allowed`. Cases:
+- A refused start is not shown as reading: `aria-pressed="false"`, no `읽는 중이에요`. Exactly one inline
+  notice `소리가 막혔어요.` appears with one `소리 켜기` button, with no dialog.
+- After one chunk ended and the next was refused, one press reads exactly the unheard chunks in order.
+  The notice is gone and does not come back after a normal end.
+- `소리 끄기` clears the notice.
+- Negative controls: another engine error (`synthesis-failed`) shows no notice, and an unserved seat has
+  nothing to press.
+- The hub refuses `resume` unless this answer is blocked, and `stop` forgets the pending chunks.
+- The style case reads the CSS rule: no animation or transition, wrapping, caption step.
+
+Red on main `97c232ddf`: 5 of 6 cases fail. The unserved-seat negative control passes there too, as it
+should. Four mutants each fail at least one case: treating `not-allowed` as a plain error, resuming
+from the first chunk, showing a blocked reading as pressed, and keeping no pending chunks. A real
+browser autoplay refusal, a screen reader and the packaged app are not run here.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell

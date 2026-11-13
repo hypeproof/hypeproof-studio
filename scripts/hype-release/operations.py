@@ -47,8 +47,9 @@ def tag_message(candidate, checkout):
     module = checkout / "scripts/release/build-contract.mjs"
     require(module.is_file(), "candidate lacks the existing managed build contract")
     plan = {"candidate": candidate["sourceSha"], "version": candidate["version"], "rcTag": candidate["tag"]}
-    js = "import {pathToFileURL} from 'node:url'; const m=await import(pathToFileURL(process.argv[1])); const p=JSON.parse(process.argv[2]); m.assertManagedCandidateSupport(p.candidate); console.log(m.buildTagMessage(p,{managedDraft:true}));"
-    p = subprocess.run(["node", "--input-type=module", "-e", js, str(module), canonical(plan)], cwd=checkout, text=True, capture_output=True)
+    # Keep the eval caller distinct from the imported module's CLI entrypoint.
+    js = "import {pathToFileURL} from 'node:url'; const m=await import(pathToFileURL(process.argv[2])); const p=JSON.parse(process.argv[3]); m.assertManagedCandidateSupport(p.candidate); console.log(m.buildTagMessage(p,{managedDraft:true}));"
+    p = subprocess.run(["node", "--input-type=module", "-e", js, str(Path(__file__).resolve()), str(module), canonical(plan)], cwd=checkout, text=True, capture_output=True)
     require(p.returncode == 0, "candidate build contract refused managed draft support")
     message = p.stdout.strip()
     require(message.startswith("hps-managed-draft/1\n"), "unexpected product build contract")

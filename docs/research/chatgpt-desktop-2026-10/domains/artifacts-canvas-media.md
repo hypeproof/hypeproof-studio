@@ -205,6 +205,8 @@ DES-ART-20 status (2026-10-27): built in REQ-STUDIO-TASK-ACTIVITY (`docs/studio-
 9. **Plugins, skills and auth rows (ART-56, 57, 58)** are inventoried here because their namespaces start with `browser*`. Parity decisions belong to the plugins, skills and account domain files. Check for duplicate IDs at merge.
 10. **Not verified at runtime.** All Studio coverage claims come from source and docs in the snapshot, not from running Studio. "No coverage found" means bounded searches of `extensions/hypeproof-chat/src`, `chalk/src/ui` and `docs/requirements`.
 
+REQ-ART-13 / DES-ART-13 status (2026-11-13): built as REQ-STUDIO-PUBLISH-STATS (`docs/studio-requirements.md`, "Test version 7-day counts (CGP-ART-R-013)") with no Service change. The tiles say `열어 본 횟수` / `끝까지 한 횟수` because CR-72 counts sessions, not people (`decisions.md`, DEC-ART-R-013).
+
 REQ-ART-05 / DES-ART-05 status (2026-11-13): built as ADM-CMT-01 to ADM-CMT-06 (`docs/requirements/classroom-admin.md`, "Artifact comments · CGP-ART-R-005"). The Service contract is in hypeproof/hypeproof-service#437. The pin sits on a page outline in the inbox side list, not in the live preview tab, and Chalk anchors to one of nine regions. Minor learners can read comments but cannot answer them until Jay decides (DEC-ART-R-005).
 
 REQ-ART-12 / DES-ART-12 status (2026-11-12): the notice for every seat is built in REQ-STUDIO-PUBLISH-NOTICE (`docs/studio-requirements.md`, "Publish responsibility notice (CGP-ART-R-012)"). The minor-cohort confirmation, its waiting state and the Chalk badge are not built; the plan is in `decisions.md` (DEC-ART-R-012).

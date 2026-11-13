@@ -2832,6 +2832,18 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-publish-sharing { font-size: var(--ds-c-studio-styles-type-17); overflow-wrap: anywhere; }
 .hps-publish-sharing button { font: inherit; min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); }
 .hps-publish-sharing button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+/* CGP-ART-D-013: two stat tiles per test version. Tabular figures; the change is an arrow plus words, never colour alone. */
+.hps-stats { margin-block-start: var(--hp-space-2); display: grid; gap: var(--hp-space-2); min-width: 0; }
+.hps-stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--hp-space) * 36)), 1fr)); gap: var(--hp-space-2); }
+.hps-publish-sharing .hps-stat-tile { display: grid; gap: var(--hp-space-1); justify-items: start; text-align: start; padding: var(--hp-space-2) var(--hp-space-3); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: transparent; color: var(--hp-text-primary-default); cursor: pointer; }
+.hps-publish-sharing .hps-stat-tile:hover { background: var(--hp-bg-control-hover); }
+.hps-publish-sharing .hps-stat-tile:active { background: var(--hp-bg-control-pressed); }
+.hps-stat-label, .hps-stat-change { font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hps-stat-value { font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); font-variant-numeric: tabular-nums; }
+.hps-stat-sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--hp-space-2); }
+.hps-stat-sources li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.hps-stat-empty { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
+@media (forced-colors: active) { .hps-publish-sharing .hps-stat-tile { border-color: ButtonText; color: ButtonText; } }
 
 @media (forced-colors: active) {
   .hps-model-selection select:disabled[aria-disabled="true"], .hps-effort select:disabled[aria-disabled="true"] { color:GrayText; border-color:GrayText; border-style:dashed !important; }
