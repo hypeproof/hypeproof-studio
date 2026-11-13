@@ -154,3 +154,55 @@ does not replace that original parent identity.
 Controls cover complete-view drift, excluded bookkeeping, fixed immutable reads,
 receipt/dispatch mismatch, independent Python vectors and native manual proof.
 Real publication remains NOT RUN; default enrollment remains shadow.
+
+
+## Canonical merge delegation (Harness #544)
+
+Active machine effects additionally read current Harness main and immutable
+policy/repos.yaml plus policy/release-merge-authority.json using only the separate
+HPS_MERGE_POLICY_READ_TOKEN. Both workflows mint this capability for Harness alone
+with contents:read. The reviewed raw JSON SHA-256 and full known rule must match;
+the same index commit must retain Studio's product/public-product/main entry and
+delegation pointer. Missing token/files, unlink, retirement or changed rule block.
+
+Every tag/draft/merge/final-publication guard checks the current exact PR head's
+rollup against all canonical required names, and refuses any current red/pending/
+unknown check or latest failing control-plane gate. CI SUCCESS/SKIPPED/NEUTRAL
+semantics match the canonical monitor; native evidence still requires strict PASS.
+Blocking labels and any current changes-requested reviewer remain holds. Ordinary
+source approvals and shadow/legacy behavior are unchanged; this rule delegates
+only the existing exact same-repository release-record shape with complete machine proof.
+Checks use explicit GraphQL context pagination with final-page proof and stable head
+identity; review history uses complete paginated REST reads.
+
+
+Check reruns are ordered across proven distinct runs of one issuer and immutable workflow
+identity, using run number and creation chronology (preserving fractional seconds).
+Same-run duplicate display names remain incomparable: parallel jobs can share a name,
+and neither check ID nor mutable workflow runAttempt proves per-job supersession.
+Every blocker in that run remains until a proven later distinct run supersedes it;
+this is technical evidence ambiguity, not an additional human approval requirement.
+Completion timestamps never establish recency. Unknown/incomparable metadata stays
+in the gate, including control-plane results. Status contexts use creation time.
+Query fields are documented in GitHub's [Checks schema](https://docs.github.com/en/graphql/reference/checks#checkrun)
+and [Actions schema](https://docs.github.com/en/graphql/reference/actions#workflowrun).
+
+
+## Active release-record review requests (#3647)
+
+Active cut creation/update writes machine-oriented publication instructions, keeping
+all case procedures and unchecked observations. Shadow copy remains unchanged.
+After creation/update, a paginated GraphQL read binds the exact Studio head,
+single-parent RC record and sole version file. Only ReviewRequest.asCodeOwner=true
+User/Team requests are removed with the existing product App capability. Each delete
+rechecks provenance/head and independently paginated review history, including
+when unprotected repositories return no aggregate reviewDecision. Every page must
+retain the exact head, total count, unique IDs and pagination proof. COMMENTED or
+PENDING cannot clear CHANGES_REQUESTED; only a proven later APPROVED/DISMISSED
+from that reviewer can clear it. Unknown attribution/state/time, conflicting ties
+or incomplete history stop cleanup. Sub-millisecond timestamps remain distinct.
+Manual false/unknown requests, holds and ordinary source PR ownership remain. Uncertain deletion is observed on
+retry rather than blindly repeated. Global CODEOWNERS and draft behavior are unchanged.
+The [official ReviewRequest schema](https://docs.github.com/en/graphql/reference/pulls#reviewrequest)
+and a read-only real shadow PR inspection confirmed the provenance field. No real PR
+requests are modified during protocol controls; installed-App rollout remains #3643.

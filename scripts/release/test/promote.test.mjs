@@ -1,6 +1,7 @@
 // Controls for release promotion (#3172). Pure decisions plus the workflow wiring; no GitHub calls.
 //   node --test scripts/release/test/promote.test.mjs
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {fixture as machineFixture} from './machine-publication.controls.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +9,7 @@ import path from 'node:path';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan, rcTagsOf} from '../promote.mjs';
+import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan, rcTagsOf, readAcceptedReceipt} from '../promote.mjs';
 import {buildTagMessage, expectedAppVersion, resolveBuildContract} from '../build-contract.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -30,6 +31,7 @@ const comment = (user, body, at = '2026-10-29T11:00:00Z', association = 'MEMBER'
 const OVERRIDE = comment('jayleekr', 'Release manager override: P0 run by hand on the pre-tester Mac; results in the thread');
 const good = () => ({
   pr: {number: 3159, state: 'open', merged: false, labels: ['release'], base: 'main', headRef: `release/${V}`, head: HEAD,
+    headRepository: 'hypeproof/hypeproof-studio', baseRepository: 'hypeproof/hypeproof-studio',
     headDate: HEAD_DATE, comments: [OVERRIDE], reviews: [{user: 'minhan', state: 'APPROVED', commit: HEAD}]},
   p0: P0,
   commit: {sha: HEAD, parents: [CAND], message: `release: record ${RC}`, files: [`releases/${V}.md`]},
@@ -61,6 +63,14 @@ test('verified complete machine PASS promotes without human review; invalid mach
   facts.writers = new Set();
   assert.equal(promotionDecision(facts).allow, false);
   assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, true);
+  for (const label of ['blocked', 'hold', 'do-not-merge', 'human-needed']) {
+    facts.pr.labels.push(label); assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, false); facts.pr.labels.pop();
+  }
+  facts.pr.headRepository = 'other/hypeproof-studio';
+  assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, false);
+  facts.pr.headRepository = 'hypeproof/hypeproof-studio';
+  facts.pr.reviews = [{user: 'reviewer', state: 'CHANGES_REQUESTED', commit: OTHER}];
+  assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, false);
   facts.pr.reviews = [{user: 'minhan', state: 'APPROVED', commit: c.releaseHead}];
   facts.pr.comments = [OVERRIDE]; facts.writers.add('minhan');
   for (const change of [{allow: false}, {candidate: OTHER}, {releaseHead: OTHER}, {tag: 'v2026.1109.9'}, {status: 'READY'}]) {
@@ -294,4 +304,15 @@ test('machine evidence capabilities are read-only and scoped to one fixed privat
     assert.ok(readers.length > 0);
     for (const step of readers) assert.equal(step.with['permission-contents'], 'read');
   }
+});
+
+test('accepted receipt byte reader remains independent of active publication authority and holds', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'receipt-reader-control-'));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const value = {schema: 'hps-unified-release/1', control: 'transport bytes only'}, bytes = JSON.stringify(value);
+  fs.writeFileSync(path.join(directory, 'unified-acceptance.json'), bytes);
+  const facts = good(); facts.pr.labels.push('hold');
+  facts.rcRelease.assets = facts.rcRelease.assets.map(asset => asset.name === 'unified-acceptance.json'
+    ? {...asset, digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex')} : asset);
+  assert.deepEqual(readAcceptedReceipt(facts, 'hypeproof/hypeproof-studio', directory), value);
 });

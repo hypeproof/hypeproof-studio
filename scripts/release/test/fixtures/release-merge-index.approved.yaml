@@ -1,0 +1,33 @@
+version: 1
+
+repositories:
+  - owner: hypeproof
+    name: hypeproof-studio
+    release_record_merge_policy: policy/release-merge-authority.json
+    # Owner decision 2026-10-16 (#332): public Studio to reduce GitHub Actions cost.
+    branch_protection: {}
+    branch_protection_reason: Public visibility approved 2026-10-16; protection management remains skipped pending a separate decision, never deleted.
+    # A public repository can always be forked; GitHub ignores allow_forking=false.
+    allow_forking: true
+    collaborator_permissions:
+      jayleekr: admin
+    visibility: public
+    profile: public-product
+    lifecycle: product
+    default_branch: main
+    products: [studio]
+    # extension / smoke is the aggregate of the six smoke shards (Studio #3455). Required
+    # since Studio #3512: merges on four green checks with smoke still running broke main twice.
+    required_status_checks:
+      - repo-governance (repo files)
+      - worker / test
+      - worker / typecheck
+      - extension / typecheck
+      - extension / smoke
+    required_secrets:
+      actions:
+        - ANTHROPIC_API_KEY
+        - DISCORD_WEBHOOK_HYPEPROOF_STUDIO
+        - DISCORD_WEBHOOK_SEDIMENT
+    release_repos:
+      - hypeproof/hypeproof-studio-releases

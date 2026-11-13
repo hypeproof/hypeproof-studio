@@ -25,6 +25,8 @@ on:
         required: false
         default: ''
 permissions:
+  checks: read
+  statuses: read
   contents: write
   actions: write
   pull-requests: read
@@ -325,6 +327,15 @@ jobs:
           private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
           repositories: hypeproof-studio-releases
           permission-contents: read
+      - name: Canonical merge policy capability (Harness read only)
+        if: inputs.machine_pr != ''
+        id: merge-policy
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+          repositories: hypeproof-harness
+          permission-contents: read
       - name: Fetch private machine evidence again before publication
         if: inputs.machine_pr != ''
         env:
@@ -354,6 +365,7 @@ jobs:
           HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
           HPS_MACHINE_DISPATCH_KEY: ${{ inputs.machine_dispatch_key }}
           HPS_MACHINE_PARENT_WORKFLOW_HEAD: ${{ inputs.machine_parent_workflow_head }}
+          HPS_MERGE_POLICY_READ_TOKEN: ${{ steps.merge-policy.outputs.token }}
         run: |
           set -euo pipefail
           args=()
@@ -480,6 +492,7 @@ jobs:
           HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
           HPS_MACHINE_DISPATCH_KEY: ${{ inputs.machine_dispatch_key }}
           HPS_MACHINE_PARENT_WORKFLOW_HEAD: ${{ inputs.machine_parent_workflow_head }}
+          HPS_MERGE_POLICY_READ_TOKEN: ${{ steps.merge-policy.outputs.token }}
           HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
           HPS_FREEZE_CONTEXT: Final machine publication after installer and notes preparation
         run: |
