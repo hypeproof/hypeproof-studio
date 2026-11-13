@@ -120,6 +120,13 @@ Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
   path for five synthetic turns from one visible tap, without RMS/end/next input.
   Reject duplicate finals, wrong/stale TTS IDs, expired/replaced credentials and
   post-background callbacks; preserve a draft edited during read-aloud.
+- `voiceAdmissionDenialKeepsServiceReasonAndStopsWithoutReplay` sends through the
+  actual NativeVoice listener and QuestionActivity Host into ReflectionModel.
+  A persisted failed-turn fixture returns the monthly-limit error; stopping voice
+  must retain that actionable explanation, the saved request ID/text and login.
+  Late recognizer callbacks cannot send again or start playback/capture (#3971).
+  This checks the failed-send transition, not error persistence across refresh or
+  restart, live admission, physical speech or installed-device acceptance.
 - Native end-of-speech waits at most eight seconds for a final result; duplicate
   endpoints cannot extend it. No endpoint within 60 seconds, no final within
   the following eight seconds, or empty speech preserves partial words and
