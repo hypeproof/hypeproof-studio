@@ -107,7 +107,7 @@ struct StudioHome: View {
                                 .accessibilityLabel(model.connected ? "생각 보내기" : "생각 기록하기").accessibilityIdentifier("sendThought")
                                 .disabled(model.busy || voice.isCapturing || model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.readOnly)
                         }
-                        Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "여기는 이 기기의 보관함이에요. 답변을 받으려면 질문 탭에서 계정으로 시작해 주세요.").font(.caption2).foregroundStyle(.secondary)
+                        Text(model.connected ? "현재 생각의 대화와 확인한 의도를 AI에 보내요." : "이 기록은 이 기기에 보관돼요. 계정 대화는 ‘대화로 돌아가기’에서 이어갈 수 있어요.").font(.caption2).foregroundStyle(.secondary)
                     }.padding(.horizontal, 20).padding(.vertical, 12).background(.regularMaterial)
                 }
             }

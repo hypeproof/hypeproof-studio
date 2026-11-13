@@ -16,6 +16,9 @@ REQUIRED = {
     'MFR-T05': 'testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
+    'MPER-T01-cancel': 'testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend',
+    'MPER-T03-collision': 'testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice',
+    'MPER-T01-layout': 'testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable',
 }
 # This is Xcode 26's XCTest output, not app stdout or a test-name substring.
 CASE = re.compile(r"^Test Case '-\[[A-Za-z0-9_.]*StudioJourneyTests (test[A-Za-z0-9_]+)\]' (started\.|(passed|failed|skipped)(?: \([0-9.]+ seconds\))?\.)$")

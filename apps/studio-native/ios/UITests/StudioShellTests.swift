@@ -6,13 +6,22 @@ final class StudioShellTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["accountStorageVerified"].exists, "The app must create, read, update and delete an isolated Keychain item before account readiness passes.")
         XCTAssertFalse(app.staticTexts["sharedError"].exists, "A storage failure must not pass as a ready sign-in screen.")
         XCTAssertTrue(app.buttons["linkDesktop"].isEnabled)
-        XCTAssertTrue(app.staticTexts["요즘 어떤 일에\n시간을 많이 쓰세요?"].exists)
+        XCTAssertTrue(app.staticTexts["firstQuestion"].exists)
+        let input = editable("sharedInput", in: app)
+        XCTAssertTrue(input.isEnabled && input.isHittable, "First use must allow a thought before account setup.")
+        XCTAssertTrue(app.buttons["sharedDictate"].isEnabled)
+        XCTAssertEqual(app.tabBars.count, 0, "Local storage must not compete with the conversation as a second product.")
         XCTAssertFalse(app.textFields["나이"].exists)
         // Account/AI storage disclosure is inline. This storage probe must not
         // start real authentication; the journeys below exercise that boundary
         // through the same production login continuation with fixture transport.
         XCTAssertFalse(app.buttons["같은 계정으로 연결"].exists)
         XCTAssertEqual(app.webViews.count, 0)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "first-use-question-and-composer"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor private func openNotebook(_ app: XCUIApplication) {
+        app.buttons["conversationSettings"].tap()
+        app.buttons["localNotebook"].tap()
     }
     @MainActor private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
         // Resolve after the screen transition. An immediate `.exists` check can
@@ -46,7 +55,7 @@ final class StudioShellTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["기기 기록"].tap()
+        openNotebook(app)
         let start = app.buttons["startProject"]
         XCTAssertTrue(start.waitForExistence(timeout: 10)); start.tap()
         let field = editable("thoughtInput", in: app)
@@ -61,7 +70,7 @@ final class StudioShellTests: XCTestCase {
         let observation = editable("reflection-observation", in: app)
         XCTAssertTrue(observation.waitForExistence(timeout: 5)); observation.tap(); observation.typeText("Two customers waited outside")
         app.buttons["닫기"].tap()
-        app.terminate(); app.launch(); app.tabBars.buttons["기기 기록"].tap()
+        app.terminate(); app.launch(); openNotebook(app)
         XCTAssertTrue(app.staticTexts["Observe one shop today"].waitForExistence(timeout: 5))
         openReflection(in: app)
         let restored = editable("reflection-observation", in: app)
@@ -69,7 +78,7 @@ final class StudioShellTests: XCTestCase {
         app.buttons["닫기"].tap()
         // This disconnected tab records locally; it must not imply an AI reply.
         XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
-        XCTAssertTrue(app.staticTexts["여기는 이 기기의 보관함이에요. 답변을 받으려면 질문 탭에서 계정으로 시작해 주세요."].exists)
+        XCTAssertTrue(app.staticTexts["이 기록은 이 기기에 보관돼요. 계정 대화는 ‘대화로 돌아가기’에서 이어갈 수 있어요."].exists)
         let draft = editable("thoughtInput", in: app)
         draft.tap(); draft.typeText("Keep this unfinished thought")
         app.buttons["voiceConversation"].tap()
@@ -85,7 +94,7 @@ final class StudioShellTests: XCTestCase {
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         XCTAssertTrue(app.buttons["dictateVoice"].exists)
         XCTAssertFalse(app.buttons["stopVoice"].exists)
-        app.terminate(); app.launch(); app.tabBars.buttons["기기 기록"].tap()
+        app.terminate(); app.launch(); openNotebook(app)
         XCTAssertEqual(editable("thoughtInput", in: app).value as? String, "Keep this unfinished thought")
         XCTAssertEqual(app.buttons["sendThought"].label, "생각 기록하기")
         XCTAssertFalse(app.buttons["stopVoice"].exists)
@@ -98,10 +107,10 @@ final class StudioShellTests: XCTestCase {
 /// synthetic; account adoption, persistence, view actions and VoiceTurn are real.
 /// These cases are never physical authentication or microphone evidence.
 final class StudioJourneyTests: XCTestCase {
-    @MainActor private func launch(_ scenario: String) -> XCUIApplication {
+    @MainActor private func launch(_ scenario: String, arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--native-journey"]
+        app.launchArguments = ["--native-journey"] + arguments
         app.launchEnvironment["HP_NATIVE_JOURNEY"] = scenario
         app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
         app.launch()
@@ -152,7 +161,7 @@ final class StudioJourneyTests: XCTestCase {
             let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "answer-missing-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
         }
         XCTAssertTrue(appeared, "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
-        XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "What small change would make tomorrow better?")
+        XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "HP Studio의 답변. What small change would make tomorrow better?")
     }
     @MainActor private func evidence(_ name: String, app: XCUIApplication) throws {
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
@@ -160,8 +169,14 @@ final class StudioJourneyTests: XCTestCase {
         observation.name = name + "-synthetic-trace"; observation.lifetime = .keepAlways; add(observation)
     }
     @MainActor func testFirstInstallSignInToFirstAnswerWithoutDesktop() throws {
-        let app = launch("first-answer"); signIn(app)
+        let app = launch("first-answer")
         let input = field(app); input.tap(); input.typeText("I want to make time for learning")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        XCTAssertTrue((try trace(app)["paths"] as? [String] ?? []).isEmpty, "Writing before login must stay local.")
+        try evidence("journey-first-thought-before-login", app: app)
+        signIn(app)
+        XCTAssertEqual(field(app).value as? String, "I want to make time for learning")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0, "Account adoption must not send the preserved draft.")
         let send = app.buttons["sharedSend"]; enabled(send); send.tap(); answer(app)
         let result = try trace(app)
         let paths = try XCTUnwrap(result["paths"] as? [String])
@@ -203,7 +218,7 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening() throws {
         let app = launch("queued-voice"); signIn(app)
-        app.buttons["연동 설정"].tap(); app.buttons["새로 고침"].tap()
+        app.buttons["conversationSettings"].tap(); app.buttons["새로 고침"].tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
         XCTAssertTrue(syncing.waitForExistence(timeout: 5))
         let voice = app.buttons["sharedVoice"]; enabled(voice); voice.tap()
@@ -274,13 +289,71 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking() throws {
         let app = launch("sign-in-expired")
+        let input = field(app); input.tap(); input.typeText("Keep this thought even when login fails")
         let start = app.buttons["linkDesktop"]; enabled(start); start.tap()
         XCTAssertTrue(app.staticTexts["sharedError"].waitForExistence(timeout: 10))
         enabled(start); XCTAssertFalse(app.buttons["accountCancel"].exists)
-        XCTAssertFalse(app.textFields["sharedInput"].exists)
+        XCTAssertEqual(field(app).value as? String, "Keep this thought even when login fails")
+        XCTAssertTrue(field(app).isEnabled)
         let result = try trace(app)
         XCTAssertEqual(result["accepted_turns"] as? Int, 0)
         XCTAssertFalse((result["paths"] as? [String] ?? []).contains("POST /v1/auth/native/exchange"))
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, "Keep this thought even when login fails")
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
         try evidence("journey-login-failure", app: app)
+    }
+    @MainActor func testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable() throws {
+        let app = launch("first-answer", arguments: ["-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5))
+        let input = field(app)
+        XCTAssertTrue(input.isEnabled && input.isHittable)
+        try evidence("journey-first-use-dark-large-text", app: app)
+        let thought = "This is my first thought\nI have more to say\nI want to understand it\nAnd keep these words\nBefore I sign in"
+        input.tap(); input.typeText(thought)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let login = app.buttons["linkDesktop"]
+        XCTAssertTrue(input.isHittable && login.isHittable)
+        XCTAssertLessThanOrEqual(input.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        XCTAssertGreaterThanOrEqual(input.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        XCTAssertLessThanOrEqual(login.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        XCTAssertGreaterThanOrEqual(login.frame.height, 44)
+        XCTAssertEqual(field(app).value as? String, thought)
+        XCTAssertTrue((try trace(app)["paths"] as? [String] ?? []).isEmpty)
+        try evidence("journey-first-use-dark-large-text-keyboard", app: app)
+    }
+    @MainActor func testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend() throws {
+        let app = launch("sign-in-cancel")
+        let input = field(app); input.tap(); input.typeText("A thought I am not ready to share")
+        app.buttons["linkDesktop"].tap()
+        let cancel = app.buttons["accountCancel"]; enabled(cancel); cancel.tap()
+        enabled(app.buttons["linkDesktop"])
+        XCTAssertEqual(field(app).value as? String, "A thought I am not ready to share")
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, "A thought I am not ready to share")
+        let result = try trace(app)
+        XCTAssertEqual(result["accepted_turns"] as? Int, 0)
+        XCTAssertEqual(result["browser_callbacks"] as? Int, 0)
+        XCTAssertFalse((result["paths"] as? [String] ?? []).contains("POST /v1/auth/native/exchange"))
+        try evidence("journey-cancel-first-thought", app: app)
+    }
+    @MainActor func testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice() throws {
+        let app = launch("draft-collision")
+        let input = field(app); input.tap(); input.typeText("My thought before login")
+        signIn(app)
+        XCTAssertEqual(field(app).value as? String, "Existing account draft")
+        let restore = app.buttons["restoreGuestDraft"]
+        XCTAssertTrue(restore.exists); XCTAssertFalse(restore.isEnabled)
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, "Existing account draft")
+        XCTAssertTrue(restore.exists); XCTAssertFalse(restore.isEnabled)
+        let draft = field(app); draft.tap()
+        draft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Existing account draft".count))
+        enabled(restore); restore.tap()
+        XCTAssertEqual(field(app).value as? String, "My thought before login")
+        XCTAssertFalse(restore.exists)
+        XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
+        try evidence("journey-first-thought-collision", app: app)
     }
 }

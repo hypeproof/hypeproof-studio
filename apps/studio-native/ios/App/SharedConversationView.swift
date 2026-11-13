@@ -2,12 +2,23 @@ import SwiftUI
 import AVFoundation
 
 struct StudioRoot: View {
-    var body: some View {
-        TabView {
-            SharedConversationView().tabItem { Label("질문", systemImage: "bubble.left.and.bubble.right") }
-            StudioHome().tabItem { Label("기기 기록", systemImage: "book.closed") }
-        }.tint(.green)
-    }
+    var body: some View { SharedConversationView().tint(ConversationStyle.accent) }
+}
+// Desktop chat uses its host canvas, quiet assistant prose and a rounded composer.
+// Keep those semantic roles with native Dynamic Type and system light/dark surfaces.
+private enum ConversationStyle {
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 213/255, green: 242/255, blue: 121/255, alpha: 1)
+            : UIColor(red: 32/255, green: 44/255, blue: 36/255, alpha: 1)
+    })
+    static let onAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 24/255, green: 35/255, blue: 28/255, alpha: 1)
+            : UIColor(red: 244/255, green: 246/255, blue: 240/255, alpha: 1)
+    })
+    static let canvas = Color(uiColor: .systemBackground)
+    static let surface = Color(uiColor: .secondarySystemBackground)
 }
 struct SharedConversationView: View {
     @StateObject private var model = SharedConversationModel()
@@ -22,21 +33,28 @@ struct SharedConversationView: View {
     @State private var reviewRecording = false
     @State private var exportURL: URL?
     @State private var clearCache = false
+    @State private var showHistory = false
+    @State private var showNotebook = false
+    @State private var notebookAfterHistory = false
+    @State private var showPrivacy = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var textSize
     private var navigationContent: some View {
         NavigationStack {
             Group {
                 if !model.signedIn { welcome }
-                else if model.selected == nil { conversationList }
+                else if model.selected == nil { waitingForConversation }
                 else { timeline }
             }
-            .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle(model.selected == nil ? "HP Studio" : model.title)
+            .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+            .background(ConversationStyle.canvas)
+            .navigationTitle(!model.signedIn || model.isReflection ? "나의 질문" : model.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.selected != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { voice.stop(); focused = false; model.choose(nil) } label: { Label("대화 목록", systemImage: "chevron.left") }
-                    }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { voice.stop(); focused = false; showHistory = true } label: {
+                        Image(systemName: "sidebar.left").frame(minWidth: 44, minHeight: 44)
+                    }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -47,9 +65,12 @@ struct SharedConversationView: View {
                             Button("이 기기의 사본 삭제") { clearCache = true }
                             Button("로그아웃") { voice.stop(); model.logout() }.disabled(model.busy || model.syncing)
                         }
+                        Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
+                        Button("대화와 개인정보") { voice.stop(); focused = false; showPrivacy = true }
                         Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                         Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
-                    } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("연동 설정")
+                    } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel("대화 설정").accessibilityIdentifier("conversationSettings")
                 }
             }
         }
@@ -70,6 +91,7 @@ struct SharedConversationView: View {
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
         }
         .onChange(of: model.selected) { _, _ in voice.stop() }
+        .onChange(of: model.signedIn) { _, _ in voice.stop() }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -83,6 +105,25 @@ struct SharedConversationView: View {
     var body: some View {
         lifecycleContent
         .sheet(isPresented: $showContext) { contextSheet }
+        .sheet(isPresented: $showHistory, onDismiss: {
+            if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
+        }) { historySheet }
+        .sheet(isPresented: $showNotebook) {
+            StudioHome().safeAreaInset(edge: .top) {
+                HStack { Text("이 기기에 저장된 기록").font(.caption).foregroundStyle(.secondary); Spacer(); Button("대화로 돌아가기") { showNotebook = false } }
+                    .padding(.horizontal, 20).padding(.vertical, 10).background(.regularMaterial)
+            }
+        }
+        .sheet(isPresented: $showPrivacy) {
+            NavigationStack {
+                List {
+                    Text("보내기 전의 글은 이 기기에 보관해요. 로그인만으로 AI에 보내지 않아요.")
+                    Text("직접 보낸 글과 AI 답변은 내 계정에 저장되어 같은 계정의 기기에서 이어집니다. 질문에 필요한 최근 글은 AI 제공자에게 전달돼요.")
+                    Text("질문 대화에는 컴퓨터를 켜 둘 필요가 없어요. 만들고 싶은 것이 구체화되면 기존 데스크톱 HP Studio에서 이어갈 수 있어요.")
+                }.navigationTitle("대화와 개인정보").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { Button("닫기") { showPrivacy = false } }
+            }
+        }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) { if let exportURL { ShareSheet(url: exportURL) } }
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
             Button("이 기기의 사본 삭제", role: .destructive) { voice.stop(); model.clearCache() }
@@ -90,69 +131,79 @@ struct SharedConversationView: View {
     }
     private var welcome: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 44)).foregroundStyle(.green).accessibilityHidden(true)
-                Text("요즘 어떤 일에\n시간을 많이 쓰세요?").font(.largeTitle.bold())
-                Text("일, 공부, 돌봄, 쉬는 시간까지 어떤 이야기든 좋아요. 아직 정리되지 않아도 괜찮아요.").foregroundStyle(.secondary)
-                Text("정답을 정하는 사람은 나예요. 답하기 어려운 질문은 건너뛰어도 괜찮아요.").font(.callout)
-                Text("보낸 글과 AI 답변은 내 계정에 저장되어 같은 계정의 기기에서 이어집니다. 질문에 필요한 최근 글은 AI 제공자에게 전달돼요.").font(.footnote).foregroundStyle(.secondary)
-                if model.busy {
-                    ProgressView(model.loginStatus.isEmpty ? "로그인을 마무리하고 있어요." : model.loginStatus)
-                    Button("로그인 취소") { model.cancelLogin() }.accessibilityIdentifier("accountCancel")
-                } else {
-                    Button("내 계정으로 시작하기") { model.login() }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.accountStorageReady).accessibilityIdentifier("linkDesktop")
-                    if !model.accountStorageReady {
-                        Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage")
-                    }
+            VStack(alignment: .leading, spacing: 20) {
+                openingQuestion
+                if !model.accountStorageReady { Button("계정 저장소 다시 확인") { model.restoreAccount() }.accessibilityIdentifier("retryAccountStorage") }
 #if DEBUG
-                    if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
+                if model.accountStorageVerified { Text("계정 저장소 확인됨").font(.caption).accessibilityIdentifier("accountStorageVerified") }
 #endif
-                }
-                Text("같은 계정의 HP Studio에서 나눈 이야기를 이어갑니다. 질문 대화에는 컴퓨터를 켜 둘 필요가 없어요. 제작이 필요해지면 기존 데스크톱 앱을 안내해요.").font(.footnote).foregroundStyle(.secondary)
                 status
+            }.padding(.horizontal, 24).padding(.top, 36).padding(.bottom, 20)
+                .frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
+        }.scrollDismissesKeyboard(.interactively).accessibilityIdentifier("conversationTimeline")
+    }
+    private var openingQuestion: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(model.signedIn ? model.opening : "요즘 어떤 일에 시간을 많이 쓰세요?")
+                .font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier(model.signedIn ? "reflectionOpening" : "firstQuestion")
+            Text("아직 정리되지 않아도 괜찮아요. 다른 이야기부터 시작해도 좋아요.")
+                .font(.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    private var waitingForConversation: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                openingQuestion
+                status
+                if !model.syncing { Button("대화 다시 불러오기") { model.refresh() } }
             }.padding(24).frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
         }
     }
-    private var conversationList: some View {
-        List {
-            Section {
-                Text("하나의 작업, 하나의 대화").font(.headline)
-                Text("나를 알아가는 대화와 기존 데스크톱에서 연결한 작업을 함께 볼 수 있어요.").font(.subheadline).foregroundStyle(.secondary)
-            }
-            if model.conversations.isEmpty {
-                Section {
-                    Text("연결된 대화가 아직 없어요.")
-                    Text("컴퓨터의 HP Studio에서 원하는 대화를 열고 ‘iPhone과 이 대화 연결’을 선택해 주세요.").foregroundStyle(.secondary)
-                    Button("다시 확인") { model.refresh() }
+    private var historySheet: some View {
+        NavigationStack {
+            List {
+                if model.signedIn {
+                    ForEach(model.conversations) { item in
+                        Button { model.choose(item.id); showHistory = false } label: {
+                            Label(item.title, systemImage: item.id == SharedConversationModel.personalID ? "bubble.left.and.bubble.right" : "desktopcomputer")
+                                .foregroundStyle(.primary).padding(.vertical, 8)
+                        }
+                    }
+                    if model.conversations.isEmpty { Text("대화 기록을 아직 불러오지 못했어요.").foregroundStyle(.secondary); Button("다시 확인") { model.refresh() } }
+                } else {
+                    Text("로그인하면 같은 계정의 대화 기록을 볼 수 있어요.").foregroundStyle(.secondary)
                 }
+                Section { Button { notebookAfterHistory = true; showHistory = false } label: { Label("이 기기의 기록", systemImage: "book.closed") }.accessibilityIdentifier("historyLocalNotebook") }
             }
-            ForEach(model.conversations) { item in
-                Button { model.choose(item.id) } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.title).font(.headline).foregroundStyle(.primary)
-                        Text(item.id == SharedConversationModel.personalID ? "어느 기기에서든 나누는 이야기" : "컴퓨터에서 이어지는 작업").font(.caption).foregroundStyle(.secondary)
-                    }.padding(.vertical, 8)
-                }
-            }
-            Section { status }
-        }.refreshable { model.refresh() }
+            .navigationTitle("대화 기록").navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("닫기") { showHistory = false } }
+        }
     }
     private var timeline: some View {
         ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if model.isReflection && model.cache.messages.isEmpty {
-                        Text(model.opening).font(.largeTitle.bold()).accessibilityIdentifier("reflectionOpening")
-                        Text(model.openingHint).foregroundStyle(.secondary)
-                        Text("답하기 어려우면 다른 이야기부터 해도 좋아요.").font(.callout)
+                        openingQuestion.padding(.top, 16)
                     }
                     if model.isReflection && model.hasEarlierReflection { Text("최근 대화를 보여줘요. 이전 기록은 계정 내보내기에 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
                     ForEach(model.cache.messages) { message in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(message.role == "user" ? "나의 생각" : "함께 생각하기").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(message.content).textSelection(.enabled).accessibilityIdentifier(message.role == "assistant" ? "sharedReply" : "sharedMessage")
-                        }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(message.role == "user" ? Color(uiColor: .secondarySystemGroupedBackground) : .green.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+                        if message.role == "user" {
+                            HStack {
+                                Spacer(minLength: 32)
+                                Text(message.content).textSelection(.enabled).lineSpacing(4)
+                                    .padding(.horizontal, 16).padding(.vertical, 12)
+                                    .background(ConversationStyle.surface, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 6, topTrailingRadius: 18))
+                                    .accessibilityIdentifier("sharedMessage")
+                                    .accessibilityLabel("내 메시지. \(message.content)")
+                            }
+                        } else {
+                            Text(message.content).textSelection(.enabled).lineSpacing(5)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+                                .accessibilityIdentifier("sharedReply")
+                                .accessibilityLabel("HP Studio의 답변. \(message.content)")
+                        }
                     }
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
@@ -163,43 +214,87 @@ struct SharedConversationView: View {
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
                                 Button("완료되지 않은 요청 정리") { model.recoverReflection() }.disabled(model.busy || model.syncing)
                             }
-                        }.padding().background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                        }.padding(.vertical, 8)
                     }
                     status
                     Color.clear.frame(height: 1).id("sharedBottom")
                 }.padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }.scrollDismissesKeyboard(.interactively)
-                .onChange(of: model.cache.messages.count) { _, _ in withAnimation { scroll.scrollTo("sharedBottom", anchor: .bottom) } }
+            }.scrollDismissesKeyboard(.interactively).accessibilityIdentifier("conversationTimeline")
+                .onChange(of: model.cache.messages.count) { _, _ in
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scroll.scrollTo("sharedBottom", anchor: .bottom) }
+                }
         }
-        .safeAreaInset(edge: .bottom) { composer }
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !voice.isActive {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        Button("다음 질문") { insert("지금까지 나눈 이야기에서 내가 더 생각해 볼 질문 하나를 해 주세요.") }
-                        Button("이 질문은 건너뛰기") { insert("이 질문은 지금 답하고 싶지 않아요. 다른 관점이나 작은 다음 행동으로 이어가 주세요.") }
-                        Button("작게 해보기") { insert("내가 원하는 변화를 확인할 수 있는 가장 작은 실험을 함께 정해 주세요.") }
-                    }.buttonStyle(.bordered).font(.callout)
-                }.disabled(!model.canSend || !model.cache.draft.isEmpty)
-            }
-            HStack(alignment: .bottom) {
-                TextField("편하게 말하거나 적어 주세요", text: Binding(get: { model.cache.draft }, set: model.editDraft), axis: .vertical)
-                    .lineLimit(1...5).focused($focused).disabled(voice.isCapturing).accessibilityIdentifier("sharedInput")
-                Button { focused = false; voice.stop(); model.send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
-                    .disabled(!model.canSend || (try? SharedRequest.checkedText(model.cache.draft)) == nil || voice.isCapturing).accessibilityLabel("대화 보내기").accessibilityIdentifier("sharedSend")
-            }
-            HStack {
-                if voice.isActive {
-                    Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2")
-                    Spacer(); Button("음성 멈춤") { voice.stop() }.accessibilityIdentifier("sharedVoiceStop")
-                } else {
-                    Button { beginVoice(.dictation) } label: { Label("말로 적기", systemImage: "mic") }.accessibilityIdentifier("sharedDictate")
+            if model.pendingGuestDraft != nil && model.signedIn {
+                HStack(alignment: .top) {
+                    Text("로그인 전에 쓴 글도 이 기기에 남아 있어요.").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button { beginVoice(.conversation) } label: { Label("대화하기", systemImage: "waveform") }.accessibilityIdentifier("sharedVoice").disabled(!model.canSend || !model.cache.draft.isEmpty)
+                    Button("가져오기") { voice.stop(); if model.restoreGuestDraft() { focused = true } }
+                        .disabled(!model.canRestoreGuestDraft).accessibilityIdentifier("restoreGuestDraft")
                 }
-            }.buttonStyle(.bordered).disabled(model.busy && !voice.isActive)
+            }
+            if !voice.isActive && !focused && model.draftText.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if model.cache.messages.isEmpty {
+                            Button("요즘 신경 쓰이는 일") { insert("요즘 신경 쓰이는 일은 ") }.accessibilityIdentifier("starterConcern")
+                            Button("해보고 싶은 것") { insert("지금 해보고 싶은 것은 ") }.accessibilityIdentifier("starterWish")
+                        } else {
+                            Button("다른 질문") { insert("다른 관점에서 생각할 수 있는 질문을 해 주세요.") }
+                            Button("작게 해보기") { insert("내가 원하는 변화를 확인할 수 있는 가장 작은 실험을 함께 정해 주세요.") }
+                        }
+                    }.buttonStyle(.bordered).font(.callout).controlSize(.large)
+                }.disabled(!model.canEditDraft)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("메시지를 입력하세요", text: Binding(get: { model.draftText }, set: model.editDraft), axis: .vertical)
+                    .font(.body).lineLimit(1...(textSize.isAccessibilitySize ? 2 : 5)).padding(.horizontal, 4).padding(.top, 4)
+                    .focused($focused).disabled(voice.isCapturing || !model.canEditDraft).accessibilityIdentifier("sharedInput")
+                    .accessibilityLabel("메시지")
+                HStack(spacing: 4) {
+                    if voice.isActive {
+                        Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
+                        Spacer()
+                        Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
+                    } else {
+                        Button { beginVoice(.dictation) } label: { Image(systemName: "mic").frame(width: 44, height: 44) }
+                            .disabled(!model.canEditDraft || model.busy).accessibilityLabel("말로 적기").accessibilityIdentifier("sharedDictate")
+                        Button { if model.signedIn { beginVoice(.conversation) } else { startLogin() } } label: {
+                            Image(systemName: "waveform").frame(width: 44, height: 44)
+                        }.accessibilityLabel(model.signedIn ? "음성 대화" : "로그인하고 음성 대화")
+                            .accessibilityIdentifier("sharedVoice")
+                            .disabled(model.signedIn ? !model.canSend || !model.draftText.isEmpty : model.busy || !model.accountStorageReady)
+                        Spacer(minLength: 0)
+                        if model.signedIn {
+                            Button { focused = false; voice.stop(); model.send() } label: {
+                                Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                                    .background(model.canSend && !model.draftText.isEmpty ? ConversationStyle.accent : ConversationStyle.surface, in: Circle())
+                                    .foregroundStyle(model.canSend && !model.draftText.isEmpty ? ConversationStyle.onAccent : Color.secondary)
+                            }.disabled(!model.canSend || (try? SharedRequest.checkedText(model.draftText)) == nil)
+                                .accessibilityLabel("대화 보내기").accessibilityIdentifier("sharedSend")
+                        } else if model.busy {
+                            ProgressView().padding(.horizontal, 8)
+                            Button("취소") { model.cancelLogin() }.frame(minHeight: 44).accessibilityLabel("로그인 취소").accessibilityIdentifier("accountCancel")
+                        } else {
+                            Button("로그인") { startLogin() }.font(.callout.weight(.semibold))
+                                .padding(.horizontal, 16).frame(minHeight: 44)
+                                .background(ConversationStyle.accent, in: Capsule()).foregroundStyle(ConversationStyle.onAccent)
+                                .disabled(!model.accountStorageReady).accessibilityLabel("로그인하고 대화하기").accessibilityIdentifier("linkDesktop")
+                        }
+                    }
+                }.buttonStyle(.plain)
+            }.padding(12).background(ConversationStyle.surface, in: RoundedRectangle(cornerRadius: 20))
+            if !model.signedIn {
+                if !focused || model.busy {
+                    Text(model.busy ? (model.loginStatus.isEmpty ? "로그인을 마무리하고 있어요. 쓴 글은 남아 있어요." : model.loginStatus) : "먼저 적어도 좋아요. 로그인 후 직접 보내면 AI가 답해요.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Button { voice.stop(); focused = false; showPrivacy = true } label: {
+                    Text("보낸 대화는 계정에 저장되고 AI에 전달돼요. 자세히").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+                }.buttonStyle(.plain).accessibilityIdentifier("conversationPrivacy")
+            }
             if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
             if reviewRecording { Text("원음은 최대 30초만 메모리에 담아요. 파일이나 서버에 저장하지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
             if voice.canReplayOwnVoice {
@@ -208,7 +303,8 @@ struct SharedConversationView: View {
                     Spacer(); Button("녹음 지우기") { voice.stop() }
                 }
             }
-        }.padding(16).background(.regularMaterial)
+        }.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 8)
+            .frame(maxWidth: 672).frame(maxWidth: .infinity).background(ConversationStyle.canvas)
     }
     private var contextSheet: some View {
         NavigationStack {
@@ -242,24 +338,27 @@ struct SharedConversationView: View {
         if NativeJourneyFixture.enabled { Text(NativeJourneyFixture.trace).font(.caption2).accessibilityIdentifier("nativeJourneyTrace") }
 #endif
     }
-    private func insert(_ text: String) { voice.stop(); focused = true; guard model.cache.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
+    private func startLogin() { voice.stop(); focused = false; model.login() }
+    private func insert(_ text: String) { voice.stop(); focused = true; guard model.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
 #if DEBUG
         NativeJourneyFixture.voiceStartAttempt(mode: mode == .conversation ? "conversation" : "dictation",
                                               hasSelection: model.selected != nil, canSend: model.canSend,
-                                              draftEmpty: model.cache.draft.isEmpty)
+                                              draftEmpty: model.draftText.isEmpty)
 #endif
-        guard let id = model.selected, model.canSend else { return }
-        guard mode != .conversation || model.cache.draft.isEmpty else { return }
-        focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.cache.draft
+        guard model.canEditDraft else { return }
+        guard mode != .conversation || (model.canSend && model.draftText.isEmpty) else { return }
+        let selection = model.selected, signedIn = model.signedIn
+        let id = selection ?? "local-first-thought"
+        focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.draftText
         voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, nextTurn: {
-            guard phase == .active, model.selected == id, model.canSend, model.cache.draft.isEmpty else { voice.stop(); return }
+            guard phase == .active, model.selected == selection, model.signedIn == signedIn, model.canSend, model.draftText.isEmpty else { voice.stop(); return }
             beginVoice(.conversation)
         }, transcript: { text in
-            guard model.selected == id else { return }
+            guard model.selected == selection, model.signedIn == signedIn else { return }
             model.editDraft(prefix.isEmpty ? text : prefix + "\n" + text)
         }, final: { _, mode in
-            guard model.selected == id else { return false }
+            guard model.selected == selection, model.signedIn == signedIn else { return false }
             if mode == .dictation { return true }
             guard model.canSend else { return false }
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
