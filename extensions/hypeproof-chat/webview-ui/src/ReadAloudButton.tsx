@@ -34,6 +34,16 @@ function hubFor(make: () => SpeechEnv): ReadAloud {
   return shared;
 }
 
+/**
+ * CGP-VOICE-R-007: the window's hub, only where the Service serves read-aloud; null elsewhere, so a seat
+ * without voice never touches the synthesizer. The voice panel's owner passes it as `statusSpeech`.
+ */
+export function useServedReadAloud(): ReadAloud | null {
+  const voice = useVoice();
+  const make = useContext(SpeechEnvContext);
+  return voice.availability.kind === "on" && voice.availability.served.readAloud ? hubFor(make) : null;
+}
+
 const IDLE = { kind: "idle" } as const;
 const idleStore = { subscribe: () => () => {}, getStatus: () => IDLE };
 const unmuted = () => false;

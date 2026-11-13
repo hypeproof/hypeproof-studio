@@ -89,3 +89,12 @@ export const MIC_OFF = "마이크 꺼짐";
 export const MIC_ON = "마이크 켜짐";
 export const OUTPUT_OFF = "소리 꺼짐";
 export const OUTPUT_ON = "소리 켜짐";
+
+// ---- Agent-status line in the voice panel (CGP-VOICE-R-007 / CGP-VOICE-D-006) ----
+// The state words are the chat header's run state (coachRunState.ts); these are only the additions.
+/** Said after a tool's own result event, never before (REQ-CGPV-08). The register's own word. */
+export const AGENT_TOOL_DONE = "끝났어요";
+/** The line's accessible group name. */
+export const AGENT_STATUS_LABEL = "AI가 하는 일";
+/** Reading a status aloud failed: said apart from any tool failure (VO-20). */
+export const AGENT_STATUS_SPEECH_FAILED = "작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.";

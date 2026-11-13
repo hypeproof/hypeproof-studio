@@ -315,6 +315,35 @@ fails it (no buttons) and a pressed rule without the edge fails it. Reads are st
 styles and minimum boxes, not text widths, so a runner's fonts do not change the verdict. A real
 voice, a screen reader and the packaged app are reported separately.
 
+## Voice agent-status line (CGP-VOICE-R-007 / CGP-VOICE-D-006)
+
+`test/voice-agent-status.test.tsx` renders the real VoicePanel, owned by the real popup and session
+reducers, under a served-voice profile (read-aloud served, disclosure read) with a scripted
+synthesizer and a real answer read-aloud button, on the minimal DOM. Host events arrive as window
+`message` events through `onHostMessage`, in the shapes `chatPanelProvider` posts (`streamStart`,
+`streamChunk`, `toolLog` with a tool_use id going running to done or error, `approvalWait`,
+`streamEnd`, `streamStopped`, `streamError`). Sixteen cases: a start is shown with the run-state word
+and the host's label, announced once and read once; a step update of the same call is not announced
+or read again; `끝났어요` appears only after that call's result event; the negative control (prose
+`파일을 저장했어요` and `끝났어요!` with no tool event) leaves `생각 중`, then `준비됨`, with nothing
+announced or read; a call with no result is never called done; a tool failure and a failed reading
+are separate lines, and a failed reading never turns a success into a failure; `소리 끄기` holds every
+reading and stops a running one; an answer reading is never cut off; approval holds its line; another
+stream's events are ignored; stop and errors; pacing at the interval; collapse and expand repeat
+nothing; with voice not served nothing touches the synthesizer; the reducer leaves its state object
+unchanged for prose and malformed messages. Red on main: the 15 behavioural cases fail (no line);
+the reducer case cannot bundle.
+
+`test/voice-agent-status.smoke.mjs` drives the same panel in headless Chromium, dark and light at
+1420 and 320, with and without reduced motion, and forced colours, posting the same host messages
+with `window.postMessage`: the line sits below the state label at 14px or more with a 16px icon that
+neither animates nor transitions, a label long enough to wrap in any font is held to two computed
+line heights while the DOM and the tooltip keep the whole text, the line itself has no live role and
+the single status announcer changes only for a start and a finish, and at 320 nothing scrolls
+sideways. Reads are computed styles and line heights, not text widths, so fonts do not change the
+verdict. Negative control: main's VoicePanel fails it (no line). A real voice, a screen reader and
+the packaged app are reported separately (NOT RUN).
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell
