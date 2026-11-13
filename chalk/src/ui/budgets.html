@@ -48,26 +48,32 @@ function parseAmount(v,m){if(m.startsWith('currency:')){if(!/^\d+(\.\d{1,6})?$/.
 async function api(path,method='GET',body){const g=generation,c=new AbortController();controllers.add(c);const t=setTimeout(()=>c.abort(),15000);try{const r=await fetch(path,{method,cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const d=await r.json();if(g!==generation)throw Error('연결이 변경되었습니다.');if(!r.ok)throw Error(r.status===403?'이 예산에 대한 위임 권한이나 한도가 부족합니다.':r.status===409?'다른 변경이 저장됐습니다. 입력을 보존했으니 현황을 새로 열어 비교해 주세요.':r.status===401?'강사 연결을 확인하세요. 위의 ‘다시 연결’을 눌러주세요.':'저장·조회하지 못했습니다. 다시 확인해 주세요.');return d;}finally{clearTimeout(t);controllers.delete(c);}}
 function reset(){generation++;for(const c of controllers)c.abort();controllers.clear();connected=false;view=null;editing=null;busy=false;$('overview').replaceChildren();$('editor').hidden=true;text('forecast','연결 후 확인할 수 있습니다.');}
 function button(label,fn){const b=el('button',label);b.type='button';b.onclick=fn;return b;}
-// CGP-SHELL-R-031 — the class's daily usage from the Service's `daily` view (last 14 Korea days, from stored reservation
-// lines). The chart and the table show the same numbers. An amount that is not known yet is never drawn or written as 0:
-// a day with unconfirmed lines says 미확인 n건. Numbers older than 30 minutes say so next to the as-of time.
+// CGP-SHELL-R-031 — the class's daily usage from the Service's `daily_usage` (hypeproof-service#270: 14 Asia/Seoul days per
+// currency meter, {date, confirmed_amount, reserved_amount, unconfirmed_amount}; unconfirmed_amount is null while unresolved
+// costs remain). The chart and the table show the same numbers. An amount that is not known yet is never drawn or written
+// as 0. Numbers older than 30 minutes say so next to the as-of time.
 const STALE_MS=30*60000,SVGNS='http://www.w3.org/2000/svg';
 const svg=(tag,attrs={})=>{const n=document.createElementNS(SVGNS,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));return n;};
 const dayLabel=d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10));
-const unconfirmedText=(x,m)=>x.unconfirmed_lines?(x.unconfirmed?amount(x.unconfirmed,m)+' · ':'')+'미확인 '+x.unconfirmed_lines+'건'+(x.unconfirmed?'':' (금액 확인 전)'):'0';
+const unconfirmedText=(x,m)=>x.unconfirmed_amount===null?'미확인 (금액 확인 전)':amount(x.unconfirmed_amount,m);
+// #270's day row, in the names the chart uses. A malformed amount reads as unknown, never as 0.
+const known=v=>Number.isSafeInteger(v)&&v>=0;
+const dayRow=x=>({day:x.date,confirmed:known(x.confirmed_amount)?x.confirmed_amount:0,reserved:known(x.reserved_amount)?x.reserved_amount:0,
+  unconfirmed_amount:known(x.unconfirmed_amount)&&known(x.confirmed_amount)&&known(x.reserved_amount)?x.unconfirmed_amount:null,unknown:!known(x.unconfirmed_amount)||!known(x.confirmed_amount)||!known(x.reserved_amount)});
 function staleText(asOf){return Date.now()-Date.parse(asOf)>STALE_MS?'30분 넘게 지난 숫자 · 새로 확인하세요':'';}
 let dailyMeter={},dailyTable={};
-function renderDaily(b,asOf){const d=b.daily;const box=el('section',undefined,'daily');box.dataset.daily=b.account.id;
+function renderDaily(b,asOf){const series=Array.isArray(b.daily_usage)?b.daily_usage.filter(s=>s&&typeof s.meter==='string'&&Array.isArray(s.days)):null;const box=el('section',undefined,'daily');box.dataset.daily=b.account.id;
  box.append(el('h3','최근 14일 사용'));
- if(!d||!d.meters||!Object.keys(d.meters).length){box.append(el('p','일별 사용을 확인하지 못했습니다. 이 서버 버전은 일별 사용을 알려 주지 않습니다.'));return box;}
+ if(!series||!series.length){box.append(el('p','일별 사용을 확인하지 못했습니다. 이 서버 버전은 일별 사용을 알려 주지 않습니다.'));return box;}
+ const d={meters:Object.fromEntries(series.map(s=>[s.meter,s.days.map(dayRow)]))};
  const meters=Object.keys(d.meters),meter=meters.includes(dailyMeter[b.account.id])?dailyMeter[b.account.id]:(meters.find(m=>m.startsWith('currency:'))||meters[0]);
  const head=el('div',undefined,'daily-head');head.append(el('span','기준 시각 '+new Date(asOf).toLocaleString()+' · 한국 시간 기준 날짜'));
  const stale=el('span',staleText(asOf),'daily-stale');stale.dataset.stale='';stale.hidden=!stale.textContent;head.append(stale);
  if(meters.length>1){const label=el('label','자원 ');const sel=el('select');for(const m of meters)sel.append(new Option(unit(m),m));sel.value=meter;sel.onchange=()=>{dailyMeter[b.account.id]=sel.value;render();};label.append(sel);head.append(label);}
  box.append(head);
  const days=d.meters[meter];
- if(days.every(x=>!x.lines)){box.append(el('p','최근 14일 사용 기록이 없습니다.'));return box;}
- const W=700,H=200,pad=24,bw=(W-pad)/days.length,max=Math.max(1,...days.map(x=>x.confirmed+x.reserved+x.unconfirmed));
+ if(days.every(x=>!x.confirmed&&!x.reserved&&x.unconfirmed_amount===0&&!x.unknown)){box.append(el('p','최근 14일 사용 기록이 없습니다.'));return box;}
+ const W=700,H=200,pad=24,bw=(W-pad)/days.length,max=Math.max(1,...days.map(x=>x.confirmed+x.reserved+(x.unconfirmed_amount??0)));
  const chart=svg('svg',{viewBox:`0 0 ${W} ${H+28}`,role:'img','aria-label':unit(meter)+' 최근 14일: 날마다 확인된 사용, 예약, 미확인. 같은 숫자는 표로 보기에서 볼 수 있습니다.'});
  const defs=svg('defs'),pat=svg('pattern',{id:'hatch-'+b.account.id.replace(/[^A-Za-z0-9_-]/g,'_'),width:6,height:6,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'});pat.append(svg('line',{x1:0,y1:0,x2:0,y2:6,stroke:'currentColor','stroke-width':2}));defs.append(pat);chart.append(defs);
  const hatch=`url(#${pat.getAttribute('id')})`,scale=v=>v/max*(H-8);
@@ -75,8 +81,8 @@ function renderDaily(b,asOf){const d=b.daily;const box=el('section',undefined,'d
   const seg=(v,attrs,kind)=>{const h=scale(v);if(h<=0)return;y-=h;g.append(svg('rect',{x:xpos,y,width:w,height:h,'data-kind':kind,...attrs}));};
   seg(x.confirmed,{fill:'currentColor'},'confirmed');seg(x.reserved,{fill:hatch,stroke:'currentColor','stroke-width':1},'reserved');
   // Unconfirmed: outlined. With lines but no amount yet, a thin outlined cap marks the day instead of drawing nothing.
-  if(x.unconfirmed>0)seg(x.unconfirmed,{fill:'none',stroke:'currentColor','stroke-width':2,'stroke-dasharray':'4 2'},'unconfirmed');
-  else if(x.unconfirmed_lines>0){y-=6;g.append(svg('rect',{x:xpos,y,width:w,height:6,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-dasharray':'4 2','data-kind':'unconfirmed-unknown'}));}
+  if(x.unconfirmed_amount>0)seg(x.unconfirmed_amount,{fill:'none',stroke:'currentColor','stroke-width':2,'stroke-dasharray':'4 2'},'unconfirmed');
+  else if(x.unconfirmed_amount===null){y-=6;g.append(svg('rect',{x:xpos,y,width:w,height:6,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-dasharray':'4 2','data-kind':'unconfirmed-unknown'}));}
   if(i%2===days.length%2||i===days.length-1){const t=svg('text',{x:xpos+w/2,y:H+22,'text-anchor':'middle'});t.textContent=dayLabel(x.day);g.append(t);}
   const title=svg('title');title.textContent=dayLabel(x.day)+' · 확인 '+amount(x.confirmed,meter)+' · 예약 '+amount(x.reserved,meter)+' · 미확인 '+unconfirmedText(x,meter);g.append(title);chart.append(g);});
  chart.append(svg('line',{x1:pad,y1:H,x2:W,y2:H,stroke:'currentColor','stroke-width':1}));

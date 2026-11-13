@@ -2,9 +2,11 @@
 // own render() in headless Chromium (no Service, no OS input, no visible window).
 // Designed behavior: 14 Korea days per class budget; each day stacks confirmed (solid), reserved (hatched) and unconfirmed
 // (dashed outline); the legend names all three in words; a day with unconfirmed lines but no amount yet is marked and
-// written as 미확인 n건 (금액 확인 전), never 0; 표로 보기 shows the same numbers in a table and back; the header carries the
+// written as 미확인 (금액 확인 전), never 0; 표로 보기 shows the same numbers in a table and back; the header carries the
 // as-of time and says 30분 넘게 지난 숫자 when the read is older; no usage → a sentence, no chart; a Service without the
 // daily view → a sentence; at 320 and 1280 px nothing leaves the page, text is at least 14 px and the toggle is 44 px.
+// The fixture is hypeproof-service#270's contract: budgets[].daily_usage[] = {meter, time_zone, days: [{date,
+// confirmed_amount, reserved_amount, unconfirmed_amount: null while unresolved costs remain}]}.
 import assert from 'node:assert/strict';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import { findChromium, launch } from '../../extensions/hypeproof-chat/test/lib/headless-chromium.mjs';
@@ -21,10 +23,10 @@ const served = await (await app.fetch(new Request('https://chalk.test/budgets'),
 const html = served.replace(/<head\b[^>]*>/i, (m) => m + SHIM);
 const M = 'currency:USD:micro';
 const days = Array.from({ length: 14 }, (_, i) => `2026-11-${String(i + 1).padStart(2, '0')}`);
-const row = (day, o = {}) => ({ day, confirmed: 0, reserved: 0, unconfirmed: 0, unconfirmed_lines: 0, lines: 0, ...o });
-const daily = (meters) => ({ day_basis: 'Asia/Seoul', days, meters });
-const series = days.map((d, i) => i === 13 ? row(d, { confirmed: 2_500_000, reserved: 910_000, unconfirmed: 0, unconfirmed_lines: 2, lines: 5 }) : i === 12 ? row(d, { confirmed: 1_000_000, unconfirmed: 300_000, unconfirmed_lines: 1, lines: 3 }) : row(d));
-const budget = (d) => ({ account: { id: 'pool:abc', paused: false }, balances: [{ meter: M, available: 1, spent: 1, held: 0, allocated: 0, unresolved: 0, overrun: 0 }], daily: d, can_edit: false, children: [], requests: [], truncated: false });
+const row = (date, o = {}) => ({ date, confirmed_amount: 0, reserved_amount: 0, unconfirmed_amount: 0, ...o });
+const daily = (meters) => Object.entries(meters).map(([meter, rows]) => ({ meter, time_zone: 'Asia/Seoul', days: rows }));
+const series = days.map((d, i) => i === 13 ? row(d, { confirmed_amount: 2_500_000, reserved_amount: 910_000, unconfirmed_amount: null }) : i === 12 ? row(d, { confirmed_amount: 1_000_000, unconfirmed_amount: 300_000 }) : row(d));
+const budget = (d) => ({ account: { id: 'pool:abc', paused: false }, balances: [{ meter: M, available: 1, spent: 1, held: 0, allocated: 0, unresolved: 0, overrun: 0 }], ...(d === undefined ? {} : { daily_usage: d }), can_edit: false, children: [], requests: [], truncated: false });
 const viewOf = (d, asOf = new Date().toISOString()) => ({ schema: 'hps-class-budget/1', cohort: 'c1', as_of: asOf, budgets: [budget(d)], seats: [], truncated: false, forecast: { state: 'unavailable', reason: '-' } });
 const show = (v) => `(() => { connected = true; cohort = 'c1'; view = ${JSON.stringify(v)}; render(); return true; })()`;
 let checks = 0;
@@ -54,8 +56,8 @@ try {
     const t = await b.evaluate(`(() => { const box = document.querySelector('[data-daily]'); return { hidden: box.querySelector('.daily-table').hidden, chart: getComputedStyle(box.querySelector('svg[role="img"]')).display,
       rows: [...box.querySelectorAll('tbody tr')].map((r) => [...r.children].map((c) => c.textContent)), toggle: box.querySelector('[data-daily-toggle]').textContent, fits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1 }; })()`);
     check(!t.hidden && t.chart === 'none' && t.toggle === '그래프로 보기' && t.rows.length === 14, 'table view: ' + JSON.stringify(t));
-    check(JSON.stringify(t.rows[13]) === JSON.stringify(['11/14', '2.5', '0.91', '미확인 2건 (금액 확인 전)']), 'last day: ' + JSON.stringify(t.rows[13]));
-    check(JSON.stringify(t.rows[12]) === JSON.stringify(['11/13', '1', '0', '0.3 · 미확인 1건']), 'a day with an observed unconfirmed amount: ' + JSON.stringify(t.rows[12]));
+    check(JSON.stringify(t.rows[13]) === JSON.stringify(['11/14', '2.5', '0.91', '미확인 (금액 확인 전)']), 'last day: ' + JSON.stringify(t.rows[13]));
+    check(JSON.stringify(t.rows[12]) === JSON.stringify(['11/13', '1', '0', '0.3']), 'a day with an observed unconfirmed amount: ' + JSON.stringify(t.rows[12]));
     check(JSON.stringify(t.rows[0]) === JSON.stringify(['11/1', '0', '0', '0']), 'an empty day: ' + JSON.stringify(t.rows[0]));
     check(t.fits, 'table fits or scrolls inside its own box: ' + width);
     await b.evaluate(`document.querySelector('[data-daily-toggle]').click()`);
@@ -69,8 +71,10 @@ try {
   check(await b.evaluate(`!document.querySelector('[data-daily] svg[role="img"]') && document.querySelector('[data-daily]').textContent.includes('최근 14일 사용 기록이 없습니다.')`), 'empty: sentence instead of chart');
   await b.evaluate(show(viewOf(undefined)));
   check(await b.evaluate(`document.querySelector('[data-daily]').textContent.includes('일별 사용을 확인하지 못했습니다.')`), 'no daily view: said, not drawn as 0');
-  // Two meters: a chooser, currency first.
-  await b.evaluate(show(viewOf(daily({ 'requests:count': days.map((d, i) => row(d, i === 13 ? { confirmed: 7, lines: 7 } : {})), [M]: series }))));
-  check(await b.evaluate(`document.querySelector('[data-daily] select')?.value === 'currency:USD:micro'`), 'meter chooser defaults to the currency meter');
+  // Two currency meters: a chooser. A malformed amount is shown as unknown, not as 0.
+  await b.evaluate(show(viewOf(daily({ 'currency:KRW:micro': days.map((d, i) => row(d, i === 13 ? { confirmed_amount: 'x' } : {})), [M]: series }))));
+  check(await b.evaluate(`document.querySelector('[data-daily] select')?.options.length === 2`), 'meter chooser');
+  await b.evaluate(`(() => { const s = document.querySelector('[data-daily] select'); s.value = 'currency:KRW:micro'; s.dispatchEvent(new Event('change')); document.querySelector('[data-daily-toggle]').click(); return 0; })()`);
+  check(await b.evaluate(`[...document.querySelectorAll('[data-daily] tbody tr')].at(-1).lastElementChild.textContent === '미확인 (금액 확인 전)'`), 'malformed amount → unknown');
   console.log(`PASS budget-daily.browser: ${checks} checks (chart, legend, unknown amounts, table toggle, stale, empty, 320/1280)`);
 } finally { await b.close(); }

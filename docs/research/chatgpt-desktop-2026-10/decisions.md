@@ -520,12 +520,12 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
 
 ## DEC-SHELL-R-031: daily class usage in Chalk budgets (2026-11-14, agent choice)
 
-- Day basis (agent choice): Korea time (`Asia/Seoul`, fixed +09:00), because every class runs in Korea. A UTC day would
-  split one evening class across two bars. The basis is named in the response and in the header.
-- Source (agent choice): the existing `budget_line_balances` view, grouped by reservation time, in one bounded query per
-  class budget. There is no new table and no stored aggregate. Same-day figures move as attempts are priced.
-- Unknown amounts (agent choice): a non-final line with no observed amount gets a dashed cap in the chart and
-  `미확인 n건 (금액 확인 전)` in the table. It is never drawn or written as 0 (AB-15).
+- Day basis: Korea time (`Asia/Seoul`), as #270 sends it. The header names it.
+- Source: hypeproof-service#270 `budgets[].daily_usage[]`, from another lane. A duplicate Service route of mine
+  (service#464) was closed in its favour. Chalk follows #270's contract exactly.
+- Unknown amounts (agent choice): #270 sends `unconfirmed_amount: null` while unresolved costs remain, and gives no
+  count. The chart gets a dashed cap and the table says `미확인 (금액 확인 전)`; a malformed amount reads the same way. It
+  is never drawn or written as 0 (AB-15).
 - Colour (agent choice): the chart is monochrome (`currentColor`). Solid, hatched and dashed patterns plus a worded legend
   carry the meaning, which also keeps forced-colours mode readable.
 - Stale (agent choice): the page reads once per open or refresh. After 30 minutes the header says so, and a minute timer
