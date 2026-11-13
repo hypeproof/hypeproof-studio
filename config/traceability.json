@@ -2497,34 +2497,6 @@
       ]
     },
     {
-      "id": "ST-REQ-INVITE-SEAT",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-INT-CAPABILITY-ACCESS",
-        "ST-REQ-ACCESS-BUDGET"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/invite-seat.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-INVITE-SEAT",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-INVITE-SEAT"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/invite-seat.md",
-          "section": "## 검증"
-        }
-      ]
-    },
-    {
       "id": "ST-DES-ACCESS-BUDGET-SETTLEMENT",
       "stage": "design",
       "owner": "jayleekr",
@@ -6154,6 +6126,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Daily release coordinator (#1757)"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Build and publication boundary"
         }
       ]
     },
@@ -6171,6 +6147,14 @@
         },
         {
           "path": "scripts/release/engine/policy.example.json"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Immutable receipt and consumer contract"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Entitlement review"
         }
       ]
     },
@@ -6201,6 +6185,33 @@
         },
         {
           "path": "scripts/release/engine/provenance.json"
+        },
+        {
+          "path": "scripts/release/macos-sign.py"
+        },
+        {
+          "path": "scripts/release/import-macos-signing.sh"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/app.plist"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/jit.plist"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/plugin.plist"
+        },
+        {
+          "path": ".github/workflows/build-mac.yml"
+        },
+        {
+          "path": "config/macos-distribution.json"
+        },
+        {
+          "path": "scripts/release/macos-signing-receipt.mjs"
+        },
+        {
+          "path": "scripts/check-unified-release.mjs"
         }
       ]
     },
@@ -6221,6 +6232,16 @@
         },
         {
           "path": "scripts/release/test/engine-package.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/test_macos_sign.py"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Acceptance and current evidence boundary"
+        },
+        {
+          "path": "scripts/release/test/macos-signing-receipt.test.mjs"
         }
       ]
     },
@@ -18382,6 +18403,71 @@
       ]
     },
     {
+      "id": "ST-REQ-CHALK-SEAT-VERSION",
+      "stage": "requirement",
+      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-SEAT-VERSION",
+      "stage": "implementation",
+      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-SEAT-VERSION",
+      "stage": "test",
+      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-SEAT-VERSION",
+        "ST-IMP-CHALK-SEAT-VERSION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/seat-version.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-CHALK-LAB-CONNECT",
       "stage": "requirement",
       "label": "Chalk instructor access through the Lab login, never a pasted issuer",
@@ -18527,133 +18613,6 @@
         },
         {
           "path": "docs/testing/native-mobile-growth.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-MOBILE"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "## Correlated native deployment — MTF-01"
-        },
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "### Correlated iPhone testing delivery — MTF-01"
-        },
-        {
-          "path": "apps/studio-native/README.md",
-          "section": "## Signed iPhone delivery"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
-      ],
-      "sources": [
-        {
-          "path": ".github/workflows/studio-apple-testflight.yml"
-        },
-        {
-          "path": "apps/studio-native/scripts/verify-native-candidate.py"
-        },
-        {
-          "path": "apps/studio-native/scripts/apple-upload.sh"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
-        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
-      ],
-      "sources": [
-        {
-          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
-        },
-        {
-          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
-        },
-        {
-          "path": "docs/testing/native-mobile-growth.md",
-          "section": "## TestFlight request and receipt — MTF-T01"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-CHALK-SEAT-VERSION",
-      "stage": "requirement",
-      "label": "REQ-SHELL-34 / DES-SHELL-33: each seat's Studio version in the Chalk /manage student table, sortable; unknown reads 확인 불가",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CLASSROOM-ADMIN",
-        "ST-REQ-CLASSROOM-DESIGN"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/classroom-admin.md",
-          "section": "### 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
-        },
-        {
-          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-CHALK-SEAT-VERSION",
-      "stage": "implementation",
-      "label": "Chalk /manage 버전 column, 순서 select and legacy usage line from the board's client_version; the latest formal release floor (DEC-24)",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-DES-CLASSROOM-ADMIN"
-      ],
-      "sources": [
-        {
-          "path": "chalk/src/ui/manage.html"
-        },
-        {
-          "path": "chalk/src/lib/latest-release.ts"
-        },
-        {
-          "path": "chalk/src/routes/studio-release.ts"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-CHALK-SEAT-VERSION",
-      "stage": "test",
-      "label": "Headless Chromium seat version values, 96px column and 44px rows, sorting, card rows; G1 layout gate",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-CHALK-SEAT-VERSION",
-        "ST-IMP-CHALK-SEAT-VERSION"
-      ],
-      "sources": [
-        {
-          "path": "chalk/test/seat-version.browser.mjs"
-        },
-        {
-          "path": "chalk/test/latest-release.test.mjs"
-        },
-        {
-          "path": "e2e/classroom/ops-g1-layout.mjs"
-        },
-        {
-          "path": "docs/testing/classroom-admin.md",
-          "section": "## 좌석별 Studio 버전 · 2026-11-12 (ADM-02 · CGP-SHELL-R-034 · CGP-SHELL-D-033)"
         }
       ]
     },
@@ -18846,6 +18805,96 @@
         {
           "path": "docs/testing/curriculum-runtime.md",
           "section": "## Publish responsibility notice (CGP-ART-R-012 / CGP-ART-D-012)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## Correlated native deployment — MTF-01"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Correlated iPhone testing delivery — MTF-01"
+        },
+        {
+          "path": "apps/studio-native/README.md",
+          "section": "## Signed iPhone delivery"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "## TestFlight request and receipt — MTF-T01"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-INVITE-SEAT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-INVITE-SEAT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-INVITE-SEAT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "section": "## 검증"
         }
       ]
     },

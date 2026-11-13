@@ -30,6 +30,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Instrument only the absolute Apple executables in a disposable source copy.
+# Production has no signing override; these fixtures do not prove Apple signing.
+mkdir -p "$WORK/repo/scripts"
+for f in make-class-kit.sh install.ps1 seed-sdk-binary.sh seed-sdk-binary.ps1; do
+  cp "$REPO_ROOT/scripts/$f" "$WORK/repo/scripts/$f"
+done
+sed -e 's|/usr/libexec/PlistBuddy|PlistBuddy|g' -e 's|/usr/bin/codesign|codesign|g' \
+  -e 's|/usr/sbin/spctl|spctl|g' "$REPO_ROOT/scripts/install.sh" > "$WORK/repo/scripts/install.sh"
+REPO_ROOT="$WORK/repo"
+
 fail=0
 pass() { printf '  ok   %s\n' "$1"; }
 bad()  { printf '  FAIL %s\n' "$1"; fail=1; }
@@ -47,6 +57,7 @@ cat > "$REL/HypeProof Studio.app/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
 <key>CFBundleShortVersionString</key><string>9.9.9</string>
+<key>CFBundleIdentifier</key><string>ai.hypeproof.studio</string>
 </dict></plist>
 EOF
 # The vendored Agent SDK package names the native binary version the app loads; the
@@ -139,7 +150,71 @@ stub defaults 'sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" "$2" | head -n1'
 stub open     'printf "%s\n" "$*" >> "$STUB_LOG/open.log"; exit 0'
 # macOS mktemp prefers the per-user temp folder over TMPDIR, and the member path
 # never removes its fetched seeder. Keep every temp file inside this test's folder.
-stub mktemp   'case "${1:-}" in -d) exec /usr/bin/mktemp -d "$STUB_TMP/tmp.XXXXXXXXXX" ;; -t) exec /usr/bin/mktemp "$STUB_TMP/$2.XXXXXXXXXX" ;; *) exec /usr/bin/mktemp "$@" ;; esac'
+stub mktemp   'case "${1:-}" in -d) exec /usr/bin/mktemp -d "${2:-$STUB_TMP/tmp.XXXXXXXXXX}" ;; -t) exec /usr/bin/mktemp "$STUB_TMP/$2.XXXXXXXXXX" ;; *) exec /usr/bin/mktemp "$@" ;; esac'
+stub PlistBuddy 'if [ "${STUB_SIGNING:-}" = wrong-bundle ]; then echo other.app; else sed -n "s/.*<key>CFBundleIdentifier<\/key><string>\(.*\)<\/string>.*/\1/p" "$3"; fi'
+cat > "$BIN/codesign" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG/codesign.log"
+app="${!#}"
+[[ ! -e "$app/tampered" ]] || exit 1
+case "${STUB_SIGNING:-}" in
+  unsigned) exit 1 ;;
+  old-unsigned) [[ ! -e "$app/old-sentinel" ]] || exit 1 ;;
+  wrong-team|wrong-signing-id) [[ "$*" != *'-R='* ]] || exit 1 ;;
+esac
+if [[ "$*" == *'-R='* ]]; then
+  [[ "$*" == *'identifier "ai.hypeproof.studio" and anchor apple generic'* &&
+     "$*" == *'certificate 1[field.1.2.840.113635.100.6.2.6] exists'* &&
+     "$*" == *'certificate leaf[field.1.2.840.113635.100.6.1.13] exists'* &&
+     "$*" == *'certificate leaf[subject.OU] = "RZBNT9ZB67"'* ]] || exit 98
+  [[ "$1 $2 $3" == '--verify --strict --all-architectures' ]] || exit 98
+else
+  [[ "$1 $2 $3 $4" == '--verify --deep --strict --all-architectures' ]] || exit 98
+fi
+EOF
+cat > "$BIN/spctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$STUB_LOG/spctl.log"
+[ "$1 $2 $3 $4" = '--assess --type execute --verbose=4' ] || exit 98
+case "${STUB_SIGNING:-}" in
+  notary-reject) echo rejected >&2; exit 1 ;;
+  not-notarized) echo 'source=Developer ID' >&2 ;;
+  disabled) echo 'assessments disabled' >&2 ;;
+  spoofed-source) printf 'source=Notarized Developer ID\nsource=Unnotarized Developer ID\n' >&2 ;;
+  *) echo 'source=Notarized Developer ID' >&2 ;;
+esac
+EOF
+cat > "$BIN/cp" <<'EOF'
+#!/usr/bin/env bash
+dest="${!#}"
+if [[ "$dest" == */.hps-install.*/*.app ]]; then
+  [[ "${STUB_SIGNING:-}" != copy-fail ]] || exit 1
+  /bin/cp "$@" || exit $?
+  if [[ "${STUB_SIGNING:-}" == stage-tamper ]]; then touch "$dest/tampered"; fi
+else
+  exec /bin/cp "$@"
+fi
+EOF
+stub ditto 'printf "%s\n" "$*" >> "$STUB_LOG/ditto.log"; exit 1'
+cat > "$BIN/mv" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG/mv.log"
+case "${STUB_SIGNING:-}" in
+  interrupt-after-backup)
+    if [[ "$2" == */previous.app ]]; then
+      /bin/mv "$@" || exit $?
+      kill -TERM "$PPID"
+      exit 0
+    fi ;;
+  backup-fail) [[ "$2" != */previous.app ]] || exit 1 ;;
+  swap-fail|restore-fail)
+    if [[ "$1" == */.hps-install.*/* && "$2" == "$HPS_APPS_DIR/HypeProof Studio.app" ]]; then
+      if [[ "$1" != */previous.app || "$STUB_SIGNING" == restore-fail ]]; then exit 1; fi
+    fi ;;
+esac
+exec /bin/mv "$@"
+EOF
+stub xattr 'printf "%s\n" "$*" >> "$STUB_LOG/xattr.log"; exit 99'
 chmod +x "$BIN"/*
 
 # The real seeder leaves a valid seed alone, so a fixture seed lets the kit's own
@@ -192,7 +267,7 @@ same=1
 for f in install.sh install.ps1 seed-sdk-binary.sh seed-sdk-binary.ps1; do
   cmp -s "$KIT/$f" "$REPO_ROOT/scripts/$f" || same=0
 done
-if [ "$same" = "1" ]; then pass "helper scripts are byte-identical to this checkout"; else bad "a helper script was altered on the way into the kit"; fi
+if [ "$same" = "1" ]; then pass "helper scripts are byte-identical to the instrumented source copy"; else bad "a helper script was altered on the way into the kit"; fi
 
 if grep -R -a -l -e "$TOKEN" -e "$MEMBER" -e "$WORK" "$KIT" >/dev/null 2>&1; then
   bad "the kit contains the member's token, account name or a local path"
@@ -237,6 +312,10 @@ else pass "no download and no brew call"; fi
 
 if [ -e "$LOG/open.log" ]; then bad "an unattended test install tried to open Studio: $(cat "$LOG/open.log")"
 else pass "an unattended install with the HPS_APPS_DIR seam does not open Studio"; fi
+
+if [ "$(wc -l < "$LOG/spctl.log" | tr -d ' ')" = 2 ] && [ "$(wc -l < "$LOG/codesign.log" | tr -d ' ')" = 4 ] && [ ! -e "$LOG/xattr.log" ]; then
+  pass "kit verifies extracted and staged apps without removing quarantine"
+else bad "kit missed signing verification or removed quarantine"; fi
 
 # A learner who is not a member reads this output: no class wording, no English
 # status lines that the Korean install used to leak (2026-10-20).
@@ -335,6 +414,57 @@ else printf '%s\n' "$out" | tail -n 5; bad "member install failed in the sandbox
 for call in 'auth status' 'release view' 'releases/tags/v9.9.9' '--jq .digest' 'application/octet-stream' 'contents/scripts/seed-sdk-binary.sh'; do
   if grep -q -F -- "$call" "$LOG/gh.log" 2>/dev/null; then pass "gh log has: $call"
   else bad "gh log lacks: $call (the member path changed, or the log is blind)"; fi
+done
+
+# The real member and kit paths must refuse before moving the old app; a second
+# check protects the staged copy. Run directly with POSIX sh, not only bash.
+echo
+echo "=== 4a. Official Mac signing and replacement controls (Apple tool doubles) ==="
+prepare_old() {
+  mkdir -p "$APPS/HypeProof Studio.app/Contents"
+  printf '<key>CFBundleShortVersionString</key><string>%s</string>\n<key>CFBundleIdentifier</key><string>ai.hypeproof.studio</string>\n' \
+    "$1" > "$APPS/HypeProof Studio.app/Contents/Info.plist"
+  touch "$APPS/HypeProof Studio.app/old-sentinel"
+}
+for route in kit member; do
+  for mode in unsigned wrong-team wrong-signing-id wrong-bundle notary-reject not-notarized disabled spoofed-source stage-tamper copy-fail backup-fail swap-fail restore-fail; do
+    APPS="$WORK/apps-sign-$route-$mode"; prepare_old 9.9.8; reset_logs
+    args=()
+    if [ "$route" = kit ]; then args=(STUB_GH_FORBID=1 HPS_KIT_DIR="$KIT"); fi
+    out="$(sandboxed "$APPS" STUB_SIGNING="$mode" HPS_STUDIO_VERSION=9.9.9 "${args[@]}" \
+      -- sh "$REPO_ROOT/scripts/install.sh" 2>&1)"; status=$?
+    preserved="$APPS/HypeProof Studio.app/old-sentinel"
+    if [ "$mode" = restore-fail ]; then
+      preserved="$(find "$APPS" -name old-sentinel -path '*/previous.app/*' | head -n1)"
+    fi
+    if [ "$status" = 0 ] || [ ! -f "$preserved" ] || [ -e "$LOG/xattr.log" ]; then
+      printf '%s\n' "$out" | tail -n 5; bad "$route/$mode: failed refusal or old-app preservation"
+    elif [ "$route" = kit ] && [ -n "$(gh_calls_beyond_version)" ]; then
+      bad "$route/$mode: used authenticated release access"
+    elif [ "$mode" != backup-fail ] && [ "$mode" != swap-fail ] && [ "$mode" != restore-fail ] && [ -e "$LOG/mv.log" ]; then
+      bad "$route/$mode: moved old app before validation"
+    else pass "$route/$mode: refused with previous app retained"; fi
+  done
+done
+
+for shell in sh bash; do
+  APPS="$WORK/apps-interrupt-$shell"; prepare_old 9.9.8; reset_logs
+  out="$(sandboxed "$APPS" STUB_SIGNING=interrupt-after-backup STUB_GH_FORBID=1 -- "$shell" "$KIT/install.sh" --kit "$KIT" 2>&1)"; status=$?
+  if [ "$status" != 0 ] && [ -f "$APPS/HypeProof Studio.app/old-sentinel" ] && [ ! -e "$LOG/xattr.log" ]; then
+    pass "$shell: TERM immediately after backup restores the old app"
+  else printf '%s\n' "$out" | tail -n 5; bad "$shell: interrupted swap lost the old app"; fi
+done
+
+for mode in valid old-unsigned; do
+  APPS="$WORK/apps-same-$mode"; prepare_old 9.9.9; reset_logs
+  if out="$(sandboxed "$APPS" STUB_SIGNING="$mode" STUB_GH_FORBID=1 -- sh "$KIT/install.sh" --kit "$KIT" 2>&1)"; then
+    checks="$(wc -l < "$LOG/spctl.log" | tr -d ' ')"
+    if [ "$mode" = valid ] && [ "$checks" = 1 ] && [ -f "$APPS/HypeProof Studio.app/old-sentinel" ] && [ ! -e "$LOG/mv.log" ]; then
+      pass "same-version official app is verified before reuse"
+    elif [ "$mode" = old-unsigned ] && [ "$checks" = 2 ] && [ ! -e "$APPS/HypeProof Studio.app/old-sentinel" ]; then
+      pass "same-version ad-hoc app is replaced with a twice-verified official app"
+    else bad "same-version $mode: incorrect verification or replacement"; fi
+  else printf '%s\n' "$out" | tail -n 5; bad "same-version $mode failed"; fi
 done
 
 # ---------------------------------------------------------------------------- #
