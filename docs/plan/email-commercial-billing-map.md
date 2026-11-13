@@ -1,5 +1,12 @@
 # Email workshop: reuse the existing purchase system
 
+> **Superseded, 2026-11-11.** Studio pass sales stopped on 2026-11-11 and Studio is
+> invite-only since 2026-11-12 (Lab decision records `2026-11-11-stop-studio-pass-sales.md`
+> and `2026-11-12-studio-invite-only.md`). The pass prices and the workshop-to-paid pass
+> continuity below are no longer an offer. The paid paths are classes and cohorts, Foundry
+> and the skill store (#3418, off in production until #3419). Kept as a history of the
+> 2026-10-15 source audit; existing passes and refunds still follow the purchase system.
+
 2026-10-15 source audit. Scope: EA-07/08 and step 7 of
 [email automation delivery](email-automation-next-steps.md). This records
 implementation facts, not a verified live sale or selected commercial offer.
