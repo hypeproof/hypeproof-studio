@@ -184,7 +184,15 @@ export function verifyMachineSource({bundle, config, contract, now = Date.now()}
 export function verifyMachineBundle({bundle, config, contract, packageDirectory, evidenceDirectory, serviceVersion, now = Date.now()}) {
   const {body, policy} = verifyMachineSource({bundle, config, contract, now});
   require(serviceVersion === contract.service.version, 'public Service no longer matches the exact accepted deployment');
-  const result = validateIntent(body.state, body.intent, policy, now, bundleFileVerifier(contract, packageDirectory, evidenceDirectory));
+  const verifier = bundleFileVerifier(contract, packageDirectory, evidenceDirectory);
+  for (const file of body.attachments ?? []) verifier(file);
+  for (const envelope of Object.values(body.state.candidates[body.intent.candidateId].evidence)) {
+    for (const record of envelope.body.native?.attachments ?? []) {
+      require(body.attachments?.some(f => f.sha256 === record.sha256 && f.size === record.size), 'signed native attachment omitted');
+      verifier(record);
+    }
+  }
+  const result = validateIntent(body.state, body.intent, policy, now, verifier);
   return {...result, allow: config.mode === 'active', route: 'machine', releasePr: contract.releasePr, releaseHead: contract.releaseHead,
     rcTag: contract.rcTag, policyDigest: digest(policy), bundleDigest: digest(bundle),
     notesLine: `Release casebook: complete machine PASS at ${contract.releaseHead}; private signed evidence ${digest(bundle)}.`};
@@ -192,9 +200,10 @@ export function verifyMachineBundle({bundle, config, contract, packageDirectory,
 
 // The caller has already built a complete engine ledger from actual signed observations.
 // This signs transport provenance, never manufactures a missing case report or an approval.
-export function signMachineBundle({state, policy, intent, contract, attestorId, privateKey, now = Date.now()}) {
+export function signMachineBundle({state, policy, intent, contract, attestorId, privateKey, publisherAnchor, attachments, now = Date.now()}) {
   const key = createPrivateKey(privateKey);
   require(key.asymmetricKeyType === 'ed25519', 'only Ed25519 bundle keys are supported');
-  const body = {schema: 'hps-machine-bundle/1', attestorId, createdAt: new Date(now).toISOString(), contract, state, policy, intent};
+  const body = {schema: 'hps-machine-bundle/1', attestorId, createdAt: new Date(now).toISOString(), contract, state, policy, intent,
+    ...(publisherAnchor ? {publisherAnchor} : {}), ...(attachments ? {attachments} : {})};
   return {body, signature: sign(null, Buffer.from(canonical(body)), key).toString('base64')};
 }

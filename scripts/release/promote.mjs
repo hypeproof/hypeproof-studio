@@ -28,6 +28,9 @@ import {isAppPackage, sha256} from '../../e2e/unified-release/artifact.mjs';
 import {CASEBOOK, decide, p0CaseIds} from './publish-gate.mjs';
 import {parseYaml} from './casebook.mjs';
 import {pickRelease} from './release-draft.mjs';
+import {automationConfig, CONFIG, releaseContract, verifyBundleSignature, verifyMachineBundle} from './machine-publication.mjs';
+import {readLiveAnchor, publicationWorkflowHead} from './publisher-anchor.mjs';
+import {digest} from './engine/core.mjs';
 
 const ACCEPTANCE = 'unified-acceptance.json';
 const VERSION = /^v\d+\.\d+\.\d+$/;
@@ -136,7 +139,7 @@ export function acceptanceSource({tag, tagSha, acceptanceSha256, rcReleases}) {
     : {reuse: false, reason: `${ACCEPTANCE} is not the receipt of a published ${tag}-rc.N at ${tagSha.slice(0, 8)}`};
 }
 
-const git = (...a) => execFileSync('git', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+const git = (...a) => execFileSync('git', a, {encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe']}).trim();
 const gh = (...a) => execFileSync('gh', a, {encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'inherit']}).trim();
 const ghJson = apiPath => JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', apiPath], {encoding: 'utf8', maxBuffer: 64 << 20})).flat();
 
@@ -251,7 +254,42 @@ function draftAssets(repo, tag) {
   return {published: false, assets: JSON.parse(gh('api', `repos/${repo}/releases/${pick.id}`)).assets.map(a => ({name: a.name, digest: a.digest ?? null}))};
 }
 
-function run({pr: number, out}) {
+export async function currentMachineAuthority({number, repo, packageDirectory, evidenceDirectory, stage = 'parent'}) {
+  const config = automationConfig(JSON.parse(fs.readFileSync(path.join(scriptDir, '../..', CONFIG), 'utf8')));
+  if (config.mode !== 'active') return null;
+  const workflowHead = publicationWorkflowHead({stage, githubSha: process.env.GITHUB_SHA,
+    checkoutHead: stage === 'parent' ? execFileSync('git', ['-C', path.join(scriptDir, '../..'), 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim() : undefined,
+    parentWorkflowHead: process.env.HPS_MACHINE_PARENT_WORKFLOW_HEAD});
+  if (!/^[a-f0-9]{64}$/.test(process.env.HPS_MACHINE_DISPATCH_KEY ?? '')) throw Error('Exact reserved machine dispatch key required');
+  if (!evidenceDirectory) throw Error('Active machine release requires private signed evidence; manager approval cannot replace it');
+  const bundle = JSON.parse(fs.readFileSync(path.join(evidenceDirectory, 'bundle.json'), 'utf8'));
+  verifyBundleSignature(bundle, config); // Refuse untrusted provenance before interpreting the ledger.
+  const facts = gatherPromotion(number, repo);
+  const input = promotionInputs(facts);
+  if (!input.allow) throw Error(input.reasons.join('; '));
+  const highestRc = Math.max(...facts.rcTags.map(t => Number(t.name.split('-rc.')[1])));
+  if (Number(input.rcTag.split('-rc.')[1]) !== highestRc) throw Error('A replacement RC supersedes this candidate');
+  const acceptance = readAcceptedReceipt(facts, repo, packageDirectory);
+  const contract = releaseContract({...facts, ...input, assets: facts.rcRelease.assets,
+    read: rev => readImmutableSource(repo, rev), acceptance, serviceProof: bundle.body.contract.service});
+  // Policy changes during a run require a new reviewed run, never an old cached READY.
+  const remote = JSON.parse(gh('api', `repos/${repo}/contents/${CONFIG}?ref=main`));
+  if (Buffer.from(remote.content, 'base64').toString('utf8') !== fs.readFileSync(path.join(scriptDir, '../..', CONFIG), 'utf8')) throw Error('Default-branch release policy changed during this run');
+  const newer = ghJson(`repos/${repo}/releases?per_page=100`).filter(r => !r.draft && !r.prerelease && VERSION.test(r.tag_name));
+  const parts = v => v.slice(1).split('.').map(Number);
+  const compare = (a, b) => parts(a).reduce((found, value, i) => found || value - parts(b)[i], 0);
+  if (newer.some(r => compare(r.tag_name, input.version) > 0)) throw Error('A newer stable release already exists');
+  const response = await fetch('https://api.hypeproof-ai.xyz/v1/health', {signal: AbortSignal.timeout(15000)});
+  if (!response.ok) throw Error('Current public Service is unavailable');
+  const serviceVersion = (await response.json()).version;
+  readLiveAnchor(bundle.body.publisherAnchor, contract, {bundleDigest: digest(bundle),
+    evidenceCommit: process.env.HPS_MACHINE_EVIDENCE_COMMIT, dispatchKey: process.env.HPS_MACHINE_DISPATCH_KEY, workflowHead},
+    endpoint => JSON.parse(gh('api', '--method', 'GET', endpoint)));
+  const authority = verifyMachineBundle({bundle, config, contract, packageDirectory, evidenceDirectory, serviceVersion});
+  return {...authority, decision: promotionDecision({...facts, machineAuthority: authority})};
+}
+
+async function run({pr: number, out, machineBundle}) {
   const repo = process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio';
   const summary = [];
   const say = line => { console.log(line); summary.push(line); };
@@ -260,14 +298,23 @@ function run({pr: number, out}) {
     process.exit(code);
   };
   const facts = gatherPromotion(number, repo);
-  const verdict = promotionDecision(facts);
+  const config = automationConfig(JSON.parse(fs.readFileSync(path.join(scriptDir, '../..', CONFIG), 'utf8')));
+  const machine = config.mode === 'active';
+  if (machine) {
+    if (!machineBundle) throw Error('Active machine release requires a private signed bundle');
+    if (!/^[a-f0-9]{40}$/.test(process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? '')) throw Error('Immutable private evidence commit required before promotion');
+    const body = verifyBundleSignature(JSON.parse(fs.readFileSync(path.join(machineBundle, 'bundle.json'), 'utf8')), config);
+    if (body.contract.releasePr !== number || body.contract.releaseHead !== facts.pr.head) throw Error('Private evidence belongs to another release head');
+  }
+  // Structural input checks precede the download. Full machine authority is checked against those actual bytes below.
+  let verdict = machine ? promotionInputs(facts) : promotionDecision(facts);
   if (!verdict.allow) {
     say('Nothing promoted.');
     verdict.reasons.forEach(say);
     finish(1);
   }
   const {version, rcTag, candidate} = verdict;
-  say(`${verdict.reasons.join('; ')}. Promoting ${rcTag} (${candidate.slice(0, 8)}) to ${version} without a rebuild.`);
+  say(`Preparing ${rcTag} (${candidate.slice(0, 8)}) for ${version} without a rebuild; publication gates still apply.`);
 
   // 1. The rc's accepted bytes, checked against the digests GitHub recorded and against the
   //    acceptance receipts for the FINAL version. An rc cut before #3172 carries its rc version
@@ -288,6 +335,15 @@ function run({pr: number, out}) {
     finish(1);
   }
   say(`${rcTag}: ${wanted.length} file(s) carry ${version.slice(1)} and match its acceptance receipts.`);
+
+  const guardMachine = async () => {
+    if (!machine) return;
+    const authority = await currentMachineAuthority({number, repo, packageDirectory: dir, evidenceDirectory: machineBundle});
+    const decision = authority.decision;
+    if (!decision.allow || decision.candidate !== candidate || decision.rcTag !== rcTag || authority.releaseHead !== facts.pr.head) throw Error('Machine publication changed: ' + decision.reasons.join('; '));
+    verdict = decision;
+  };
+  await guardMachine();
 
   // 2. The v tag on the rc commit, pushed with the workflow token (starts no build).
   if (facts.vTagSha) say(`${version} already on ${candidate.slice(0, 8)}.`);
@@ -311,6 +367,7 @@ function run({pr: number, out}) {
   }
 
   // 4. The release PR adds only releases/<version>.md. --match-head-commit refuses a moved branch.
+  await guardMachine();
   if (facts.pr.merged) say(`#${number} already merged.`);
   else {
     // The bot App token when set (release-promote.yml), so a protected main accepts the merge.
@@ -322,7 +379,10 @@ function run({pr: number, out}) {
 
   // 5. The existing verify path: it reuses the rc's receipts, runs the publish gate and publishes.
   if (!draft.published) {
-    gh('workflow', 'run', 'verify-unified-release.yml', '--repo', repo, '-f', `tag=${version}`, '-f', 'override_live_session=false');
+    await guardMachine();
+    const machineInputs = machine ? ['-f', `machine_pr=${number}`, '-f', `machine_evidence_commit=${process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? ''}`, '-f', `machine_dispatch_key=${process.env.HPS_MACHINE_DISPATCH_KEY ?? ''}`, '-f', `machine_parent_workflow_head=${process.env.GITHUB_SHA ?? ''}`] : [];
+    if (machine && !/^[a-f0-9]{40}$/.test(process.env.HPS_MACHINE_EVIDENCE_COMMIT ?? '')) throw Error('Immutable private evidence commit required for final publication');
+    gh('workflow', 'run', 'verify-unified-release.yml', '--repo', repo, '-f', `tag=${version}`, '-f', 'override_live_session=false', ...machineInputs);
     say(`Started verify-unified-release for ${version}.`);
   }
   finish(0);
@@ -355,8 +415,9 @@ async function reuseAcceptance({tag, sha, version, dir}) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(process.argv[1])) {
   const [command, ...rest] = process.argv.slice(2);
   const {values} = parseArgs({args: rest, options: {pr: {type: 'string'}, out: {type: 'string'},
+    'machine-bundle': {type: 'string'},
     tag: {type: 'string'}, sha: {type: 'string'}, version: {type: 'string'}, dir: {type: 'string'}}});
-  if (command === 'run' && /^[1-9]\d*$/.test(values.pr ?? '')) run({pr: Number(values.pr), out: values.out ?? process.env.RUNNER_TEMP ?? '.'});
+  if (command === 'run' && /^[1-9]\d*$/.test(values.pr ?? '')) await run({pr: Number(values.pr), out: values.out ?? process.env.RUNNER_TEMP ?? '.', machineBundle: values['machine-bundle']});
   else if (command === 'reuse-acceptance' && values.tag && /^[a-f0-9]{40}$/.test(values.sha ?? '') && values.version && values.dir) await reuseAcceptance(values);
   else {
     console.error('usage: promote.mjs run --pr N [--out DIR] | reuse-acceptance --tag T --sha S --version V --dir D');
