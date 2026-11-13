@@ -202,7 +202,7 @@ public final class QuestionActivity extends Activity {
         try{String answer=model.state.voiceAnswer(voiceTurn);if(answer!=null){voiceTurn=null;voice.read(voiceTicket,model.account(),answer);return;}
             JSONObject request=model.state.request;
             boolean waiting=request!=null&&voiceTurn.equals(request.optString("id"))&&java.util.Set.of("running","pending","completed").contains(request.optString("status"));
-            if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
+            if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();if(model.error.isEmpty())model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
     private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인"},(d,w)->{
