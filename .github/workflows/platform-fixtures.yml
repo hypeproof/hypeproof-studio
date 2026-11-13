@@ -52,6 +52,8 @@ jobs:
       matrix:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
+    # Bound the existing shared job; feature additions never create extra runner jobs.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -116,7 +118,7 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: |
           failed=0
-          for f in test/show-what-i-made.smoke.mjs test/voice-read-aloud.smoke.mjs test/classroom-inbox.smoke.mjs test/lesson-settings-change.test.mjs test/lesson-settings-change-host.smoke.mjs test/personal-reflection.test.mjs test/mobile-conversation.test.mjs test/mobile-conversation-host.test.mjs test/work-export.smoke.mjs test/studio-folder-trust.smoke.mjs; do
+          for f in test/show-what-i-made.smoke.mjs test/voice-read-aloud.smoke.mjs test/classroom-inbox.smoke.mjs test/lesson-settings-change.test.mjs test/lesson-settings-change-host.smoke.mjs test/personal-reflection.test.mjs test/mobile-conversation.test.mjs test/mobile-conversation-host.test.mjs test/work-export.smoke.mjs test/studio-folder-trust.smoke.mjs test/show-link.smoke.mjs test/voice-mute-controls.smoke.mjs test/host-theme-kinds-computed.smoke.mjs test/page-card-presentation.smoke.mjs test/page-card-result-layout.smoke.mjs; do
             echo "— $f"
             node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::feature regression failed"; failed=1; }
           done
