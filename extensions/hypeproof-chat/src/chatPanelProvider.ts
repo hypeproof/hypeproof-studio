@@ -12148,6 +12148,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       refusal: (target) => this.folderWriteRefusalFor(target),
       capturePage: (root, abs) => this.captureShowPageImage(root, abs),
       noteWrite: (absPath, data) => noteHostWrite([{ absPath, data }], "studio"),
+      // REQ-STUDIO-SHOW-LINK (#3794 slice 2): 링크로 보여주기, off by default until the Service ships it.
+      share: {
+        enabled: () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showLinkEnabled', false),
+        request: () => { const a = this.reflectionAccounts; return a ? (p: string, b?: unknown) => a.showLinkRequest(p, b) : undefined; },
+        production: vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1') === 'https://api.hypeproof-ai.xyz/v1',
+        copy: async (text) => { await vscode.env.clipboard.writeText(text); },
+      },
     });
   }
 

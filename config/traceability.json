@@ -17897,6 +17897,15 @@
         },
         {
           "path": "apps/studio-native/tests/test_android_environment.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_android_emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_cleanup.py"
         }
       ]
     },
@@ -18833,6 +18842,90 @@
         {
           "path": "docs/testing/native-mobile-growth.md",
           "section": "## TestFlight request and receipt — MTF-T01"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-INVITE-SEAT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-INVITE-SEAT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-INVITE-SEAT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "section": "## 검증"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SHOW-LINK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-WHAT-I-MADE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Show what I made as a link (#3794 slice 2)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHOW-LINK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/showLink.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/showWhatIMadeView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-SHOW-LINK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHOW-LINK",
+        "ST-IMP-SHOW-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/show-link.smoke.mjs"
         }
       ]
     }

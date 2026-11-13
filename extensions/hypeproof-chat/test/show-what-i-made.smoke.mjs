@@ -15,6 +15,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import {
   SHOW_COPY, SHOW_TIMING, SHOW_PLAYER_FILE, SHOW_RUNTIME_FILE, SHOW_ANIME_FILE, SHOW_FONT_FILE, SHOW_FOLDER_ASSETS, captureShowPage, showComposition, showDecisionRecord,
@@ -24,7 +25,7 @@ import { showPanelHtml, SHOW_POSTER_SECONDS } from "../src/showWhatIMadeView.ts"
 import { findChromium, launch } from "./lib/headless-chromium.mjs";
 
 const require = createRequire(import.meta.url);
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const extRoot = path.join(here, "..");
 const media = path.join(extRoot, "media", "show");
 
@@ -131,20 +132,21 @@ const disk = showComposition({ headline: hostile, audience: "엄마</p><script>x
 // 3. Host: real panel messages, picker, folder writes (vscode stubbed)
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-")));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-")));
   fs.mkdirSync(path.join(root, "art")); fs.writeFileSync(path.join(root, "art", "drawing.png"), PNG);
   fs.writeFileSync(path.join(root, "art", "fake.png"), "<svg onload=alert(1)>");
   fs.writeFileSync(path.join(root, "page.html"), "<h1>hi</h1>");
   const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hp-out-")), "o.png"); fs.writeFileSync(outside, PNG);
   fs.symlinkSync(outside, path.join(root, "art", "link.png"));
   let panel, picks = [], infos = [], enabled = true, refusal = null, captured = [];
-  const Uri = { file: (p) => ({ scheme: "file", fsPath: p, toString: () => "file://" + p }), joinPath: (u, ...p) => Uri.file(path.join(u.fsPath, ...p)) };
+  const resourceUrl = (p) => "https://res.test" + pathToFileURL(p).pathname;
+  const Uri = { file: (p) => ({ scheme: "file", fsPath: p, toString: () => pathToFileURL(p).href }), joinPath: (u, ...p) => Uri.file(path.join(u.fsPath, ...p)) };
   const vscode = { Uri, ViewColumn: { Active: -1 }, window: {
     showInformationMessage: async (m) => { infos.push(m); },
     showOpenDialog: async () => { const p = picks.shift(); return p ? [Uri.file(p)] : undefined; },
     createWebviewPanel(...args) {
       let received, closed;
-      panel = { args, disposed: false, webview: { html: "", cspSource: "https://res.test", asWebviewUri: (u) => ({ toString: () => "https://res.test" + u.fsPath }),
+      panel = { args, disposed: false, webview: { html: "", cspSource: "https://res.test", asWebviewUri: (u) => ({ toString: () => resourceUrl(u.fsPath) }),
         onDidReceiveMessage(fn) { received = fn; return { dispose() {} }; } },
         onDidDispose(fn) { closed = fn; return { dispose() {} }; }, reveal() {}, dispose() { panel.disposed = true; closed?.(); },
         async send(m) { await received(m); } };
@@ -189,9 +191,9 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   const index = () => fs.readFileSync(path.join(dir, "index.html"), "utf8");
   assert.ok(index().includes('<span class="w">&lt;b&gt;&quot;내</span> <span class="w">그림&quot;&lt;/b&gt;</span> <span class="w">&amp;</span> <span class="w">색깔</span>'), "the person's words, escaped");
   assert.ok(index().includes("할머니에게") && !/https?:\/\//.test(index()));
-  assert.ok(shown().includes("<hyperframes-player") && shown().includes(`https://res.test${media}/${SHOW_PLAYER_FILE}`));
-  assert.ok(shown().includes(`https://res.test${media}/${SHOW_RUNTIME_FILE}`), "playback injects the vendored runtime");
-  assert.ok(shown().includes(`https://res.test${dir}/${SHOW_ANIME_FILE}`), "playback loads the folder's own Anime.js copy");
+  assert.ok(shown().includes("<hyperframes-player") && shown().includes(`${resourceUrl(media)}/${SHOW_PLAYER_FILE}`));
+  assert.ok(shown().includes(`${resourceUrl(media)}/${SHOW_RUNTIME_FILE}`), "playback injects the vendored runtime");
+  assert.ok(shown().includes(`${resourceUrl(dir)}/${SHOW_ANIME_FILE}`), "playback loads the folder's own Anime.js copy");
   assert.ok(!/jsdelivr|https:\/\/(?!res\.test)/.test(shown().replace(/https:\/\/res\.test/g, "")), "panel names no other origin");
   await send({ type: "headline", text: "내 그림을 봐 주세요" });
   assert.ok(index().includes('<span class="w">내</span> <span class="w">그림을</span> <span class="w">봐</span> <span class="w">주세요</span>'), "headline edit rewrites the composition");
