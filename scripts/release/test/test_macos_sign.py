@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -24,7 +25,7 @@ SOURCE = "1" * 40
 # These mock executables consume the real CLI arguments and persist invocation
 # order across processes. The production orchestration is not stubbed out.
 TOOLS = r'''#!/usr/bin/env python3
-import json, os, pathlib, shutil, stat, sys, zipfile
+import json, os, pathlib, shutil, signal, stat, sys, zipfile
 tool = pathlib.Path(sys.argv[0]).name
 a = sys.argv[1:]
 with open(os.environ['MOCK_LOG'], 'a') as f: f.write(json.dumps([tool, *a]) + '\n')
@@ -32,6 +33,16 @@ def fail(message):
     print(message, file=sys.stderr); sys.exit(1)
 if os.environ.get('MOCK_FAIL') == tool + ':' + (a[0] if a else ''): fail('injected failure')
 if tool == 'security':
+    if a[0] == 'list-keychains':
+        state = pathlib.Path(os.environ['MOCK_SEARCH_LIST'])
+        counter = state.with_suffix('.count')
+        count = int(counter.read_text()) + 1 if counter.exists() else 1
+        counter.write_text(str(count))
+        if str(count) == os.environ.get('MOCK_SEARCH_FAIL_AT'): fail('search-list operation unavailable')
+        if '-s' in a: state.write_text(json.dumps(a[a.index('-s')+1:]))
+        else:
+            for item in json.loads(state.read_text()): print(json.dumps(item))
+        sys.exit(0)
     if a[0] == 'create-keychain': pathlib.Path(a[-1]).touch()
     if a[0] == 'delete-keychain': pathlib.Path(a[-1]).unlink()
     kind = os.environ.get('MOCK_CERT_KIND', 'Developer ID Application')
@@ -43,13 +54,23 @@ elif tool == 'codesign':
         print('Authority=Developer ID Application: Fixture (A1B2C3D4E5)\nTeamIdentifier=' + os.environ.get('MOCK_CODE_TEAM', 'A1B2C3D4E5'))
         if not os.environ.get('MOCK_NO_RUNTIME'): print('CodeDirectory flags=0x10000(runtime)\nTimestamp=Nov 12, 2026 at 12:00:00')
     elif '--sign' in a:
+        state = pathlib.Path(os.environ['MOCK_SEARCH_LIST'])
+        if a[a.index('--keychain')+1] not in json.loads(state.read_text()):
+            fail('The specified item could not be found in the keychain.')
+        if os.environ.get('MOCK_CONCURRENT_KEYCHAIN'):
+            state.write_text(json.dumps([os.environ['MOCK_CONCURRENT_KEYCHAIN'], *json.loads(state.read_text())]))
+        if os.environ.get('MOCK_CONCURRENT_SEARCH'):
+            state.write_text(json.dumps([a[a.index('--keychain')+1], *json.loads(os.environ['MOCK_CONCURRENT_SEARCH'])]))
+        if os.environ.get('MOCK_SIGNAL'):
+            os.kill(os.getppid(), getattr(signal, os.environ['MOCK_SIGNAL'])); sys.exit(0)
         p = pathlib.Path(a[-1])
         if p.is_dir():
             marker = p / '_CodeSignature' / 'CodeResources'; marker.parent.mkdir(exist_ok=True)
             marker.write_text('signed fixture')
     elif os.environ.get('MOCK_BAD_CHAIN'): fail('a sealed resource is missing or invalid / requirement failed')
 elif tool == 'xcrun':
-    if a[0] == '--find': print('/usr/bin/' + a[1])
+    if a[0] == 'clang': pathlib.Path(a[-1]).write_bytes(b'\xcf\xfa\xed\xfe' + b'probe fixture')
+    elif a[0] == '--find': print('/usr/bin/' + a[1])
     elif a[:2] == ['notarytool', 'history']: print('{}')
     elif a[:2] == ['notarytool', 'submit']:
         if os.environ.get('MOCK_SUBMIT_AMBIGUOUS'): fail('network interrupted after upload')
@@ -96,6 +117,10 @@ class SigningControls(unittest.TestCase):
         self.log = self.root / "invocations.jsonl"
         self.keychain = self.root / "isolated.keychain-db"
         self.keychain.touch()
+        self.search_state = self.root / "search-list.json"
+        self.original_search = ["/fixture/login.keychain-db", "/fixture/Unrelated Keychain.keychain-db",
+                                "/fixture/third.keychain-db"]
+        self.search_state.write_text(json.dumps(self.original_search))
         self.app = self.root / "HypeProof Studio.app"
         (self.app / "Contents/Resources/app").mkdir(parents=True)
         (self.app / "Contents/Info.plist").write_bytes(plistlib.dumps({
@@ -113,7 +138,8 @@ class SigningControls(unittest.TestCase):
             notary_profile="fixture", app=str(self.app), source_sha=SOURCE,
             output=str(self.root/"dist"), evidence=str(self.root/"evidence"), notary_timeout="1s")
         environment = {k:v for k,v in os.environ.items() if not k.startswith(("MOCK_", "GITHUB_"))}
-        environment.update(PATH=str(self.bin)+os.pathsep+os.environ["PATH"], MOCK_LOG=str(self.log))
+        environment.update(PATH=str(self.bin)+os.pathsep+os.environ["PATH"], MOCK_LOG=str(self.log),
+                           MOCK_SEARCH_LIST=str(self.search_state))
         self.env = patch.dict(os.environ, environment, clear=True)
         self.env.start(); self.addCleanup(self.env.stop)
         self.platform = patch.object(sign.sys, "platform", "darwin")
@@ -187,9 +213,9 @@ class SigningControls(unittest.TestCase):
         with patch.dict(os.environ, {"MOCK_WAIT_TIMEOUT": "1"}):
             with self.assertRaisesRegex(sign.SigningError, "timeout"): self.release()
         self.assertFalse(self.receipt().exists())
-        before = len([c for c in self.calls() if "--sign" in c])
+        before = len([c for c in self.calls() if "--sign" in c and str(self.app) in c[-1]])
         self.release()
-        self.assertEqual(len([c for c in self.calls() if "--sign" in c]), before)
+        self.assertEqual(len([c for c in self.calls() if "--sign" in c and str(self.app) in c[-1]]), before)
         self.assertEqual(len([c for c in self.calls() if c[:3] == ["xcrun", "notarytool", "submit"]]), 1)
         self.assertFalse(sign.read_json(self.receipt())["release_eligible"])
 
@@ -221,7 +247,64 @@ class SigningControls(unittest.TestCase):
     def test_escaping_symlink_refused_before_signature_mutation(self):
         (self.app/"Contents/escape").symlink_to(self.root)
         with self.assertRaisesRegex(sign.SigningError, "symlink escapes"): self.release()
-        self.assertFalse(any("--sign" in c for c in self.calls()))
+        self.assertFalse(any("--sign" in c and str(self.app) in c[-1] for c in self.calls()))
+
+    def test_real_preflight_flow_catches_unusable_key_before_notary_or_app_and_restores_list(self):
+        with patch.dict(os.environ, {"MOCK_FAIL": "codesign:--force"}):
+            with self.assertRaisesRegex(sign.SigningError, "codesign --force failed"):
+                self.release()
+        self.assertEqual(json.loads(self.search_state.read_text()), self.original_search)
+        self.assertFalse(any(c[:2] == ["xcrun", "notarytool"] for c in self.calls()))
+        self.assertFalse(any("--sign" in c and str(self.app) in c[-1] for c in self.calls()))
+        probes = [Path(c[-1]) for c in self.calls() if c[:2] == ["xcrun", "clang"]]
+        self.assertEqual(len(probes), 1)
+        self.assertFalse(probes[0].parent.exists())
+        self.assertFalse(self.receipt().exists())
+
+    def test_search_scope_preserves_existing_and_concurrent_unrelated_entries(self):
+        with patch.dict(os.environ, {"MOCK_CONCURRENT_KEYCHAIN": "/fixture/new-peer.keychain-db"}):
+            sign.preflight(self.args)
+        self.assertEqual(json.loads(self.search_state.read_text()),
+                         ["/fixture/new-peer.keychain-db", *self.original_search])
+        self.search_state.write_text(json.dumps(self.original_search))
+        concurrent = [self.original_search[2], self.original_search[0]]
+        with patch.dict(os.environ, {"MOCK_CONCURRENT_SEARCH": json.dumps(concurrent)}):
+            sign.preflight(self.args)
+        self.assertEqual(json.loads(self.search_state.read_text()), concurrent)
+        already_listed = [str(self.keychain), *self.original_search]
+        self.search_state.write_text(json.dumps(already_listed))
+        self.log.unlink()
+        sign.preflight(self.args)
+        self.assertEqual(json.loads(self.search_state.read_text()), already_listed)
+        self.assertFalse(any(c[:2] == ["security", "list-keychains"] and "-s" in c for c in self.calls()))
+
+    def test_cleanup_read_or_write_failure_blocks_preflight_success_and_notary(self):
+        for operation in (4, 5):  # fresh-list read, then removal write
+            with self.subTest(operation=operation):
+                self.log.unlink(missing_ok=True)
+                self.search_state.with_suffix('.count').unlink(missing_ok=True)
+                self.search_state.write_text(json.dumps(self.original_search))
+                with patch.dict(os.environ, {"MOCK_SEARCH_FAIL_AT": str(operation)}):
+                    with self.assertRaisesRegex(sign.SigningError, "search-list operation unavailable"):
+                        sign.preflight(self.args)
+                self.assertIn(str(self.keychain), json.loads(self.search_state.read_text()))
+                self.assertFalse(any(c[:2] == ["xcrun", "notarytool"] for c in self.calls()))
+
+    def test_actual_cli_term_and_int_restore_search_list_and_fail_without_submission(self):
+        for number, name in [(15, "SIGTERM"), (2, "SIGINT")]:
+            with self.subTest(signal=name):
+                self.log.unlink(missing_ok=True)
+                env = dict(os.environ, MOCK_SIGNAL=name)
+                code = ("import importlib.util,sys; "
+                        f"s=importlib.util.spec_from_file_location('sign',{str(SCRIPT)!r}); "
+                        "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+                        "m.sys.platform='darwin'; sys.exit(m.main())")
+                result = subprocess.run([sys.executable, "-c", code, "preflight", "--identity", CERT,
+                    "--team-id", TEAM, "--keychain", str(self.keychain), "--notary-profile", "fixture"],
+                    env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 128 + number, result.stderr)
+                self.assertEqual(json.loads(self.search_state.read_text()), self.original_search)
+                self.assertFalse(any(c[:2] == ["xcrun", "notarytool"] for c in self.calls()))
 
     def test_policy_and_workflow_keep_legacy_out_of_official_lane(self):
         policies = {p.stem:plistlib.loads(p.read_bytes()) for p in sign.ENTITLEMENTS.glob("*.plist")}
