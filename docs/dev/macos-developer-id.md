@@ -9,7 +9,11 @@ does not establish an Apple-signed release, installation, update or launch.
 ## Build and publication boundary
 
 Both full and repack builds use `.github/workflows/build-mac.yml`. Credentials
-are checked before either expensive build. After extension/vendor injection,
+are checked before either expensive build, including compilation, Developer ID
+signing and strict verification of one disposable Mach-O with runtime and secure
+timestamp. Identity enumeration alone does not establish usable private-key or
+certificate-chain access ([repair #3909](https://github.com/hypeproof/hypeproof-studio/issues/3909)).
+After extension/vendor injection,
 version/source stamping and branding checks, `scripts/release/macos-sign.py`:
 
 1. Requires one explicit valid **Developer ID Application** SHA-1 and Apple
@@ -85,7 +89,15 @@ Store Distribution certificate cannot replace Developer ID Application.
 `import-macos-signing.sh` creates only
 `$RUNNER_TEMP/hps-developer-id.keychain-db`, fails if it already exists, and
 passes that keychain explicitly to Apple tools. It does not change login
-keychain trust, the user's search list or existing signing identities. Temporary
+keychain trust or existing signing identities. `macos-sign.py` temporarily
+prepends this keychain to the user search list during preflight and app signing:
+Apple's `codesign --keychain` selects the identity but still uses that search list
+to construct its certificate chain. The helper removes only its added entry on
+success, failure, INT or TERM; an already-present entry remains untouched. With
+no concurrent edits the original order is restored exactly; cleanup preserves
+unrelated concurrent list changes instead of replaying a stale snapshot. These
+system read/modify/write operations are not an atomic compare-and-swap. Use the
+isolated release runner, and stop on unverified cleanup. Temporary
 P12/P8 files use mode 0600 and are removed on success/failure; shell tracing is
 disabled. `security` requires import/keychain passwords as local process
 arguments, so use only the isolated hosted release runner; never enable shell

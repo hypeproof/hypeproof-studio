@@ -6,12 +6,15 @@ Evidence files are exclusive-create checkpoints, not mutable success flags.
 See docs/dev/macos-developer-id.md for credentials and interrupted submissions.
 """
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import plistlib
 import re
+import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -78,6 +81,48 @@ def requirement(team):
             f'and certificate leaf[subject.OU] = "{team}"')
 
 
+@contextmanager
+def signing_keychain(args):
+    # --keychain selects the identity, but codesign resolves its certificate
+    # chain through the user search list (codesign(1), --keychain).
+    keychain = str(Path(args.keychain).resolve())
+    def search_list():
+        return shlex.split(run("security", "list-keychains", "-d", "user"))
+    original = search_list()
+    if keychain in original:
+        yield
+        return
+    def interrupted(number, _frame):
+        raise SystemExit(128 + number)
+    handlers = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        run("security", "list-keychains", "-d", "user", "-s", keychain, *original)
+        if search_list() != [keychain, *original]:
+            raise SigningError("signing keychain search-list update could not be verified")
+        yield
+    finally:
+        try:
+            # Never replay a stale snapshot over a concurrent writer's changes.
+            # With no concurrent changes this restores the exact original list.
+            current = search_list()
+            if keychain in current:
+                remaining = [p for p in current if p != keychain]
+                run("security", "list-keychains", "-d", "user", "-s", *remaining)
+                if search_list() != remaining:
+                    raise SigningError("signing keychain search-list cleanup could not be verified")
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+
+
+def sign_code(path, args, policy=None):
+    command = ["codesign", "--force", "--sign", args.identity, "--keychain", args.keychain,
+               "--options", "runtime", "--timestamp"]
+    if policy:
+        command += ["--entitlements", policy]
+    run(*command, path)
+
+
 def preflight(args):
     if sys.platform != "darwin":
         raise SigningError("Developer ID signing requires macOS")
@@ -87,12 +132,21 @@ def preflight(args):
         raise SigningError("explicit ten-character Apple Team ID required")
     if not args.keychain or not Path(args.keychain).is_file() or not args.notary_profile:
         raise SigningError("an existing isolated keychain and notary profile are required")
-    identities = run("security", "find-identity", "-v", "-p", "codesigning", args.keychain)
-    pattern = (r'\b' + re.escape(args.identity.upper())
-               + r'\s+"Developer ID Application: [^"\n]+ \('
-               + re.escape(args.team_id) + r'\)"')
-    if not re.search(pattern, identities):
-        raise SigningError("selected valid Developer ID Application identity/Team ID not found")
+    with signing_keychain(args):
+        identities = run("security", "find-identity", "-v", "-p", "codesigning", args.keychain)
+        pattern = (r'\b' + re.escape(args.identity.upper())
+                   + r'\s+"Developer ID Application: [^"\n]+ \('
+                   + re.escape(args.team_id) + r'\)"')
+        if not re.search(pattern, identities):
+            raise SigningError("selected valid Developer ID Application identity/Team ID not found")
+        # Identity enumeration alone passed before the real #3909 CI failure.
+        # Exercise this exact private key and chain before an expensive build.
+        with tempfile.TemporaryDirectory(prefix="hps-signing-preflight-") as scratch:
+            source, probe = Path(scratch)/"probe.c", Path(scratch)/"probe"
+            source.write_text("int main(void) { return 0; }\n")
+            run("xcrun", "clang", source, "-o", probe)
+            sign_code(probe, args)
+            verify_code(probe, [probe], args)
     for tool in ("notarytool", "stapler"):
         run("xcrun", "--find", tool)
     # Validates credentials before an expensive build without submitting code.
@@ -159,15 +213,11 @@ def verify_code(app, objects, args):
 
 
 def sign_app(app, objects, args):
-    for path in objects:
-        command = ["codesign", "--force", "--sign", args.identity, "--keychain", args.keychain,
-                   "--options", "runtime", "--timestamp"]
-        policy = entitlements(path, app)
-        if policy:
-            command += ["--entitlements", policy]
-        # Never --deep when signing: vendor CLIs/native modules are explicit.
-        run(*command, path)
-    verify_code(app, objects, args)
+    with signing_keychain(args):
+        for path in objects:
+            # Never --deep when signing: vendor CLIs/native modules are explicit.
+            sign_code(path, args, entitlements(path, app))
+        verify_code(app, objects, args)
 
 
 def archive(app, output):
@@ -332,7 +382,7 @@ def main():
             release(args)
         else:
             preflight(args)
-            print("Developer ID and notary credential preflight passed; no app signed or submitted")
+            print("Developer ID probe signing and notary credential preflight passed; no app signed or submitted")
     except (SigningError, OSError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"macos-sign: {error}", file=sys.stderr)
         return 1
