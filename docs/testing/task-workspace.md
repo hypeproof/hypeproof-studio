@@ -356,6 +356,9 @@ the packaged app are reported separately (NOT RUN).
 - After one chunk ended and the next was refused, one press reads exactly the unheard chunks in order.
   The notice is gone and does not come back after a normal end.
 - `소리 끄기` clears the notice.
+- `소리 켜기` goes through `voice.gate`: when the disclosure is no longer acknowledged (the policy changed between
+  the block and the press), the press opens the sheet and speaks nothing until `시작하기`. The mutant that
+  calls `resume` directly fails this case.
 - Negative controls: another engine error (`synthesis-failed`) shows no notice, and an unserved seat has
   nothing to press.
 - The hub refuses `resume` unless this answer is blocked, and `stop` forgets the pending chunks.

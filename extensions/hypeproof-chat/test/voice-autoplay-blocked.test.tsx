@@ -9,6 +9,7 @@
 //     focus move, announced once in the row's status;
 //   - one press reads on from the first chunk that did not finish (nothing heard twice, nothing lost);
 //   - 소리 끄기 (CGP-VOICE-R-002) clears the notice and a resume then speaks nothing;
+//   - 소리 켜기 goes through voice.gate: a disclosure no longer acknowledged opens the sheet before any sound;
 //   - negative controls: another engine error is not the blocked notice; an unserved seat draws nothing.
 // Run: node scripts/run-tsx-tests.mjs voice-autoplay-blocked
 import { act as reactAct, createElement } from "react";
@@ -116,6 +117,25 @@ t("소리 끄기 clears the notice and nothing is spoken after it", async () => 
   const hub = new ReadAloud(speechEnv() as never, windowOutputMute);
   eq(hub.resume("a1"), false, "nothing to resume on a fresh hub");
   await act(() => { windowOutputMute.set(false); });
+});
+
+t("소리 켜기 goes through the voice gate: a disclosure that is no longer acknowledged opens the sheet first", async () => {
+  await mount();
+  await press(listen());
+  await fire(() => rig.spoken[0].onerror?.({ error: "not-allowed" }));
+  eq(resumeButtons().length, 1, "blocked");
+  // The policy changed between the block and the press (the host now reports nothing acknowledged).
+  await hostSays({ type: "voiceDisclosureState", acknowledged: [] });
+  const before = rig.spoken.length;
+  await press(resumeButtons()[0]);
+  eq(rig.spoken.length, before, "nothing is spoken before the disclosure is accepted");
+  const sheet = all((e) => e.tagName === "DIALOG");
+  eq(sheet.length, 1, "the disclosure sheet opened");
+  const start = all((e) => e.tagName === "BUTTON" && e.textContent.trim() === "시작하기")[0];
+  ok(start, "the sheet's 시작하기");
+  await press(start);
+  ok(rig.spoken.length > before, "accepting the disclosure resumes the reading");
+  eq(listen().getAttribute("aria-pressed"), "true", "reading again");
 });
 
 t("negative controls: another engine error is not the blocked notice; an unserved seat draws nothing", async () => {
