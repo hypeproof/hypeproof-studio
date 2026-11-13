@@ -672,6 +672,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private mobileTurn?: { id: string; failed: boolean };
   private reflectionAccounts?: AccountSession;
   private reflectionRefreshing = false;
+  private reflectionRefresh?: Promise<void>;
+  private reflectionWrites: Promise<void> = Promise.resolve();
   private reflectionMaking = false;
   isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
@@ -679,11 +681,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionBindings(): ReflectionBinding[] {
     return this.context.globalState.keys().filter(k=>k.startsWith(REFLECTION_BINDING_KEY+':')).map(k=>this.context.globalState.get<ReflectionBinding>(k)).filter((b):b is ReflectionBinding=>!!b);
   }
-  private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
+  private async saveReflectionBinding(b:ReflectionBinding, update?: (held: ReflectionBinding) => ReflectionBinding):Promise<void> {
     const key=REFLECTION_BINDING_KEY+':'+JSON.stringify([b.activity,b.workspace,b.task]);
-    const held=this.context.globalState.get<ReflectionBinding>(key);
-    if(held&&held.revision>b.revision)return;
-    await this.context.globalState.update(key,b);
+    const write=(this.reflectionWrites??Promise.resolve()).then(async()=>{
+      const held=this.context.globalState.get<ReflectionBinding>(key);
+      const next=update?update(held??b):b;
+      if(held&&held.revision>next.revision)return;
+      await this.context.globalState.update(key,next);
+    });
+    this.reflectionWrites=write.catch(()=>{});
+    await write;
   }
   private reflectionBinding(): ReflectionBinding | undefined {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
@@ -703,8 +710,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
     // Write to the captured task. Navigation while disk IO runs cannot redirect these words.
     if (incoming.length) await store.append(b.task,incoming);
-    const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
-    await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    await this.saveReflectionBinding({...held,revision:value.state.revision},current=>{
+      if(current.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+      const pending=current.pending;
+      const acknowledged=pending&&(value.acknowledged_id===pending.id||value.state.messages.some(m=>m.id===pending.id&&m.role==='user'&&m.content===pending.text));
+      return {...current,revision:value.state.revision,pending:acknowledged?undefined:pending};
+    });
     // An app exit between saving the outbox and dispatch must leave recoverable input.
     const pending=this.reflectionBinding()?.pending;
     if(stillHere()&&pending&&!this.hasActiveStream()){
@@ -758,8 +769,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       ||this.hasActiveStream()||this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory
       ||this.verifySession?.running||this.opsHold||this.interruptedHistory)return;
     this.reflectionRefreshing=true;
-    try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
-    finally { this.reflectionRefreshing=false; }
+    const refresh=(async()=>{await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts!.reflectionRequest(b.session)));})();
+    this.reflectionRefresh=refresh;
+    try { await refresh; }
+    finally { if(this.reflectionRefresh===refresh)this.reflectionRefresh=undefined;this.reflectionRefreshing=false; }
   }
   /** Copy only the person's reviewed words into an ordinary, unsent desktop task. */
   async beginPersonalMaking(): Promise<void> {
@@ -803,22 +816,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async sendPersonalReflection(msg: Extract<WebviewMessage,{type:'sendMessage'}>): Promise<boolean> {
     const b=this.reflectionBinding();if(!b)return false;
     const accounts=this.reflectionAccounts;
-    if(!accounts||this.hasActiveStream()||this.reflectionRefreshing||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
-      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:this.reflectionRefreshing?'대화를 확인 중이에요. 잠시 뒤 다시 보내 주세요.':'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
+    if(!accounts||this.hasActiveStream()||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
     }
     if(b.pending&&b.pending.text!==msg.text){
       await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
     }
     const store=this.currentTaskStore();
     const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
-    const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
+    const refresh=this.reflectionRefresh;
+    let pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision,...(refresh?{awaitingRefresh:true}:{})};
     const id=pending.id,streamId=randomId(),controller=new AbortController();
     let streamStarted=false,terminal=false;
     // Hold task navigation before the first asynchronous outbox write.
     this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
     try {
-      await this.saveReflectionBinding({...b,pending});
-      if(!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      await this.saveReflectionBinding({...b,pending},held=>{
+        if(held.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+        return {...held,pending};
+      });
+      if(refresh)await refresh;
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      if(this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory||this.verifySession?.running||this.opsHold||this.interruptedHistory)throw Error('현재 작업 상태를 확인한 뒤 다시 보내 주세요.');
+      // Only a never-dispatched request can take the refreshed revision. An
+      // uncertain previous POST keeps its original idempotency payload.
+      if(pending.awaitingRefresh){
+        const current=this.reflectionBinding()!;
+        if(!current.pending&&store?.getHistory(b.task).some(m=>m.id===id))return true;
+        pending={id:pending.id,text:pending.text,revision:current.revision};
+        await this.saveReflectionBinding({...current,pending});
+      }
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
       await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});streamStarted=true;
       const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
       if(!controller.signal.aborted&&stillHere()){await this.post({type:'streamEnd',streamId});terminal=true;}
@@ -831,8 +859,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         } else {
           void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
         }
-        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
-        try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
+        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding(b,current=>
+          current.session===b.session&&current.pending?.id===id?{...current,pending:undefined}:current);
+        if(streamStarted)try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
         if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
       }
     } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);if(streamStarted&&!terminal&&!controller.signal.aborted)await this.post({type:'streamStopped',streamId});}
