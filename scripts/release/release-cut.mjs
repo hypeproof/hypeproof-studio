@@ -8,7 +8,7 @@
 //   node scripts/release/release-cut.mjs --since "7 days ago"    # trial: pretend the last release was a week ago
 //   node scripts/release/release-cut.mjs --mode create           # body without the DRY-RUN banner
 //
-// Steps: baseline (last stable v tag) → candidate → range → smoke → failure issue body | rc tag + release PR body.
+// Steps: baseline (latest published stable release) → candidate → range → smoke → failure issue body | rc tag + release PR body.
 // Exit: 0 PASS or skipped, 1 smoke FAIL, 2 smoke NOT_RUN (a real cut would stop there).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +20,7 @@ import {exitCode, printSmoke, runSmoke} from './smoke/smoke.mjs';
 import {nextRcTag, versionFor} from './version.mjs';
 import {oneLiner, windowsOneLiner} from './install-kit.mjs';
 import {checkoutPlatforms} from './platforms.mjs';
+import {publishedBaseline} from './published-baseline.mjs';
 import {run as selectCases} from './select-cases.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,9 +36,10 @@ const out = path.resolve(arg('--out', path.join(os.tmpdir(), 'hps-release-cut'))
 fs.rmSync(out, {recursive: true, force: true});
 fs.mkdirSync(out, {recursive: true});
 
-// 1. Baseline: the last stable v tag. Tags with a suffix (-rc.N) are candidates, not releases.
+// 1. Draft releases and tag-only promotions have not shipped and cannot narrow the range.
 if (!args.includes('--no-fetch')) git('fetch', '-q', 'origin', 'main', '--tags');
-let baseline = git('tag', '-l', 'v*', '--sort=-v:refname').split('\n').find(t => t && !t.includes('-'));
+const candidate = git('rev-parse', `${arg('--candidate', 'origin/main')}^{commit}`);
+let baseline = arg('--since') ? null : publishedBaseline(git, candidate);
 if (arg('--since')) {
   const base = git('rev-list', '-1', `--before=${arg('--since')}`, 'origin/main');
   console.log(`(trial) baseline replaced by the last main commit before "${arg('--since')}": ${git('log', '-1', '--format=%h %ci %s', base)}`);
@@ -45,7 +47,6 @@ if (arg('--since')) {
 }
 
 // 2. Candidate: fixed at cut time. Later merges go to the next cycle.
-const candidate = git('rev-parse', `${arg('--candidate', 'origin/main')}^{commit}`);
 const short = candidate.slice(0, 8);
 
 // 3. Range. PR numbers come from squash-merge subjects "... (#N)". Never search PRs by date:

@@ -517,6 +517,45 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
 
+## DEC-ART-R-005: instructor comment on an approved artifact version (2026-11-13, agent choice)
+
+Built (Service hypeproof/hypeproof-service#437, Studio + Chalk in this PR):
+
+- Channel (agent choice): a new distribution content kind `comment` on the existing U2 ledger, not a new message channel.
+  Targets, re-offer, withdrawal and device receipts are the ones notices and question cards already use. The learner's
+  answer is a row in `classroom_question_answers`, so it inherits the class-data consent (ADR 0012), secret masking,
+  instructor-only reads and erasure on consent withdrawal. No new table, no migration.
+- Anchor (agent choice): `artifact_sha256` (the sha256 of index.html that the learner approved, U1b) plus a permille
+  rectangle or a plain element reference. Chalk offers nine regions because it has no viewer of the approved page
+  (REQ-ART-22, P2). The rectangle contract already admits a precise click-to-place anchor later. Line numbers are never
+  used.
+- Which versions (agent choice): a verified collection's extent now names `approved_versions`, the approved pages whose
+  bytes arrived. Chalk offers a comment only for those versions. Studio shows a comment only on a version that this
+  learner approved on this device, read from their own spool sessions by identity. That makes "never on another
+  learner's artifact" a device-side check and not only a Service promise. The Service also sends a comment to one seat
+  only and never to a different seat later.
+- Thread (agent choice): one current state per learner per comment revision, `{handled, reply?}`. Each answer
+  replaces the last. There is no message history, and an instructor follow-up is a new revision. This keeps the
+  stored data the same shape as a question-card text answer.
+- Switch (agent choice): comments ride `ops_questions` ("learners in this run may write back") instead of a new run flag.
+- Pin (agent choice): a 16 px pin on a page outline in the inbox's side list, not on the live preview tab. The native
+  BrowserTab has no trusted in-tab surface (the same gap as CGP-ART-D-002, D-006 and D-008). The place is also said in
+  words. The instructor colour is a filled Paper disc with a control-boundary ring. The learner's own annotations are
+  outlined and numbered, never filled.
+- Coach (agent choice): there is no forward-to-coach action. The REQ allows an explicit forward, but nothing requires
+  one, and leaving it out keeps the negative condition trivially true. A learner can still quote the comment by typing it.
+
+Parked for Jay (not built, Confirmed by Jay: no):
+
+- Minor learners. The class-data consent is `adult_only: true`, so a child profile cannot send a reply or a handled
+  state. The Service refuses with `guardian_consent_required`, and Studio says `이 수업은 보호자 동의가 필요해 앱에서
+  답글을 보낼 수 없습니다. 의견은 계속 볼 수 있습니다.` A minor can still read comments. Question: may a minor send the
+  handled state (no text), and may a minor send a reply? Recommended: allow the handled state only, stored under the run
+  and deleted with it, and keep text replies adult-only until a guardian-consent path exists. Either way this is a new
+  data category about minors, so it needs Jay.
+
+Confirmed by Jay: no (all choices above are agent choices).
+
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
 Agent-selected conservative implementation, not a new human policy agreement:
@@ -2107,12 +2146,13 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
   - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
   - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
-  - any parser finding (warn or fail) that the stored plan did not already have.
+  - any parser finding (warn or fail) that the stored plan did not already have;
+  - markup that a browser could read differently from the plan tokenizer (round 2 of the verification). This also applies to every PUT /plan. It covers abrupt or `--!>` comments, CDATA, a quoted value containing `<` or `>`, an unquoted value with quotes or a backtick, a `<` that does not start a well-formed tag, duplicate attributes and NUL. Round 3 adds three more. Inside a tag, only space, tab, LF and CR count as whitespace, so a form feed is refused. `textarea`, `template`, `svg` and `math` are refused anywhere, because foreign content and raw text are read differently. `style` and `title` are allowed only in the document head, with no `<` in their text. Five of the six plan fixtures and the derived handout and runbook use a head `<style>` or `<title>`, so refusing those outright would refuse real plans. The Service's own lesson and ops skeletons still save. Round 4 adds CSS. In a head `<style>` and in `style` attributes, the Service refuses every way CSS can load a resource other than `url(data:image…)`: `image-set()` (with or without a vendor prefix), `image()`, `cross-fade()`, `element()`, `src()`, `@import` and `@font-face`. Matching is case-insensitive and happens after CSS escapes and HTML entities are decoded and comments are dropped. A leading `<!DOCTYPE html>` and spec-valid comments still pass. The Service's own skeleton is full of guide comments, so refusing every comment would break real plans. A revision may keep a comment the section already has but may add none, and it may not add a second element carrying the selected marker.
 
   The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
 
   Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
-- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0085) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
 - **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
   - the pointer outline is CSS `:hover` on the innermost mark;
   - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;

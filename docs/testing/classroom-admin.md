@@ -1577,6 +1577,29 @@ collection contract.
 
 **NOT RUN**: 실제 Studio 앱(이 체크아웃의 앱은 아직 `inbox_question`을 선언하지 않아 기기는 Service sync 규약으로 대신 몰았다), 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
 
+<a id="artifact-comments-cgp-art-r-005"></a>
+
+## Artifact comments · 2026-11-13 (ADM-CMT-01–06 · CGP-ART-R-005 · CGP-ART-D-005)
+
+Requirement: [Artifact comments](../requirements/classroom-admin.md#artifact-comments-cgp-art-r-005). Host snts (Ubuntu
+24.04, node 22.23.4), each head extracted with `git archive`, `npm ci` there, headless only.
+
+| Test | What | Result · evidence |
+|---|---|---|
+| Service `worker/test/classroom-artifact-comment.test.mjs` (hypeproof-service#437) | Anchor contract and hash. The question switch. One seat only and no re-send to another seat. The device receives the anchor. No offer to an app without `inbox_comment`. The instructor view shows only that seat. Consent required, the `{handled, reply?}` form, masked secrets, a metadata-only audit with the student actor, `created_by` for the instructor, consent withdrawal erases. | Red on `1919b92` (test only). 8/8 on `1fa5fe1`. `test:classroom-ops` group 15/15. |
+| `extensions/hypeproof-chat/test/artifact-comment.test.mjs` | The anchor exactly as the Service sends it, canonical bytes, `validateItem` (no links, ≤ 500, an anchor on a comment only), the answer form, approvals with the last word winning across sessions, and placement (`current` / `previous` / not this learner's). | Red on `17ba91f80` (module missing). 6/6 on `5862b6986`. |
+| `extensions/hypeproof-chat/test/classroom-artifact-comment-host.test.mjs` | The real host through sync and store: `inbox_comment` declared at connect and sync, current and previous placement, negatives (withdrawn approval, never approved, a host without approval readers: not drawn, not counted, not answerable), reply and handled POST bodies, and the comment text in no request. | Red on `17ba91f80`. 5/5 on `5862b6986`, three repeated runs. |
+| `extensions/hypeproof-chat/test/inbox-artifact-comment.test.tsx` | Drawn apart from notices. Text as text (no `a`/`b` elements). Pin at a logical inset of 17%/17% for the top-left third, place in words, the fingerprint. The `이전 판` badge. A polite live region for `새 의견 1개`. Groups open/handled. `inboxOpen` on opening. Typing sends nothing. Reply, handled and reopen bodies. Only `inboxAnswer`/`inboxOpen` posted. | Red on `17ba91f80`. PASS on `5862b6986`. |
+| `chalk/test/artifact-comment.browser.mjs` (`FOCUS_REQUIRE_BROWSER=1`) | The real `/manage` in headless Chromium: buttons only for verified seats with approved versions and the switch on. The composer copy, nine regions of 44 px or more, a 500 cap, text ≥ 14 px, focus. An empty comment sends nothing. One `/contents` with `{kind:'comment', anchor}` and one `/distributions` to `["A1"]`. The sent list shows `의견 ·`, the anchor in words, actors and the reply. | Red on `17ba91f80` (no buttons). 18 checks PASS on `5862b6986`. |
+| Full suites | `extensions/hypeproof-chat` `npm test` (all parts, continued past failures) and `chalk` `npm test`, on `4d5e33c00`. | Chalk 56 parts, 0 failures. Extension: 4 smokes failed on my new CSS (design-tokens, focus-placeholder, forced-colors, hover-pressed-fills) and type-scale failed on the bundle-order list. Fixed in `b79b514e6`/`5862b6986`, and those five plus logical-css and semantic-tokens re-ran PASS. The known snts base failures did not appear. |
+
+After rebasing onto main `8b4b00a2f` (code head `596fe25f2`, equal to this commit apart from this record), these were re-run on snts and passed: `tsc --noEmit` for the extension and the webview, the nine smokes above plus classroom-inbox and korean-input, the four comment and question node files (23/23), both inbox render tests, the Chalk browser test, and Chalk design-tokens.
+
+**NOT VERIFIED**: the Service's `approved_versions` through the real collection path. The Studio-integration test
+`classroom-ops-collect-kinds.test.mjs` stops at its line 162 (`consent_declined`) on base and branch alike, before the
+new assertions. **NOT RUN**: the dev host, a real Studio window, real Chalk against a deployed Service, minors
+(answers are refused by the adult-only consent, DEC-ART-R-005), Windows, and screen readers.
+
 <a id="help-queue-keyboard-triage-run"></a>
 
 ## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)

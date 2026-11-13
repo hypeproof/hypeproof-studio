@@ -2,7 +2,8 @@
 
 `/hype-loop start` must not schedule anything until a charter exists and the person has
 seen its summary. The interview is the only question round in the loop's life (L10):
-everything the loop would otherwise stop to ask is asked here, once.
+everything the loop would otherwise stop to ask is asked here, once. A decision that
+still comes up later is parked on the dashboard, not asked (tick prompt R10).
 
 ## How to ask
 

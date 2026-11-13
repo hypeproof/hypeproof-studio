@@ -23,7 +23,7 @@ class JourneyEvidence(unittest.TestCase):
             simulator_log.write_text(log if log is not None else ''.join(case(name) for name in journey.REQUIRED.values()))
             return journey.collect(SHA, build_log, build_exit, simulator_log, test_exit)
 
-    def test_eight_executed_journeys_allow_test_candidate_without_fabricating_physical_acceptance(self):
+    def test_required_executed_journeys_allow_test_candidate_without_fabricating_physical_acceptance(self):
         result = self.run_fixture()
         self.assertEqual(result['test_candidate_eligibility'], 'PASS')
         self.assertEqual(result['physical_device'], {'status': 'NOT_RUN', 'blocks_test_candidate': False})

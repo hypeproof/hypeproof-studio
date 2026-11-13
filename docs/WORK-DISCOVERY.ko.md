@@ -43,6 +43,11 @@
 ID는 문서별 범위이며 현재 파서는 Markdown 표 첫 열과 `### VO-01` 형식의 정의를 읽는다.
 NAT처럼 표 안 문장에 정의한 ID는 문서별 `inline_prefixes`를 명시한다. 다른 형식은
 명시적인 parser 확장이 필요하며 비어 있는 문서를 통과시키지 않는다.
+Sediment처럼 `REQ-SED-COST` 형식을 쓰는 문서는 `symbolic_prefixes: ["REQ-SED"]`로
+문자형 ID 접두사를 명시한다. 해당 문서의 표 첫 열과 독립된 `###` 정의만 수집하며,
+다른 문서나 본문 언급까지 등록하지 않는다. 기본 숫자형 문법은 유지한다. 잘못된
+접두사 설정·추가/누락 ID는 검사를 실패시킨다. 정렬 검사는 등록된 문자형 ID와
+테스트 대상 열의 정확한 연결을 확인하고 같은 행 단위 완료 증거를 사용한다.
 
 ```bash
 python3 /path/to/hypeproof-harness/scripts/work-discovery/discover.py --checkout .

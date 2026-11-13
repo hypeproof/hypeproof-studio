@@ -187,6 +187,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** MPER-05: display-only identity of the active account reflection; the host rechecks every making request. */
+  personalMaking?: { scope: string; taskId: string };
   /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
   temporaryTask?: { allowed: boolean };
   /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
@@ -603,6 +605,7 @@ export type WebviewMessage = (
   | { type: 'taskCreate' }
   /** MPER-02/04: use the same account/admission entry as the start page. */
   | { type: 'openPersonalReflection' }
+  | { type: 'beginPersonalMaking' }
   /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
   | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }
@@ -896,7 +899,7 @@ export type WebviewMessage = (
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // E5 (#3776) — the learner pressed 제출 or 건너뛰기 on a question card. Nothing else ever sends an answer.
-  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer }
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").InboxAnswer }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
   | { type: "helpRequest" }
   // #751 U1b — the learner opens the approval question for the current index.html (the host asks; nothing is approved or sent by this message).
