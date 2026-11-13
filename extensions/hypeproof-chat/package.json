@@ -564,6 +564,12 @@
           "type": "boolean", "default": false,
           "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."
         },
+        "hypeproofChat.instructorSubscription": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "강사 본인의 Claude·Codex 구독으로 강사 채팅을 실행합니다. 이 기기에 명령줄 도구를 설치하고 로그인해야 합니다. 학생 화면에는 나타나지 않습니다."
+        },
         "hypeproofChat.artifactHistoryEnabled": {
           "type": "boolean",
           "default": false,

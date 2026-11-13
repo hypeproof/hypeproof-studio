@@ -914,7 +914,7 @@
         "PCC-08"
       ],
       "inline_prefixes": [],
-      "sha256": "7b6c93345c77a55770c2224d371f6cc43ce3847d9961dd0e188572df2d80aa65",
+      "sha256": "895dde731027831df320a6b97f862b4d3318e6dfa9e3c70f2fc8b00226494744",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/personal-claude-continuation.md",
