@@ -66,6 +66,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Install emulator host library on the disposable runner
+        run: |
+          # Headless SDK QEMU still links to the PulseAudio client library.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpulse0
       - name: Enable emulator acceleration on the disposable runner
         run: sudo chmod a+rw /dev/kvm
       - name: Provision the existing Android 35 emulator recipe
