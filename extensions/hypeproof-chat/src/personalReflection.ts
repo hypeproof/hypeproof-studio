@@ -15,7 +15,7 @@ export function readReflection(value:unknown):ReflectionSnapshot {
   }
   return v;
 }
-export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;pending?:{id:string;text:string;revision:number} }
+export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;pending?:{id:string;text:string;revision:number;awaitingRefresh?:boolean} }
 export const REFLECTION_BINDING_KEY='hps.personalReflection.v1';
 export function reflectionFailure(error:unknown):string {
   const code=(error as {code?:string})?.code;

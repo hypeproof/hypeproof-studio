@@ -77,6 +77,9 @@ export const READ_ALOUD_STOP = "그만 읽기";
 export const READ_ALOUD_PLAYING = "읽는 중이에요";
 export const READ_ALOUD_CODE_SKIPPED = "코드는 건너뛰었어요";
 export const READ_ALOUD_UNAVAILABLE = "이 컴퓨터에서는 소리로 읽을 수 없어요";
+/** CGP-VOICE-R-028 / DES-CGPV-41: the engine refused sound without a press (autoplay policy). One sentence + one action. */
+export const READ_ALOUD_BLOCKED = "소리가 막혔어요.";
+export const READ_ALOUD_RESUME = "소리 켜기";
 /** CGP-VOICE-R-002: read-aloud is held while the voice panel's 소리 끄기 is on. */
 export const READ_ALOUD_OUTPUT_OFF = "소리를 꺼 두었어요. 음성 대화에서 소리를 켜면 들을 수 있어요";
 

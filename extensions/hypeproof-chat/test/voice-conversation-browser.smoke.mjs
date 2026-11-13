@@ -105,6 +105,21 @@ try {
  controls.push('two automatic observed-audio turns through actual host/account/disk store');
  await click('음성 대화 중지');assert.equal(await live(),0);
  await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,150));assert.equal(await live(),0);controls.push('Stop fences late playback completion');
+ // Actual mounted App uses the same hub for automatic playback and the answer's manual recovery.
+ await click('자동 음성 대화 시작');await speech();
+ await wait(async()=>(await spoken()).length===3,'automatic answer before autoplay refusal');
+ assert.equal(await live(),0);
+ await b.evaluate("window.__utterances.at(-1).onerror({error:'not-allowed'})");await drain();
+ await wait(()=>b.evaluate('!!document.querySelector(".hps-voice-resume")'),'manual blocked-playback recovery');
+ assert(await b.evaluate(`!!document.querySelector('button[aria-label="자동 음성 대화 시작"]')`),'blocked reading stops the automatic conversation');
+ const blockedSends=calls.filter(c=>c.type==='sendMessage').length;
+ const resumePoint=await b.evaluate('(()=>{const e=document.querySelector(".hps-voice-resume"),r=e.getBoundingClientRect();if(!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))throw Error("resume obscured");return{x:r.x+r.width/2,y:r.y+r.height/2}})()');
+ await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...resumePoint});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...resumePoint});await drain();
+ assert.equal((await spoken()).length,4,'one deliberate manual resume plays the blocked answer');
+ assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-resume")'),false);
+ await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,150));await drain();
+ assert.equal(await live(),0,'manual playback completion never restarts the microphone');assert.equal(calls.filter(c=>c.type==='sendMessage').length,blockedSends);
+ controls.push('autoplay refusal stops continuous voice; actual answer recovery press reads without auto-listen or resend');
  const before=calls.filter(c=>c.type==='sendMessage').length;
  hold=true;await click('자동 음성 대화 시작');await speech();await wait(async()=>!!held,'held transcription');assert.equal(await live(),0);
  await send({type:'config',config:{...config,activity:{...config.activity,id:'other-account-activity'}}});

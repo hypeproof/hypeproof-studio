@@ -258,11 +258,12 @@ def render_text(card: dict) -> list[str]:
             f"바뀌는 점: {card['change_ko']}", f"받는 이유: {card['why_ko']}", f"질문: {card['question_ko']}  {choices}", card["url"]]
 
 
-def render_github(card: dict, approvals_hint: str, step: int) -> str:
+def render_github(card: dict, approvals_hint: str, step: int, *, discord_sent: bool = False) -> str:
     """English durable record on the PR; GitHub records stay English."""
     ask = "your approval" if card["blocking"] else "a quick look (you are a stakeholder)"
+    delivery = "A short summary was posted on Discord. " if discord_sent else "Discord delivery is not confirmed. "
     return (f"@{card['to']['login']} this PR is waiting on {ask}{approvals_hint}. "
-            "A short summary was sent to you on Discord; review or reply here to stop the reminders.\n\n"
+            f"{delivery}Review or reply here to stop the reminders.\n\n"
             f"<!-- hype-notify:v1 card={card['id']} person={card['to']['login']} head={card['head']} step={step} -->")
 
 
@@ -381,7 +382,7 @@ def plan(repo: str, pr: int, card: dict | None, registry: dict, *, gh: Callable 
         decision = decision_card(card, person, name, repo, pr, facts["url"], facts["headRefOid"])
         contact = contacts.get(person["login"], {})
         out.append({**person, "name": name, "member": person["login"] in names, "card": decision,
-                    "text": render_text(decision), "github_comment": render_github(decision, approvals_hint, 1),
+                    "text": render_text(decision), "approvals_hint": approvals_hint, "github_comment": render_github(decision, approvals_hint, 1),
                     "channels": {"discord": bool(contact.get("discord_id") and all(_discord(registry))),
                                  "discord_dm": bool(contact.get("discord_id") and _discord(registry)[0]),
                                  "github": True,
@@ -397,10 +398,19 @@ def deliver(db, registry: dict, row: dict, step: int, channels: tuple, now: floa
     results = []
     for channel in channels:
         key = (row["repo"], row["pr"], row["head"], row["person"], step, channel)
-        if db.execute("SELECT 1 FROM sends WHERE repo=? AND pr=? AND head=? AND person=? AND step=? AND channel=?", key).fetchone():
-            results.append({"channel": channel, "step": step, "status": "already_sent"})
+        previous = db.execute("SELECT status FROM sends WHERE repo=? AND pr=? AND head=? AND person=? AND step=? AND channel=?", key).fetchone()
+        if previous:
+            results.append({"channel": channel, "step": step,
+                            "status": "already_sent" if previous["status"] == "sent" else "already_attempted",
+                            "original_status": previous["status"]})
             continue
-        text = person["github_comment"].replace("step=1", f"step={step}") if channel == "github" else "\n".join(card_lines)
+        # Render from observed receipts, never a cached plan (including old ledger rows).
+        discord_sent = db.execute(
+            "SELECT 1 FROM sends WHERE repo=? AND pr=? AND head=? AND person=? "
+            "AND channel IN ('discord', 'discord_dm') AND status='sent' LIMIT 1",
+            key[:4]).fetchone() is not None
+        text = (render_github(person["card"], person.get("approvals_hint", ""), step,
+                              discord_sent=discord_sent) if channel == "github" else "\n".join(card_lines))
         if not apply:
             results.append({"channel": channel, "step": step, "status": "would_send"})
             continue
@@ -492,7 +502,7 @@ def tick(registry: dict, db, *, apply: bool = False, now: float | None = None, g
         for step, delay, channels in STEPS[1:]:
             if now - row["first_sent_at"] >= delay:
                 results = deliver(db, registry, dict(row), step, step_channels(channels, registry, step), now, apply)
-                if any(r["status"] not in ("already_sent",) for r in results):
+                if any(r["status"] not in ("already_sent", "already_attempted") for r in results):
                     report.append({"person": row["person"], "pr": f"{row['repo']}#{row['pr']}", "step": step, "results": results})
                     break
     return report

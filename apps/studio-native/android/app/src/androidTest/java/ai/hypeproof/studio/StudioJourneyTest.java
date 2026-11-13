@@ -6,6 +6,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
+import android.util.Log;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.base.DefaultFailureHandler;
+import org.json.JSONObject;
 import android.speech.RecognizerIntent;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -33,6 +39,58 @@ import static org.junit.Assert.*;
 public class StudioJourneyTest {
     private ActivityScenario<MainActivity> app;
     private Context context;
+    @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
+    private File failureDirectory;
+    private Throwable firstFailure;
+
+    // Espresso calls this before the exception unwinds into JUnit's @After.
+    // TestWatcher.failed would run too late to observe the original activity.
+    private void captureFailure(Throwable error) {
+        if(firstFailure!=null)return;
+        firstFailure=error;
+        try {
+            failureDirectory=new File(context.getExternalFilesDir(null),"evidence/failures/"+testName.getMethodName()+"-"+SystemClock.elapsedRealtime());
+            if(!failureDirectory.mkdirs())throw new java.io.IOException("Cannot create failure evidence directory");
+            String message=String.valueOf(error.getMessage());
+            JSONObject state=new JSONObject().put("phase","before_teardown").put("test",testName.getMethodName())
+                .put("elapsed_ms",SystemClock.elapsedRealtime()).put("error_class",error.getClass().getName())
+                .put("error_message",message.substring(0,Math.min(message.length(),4096))).put("scenario_state",app==null?"absent":app.getState().name());
+            if(app!=null)try {
+                app.onActivity(activity->{try {
+                    state.put("activity",activity.getClass().getName()).put("activity_destroyed",activity.isDestroyed())
+                        .put("activity_finishing",activity.isFinishing()).put("window_focus",activity.hasWindowFocus())
+                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility());
+                }catch(Exception problem){throw new RuntimeException(problem);}});
+            }catch(Throwable problem){state.put("activity_observation_error",problem.getClass().getName());}
+            writeFailureJson("failure.json",state);
+            try {
+                Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                if(pixels==null)throw new java.io.IOException("Screenshot unavailable");
+                try(FileOutputStream out=new FileOutputStream(new File(failureDirectory,"screen.png"))){
+                    if(!pixels.compress(Bitmap.CompressFormat.PNG,100,out))throw new java.io.IOException("Screenshot write failed");
+                }finally{pixels.recycle();}
+            }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
+            captureCommand("window.txt","timeout 3 dumpsys window",state);
+            captureCommand("power.txt","timeout 3 dumpsys power",state);
+            captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
+            state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
+        }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
+    }
+    private void captureCommand(String name,String command,JSONObject state) {
+        try(java.io.InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command));
+            FileOutputStream output=new FileOutputStream(new File(failureDirectory,name))) {
+            byte[] buffer=new byte[8192];int count,total=0;
+            while(total<512*1024&&(count=input.read(buffer,0,Math.min(buffer.length,512*1024-total)))!=-1){output.write(buffer,0,count);total+=count;}
+            state.put(name+"_bytes",total).put(name+"_at_byte_limit",total==512*1024);
+        }catch(Throwable problem){try{state.put(name+"_error",problem.getClass().getName());}catch(Exception ignored){/* Keep the original Espresso failure. */}}
+    }
+    private void writeFailureJson(String name,JSONObject value) throws Exception {
+        Files.write(new File(failureDirectory,name).toPath(),value.toString(2).getBytes(StandardCharsets.UTF_8));
+    }
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowOriginal(Throwable error) throws T { throw (T)error; }
+
 
     @Before public void start() throws Exception {
         Assume.assumeTrue("Use a disposable emulator, not a person's phone",
@@ -41,11 +99,23 @@ public class StudioJourneyTest {
         for (String name:new String[]{"studio-notebook-v1.json","studio-notebook-v1.json.bak","studio-notebook-v1.json.new"})
             Files.deleteIfExists(new File(context.getFilesDir(),name).toPath());
         Intents.init();
+        Espresso.setFailureHandler((error,matcher)->{
+            captureFailure(error);
+            StudioJourneyTest.<RuntimeException>rethrowOriginal(error);
+        });
         app=ActivityScenario.launch(MainActivity.class);
     }
     @After public void stop() {
-        if (app!=null) app.close();
-        if (context!=null) Intents.release();
+        try {
+            if(app!=null)app.close();
+            if(failureDirectory!=null)try {
+                writeFailureJson("after-teardown.json",new JSONObject().put("phase","after_teardown")
+                    .put("elapsed_ms",SystemClock.elapsedRealtime()).put("scenario_state",app==null?"absent":app.getState().name()));
+            }catch(Exception problem){Log.e("StudioFailureEvidence","Teardown evidence write failed: "+problem.getClass().getName());}
+        } finally {
+            try {if(context!=null)Intents.release();}
+            finally {if(context!=null)Espresso.setFailureHandler(new DefaultFailureHandler(context));}
+        }
     }
     private StudioState notebook() throws Exception {
         return new StudioState(new String(Files.readAllBytes(new File(context.getFilesDir(),"studio-notebook-v1.json").toPath()),StandardCharsets.UTF_8));
@@ -63,6 +133,13 @@ public class StudioJourneyTest {
     }
     @Test public void reflectionIsOptionalPersistentAndExcludedFromAIContext() throws Exception {
         begin();
+        // Explicit diagnostic control only; ordinary instrumentation never sets it.
+        if("before-teardown".equals(InstrumentationRegistry.getArguments().getString("hpsFailureProbe"))) {
+            onView(withContentDescription("생각 입력")).check((view,error)->{
+                if(error!=null)throw error;
+                throw new AssertionError("HPS_INTENTIONAL_BEFORE_TEARDOWN_FAILURE");
+            });
+        }
         onView(withText("생각 정리")).perform(scrollTo(),click());
         onView(withContentDescription("해보니 무엇이 달랐나요?")).perform(scrollTo(),replaceText("먼저 적은 배움"),closeSoftKeyboard());
         onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(scrollTo(),replaceText("손님이 문 앞에서 기다렸다"),closeSoftKeyboard());

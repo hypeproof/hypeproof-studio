@@ -677,6 +677,7 @@ export function App() {
       onSubmit={(form) => postToHost({ type: "publishSubmit", form })}
       onLink={(experimentId, channel, expiresInDays, noticeVersion) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays, ...(noticeVersion ? { noticeVersion } : {}) })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
+      onOpenEvidence={(experimentId) => postToHost({ type: "evidenceOpen", experimentId })}
       onClose={() => { postToHost({ type: "publishClose" }); dispatch({ type: "testPublishClose" }); }}
     /></PanelBoundary>
   ) : null;
