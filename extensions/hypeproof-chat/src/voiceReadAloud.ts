@@ -74,6 +74,8 @@ export function pickKoreanVoice(voices: readonly VoiceLike[]): VoiceLike | null 
 
 export type ReadAloudStatus = { kind: "idle" } | { kind: "playing"; id: string } | { kind: "error"; id: string };
 export interface ReadAloudStartResult { started: boolean; skippedCode: boolean; note: string | null }
+/** Only the final natural onend completes a conversation turn. Stop/replacement/mute never do. */
+export type PlaybackOutcome = "completed" | "stopped" | "error";
 
 /**
  * One playback at a time across every answer. `play` for another answer stops the first; `stop` is
@@ -86,6 +88,7 @@ export class ReadAloud {
   private status: ReadAloudStatus = { kind: "idle" };
   private generation = 0;
   private listeners = new Set<() => void>();
+  private finished: ((outcome: PlaybackOutcome) => void) | null = null;
 
   private readonly env: SpeechEnv;
   private readonly output: OutputMute | undefined;
@@ -105,7 +108,7 @@ export class ReadAloud {
 
   private set(status: ReadAloudStatus) { this.status = status; for (const l of [...this.listeners]) l(); }
 
-  play(id: string, markdown: string): ReadAloudStartResult {
+  play(id: string, markdown: string, finished?: (outcome: PlaybackOutcome) => void): ReadAloudStartResult {
     const synth = this.env.synth;
     if (!synth) return { started: false, skippedCode: false, note: null };
     if (this.output?.getMuted()) return { started: false, skippedCode: false, note: null };
@@ -115,6 +118,7 @@ export class ReadAloud {
     const chunks = chunkForSpeech(text);
     if (chunks.length === 0) return { started: false, skippedCode, note };
     const generation = ++this.generation;
+    this.finished = finished ?? null;
     const voice = pickKoreanVoice(synth.getVoices());
     this.set({ kind: "playing", id });
     chunks.forEach((chunk, index) => {
@@ -123,14 +127,21 @@ export class ReadAloud {
       utterance.rate = 1;
       utterance.voice = voice;
       const last = index === chunks.length - 1;
-      utterance.onend = () => { if (generation === this.generation && last) this.set({ kind: "idle" }); };
+      utterance.onend = () => {
+        if (generation !== this.generation || !last) return;
+        const done = this.finished; this.finished = null;
+        this.set({ kind: "idle" });
+        done?.("completed");
+      };
       utterance.onerror = (event) => {
         if (generation !== this.generation) return;
         // stop() and a newer play() end the old queue with these; they are not failures.
-        if (event?.error === "canceled" || event?.error === "interrupted") return;
+        if (event?.error === "canceled" || event?.error === "interrupted") { if (this.finished) this.stop(); return; }
         this.generation++;
+        const done = this.finished; this.finished = null;
         try { synth.cancel(); } catch { /* ignore */ }
         this.set({ kind: "error", id });
+        done?.("error");
       };
       synth.speak(utterance);
     });
@@ -139,9 +150,11 @@ export class ReadAloud {
 
   stop(): void {
     this.generation++;
+    const done = this.finished; this.finished = null;
     // Nothing playing means nothing to cancel: an idle hub never touches the synthesizer.
-    if (this.status.kind === "idle") return;
+    if (this.status.kind === "idle") { done?.("stopped"); return; }
     try { this.env.synth?.cancel(); } catch { /* ignore */ }
     this.set({ kind: "idle" });
+    done?.("stopped");
   }
 }

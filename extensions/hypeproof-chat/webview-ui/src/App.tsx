@@ -634,6 +634,7 @@ export function App() {
     settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
     dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
+    return userMessageId;
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
