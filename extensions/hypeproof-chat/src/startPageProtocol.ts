@@ -125,7 +125,7 @@ export type StartRequest =
   /** Epic #3418 REQ-STORE-ENTRY — opens the skill store panel (`hypeproof-chat.skillStore`). Not offered on a classroom seat. */
   | { type: "openSkillStore" }
   | { type: "openAdvancedSettings" }
-  | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
+  | { type: "startSetting"; key: "textSize" | "theme" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
   | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }

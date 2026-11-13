@@ -518,6 +518,21 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
 
+## DEC-SHELL-R-016: HP Dark, HP Light, 기기 설정 따르기 (2026-11-14, agent choice)
+
+- Mechanism (agent choice): VS Code's own theme settings, with no extension-side theme engine. HP Light is a second
+  contributed theme. The device option is `window.autoDetectColorScheme` with the HP pair as preferred themes. VS Code
+  switches the workbench and every webview in one step, so there is no reload and no second source of truth.
+- #725 (agent reading): the row never overwrites a theme the learner chose themselves. An explicit non-HP
+  `workbench.colorTheme` in user or workspace settings shows as `직접 고른 테마`, disabled, and the host refuses writes.
+  An HP theme written by this row counts as an HP choice, so the row can change it again.
+- Palette (agent choice): Paper `#F4F6F0`, forest ink `#151D19` and a darker green `#3C6E2F` for the focus ring and
+  links, because lime on Paper is 1.2:1. Lime stays the CTA fill with forest text. Each pair is measured in
+  `hp-light-theme.smoke.mjs`.
+- Default: unchanged (HP Dark), so nobody's screen changes until they choose.
+
+Confirmed by Jay: no.
+
 ## DEC-ART-R-013: 7-day counts per test version (2026-11-13, agent choice)
 
 - Source (agent choice): the existing evidence read (`GET /v1/curriculum/experiments/:id/evidence`), whose sessions

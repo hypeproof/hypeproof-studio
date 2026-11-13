@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
 import { isMinorProfile } from "./sdkCoachHelpers";
-import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
+import { parseStartSettingWrite, startSettingsView, themeState, themeWrites, type StartSettingsView } from "./startSettings";
 import { TEXT_SIZE_KEY } from "./textSize";
 import type { ActivityResume } from './studioNavigation';
 
@@ -853,10 +853,16 @@ export class StartPage {
    * CGP-SHELL-R-014 — the learner settings sheet. `profile` is the one this refresh shows (a previewed
    * candidate or the running seat); without it the seat is read the way refresh reads it.
    */
+  /** CGP-SHELL-R-016 — the effective theme, the theme the learner set explicitly in user/workspace settings, and auto-detect. */
+  private themeInput() {
+    const wb = vscode.workspace.getConfiguration("workbench"), info = wb.inspect?.<string>("colorTheme");
+    return { colorTheme: wb.get("colorTheme"), explicitTheme: info?.workspaceValue ?? info?.globalValue, autoDetect: vscode.workspace.getConfiguration("window").get("autoDetectColorScheme") };
+  }
   private async settingsView(profile?: ResolvedProfile | null): Promise<StartSettingsView> {
     const p = profile !== undefined ? profile : this.candidate?.profile ?? (this.deferProfileUntilEntry ? null : await this.chat.ensureProfile());
     return startSettingsView({
       textSize: this.context.globalState?.get(TEXT_SIZE_KEY),
+      theme: this.themeInput(),
       reduceMotion: vscode.workspace.getConfiguration("workbench").get("reduceMotion"),
       notices: vscode.workspace.getConfiguration("hypeproofChat").get("osTaskNotices"),
       profileMinor: p ? isMinorProfile(p) : null,
@@ -978,6 +984,11 @@ export class StartPage {
       if (!write) return;
       try {
         if (write.key === "textSize") { await this.context.globalState.update(TEXT_SIZE_KEY, write.value); void this.chat.refreshConfig(); }
+        else if (write.key === "theme") {
+          // CGP-SHELL-R-016: a theme the learner chose in VS Code themselves is never overwritten (#725). The row offers no
+          // write then; a message that asks anyway changes nothing.
+          if (themeState(this.themeInput()) !== "custom") for (const w of themeWrites(write.value)) await vscode.workspace.getConfiguration(w.section).update(w.key, w.value, true);
+        }
         else if (write.key === "reduceMotion") await vscode.workspace.getConfiguration("workbench").update("reduceMotion", write.value, true);
         else await vscode.workspace.getConfiguration("hypeproofChat").update("osTaskNotices", write.value, true);
       } catch { this.error = "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요."; }

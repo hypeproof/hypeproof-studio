@@ -3149,6 +3149,15 @@ REQ-A8 fixture isolation: both the environment flag and the existing user-data t
 
 시작 화면 #723: `test/start-page.smoke.mjs`는 host 인증 오류/연결 보존/해제를, `e2e/start-page/run.mjs`는 빌드된 화면의 상태 전이와 390/768/1280px를 검증한다. 실제 Mac 관측은 `e2e/start-page/README.md` 참조.
 
+### Theme choice: HP Dark, HP Light, 기기 설정 따르기 (CGP-SHELL-R-016)
+
+CGP-SHELL-R-016 / CGP-SHELL-D-015 (REQ-SHELL-16, DES-SHELL-15). A comfort setting for reading during work; it makes no
+learning claim. It extends the HP shell defaults below without changing the default (HP Dark).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-THEME | The extension contributes HP Dark (`HypeProof Studio`, vs-dark) and HP Light (`HypeProof Studio Light`, vs). HP Light uses Paper `#F4F6F0` with forest text and colours every key HP Dark colours. Body text is ≥ 7:1, the lime CTA keeps forest text at ≥ 4.5:1, secondary text and links are ≥ 4.5:1, and control boundaries and the focus ring are ≥ 3:1. `configurationDefaults` keeps HP Dark as `workbench.colorTheme` and names the pair as `workbench.preferredDarkColorTheme` / `preferredLightColorTheme`. The learner settings sheet (REQ-SHELL-14) shows `화면 밝기` with `어둡게` / `밝게` / `기기 설정 따르기`. Dark or light writes `window.autoDetectColorScheme: false` and that HP theme as `workbench.colorTheme`, in user scope. The device option writes `window.autoDetectColorScheme: true` and leaves the theme setting alone. When the learner has explicitly chosen a non-HP theme in VS Code, the row shows `직접 고른 테마` disabled, with `VS Code에서 직접 고른 테마를 쓰고 있어요. 여기서는 바꾸지 않아요.`, and the host refuses any write (#725: explicit user theme settings are never overwritten). The chat webview and the start page follow through the host theme mapping (CGP-DS-D-002) with no reload. | `extensions/hypeproof-chat/test/hp-light-theme.smoke.mjs`, `extensions/hypeproof-chat/test/start-settings-host.smoke.mjs`, `extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs` |
+
 ### HP shell defaults (#725)
 
 The built-in extension contributes the HypeProof Studio dark theme: forest `#151D19`,
