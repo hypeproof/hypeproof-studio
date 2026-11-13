@@ -91,4 +91,27 @@ const B = { sha256: "b".repeat(64), version: "m2026.09.22-12", content: { steps:
   }
   ok("block pins: only the catalog versions this App draws; v2 of a v1-only block is the unsupported notice");
 }
+{
+  // CGP-LEARN-R-010 — reset to the preset and undo one change; pure, so no host message can come from it.
+  const A1 = { text: "a", reason: "" }, B1 = { text: "ab", reason: "" };
+  let h = F.EMPTY_HISTORY;
+  h = F.historyEdit(h, F.BLOCK_PRESET); h = F.historyEdit(h, A1); // one burst: only the state before it is recorded
+  assert.deepEqual(h.past, [F.BLOCK_PRESET]);
+  h = F.historyBoundary(h); h = F.historyEdit(h, B1);                // a new burst after a pause or blur
+  assert.deepEqual(h.past, [F.BLOCK_PRESET, B1]);
+  const cur = { text: "abc", reason: "이유" };
+  const r = F.historyReset(F.historyBoundary(h), cur);
+  assert.deepEqual(r.fields, F.BLOCK_PRESET, "처음으로 restores the preset exactly");
+  assert.deepEqual(r.history.past.at(-1), cur, "the reset itself is one change");
+  assert.equal(F.historyReset(r.history, F.BLOCK_PRESET), null, "nothing to reset at the preset (button disabled)");
+  let u = F.historyUndo(r.history);
+  assert.deepEqual(u.fields, cur, "undo reverts the reset");
+  u = F.historyUndo(u.history); assert.deepEqual(u.fields, B1, "then the second burst");
+  u = F.historyUndo(u.history); assert.deepEqual(u.fields, F.BLOCK_PRESET, "then the first");
+  assert.equal(F.historyUndo(u.history), null, "empty history: undo disabled");
+  let big = F.EMPTY_HISTORY; for (let i = 0; i < 80; i++) big = F.historyBoundary(F.historyEdit(big, { text: String(i), reason: "" }));
+  assert.equal(big.past.length, F.BLOCK_HISTORY_MAX, "history is bounded");
+  assert.deepEqual(big.past.at(-1), { text: "79", reason: "" });
+  ok("block reset/undo: preset exactly, one change per burst or reset, empty history disables undo, bounded");
+}
 console.log(`${n} lesson focus checks passed`);

@@ -8717,6 +8717,25 @@ draws the block, a v2 pin draws none and shows the notice, and no kind id, `ui_v
 appears in the learner's text on either step) and `test/lesson-focus.smoke.mjs` (`surfaceOf` / `rendersPin`: an unpinned
 lesson is v1, v2 and a non-integer pin are unsupported, every kind renders v1 only).
 
+REQ-STUDIO-LEARNING-BLOCK-RESET-UNDO / REQ-CGP-LEARN-10 and DES-CGP-LEARN-10 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH,
+CGP-LEARN-R-010) / PI#4: a learner can reset a learning block to its preset and undo the last change. Every block this
+Studio draws (`criterion_form`, `decision_form`, catalog v1, no params) has empty fields as its preset, so "처음으로"
+empties the block's fields exactly. "되돌리기" reverts one change. A change is one burst of typing in a field (it ends on
+blur, after a 1 s pause, or with a reset or undo), or one reset. Undo is disabled while there is nothing to undo, and
+reset is disabled while the fields are the preset. The history belongs to the lesson version and step, and holds at most
+50 changes. Reset and undo change only the fields on screen: nothing is posted to the host, so no work is saved and no
+observation event is emitted. The learner's saved work stays saved until the next 저장 (the state line then reads "칸을
+비웠어요. 전에 저장한 기준은 그대로 있어요."). Both are quiet buttons (not Primary, SX-04), side by side under the save button,
+with 44px targets and 14px text. A disabled one is drawn in the muted text token with a dashed boundary, so it reads
+differently from an enabled one, and it carries the native `disabled` state that assistive technology announces. Each
+block's controls help names both buttons. Seats: every seat that draws the lesson rail. Default: on; display only, no
+new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-reset-undo-browser.smoke.mjs` (headless Chromium, light and dark, 800
+and 1420px, criterion and decision blocks: preset exactly, undo of a reset, then one burst at a time, both disabled states,
+no host message, saved work kept, quiet 44px/14px buttons, disabled colour and dashed boundary) and
+`test/lesson-focus.smoke.mjs` (the pure history: one change per burst or reset, empty history disables undo, bounded).
+
 ## Activity memory state line (CGP-KNOW-R-022)
 
 REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI

@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import "./learningBlockCard.css";
@@ -72,6 +72,36 @@ export function LessonStepPanel(props: {
   const saved = props.work[step.id];
   const [text, setText] = useState(""), [reason, setReason] = useState(""), [draftOf, setDraftOf] = useState("");
   useEffect(() => { setText(saved?.text ?? ""); setReason(saved?.reason ?? ""); setDraftOf(key); }, [key, saved?.savedAt]);
+  // CGP-LEARN-R-010 — reset ("처음으로") and undo ("되돌리기") for this step's fields. Local only: nothing is posted to the host,
+  // so neither saves work nor emits an observation event. The history belongs to this lesson version and step.
+  const [hist, setHist] = useState<{ key: string; h: BlockHistory }>({ key: "", h: EMPTY_HISTORY });
+  const history = hist.key === key ? hist.h : EMPTY_HISTORY;
+  const pause = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // A Korean IME composition is one burst however long the learner pauses inside it: the pause timer is not armed while
+  // composing, and the burst may end only after compositionend. Otherwise undo could land on a lone jamo ("ㅎ").
+  const composing = useRef(false);
+  useEffect(() => () => clearTimeout(pause.current), []);
+  const armPause = () => {
+    clearTimeout(pause.current);
+    if (composing.current) return;
+    pause.current = setTimeout(() => { if (!composing.current) setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x)); }, 1000);
+  };
+  const ime = { onCompositionStart: () => { composing.current = true; clearTimeout(pause.current); }, onCompositionEnd: () => { composing.current = false; armPause(); } };
+  const apply = (f: BlockFields) => { setText(f.text); setReason(f.reason); };
+  const edit = (next: Partial<BlockFields>) => {
+    setHist((x) => ({ key, h: historyEdit(x.key === key ? x.h : EMPTY_HISTORY, { text, reason }) }));
+    armPause();
+    apply({ text: next.text ?? text, reason: next.reason ?? reason });
+  };
+  const endBurst = () => setHist((x) => (x.key === key ? { key, h: historyBoundary(x.h) } : x));
+  const reset = () => { const r = historyReset(history, { text, reason }); if (!r) return; clearTimeout(pause.current); setHist({ key, h: r.history }); apply(r.fields); };
+  const undo = () => { const r = historyUndo(history); if (!r) return; clearTimeout(pause.current); setHist({ key, h: r.history }); apply(r.fields); };
+  const resetUndo = (
+    <div className="hp-block-history" role="group" aria-label="고친 것 되돌리기">
+      <button type="button" className="hp-cta-quiet" data-block-reset="" disabled={!text && !reason} onClick={reset}>처음으로</button>
+      <button type="button" className="hp-cta-quiet" data-block-undo="" disabled={!history.past.length} onClick={undo}>되돌리기</button>
+    </div>
+  );
 
   const r = props.rehearsal, rs = props.rehearsalState;
   // CGP-LEARN-R-003 — the block's live text equivalent: a title, how its controls work, and a state sentence computed from the
@@ -138,20 +168,22 @@ export function LessonStepPanel(props: {
       {block(surface === "criterion_form" ? (
         <form data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
           <label>이 단계의 확인 기준 — 무엇이 되면 잘 된 것인지 한 줄로 적으세요
-            <textarea value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} rows={2} aria-describedby={describe} />
+            <textarea value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim()}>기준 저장</button>
+          {resetUndo}
           {saved && <p className="hp-rail-lesson-note" data-saved-work="criterion">저장한 기준: {saved.text} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface === "decision_form" ? (
         <form data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
           <label>무엇을 바꾸기로 했나요
-            <input value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} aria-describedby={describe} />
+            <input value={text} maxLength={1000} onChange={(e) => edit({ text: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} aria-describedby={describe} />
           </label>
           <label>왜 그렇게 정했나요
-            <textarea value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} rows={2} aria-describedby={describe} />
+            <textarea value={reason} maxLength={1000} onChange={(e) => edit({ reason: e.target.value })} onBlur={() => { composing.current = false; endBurst(); }} {...ime} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim() || !reason.trim()}>결정 저장</button>
+          {resetUndo}
           {saved && <p className="hp-rail-lesson-note" data-saved-work="decision">저장한 결정: {saved.text} · 이유: {saved.reason} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface.startsWith("unsupported:") ? (
