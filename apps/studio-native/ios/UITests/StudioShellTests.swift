@@ -23,6 +23,27 @@ final class StudioShellTests: XCTestCase {
         app.buttons["conversationSettings"].tap()
         app.buttons["localNotebook"].tap()
     }
+    @MainActor private func notebookNavigationIsUsable(_ app: XCUIApplication) {
+        let bar = app.navigationBars["기기 기록"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let title = bar.staticTexts["기기 기록"]
+        XCTAssertTrue(title.exists)
+        let controls = [app.buttons["대화로 돌아가기"], app.buttons["나의 기록"], app.buttons["기록 메뉴"]]
+        for control in controls {
+            XCTAssertTrue(control.isHittable, "Notebook navigation must remain usable above the record.")
+            XCTAssertFalse(control.frame.isEmpty)
+            XCTAssertTrue(app.frame.contains(control.frame))
+            XCTAssertFalse(control.frame.intersects(title.frame), "The return action must not cover the notebook title.")
+        }
+        for index in controls.indices {
+            for other in controls.indices where other > index {
+                XCTAssertFalse(controls[index].frame.intersects(controls[other].frame), "Navigation actions must not cover each other.")
+            }
+        }
+        let scope = app.staticTexts["localNotebookScope"]
+        XCTAssertTrue(scope.exists)
+        XCTAssertGreaterThanOrEqual(scope.frame.minY, bar.frame.maxY, "Local-storage disclosure belongs below the navigation bar.")
+    }
     @MainActor private func editable(_ id: String, in app: XCUIApplication) -> XCUIElement {
         // Resolve after the screen transition. An immediate `.exists` check can
         // choose the wrong SwiftUI accessibility type before either one appears.
@@ -56,6 +77,7 @@ final class StudioShellTests: XCTestCase {
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.buttons["linkDesktop"].waitForExistence(timeout: 10))
         openNotebook(app)
+        notebookNavigationIsUsable(app)
         let start = app.buttons["startProject"]
         XCTAssertTrue(start.waitForExistence(timeout: 10)); start.tap()
         let field = editable("thoughtInput", in: app)
@@ -286,7 +308,31 @@ final class StudioJourneyTests: XCTestCase {
         app.buttons["conversationSettings"].tap(); app.buttons["새로 고침"].tap()
         let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
         XCTAssertTrue(syncing.waitForExistence(timeout: 5))
-        let voice = app.buttons["sharedVoice"]; enabled(voice); voice.tap()
+        // Refresh starts before the system menu has finished dismissing. An
+        // enabled button behind that menu is not yet a usable touch target.
+        XCTAssertTrue(app.buttons["새로 고침"].waitForNonExistence(timeout: 5), "Dismiss Settings before the single voice tap.")
+        let voice = app.buttons["sharedVoice"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            voice.exists && voice.isEnabled && voice.isHittable
+                && !voice.frame.isEmpty && app.frame.contains(voice.frame)
+        }, object: voice)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        XCTAssertTrue(syncing.exists, "The voice action must still overlap the held history read.")
+        let before = try trace(app)
+        XCTAssertEqual(before["history_barrier_completions"] as? Int, 0)
+        XCTAssertEqual(before["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(before["history_barrier_cancellations"] as? Int, 0)
+        XCTAssertEqual(before["voice_start_attempts"] as? [String], [])
+        XCTAssertEqual(before["speech_captures"] as? Int, 0)
+        voice.tap()
+        let transport = diagnostic("nativeJourneyTrace", in: app)
+        let started = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = transport.value as? String, let bytes = text.data(using: .utf8),
+                  let state = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
+            return (state["voice_start_attempts"] as? [String])?.first?.hasPrefix("mode=conversation;") == true
+                && (state["speech_captures"] as? Int ?? 0) >= 1
+        }, object: transport)
+        XCTAssertEqual(XCTWaiter.wait(for: [started], timeout: 5), .completed, "One real tap must reach voice capture before waiting for its reply.")
         answer(app)
         valueContains(field(app), "Keep this spoken draft without sending")
         let stop = app.buttons["sharedVoiceStop"]; enabled(stop); stop.tap()

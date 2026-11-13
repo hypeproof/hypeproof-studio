@@ -145,10 +145,7 @@ struct SharedConversationView: View {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
         }) { historySheet }
         .sheet(isPresented: $showNotebook) {
-            StudioHome().safeAreaInset(edge: .top) {
-                HStack { Text("이 기기에 저장된 기록").font(.caption).foregroundStyle(.secondary); Spacer(); Button("대화로 돌아가기") { showNotebook = false } }
-                    .padding(.horizontal, 20).padding(.vertical, 10).background(.regularMaterial)
-            }
+            StudioHome(onReturnToConversation: { showNotebook = false })
         }
         .sheet(isPresented: $showPrivacy) {
             NavigationStack {

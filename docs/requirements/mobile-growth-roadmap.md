@@ -307,6 +307,12 @@ Optional on-device dictation only edits the notebook draft. Returning is an
 explicit navigation action that preserves both destinations' drafts and stops
 capture. Existing server compatibility for older versions remains unchanged.
 
+The notebook owns one native navigation bar. Its title, return action, record
+history and menu must remain visible without overlapping each other or a parent
+disclosure strip. The local-storage notice belongs below that bar in the record
+content. Studio #3998 follows the actual simulator overlap found after #3985;
+source integration does not establish visual or installed-device acceptance.
+
 ### Desktop visible question entry (Studio #3798)
 
 This follow-up to #3725 reuses the existing StartPage account panel, AccountSession,
