@@ -356,8 +356,11 @@ export class PublishSession {
         })) : null;
       } catch { sessions = null; }
       this.statsLoading.delete(id);
-      // A read for a learner who has since signed out or changed is dropped, never shown to the next one.
-      if ((await this.ports.token()) !== client.token) return;
+      // A read for a learner who has since signed out or changed is dropped, never shown to the next one. A token lookup
+      // that throws proves nothing about who is signed in: the read is not kept and the version says unknown.
+      let same = false;
+      try { same = (await this.ports.token()) === client.token; } catch { same = false; this.statsFailed.set(id, this.now()); return; }
+      if (!same) return;
       if (sessions) { this.sessionsRead.set(id, { at: this.now(), token: client.token, sessions }); this.statsFailed.delete(id); }
       else this.statsFailed.set(id, this.now());
     }));
