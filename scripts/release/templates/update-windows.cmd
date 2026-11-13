@@ -13,6 +13,10 @@ exit /b %HPS_RC%
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# PowerShell 7 -> cmd/Node -> Windows PowerShell inherits incompatible module
+# paths. Prefer this engine's built-ins (also inherited by the SDK seeder).
+# This changes only this installer process, never the user's saved environment.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $Tag = '@@TAG@@'
 $Exe = '@@EXE_NAME@@'
