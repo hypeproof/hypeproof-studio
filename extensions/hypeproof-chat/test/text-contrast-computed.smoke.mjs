@@ -128,7 +128,9 @@ const REGISTRY = {
   hcDark: { errorForeground: '#F48771', 'charts.green': '#89D185', 'charts.red': '#F48771', 'editorInfo.foreground': '#3794FF', 'editorWidget.background': '#0C141F', 'editorWidget.foreground': '#FFFFFF', 'list.inactiveSelectionBackground': '#00000000', 'textBlockQuote.background': '#00000000', 'textCodeBlock.background': '#00000000', 'diffEditor.insertedTextBackground': '#33FF3333', 'diffEditor.removedTextBackground': '#FF000033', 'toolbar.activeBackground': '#00000000' },
   hcLight: { errorForeground: '#B5200D', 'charts.green': '#374E06', 'charts.red': '#B5200D', 'editorInfo.foreground': '#1A85FF', 'editorWidget.background': '#FFFFFF', 'editorWidget.foreground': '#292929', 'list.inactiveSelectionBackground': '#00000000', 'textBlockQuote.background': '#00000000', 'textCodeBlock.background': '#00000000', 'diffEditor.insertedTextBackground': '#74B97433', 'diffEditor.removedTextBackground': '#FF000033', 'toolbar.activeBackground': '#00000000' },
 };
-const THEMES = { 'HypeProof Studio': { cls: 'vscode-dark', vars: vars({ ...REGISTRY.dark, ...hp }) }, 'no theme': { cls: 'vscode-dark', vars: {} } };
+// CGP-SHELL-R-016: HP Light (media/hypeproof-light-theme.json) is measured like HP Dark, every row, not only muted text.
+const hpLight = JSON.parse(readFileSync(resolve(root, 'media/hypeproof-light-theme.json'), 'utf8')).colors;
+const THEMES = { 'HypeProof Studio': { cls: 'vscode-dark', vars: vars({ ...REGISTRY.dark, ...hp }) }, 'HypeProof Studio Light': { cls: 'vscode-light', vars: vars({ ...REGISTRY.light, ...hpLight }) }, 'no theme': { cls: 'vscode-dark', vars: {} } };
 for (const n of ['Dark+', 'Dark Modern', 'Light+', 'Light Modern', 'HC Dark', 'HC Light', '2026 Dark', '2026 Light']) {
   assert.ok(DEFAULT_THEMES[n], `theme ${n}`);
   // VS Code writes the active theme's id on <body data-vscode-theme-id>; tokens.css keys the 2026 pair on it.
