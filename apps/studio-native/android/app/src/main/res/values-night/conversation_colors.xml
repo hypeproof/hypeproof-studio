@@ -1,0 +1,8 @@
+<resources>
+    <color name="conversation_canvas">#1F1F1F</color>
+    <color name="conversation_surface">#36363E</color>
+    <color name="conversation_ink">#E6E6E6</color>
+    <color name="conversation_muted">#AAAAAA</color>
+    <color name="conversation_accent">#D5F279</color>
+    <color name="conversation_on_accent">#18231C</color>
+</resources>

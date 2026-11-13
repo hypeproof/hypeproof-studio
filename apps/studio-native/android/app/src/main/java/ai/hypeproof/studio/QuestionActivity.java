@@ -3,9 +3,12 @@ package ai.hypeproof.studio;
 import android.app.*;
 import android.content.*;
 import android.content.res.Configuration;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.text.*;
@@ -28,16 +31,17 @@ public final class QuestionActivity extends Activity {
     private ReflectionStorage storage;
     private ReflectionModel model;
     private NativeVoice voice;
-    private LinearLayout root,messages,actions,voiceActions;
+    private LinearLayout root,messages,actions,voiceActions,body;
     private EditText composer;
-    private TextView heading,hint,status;
+    private TextView heading,hint,status,voiceStatus,voiceHint;
     private Button send;
+    private ImageButton dictate,talk,voiceStop;
     private String shownAccount,transcriptKey="",voicePrefix="",voiceTurn;
     private long voiceWait,voiceTicket;
     private NativeDeviceSignIn.Credentials voiceCredentials;
     private boolean foreground;
     private boolean visible,editing;
-    private int ink,paper,muted,card;
+    private int ink,paper,muted,card,accent,onAccent;
     private final Runnable poll=new Runnable(){public void run(){if(visible&&model!=null){if(!voice.session.active()||voice.session.phase()==VoiceSession.Phase.WAITING)model.refresh();updateVoiceReply();handler.postDelayed(this,4000);}}};
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     @Override public void onCreate(Bundle saved){
@@ -79,29 +83,60 @@ public final class QuestionActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);}
     private LinearLayout column(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);return c;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(ink);t.setPadding(0,dp(6),0,dp(8));if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
-    private Button button(String title,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setMinHeight(dp(48));b.setOnClickListener(v->action.run());return b;}
+    private GradientDrawable rounded(int color,int radius){GradientDrawable shape=new GradientDrawable();shape.setColor(color);shape.setCornerRadius(dp(radius));return shape;}
+    private ColorStateList tones(int enabled,int disabled){return new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},new int[]{disabled,enabled});}
+    private RippleDrawable touchSurface(int color,int radius){return new RippleDrawable(ColorStateList.valueOf((ink&0x00ffffff)|0x18000000),rounded(color,radius),rounded(Color.WHITE,radius));}
+    private Button button(String title,Runnable action){
+        Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTextSize(14);b.setTypeface(null,Typeface.NORMAL);
+        b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setMinWidth(dp(48));b.setMinimumWidth(dp(48));b.setPadding(dp(12),dp(8),dp(12),dp(8));
+        b.setTextColor(tones(ink,muted));b.setBackground(touchSurface(Color.TRANSPARENT,24));b.setStateListAnimator(null);b.setOnClickListener(v->action.run());return b;
+    }
+    private ImageButton iconButton(String label,int icon,Runnable action){
+        ImageButton b=new ImageButton(this);b.setImageResource(icon);b.setImageTintList(tones(ink,muted));b.setScaleType(ImageView.ScaleType.CENTER);
+        b.setContentDescription(label);b.setTooltipText(label);b.setPadding(dp(12),dp(12),dp(12),dp(12));b.setMinimumWidth(dp(48));b.setMinimumHeight(dp(48));
+        b.setLayoutParams(new LinearLayout.LayoutParams(dp(48),dp(48)));b.setBackground(touchSurface(Color.TRANSPARENT,24));b.setOnClickListener(v->action.run());return b;
+    }
     private void build(){
         boolean dark=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
-        ink=dark?Color.rgb(230,230,230):Color.rgb(40,40,40);paper=dark?Color.rgb(31,31,31):Color.WHITE;muted=dark?Color.rgb(170,170,170):Color.rgb(100,100,100);card=dark?Color.rgb(54,54,62):Color.rgb(231,231,239);
-        shownAccount=model.account();transcriptKey="";root=column();root.setBackgroundColor(paper);root.setPadding(dp(20),dp(8),dp(20),dp(8));
+        ink=getColor(R.color.conversation_ink);paper=getColor(R.color.conversation_canvas);muted=getColor(R.color.conversation_muted);card=getColor(R.color.conversation_surface);accent=getColor(R.color.conversation_accent);onAccent=getColor(R.color.conversation_on_accent);
+        shownAccount=model.account();transcriptKey="";root=column();root.setBackgroundColor(paper);root.setPadding(dp(16),dp(4),dp(16),dp(8));
         androidx.core.view.WindowInsetsControllerCompat bars=androidx.core.view.WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView());bars.setAppearanceLightStatusBars(!dark);bars.setAppearanceLightNavigationBars(!dark);
-        root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(20),insets.getSystemWindowInsetTop()+dp(8),dp(20),bottom+dp(8));return insets;});
-        LinearLayout header=new LinearLayout(this);header.addView(text("HP Studio",22,true),new LinearLayout.LayoutParams(0,-2,1));header.addView(button("메뉴",this::menu));root.addView(header);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout body=column();heading=text(ReflectionState.OPENING,22,false);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);hint=text(ReflectionState.HINT,16,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(16),insets.getSystemWindowInsetTop()+dp(4),dp(16),bottom+dp(8));return insets;});
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setBaselineAligned(false);
+        TextView title=text("HP Studio",18,true);title.setPadding(dp(4),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));header.addView(iconButton("메뉴",R.drawable.ic_conversation_menu,this::menu));root.addView(header);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);body=column();body.setPadding(dp(4),dp(24),dp(4),dp(20));
+        heading=text(ReflectionState.OPENING,24,true);heading.setLineSpacing(dp(3),1);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);
+        hint=text(ReflectionState.HINT,14,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);messages=column();body.addView(messages);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         status=text("",13,false);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
-        actions=column();root.addView(actions);voiceActions=column();root.addView(voiceActions);
-        LinearLayout compose=new LinearLayout(this);compose.setBaselineAligned(false);compose.setGravity(Gravity.BOTTOM);composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(48));composer.setMaxLines(getResources().getConfiguration().fontScale>=1.3f?2:4);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});
-        composer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){if(!editing){stopVoice();model.edit(s.toString());status.setText(model.error.isEmpty()?model.notice:model.error);send.setEnabled(canSend());handler.post(QuestionActivity.this::update);}}});
-        composer.setOnFocusChangeListener((v,focused)->update());
-        compose.addView(composer,new LinearLayout.LayoutParams(0,-2,1));send=button("보내기",()->{stopVoice();if(model.account()==null)signIn();else model.send();});compose.addView(send);root.addView(compose);setContentView(root);root.requestApplyInsets();
+        actions=column();root.addView(actions);
+        LinearLayout compose=column();compose.setPadding(dp(12),dp(4),dp(12),dp(8));compose.setBackground(rounded(card,24));
+        composer=new EditText(this);composer.setTextColor(ink);composer.setHintTextColor(muted);composer.setHint("정리되지 않은 말도 괜찮아요");composer.setContentDescription("질문 대화 입력");composer.setTextSize(17);composer.setMinHeight(dp(56));composer.setMaxLines(getResources().getConfiguration().fontScale>=1.3f?2:4);composer.setGravity(Gravity.TOP|Gravity.START);composer.setPadding(dp(4),dp(12),dp(4),dp(12));composer.setBackground(null);composer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4000)});
+        composer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){if(!editing){stopVoice();model.edit(s.toString());status.setText(model.error.isEmpty()?model.notice:model.error);send.setEnabled(canActivatePrimary());handler.post(QuestionActivity.this::update);}}});
+        composer.setOnFocusChangeListener((v,focused)->update());compose.addView(composer,new LinearLayout.LayoutParams(-1,-2));
+        voiceStatus=text("",13,false);voiceStatus.setTextColor(muted);voiceStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);compose.addView(voiceStatus);
+        LinearLayout tools=new LinearLayout(this);tools.setGravity(Gravity.CENTER_VERTICAL);tools.setBaselineAligned(false);
+        voiceActions=new LinearLayout(this);voiceActions.setGravity(Gravity.CENTER_VERTICAL);
+        dictate=iconButton("말로 적기",R.drawable.ic_conversation_mic,()->startVoice(false));talk=iconButton("음성 대화",R.drawable.ic_conversation_wave,()->startVoice(true));
+        voiceStop=iconButton("음성 멈추기",R.drawable.ic_conversation_stop,()->{stopVoice();update();});voiceStop.setImageTintList(ColorStateList.valueOf(onAccent));voiceStop.setBackground(touchSurface(accent,24));
+        voiceActions.addView(dictate);voiceActions.addView(talk);voiceActions.addView(voiceStop);tools.addView(voiceActions,new LinearLayout.LayoutParams(0,-2,1));
+        send=button("보내기",()->{stopVoice();if(model.account()==null)signIn();else model.send();});send.setTypeface(null,Typeface.BOLD);send.setTextColor(tones(onAccent,muted));
+        StateListDrawable sendStates=new StateListDrawable();sendStates.addState(new int[]{-android.R.attr.state_enabled},rounded(paper,24));sendStates.addState(new int[]{},rounded(accent,24));send.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33000000),sendStates,rounded(Color.WHITE,24)));
+        tools.addView(send);compose.addView(tools);root.addView(compose);
+        voiceHint=text("음성 대화는 말이 끝나면 보내고 계속 들어요.",12,false);voiceHint.setTextColor(muted);voiceHint.setPadding(dp(4),dp(8),dp(4),0);root.addView(voiceHint);
+        setContentView(root);root.requestApplyInsets();
     }
     private String voiceScope(){return model.account()==null?"guest-local-draft":model.account();}
     private boolean canSend(){return !model.readOnly&&!model.busy&&!model.brokenCredentials&&(model.account()!=null||!model.guestReadOnly)&&(model.state==null||!model.state.outstanding())&&!model.draft.trim().isEmpty()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
+    private boolean canActivatePrimary(){
+        if(model.account()!=null)return canSend();
+        return !model.readOnly&&!model.guestReadOnly&&!model.busy&&!model.signing&&!model.brokenCredentials
+            &&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;
+    }
     private void update(){
         if(isDestroyed()||model==null)return;
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
         ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
-        heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
+        body.setGravity(s!=null&&s.messages.length()>0?Gravity.TOP:Gravity.BOTTOM);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
         String key=s==null?"signed-out":s.messages.toString()+String.valueOf(s.request)+s.earlier;
         if(!key.equals(transcriptKey)){
             transcriptKey=key;messages.removeAllViews();
@@ -116,7 +151,7 @@ public final class QuestionActivity extends Activity {
         }
         if(!composer.getText().toString().equals(model.draft)){editing=true;composer.setText(model.draft);composer.setSelection(composer.length());editing=false;}
         boolean capturing=voice!=null&&(voice.session.phase()==VoiceSession.Phase.LISTENING||voice.session.phase()==VoiceSession.Phase.PERMISSION);
-        composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canSend());
+        composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canActivatePrimary());
         status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
         actions.removeAllViews();
         if(s==null){
@@ -130,21 +165,27 @@ public final class QuestionActivity extends Activity {
             TextView kept=text("로그인 전 글도 남아 있어요. 입력창을 비운 뒤 가져올 수 있어요.",13,false);actions.addView(kept);
             Button restore=button("로그인 전 글 가져오기",()->{stopVoice();model.restoreGuest();update();});restore.setEnabled(model.canRestoreGuest());actions.addView(restore);
         }
-        voiceActions.removeAllViews();
+        // Keep the actual touch targets stable while focus/model updates arrive.
+        voiceActions.setVisibility(model.readOnly?View.INVISIBLE:View.VISIBLE);voiceStatus.setVisibility(View.GONE);voiceHint.setVisibility(View.GONE);
+        boolean active=voice.session.active();dictate.setVisibility(active?View.GONE:View.VISIBLE);talk.setVisibility(!active&&s!=null?View.VISIBLE:View.GONE);voiceStop.setVisibility(active?View.VISIBLE:View.GONE);
         if(!model.readOnly){
             if(voice.session.active()){
-                VoiceSession.Phase phase=voice.session.phase();voiceActions.addView(text(phase==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":phase==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":phase==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":phase==VoiceSession.Phase.PERMISSION?"마이크 권한 확인 중":"답변을 기다려요 · 마이크 꺼짐",13,true));
-                LinearLayout row=new LinearLayout(this);row.addView(button("음성 멈추기",()->{stopVoice();update();}));voiceActions.addView(row);
-            }else{if(s!=null&&!composer.hasFocus())voiceActions.addView(text("음성 대화는 말이 끝나면 보내고 계속 들어요.",12,false));LinearLayout row=new LinearLayout(this);Button dictate=button("말로 적기",()->startVoice(false));dictate.setEnabled((model.account()!=null||!model.guestReadOnly)&&!model.busy);row.addView(dictate,new LinearLayout.LayoutParams(0,-2,1));if(s!=null){Button talk=button("음성 대화",()->startVoice(true));talk.setEnabled(!model.busy&&!s.outstanding());row.addView(talk,new LinearLayout.LayoutParams(0,-2,1));}voiceActions.addView(row);}
+                VoiceSession.Phase phase=voice.session.phase();voiceStatus.setText(phase==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":phase==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":phase==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":phase==VoiceSession.Phase.PERMISSION?"마이크 권한 확인 중":"답변을 기다려요 · 마이크 꺼짐");voiceStatus.setVisibility(View.VISIBLE);
+
+            }else{
+                voiceHint.setVisibility(s!=null&&!composer.hasFocus()?View.VISIBLE:View.GONE);
+                dictate.setEnabled((model.account()!=null||!model.guestReadOnly)&&!model.busy);
+                talk.setEnabled(s!=null&&!model.busy&&!s.outstanding());
+            }
         }
         updateVoiceReply();
     }
     private void addMessage(String label,String value){
         boolean user=label.equals("나의 생각")||label.equals("전송 확인이 필요한 내 생각");
-        LinearLayout box=column();box.setPadding(dp(14),dp(8),dp(14),dp(8));
+        LinearLayout box=column();box.setPadding(user?dp(16):0,dp(4),user?dp(16):0,dp(4));
         if(user){GradientDrawable bg=new GradientDrawable();bg.setColor(card);bg.setCornerRadius(dp(16));box.setBackground(bg);}
-        TextView t=text(value,17,false);t.setTextIsSelectable(true);t.setContentDescription(label+": "+value);box.addView(t);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(user?-2:-1,-2);params.gravity=user?Gravity.END:Gravity.START;params.bottomMargin=dp(12);if(user)params.leftMargin=dp(24);messages.addView(box,params);
+        TextView t=text(value,17,false);t.setLineSpacing(dp(4),1);t.setTextIsSelectable(true);t.setContentDescription(label+": "+value);box.addView(t);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(user?-2:-1,-2);params.gravity=user?Gravity.END:Gravity.START;params.bottomMargin=dp(20);if(user)params.leftMargin=dp(24);messages.addView(box,params);
     }
     private void signIn(){stopVoice();composer.clearFocus();new AlertDialog.Builder(this).setTitle("로그인하고 대화하기").setMessage("대화는 HP Studio 서버에 저장되고 같은 계정의 iPhone·Android·기존 데스크톱에서 읽을 수 있어요. 전송 시 AI가 최근 대화를 처리하며 계정의 AI 이용 권한과 비용 한도가 적용돼요. 전송 구간은 암호화되지만 종단 간 암호화는 아니에요. 기기 기록의 원본은 이 기기에 남고, 그 화면의 AI 연결은 별도 동의를 받아요.").setNegativeButton("나중에",null).setPositiveButton("동의하고 로그인",(d,w)->model.login(url->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(ActivityNotFoundException e){model.cancelLogin();model.error="로그인할 브라우저를 열지 못했어요.";update();}})).show();}
     private void stopVoice(){voiceTurn=null;if(voice!=null)voice.stop();}

@@ -44,10 +44,28 @@ public class QuestionJourneyTest {
         app.close();app=ActivityScenario.launch(QuestionActivity.class);
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("  로그인 전 내 생각\n다음 줄  ")));assertEquals("  로그인 전 내 생각\n다음 줄  ",new ReflectionStorage(context).loadGuestDraft());assertEquals(0,calls.get());screen("android-question-home");
     }
+    @Test public void emptyGuestCanOpenLoginAndCancelWithoutDraftOrNetwork()throws Exception{
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No request before login consent");};
+        app=ActivityScenario.launch(QuestionActivity.class);
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("")));
+        onView(withText("로그인")).check(matches(isEnabled())).perform(click());
+        onView(withText("동의하고 로그인")).check(matches(isDisplayed()));screen("android-design-empty-login");onView(withText("나중에")).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("")));
+        ReflectionStorage store=new ReflectionStorage(context);assertEquals("",store.loadGuestDraft());assertNull(store.loadCredentials());assertEquals(0,calls.get());
+    }
     @Test public void guestDictationAndBackgroundPreserveWordsWithoutAnAccountOrSend()throws Exception{
         java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();QuestionActivity.testTransport=(p,b,t,c)->{calls.incrementAndGet();throw new IOException("No guest network");};
         app=ActivityScenario.launch(QuestionActivity.class);VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
-        onView(withContentDescription("질문 대화 입력")).perform(replaceText("이미 적은 글"),closeSoftKeyboard());onView(withText("말로 적기")).perform(click());
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText("이미 적은 글"),click(),closeSoftKeyboard());
+        // A focus update may arrive between physical DOWN/UP; it must not eat the tap.
+        java.util.concurrent.atomic.AtomicReference<float[]> point=new java.util.concurrent.atomic.AtomicReference<>();
+        onView(withContentDescription("말로 적기")).check((v,e)->{if(e!=null)throw e;int[] xy=new int[2];v.getLocationOnScreen(xy);point.set(new float[]{xy[0]+v.getWidth()/2f,xy[1]+v.getHeight()/2f});});
+        var instrumentation=InstrumentationRegistry.getInstrumentation();float[] xy=point.get();long downTime=android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down=android.view.MotionEvent.obtain(downTime,downTime,android.view.MotionEvent.ACTION_DOWN,xy[0],xy[1],0);down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(down);down.recycle();
+        onView(withContentDescription("질문 대화 입력")).check((v,e)->{if(e!=null)throw e;v.clearFocus();});
+        android.view.MotionEvent up=android.view.MotionEvent.obtain(downTime,android.os.SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,xy[0],xy[1],0);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);instrumentation.sendPointerSync(up);up.recycle();drain();
+        app.onActivity(a->{try{var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel model=(ReflectionModel)f.get(a);assertNotNull("dictation tap must start capture; phase="+voice.controller.session.phase()+" error="+model.error,voice.capture);}catch(ReflectiveOperationException e){throw new AssertionError(e);}});
         app.onActivity(a->voice.partial("말로 이어 적은 글"));app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
         app.onActivity(a->voice.result("늦게 온 말"));drain();assertFalse(voice.controller.session.active());
         app.close();app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(withText("이미 적은 글\n말로 이어 적은 글")));assertEquals(0,calls.get());
@@ -105,12 +123,38 @@ public class QuestionJourneyTest {
         onView(withText("로그인")).check(matches(isCompletelyDisplayed()));
         onView(withContentDescription("질문 대화 입력")).perform(closeSoftKeyboard());
     }
+    private void compactControl(String label){
+        onView(org.hamcrest.Matchers.anyOf(withContentDescription(label),withText(label))).check((view,error)->{
+            if(error!=null)throw error;
+            float density=view.getResources().getDisplayMetrics().density;
+            android.graphics.Rect visible=new android.graphics.Rect();assertTrue(label+" is visible",view.getGlobalVisibleRect(visible));
+            assertEquals(label+" full width",view.getWidth(),visible.width());assertEquals(label+" full height",view.getHeight(),visible.height());
+            assertTrue(label+" has a 48dp touch target",view.getWidth()>=48*density&&view.getHeight()>=48*density);
+            assertTrue(label+" stays a compact tool, not a full-width bar",view.getWidth()<=64*density);
+            android.view.accessibility.AccessibilityNodeInfo node=view.createAccessibilityNodeInfo();
+            assertTrue(label+" exposes an accessible action",node.isClickable());assertTrue(label+" remains enabled",node.isEnabled());
+            assertTrue(label+" has a readable name",label.contentEquals(node.getContentDescription()==null?node.getText():node.getContentDescription()));
+        });
+    }
+    @Test public void compactConversationToolsKeepHumanWordsAndVoiceStopVisible()throws Exception{
+        app=ActivityScenario.launch(QuestionActivity.class);onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed()));
+        screen("android-design-guest");compactControl("메뉴");compactControl("말로 적기");app.close();app=null;
+        java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
+        compactControl("말로 적기");compactControl("음성 대화");
+        onView(withContentDescription("음성 대화")).perform(click());compactControl("음성 멈추기");
+        onView(withContentDescription("질문 대화 입력")).check(matches(org.hamcrest.Matchers.not(isEnabled())));screen("android-design-listening");
+        app.onActivity(a->voice.result("이웃의 이야기를 듣고 내가 할 수 있는 일을 생각했어요."));ready();drain();
+        onView(withText("이웃의 이야기를 듣고 내가 할 수 있는 일을 생각했어요.")).check(matches(isDisplayed()));
+        onView(withText("내 생각의 답변 1")).check(matches(isDisplayed()));compactControl("음성 멈추기");screen("android-design-messages");
+        onView(withContentDescription("음성 멈추기")).perform(click());drain();assertFalse(voice.controller.session.active());assertEquals(1,submitted.size());
+        compactControl("말로 적기");compactControl("음성 대화");
+    }
     @Test public void sameAccountDraftAndVoiceStopSurviveRecreationWithoutLiveNetwork()throws Exception{
         ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));ReflectionState state=new ReflectionState("test-account");state.draft="내가 더 듣고 싶은 이야기";store.save(state);
         app=ActivityScenario.launch(QuestionActivity.class);
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("내가 더 듣고 싶은 이야기")));
         ready();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
-        onView(withText("말로 적기")).perform(click());onView(withText("음성 멈추기")).perform(click());
+        onView(withContentDescription("말로 적기")).perform(click());onView(withContentDescription("음성 멈추기")).perform(click());
         onView(withContentDescription("질문 대화 입력")).perform(replaceText("한 번 더 생각한 말"),closeSoftKeyboard());app.recreate();
         app.onActivity(a->{try{var root=QuestionActivity.class.getDeclaredField("root");root.setAccessible(true);assertTrue(((android.view.View)root.get(a)).getPaddingLeft()>0);}catch(Exception e){throw new AssertionError(e);}});
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("한 번 더 생각한 말")));assertEquals("한 번 더 생각한 말",store.load("test-account").draft);screen("android-account-questions");
@@ -150,7 +194,7 @@ public class QuestionJourneyTest {
     private void drain(){InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
     @Test public void oneTapFiveAutomaticTurnsUseDurableOwnRepliesWithoutRmsOrNextTap()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
-        onView(withText("음성 대화")).perform(click());onView(withText("말하기 끝")).check(doesNotExist());
+        onView(withContentDescription("음성 대화")).perform(click());onView(withText("말하기 끝")).check(doesNotExist());
         onView(withText("다시 말하기")).check(doesNotExist());
         for(int i=0;i<5;i++){
             final int n=i;app.onActivity(a->{assertEquals(n+1,voice.starts);voice.partial("생각 "+n);voice.endpoint();voice.endpoint();assertEquals(n,submitted.size());voice.result("생각 "+n+" 최종");voice.result("중복 결과");});
@@ -160,14 +204,14 @@ public class QuestionJourneyTest {
             app.onActivity(a->{listener.onDone(utterance);listener.onDone(utterance);});drain();assertEquals(i+2,voice.starts);
             app.onActivity(a->listener.onError(utterance));drain();assertTrue(voice.controller.session.active());
         }
-        onView(withText("음성 멈추기")).perform(click());int starts=voice.starts;
+        onView(withContentDescription("음성 멈추기")).perform(click());int starts=voice.starts;
         app.onActivity(a->{voice.partial("중단 뒤 인식");voice.result("중단 뒤 최종");voice.output.onDone(voice.utterance);});drain();
         assertEquals(starts,voice.starts);assertEquals(5,submitted.size());assertEquals(10,new ReflectionStorage(context).load("test-account").messages.length());
         screen("android-continuous-voice-fixture");
     }
     @Test public void dictationEndpointTimeoutKeepsPartialAndNeverSubmits()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
-        onView(withText("말로 적기")).perform(click());
+        onView(withContentDescription("말로 적기")).perform(click());
         app.onActivity(a->{voice.partial("인식이 끝나지 않아도 남길 말");voice.endpoint();voice.expire();voice.result("늦게 온 최종");});drain();
         assertFalse(voice.controller.session.active());assertTrue(submitted.isEmpty());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("인식이 끝나지 않아도 남길 말")));
@@ -175,12 +219,12 @@ public class QuestionJourneyTest {
     }
     @Test public void editingDuringReplyOrBackgroundInvalidatesAutomaticReopen()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
-        onView(withText("음성 대화")).perform(click());app.onActivity(a->voice.result("내가 보낸 말"));ready();drain();
+        onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.result("내가 보낸 말"));ready();drain();
         onView(withContentDescription("질문 대화 입력")).perform(replaceText("답변을 들으며 직접 적은 글"),closeSoftKeyboard());
         app.onActivity(a->voice.output.onDone(voice.utterance));drain();assertEquals(1,voice.starts);assertEquals(1,submitted.size());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("답변을 들으며 직접 적은 글")));
         onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());
-        onView(withText("음성 대화")).perform(click());app.onActivity(a->voice.partial("화면을 떠나도 남길 말"));
+        onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.partial("화면을 떠나도 남길 말"));
         var old=voice.capture;app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
         app.onActivity(a->old.onResults(VoiceFixture.words("뒤늦은 말")));drain();assertFalse(voice.controller.session.active());assertEquals(2,voice.starts);assertEquals(1,submitted.size());
         onView(withContentDescription("질문 대화 입력")).check(matches(withText("화면을 떠나도 남길 말")));
@@ -188,7 +232,7 @@ public class QuestionJourneyTest {
 
     @Test public void expiredOrReplacedCredentialCannotSendOrReopenTheOldVoiceTurn()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
-        onView(withText("음성 대화")).perform(click());
+        onView(withContentDescription("음성 대화")).perform(click());
         app.onActivity(a->{voice.partial("연결이 끝나기 전에 적은 말");try{
             var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel m=(ReflectionModel)f.get(a);
             m.credentials=new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",0);
@@ -197,7 +241,7 @@ public class QuestionJourneyTest {
             m.credentials=new NativeDeviceSignIn.Credentials("test-account","new-session","synthetic-access","new-refresh",System.currentTimeMillis()+3600000);
         }catch(Exception e){throw new AssertionError(e);}});
         onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());
-        onView(withText("음성 대화")).perform(click());app.onActivity(a->voice.result("새 연결의 말"));ready();drain();
+        onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.result("새 연결의 말"));ready();drain();
         app.onActivity(a->{try{
             var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel m=(ReflectionModel)f.get(a);
             m.credentials=new NativeDeviceSignIn.Credentials("test-account","replacement-session","synthetic-access","replacement-refresh",System.currentTimeMillis()+3600000);
