@@ -9287,6 +9287,12 @@ commands: [native preview](../apps/studio-native/README.md). Signed iOS/Mac
 0.1.1 (2.1) is the separately observed TestFlight baseline; newer reflection and
 voice changes need their own package/device evidence.
 
+Android response Stop (#3997): MADR-02/03/04 and MPER-04 apply while the turn POST is still waiting: an accessible
+Stop remains available, halts voice continuation and confirms the same request's
+server registration before cancellation. Original words, drafts and request IDs
+survive unconfirmed cancellation; late replies cannot restart voice or overwrite
+confirmed cancellation. See the [Android contract](requirements/mobile-growth-roadmap.md#android-in-flight-response-stop--studio-3997).
+
 `ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
 extend expression with project-bound editable dictation and consented final-text
 auto-send/read-aloud. System on-device recognition is required with no cloud

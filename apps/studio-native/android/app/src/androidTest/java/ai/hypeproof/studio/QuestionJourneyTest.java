@@ -32,6 +32,60 @@ public class QuestionJourneyTest {
     @After public void teardown(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
     private void ready()throws Exception{for(int i=0;i<100;i++){java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get())return;Thread.sleep(50);}throw new AssertionError("fixture did not settle");}
     private void screen(String name)throws Exception{Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(pixels);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(pixels.compress(Bitmap.CompressFormat.PNG,100,out));}pixels.recycle();}
+    private static ReflectionModel questionModel(QuestionActivity a){try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);return (ReflectionModel)field.get(a);}catch(Exception e){throw new AssertionError(e);}}
+    private static NativeDeviceSignIn.Reply stopSnapshot(JSONObject request,String status)throws Exception{
+        JSONObject turn=request==null?null:new JSONObject(request.toString()).put("status",status);
+        JSONArray messages=new JSONArray();if(turn!=null)messages.put(new JSONObject().put("id",turn.getString("id")).put("role","user").put("content",turn.getString("text")).put("created_at",1000));
+        return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",turn==null?0:3).put("messages",messages).put("turn",turn==null?JSONObject.NULL:turn).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+    }
+    @Test public void heldVoiceResponseCanStopBeforePostReturnsAndKeepsWordsAcrossRestart()throws Exception{
+        var posted=new java.util.concurrent.CountDownLatch(1);var stopRead=new java.util.concurrent.CountDownLatch(1);var releasePost=new java.util.concurrent.CountDownLatch(1);var postReturned=new java.util.concurrent.CountDownLatch(1);var releaseCancel=new java.util.concurrent.CountDownLatch(1);
+        var registered=new java.util.concurrent.atomic.AtomicBoolean();var cancelled=new java.util.concurrent.atomic.AtomicBoolean();var posts=new java.util.concurrent.atomic.AtomicInteger();var cancels=new java.util.concurrent.atomic.AtomicInteger();var request=new java.util.concurrent.atomic.AtomicReference<JSONObject>();
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            assertEquals("synthetic-access",bearer);
+            if(path.equals("/me/reflection/turns")){
+                posts.incrementAndGet();JSONObject value=new JSONObject().put("id",body.get("id")).put("text",body.get("text")).put("created_at",1000).put("updated_at",1000);request.set(value);posted.countDown();
+                try{if(!releasePost.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("held fixture not released");return stopSnapshot(value,"completed");}finally{postReturned.countDown();}
+            }
+            if(path.equals("/me/reflection")){if(request.get()!=null)stopRead.countDown();return stopSnapshot(registered.get()?request.get():null,cancelled.get()?"cancelled":"running");}
+            assertEquals("/me/reflection/turns/"+request.get().getString("id")+"/cancel",path);assertTrue(registered.get());cancels.incrementAndGet();
+            if(!releaseCancel.await(8,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("cancel fixture not released");cancelled.set(true);return stopSnapshot(request.get(),"cancelled");
+        };
+        ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        try{
+            app=ActivityScenario.launch(QuestionActivity.class);ready();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
+            onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.result("중지해도 남겨 둘 나의 말"));assertTrue(posted.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
+            onView(withText("응답 수신 멈추기")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;assertTrue(v.getHeight()>=48*v.getResources().getDisplayMetrics().density);});
+            onView(withText("응답 수신 멈추기")).perform(click());onView(withText("멈추기")).perform(click());assertTrue(stopRead.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
+            assertEquals(0,cancels.get());assertEquals("local",store.load("test-account").status());assertFalse(voice.controller.session.active());
+            onView(withContentDescription("질문 대화 입력")).perform(replaceText("답변을 기다리며 적은 다른 글"),closeSoftKeyboard());
+            screen("android-response-stop-pending");
+            registered.set(true);releaseCancel.countDown();ready();drain();
+            releasePost.countDown();assertTrue(postReturned.await(3,java.util.concurrent.TimeUnit.SECONDS));
+            // The transport returning precedes ui.accept. Wait for the actual
+            // model callback to consume the late result before asserting state.
+            var consumed=new java.util.concurrent.atomic.AtomicBoolean();for(int i=0;i<100&&!consumed.get();i++){app.onActivity(a->{try{var f=ReflectionModel.class.getDeclaredField("responseFlight");f.setAccessible(true);consumed.set(f.get(questionModel(a))==null);}catch(Exception e){throw new AssertionError(e);}});if(!consumed.get())Thread.sleep(25);}assertTrue("late response callback consumed",consumed.get());drain();
+            assertEquals(1,voice.starts);assertEquals(0,voice.spoken.size());assertEquals(1,posts.get());assertEquals(1,cancels.get());assertFalse(voice.controller.session.active());
+            ReflectionState saved=store.load("test-account");assertEquals("cancelled",saved.status());assertEquals(request.get().getString("id"),saved.request.getString("id"));assertEquals("중지해도 남겨 둘 나의 말",saved.request.getString("text"));assertEquals("답변을 기다리며 적은 다른 글",saved.draft);
+            app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();onView(withContentDescription("질문 대화 입력")).check(matches(withText(saved.draft)));onView(withText("중지해도 남겨 둘 나의 말")).check(matches(isDisplayed()));assertEquals("cancelled",store.load("test-account").status());assertEquals(1,posts.get());screen("android-response-stop-restored");
+        }finally{releasePost.countDown();releaseCancel.countDown();}
+    }
+    @Test public void stopDuringAdmissionFailureShowsMonthlyReasonWithoutPretendingCancellation()throws Exception{
+        var posted=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);var request=new java.util.concurrent.atomic.AtomicReference<JSONObject>();var posts=new java.util.concurrent.atomic.AtomicInteger();var cancels=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            if(path.equals("/me/reflection/turns")){posts.incrementAndGet();request.set(new JSONObject().put("id",body.get("id")).put("text",body.get("text")).put("created_at",1000).put("updated_at",1000));posted.countDown();if(!release.await(12,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("fixture body not released");return new NativeDeviceSignIn.Reply(429,Map.of("error","reflection_monthly_limit"));}
+            if(path.endsWith("/cancel")){cancels.incrementAndGet();throw new AssertionError("terminal failure must not cancel");}
+            assertEquals("/me/reflection",path);return stopSnapshot(request.get(),"failed");
+        };
+        ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        try{
+            app=ActivityScenario.launch(QuestionActivity.class);ready();onView(withContentDescription("질문 대화 입력")).perform(replaceText("한도에 닿아도 지킬 말"),closeSoftKeyboard());onView(withText("보내기")).perform(click());assertTrue(posted.await(3,java.util.concurrent.TimeUnit.SECONDS));
+            onView(withText("응답 수신 멈추기")).perform(click());onView(withText("멈추기")).perform(click());
+            var failed=new java.util.concurrent.atomic.AtomicBoolean();for(int i=0;i<60&&!failed.get();i++){app.onActivity(a->failed.set(questionModel(a).state.status().equals("failed")));if(!failed.get())Thread.sleep(25);}assertTrue(failed.get());
+            release.countDown();ready();drain();onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+            assertEquals("failed",store.load("test-account").status());assertEquals("한도에 닿아도 지킬 말",store.load("test-account").request.getString("text"));assertEquals(1,posts.get());assertEquals(0,cancels.get());screen("android-response-stop-monthly");
+        }finally{release.countDown();}
+    }
     @Test public void launcherStartsWithEditableGuestDraftAndConsentCanBeDeclined()throws Exception{
         assertEquals(QuestionActivity.class.getName(),context.getPackageManager().getLaunchIntentForPackage(context.getPackageName()).getComponent().getClassName());
         java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();

@@ -31,7 +31,10 @@ final class NativeDeviceSignIn {
  record Reply(int status,Map<String,Object> body) {}
  record Challenge(String code,String url) {}
  record Credentials(String account,String session,String bearer,String refresh,long expiresAt) {}
- interface Transport { Reply call(String path,Map<String,String> body,String bearer,Cancel cancel) throws Exception; }
+ interface Transport {
+  Reply call(String path,Map<String,String> body,String bearer,Cancel cancel) throws Exception;
+  default Reply call(String path,Map<String,String> body,String bearer,Cancel cancel,long timeoutMillis) throws Exception { return call(path,body,bearer,cancel); }
+ }
  interface Clock { long now(); void pause(long ms,Cancel cancel) throws Exception; }
  static final Clock MONOTONIC=new Clock(){public long now(){return System.nanoTime()/1_000_000;}public void pause(long ms,Cancel c)throws Exception{c.pause(ms);}};
  private final Target target; private final Transport transport; private final Clock clock;

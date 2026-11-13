@@ -26,7 +26,8 @@ public final class QuestionActivity extends Activity {
     // Instrumentation may install a fixture only inside a debug app process; no Intent override.
     static NativeDeviceSignIn.Transport testTransport;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final ExecutorService worker=Executors.newSingleThreadExecutor();
+    // One response and one bounded cancellation may overlap; ordinary requests stay serialized by the model.
+    private final ExecutorService worker=Executors.newFixedThreadPool(2);
     private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
     private ReflectionStorage storage;
     private ReflectionModel model;
@@ -159,15 +160,16 @@ public final class QuestionActivity extends Activity {
         if(!composer.getText().toString().equals(model.draft)){editing=true;composer.setText(model.draft);composer.setSelection(composer.length());editing=false;}
         boolean capturing=voice!=null&&(voice.session.phase()==VoiceSession.Phase.LISTENING||voice.session.phase()==VoiceSession.Phase.PERMISSION);
         composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canActivatePrimary());
-        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
+        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.stoppingResponse?"답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
         actions.removeAllViews();
         if(s==null){
             if(model.brokenCredentials)actions.addView(button("로그인 복구",()->new AlertDialog.Builder(this).setTitle("로그인 복구").setMessage("읽지 못한 로그인 정보는 이 기기에 보존하고 다시 로그인해요. 대화 파일은 그대로 남아요.").setNegativeButton("취소",null).setPositiveButton("보존 후 다시 로그인",(d,w)->{try{storage.preserveBrokenCredentials();model.brokenCredentials=false;model.error="";update();}catch(Exception e){model.error="연결 정보를 보존하지 못했어요.";update();}}).show()));
             else if(model.signing)actions.addView(button("로그인 취소",model::cancelLogin));
 
+        }else if(model.canStopResponse()){actions.addView(button("응답 수신 멈추기",()->{stopVoice();new AlertDialog.Builder(this).setTitle("응답 수신 멈추기").setMessage("이 답변을 더 받지 않도록 요청해요. 이미 시작된 AI 처리에는 비용이 발생할 수 있어요. 보낸 글은 남아요.").setNegativeButton("계속 기다리기",null).setPositiveButton("멈추기",(d,w)->model.stopResponse()).show();}));
         }else if(s.status().equals("local")&&!model.busy){
             LinearLayout row=new LinearLayout(this);row.addView(button("먼저 대화 확인",model::refresh),new LinearLayout.LayoutParams(0,-2,1));row.addView(button("같은 요청 다시 확인",model::retry),new LinearLayout.LayoutParams(0,-2,1));actions.addView(row);
-        }else if(s.outstanding()&&!model.busy){actions.addView(button("응답 수신 멈추기",()->{stopVoice();new AlertDialog.Builder(this).setTitle("응답 수신 멈추기").setMessage("이 답변을 더 받지 않도록 요청해요. 이미 시작된 AI 처리에는 비용이 발생할 수 있어요. 보낸 글은 남아요.").setNegativeButton("계속 기다리기",null).setPositiveButton("멈추기",(d,w)->model.stopResponse()).show();}));}
+        }
         if(s!=null&&s.status().equals("failed")){
             Button restore=button("입력란에 가져오기",()->{stopVoice();if(model.restoreFailedDraft())composer.requestFocus();});
             restore.setEnabled(model.canRestoreFailedDraft());actions.addView(restore);

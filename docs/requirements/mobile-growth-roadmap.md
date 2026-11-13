@@ -263,6 +263,18 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+#### Android in-flight response Stop — Studio #3997
+
+MADR-02/03/04 and MPER-04 keep `응답 수신 멈추기` available while the original
+turn POST is waiting. Stop ends local voice continuation and observes the exact
+request ID and words before calling the existing Service cancel route. Only a
+matching terminal acknowledgement changes the durable outbox; an unconfirmed stop
+preserves its original identity and words without replay. Same-account/session
+fences reject late responses; a confirmed failed turn retains its later typed
+monthly/admission error. Cancellation does not promise zero provider cost.
+Real JVM HTTP and Activity/Keystore tests cover separate boundaries; native live
+HTTP, physical speech and billing remain separate acceptance.
+
 #### Confirmed failed-question recovery — Studio #3974
 
 MPER-03/04 and MREF-05 preserve the person's decision after a server-confirmed
