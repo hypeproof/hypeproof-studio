@@ -4389,15 +4389,15 @@ black-box cases that hang under the core user journeys in
 [docs/operations/release-casebook/](operations/release-casebook/README.md) (`journeys.yaml`
 CUJ-1–4, `cases.yaml` BB-nnn with priority, linked requirement ids, steps, verbatim expected
 Korean copy, origin and optional `automated_by`). `scripts/release/select-cases.mjs` selects,
-from local git only, every P0 case, every case linked to a requirement id touched since the last
-stable `v` tag (commit subjects/bodies and changed lines of requirement docs; a touched child id
+every P0 case, every case linked to a requirement id touched since the latest published stable
+GitHub release (local commit subjects/bodies and changed requirement-doc lines; a touched child id
 reaches its parent case) and every escaped-bug case dated within 14 days; `자동화됨` cases are
 never selected. release-cut puts the rc install one-liner first in the release PR body, lists the
 touched requirement ids and the selected checklist, and the release PR carries the `release` label
 (created when missing, re-applied when a later rc updates the PR). A broken casebook does not stop
 the cut; the body says the selection failed and the manager runs every P0 case. `release-cut.yml`
 also runs at 17:00 KST: `scripts/release/daily-gate.mjs` skips the run when the repository variable
-`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the last stable tag,
+`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the latest published stable release,
 or when the live-class freeze (`scripts/check-live-sessions.mjs`) does not answer `proceed`, and
 otherwise cuts with `mode=create` (`dry-run` when the variable says so); a manual dispatch keeps its
 inputs and defaults to dry-run. Existing smoke, NOT_RUN, publish-gate and freeze gates are
@@ -4406,6 +4406,9 @@ one `hps-blackbox-run/1` result (`scripts/release/validate-blackbox-run.mjs`: a 
 screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 보류 권장`, every selected
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
+Draft releases and tag-only promotions cannot narrow the default range. Missing release metadata
+or a published tag absent from the candidate ancestry stops selection without a tag fallback (#3910).
+Explicit baseline/PR ranges and dry-run trial ranges remain explicit overrides.
 
 Studio #3771 extends this same casebook to native iPhone first-use failures.
 Cases declare validated release targets; omission retains the existing desktop
