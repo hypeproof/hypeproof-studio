@@ -183,6 +183,12 @@ final class StudioJourneyTests: XCTestCase {
         let app = launch("member-inbox"); signIn(app)
         let draft = field(app); draft.tap(); draft.typeText("Keep my question draft")
         app.buttons["conversationSettings"].tap(); enabled(app.buttons["memberApprovalInbox"]); app.buttons["memberApprovalInbox"].tap()
+        let summary = app.staticTexts["approvalChangeSummary-member-card"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5)); XCTAssertTrue(summary.isHittable)
+        XCTAssertEqual(summary.label, "Small synthetic change")
+        XCTAssertFalse(app.staticTexts["Fixture evidence only"].exists, "evidence stays collapsed before the choice")
+        let beforeChoice = try XCTUnwrap(trace(app)["paths"] as? [String])
+        XCTAssertFalse(beforeChoice.contains { $0.contains("/decisions") })
         let approve = app.buttons["approvalApprove-member-card"]; enabled(approve); approve.tap()
         let status = app.staticTexts["approvalInboxStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))

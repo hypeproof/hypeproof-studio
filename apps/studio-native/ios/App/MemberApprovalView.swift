@@ -21,6 +21,9 @@ struct MemberApprovalView: View {
                 }
                 ForEach(model.state.cards) { card in
                     Section {
+                        Text("변경 내용").font(.caption).foregroundStyle(.secondary)
+                        Text(changeSummary(card)).font(.body).lineLimit(3)
+                            .accessibilityIdentifier("approvalChangeSummary-" + card.id)
                         Text("이 변경의 검토 담당자로 지정되어 확인을 요청했어요.")
                         Text(card.statusLabel).font(.headline).accessibilityIdentifier("approvalStatus-" + card.id)
                         Text("정확한 버전").font(.caption)
@@ -52,6 +55,10 @@ struct MemberApprovalView: View {
                 .task { await model.controller?.refresh() }
                 .onDisappear { model.dismiss() }
         }
+    }
+    private func changeSummary(_ card: MemberApprovalCard) -> String {
+        let authored = card.brief.authored.first ?? ""
+        return authored.hasPrefix("summary: ") ? String(authored.dropFirst(9)) : authored
     }
     private var status: String {
         switch model.state.status {

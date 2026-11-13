@@ -10,11 +10,19 @@ Object.defineProperty(globalThis,"navigator",{value:dom.window.navigator,configu
 dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};
 const posted:any[]=[],root=createRoot(document.getElementById('root')!);
 const now=Date.now()/1000;
-const card:any={id:'card-1',request_digest:'d'.repeat(64),source:{repo:'hypeproof/hypeproof-studio',pr:3788,head:'a'.repeat(40),base:'b'.repeat(40)},reviewer:'member',brief:{authored:['<script>never execute</script>'],verified:['Actual evidence']},state:'pending',expires_at:now+600,lease_expires_at:now+50,can_decide:true,decision:null,review:null};
+const card:any={id:'card-1',request_digest:'d'.repeat(64),source:{repo:'hypeproof/hypeproof-studio',pr:3788,head:'a'.repeat(40),base:'b'.repeat(40)},reviewer:'member',brief:{authored:['summary: 저장하지 못한 글도 다시 열면 그대로 이어 쓸 수 있어요.','<script>never execute</script>'],verified:['Actual evidence']},state:'pending',expires_at:now+600,lease_expires_at:now+50,can_decide:true,decision:null,review:null};
 const render=async(view:any)=>act(async()=>root.render(<MemberApprovalInbox view={view} post={m=>posted.push(m)} close={()=>{}}/>));
 const button=(name:string)=>[...document.querySelectorAll('button')].find(x=>x.textContent===name)!;
 async function main(){ try{
  await render({status:'ready',cards:[card],pending:[],busy:false});assert.equal(document.querySelector('dialog')?.open,true);assert.equal(document.querySelector('details')?.open,false);assert.equal(document.querySelector('script'),null);assert(document.body.textContent?.includes(card.source.head));
+ const change='저장하지 못한 글도 다시 열면 그대로 이어 쓸 수 있어요.';
+ const summary=[...document.querySelectorAll('article p')].find(p=>p.textContent===change);
+ assert(summary,'what changes must be readable before expanding evidence');assert.equal(summary.closest('details'),null);assert.equal(document.querySelector('details')?.open,false);assert.equal(posted.length,0);
+ assert(summary.compareDocumentPosition(button('승인')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,'change must precede choices');
+ assert(document.querySelector('details')?.textContent?.includes('summary: '+change),'full authored source remains available');
+ await render({status:'ready',cards:[{...card,brief:{authored:['<img src=x onerror=alert(1)>'],verified:['Actual evidence']}}],pending:[],busy:false});
+ assert.equal(document.querySelector('article img'),null);assert([...document.querySelectorAll('article p')].some(p=>p.textContent==='<img src=x onerror=alert(1)>'));
+ await render({status:'ready',cards:[card],pending:[],busy:false});
  await act(async()=>button('승인').click());assert.deepEqual(posted.at(-1),{type:'memberApprovalDecision',id:'card-1',requestDigest:card.request_digest,choice:'approve'});
  for(const c of [{...card,can_decide:false},{...card,lease_expires_at:now-1},{...card,state:'unknown'}]){await render({status:'ready',cards:[c],pending:[],busy:false});for(const label of ['승인','보류','설명 요청'])assert.equal(button(label).disabled,true)}
  await render({status:'ready',cards:[card],pending:[{cardID:'card-1'}],busy:false});assert.equal(button('승인').disabled,true);

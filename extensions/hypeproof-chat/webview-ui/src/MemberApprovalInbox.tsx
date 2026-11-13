@@ -14,7 +14,9 @@ export function MemberApprovalInbox({view,post,close}:{view?:ApprovalView;post:(
     <button disabled={view?.busy} onClick={()=>post({type:'memberApprovalRefresh'})}>새로고침</button>
     <p role="status">{view?.message ?? messages[view?.status ?? 'loading'] ?? (!view?.cards.length?'지금 확인할 요청이 없어요.':'')}</p>
     {view?.cards.map(card=>{const allowed=view.status==='ready'&&!view.busy&&!view.pending.some(p=>p.cardID===card.id)&&approvalCanDecide(card,now);return <article key={card.id} aria-label={`${card.source.repo} #${card.source.pr} 확인 요청`}>
-      <h3>{card.source.repo} #{card.source.pr}</h3><p>이 변경의 검토 담당자로 지정되어 확인을 요청했어요.</p>
+      <h3>{card.source.repo} #{card.source.pr}</h3>
+      <h4>변경 내용</h4><p className="approval-change-summary">{card.brief.authored[0].replace(/^summary: /, '')}</p>
+      <p>이 변경의 검토 담당자로 지정되어 확인을 요청했어요.</p>
       <p className="approval-status" role="status">{approvalStatus(card)}</p>
       <p>정확한 버전 <code>{card.source.head}</code></p>
       <details><summary>변경 설명과 검증 근거</summary><h4>작성자가 설명한 변경</h4><ul>{card.brief.authored.map((text,i)=><li key={i}>{text}</li>)}</ul><h4>검증된 근거</h4><ul>{card.brief.verified.map((text,i)=><li key={i}>{text}</li>)}</ul><p>기준: {card.source.base}</p><p>검토자: {card.reviewer}</p></details>

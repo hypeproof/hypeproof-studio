@@ -31,3 +31,13 @@
 .member-approval summary { cursor: pointer; min-height: var(--hp-control-min); align-content: center; }
 .member-approval li { white-space: pre-wrap; overflow-wrap: anywhere; }
 .member-approval a { display: inline-flex; align-items: center; min-height: var(--hp-control-min); color: var(--vscode-textLink-foreground); }
+
+/* A short, verbatim change preview; the original remains in collapsed details. */
+.member-approval .approval-change-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--hp-font-body);
+}

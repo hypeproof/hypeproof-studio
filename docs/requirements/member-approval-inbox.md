@@ -16,6 +16,11 @@ replace a question conversation or discard its draft. iPhone stops capture befor
 
 ## MAI-02 — Understand the exact request
 
+Before the choices, both clients show **변경 내용** and at most three visible lines of the
+existing authored summary. This is a verbatim preview, not an AI-generated or verified claim;
+only the canonical leading `summary: ` label is removed. The full authored text and verified
+evidence stay separately labeled in collapsed details. Reading the preview sends no decision.
+
 A short Korean card names why the member was asked, repository/PR and the complete source head.
 Collapsed details separate author statements from verified evidence. Render only allowed fields
 as text. “선택을 전달했어요 · 처리 대기” is not “GitHub 승인 반영됨”; the latter needs a validated
