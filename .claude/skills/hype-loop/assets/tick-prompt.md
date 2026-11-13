@@ -41,9 +41,14 @@ R7 Long output goes to the dashboard or a Korean HTML artifact; chat gets a link
 R8 Route models by role: Opus implement/verify, Sonnet e2e/clerk/report, Haiku gh lane.
    Reuse test logs, keep PRs small, use scripted ship steps.
 R9 Post a 1-line Korean progress note for any phase longer than 20 minutes.
-R10 Do not ask Jay mid-loop. Stop only for data-loss risk, a live class, or a human-only step;
-   for the last, write click-by-click steps (the auto-mode classifier blocks some console
-   settings and publish clicks) and continue other work.
+R10 Questions never block the loop. An open AskUserQuestion keeps the session busy, so no cron
+   tick fires and no agent message is delivered until it is answered (2026-11-13: 5 h 18 min
+   stall). Stop only for data-loss risk, a live class, or a human-only step, and when a
+   decision is needed: stop only the lane that needs it, at its decision point; keep the other
+   lanes running; put the question (with a recommended option) on the dashboard and in the
+   tick summary under "QUESTIONS:". Use AskUserQuestion only if Jay wrote in this session in
+   the last ~15 minutes; otherwise leave it parked for him. For a human-only step, write
+   click-by-click steps (the auto-mode classifier blocks some console settings and publish clicks).
 R11 Never print a secret. Generate secrets into ~/hps-secrets (mode 600). Prefer CLIs over
    browser fields. Clear the clipboard after use.
 R12 Before any production write: live-class check, backup and restore point. D1 migrations are
@@ -59,6 +64,8 @@ R16 PR work runs the harness gates in this order: PREFLIGHT, SENSE, ADVANCE, STA
 
 ## 3. End
 Run: python3 {{LOOPCTL}} tick-end {{LOOP_ID}} --tick <n> --status ok|fail|partial --summary "<one English line>" [--links <urls>]
+If a lane is parked on a decision, end that summary with "QUESTIONS: <q1 (recommended: ...)>; ..."
+(max 4) so the dashboard shows it. Ask with AskUserQuestion only under R10's active-user rule.
 Then republish {{DASHBOARD}} with the Artifact tool using that same file path (the first
 publish's URL is stored with `loopctl.py set-dashboard`). Post a 3-5 line Korean status:
 tick n/{{TARGET}}, what changed, what is next, blockers, dashboard link.

@@ -48,6 +48,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
+_owner_spec = importlib.util.spec_from_file_location("notify_ownership", Path(__file__).with_name("ownership.py"))
+ownership = importlib.util.module_from_spec(_owner_spec)
+_owner_spec.loader.exec_module(ownership)
+
 KST = dt.timezone(dt.timedelta(hours=9))
 QUIET_FROM, QUIET_UNTIL = 22, 9
 STEPS = ((1, 0, ("discord", "github")), (2, 4 * 3600, ("discord_dm",)), (3, 24 * 3600, ("discord",)))
@@ -143,7 +147,7 @@ def touched_nodes(traceability: dict | None, paths: list[str]) -> list[dict]:
 
 
 def recipients(facts: dict, snapshot: dict, traceability: dict | None, issues: dict[int, dict],
-               approvers: list[str]) -> list[dict]:
+               approvers: list[str], *, owner_members=None, repo=None) -> list[dict]:
     """[{login, role, blocking, reasons: [why_ko, ...]}] ordered blocking first."""
     head, author = facts["headRefOid"], login(facts.get("author"))
     approved = {login(r.get("author")) for r in facts.get("reviews", [])
@@ -174,7 +178,10 @@ def recipients(facts: dict, snapshot: dict, traceability: dict | None, issues: d
             add(who, "approver", "정책·보안 파일을 바꾸는 PR이라 사람 승인 1건이 있어야 머지됩니다.", True)
     owned: dict[str, list[str]] = {}
     for node in touched_nodes(traceability, [f["path"] for f in facts.get("files", [])]):
-        owned.setdefault(node["owner"], []).append(node["id"])
+        owners = (ownership.resolve("core", repo, owner_members)
+                  if node["owner"] == "core" else [node["owner"]])
+        for who in owners:
+            owned.setdefault(who, []).append(node["id"])
     for who, ids in owned.items():
         more = f" 외 {len(ids) - 1}개" if len(ids) > 1 else ""
         add(who, "owner", f"이 PR이 맡으신 기준({ids[0]}{more})의 파일을 바꿉니다.", False)
@@ -357,7 +364,13 @@ def plan(repo: str, pr: int, card: dict | None, registry: dict, *, gh: Callable 
     for ref in facts.get("closingIssuesReferences", []):
         issues[ref["number"]] = gh(["issue", "view", str(ref["number"]), "--repo", repo, "--json", "author,assignees"])
     names = member_names(content(gh, *MEMBERS))
-    people = recipients(facts, snap, trace, issues, approvers())
+    roster = None
+    if any(n.get("owner") == "core" for n in (trace or {}).get("nodes", [])):
+        import yaml
+        data = gh(["api", "repos/hypeproof/hypeproof-harness/contents/policy/members.yaml?ref=main"])
+        membership = yaml.safe_load(base64.b64decode(data["content"]))
+        roster = sorted({m for group in membership["members"].values() for m in group})
+    people = recipients(facts, snap, trace, issues, approvers(), owner_members=roster, repo=repo)
     card = validate_card(card) if card else {"change_ko": "(작성된 카드 없음: --card로 한 줄 요약을 넣어야 보낼 수 있습니다)"}
     contacts = registry.get("contacts", {})
     approvals_hint = next((f" (approvals {m[1]}/{m[2]})" for b in snap.get("assessment", {}).get("blockers", [])
