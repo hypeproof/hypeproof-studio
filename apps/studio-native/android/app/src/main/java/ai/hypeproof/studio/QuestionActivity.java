@@ -126,7 +126,7 @@ public final class QuestionActivity extends Activity {
         voiceActions.removeAllViews();
         if(s!=null){
             if(voice.session.active()){
-                VoiceSession.Phase phase=voice.session.phase();voiceActions.addView(text(phase==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":phase==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":phase==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":"답변을 기다려요 · 마이크 꺼짐",13,true));
+                VoiceSession.Phase phase=voice.session.phase();voiceActions.addView(text(phase==VoiceSession.Phase.LISTENING?"듣고 있어요 · 기기 내 한국어 인식":phase==VoiceSession.Phase.SPEAKING?"답변을 읽고 있어요":phase==VoiceSession.Phase.READY?"다음 말을 기다려요 · 마이크 꺼짐":phase==VoiceSession.Phase.PERMISSION?"마이크 권한 확인 중":"답변을 기다려요 · 마이크 꺼짐",13,true));
                 LinearLayout row=new LinearLayout(this);row.addView(button("음성 멈추기",()->{stopVoice();update();}));voiceActions.addView(row);
             }else{voiceActions.addView(text("말로 적기는 입력창에만 적어요. 음성 대화는 말이 끝나면 이 계정의 AI 대화로 보내고, 답변을 읽은 뒤 계속 들어요. 음성 멈추기로 끝낼 수 있어요.",12,false));LinearLayout row=new LinearLayout(this);Button dictate=button("말로 적기",()->startVoice(false)),talk=button("음성 대화",()->startVoice(true));dictate.setEnabled(!model.readOnly&&!model.busy);talk.setEnabled(!model.readOnly&&!model.busy&&!s.outstanding());row.addView(dictate,new LinearLayout.LayoutParams(0,-2,1));row.addView(talk,new LinearLayout.LayoutParams(0,-2,1));voiceActions.addView(row);}
         }
