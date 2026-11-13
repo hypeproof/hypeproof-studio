@@ -9,10 +9,15 @@
 //
 // CGP-VOICE-R-002: the voice panel's 소리 끄기 holds it (disabled, the reason in its name) and stops a
 // reading in the same press; the microphone switch never affects it.
+//
+// CGP-VOICE-R-028 / DES-CGPV-41: when the engine refuses to start sound without a press (autoplay
+// policy, `not-allowed`), the answer is not shown as being read; one quiet inline notice
+// "소리가 막혔어요." with one action "소리 켜기" reads on from where it stopped. No modal, no focus
+// move, no motion; the notice goes away once pressed, stopped or silenced.
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useVoice } from "./VoiceProvider";
-import { CLASS_OFF, OUTPUT_OFF, READ_ALOUD_LABEL, READ_ALOUD_OUTPUT_OFF, READ_ALOUD_PLAYING, READ_ALOUD_STOP, READ_ALOUD_UNAVAILABLE } from "../../src/voiceCopy";
+import { CLASS_OFF, OUTPUT_OFF, READ_ALOUD_BLOCKED, READ_ALOUD_LABEL, READ_ALOUD_RESUME, READ_ALOUD_OUTPUT_OFF, READ_ALOUD_PLAYING, READ_ALOUD_STOP, READ_ALOUD_UNAVAILABLE } from "../../src/voiceCopy";
 import { windowOutputMute } from "../../src/voiceOutputMute";
 import { ReadAloud, type SpeechEnv } from "../../src/voiceReadAloud";
 
@@ -51,6 +56,7 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
   const outputMuted = useSyncExternalStore(hub ? windowOutputMute.subscribe : noSubscribe, hub ? windowOutputMute.getMuted : unmuted, hub ? windowOutputMute.getMuted : unmuted);
   const [note, setNote] = useState("");
   const playing = status.kind === "playing" && status.id === answerId;
+  const blocked = status.kind === "blocked" && status.id === answerId;
   // An answer that goes away, or voice that goes off, stops its own reading (a no-op when it is not playing).
   useEffect(() => () => { const s = hub?.getStatus(); if (hub && s?.kind === "playing" && s.id === answerId) hub.stop(); }, [hub, answerId]);
   useEffect(() => { if (!enabled && shared) shared.stop(); }, [enabled]);
@@ -75,8 +81,16 @@ export function ReadAloudButton({ answerId, content }: { answerId: string; conte
       <button type="button" className="hps-answer-action hps-voice-listen" aria-pressed={playing} onClick={press} data-hp-tooltip={playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL} aria-label={playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL}>
         <ChatIcon kind={playing ? "level" : "speaker"} size={16} /><span>{playing ? READ_ALOUD_STOP : READ_ALOUD_LABEL}</span>
       </button>
-      <span className="hps-sr-only" role="status">{playing ? READ_ALOUD_PLAYING : ""}{note ? ` ${note}` : ""}</span>
+      <span className="hps-sr-only" role="status">{playing ? READ_ALOUD_PLAYING : blocked ? READ_ALOUD_BLOCKED : ""}{note ? ` ${note}` : ""}</span>
       {note && <span className="hps-voice-skipped">{note}</span>}
+      {blocked && (
+        <span className="hps-voice-blocked">
+          <span>{READ_ALOUD_BLOCKED}</span>
+          <button type="button" className="hps-answer-action hps-voice-resume" onClick={() => voice.gate(() => { hub.resume(answerId); })}>
+            <ChatIcon kind="speaker" size={16} /><span>{READ_ALOUD_RESUME}</span>
+          </button>
+        </span>
+      )}
     </>
   );
 }

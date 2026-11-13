@@ -19300,6 +19300,66 @@
           "section": "## 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-VOICE-AUTOPLAY-BLOCKED",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)"
+        },
+        {
+          "path": "docs/requirements/voice-conversation.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-AUTOPLAY-BLOCKED",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-AUTOPLAY-BLOCKED",
+        "ST-TEST-VOICE-AUTOPLAY-BLOCKED"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceCopy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/voice.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-AUTOPLAY-BLOCKED",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-AUTOPLAY-BLOCKED"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-autoplay-blocked.test.tsx"
+        },
+        {
+          "path": "docs/testing/task-workspace.md",
+          "section": "## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)"
+        }
+      ]
     }
   ]
 }
