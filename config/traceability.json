@@ -5209,6 +5209,12 @@
           "path": "scripts/install-win.ps1"
         },
         {
+          "path": "scripts/release/install-kit.mjs"
+        },
+        {
+          "path": "scripts/release/templates/update-windows.cmd"
+        },
+        {
           "path": ".github/workflows/requirement-work.yml"
         },
         {
@@ -5256,6 +5262,12 @@
         },
         {
           "path": "scripts/tests/install-win-fixture.ps1"
+        },
+        {
+          "path": "scripts/release/test/install-kit.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/windows-delivery.smoke.mjs"
         },
         {
           "path": ".github/workflows/private-installers.yml"

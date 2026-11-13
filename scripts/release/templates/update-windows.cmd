@@ -17,38 +17,55 @@ $ProgressPreference = 'SilentlyContinue'
 $Tag = '@@TAG@@'
 $Exe = '@@EXE_NAME@@'
 $Sha = '@@EXE_SHA256@@'
+$SeedName = '@@SEED_NAME@@'
+$SeedVersion = '@@SEED_VERSION@@'
+$SeedSha = '@@SEED_SHA256@@'
+$SeederSha = '@@SEEDER_SHA256@@'
 $Page = "https://github.com/hypeproof/hypeproof-studio/releases/tag/$Tag"
-$Url = "https://github.com/hypeproof/hypeproof-studio/releases/download/$Tag/$Exe"
-try {
-  $dir = Join-Path ([IO.Path]::GetTempPath()) "hps-update-$Tag"
-  New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  $file = Join-Path $dir $Exe
-  Write-Host "HP Studio $Tag 받는 중..."
+$BaseUrl = "https://github.com/hypeproof/hypeproof-studio/releases/download/$Tag"
+$dir = $null
+function Get-VerifiedAsset([string]$name, [string]$sha) {
+  $file = Join-Path $dir $name
   if ($env:HPS_INSTALL_ASSET_DIR) {
-    Copy-Item -LiteralPath (Join-Path $env:HPS_INSTALL_ASSET_DIR $Exe) -Destination $file -Force
+    Copy-Item -LiteralPath (Join-Path $env:HPS_INSTALL_ASSET_DIR $name) -Destination $file
   } else {
-    Invoke-WebRequest -Uri $Url -OutFile $file -UseBasicParsing
+    Invoke-WebRequest -Uri "$BaseUrl/$name" -OutFile $file -UseBasicParsing
   }
-  $got = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($got -ne $Sha) {
-    Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
-    throw "받은 설치 파일이 $Tag 릴리스 파일과 달라요 (SHA-256 불일치)"
+  if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $sha) {
+    throw "받은 $name 파일이 $Tag 릴리스 파일과 달라요 (SHA-256 불일치)"
   }
+  return $file
+}
+try {
+  $dir = Join-Path ([IO.Path]::GetTempPath()) ("hps-update-" + [guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $dir | Out-Null
+  Write-Host "HP Studio $Tag 와 AI 코치 실행 파일 받는 중..."
+  # Verify the entire delivery set before running either installer or seeder.
+  $file = Get-VerifiedAsset $Exe $Sha
+  $seed = Get-VerifiedAsset $SeedName $SeedSha
+  $seeder = Get-VerifiedAsset 'seed-sdk-binary.ps1' $SeederSha
   $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/MERGETASKS=!runcode')
   if ($env:HPS_INSTALL_DRY_RUN -eq '1') {
-    Write-Host "DRY RUN: $file $($setupArgs -join ' ')"
+    Write-Host "DRY RUN: verified App, SDK $SeedVersion and seeder; nothing installed"
     exit 0
   }
-  Write-Host "HP Studio를 닫고 설치합니다. 기존 대화와 설정은 그대로 남아요."
-  Get-Process | Where-Object { $_.ProcessName -like 'HypeProof*' } | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
+  $installedExe = Join-Path $env:LOCALAPPDATA 'Programs\HypeProof Studio\HypeProof Studio.exe'
+  if (Get-Process | Where-Object { $_.Path -and $_.Path -eq $installedExe }) {
+    throw '열려 있는 HP Studio를 먼저 닫은 뒤 다시 실행해 주세요. 대화와 설정은 그대로 남아요.'
+  }
+  Write-Host "HP Studio를 설치합니다. 기존 대화와 설정은 그대로 남아요."
   $p = Start-Process -FilePath $file -ArgumentList $setupArgs -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "설치 프로그램이 오류 코드 $($p.ExitCode)로 끝났어요" }
-  Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
-  Write-Host "설치 완료: HP Studio $Tag. 이제 HP Studio를 다시 열어주세요."
+  Write-Host "AI 코치 실행 파일을 준비합니다..."
+  # The canonical seeder additionally verifies pinned SHA-512 and writes the trusted marker.
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $seeder -Version $SeedVersion -Platform win32-x64 -Tarball $seed
+  if ($LASTEXITCODE -ne 0) { throw '앱은 설치됐지만 AI 코치 실행 파일 준비가 끝나지 않았어요. 이 설치 명령을 다시 실행해 주세요.' }
+  Write-Host "설치 완료: HP Studio $Tag. 이제 HP Studio를 열어주세요."
   exit 0
 } catch {
-  Write-Host "설치하지 못했어요: $($_.Exception.Message)" -ForegroundColor Red
-  Write-Host "$Page 에서 $Exe 파일을 직접 받아 실행해 주세요."
+  Write-Host "설치를 마치지 못했어요: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "$Page 의 Windows 설치 명령으로 다시 시도해 주세요."
   exit 1
+} finally {
+  if ($dir -and (Test-Path -LiteralPath $dir)) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
 }
