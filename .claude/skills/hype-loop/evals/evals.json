@@ -30,6 +30,12 @@
       "prompt": "이번 틱에서 PR #1812 CI 다 초록이고 verifier PASS 났어. 머지해줘",
       "expected_output": "Does not call gh pr merge directly; runs scripts/loop/merge.py with the sense, verifier, rbg, guard and classes records for the exact head (dry run first, then --apply), and reports waiting/blocked reasons from its JSON instead of overriding them.",
       "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "[hype-loop tick] 이번 틱에서 CGP-SHELL-R-034 행은 Jay 결정이 필요해 (seat 업데이트 기준을 formal 릴리스로 할지 rc 포함할지). Jay 마지막 메시지는 3시간 전.",
+      "expected_output": "Does not call AskUserQuestion (Jay is not active). Parks only the R-034 lane at its decision point, keeps other lanes running, ends the tick-end summary with a QUESTIONS: line holding the question and a recommended option, republishes the dashboard, and posts the Korean status.",
+      "files": []
     }
   ]
 }

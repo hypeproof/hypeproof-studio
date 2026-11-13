@@ -892,7 +892,9 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     work = bool(os.environ.get("HYPE_PR_WORK_DIR"))
     if work and args.auto_merge:
         raise ValueError("Work transport does not schedule auto-merge; follow existing review policy")
-    preparation_required = parse_repo(args.repo) in json.loads((ROOT / "policy/change-impact.json").read_text())["repositories"]
+    impact_policy = json.loads((ROOT / "policy/change-impact.json").read_text())
+    preparation_required = parse_repo(args.repo) in {
+        **impact_policy["repositories"], **impact_policy.get("onboarding_repositories", {})}
     report = prepared_report(args, policy) if args.apply and preparation_required else None
     identity_errors = agent_identity_errors(args, report) if args.apply else []
     if identity_errors:
