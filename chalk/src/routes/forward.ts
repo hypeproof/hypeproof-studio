@@ -51,7 +51,11 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // (hypeproof-service#433); until Chalk's pin moves past 0.1.5 it is named here. The Service re-checks the issuer,
   // course ownership, the draft revision and the authoring assistant's money cap, and answers 404 while the flag is off.
   const sectionRevision = isSectionRevision(url.pathname, method);
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision) {
+  // CGP-SHELL-R-003 — the cohort's Studio update freeze (instructor write). The Service admits it in its service-contracts
+  // source after 0.1.5 (the pinned 0.1.5 tarball does not); until Chalk's pin includes it, it is named here. Same issuer-from-connection path as every write;
+  // the Service re-checks the issuer and can_start_session on the cohort.
+  const updateFreeze = (method === 'PUT' || method === 'DELETE') && /^\/admin\/cohorts\/[^/]+\/update-freeze$/.test(url.pathname);
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision && !updateFreeze) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,

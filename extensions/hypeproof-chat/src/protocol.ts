@@ -215,6 +215,8 @@ export interface ChatConfig {
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
+  /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
+  updateFreeze?: { until: string };
   /**
    * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
    * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
@@ -246,6 +248,8 @@ export interface UpdateOffer {
   sizeBytes: number;
   /** CGP-SHELL-R-001: a class seat is active, so the banner offers no install. */
   heldForClass?: boolean;
+  /** CGP-SHELL-R-003: a security-critical release; a cohort's update freeze does not hide it. */
+  securityCritical?: boolean;
 }
 
 export interface CoachInfo {

@@ -15293,78 +15293,6 @@
       ]
     },
     {
-      "id": "ST-REQ-VOICE-MUTE-SWITCHES",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-INT-NATIVE"
-      ],
-      "sources": [
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
-        },
-        {
-          "path": "docs/requirements/voice-conversation.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-VOICE-MUTE-SWITCHES",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-VOICE-MUTE-SWITCHES",
-        "ST-TEST-VOICE-MUTE-SWITCHES"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/voiceOutputMute.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-VOICE-MUTE-SWITCHES",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-VOICE-MUTE-SWITCHES"
-      ],
-      "sources": [
-        {
-          "path": "extensions/hypeproof-chat/test/voice-mute.test.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/voice-mute-controls.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/voice-read-aloud.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/voice-popup.smoke.mjs"
-        },
-        {
-          "path": "docs/testing/task-workspace.md",
-          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
-        }
-      ]
-    },
-    {
       "id": "ST-REQ-COACH-RUN-STATE",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -18786,30 +18714,172 @@
       ]
     },
     {
-      "id": "ST-REQ-GUARDIAN",
+      "id": "ST-REQ-COHORT-UPDATE-FREEZE",
       "stage": "requirement",
+      "label": "REQ-SHELL-03 / DES-SHELL-02: an instructor freezes a cohort's Studio updates for a date range; a security-critical release is never held; amber 업데이트 고정 badge on the cohort row",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-INT-CAPABILITY-ACCESS",
-        "ST-REQ-STUDIO-SAFETY"
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN",
+        "ST-REQ-AUTO-UPDATE"
       ],
       "sources": [
         {
-          "path": "docs/requirements/guardian-child-profile.md"
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)"
+        },
+        {
+          "path": "docs/studio-requirements.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
         }
       ]
     },
     {
-      "id": "ST-TEST-GUARDIAN",
-      "stage": "test",
+      "id": "ST-IMP-COHORT-UPDATE-FREEZE",
+      "stage": "implementation",
+      "label": "Chalk /console freeze control, badge and security label; forwarder exception; Studio freeze rule, hidden banner and notice, held staging, freeze copy; security marker in Studio, Chalk and the mirror",
       "owner": "jayleekr",
       "depends_on": [
-        "ST-REQ-GUARDIAN"
+        "ST-REQ-COHORT-UPDATE-FREEZE",
+        "ST-DES-CLASSROOM-ADMIN"
       ],
       "sources": [
         {
-          "path": "docs/requirements/guardian-child-profile.md",
-          "section": "## 검증 계획"
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/lib/latest-release.ts"
+        },
+        {
+          "path": "chalk/src/routes/studio-release.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": ".github/workflows/mirror-release.yml"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COHORT-UPDATE-FREEZE",
+      "stage": "test",
+      "label": "Freeze rule and render (Studio), start-page notice, Chalk forwarder, latest-release security flag, headless Chromium /console freeze control",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COHORT-UPDATE-FREEZE",
+        "ST-IMP-COHORT-UPDATE-FREEZE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/cohort-update-freeze.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-update-notice.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/update-freeze-forward.test.mjs"
+        },
+        {
+          "path": "chalk/test/update-freeze.browser.mjs"
+        },
+        {
+          "path": "chalk/test/latest-release.test.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md",
+          "section": "## 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-MOBILE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "## Correlated native deployment — MTF-01"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Correlated iPhone testing delivery — MTF-01"
+        },
+        {
+          "path": "apps/studio-native/README.md",
+          "section": "## Signed iPhone delivery"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/studio-apple-testflight.yml"
+        },
+        {
+          "path": "apps/studio-native/scripts/verify-native-candidate.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/apple-upload.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
+        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md",
+          "section": "## TestFlight request and receipt — MTF-T01"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_workflow_source.py"
         }
       ]
     },
@@ -18893,99 +18963,6 @@
       ]
     },
     {
-      "id": "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-MOBILE"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/mobile-growth-roadmap.md",
-          "section": "## Correlated native deployment — MTF-01"
-        },
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "### Correlated iPhone testing delivery — MTF-01"
-        },
-        {
-          "path": "apps/studio-native/README.md",
-          "section": "## Signed iPhone delivery"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "implementation",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT"
-      ],
-      "sources": [
-        {
-          "path": ".github/workflows/studio-apple-testflight.yml"
-        },
-        {
-          "path": "apps/studio-native/scripts/verify-native-candidate.py"
-        },
-        {
-          "path": "apps/studio-native/scripts/apple-upload.sh"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-NATIVE-DEPLOYMENT-RECEIPT",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-NATIVE-DEPLOYMENT-RECEIPT",
-        "ST-IMP-NATIVE-DEPLOYMENT-RECEIPT"
-      ],
-      "sources": [
-        {
-          "path": "apps/studio-native/tests/test_native_deployment_contract.py"
-        },
-        {
-          "path": "apps/studio-native/tests/test_verify_native_candidate.py"
-        },
-        {
-          "path": "docs/testing/native-mobile-growth.md",
-          "section": "## TestFlight request and receipt — MTF-T01"
-        },
-        {
-          "path": "apps/studio-native/tests/test_native_workflow_source.py"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-INVITE-SEAT",
-      "stage": "requirement",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-INT-CAPABILITY-ACCESS",
-        "ST-REQ-ACCESS-BUDGET"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/invite-seat.md"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-INVITE-SEAT",
-      "stage": "test",
-      "owner": "jayleekr",
-      "depends_on": [
-        "ST-REQ-INVITE-SEAT"
-      ],
-      "sources": [
-        {
-          "path": "docs/requirements/invite-seat.md",
-          "section": "## 검증"
-        }
-      ]
-    },
-    {
       "id": "ST-REQ-SHOW-LINK",
       "stage": "requirement",
       "owner": "jayleekr",
@@ -19038,6 +19015,134 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/show-link.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-GUARDIAN",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-GUARDIAN",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-GUARDIAN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "section": "## 검증 계획"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-INVITE-SEAT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-INVITE-SEAT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-INVITE-SEAT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "section": "## 검증"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-VOICE-MUTE-SWITCHES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
+        },
+        {
+          "path": "docs/requirements/voice-conversation.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-MUTE-SWITCHES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-MUTE-SWITCHES",
+        "ST-TEST-VOICE-MUTE-SWITCHES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceOutputMute.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-MUTE-SWITCHES",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-MUTE-SWITCHES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-mute.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-mute-controls.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-read-aloud.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-popup.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/task-workspace.md",
+          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
         }
       ]
     }

@@ -18,6 +18,8 @@ export interface ChalkEnv {
   // answers without reading GitHub. "off" = unknown (nobody is flagged); a plain x.y.z = that floor. The e2e harness
   // sets "off" so CI never depends on GitHub.
   HPS_STUDIO_LATEST_RELEASE?: string;
+  /** CGP-SHELL-R-003: "1" marks the fixed HPS_STUDIO_LATEST_RELEASE security-critical (outside production only). */
+  HPS_STUDIO_LATEST_RELEASE_SECURITY?: string;
 }
 
 export const DEFAULT_SERVICE_ORIGIN = "https://api.hypeproof-ai.xyz";
