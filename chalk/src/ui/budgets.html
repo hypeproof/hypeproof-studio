@@ -55,7 +55,9 @@ function button(label,fn){const b=el('button',label);b.type='button';b.onclick=f
 const STALE_MS=30*60000,SVGNS='http://www.w3.org/2000/svg';
 const svg=(tag,attrs={})=>{const n=document.createElementNS(SVGNS,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));return n;};
 const dayLabel=d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10));
-const unconfirmedText=(x,m)=>x.unconfirmed_amount===null?'미확인 (금액 확인 전)':amount(x.unconfirmed_amount,m);
+// #270 sends either null (unresolved costs remain: the amount is not known, so neither is the day's total) or 0. A
+// positive number, should a later contract send one, is an amount not yet confirmed and says so; it is never read as final.
+const unconfirmedText=(x,m)=>x.unconfirmed_amount===null?'미확인 (금액 확인 전)':x.unconfirmed_amount>0?amount(x.unconfirmed_amount,m)+' (확정 전)':'0';
 // #270's day row, in the names the chart uses. A malformed amount reads as unknown, never as 0.
 const known=v=>Number.isSafeInteger(v)&&v>=0;
 const dayRow=x=>({day:x.date,confirmed:known(x.confirmed_amount)?x.confirmed_amount:0,reserved:known(x.reserved_amount)?x.reserved_amount:0,
