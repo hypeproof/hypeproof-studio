@@ -17825,6 +17825,9 @@
       ],
       "sources": [
         {
+          "path": "apps/studio-native/ios/Sources/StudioCore/FailedReflectionDraft.swift"
+        },
+        {
           "path": "apps/studio-native/.gitignore"
         },
         {
@@ -17973,6 +17976,9 @@
         "ST-IMP-NATIVE-MOBILE"
       ],
       "sources": [
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/FailedReflectionDraftTests.swift"
+        },
         {
           "path": "apps/studio-native/ios/UITests/StudioShellTests.swift"
         },
