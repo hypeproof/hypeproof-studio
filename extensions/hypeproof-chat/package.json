@@ -771,7 +771,7 @@
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "cd webview-ui && npm run dev",
     "package": "vsce package --no-dependencies",
-    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/classroom-join-code.test.mjs",
+    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/artifact-comment.test.mjs test/classroom-artifact-comment-host.test.mjs test/classroom-join-code.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
     "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",
