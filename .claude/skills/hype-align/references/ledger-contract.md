@@ -78,6 +78,21 @@ A requirement row is a Markdown table line whose first cell is the ID, the same 
   an acceptance sentence quoting "3주차" does not tag the row. The earliest week wins.
 - **Cited tests**: every `-T<n>` token in the row's cells.
 
+### Document-scoped symbolic requirement IDs
+
+A document may declare `symbolic_prefixes: ["REQ-SED"]` in its manifest entry.
+Only table first cells or standalone `###` headings matching a declared prefix
+and an uppercase symbolic suffix (for example `REQ-SED-COST`) join its inventory.
+The prefix must contain only uppercase alphanumeric hyphen-separated segments;
+malformed configuration fails the audit. Omit the field to retain numeric-only
+inventory behavior. This does not opt a draft document into the registry or
+change the meaning of its requirements.
+
+Alignment recognizes exact registered symbolic IDs in test target columns and
+row facts; it does not infer substring matches (`REQ-SED-COST-EXTRA` is not
+`REQ-SED-COST`). Test IDs retain the numeric grammar below. Requirement acceptance
+rows and their amendments use the same content pins as numeric requirements.
+
 ### Test-ID grammar
 
 `PREFIX-T<n>` with shorthand continuations that expand with the same prefix and width:
@@ -262,6 +277,21 @@ Notes and warnings (still written):
   until `config/traceability.json` registers it. JSON `report_needs_trace_node: true`.
 
 ## 5. check
+
+Optional Lab verification is repository-scoped. The ledger's `repository` selects
+an explicit adapter; currently only `hypeproof/hypeproof-studio` is supported.
+Sediment has no declared catalog adapter: `check --lab` and `drift` return
+`unsupported` with exit 2 and mark Lab alignment unverified, without reading Studio
+catalog files. This does not affect consumer-only chain checks. Do not infer a
+Sediment catalog from its member-doc mirror or add its packets to Studio's catalog.
+
+The Studio adapter binds its fixed features/catalog paths to that repository.
+`work.json` and each available drift pin file must declare matching `sourceRepo`.
+Published pre-transfer Studio provenance is normalized for reads only. Missing or
+cross-product provenance cannot pass. Work item IDs and unique bare issue numbers
+inherit that validated repository scope; an entry's explicit repository metadata
+must also agree. A same-number issue in another product is never link evidence.
+Existing source hashes and immutable sourceCommit evidence remain unchanged.
 
 `discover.audit` runs first. Any gap is printed as `GAP:` and fails the check whatever the
 scope, as it fails the product's `next-work.py --check` gate; the verdict starts with
