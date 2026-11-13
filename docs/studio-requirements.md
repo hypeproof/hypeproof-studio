@@ -9203,6 +9203,9 @@ availability and actual device behavior remain distinct states throughout.
 `ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
 receipts to the existing exact-source native CI and Apple environment gates.
 Partial inputs/source movement or an older release-attempt gate refuse signing.
+Studio #3866 keeps a v2 app candidate fixed while separately pinning trusted-main
+workflow/control source. Exact-candidate CI and candidate → workflow → current-main
+ancestry proofs remain required; the legacy v1 equal-source path remains supported.
 The exact current-attempt gate is checked before signing and receipt emission;
 failed-job-only reruns must not reuse an older successful gate. Successful command completion
 does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)

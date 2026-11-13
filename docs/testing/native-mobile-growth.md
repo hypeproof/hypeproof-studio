@@ -173,6 +173,17 @@ run binds package bytes and app/run identity without claiming availability.
 Existing native-gate controls still reject stale or mismatched CI artifacts.
 These controls perform no signing, Apple call or workflow dispatch.
 
+For Studio #3866, `test_native_workflow_source.py` adds two-source contract and
+real CLI/shell controls. A candidate containing an obsolete helper must use the
+separate trusted control checkout. Main may advance normally without changing
+app identity; mismatched workflow/ref/event, partial v2 inputs, unrelated ancestry,
+dirty/wrong checkout and stale v1/attempt/workflow gate documents refuse. The
+actual upload shell re-reads ancestry before any signing material. Original
+exact-head CI and upload failure controls remain unchanged. v2 gate/upload
+receipts name `workflow_source_sha`; their app source fields still name the
+candidate. An actual v2 signed upload and Harness reconciliation remain required
+before claiming live compatibility.
+
 Authorized deployment acceptance: supply one Harness request, verify the run
 name and gate `deployment_request` match its exact digest/source, then inspect
 that run attempt's `upload-receipt.json` and IPA digest. A missing receipt stays

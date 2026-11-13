@@ -18951,6 +18951,9 @@
         {
           "path": "docs/testing/native-mobile-growth.md",
           "section": "## TestFlight request and receipt — MTF-T01"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_workflow_source.py"
         }
       ]
     },
