@@ -61,8 +61,8 @@ struct SharedConversationView: View {
                         if model.signedIn {
                             if model.selected != nil { Button("내 상황과 의도") { voice.stop(); focused = false; showContext = true } }
                             Button("새로 고침") { model.refresh() }
-                            Button("이 기기의 연동 기록 내보내기") { exportURL = model.exportCache() }
-                            Button("이 기기의 사본 삭제") { clearCache = true }
+                            Button("이 기기의 연동 기록 내보내기") { voice.stop(); focused = false; exportURL = model.exportCache() }
+                            Button("이 기기의 사본 삭제") { voice.stop(); focused = false; clearCache = true }
                             Button("로그아웃") { voice.stop(); model.logout() }.disabled(model.busy || model.syncing)
                         }
                         Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
