@@ -187,6 +187,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** MPER-05: display-only identity of the active account reflection; the host rechecks every making request. */
+  personalMaking?: { scope: string; taskId: string };
   /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
   temporaryTask?: { allowed: boolean };
   /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
@@ -603,6 +605,7 @@ export type WebviewMessage = (
   | { type: 'taskCreate' }
   /** MPER-02/04: use the same account/admission entry as the start page. */
   | { type: 'openPersonalReflection' }
+  | { type: 'beginPersonalMaking' }
   /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
   | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }

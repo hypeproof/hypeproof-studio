@@ -746,6 +746,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
     }
     await this.applyReflectionSnapshot(b,value);
+    // A new reflection binding is saved after task creation; publish it to the visible action now.
+    await this.postConfig();
   }
   async refreshPersonalReflection(): Promise<void> {
     const b=this.reflectionBinding();
@@ -8455,6 +8457,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
     if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
+    if (msg.type === 'beginPersonalMaking') {
+      try { await this.beginPersonalMaking(); }
+      catch (error) { await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '제작 초안을 열지 못했어요.' }); }
+      return;
+    }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -12341,6 +12348,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'config') {
+      const binding = this.reflectionBinding();
+      const view = msg.config.taskWorkspace;
+      msg = { ...msg, config: { ...msg.config, personalMaking: binding && this.reflectionAccounts && !msg.config.isInstructor
+        && view && binding.workspace === view.scope && binding.task === view.activeTaskId
+        ? { scope: binding.workspace, taskId: binding.task } : undefined } };
+    }
     if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
