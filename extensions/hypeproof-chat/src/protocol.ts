@@ -578,6 +578,12 @@ export interface UxConfig {
     show_counter: boolean;
     counter_toast_md?: string;
   };
+  /**
+   * Opt-in compact coach layout, served per cohort. `'compact'` turns on the slimmer chrome, the
+   * one-row running-process card, "AI가 할 수 있는 일" in settings, materials in the "+" menu and
+   * the coach-driven next-step chips. Absent or any other value is the standard layout.
+   */
+  coach_layout?: "compact";
 }
 
 export interface SuggestionChip {

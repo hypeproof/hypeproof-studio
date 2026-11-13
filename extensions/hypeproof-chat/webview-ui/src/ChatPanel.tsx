@@ -96,7 +96,9 @@ import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
-import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
+import { MaterialsChips, MaterialsPanel, MaterialsScope, MaterialsTags } from './MaterialsPanel';
+import { NextStepChips } from './NextStepChips';
+import { nextSteps, nextStepsBody } from './nextStepsParser';
 import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
 import { ExternalLinkBlocked, blockedLinkHelpText } from './ExternalLinkBlocked';
@@ -325,12 +327,12 @@ function ConversationSupport({ compact, children }: { compact: boolean; children
   return compact ? <details className="hps-conversation-support"><summary>수업 안내 · 도움</summary>{children}</details> : <>{children}</>;
 }
 
-function ConversationSettings({ compact, required, questionId, children }: { compact: boolean; required: boolean; questionId?: string; children: ReactNode }) {
+function ConversationSettings({ compact, required, questionId, usage = true, children }: { compact: boolean; required: boolean; questionId?: string; /** False when the usage panel is not inside (compact layout): the summary must not promise it. */ usage?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(required);
   useEffect(() => { setOpen(required); }, [required]);
   useEffect(() => { if (questionId && !required) setOpen(false); }, [questionId, required]);
   return compact ? <details className="hps-conversation-settings" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{required ? "이용권을 선택해 주세요" : "대화 설정 · 이용권"}</summary>{children}
+    <summary>{required ? "이용권을 선택해 주세요" : usage ? "대화 설정 · 이용권" : "대화 설정"}</summary>{children}
   </details> : <>{children}</>;
 }
 /** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
@@ -938,6 +940,9 @@ export function ChatPanel(props: Props) {
   const dismissQuote = () => { dropAnswerQuote(); document.getSelection?.()?.removeAllRanges?.(); recoverToComposer(undefined); };
 
   const ux: UxConfig = config?.profile?.ux ?? DEFAULT_UX;
+  // `ux.coach_layout: 'compact'` is a per-cohort opt-in. Everything it changes is gated on this one flag, so
+  // any other value (or none) draws exactly the standard layout. Never on for the instructor console.
+  const compactLayout = ux.coach_layout === 'compact' && !props.instructor;
   // Image paste is a per-profile opt-in (website-copyclone). Default-off so
   // minor cohorts never expose the image flow — the worker enforces the same
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
@@ -1675,11 +1680,6 @@ export function ChatPanel(props: Props) {
   // assistant" is judged by the last **bubble**. Otherwise the follow-up chips vanish
   // on a turn that ended with a tool.
   const lastSpoken = [...messages].reverse().find((m) => m.role !== "tool");
-  const showFollowUpChips =
-    !streaming &&
-    messages.length > 0 &&
-    lastSpoken?.role === "assistant" &&
-    ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
   const longStep = streaming ? runningProgressStep(messages) : null;
@@ -1698,6 +1698,24 @@ export function ChatPanel(props: Props) {
       !!config?.taskWorkspace?.sourceSelection || props.openWorldId !== null || props.publish !== null) : null;
   const ideaKey = ideaOffer ? ideaOfferKey(activityId, taskId, ideaOffer.messageId) : null;
   const showIdeas = !!ideaKey && !dismissedIdeas.includes(ideaKey);
+  // Compact layout: the coach's own next steps (a trailing 다음에 해볼 만한 것 block) replace the static follow-ups. They
+  // come only from a reply that ended cleanly: not while streaming, not after an error, not after a stopped turn (its
+  // last line may be cut off), and not while the project-ideas offer takes this slot. The same message, and only that
+  // one, loses the block from its bubble (`nextStepsMode` below): coach text never disappears without a chip for it.
+  const lastSpokenAt = lastSpoken ? messages.lastIndexOf(lastSpoken) : -1;
+  const turnStopped = lastSpokenAt >= 0 && messages.slice(lastSpokenAt).some((m) => m.elapsedTurn?.outcome === "stopped");
+  const nextStepChips = compactLayout && !streaming && !error && !turnStopped && !showIdeas && lastSpoken?.role === "assistant" && lastSpoken.id === latestAssistantId
+    ? nextSteps(lastSpoken.content) : null;
+  // Compact layout: the "이용권 · 사용량" panel is not drawn in the footer on any activity (the settings dialog still
+  // has it). The one exception is a funding choice the learner must make before sending: that is a blocking action,
+  // not routine usage. Limit errors and notices are separate messages and are untouched.
+  const footerUsagePanel = !compactLayout || requiresFundingSelection(config);
+  const showFollowUpChips =
+    !streaming &&
+    messages.length > 0 &&
+    lastSpoken?.role === "assistant" &&
+    ux.suggestions.follow_up.length > 0 &&
+    !nextStepChips;
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   // CGP-CHAT-R-023 — read-only step dividers where the served step changes, and the "지금 단계로" target: the
@@ -1768,6 +1786,7 @@ export function ChatPanel(props: Props) {
     <CopyFeedbackRegion><div
       className={`hps-shell${automationCompact ? " hps-shell-automation" : ""}${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
+      data-coach-layout={compactLayout ? 'compact' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -1871,7 +1890,7 @@ export function ChatPanel(props: Props) {
           {/* REQ-STUDIO-FEEDBACK-ENTRY (#3413) — a visible way to send a complaint or a problem: the same in-panel form
               (and the same automatic attachments) as the error card's 문제 보내기, opened as a learner's own report. */}
           {personalWorkspace && <button type="button" className="tw-feedback-open" onClick={() => props.onReportProblem()} data-hp-tooltip="불편한 점이나 안 되는 것을 운영팀에 알려요">{FEEDBACK_ENTRY_LABEL}</button>}
-          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
+          <button onClick={personalWorkspace || compactLayout ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
@@ -1974,11 +1993,11 @@ export function ChatPanel(props: Props) {
       {/* #751 U2 — instructor notices/materials: the coach rail's "강사 메시지" kind (SX-06), outside the message stream
           (SX-05), closed by default, no Primary (SX-04). Drawn with or without a lesson. */}
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
-      {!props.instructor && !entryOpen && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
+      {!props.instructor && !entryOpen && !compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
       <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
       {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate.
           CGP-KNOW-R-002: a task workspace draws it as the activity home's 자료 view instead (classroom seats keep it here). */}
-      {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
+      {!props.instructor && config?.materials && !materialsHome && !compactLayout && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
       {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} prefill={helpPrefill} onPrefillUsed={() => setHelpPrefill(null)} /></PanelBoundary>}
@@ -2100,6 +2119,7 @@ export function ChatPanel(props: Props) {
               onRunCode={props.onRunCode}
               onRetry={(prompt, source) => { sendWhenOnline(() => props.onRetry(prompt, source), 'press'); }}
               personal={personalWorkspace}
+              nextStepsMode={compactLayout && m.role === "assistant" ? (streaming && m.id === streamingId ? "streaming" : nextStepChips && m.id === lastSpoken?.id ? "strip" : undefined) : undefined}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
               onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
@@ -2176,7 +2196,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
-        {!props.instructor && config?.materials && <MaterialsChips />}
+        {!props.instructor && config?.materials && !compactLayout && <MaterialsChips />}
 
         {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray key={`${config?.activity?.id ?? ""}/${config?.taskWorkspace?.activeTaskId ?? ""}`} annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
@@ -2280,6 +2300,7 @@ export function ChatPanel(props: Props) {
             label="이어서 이런 것도 해볼래요?"
           />
         )}
+        {nextStepChips && <NextStepChips steps={nextStepChips.steps} onPick={text => handleChip({ style: "good", text })} />}
 
         {error && props.safetyNotice ? (
           <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
@@ -2311,6 +2332,7 @@ export function ChatPanel(props: Props) {
       )}
 
       <AddonScope api={addonApi}>
+      <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -2341,10 +2363,10 @@ export function ChatPanel(props: Props) {
         <AttachmentFailures items={attachmentFailures.items} retry={attachmentFailures.retry} remove={attachmentFailures.remove} />
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
-        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId}>
-          <ModelControl config={config} streaming={streaming} />
+        {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId} usage={footerUsagePanel}>
+          <ModelControl config={config} streaming={streaming} compact={compactLayout} />
           <EffortControl config={config} post={postToHost} />
-          <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} /></ConversationSettings>}
+          {footerUsagePanel && <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} />}</ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
@@ -2510,6 +2532,7 @@ export function ChatPanel(props: Props) {
         {planFirst.switchedOff && <PlanSwitchedOffNotice />}
         <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         {addon && <addon.Notice />}
+        {compactLayout && config?.materials && <MaterialsTags />}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2529,9 +2552,9 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} planFirst={props.instructor || planFirst.available === false ? undefined : { on: planFirst.on, locked: streaming }} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} materials={compactLayout && !!config?.materials} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
-          {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
+          {!personalWorkspace && (fileAttachShown || sketchAllowed || (compactLayout && !!config?.materials)) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} materials={compactLayout && !!config?.materials} />}
           {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
           {fileMentions.view}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
@@ -2672,13 +2695,15 @@ export function ChatPanel(props: Props) {
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
         <CopyFeedbackOutlet />
       </footer>
+      </MaterialsScope>
       </AddonScope>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
         imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
       }} />}
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
-      {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
+      {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={compactLayout && !preferencesUsage ? undefined : ".hps-access > summary"} opener={() => preferencesOpener.current}>
+        {compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
@@ -2686,6 +2711,8 @@ export function ChatPanel(props: Props) {
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
+        {/* Compact layout: the header gear opens this dialog, so the app's own settings editor is one press away here. */}
+        {compactLayout && <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); props.onSettings(); }}>앱 설정 열기</button>}
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2709,6 +2736,7 @@ export function ChatPanel(props: Props) {
             Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
         {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
+        {compactLayout && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
@@ -3250,6 +3278,7 @@ function MessageItem({
   onRunCode,
   onRetry,
   personal = false,
+  nextStepsMode,
   isLatest = false,
   freeSeat = false,
   onPickReply,
@@ -3290,6 +3319,8 @@ function MessageItem({
   onRunCode: (html: string) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
+  /** Compact layout: "strip" cuts the trailing 다음에 해볼 만한 것 block from this answer (its steps are drawn as chips); "streaming" hides a block that is still arriving. */
+  nextStepsMode?: "strip" | "streaming";
   /** Personal chat: retry is offered on the latest coach answer only (the ChatGPT/Claude pattern). */
   isLatest?: boolean;
   /**
@@ -3390,6 +3421,7 @@ function MessageItem({
             hasActivity={hasActivity}
             personal={personal}
             messageId={message.id}
+            nextStepsMode={nextStepsMode}
           />
         ) : (
           <>
@@ -3512,6 +3544,7 @@ function AssistantContent({
   hasActivity = false,
   personal = false,
   messageId,
+  nextStepsMode,
 }: {
   content: string;
   streaming: boolean;
@@ -3522,8 +3555,17 @@ function AssistantContent({
   personal?: boolean;
   /** CGP-CHAT-R-008: scopes this answer's code-block wrap choices. */
   messageId?: string;
+  /** Compact layout: cut a trailing next-steps block out of what is drawn ("strip": finished, drawn as chips; "streaming": still arriving). */
+  nextStepsMode?: "strip" | "streaming";
 }) {
-  const segments = useMemo(() => splitFences(content), [content]);
+  const shown = useMemo(() => {
+    if (!nextStepsMode) return content;
+    if (nextStepsMode === "streaming") return nextStepsBody(content, true);
+    // A reply that is nothing but the block keeps it: an empty bubble would hide what the coach said.
+    const block = nextSteps(content);
+    return block && block.body.trim() ? block.body : content;
+  }, [content, nextStepsMode]);
+  const segments = useMemo(() => splitFences(shown), [shown]);
   const hasOpenFence = segments.some((s) => s.type === "code-open");
 
   if (content.length === 0) {

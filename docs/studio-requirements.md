@@ -9283,3 +9283,62 @@ pins and cap, host against a recording Service: flag and sign-in gates, nothing 
 consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
 and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
 Electron app and a deployed Service; both are NOT RUN in this slice.
+
+## Compact coach layout: `ux.coach_layout` (REQ-STUDIO-COACH-LAYOUT-COMPACT)
+
+`REQ-STUDIO-COACH-LAYOUT-COMPACT` (2026-11-12; instructor feedback from a dental-seminar test on a 761px-tall
+window, where the conversation area was left at 24px by the chrome above and below it). The served profile may carry
+`ux.coach_layout: 'compact'`. That one value turns on everything below; an absent field or any other value draws exactly
+today's layout (same DOM, same classes, the static `ChipRack`), and the instructor console never takes it. The gate is
+`data-coach-layout="compact"` on the shell root (CSS: the closing block of `chatDetails.css`, every rule scoped under it) plus one
+`compactLayout` flag in `ChatPanel`; the running-process card reads the same field in `App.tsx`. No host change.
+
+- **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
+  and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
+  (`--hp-control-min`); only padding, margins and rows shrink.
+- **Composer footer.** The cohort-managed model reason ("선생님이 정한 설정이에요", `small.hps-managed-reason`) stays in the
+  DOM, visually hidden, because the disabled model select describes itself through it (`aria-describedby`). The collapsed
+  "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
+  replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
+  The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
+  sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
+  messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
+  (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
+  line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier
+  answers yes or no), so `compactDestructiveNote(command)` picks the sentence from the command's shape: a download piped
+  into a shell: "내려받은 것을 바로 실행하는 경우 내용을 확인할 수 없어 위험할 수 있습니다."; a delete/move/overwrite verb or
+  redirect: "파일을 지우거나 옮기거나 덮어쓰는 경우 되돌리기 어려워 위험할 수 있습니다."; several commands joined (`&&`, `;`,
+  `|`): "여러 명령을 이어 붙인 경우 그중에 파일을 지우거나 덮어쓰는 명령이 섞여 있으면 위험할 수 있습니다."; otherwise
+  "파일을 지우거나 덮어쓰는 명령이면 되돌리기 어려울 수 있습니다." The command, the 거절/허락 buttons, the deny-first focus, the
+  classifier and the approval flow are untouched; the outward and ordinary prompts keep their headings. The webview reads
+  `coach_layout` from the served profile itself, so no host change.
+- **Running processes.** One row per card: title, address (a shell shows its folder), and the 끄기/멈추기 button. The
+  "실행 중인 것" heading, the "보여 주는 곳" line, the "켜 두어요" note and the state word are not drawn; the heading and
+  state word stay for screen readers.
+- **Rail panels.** "이 수업에서 AI가 할 수 있는 일" (CGP-AGENT-R-003) and the "자료 N개" card
+  (REQ-STUDIO-ACTIVITY-MATERIALS) are no longer drawn above the conversation. The capabilities card is the first block in
+  the settings dialog, and the header gear opens that in-panel dialog on a classroom seat too (it used to open the app's
+  settings editor); the dialog's "앱 설정 열기" reaches it. The 자료 actions move into the composer's "+" menu as
+  "파일 넣기" and "주소 넣기 (https)", which post the rail card's own messages (`materialAddFile`, `materialAddUrl`);
+  the host-side behaviour, checks and refusal text are unchanged. The list shows as small tags directly above the
+  composer; pressing a tag puts it in or takes it out of the next question (`aria-pressed`), × removes a removable
+  item, nothing is pre-selected, and only selected items are sent ("고른 자료만 다음 질문과 함께 AI에게 보내요").
+- **Next steps.** A reply that ENDS with a line of exactly `다음에 해볼 만한 것` (optional trailing `:`) followed by one
+  to three lines each starting `→ ` is a block. Each step is trimmed, 1 to 60 characters, with no control or format
+  character, none of `<>` and the backtick, no `http`, no markdown link; anything else (text after the block, a fourth step,
+  a bad step) leaves the text as ordinary prose. A matched block is cut out of the bubble, also while it streams in (from a
+  complete header line on, while every non-empty line after it starts with `→`). Under the latest spoken answer, not while
+  streaming, the steps are single-line pills under a muted caption; a press fills the composer like any chip and never
+  sends. A latest reply with a block shows these and not the static follow-up chips; without one, the static chips behave
+  as before. Coach text never disappears without a chip for it: the block is cut only from the answer whose steps are drawn
+  as chips (not an older answer, not after an error or a stopped turn whose last line may be cut off, not while the
+  project-ideas offer holds the slot, and not when nothing else would be left of the bubble). The format-character check
+  applies to the block's own lines, not the body; an unclosed fence (3 or more backticks or tildes) hides a block inside
+  it; a step with `**`, `__` or a leading `www.` is refused.
+- **자료 menu.** The two "+" menu entries are offered only once the host has answered with its list (a press would
+  otherwise show nothing). The address form closes only on the answer to its own request and returns focus to the "+"
+  button or the text box.
+- **Evidence.** Parser: `test/next-steps-parser.test.tsx`. Gate on and off, tags, "+" menu, settings dialog, footer reason and usage panel,
+  next steps, running-process markup: `test/coach-layout-compact.test.tsx`; command-approval wording on and off: `test/command-approval.test.tsx`. Not covered: real-app pixel heights at 761px (run in the
+  installed app), and the Service serving the field (hypeproof-service).
