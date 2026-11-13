@@ -1,0 +1,82 @@
+name: merge-tier
+
+# Risk-tiered merge gate (hypeproof-harness#385, policy/merge-tiers.yaml).
+#
+#   tier A (control plane, payments/passes, auth/secrets, DB migrations, deploy
+#   config, CI workflows, pricing/terms): passes only with an approval on the head
+#   commit from a policy human approver who is not the author or last pusher.
+#   tier B (everything else): passes unless the latest hype-review lists blockers.
+#   CI being green is enforced by the repository's other required checks.
+#
+# The same file ships to consumer repositories: harness vendors it as
+# scripts/merge-tier/merge-tier.yml (with merge_tier.py and policy/merge-tiers.yaml)
+# and a consumer adopts it by copying it to .github/workflows/merge-tier.yml.
+# tests/merge_tier keeps both copies byte-identical.
+#
+# Trust: like control-plane-gate.yml, the checker and the policy are restored from
+# the BASE ref before running, so a PR cannot weaken the rules that judge it. The
+# changed-file list comes from commit objects with --no-renames, so a rename out of
+# a tier-A path still shows the old path. A PR can still edit this workflow file;
+# .github/workflows/** is tier A and CODEOWNERS-protected, and renaming the job
+# makes the required context "merge-tier" never report, which blocks merge.
+# pull_request_target is deliberately not used.
+
+on:
+  pull_request:
+    branches: [main]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: merge-tier-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: merge-tier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: python -m pip install --quiet "pyyaml>=6,<7"
+
+      - name: Restore trusted (base-ref) checker and policy
+        run: |
+          set -e
+          git fetch origin "$BASE_REF"
+          for f in scripts/merge-tier/merge_tier.py policy/merge-tiers.yaml policy/control-plane.yaml; do
+            if git cat-file -e "origin/${BASE_REF}:$f" 2>/dev/null; then
+              git checkout "origin/${BASE_REF}" -- "$f"
+              echo "restored trusted $f from origin/${BASE_REF}"
+            elif [ -e "$f" ] && [ "$f" = policy/control-plane.yaml ]; then
+              # Only harness has a control plane; a PR must not add one elsewhere to
+              # change how this repository is classified.
+              rm -f "$f"
+              echo "removed PR-added $f (absent in base)"
+            elif [ -e "$f" ]; then
+              echo "::warning::$f is absent in base ($BASE_REF): using the PR-head copy (the bootstrap PR that introduces the gate). Base-ref protection is active from the next PR onward."
+            fi
+          done
+
+      - name: Decide the tier and enforce it
+        run: |
+          set -e
+          git diff --name-only --no-renames "origin/${BASE_REF}...HEAD" > changed.txt
+          python scripts/merge-tier/merge_tier.py gate --repo "$REPO" --pr "$PR_NUMBER" --changed-files changed.txt
