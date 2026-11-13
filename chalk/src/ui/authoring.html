@@ -151,6 +151,21 @@ label small{color:var(--hp-mute)}
 </details>
 </fieldset>
 <button id="save" type="submit" disabled>초안 저장</button><button id="export" type="button">편집 내용 내보내기</button></form>
+<fieldset id="plan-view" class="plan-view" hidden><legend>계획서 · 부분 고치기</legend>
+<p class="muted">저장한 계획서를 읽고 고칠 부분을 고르세요. 표시된 부분을 누르거나 Tab으로 옮기면 테두리와 ‘이 부분 고치기’가 나타나고, Enter를 눌러도 됩니다. AI는 고른 부분만 고치고 나머지 글자는 한 글자도 바꾸지 않습니다.</p>
+<div class="plan-bar"><label>계획서<select id="plan-file"><option value="lesson">지도안</option><option value="ops">운영 계획안</option></select></label><button id="plan-load" type="button">계획서 불러오기</button></div>
+<p id="plan-hint" class="muted" role="status"></p>
+<p id="plan-note" role="status" aria-live="polite"></p>
+<p id="plan-mark-hint" hidden>Enter를 누르면 이 부분을 고쳐 달라고 할 수 있어요.</p>
+<div id="plan-wrap" class="plan-wrap"><div id="plan-paper" class="plan-paper" lang="ko"></div>
+<button id="plan-fix" type="button" class="plan-fix" tabindex="-1" hidden>이 부분 고치기</button>
+<div id="plan-composer" class="plan-composer" role="group" aria-labelledby="plan-composer-title" hidden>
+<label id="plan-composer-title" for="plan-text"></label>
+<textarea id="plan-text" rows="3" maxlength="500" autocomplete="off" placeholder="예: 선생님 활동을 짝 활동으로 바꿔 주세요" aria-describedby="plan-count"></textarea>
+<div class="plan-composer-bar"><small id="plan-count">0/500</small><span class="plan-actions"><button id="plan-send" type="button" disabled>고쳐 달라고 하기</button><button id="plan-cancel" type="button" class="ghost">취소</button></span></div>
+</div></div>
+<div id="plan-compare" class="assist-card plan-compare" hidden><h3 id="plan-compare-title" tabindex="-1"></h3><p id="plan-compare-empty" class="muted" hidden>글자로 보이는 내용은 그대로이고 표식만 바뀌었어요.</p><table id="plan-compare-table" aria-labelledby="plan-compare-title"><thead><tr><th scope="col">위치</th><th scope="col">이전</th><th scope="col">새 내용</th></tr></thead><tbody></tbody></table></div>
+</fieldset>
 <fieldset id="review"><legend>03 · 바뀌는 내용 확인 · 확정 버전 다시 쓰기</legend>
 <p>저장한 초안이 확정된 버전과 비교해 학생에게 무엇이 달라지는지 봅니다. 확정된 버전의 내용이나 단계 하나를 가져와 새 초안으로 고칠 수도 있습니다. 학생 기록·명단·참여 코드·사용량은 가져오지 않습니다.</p>
 <button id="versions-load" type="button">이 강의의 버전 불러오기</button>
@@ -256,7 +271,7 @@ let lessonApprovalPreset;
 let assistProposal=null,assistApplying=false;const assistAvail=new Map();
 const identity=()=>JSON.stringify(['cohort','profile','course'].map(k=>$(k).value.trim()));
 const status=text=>{$('status').textContent=text;};
-function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;$('approval-fields').disabled=busy||!approvalCatalog();$('tone-fields').disabled=busy||!toneCatalog();styleSync();const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion||confirmDiff?.candidate!==readiness?.version||confirmDiff?.state!=='ready';for(const f of document.querySelectorAll('#editor>fieldset'))f.disabled=busy;aiPreview();assistControls();retroControls();}
+function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;$('approval-fields').disabled=busy||!approvalCatalog();$('tone-fields').disabled=busy||!toneCatalog();styleSync();const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion||confirmDiff?.candidate!==readiness?.version||confirmDiff?.state!=='ready';for(const f of document.querySelectorAll('#editor>fieldset'))f.disabled=busy;aiPreview();assistControls();retroControls();planControls();}
 function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
 function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!globalThis.chalkConnection?.current?.connected)throw Error('위의 ‘Lab 로그인으로 연결’을 눌러 강사 권한을 먼저 연결해주세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
@@ -281,7 +296,7 @@ $('forget').onclick=()=>{clearConnection();status('수업 설정을 비웠습니
 $('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});const filled=frPrefill();step();revision=0;bound=identity();pending=null;dirty=true;status(filled?'새 강의 — 기본 대상으로 ‘대상’과 ‘대상 단계’를 채웠습니다. 이 강의에 맞게 고치고 저장하세요.':'새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
 $('import').onchange=()=>run(async()=>{const f=$('import').files[0];if(!f)return;if(f.size>1024*1024)throw Error('파일은 1 MiB 이하여야 합니다.');const j=JSON.parse(await f.text());const items=j.schema==='hps-authoring-batch/1'?j.courses:[j];if(!Array.isArray(items)||!items.length||items.some(x=>!x.course_id||x.content?.schema!=='hps-session-design/1'||!Array.isArray(x.content.steps)))throw Error('지원하는 강의 초안 파일이 아닙니다.');batch=items;$('courses').replaceChildren(new Option('가져올 강의를 선택하세요',''),...items.map((c,i)=>new Option(c.content.title,String(i))));status('강의를 선택한 뒤 편집하고 저장하세요.');});
 $('courses').onchange=()=>{if($('courses').value===''||!discard())return;const c=batch[Number($('courses').value)];$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('course').value=c.course_id;render(c.content);revision=0;bound=identity();pending=null;dirty=true;status('가져온 초안 — 새 수업으로만 저장합니다. 기존 ID가 있으면 충돌로 보호합니다.');controls();};
-$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);frozenAi(null);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);assistProbe();});
+$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);frozenAi(null);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);assistProbe();planProbe();});
 function renderModels(){
   const available=modelCatalogueScope===identity()&&modelCatalogue;
   $('models-fields').disabled=!available;
@@ -898,6 +913,169 @@ $('retro-next').onclick=()=>retroRun(async()=>{retroFresh();const v=retroView;if
  const d=await retroCall(retroPath()+'/'+encodeURIComponent(v.id)+'/next-draft','POST',{request_id:nextPending.id,expected_draft_revision:revision});nextPending=null;
  if(d.draft){render(d.draft.content);revision=d.draft.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';}
  showRetro(d);status('다음 초안을 시작했습니다 · revision '+revision+' — 버전 '+v.base.version+' 내용입니다. ‘수정’으로 정한 것을 고쳐 저장한 뒤 04에서 후보로 고정해 리허설하세요.');$('retro-status').textContent='다음 초안 revision '+revision+'을(를) 시작했습니다.';});
+// CGP-ART-R-004 / DES-ART-04 — 계획서 · 부분 고치기. The stored chalk-plan/1 file is read with the existing GET .../plan and drawn
+// as inert paper: parsed by DOMParser (no script runs), rebuilt from a closed tag list, and only data-chalk-* attributes are kept,
+// so no style, link, image or handler from the file reaches this page. A section, or an element inside it whose marker value is
+// unique there (the same rule the Service uses), is focusable and can be sent to POST .../plan/section-revision with its marker
+// key. The Service revises only that section and saves it as the next draft revision; the result opens in the FB-01 compare
+// (GET .../diff). Nothing is sent while the draft has unsaved edits or a frozen version is shown.
+const PLAN_ITEM_MARKS=['data-chalk-objective','data-chalk-evidence','data-chalk-move','data-chalk-stuck','data-chalk-risk','data-chalk-material','data-chalk-block','data-chalk-consent','data-chalk-step'];
+const PLAN_SECTION_NAMES={meta:'수업 정보',objectives:'목표','essential-question':'핵심 질문',evidence:'배움의 증거',flow:'수업 흐름','key-questions':'주요 발문','prohibited-moves':'하지 않을 개입','dev-variants':'수준별 변형','home-link':'가정 연계',materials:'준비물',safety:'안전',bridging:'다음 수업 잇기',support:'단계별 막힘과 지원',schedule:'시간표',risks:'위험과 대비',consent:'동의','post-deliverables':'수업 뒤 결과물'};
+const PLAN_ITEM_NAMES={'data-chalk-step':'단계','data-chalk-objective':'목표','data-chalk-evidence':'증거','data-chalk-move':'하지 않을 개입','data-chalk-stuck':'막힘','data-chalk-risk':'위험','data-chalk-material':'준비물','data-chalk-block':'블록','data-chalk-consent':'동의'};
+const PLAN_TAGS=new Set(['section','h1','h2','h3','h4','h5','h6','p','ul','ol','li','table','thead','tbody','tfoot','tr','th','td','caption','div','span','strong','em','b','i','u','br','small','dl','dt','dd','blockquote','code','pre','hr']);
+const PLAN_DROP=new Set(['script','style','template','noscript','iframe','frame','object','embed','svg','math','link','meta','title','head','form','input','button','select','textarea','img','video','audio','canvas']);
+const PLAN_VALUE=/^[A-Za-z0-9_.:-]{1,64}$/;
+var PLAN_MAX=500;
+const PLAN_MSG={stale:'계획서나 초안이 그사이 바뀌었어요. 저장본을 다시 열고 다시 부탁해 주세요.',cap:'오늘 AI 부탁 한도를 다 썼어요. 내일 다시 부탁해 주세요.',refused:'AI가 고친 내용이 계획서 규칙에 맞지 않아 넣지 않았어요. 아무것도 바뀌지 않았어요. 다르게 부탁해 보세요.',selection:'이 부분은 고칠 수 없어요. 다른 부분을 골라 주세요.',large:'이 부분은 한 번에 고치기에 너무 길어요. 더 작은 부분을 골라 주세요.',unchanged:'AI가 이 부분에서 바꿀 곳을 찾지 못했어요. 무엇을 어떻게 바꿀지 조금 더 구체적으로 적어 주세요.',auth:'강사 연결을 확인해 주세요. 아무것도 바뀌지 않았어요.',failed:'고치지 못했어요. 아무것도 바뀌지 않았어요. 잠시 뒤 다시 해 주세요.',none:'이 강의에는 아직 저장된 계획서가 없어요. Studio 강사 모드에서 계획서를 만든 뒤 불러오세요.'};
+// var, not const/let: controls() runs while the page script is still loading, before these lines; planControls() then
+// sees undefined instead of a temporal-dead-zone error.
+var planAvail=new Map(),planState=null,planActive=null,planOpen=null,planPending=null;
+function planIdentity(){return JSON.stringify([identity(),$('plan-file').value]);}
+function planPath(){scope();return '/admin/chalk/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/courses/'+encodeURIComponent($('course').value.trim());}
+function planReady(){return assistReady()&&!!planState&&planState.identity===planIdentity();}
+const planNote=t=>{$('plan-note').textContent=t;};
+function planControls(){
+  if(!planAvail)return;
+  const on=planAvail.get(identity())==='on';
+  $('plan-view').hidden=!on;
+  if(!on)return;
+  $('plan-load').disabled=busy||!assistReady();$('plan-file').disabled=busy;
+  if(planState&&planState.identity!==planIdentity())planClear();
+  const n=$('plan-text').value.length;$('plan-count').textContent=n+'/'+PLAN_MAX;
+  $('plan-text').disabled=busy||!planReady();
+  $('plan-send').disabled=busy||!planReady()||!planOpen||!$('plan-text').value.trim();
+  $('plan-cancel').disabled=busy;
+  $('plan-hint').textContent=assistFrozenOpen()?'고정된 버전을 보는 중에는 고칠 수 없어요. 저장된 초안을 다시 열어 주세요.':bound!==identity()||revision===null||revision<1?'초안을 저장한 뒤에 계획서를 불러올 수 있어요.':dirty?'저장하지 않은 편집이 있어요. 먼저 저장한 뒤에 부탁해 주세요.':!planState?'‘계획서 불러오기’를 누르세요.':'고친 결과는 다음 초안 revision으로 저장되고, 바뀐 곳은 아래 비교에서 볼 수 있어요.';
+}
+// Same probe as the assistant box: an empty POST is 404 while the flag is off and 400 (request required) while it is on,
+// before any model call or charge.
+async function planProbe(){
+  let path,id;try{path=planPath();id=identity();}catch{return;}
+  if(planAvail.has(id))return;
+  try{const r=await fetch(path+'/plan/section-revision',{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:'{}'});
+    if(r.status===404)planAvail.set(id,'off');else if(r.status===400||r.ok)planAvail.set(id,'on');}catch{}
+  controls();
+}
+function planClear(){planState=null;planCloseComposer(false);planSetActive(null);$('plan-paper').replaceChildren();}
+// Inert rebuild: closed tag list, data-chalk-* attributes only, text as text.
+function planCopy(node,out){
+  for(const n of node.childNodes){
+    if(n.nodeType===3){out.append(document.createTextNode(n.nodeValue));continue;}
+    if(n.nodeType!==1)continue;
+    const tag=n.localName;
+    if(PLAN_DROP.has(tag))continue;
+    if(!PLAN_TAGS.has(tag)){planCopy(n,out);continue;}
+    const e=document.createElement(tag);
+    for(const a of n.attributes)if(a.name.startsWith('data-chalk-'))e.setAttribute(a.name,a.value);
+    if((tag==='td'||tag==='th')){for(const k of ['colspan','rowspan'])if(/^[1-9][0-9]?$/.test(n.getAttribute(k)||''))e.setAttribute(k,n.getAttribute(k));}
+    planCopy(n,e);out.append(e);
+  }
+}
+function planMark(el,at,label){el.classList.add('plan-mark');el.tabIndex=0;el.dataset.planAt=JSON.stringify(at);el.dataset.planName=label;el.setAttribute('aria-describedby','plan-mark-hint');}
+function planRender(html,file){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const paper=$('plan-paper');paper.replaceChildren();planCopy(doc.body,paper);
+  const seen=new Map();
+  for(const sec of paper.querySelectorAll('section[data-chalk-section]'))seen.set(sec.dataset.chalkSection,(seen.get(sec.dataset.chalkSection)||0)+1);
+  for(const sec of paper.querySelectorAll('section[data-chalk-section]')){
+    const key=sec.dataset.chalkSection;if(seen.get(key)!==1||!/^[a-z][a-z0-9-]{0,40}$/.test(key))continue;
+    const name=PLAN_SECTION_NAMES[key]||key;sec.dataset.planLabel=name;
+    planMark(sec,{file,section:key},name);
+    for(const el of sec.querySelectorAll('*')){
+      for(const m of PLAN_ITEM_MARKS){
+        const v=el.getAttribute(m);if(v===null||!PLAN_VALUE.test(v))continue;
+        if(sec.querySelectorAll('['+m+'="'+CSS.escape(v)+'"]').length!==1)continue;
+        planMark(el,{file,section:key,marker:{name:m,value:v}},name+' · '+PLAN_ITEM_NAMES[m]+' '+v);break;
+      }
+    }
+  }
+}
+function planPlace(node,mark,below){
+  const w=$('plan-wrap').getBoundingClientRect(),r=mark.getBoundingClientRect();
+  node.style.insetBlockStart=Math.max(0,(below?r.bottom:r.top)-w.top+(below?4:0))+'px';
+  if(!below)node.style.insetInlineEnd=Math.max(0,w.right-r.right)+'px';
+}
+function planSetActive(m){
+  if(planActive&&planActive!==m)planActive.classList.remove('plan-active');
+  planActive=m||null;
+  if(!m){$('plan-fix').hidden=true;return;}
+  m.classList.add('plan-active');$('plan-fix').hidden=false;$('plan-fix').disabled=busy||!planReady();planPlace($('plan-fix'),m,false);
+}
+function planOpenComposer(m){
+  if(!m||!planReady())return;
+  if(planOpen&&planOpen.el!==m)planOpen.el.classList.remove('plan-target');
+  planOpen={el:m,at:JSON.parse(m.dataset.planAt),name:m.dataset.planName};
+  m.classList.add('plan-target');
+  $('plan-composer-title').textContent='‘'+planOpen.name+'’ 고치기';
+  $('plan-composer').hidden=false;planPlace($('plan-composer'),m,true);
+  controls();$('plan-text').focus();
+}
+function planCloseComposer(refocus=true){
+  const o=planOpen;planOpen=null;$('plan-composer').hidden=true;
+  if(o){o.el.classList.remove('plan-target');if(refocus&&o.el.isConnected)o.el.focus();}
+}
+function planError(e){
+  if(e.status===429)return PLAN_MSG.cap;
+  if(e.status===409)return PLAN_MSG.stale;
+  if(e.status===422)return PLAN_MSG.refused;
+  if(e.status===413)return PLAN_MSG.large;
+  if(e.status===400)return PLAN_MSG.selection;
+  if(e.status===401||e.status===403)return PLAN_MSG.auth;
+  return PLAN_MSG.failed;
+}
+async function planFetch(){
+  const file=$('plan-file').value;
+  let d;try{d=await call(planPath()+'/plan?file='+encodeURIComponent(file));}
+  catch(e){if(e.status===404){planClear();planNote(PLAN_MSG.none);return null;}throw e;}
+  if(typeof d?.html!=='string')throw Error('계획서 응답 형식이 예상과 다릅니다');
+  planState={identity:planIdentity(),file,sha:d.sha256,ref:d.ref};planRender(d.html,file);return d;
+}
+function planShowCompare(d,changes,name){
+  const body=$('plan-compare-table').tBodies[0];body.replaceChildren();
+  for(const c of changes){
+    const tr=document.createElement('tr'),th=document.createElement('th'),b=document.createElement('td'),a=document.createElement('td'),code=document.createElement('code');
+    th.scope='row';code.textContent=c.key+(c.field?' · '+c.field:'');th.append(code);
+    b.dataset.label='이전';b.textContent=c.before??'(없음)';a.dataset.label='새 내용';a.textContent=c.after??'(지움)';
+    tr.append(th,b,a);body.append(tr);
+  }
+  $('plan-compare-title').textContent='‘'+name+'’을 고쳤어요 · revision '+d.from_revision+' → '+d.to_revision;
+  $('plan-compare-empty').hidden=changes.length>0;$('plan-compare-table').hidden=!changes.length;
+  $('plan-compare').hidden=false;
+}
+$('plan-load').onclick=()=>run(async()=>{$('plan-compare').hidden=true;planNote('');const d=await planFetch();if(d)planNote('계획서를 불러왔어요 · revision '+d.ref);});
+$('plan-file').onchange=()=>{planClear();$('plan-compare').hidden=true;controls();};
+const planWrap=$('plan-wrap');
+// No hover handler (REQ-CHALK-ROW-ACTIONS): the pointer outline is CSS :hover; the button follows focus, which a click or a
+// tap on a mark gives as well as Tab, so the action never depends on hover.
+$('plan-paper').addEventListener('focusin',e=>{const m=e.target.closest('.plan-mark');if(m)planSetActive(m);});
+$('plan-paper').addEventListener('focusout',e=>{if(!planWrap.contains(e.relatedTarget)&&!planOpen)planSetActive(null);});
+$('plan-paper').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.classList?.contains('plan-mark')){e.preventDefault();planOpenComposer(e.target);}});
+$('plan-fix').onclick=()=>planOpenComposer(planActive);
+$('plan-cancel').onclick=()=>{planCloseComposer();controls();};
+$('plan-composer').addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing){e.preventDefault();planCloseComposer();controls();}});
+$('plan-text').addEventListener('input',e=>{e.stopPropagation();controls();});
+$('plan-send').onclick=()=>run(async()=>{
+  const o=planOpen,text=$('plan-text').value.trim();
+  if(!o||!text||!planReady())return;
+  const id=identity(),rev=revision,sig=JSON.stringify([id,rev,o.at,text]);
+  if(planPending?.sig!==sig)planPending={sig,id:'plan-'+crypto.randomUUID()};
+  planNote('AI가 ‘'+o.name+'’을 고치고 있어요…');
+  let d;try{d=await call(planPath()+'/plan/section-revision','POST',{at:o.at,request:text,expected_revision:rev,request_id:planPending.id});}
+  catch(e){planPending=null;planNote(planError(e));if(e.status===404){planAvail.set(id,'off');planClear();}return;}
+  planPending=null;
+  if(identity()!==id){planNote(PLAN_MSG.stale);return;}
+  if(!d?.changed){planNote(PLAN_MSG.unchanged);return;}
+  // The draft revision moved: read the saved draft back (its plan_ref changed) before anything else can save over it.
+  const draft=await call(scope());render(draft.content);revision=draft.revision;bound=identity();dirty=false;pending=null;
+  planCloseComposer(false);$('plan-text').value='';
+  await planFetch();
+  const diff=await call(planPath()+'/diff?file='+encodeURIComponent(o.at.file)+'&from='+encodeURIComponent(d.from_revision)+'&to='+encodeURIComponent(d.revision));
+  const target=[...$('plan-paper').querySelectorAll('.plan-mark')].find(el=>el.dataset.planAt===JSON.stringify(o.at));
+  target?.classList.add('plan-revised');
+  planShowCompare(diff,Array.isArray(diff?.changes)?diff.changes:[],o.name);
+  planNote('‘'+o.name+'’만 고쳐서 저장했어요 · revision '+revision+'. 바뀐 곳을 아래에서 확인하세요.');
+  $('plan-compare-title').focus();
+});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 </script><style>
 html:root,body{background:var(--ds-c-chalk-authoring-surface-87)!important;color:var(--ds-c-chalk-authoring-ink-66);min-height:100vh}body{margin:0!important}body>.wrap,body>header,body>main{width:min(100%,var(--ds-c-chalk-authoring-size-97));margin-inline:auto;padding:var(--ds-c-chalk-authoring-space-5)}
@@ -944,4 +1122,30 @@ body{max-width:var(--ds-c-chalk-authoring-size-97);margin:0 auto!important;paddi
 #assistant_role,.ai-starter{box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);width:100%}
 #starters-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--ds-c-chalk-authoring-space-2)}
 .counter{color:var(--hp-mute)}
+/* CGP-ART-R-004 / DES-ART-04 — the plan view. The plan is light-only paper; a marked section shows a 1px outline (≥3:1 on the
+   paper) under the pointer (innermost mark only) and on focus. "이 부분 고치기" follows focus — Tab, a click or a tap — never hover
+   alone, because Chalk reveals no action on hover (REQ-CHALK-ROW-ACTIONS). Logical properties only. */
+.plan-bar{display:flex;flex-wrap:wrap;align-items:end;gap:var(--ds-c-chalk-authoring-space-2)}
+.plan-view button,.plan-view select{min-height:var(--ds-c-chalk-authoring-size-8)}
+.plan-wrap{position:relative;margin-block:var(--ds-c-chalk-authoring-space-2)}
+.plan-paper{background:var(--ds-c-chalk-authoring-surface-76);color:var(--ds-c-chalk-authoring-ink-47);border-radius:var(--ds-c-chalk-authoring-radius-10);padding:var(--ds-c-chalk-authoring-space-20);font-size:var(--ds-c-chalk-authoring-type-2);overflow-wrap:anywhere}
+.plan-paper:empty{display:none}
+.plan-paper section{background:transparent;border:0;padding:var(--ds-c-chalk-authoring-space-2);margin:0 0 var(--ds-c-chalk-authoring-space-2);color:inherit}
+.plan-paper table{border-collapse:collapse;inline-size:100%}
+.plan-paper th,.plan-paper td{border:var(--ds-c-chalk-authoring-size-3) solid var(--ds-c-chalk-authoring-boundary-55);padding:var(--ds-c-chalk-authoring-space-13) var(--ds-c-chalk-authoring-space-2);text-align:start;vertical-align:top;color:inherit}
+.plan-paper [data-chalk-section]::before{content:attr(data-plan-label);display:block;font-size:var(--ds-c-chalk-authoring-type-17);font-weight:var(--ds-c-chalk-authoring-typography-7);color:var(--ds-c-chalk-authoring-ink-50)}
+.plan-mark{outline:var(--ds-c-chalk-authoring-size-3) solid transparent;outline-offset:var(--ds-c-chalk-authoring-size-7)}
+.plan-mark{cursor:pointer}
+.plan-mark:hover:not(:has(.plan-mark:hover)),.plan-mark.plan-active,.plan-mark.plan-target{outline-color:var(--ds-c-chalk-authoring-ink-50)}
+.plan-mark:focus-visible{outline:var(--ds-c-chalk-authoring-size-7) solid var(--ds-c-chalk-authoring-ink-50)!important}
+.plan-mark.plan-revised{background:var(--ds-c-chalk-authoring-surface-80)}
+.plan-fix{position:absolute;z-index:2;margin:0;font-size:var(--ds-c-chalk-authoring-type-17)}
+.plan-composer{position:absolute;z-index:3;margin:0;inset-inline:0;max-inline-size:var(--ds-c-chalk-authoring-size-101);background:var(--hp-panel);color:var(--hp-text);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-control-line);border-radius:var(--ds-c-chalk-authoring-radius-10);padding:var(--ds-c-chalk-authoring-space-19)}
+.plan-composer label{display:block;font-size:var(--ds-c-chalk-authoring-type-17)}
+.plan-composer textarea{box-sizing:border-box;inline-size:100%;min-block-size:var(--ds-c-chalk-authoring-size-8);resize:vertical;font-size:var(--ds-c-chalk-authoring-type-17)}
+.plan-composer-bar,.plan-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--ds-c-chalk-authoring-space-2)}
+.plan-composer small,.plan-view small{font-size:var(--ds-c-chalk-authoring-type-17)}
+.plan-compare code{font-size:var(--ds-c-chalk-authoring-type-17)}
+@media (forced-colors:active){.plan-mark:hover:not(:has(.plan-mark:hover)),.plan-mark.plan-active,.plan-mark.plan-target{outline-color:Highlight}.plan-mark:focus-visible{outline-color:Highlight!important}.plan-composer{border-color:CanvasText}}
+@media (prefers-reduced-motion:reduce){.plan-wrap *{transition:none!important}}
 </style></html>
