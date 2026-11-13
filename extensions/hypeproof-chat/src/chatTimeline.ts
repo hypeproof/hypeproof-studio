@@ -31,8 +31,8 @@ export interface ToolEntry {
   step?: string;
   since?: number;
   /**
-   * CGP-VOICE-R-007 — set only where the line is a real tool call or its result (an SDK tool_use /
-   * tool_result, a browser-loop call). Thinking, notices, compaction and the pending line carry none.
+   * Set only where the line is a real tool call or its result (an SDK tool_use / tool_result, a
+   * browser-loop call, a denial of one). Thinking, notices, compaction and the pending line carry none.
    * Sent to the webview; never persisted in the timeline.
    */
   kind?: "tool";

@@ -105,7 +105,7 @@ try {
     assert.equal(m.line, null, `${label}: no line before any host event`);
 
     await say({ type: 'streamStart', streamId: 's', messageId: 'm' });
-    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: '파일 고치기 index.html', state: 'running' });
+    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: '파일 고치기 index.html', state: 'running', kind: 'tool' });
     m = await read();
     assert.equal(m.line, '만드는 중 · 파일 고치기 index.html', `${label}: line`);
     assert.ok(m.belowLabel, `${label}: the line sits under the state label`);
@@ -118,7 +118,7 @@ try {
     assert.deepEqual(m.announcers, [['status', '만드는 중 · 파일 고치기 index.html']], `${label}: one announcer`);
     assert.ok(m.inkVisible, `${label}: transparent ink`);
 
-    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: LONG, state: 'running' });
+    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: LONG, state: 'running', kind: 'tool' });
     m = await read();
     assert.equal(m.line, `만드는 중 · ${LONG}`, `${label}: the DOM keeps the whole text`);
     assert.equal(m.tooltip, `만드는 중 · ${LONG}`, `${label}: the tooltip keeps the whole text`);
@@ -128,7 +128,7 @@ try {
     assert.ok(m.inside, `${label}: the line leaves the viewport`);
     assert.equal(m.sideways, false, `${label}: the page scrolls sideways`);
 
-    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: '파일 고치기 index.html', state: 'done' });
+    await say({ type: 'toolLog', streamId: 's', id: 'toolu_1', icon: '✍️', label: '파일 고치기 index.html', state: 'done', kind: 'tool' });
     m = await read();
     assert.deepEqual([m.line, m.kind], ['파일 고치기 index.html 끝났어요', 'done'], `${label}: finished after the result event`);
     assert.deepEqual(m.announcers, [['status', '파일 고치기 index.html 끝났어요']], `${label}: the finish is announced`);

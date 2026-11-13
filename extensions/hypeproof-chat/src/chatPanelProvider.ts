@@ -34,7 +34,7 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, denialToolLine, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
 import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
@@ -10059,7 +10059,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         const log = (id: string, icon: string, label: string, state: "running" | "done" | "error", kind?: "tool") =>
           // #503 — a.at: the SDK's own timestamp as it sent it. It becomes the persisted line's createdAt.
-          // CGP-VOICE-R-007 — `kind: "tool"` only from the tool_use / tool_result cases below, never thinking.
+          // `kind: "tool"` only from the tool_use / tool_result cases below, never thinking (the status line reads it).
           this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}), ...(kind ? { kind } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
@@ -12288,12 +12288,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the window is reopened — the very symptom this issue is meant to catch.
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
-    if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
-      entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
-    }
+    // The denial line keeps the call's `kind` marker: a refused or failed call still ends its running line.
+    if (entry.denial) entry = denialToolLine(entry);
     const t = this.turnTimelines.get(streamId);
-    // CGP-VOICE-R-007 — `kind` is a live-channel marker only; the persisted line keeps its old shape.
+    // `kind` is a live-channel marker only; the persisted line keeps its old shape.
     const { kind: _kind, ...persisted } = entry;
     if (t) this.turnTimelines.set(streamId, timelineTool(t, persisted, Date.now()));
     void this.post({ type: "toolLog", streamId, ...entry });

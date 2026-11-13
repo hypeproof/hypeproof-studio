@@ -28,6 +28,7 @@ import { initialPopupState, meterView, popupTransition, type PopupEvent, type Po
 import { initialVoiceSession, voiceTransition, type VoiceSession } from "../src/voiceSessionHelpers";
 import { windowOutputMute } from "../src/voiceOutputMute";
 import { agentStatusTransition, initialAgentStatus } from "../src/voiceAgentStatus";
+import { denialNotice, denialToolLine } from "../src/denialNotice";
 
 type El = { tagName?: string; textContent: string; getAttribute(n: string): string | null; hasAttribute(n: string): boolean; findAll(f: (e: El) => boolean): El[] };
 const act: (fn: () => unknown) => Promise<void> = (reactAct as unknown as (fn: () => unknown) => Promise<void>);
@@ -251,6 +252,76 @@ t("host: only tool_use / tool_result / browser-loop lines carry kind \"tool\"", 
     const lines = src.filter((l) => l.includes(marker) && /postToolLog|log\(/.test(l));
     ok(lines.length > 0, `found the ${marker} post`);
     for (const l of lines) ok(!/kind|"tool"/.test(l), `a ${marker} line is tagged as a tool: ${l.trim()}`);
+  }
+});
+
+// ---- Failure paths, through the host's own denial rewrite (postToolLog -> denialToolLine) ----
+/** A denial exactly as postToolLog posts it: the call's id, the lock, the denial label, state error. */
+const denied = (id: string, source: string, extra: Record<string, unknown> = {}) =>
+  hostSays({ type: "toolLog", streamId: S, ...denialToolLine({ id, icon: "🔒", label: "", state: "error" as const, denial: denialNotice(source), kind: "tool" as const, ...extra }) });
+const deniedLabel = (source: string) => denialToolLine({ id: "x", denial: denialNotice(source) }).label;
+
+t("D1: a refused approval (denial card) ends the running line and is said, whichever comes first", async () => {
+  await mount();
+  await start();
+  await tool("toolu_1", "running");
+  await approval(true);
+  await denied("toolu_1", "declined");
+  await approval(false);
+  eq([line(), lineKind()], [`문제가 생겼어요 · ${deniedLabel("declined")}`, "error"], "the refusal replaces 만드는 중");
+  eq(announcer(), `문제가 생겼어요 · ${deniedLabel("declined")}`, "announced");
+  ok(!everything().includes("만드는 중"), "the refused call is no longer said to be running");
+  // The other order: the approval closes first, then the denial card arrives.
+  await start("stream-2");
+  await tool("toolu_2", "running", "파일 고치기 index.html", "✍️", "stream-2");
+  await approval(true);
+  await approval(false);
+  await hostSays({ type: "toolLog", streamId: "stream-2", ...denialToolLine({ id: "toolu_2", denial: denialNotice("timeout"), kind: "tool" as const }) });
+  eq(lineKind(), "error", "a timed-out approval is a failure too");
+});
+
+t("an SDK tool denial (policy or runtime) ends the running line", async () => {
+  await mount();
+  await start();
+  await tool("toolu_1", "running", "파일 고치기 /tmp/x.html");
+  await denied("toolu_1", "safety");
+  eq([line(), lineKind()], [`문제가 생겼어요 · ${deniedLabel("safety")}`, "error"]);
+  ok(!everything().includes("만드는 중"), "no running line left");
+});
+
+t("D2: a failed browser-loop step (error with a denial) ends 찾는 중", async () => {
+  await mount();
+  await start();
+  await tool("call_1", "running", "페이지 열기", "🌐");
+  eq(line(), "찾는 중 · 페이지 열기");
+  // The browser loop posts { id, ...line, state: "error", kind: "tool", denial }.
+  await denied("call_1", "runtime", { icon: "🌐", label: "페이지 열기" });
+  eq(lineKind(), "error", "the failure is said");
+  ok(!everything().includes("찾는 중"), "찾는 중 is gone");
+});
+
+t("a failed end while a call runs ends the running line", async () => {
+  await mount();
+  await start();
+  await tool("toolu_1", "running");
+  await end(true);
+  eq([line(), lineKind()], ["문제가 생겼어요", "error"]);
+  ok(!everything().includes("만드는 중"), "no running line left");
+});
+
+t("host: postToolLog's denial rewrite keeps the call's kind marker", async () => {
+  const one = denialToolLine({ id: "toolu_1", denial: denialNotice("declined"), kind: "tool" as const, at: 5 });
+  eq([one.kind, one.state, one.id, one.at, one.icon], ["tool", "error", "toolu_1", 5, "🔒"], "kept");
+  eq(denialToolLine({ id: "n", denial: denialNotice("declined") }).kind, undefined, "and never invented");
+  const src = readFileSync("src/chatPanelProvider.ts", "utf8");
+  const body = src.slice(src.indexOf("private postToolLog("), src.indexOf("private postToolLog(") + 900);
+  ok(/if \(entry\.denial\) entry = denialToolLine\(entry\);/.test(body), "postToolLog rewrites denials through denialToolLine");
+  for (const site of ["approvalDenialCard = ", "this.postToolLog(streamId, { id: line.lineId, icon: '🔒'", "this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError"]) {
+    const at = src.indexOf(site);
+    ok(at >= 0, `found ${site}`);
+    // The statement that posts, up to its closing `);` (the denial card is a short arrow function).
+    const stmt = src.slice(at, src.indexOf(");", src.indexOf("postToolLog", at)) + 2);
+    ok(/kind: ['"]tool['"]/.test(stmt), `${site} posts kind "tool": ${stmt.slice(0, 160)}`);
   }
 });
 

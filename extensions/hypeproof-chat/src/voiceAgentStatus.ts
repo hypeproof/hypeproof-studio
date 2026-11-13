@@ -42,6 +42,8 @@ export interface AgentStatusState {
   streamId: string | null;
   running: readonly RunningTool[];
   approval: boolean;
+  /** A result or failure that arrived while an approval was open: said when the approval closes. */
+  held?: AgentStatusLine | null;
   line: AgentStatusLine | null;
   seq: number;
 }
@@ -116,7 +118,9 @@ export function agentStatusTransition(s: AgentStatusState, event: AgentStatusEve
         const line: AgentStatusLine = event.state === "done"
           ? { kind: "done", icon: "check", text: detail ? `${detail} ${AGENT_TOOL_DONE}` : AGENT_TOOL_DONE, eventId: id, announce: true, seq }
           : runState("error", id, true, seq, detail || undefined);
-        return { ...s, streamId, running, seq, line: s.approval ? s.line : line };
+        // An open approval keeps its line; the result is held and said as soon as it closes, so a
+        // refusal or failure always ends the running line it belongs to.
+        return s.approval ? { ...s, streamId, running, seq, held: line } : { ...s, streamId, running, seq, line };
       }
       return s;
     }
@@ -127,8 +131,8 @@ export function agentStatusTransition(s: AgentStatusState, event: AgentStatusEve
         return { ...s, approval: true, seq, line: runState("approval", null, true, seq) };
       }
       if (!s.approval) return s;
-      const next = { ...s, approval: false };
-      return { ...next, line: resumeLine(next) };
+      const next = { ...s, approval: false, held: null };
+      return { ...next, line: s.held ?? resumeLine(next) };
     }
     case "streamStopped": {
       if (otherStream(s, event.streamId)) return s;
