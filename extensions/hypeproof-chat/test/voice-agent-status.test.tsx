@@ -82,6 +82,8 @@ const speechEnv = () => ({
 });
 const spokenTexts = () => rig.spoken.map((u) => u.text);
 
+/** Long enough to be read in more than one chunk (one utterance holds at most 180 characters). */
+const ANSWER = ["첫 번째 문장이에요.", "두 번째 문장이에요.", "세 번째 문장이에요."].map((x) => x + " 이 문장은 소리로 읽을 때 한 덩어리에 다 들어가지 않도록 일부러 길게 쓴 문장이에요.".repeat(3)).join(" ");
 let interval = 0;
 function Owner() {
   const listening = voiceTransition(voiceTransition(initialVoiceSession(), { type: "start" }), { type: "transport_ready" });
@@ -113,7 +115,7 @@ function Harness({ served }: { served: boolean }) {
     createElement(SpeechEnvContext.Provider, { value: speechEnv as never },
       createElement("div", { className: "frame" },
         createElement(Owner),
-        createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content: "답을 읽어요. 두 번째 문장이에요." })))));
+        createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content: ANSWER })))));
 }
 
 async function mount({ served = true, intervalMs = 0 } = {}) {
@@ -353,6 +355,37 @@ t("a tool failure and a failed reading are two different lines (VO-20)", async (
   await act(() => rig.spoken.at(-1)!.onerror?.({ error: "synthesis-failed" }));
   await tool("toolu_2", "done", "파일 고치기 app.js");
   eq([line(), lineKind()], ["파일 고치기 app.js 끝났어요", "done"], "the tool result is still a success");
+});
+
+t("F1: a status reading refused by autoplay (not-allowed) is reported as a failed reading (VO-20)", async () => {
+  await mount();
+  await start();
+  await tool("toolu_1", "running");
+  const reading = rig.spoken.at(-1)!;
+  eq(reading.text, "만드는 중 · 파일 고치기 index.html", "the status reading started");
+  await act(() => reading.onerror?.({ error: "not-allowed" }));
+  eq(speechFailedLine(), ["작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요."], "the refused reading is said on its own line");
+  eq([line(), lineKind()], ["만드는 중 · 파일 고치기 index.html", "creating"], "the tool line is unchanged");
+});
+
+t("F2: a status never reads over a blocked answer, so its 소리 켜기 still reads the unheard part", async () => {
+  await mount();
+  await press(listen());
+  const answer = rig.spoken.slice();
+  ok(answer.length >= 2, `the answer reads in chunks (${answer.length})`);
+  await act(() => answer[0].onend?.());
+  await act(() => answer[1].onerror?.({ error: "not-allowed" }));
+  const resume = () => all((e) => e.tagName === "BUTTON" && e.textContent.trim() === "소리 켜기")[0];
+  ok(resume(), "the answer is blocked and offers 소리 켜기");
+  const before = rig.spoken.length;
+  await start();
+  await tool("toolu_1", "running");
+  await tool("toolu_1", "done");
+  eq(announcer(), "파일 고치기 index.html 끝났어요", "the status is still announced");
+  eq(rig.spoken.length, before, "no status reading over the blocked answer");
+  ok(resume(), "the answer's recovery is still there");
+  await press(resume());
+  eq(rig.spoken.slice(before).map((u) => u.text), answer.slice(1).map((u) => u.text), "one press reads exactly the unheard chunks");
 });
 
 t("소리 끄기 holds every reading; the line and the announcement still follow events", async () => {
