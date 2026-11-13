@@ -44,7 +44,26 @@ export interface RecorderCtor {
   new (stream: StreamLike, options: { mimeType: string; audioBitsPerSecond: number }): RecorderLike;
   isTypeSupported(mime: string): boolean;
 }
+/**
+ * CGP-SHELL-R-010: what the browser says about the microphone permission before we ask.
+ * `unknown` when it cannot say (no Permissions API, no `microphone` name, a timeout).
+ */
+export type MicPermission = "granted" | "denied" | "prompt" | "unknown";
+
+/**
+ * CGP-SHELL-R-010 / DES-SHELL-09: show Studio's own explainer before `getUserMedia` may raise the OS
+ * prompt. Not when the permission is already granted (no prompt comes) or denied (no prompt comes; the
+ * denied card explains instead), and once per dictation control: after the learner pressed 허용하기 or
+ * 나중에 the next press goes straight on.
+ */
+export function needsMicExplainer(permission: MicPermission, explainedAlready: boolean): boolean {
+  if (explainedAlready) return false;
+  return permission === "prompt" || permission === "unknown";
+}
+
 export interface DictationEnv {
+  /** CGP-SHELL-R-010. Absent (older test rigs): treated as granted, so no explainer is drawn. */
+  micPermission?(): Promise<MicPermission>;
   getUserMedia(constraints: { audio: boolean }): Promise<StreamLike>;
   Recorder: RecorderCtor | undefined;
   now(): number;

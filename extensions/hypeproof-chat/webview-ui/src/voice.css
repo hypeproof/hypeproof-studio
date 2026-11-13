@@ -28,6 +28,10 @@
   overflow-wrap: anywhere; word-break: keep-all; min-width: 0;
 }
 .hps-voice-card { flex-direction: column; align-items: flex-start; }
+/* CGP-SHELL-R-010 / DES-SHELL-09: the microphone explainer is the same inline card (never a modal), the
+   mic glyph before its title; it wraps at 320px like every voice note. */
+.hps-voice-explain > strong { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); }
+.hps-voice-explain > strong > svg { flex: none; }
 .hps-voice-classoff { color: var(--hp-text-muted-default); }
 .hps-voice-recording { gap: var(--hp-space-2) var(--hp-space-3); }
 .hps-voice-rec-dot { width: var(--hp-space-3); height: var(--hp-space-3); border-radius: var(--hp-radius-full); background: var(--hp-ring-focus-default); flex-shrink: 0; }
