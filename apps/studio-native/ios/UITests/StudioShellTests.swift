@@ -140,7 +140,18 @@ final class StudioJourneyTests: XCTestCase {
         return result
     }
     @MainActor private func answer(_ app: XCUIApplication) {
-        XCTAssertTrue(app.staticTexts["sharedReply"].firstMatch.waitForExistence(timeout: 10), "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
+        let appeared = app.staticTexts["sharedReply"].firstMatch.waitForExistence(timeout: 10)
+        if !appeared {
+            // Preserve the first failed observation before XCTest stops the case.
+            // No second tap, longer answer timeout or alternate success oracle.
+            let traceElement = app.staticTexts["nativeJourneyTrace"]
+            let observation = traceElement.exists ? traceElement.label : "native journey trace absent"
+            print("HP_NATIVE_JOURNEY_ANSWER_MISSING " + observation)
+            let trace = XCTAttachment(string: observation); trace.name = "answer-missing-synthetic-trace"; trace.lifetime = .keepAlways; add(trace)
+            let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = "answer-missing-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+            let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "answer-missing-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+        }
+        XCTAssertTrue(appeared, "A send action needs a visible answer or an actionable failure, not just a cleared composer.")
         XCTAssertEqual(app.staticTexts["sharedReply"].firstMatch.label, "What small change would make tomorrow better?")
     }
     @MainActor private func evidence(_ name: String, app: XCUIApplication) throws {
