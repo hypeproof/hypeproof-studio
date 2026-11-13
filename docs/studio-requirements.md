@@ -8694,6 +8694,23 @@ caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+
 viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
 onto a closed card; six injected overrides caught).
 
+REQ-STUDIO-LEARNING-BLOCK-PIN / REQ-CGP-LEARN-04 and DES-CGP-LEARN-04 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH,
+CGP-LEARN-R-004) / PI#4: a block is drawn only at a catalog version this Studio renders. A confirmed lesson pins each
+step's block as `ui` (type) plus `ui_version` (and `ui_params` where the version has params), written by the Service at
+confirm from its versioned catalog (hypeproof-service#461). A lesson frozen before pinning carries no `ui_version`, and
+that means v1. `RENDERED_UI_VERSIONS` (`extensions/hypeproof-chat/src/lessonFocus.ts`) lists the versions drawn: v1
+of every kind today. A pinned version outside it gives no block, and the step's work surface is the unsupported
+notice. It is never drawn with another version's behaviour, so a class pinned to v1 keeps v1 after v2 is published and an
+App that predates v2 never fakes it. The learner never sees a type id, `ui_version`, `ui_params` or a version number:
+the unsupported notice reads "이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요."
+(the type id it used to show between brackets is gone; it stays only in the `data-surface` attribute). Seats: every seat
+that draws the lesson rail. Default: on; display only, no new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-attach.test.tsx` (the real ChatPanel on the minimal DOM: a v1 pin
+draws the block, a v2 pin draws none and shows the notice, and no kind id, `ui_version`, `ui_params` or version number
+appears in the learner's text on either step) and `test/lesson-focus.smoke.mjs` (`surfaceOf` / `rendersPin`: an unpinned
+lesson is v1, v2 and a non-integer pin are unsupported, every kind renders v1 only).
+
 ## Activity memory state line (CGP-KNOW-R-022)
 
 REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI

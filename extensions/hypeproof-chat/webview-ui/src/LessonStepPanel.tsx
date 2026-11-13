@@ -155,7 +155,7 @@ export function LessonStepPanel(props: {
           {saved && <p className="hp-rail-lesson-note" data-saved-work="decision">저장한 결정: {saved.text} · 이유: {saved.reason} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface.startsWith("unsupported:") ? (
-        <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면({surface.slice(12)})은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
+        <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
       ) : (
         <span hidden data-surface="chat" />
       ))}
