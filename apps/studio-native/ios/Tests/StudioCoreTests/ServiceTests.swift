@@ -28,6 +28,38 @@ private final class StubProtocol: URLProtocol {
     }
 }
 final class ServiceTests: XCTestCase {
+    func testReflectionTransportKeepsMonthlyAndUnknownBudgetRefusalsDistinct() async throws {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { StubProtocol.handler = nil; session.invalidateAndCancel() }
+        let service = ConversationService(session: session, base: URL(string: "https://fixture.invalid")!)
+        var pending = try SharedRequest.pending("보낸 생각"); pending.expectedRevision = 2
+        var calls = 0
+        for (status, code) in [(429, "reflection_monthly_limit"), (429, "reflection_budget_limit"), (503, "reflection_admission_unavailable"), (403, "reflection_access_required")] {
+            StubProtocol.handler = { request in
+                calls += 1
+                XCTAssertEqual(request.url?.path, "/v1/me/reflection/turns")
+                XCTAssertEqual(request.httpMethod, "POST")
+                let body = try JSONSerialization.jsonObject(with: StubProtocol.body(request)) as! [String: Any]
+                XCTAssertEqual(body["text"] as? String, "보낸 생각")
+                return (status, try JSONSerialization.data(withJSONObject: ["error": code]))
+            }
+            let before = calls
+            do {
+                _ = try await service.reflect(pending, token: "synthetic")
+                XCTFail("Admission refusal must not become a successful answer")
+            } catch SyncFailure.http(let actualStatus, let actualCode) {
+                XCTAssertEqual(actualStatus, status); XCTAssertEqual(actualCode, code)
+                let message = SyncFailure.http(actualStatus, actualCode).localizedDescription
+                XCTAssertFalse(message.contains("오늘") || message.contains("내일") || message.contains("다시 로그인"))
+                XCTAssertEqual(message.contains("이번 달"), code == "reflection_monthly_limit")
+                XCTAssertEqual(message.contains("다음 달"), code == "reflection_monthly_limit")
+                if status == 503 { XCTAssertTrue(message.contains("이용 상태를 확인하지 못")) }
+                if status == 403 { XCTAssertTrue(message.contains("이용 권한")) }
+            }
+            XCTAssertEqual(calls, before + 1, "Refusal must not silently resend the turn")
+        }
+    }
     func testNativeServiceBoundary() async throws {
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubProtocol.self]
         let service = StudioService(session: URLSession(configuration: config), base: URL(string:"https://fixture.invalid")!)
