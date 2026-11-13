@@ -15,7 +15,7 @@
 `scripts/release/validate-blackbox-run.mjs`(결과 검사), `scripts/release/daily-gate.mjs`(매일 컷 판단).
 대조군: `node --test scripts/release/test/select-cases.test.mjs`.
 
-## 하루의 흐름
+## 데스크톱 릴리스의 하루 흐름
 
 ```
 17:00 KST  release-cut 예약 실행 ─ 앱 변경 없음 / 수업 중 / 일시 정지 → 건너뜀
@@ -55,11 +55,15 @@
 
 ## 케이스 선택 (`select-cases.mjs`)
 
-릴리스마다 자동으로 고른다. 이유가 케이스마다 기록된다.
+릴리스마다 해당 대상의 케이스를 고른다. 기본 대상은 `desktop`(기존 macOS·Windows 앱)이다.
+각 케이스의 `targets` 를 생략하면 `desktop` 이며, iPhone 은 `targets: [ios]` 로 명시한다.
+허용 값은 `desktop`, `ios`, `android` 다. 빈 배열·중복·문자열 하나·모르는 값은 오류이며,
+모르는 대상을 데스크톱으로 바꾸거나 검사 0건으로 통과시키지 않는다.
+대상 필터를 적용한 뒤 다음 이유가 케이스마다 기록된다.
 
 | 이유 | 조건 |
 |---|---|
-| `p0` | 모든 여정의 P0 케이스 전부 |
+| `p0` | 해당 대상에 속한 모든 여정의 P0 케이스 전부 |
 | `touched:<id>` | 마지막 안정 태그 이후 머지된 PR 이 건드린 요구사항 id 에 연결된 케이스. id 는 커밋 제목·본문(스쿼시 머지가 PR 제목과 본문을 담는다)과 요구사항 문서(`docs/studio-requirements.md`, `docs/requirements/`, `docs/dev/04-requirements.md`) diff 의 바뀐 줄에서 찾는다. 로컬 git 만 쓴다. 바뀐 id 가 케이스 id 의 하위(`REQ-L12-14` → `REQ-L12`)여도 걸린다 |
 | `escaped:<날짜>` | 최근 14일 안에 추가된 유출 버그 케이스 |
 
@@ -70,14 +74,16 @@
 node scripts/release/select-cases.mjs                      # 마지막 안정 태그..origin/main
 node scripts/release/select-cases.mjs --json --today 2026-10-21
 node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문의 범위·커밋 (gh 읽기 1회)
+node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA> --candidate <후보-소스-SHA> --json
 ```
 
 `--pr <번호>` 는 릴리스 PR 본문의 `Candidate commit` 과 `Range` 를 읽어 범위를 정한다. 본문에 그 줄이
 없거나 형식이 다르면 멈춘다 — 기본 범위로 조용히 바꾸지 않는다. `--baseline`·`--candidate` 와 같이 쓰면
-오류다. 모르는 옵션도 오류로 멈춘다.
+오류다. 모르는 옵션·`--target` 값도 오류로 멈춘다. JSON 의 `target` 과 각 행의 `targets`,
+마크다운의 대상 줄에 적용 범위가 남는다. iPhone 확인은 정확한 네이티브 후보의 소스 범위를 명시한다.
 
 케이스북이 깨져 선택이 실패하면 컷은 멈추지 않는다. PR 본문에 **케이스 선택 실패** 가 찍히고,
-관리자는 `cases.yaml` 의 P0 를 전부 실행한다.
+관리자는 `cases.yaml` 에서 해당 대상의 P0 를 전부 확인한다. 잘못된 대상 표기는 먼저 고친다.
 
 ## 판정 규칙
 
@@ -88,10 +94,48 @@ node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문
 - PASS 는 스크린샷이 있어야 PASS 다. 사전 테스트의 FAIL 은 깨끗한 프로필에서 한 번 다시 해 본 뒤의 FAIL 이다.
 - 체크박스를 비워 둔 채 승인하지 않는다. 할 수 없었던 케이스는 `BLOCKED — 이유` 로 적는다.
 - **발행 게이트가 이것을 확인한다**(#3429, `scripts/release/publish-gate.mjs`). 승인 경로의 안정 태그는 릴리스 PR 에
-  현재 head 를 테스트한 `hps-blackbox-run/1` 결과 댓글이 태그 시점 `cases.yaml` 의 P0 케이스(자동화됨 제외) 전부에
+  현재 head 를 테스트한 `hps-blackbox-run/1` 결과 댓글이 태그 시점 `cases.yaml` 의 데스크톱 P0 케이스(자동화됨 제외) 전부에
   PASS 를 줄 때만 공개된다. 결과 댓글은 멤버·협업자나 조직 봇이 단 것만 센다. 대신 Jay 나 그 PR 을 승인한 writer 가 head
   커밋 뒤에 `Release manager override` 로 시작하고 이유를 적은 댓글을 남기면 공개된다. 어느 길로 나갔는지 한 줄이 릴리스
   노트의 `hps-process:v1` 블록에 남는다. 공개 Service 가 rc 수락 뒤에 바뀌어 수락을 다시 돌렸으면 그 사실도 한 줄 남는다.
+
+## iPhone 여정과 증거 연결 (CUJ-8, #3771 / #3784)
+
+`CUJ-8` 의 `BB-033`–`BB-037` 은 첫 로그인·받아쓰기·음성 대화·실패 복구의 **active** 유출 버그
+케이스다. `--target ios` 로 고르며, 최근 14일 유출 조건이나 P0 때문에 데스크톱 안정 릴리스의
+필수 목록에 섞이지 않는다. 선택기와 `publish-gate` 는 같은 대상 판정을 사용한다.
+`android` 는 허용된 대상 이름일 뿐, iPhone 케이스가 Android 수용 증거가 되는 것은 아니다.
+
+자동 검사는 기존 네이티브 경로에 연결한다. 아래 여덟 검사는
+[`StudioJourneyTests`](../../../apps/studio-native/ios/UITests/StudioShellTests.swift)에 있으며,
+[`collect-native-journeys.py`](../../../apps/studio-native/scripts/collect-native-journeys.py)가 실제
+실행 로그에서 이름별 실행·통과를 확인한다. 하나라도 누락·건너뜀·실패하면 시뮬레이터 여정 통과로
+보고하지 않는다. 빌드 성공만으로 이 목록을 채우지 않는다.
+
+| 케이스 | 시뮬레이터 검사 (`StudioJourneyTests.` 뒤 이름) |
+|---|---|
+| BB-033 | `testFirstInstallSignInToFirstAnswerWithoutDesktop` |
+| BB-033 | `testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking` |
+| BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
+| BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
+| BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-036 | `testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch` |
+| BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
+| BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
+
+`hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
+상태·저장 경로를 사용하지만 인증 서버·HTTP·음성 이벤트는 합성이다. 실기기, 실제 브라우저 로그인,
+한국어 음성 인식은 따로 실행하기 전까지 `NOT_RUN` 이다. 실제 iPhone 실행은 빌드 번호·소스 SHA·
+iOS 버전·계정 이용 자격과 케이스별 스크린샷/관측·실패 이유를 별도 기록한다. 한 케이스의 일부만
+관측했으면 전체 PASS 로 합치지 않는다. 시뮬레이터 통과는 `status: 자동화됨` 으로 은퇴시키는
+근거가 아니며 아래 은퇴 규칙을 그대로 따른다.
+
+데스크톱 RC 태그용 `hps-blackbox-run/1` 에 iPhone 빌드나 합성 결과를 끼워 넣지 않는다.
+이 연결은 새 승인·배포 경로를 만들지 않는다. 기존 네이티브 후보 검증·TestFlight 업로드 절차를
+유지하며 **실기기 `NOT_RUN` 만으로 테스트 후보 배포를 막지 않는다.** 업로드·TestFlight에서 설치 가능·
+사용자 수용은 다른 상태다. 상세 기준은 [MFR-01–06](../../requirements/mobile-growth-roadmap.md)과
+[MFR-T01–06](../../testing/native-mobile-growth.md),
+[Foundry native recipe](../../../apps/studio-native/FOUNDRY.md)를 따른다.
 
 ## 유출 버그 규칙
 
@@ -99,7 +143,7 @@ node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문
 
 - `origin: {kind: escaped-bug, date: <발견일>, ref: "#<고친 PR>"}`.
 - 케이스는 그 버그를 사용자 눈으로 다시 밟는 단계와, 고친 뒤의 실제 문구를 `expect` 에 적는다.
-- 추가된 날부터 14일 동안은 P0 가 아니어도 매 릴리스에 뽑힌다. 그 뒤에는 우선순위와 요구사항 연결로만 뽑힌다.
+- 추가된 날부터 14일 동안은 P0 가 아니어도 해당 대상의 매 릴리스에 뽑힌다. 그 뒤에는 우선순위와 요구사항 연결로만 뽑힌다.
 - PR 검사 `process / escaped-bug-case` 가 이 규칙을 기계로 지킨다(#3429, `scripts/release/escaped-bug-case.mjs`).
   PR 이 닫는 이슈(`Closes #N` 또는 연결된 이슈)에 `escaped-bug` 라벨이 있거나 `member-report` + `bug` 이면, 이 PR 이
   `cases.yaml` 에서 추가·수정한 케이스 중 하나가 `origin.ref` 에 그 PR 이나 이슈 번호를 적거나, `automated_by` 에 이 PR 이
@@ -123,6 +167,7 @@ CI 가 자동으로 같은 것을 재고, **그 자동 검사가 6개월 동안 
   - id: BB-023
     journey: CUJ-1
     priority: P0
+    targets: [desktop]
     title: 한 줄 요약
     requirements: [REQ-STUDIO-FREE-START, TUX-SP-14]
     steps:
@@ -138,13 +183,14 @@ CI 가 자동으로 같은 것을 재고, **그 자동 검사가 6개월 동안 
 
 - `id` 는 다음 번호. 지운 번호를 다시 쓰지 않는다.
 - `priority`: **P0** = 막히면 사용자가 그 여정을 끝내지 못한다. P1 = 우회할 수 있지만 사용자가 알아챈다. P2 = 드문 경로·문구.
-- `requirements`: `REQ-` `TUX-` `US-` `PRA-` `NAT-` `AB-` `CGP-…-R-nnn` id. 적어도 하나. 이것이 `touched` 선택의 연결고리다.
+- `targets`: 선택. 생략하면 `[desktop]`. 복수 대상에 실제로 같은 동작이 있을 때만 예를 들어 `[ios, android]` 로 적는다. 대상 선택은 실행·수용 증거가 아니다.
+- `requirements`: `REQ-` `TUX-` `US-` `PRA-` `NAT-` `AB-` `MFR-nn` `CGP-…-R-nnn` id. 적어도 하나. 이것이 `touched` 선택의 연결고리다.
 - `origin.kind` 는 `design` 또는 `escaped-bug`(+ `date`, `ref`). `automated_by` 는 같은 것을 재는 자동 검사(선택). `status: 자동화됨` 은 은퇴 규칙을 따른다.
 - 줄 끝 주석(`값  # 설명`)은 쓰지 않는다. 주석은 줄 전체로만 쓴다.
 
-- 문구는 소스(`extensions/hypeproof-chat/`, `scripts/release/templates/`)에서 그대로 옮긴다. 추측한 문구로 기준을 세우지 않는다(.claude/rules/verification.md 규칙 1).
+- 문구는 소스(`extensions/hypeproof-chat/`, `scripts/release/templates/`, `apps/studio-native/ios/`)에서 그대로 옮긴다. 추측한 문구로 기준을 세우지 않는다(.claude/rules/verification.md 규칙 1).
 - 따옴표로 시작하는 값은 따옴표로 끝나야 한다. 날짜(`"2026-10-20"`)와 `#` 으로 시작하는 값(`"#2094"`)은 따옴표로 감싼다 — 다른 YAML 도구가 날짜 객체나 주석으로 읽는다. 파서는 YAML 의 일부만 읽고, 모르는 것은 오류로 낸다. 테스트가 PyYAML 결과와 대조한다.
-- 고친 뒤 `node --test scripts/release/test/select-cases.test.mjs` 를 돌린다.
+- 고친 뒤 `node --test scripts/release/test/select-cases.test.mjs scripts/release/test/publish-gate.test.mjs` 를 공유 자원 래퍼로 돌린다.
 
 ## 매일 컷 멈추기
 

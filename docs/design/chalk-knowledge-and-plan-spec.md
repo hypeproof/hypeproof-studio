@@ -203,6 +203,7 @@ CREATE TABLE chalk_knowledge_docs (
 ```
 
 - `at` 은 키만 쓴다. 줄 번호·문자 위치는 앱이 HTML 을 열 때 표식을 찾아 계산한다(서버는 줄 번호를 모른다)
+- 부분 고치기(CH-11, CGP-ART-R-004)의 위치도 같은 원칙을 따른다: `{file, section, marker?:{name,value}}`. `marker` 가 없으면 절 전체이고, 있으면 그 절 안에서 값이 하나뿐인 표식 요소다. 서버가 저장된 파일에서 직접 위치를 찾고, 하나로 정해지지 않으면 거절한다. 칸 표식(`data-chalk-field`·`-role`·`-requires`·`-forbids`·`-derived-from`)은 위치로 쓰지 않는다
 
 ---
 

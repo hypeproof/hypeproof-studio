@@ -9,8 +9,8 @@
 # commit it was built from and the SHA-256 of its darwin-arm64 zip. Nothing is looked
 # up at run time, so this script installs exactly this build or nothing.
 #
-# Why curl: the zip is ad-hoc signed and not notarized. A browser download gets the
-# com.apple.quarantine flag and Gatekeeper refuses the app. curl adds no such flag.
+# Official candidates require Developer ID and notarized Gatekeeper acceptance.
+# The script preserves quarantine attributes and never changes security policy.
 #
 # Layouts:
 #   app  ~/Applications/HypeProof Studio.app (default for a stable tag).
@@ -22,7 +22,7 @@
 #
 # What it reuses rather than reimplements:
 #   - the app install steps of scripts/install.sh (install_studio_mac): verified zip,
-#     extract, replace, clear quarantine on the curl path;
+#     extract, stage, verify and replace;
 #   - the native SDK seed: this release's own claude-agent-sdk-darwin-arm64-<v>.tgz,
 #     installed by the canonical scripts/seed-sdk-binary.sh --tarball, exactly as Lab's
 #     open install (hypeprooflab web/public/install/studio/install-mac.sh) does. The
@@ -60,6 +60,7 @@ HPS_SEED_VERSION="@@SEED_VERSION@@"
 HPS_SEEDER_SHA256="@@SEEDER_SHA256@@"
 HPS_PRERELEASE="@@PRERELEASE@@"
 HPS_FREE_START="@@FREE_START@@"
+HPS_OFFICIAL_SIGNING="@@OFFICIAL_SIGNING@@"
 HPS_KIT_DIR_NAME="@@KIT_DIR_NAME@@"
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,18 @@ APP="$PARENT/$APP_NAME"
 
 plist() { /usr/libexec/PlistBuddy -c "Print $1" "$2/Contents/Info.plist" 2>/dev/null || true; }
 
+# Fixed release identity; neither downloaded metadata nor the installed app chooses it.
+verify_signed_app() {
+  local app="$1" bid assessment
+  bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") || return 1
+  [[ "$bid" == 'ai.hypeproof.studio' ]] || return 1
+  /usr/bin/codesign --verify --deep --strict --all-architectures "$app" || return 1
+  /usr/bin/codesign --verify --strict --all-architectures '-R=identifier "ai.hypeproof.studio" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "RZBNT9ZB67"' "$app" || return 1
+  assessment=$(LC_ALL=C /usr/sbin/spctl --assess --type execute --verbose=4 "$app" 2>&1) || { printf '%s\n' "$assessment" >&2; return 1; }
+  # Only one authority line is valid; text in a path must not impersonate it.
+  [[ "$(printf '%s\n' "$assessment" | /usr/bin/sed -n 's/^source=//p')" == 'Notarized Developer ID' ]] || return 1
+}
+
 # ── Safety checks (nothing is written before these pass) ─────────────────────
 if [ -L "$PARENT" ] || [ -L "$APP" ]; then
   fail "설치 경로가 심볼릭 링크여서 멈췄습니다: $APP"
@@ -236,15 +249,23 @@ PRODUCT_COMMIT=$(/usr/bin/plutil -extract commit raw -o - "$PRODUCT" 2>/dev/null
 [ "$PRODUCT_VERSION" = "$HPS_PRODUCT_VERSION" ] || fail "앱 제품 버전이 맞지 않습니다."
 [ "$PRODUCT_COMMIT" = "$HPS_SOURCE_SHA" ] || fail "앱 소스 커밋이 맞지 않습니다."
 
+if [ "$HPS_OFFICIAL_SIGNING" = 1 ]; then
+  verify_signed_app "$NEW" || fail "공식 서명과 Apple 공증을 확인하지 못했습니다. 기존 앱은 변경하지 않았습니다."
+fi
+
 # ── Install: stage beside the target, then swap (the old copy returns on failure) ──
 INSTALL_STEP=place
 say "$APP 에 설치하는 중"
 mkdir -p "$PARENT"
 [ "$LAYOUT" != kit ] || touch "$PARENT/$MARKER"
-STAGE="$PARENT/.hps-install-$$"
+STAGE="$PARENT/.hps-install-$$.app"
 OLD="$PARENT/.hps-previous-$$"
 rm -rf "$STAGE" "$OLD"
 ditto "$NEW" "$STAGE" || { rm -rf "$STAGE"; fail "앱을 복사하지 못했습니다."; }
+if [ "$HPS_OFFICIAL_SIGNING" = 1 ] && ! verify_signed_app "$STAGE"; then
+  rm -rf "$STAGE"
+  fail "복사된 앱의 보안 검증에 실패했습니다. 기존 앱은 변경하지 않았습니다."
+fi
 if [ -e "$APP" ]; then mv "$APP" "$OLD"; fi
 if ! mv "$STAGE" "$APP"; then
   [ ! -e "$OLD" ] || mv "$OLD" "$APP"
@@ -252,14 +273,6 @@ if ! mv "$STAGE" "$APP"; then
   fail "앱을 제자리에 옮기지 못했습니다. 이전 설치는 그대로 두었습니다."
 fi
 rm -rf "$OLD"
-# curl added no quarantine flag; this only clears one an earlier browser copy left
-# behind, as scripts/install.sh does. The .command kit never changes security
-# settings, so it only reports.
-if [ "$FROM_COMMAND" = 0 ]; then
-  xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
-elif xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1; then
-  warn "앱에 다운로드 격리 표시가 있습니다. 보안 설정을 바꾸지 말고 아래 한 줄 설치 명령을 쓰세요: $ONE_LINER"
-fi
 [ "$(plist CFBundleShortVersionString "$APP")" = "$HPS_PRODUCT_VERSION" ] || fail "설치된 앱 버전을 확인하지 못했습니다."
 
 # ── Kit layout: own profile + START script ───────────────────────────────────

@@ -472,6 +472,50 @@ The existing curriculum-runtime grant remains authoritative for every seat/runti
 This display does not implement the separate minor-publication confirmation row R-012.
 No new recipient, default, publication permission or human agreement is introduced.
 
+## DEC-ART-R-012: publish responsibility notice (2026-11-12, agent choice)
+
+Built (notice for every seat, Studio-only):
+
+- Placement (agent choice): an inline sheet beside the button that makes a new link, not a modal.
+  The publish flow already has a visitor preview and an outbound checklist with a public step
+  (CGP-KNOW-R-007); a third modal would train dismissal. The sheet comes first, so nothing is
+  built or sent before it is acknowledged.
+- Scope (agent choice): both link producers, `submit` (first publish) and `link` (another channel's
+  link of a running experiment), are gated. A learner who published before this change reads the
+  notice once at their next new link.
+- Versioning (agent choice): `PUBLISH_NOTICE_VERSION` in `extensions/hypeproof-chat/src/publishNotice.ts`.
+  Any copy change is a new version. Acknowledgments are kept per owner digest per version in machine
+  `globalState` (not workspace state), so another learner on the same machine reads it and moving
+  folders does not ask again. The record is local; it is not sent to the Service and Chalk cannot
+  see it. A cleared profile asks again, which is the safe direction.
+- Copy (agent choice): three bullets adapted from the observed ChatGPT terms modal (who can open it,
+  who is responsible for its content, personal data), in the learner's register. No policy or
+  removal claim is made, because no Studio removal policy is written down.
+
+Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk badge):
+
+- What exists: no served SX-41 flag (spec only, `docs/requirements/studio-learning-experience.md`
+  SX-41, P2), no Service link state other than live/revoked/expired, no confirm route, no Chalk list.
+  `curriculumRuntimeAllowed` lets minor cohorts publish ("Age does not decide it", 2026-10-05), so a
+  minor cohort's link is reachable as soon as it is issued, before and after this change.
+- Plan, in order, each its own PR behind a default-off profile flag, "Confirmed by Jay: no":
+  1. Service (hypeproof-service): a served profile flag (for example
+     `curriculum_runtime.publish_confirmation: "instructor"`, absent = off); `POST /experiments/:id/links`
+     creates the link `pending_confirmation` when the flag is on; the test origin answers a pending
+     link like a revoked one (no content, no session open, no events); an issuer-token route lists
+     and confirms (or declines) pending links of the issuer's cohorts; the project read returns
+     `pending_confirmation` with its request time. Negative test: a pending link's URL, files and
+     `__hp` routes return no product content.
+  2. Studio: a fourth sharing state `선생님 확인을 기다리고 있어요` with the spinner-free `기다리는 중` label
+     and a time-since counter, refreshed by the existing 15-second and focus reads (no reload); copy
+     stays off until confirmed.
+  3. Chalk: pending confirmations listed in `/manage` with a count badge, confirm and decline.
+- Open question 4 (agent answer, conservative): for a minor cohort the CR-20 one-minute clock starts
+  at instructor confirmation, not at the learner's publish action. The waiting time is recorded
+  separately (the counter above and the request/confirm times), never as a product miss and never
+  as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
+- Confirmed by Jay: no (all choices above are agent choices).
+
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
 Agent-selected conservative implementation, not a new human policy agreement:
@@ -2018,3 +2062,51 @@ Audit of main (4f1602fb2). The extension creates one webview view and twelve web
 - Not changed: Chalk (REQ-CGP-DS-03 says Both, but Chalk is a dark-only web page with no host theme kind); forced colors (forced-colors-computed); the learner's own page inside the preview frame.
 - Not covered: the packaged app in a real VS Code high-contrast theme on macOS or Windows: NOT RUN. The default-theme variables come from the recorded table plus colour-registry defaults, not from a live VS Code.
 - Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-ART-R-004 / CGP-ART-D-004: 이 부분 고치기 in the Chalk plan view (2026-11-13)
+
+Jay approved building it on 2026-11-13. It is an extension of the authoring assistant (CGP-AGENT-R-014), and the approval allows one new Haiku prompt, for this scope only, under these constraints:
+- the same `HPS_AUTHORING_ASSISTANT` flag;
+- the same US$0.20 per instructor per KST day cap;
+- metadata-only logs;
+- the Service, not the model, splices the result back, so every byte outside the section stays unchanged;
+- a Chalk plan view with 이 부분 고치기.
+
+The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed by Jay: yes (2026-11-13) for the approved scope and constraints above. Confirmed by Jay: no for the agent-selected choices below.
+
+- **Generator (agent choice, from the plan).** `chalk-plan/1` files are written by Studio instructor mode through the Chalk tools. Neither hps-authoring-batch nor the assistant route writes them. The assistant's existing prompt and key allow-list cover SessionDesign keys only, and its draft projection drops `plan_ref`. So the section revision is a second task beside it: its own prompt, a `{section_html}` output and the chalk-plan validator. It reuses the assistant's flag, price revision, cap, charge ledger, client and log line.
+- **Anchor (agent choice).** The anchor is `{file, section, marker?:{name,value}}`: a whole section, or an element inside it whose marker value is unique in that section.
+  - Cell markers (`data-chalk-field`, `-role`, `-requires`, `-forbids`, `-derived-from`) are not addressable, because their values repeat by design.
+  - The Service locates the element in the stored file with the parser's tokenizer. Chalk uses the same uniqueness rule, so it only offers what the Service will accept.
+- **Save, not proposal (agent choice).** Unlike CH-10, the result is saved as the next draft revision through the PUT /plan save. Reasons:
+  - The existing FB-01 compare is `GET /diff` between saved revisions.
+  - The FB-05 link (`chalk_feedback_revisions`) needs a revision.
+  - Saving server-side keeps the byte-identical splice from passing back through the browser.
+
+  A draft is never what learners get: freeze, rehearsal and confirmation still gate that.
+- **What the Service refuses (agent choice).** With 422 and nothing stored:
+  - a shape change;
+  - anything PUT /plan refuses;
+  - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
+  - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
+  - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
+  - any parser finding (warn or fail) that the stored plan did not already have.
+
+  The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
+
+  Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
+  - the pointer outline is CSS `:hover` on the innermost mark;
+  - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
+  - keyboard focus shows both the outline and the button, and Enter opens the composer, as the row asks.
+
+  Showing the button on hover alone would need that lock changed. That is a design-system decision, not made here.
+- **Rendering (agent choice).** The plan is parsed with `DOMParser`, rebuilt from a closed tag list, and keeps only `data-chalk-*` attributes. It is drawn as light paper (surface white, ink `#242c28`). The outline uses `ink-50`, about 5.9:1 on the paper, and `Highlight` under forced colors.
+- **Forwarder (agent choice).** Chalk admits the path by name until its service-contracts pin moves past 0.1.5, the same pattern as CGP-SHELL-R-003. The forward budget is 45 s for this path only, because the Service waits up to 30 s on Haiku.
+- **Copy.** The section names, the composer wording and the error sentences are the agent's wording.
+- **Not covered:**
+  - a real Haiku answer: NOT RUN, the model is a fake client in tests;
+  - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
+  - a real screen reader;
+  - staging or production.

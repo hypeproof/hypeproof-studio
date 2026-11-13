@@ -77,16 +77,17 @@ export interface StoreBuyerOrderView {
   paid_at: number;
   refunded_at: number | null;
 }
+/**
+ * One sale as the seller sees it (Jay 2026-11-13): the sale price, the PG fee and the seller's own
+ * 80%, nothing else. The Service's row also carries HypeProof's 20% and the partner/instructor
+ * referral parts inside it; `sellerSaleView` drops them before the row reaches the webview.
+ */
 export interface StoreSaleView {
   order_id: string;
   title: string;
   gross: number;
   pg_fee: number;
   seller: number;
-  commission: number;
-  partner: number;
-  instructor: number;
-  hypeproof: number;
   seller_net: number;
   policy_version: string;
   paid_at: number;

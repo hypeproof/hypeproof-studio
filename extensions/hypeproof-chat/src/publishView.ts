@@ -1,6 +1,7 @@
 // The "사용자 테스트용으로 공개" panel state (cr-publish, #1393). Types only, shared by the
 // host (publishSession.ts) and the webview (PublishPanel.tsx): no node or vscode imports.
 import type { ProductVerification } from "@hypeproof/measurement-core/verification";
+import type { PublishNoticeView } from "./publishNotice";
 
 export interface PublishLinkView {
   id: string;
@@ -45,6 +46,8 @@ export interface PublishView {
   read_failed?: boolean;
   /** With `read_failed`: the rows above are the last good read, taken at this time. Absent when there was none. */
   stale_at?: number | null;
+  /** CGP-ART-R-012: the responsibility notice for the signed-in learner; absent when no one is signed in. */
+  publish_notice?: PublishNoticeView | null;
 }
 
 /** CGP-ART-R-011: what the panel says when the sharing state could not be read. */
@@ -68,6 +71,8 @@ export interface PublishForm {
   repeated_use?: boolean;
   /** Task and milestone names the app reports (`declarations.labels`, cr-evidence): only these are recorded. */
   labels?: string[];
+  /** CGP-ART-R-012: the notice version the learner just acknowledged with 알겠어요 in this panel. */
+  notice_version?: string;
 }
 
 export const EXPIRY_CHOICES = [1, 3, 7, 14] as const;

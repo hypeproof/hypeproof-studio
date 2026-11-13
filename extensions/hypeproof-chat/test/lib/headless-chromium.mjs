@@ -74,6 +74,7 @@ export async function launch(bin, attempt = 1) {
   };
   return {
     send, evaluate, waitForEvent,
+    onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     // One document at a time. `forcedColors` and `dark` are media emulation, not class names.
     async load(html, { width = 1420, height = 800, forcedColors = false, dark = true } = {}) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });

@@ -9,7 +9,9 @@ import re
 import json
 import os
 import subprocess
+import sys
 import tempfile
+import time
 import urllib.parse
 import uuid
 from pathlib import Path
@@ -94,6 +96,13 @@ class GitHub:
             if temp is not None:
                 temp.unlink(missing_ok=True)
 
+    def artifact_zip(self, repo, artifact_id, destination):
+        require(type(artifact_id) is int and artifact_id > 0, 'numeric Actions artifact ID required')
+        with Path(destination).open('xb') as output:
+            result = subprocess.run(['gh', 'api', f'repos/{repository(repo)}/actions/artifacts/{artifact_id}/zip'],
+                                    stdout=output, stderr=subprocess.PIPE, timeout=600)
+        require(result.returncode == 0, 'Actions artifact download failed; no release evidence accepted')
+
 
 def load_native_broker():
     # Authentication code belongs to this same trusted Harness checkout. Neither
@@ -120,8 +129,30 @@ class NativeGitHub(GitHub):
         self.broker = load_native_broker()
         require("actions" in inspect.signature(self.broker.broker_token).parameters,
                 "canonical agent-auth lacks Actions profile; adopt Harness #553, never fall back")
+        require(callable(getattr(self.broker, "broker_grant", None)),
+                "canonical agent-auth lacks grant expiry; adopt Harness #603, never fall back")
+        self._grants = {}
+        self._closed = False
 
-    def _environment(self, path, method):
+    def _revoke(self, grant):
+        # Revocation uses only this instance's installation grant, never a member
+        # credential. Cleanup cannot hide an operation result or its UNKNOWN error.
+        if grant[1].timestamp() <= time.time():
+            return
+        try:
+            self.broker.request("https://api.github.com/installation/token", grant[0], method="DELETE")
+        except Exception:
+            print("Native credential cleanup unconfirmed; the unsaved grant expires at its provider expiry. "
+                  "Preserve the command result and reconcile uncertain writes; do not replay them.", file=sys.stderr)
+
+    def close(self):
+        self._closed = True
+        grants, self._grants = self._grants, {}
+        for grant in grants.values():
+            self._revoke(grant)
+
+    def _environment(self, path, method, *, timeout):
+        require(not self._closed, "native credential session is closed")
         match = re.fullmatch(r"repos/(hypeproof/[A-Za-z0-9_.-]+)(/[^#]*)?", path)
         require(match and match[1] in self.repositories, "native request outside configured repositories")
         repo, suffix = match[1], (match[2] or "")
@@ -132,16 +163,30 @@ class NativeGitHub(GitHub):
             allowed = (method == "GET" and (not suffix or suffix.startswith(("/git/", "/contents/", "/pulls/")))) or (
                 method in {"POST", "PATCH"} and suffix.startswith("/git/"))
         require(allowed, "native endpoint does not match credential profile")
-        try:
-            token = self.broker.broker_token(repo, actions=True) if self.actions else self.broker.broker_token(repo)
-        except Exception:
-            raise Blocked("native broker authentication failed; no ambient credential fallback") from None
+        grant = self._grants.get(repo)
+        # Check both provider wall-clock expiry and a monotonic deadline so a
+        # backward clock adjustment cannot extend a cached grant's lifetime.
+        if grant and min(grant[1].timestamp() - time.time(), grant[2] - time.monotonic()) <= timeout:
+            self._revoke(self._grants.pop(repo))
+            grant = None
+        if grant is None:
+            try:
+                token, expires = self.broker.broker_grant(repo, actions=True) if self.actions else self.broker.broker_grant(repo)
+            except Exception:
+                raise Blocked("native broker authentication failed; no ambient credential fallback") from None
+            grant = (token, expires, time.monotonic() + expires.timestamp() - time.time())
+            self._grants[repo] = grant
+            # One acquisition only; a too-short grant blocks before any GitHub
+            # request. API failures never refresh credentials or replay requests.
+            require(min(expires.timestamp() - time.time(), grant[2] - time.monotonic()) > timeout,
+                    "native grant expires before the request timeout; no request attempted")
+        token = grant[0]
         env = {k: v for k, v in os.environ.items() if k not in {"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_DEBUG"}}
         env.update(GH_TOKEN=token, GH_HOST="github.com", GH_PROMPT_DISABLED="1")
         return env
 
     def api(self, path, method="GET", data=None, *, binary=False):
-        env = self._environment(path, method)
+        env = self._environment(path, method, timeout=90)
         args = ["gh", "api", "--method", method, path]
         if data is not None:
             args += ["--input", "-"]
@@ -155,7 +200,7 @@ class NativeGitHub(GitHub):
     def artifact_zip(self, repo, artifact_id, destination):
         require(self.actions and type(artifact_id) is int and artifact_id > 0, "Actions artifact identity required")
         path = f"repos/{repository(repo)}/actions/artifacts/{artifact_id}/zip"
-        env = self._environment(path, "GET")
+        env = self._environment(path, "GET", timeout=180)
         with Path(destination).open("xb") as output:
             result = subprocess.run(["gh", "api", path], stdout=output, stderr=subprocess.PIPE,
                                     env=env, timeout=180)

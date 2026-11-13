@@ -93,9 +93,9 @@ assert.equal(labels.freeSeatEndedNote('exhausted', undefined, now), '무료로 �
 assert.equal(labels.freeSeatEndedNote('expired', past, now), '무료 사용 시간이 끝나서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요.');
 assert.equal(purchase.freeRefillPending(ahead, now), true); assert.equal(purchase.freeRefillPending(past, now), false);
 assert.equal(purchase.freeRefillPending(undefined, now), false); assert.equal(purchase.freeRefillPending(Infinity, now), false);
-assert.equal(purchase.trialEndNotice('exhausted', true, true, true), `${JAY} 만든 파일과 대화는 그대로 있어요. ${purchase.TRIAL_PASS_POINTER_CHAT}`, 'the pass pointer stays');
-assert.equal(purchase.trialEndNotice('exhausted', false, true, false), purchase.FREE_EXHAUSTED_FRIENDLY, 'no refill ahead: today');
-assert.equal(purchase.trialEndNotice('expired', false, false, true), purchase.TRIAL_EXPIRED_FRIENDLY, 'a code-issued trial never says refill');
+assert.equal(purchase.trialEndNotice('exhausted', true, true), `${JAY} 만든 파일과 대화는 그대로 있어요.`, 'the refill notice names no pass (2026-11-13)');
+assert.equal(purchase.trialEndNotice('exhausted', true, false), purchase.FREE_EXHAUSTED_FRIENDLY, 'no refill ahead: today');
+assert.equal(purchase.trialEndNotice('expired', false, true), purchase.TRIAL_EXPIRED_FRIENDLY, 'a code-issued trial never says refill');
 
 const product = { id: 'pass-30d', label: '30일 이용권', amount: 50000, currency: 'KRW', durationDays: 30, requestLimit: 600 };
 const openTrial = trial => ({ activity_kind: 'trial', profile_id: 'studio-open-trial', ...(trial ? { trial } : {}) });

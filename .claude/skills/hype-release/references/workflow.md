@@ -92,6 +92,17 @@ complete identity matches; obtain the existing engine's new artifact-bound manif
 evidence and approval before promotion. There is no waiver that turns an old PASS
 report into acceptance of a new package.
 
+Official Mac collection additionally requires the final
+`HypeProof-Studio-darwin-arm64.signing.json` receipt, byte-identical to the receipt
+in the exact successful build run's `hypeproof-studio-macos-signing-receipt`
+Actions artifact. Harness pins Apple team `RZBNT9ZB67` and bundle
+`ai.hypeproof.studio`, verifies final ZIP/source/run/attempt identity and retains
+`state.macSigning`. Local-only or expired/mismatched evidence blocks official
+promotion. Historical records remain readable as `legacy`, never relabelled
+official. The existing publisher rechecks before dispatch and preserves the
+receipt alongside package bytes. See `docs/RELEASE-MAC-SIGNING.md` in Harness.
+This Mac verdict does not change or complete the separate TestFlight state.
+
 ## Evidence and acceptance
 
 Evidence keys:
@@ -215,6 +226,15 @@ invoke the same canonical command below; a copied release runtime without that
 broker refuses native operations. No CLI or candidate field selects an alternative
 authentication module, and the broker is never copied into the skill runtime. An old
 client, failed broker or incorrect grant blocks execution without credential fallback.
+
+Within one native command, each repository/profile reuses its own in-memory grant.
+The validated provider expiry must cover the existing request timeout; an expiring
+grant is replaced before a request, never in response to a failed mutation. No token
+is saved or shared between commands. Normal return and exception unwinding revoke
+grants acquired by the command; abrupt process/host loss relies on provider expiry.
+An unconfirmed cleanup emits a sanitized warning without replacing the operation
+result or UNKNOWN failure. Preserve that result and reconcile rather than replaying
+the operation. Injected transports remain owned by their caller.
 The authenticated human identity is read only (`GET /user`); ordinary bot grants
 write the state branch and read source PRs, while a separate Actions grant reads CI
 and dispatches this one workflow. No token enters arguments, state or the report.

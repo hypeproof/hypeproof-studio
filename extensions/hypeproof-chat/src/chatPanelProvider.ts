@@ -51,8 +51,8 @@ import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
-import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
-import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, trialEndNotice, trialEnding } from "./passPurchase";
+import { endCardAdvertised, notifyOptinOffered } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
@@ -146,6 +146,10 @@ import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllow
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
 import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
 import { PublishSession } from "./publishSession";
+import { PublishNoticeLedger } from "./publishNotice";
+
+/** globalState key: CGP-ART-R-012 responsibility-notice acknowledgments, per owner digest per notice version. */
+const PUBLISH_NOTICE_STATE = "hypeproof-chat.publishNoticeAcks";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
@@ -2486,6 +2490,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly publishSession = new PublishSession({
     previewVisitor: showVisitorPreview,
     confirmOutbound,
+    // Per learner (owner digest, never the identity) per notice version, kept across workspaces.
+    publishNotice: new PublishNoticeLedger(
+      {
+        get: () => this.context.globalState.get<unknown>(PUBLISH_NOTICE_STATE),
+        update: (value) => this.context.globalState.update(PUBLISH_NOTICE_STATE, value),
+      },
+      (token) => crBytesOwner(token),
+    ),
     scopeKey: () => String(this.profileGeneration),
     privateDirectories: () => this.cachedProfile?.learning_wiki?.plan?.dir ? [this.cachedProfile.learning_wiki.plan.dir] : [],
     switchOn: () => this.isCurriculumRuntimeEnabled(),
@@ -2531,7 +2543,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (view.available) { this.lastGoodPublish = { scope, at: Date.now(), view }; return view; }
     const last = this.lastGoodPublish;
     if (!view.read_failed || !last || last.scope !== scope) { if (!view.read_failed) this.lastGoodPublish = null; return view; }
-    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice };
+    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice, publish_notice: view.publish_notice ?? null };
   }
 
   /** CR-17 — the "Publish for user test" command: re-checks the served switch, then opens the panel. */
@@ -2546,7 +2558,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** One publish action from the panel, each behind the served switch (a message can be posted without the panel). */
-  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
+  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.postDenialNotice("lesson");
       await this.post({ type: "publishState", view: null, error: lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()) });
@@ -2574,7 +2586,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message, ...(r.lines ? { errorLines: r.lines } : {}) });
       }
       if (msg.type === "publishLink") {
-        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays });
+        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays, ...(typeof msg.noticeVersion === "string" ? { notice_version: msg.noticeVersion } : {}) });
         return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message });
       }
       const r = await this.publishSession.revoke(String(msg.linkId ?? ""));
@@ -5165,7 +5177,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
-  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
+  inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null>; inboxAnswer?(objectId: string, revision: number, generation: number, answer: unknown): Promise<void> } | null = null;
   private currentClassNoticeId: string | undefined;
   classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
   async postInbox(): Promise<void> {
@@ -8628,6 +8640,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "checkpointSave": await this.handleCheckpointSave(msg); return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
+      case "inboxAnswer": await this.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
       case "artifactApprove": await this.approveArtifactInteractively(); return;
       case "helpDraft": await this.helpSource?.draft(msg.key, msg.draft); return;
@@ -8983,15 +8996,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "problemReportOfferAnswer":
         void this.post({ type: "problemReportOffer", offer: null });
         if (msg.accept === true && (msg.reason === "repeat" || msg.reason === "frustration")) await this.openProblemReport(msg.reason);
-        return;
-      case "trialEndCardPasses":
-        // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
-        // purchase view (REQ-L12 ②); no order is created until they choose there.
-        // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
-        // list directly and never passes through the start page's purchaseOpen (surface start_page).
-        this.emitEndCardOffer("offer_clicked");
-        // CONV-FUNNEL-R-006 — the pass list it opens is counted as pass_list_viewed on this surface.
-        void vscode.commands.executeCommand("hypeproof-chat.showPasses", msg.surface === "header_menu" ? "header_menu" : "end_card");
         return;
       case "trialEndCardDismiss":
         // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
@@ -11150,29 +11154,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: 'streamError', streamId, error: err instanceof ProxyAuthError ? err.friendly : sdkErrorDisplayText(err, audience), activityUnavailable: unavailable, requestId, retry: false });
       return;
     }
-    // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
-    // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
-    // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
-    // purchase view, and any other turn ending falls through unchanged.
-    // CONV-ENDCARD-R-005 — an unreadable catalogue is read once more; if it still cannot be read the
-    // card is drawn without pass facts. Only a Service that sells no passes falls back to the banner.
-    if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
-      const card = trialEndCardView({ profile: current.profile, err, products: await endCardCatalogue(current.proxyUrl, { signal: current.signal }), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
-      if (current.signal?.aborted) return;
-      if (card) {
-        void this.post({ type: "streamError", streamId, error: card.text, activityUnavailable: { cause: trialEndReason(err, false) === "expired" ? "expired" : "exhausted", audience }, trialEndCard: card });
-        // CONV-FUNNEL-R-002 — count the card on the grant-scoped funnel route. Only reached when the
-        // card is drawn (never for the banner fallback, a code-issued trial or a pass). The reporter
-        // sends nothing unless the probe turned the route on, and keeps the first view per grant.
-        // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
-        this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
-        this.endCardOfferToken = current.token ?? null;
-        return;
-      }
-    }
+    // TUX-COND-07 — the end-of-trial card was a pass offer. No pass is sold and the app has no purchase
+    // view (2026-11-13, REQ-L12 ①–④ removed), so the host no longer reads the catalogue or draws the
+    // card: a free trial that ran out ends in the calm notice below.
     // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
-    // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
-    // opens the purchase screen or the code box, and leaves the saved code alone.
+    // says the files stay and names no pass. It never opens the code box and leaves the saved code alone.
     // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
     // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
     if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
@@ -11181,12 +11167,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     const ending = trialEnding(err, !!current?.profile?.pass);
     if (ending) {
-      const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
       return;
     }
-    // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
+    // REQ-L12 — a spent pass is not a crash: say what happened (no pass is sold, so no way to buy is named).
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent, activityUnavailable: {cause:"exhausted",audience} }); return; }
     if (unavailable) {
@@ -12135,6 +12120,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       refusal: (target) => this.folderWriteRefusalFor(target),
       capturePage: (root, abs) => this.captureShowPageImage(root, abs),
       noteWrite: (absPath, data) => noteHostWrite([{ absPath, data }], "studio"),
+      // REQ-STUDIO-SHOW-LINK (#3794 slice 2): 링크로 보여주기, off by default until the Service ships it.
+      share: {
+        enabled: () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('showLinkEnabled', false),
+        request: () => { const a = this.reflectionAccounts; return a ? (p: string, b?: unknown) => a.showLinkRequest(p, b) : undefined; },
+        production: vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1') === 'https://api.hypeproof-ai.xyz/v1',
+        copy: async (text) => { await vscode.env.clipboard.writeText(text); },
+      },
     });
   }
 

@@ -47,7 +47,7 @@ expanded WAJ packages repeat the gate after implementation. New acceptance is NO
 | REQ-STUDIO-ISSUER | workshop token mint | issuer token is stored, invalidated on auth failure, and never leaked | `mintStudentToken.ts`, `worker/src/routes/admin.ts` |
 | REQ-STUDIO-REPORT | support report | member report includes safe metadata and request id without raw JTI | `reportProblem.ts`, `worker/src/routes/report.ts` |
 | REQ-STUDIO-PROBLEM-REPORT | problem reporting | automatic content-free signal (default off), in-panel report form with explicit conversation opt-in, offer after a repeated failure or frustration; REQ-H10–H12 | `problemReport.ts`, `problemReportHost.ts`, `ProblemReportDialog.tsx`, Service `worker/src/routes/problem-signals.ts` |
-| REQ-STUDIO-RELEASE | installable app | display name, bundle id, data folder, and branding pass verification | `scripts/verify-branding.sh` |
+| REQ-STUDIO-RELEASE | installable app | display name, bundle id, data folder, and branding pass verification; official macOS full/repack ZIP requires Developer ID Application for the expected team, hardened runtime, timestamp, Apple Accepted, stapled ticket, Gatekeeper and immutable source/run/archive receipt; actual signed install/update acceptance remains required ([#620 contract](macos-developer-id.md)) | `scripts/verify-branding.sh`, `scripts/release/macos-sign.py`, `scripts/release/test/test_macos_sign.py` |
 | REQ-STUDIO-DEV-SUBSCRIPTION | isolated developer runtime | macOS arm64/Windows app copies use explicitly selected CLI subscriptions with local Service authorization, existing approvals, credential isolation and cancellation | `scripts/studio-dev.py`, `src/localRuntime/`, `scripts/test-studio-dev.py`, `test/local-runtime.smoke.mjs` |
 
 ## Acceptance Policy

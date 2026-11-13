@@ -269,8 +269,11 @@ check("renderInstallerScript: includes expected anchors", () => {
   assert.ok(script.includes("*/Contents/Frameworks/*)"), "missing nested-bundle guard");
   // #206: validates OLD_APP's own bundle id, not just NEW_APP's
   assert.ok(script.includes("OLD_BID="), "missing old-app bundle id check");
-  // Has quarantine strip
-  assert.ok(script.includes("xattr -dr com.apple.quarantine"), "missing quarantine strip");
+  assert.ok(!script.includes("xattr"), "official updates must preserve quarantine");
+  assert.ok(script.includes('/usr/bin/codesign --verify --deep --strict --all-architectures'));
+  assert.ok(script.includes('RZBNT9ZB67'), "release-owner pinned Apple team");
+  assert.ok(script.includes('Notarized Developer ID'));
+  assert.ok(script.indexOf('verify_signed_update "$STAGE/next.app"') < script.indexOf('mv "$OLD_APP" "$BACKUP_PATH"'), 'verify the final staged bytes before touching the old app');
   // Has reopen step
   assert.ok(script.includes('open "$OLD_APP"'), "missing reopen");
   assert.ok(script.includes('BACKUP_PATH="$STAGE/previous.app"'), "missing same-volume backup");

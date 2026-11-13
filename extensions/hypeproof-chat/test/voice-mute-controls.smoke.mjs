@@ -110,7 +110,8 @@ const checkPair = (m, label) => {
   assert.deepEqual(m.mutes.map((b) => b.name), ['마이크 끄기', '소리 끄기'], `${label}: names`);
   for (const b of m.mutes) {
     assert.ok(b.pressed === 'true' || b.pressed === 'false', `${label} ${b.name}: aria-pressed missing`);
-    assert.ok(b.w >= 44 && b.h >= 44, `${label} ${b.name}: target ${b.w}x${b.h} under 44px`);
+    // 0.01px of slack: the compact control sits on a translate, so a 44px box can read 43.99998 (CI dark-320).
+    assert.ok(b.w >= 43.99 && b.h >= 43.99, `${label} ${b.name}: target ${b.w}x${b.h} under 44px`);
     assert.ok(Math.abs(b.iconSize - 20) <= 0.5, `${label} ${b.name}: glyph ${b.iconSize}px, want 20`); // a translated corner box reads 20.00002
     assert.ok(b.inside, `${label} ${b.name}: outside the viewport`);
   }

@@ -1,6 +1,6 @@
 # HypeProof 멤버 온보딩 가이드
 
-> 갱신일 2026-10-13 · 상태: 활성
+> 작성일 2026-05-20 · 상태: 활성 · 갱신일 2026-10-13
 
 > 이 문서는 **HypeProof 멤버 누구나 따라할 수 있게** 한글로 적힌 가이드다.
 > Claude Code, Codex, OpenClaw 같은 코딩 에이전트와 함께 쓰는 걸 가정한다.
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | **macOS** (arm64 권장) | ✓ 전부 동작 | ✓ 정책상 유일 지원 | ✓ |
 | **Linux** (x86_64/arm64) | ✓ 대부분 동작 (`stat -f` 의존 메인테이너 스크립트 일부만 BSD 전용) | ✗ METAPLAN §0 정책상 미지원 | ✓ |
-| **Windows** | △ **WSL2 강력 권장**. 네이티브 PowerShell/cmd 미지원 | ✗ 미지원 | △ WSL2로 가능 |
+| **Windows** | 네이티브 PowerShell 진단 지원; 인증·PR·동기화는 **WSL2** | ✗ 미지원 | △ WSL2로 가능 |
 
 **Studio 멤버라면**: 로컬 빌드는 macOS arm64만 가능 (METAPLAN §0). 그 외 OS에선
 CI 빌드된 `.exe`/`.dmg`만 받음 — DEV-GUIDE.md 참고.
@@ -199,9 +199,9 @@ cd "$WS/<your-repo>"
 clone 직후 바로 동작 — 별도 `submodule update --init` 같은 거 없다
 (`skill-creator`는 실파일로 들어와 있음, `vscodium-base`만 studio용 서브모듈).
 
-> **Windows 사용자**: WSL2 안에서 위 명령을 그대로 실행. 네이티브 PowerShell은
-> 미지원 (rsync·BSD stat 등 의존 도구 부재). Git Bash로도 부분 가능하지만
-> 일관성을 위해 WSL2 권장.
+> **Windows 사용자**: 인증·PR·동기화 명령은 WSL2 Linux 체크아웃 안에서 실행한다.
+> 네이티브 PowerShell에서는 소스 진단과 WSL bridge를 사용할 수 있다.
+> [Windows 개발환경](WINDOWS-DEVELOPMENT.ko.md)의 가상환경·symlink·인증 경계를 따른다.
 
 ### 2c. 일상 작업 — harness는 옆에 둔다
 

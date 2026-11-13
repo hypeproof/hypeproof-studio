@@ -126,3 +126,42 @@ exemption, so ignored outputs cannot become a preexisting trusted build cache.
 Existing trees or symlink ancestors are refused without cleanup or execution.
 Real-Git fixtures cover every listed root on each platform with an external
 symlink beneath the ignored tree and assert that the native command never starts.
+
+## First-person iPhone regression journeys — Studio #3771
+
+A shell launch, Keychain probe, build or local-note screenshot does not establish
+that someone can sign in and receive a question. The existing iOS verification
+entrypoint must run `StudioJourneyTests` and collect the actual XCTest log with
+`scripts/collect-native-journeys.py`. Eight required cases exercise the real app
+account continuation, view actions, cache/outbox and voice state machine while
+external Service, browser callback and recognizer transports are synthetic.
+
+The DEBUG-only `NativeJourneyFixture` is selected by `--native-journey`, a known
+`HP_NATIVE_JOURNEY` scenario and a unique `HP_NATIVE_JOURNEY_ID`. It uses a private
+URLSession protocol that refuses unknown routes without a network fallback,
+validates the actual PKCE exchange and namespaces its synthetic Keychain/cache
+and server snapshot. It never presets `signedIn`, replaces the app's send action,
+uses live credentials or grants a real account AI eligibility. The synthetic
+trace and screenshots are XCTest attachments. This seam has no Release code.
+
+The queued-voice case delays only the fixture history GET for two seconds and
+requires trace evidence that speech actually ended during that read, then one
+POST, a visible reply and resumed listening. A delay alone cannot pass the case.
+
+The collector separates device build, simulator journey and physical evidence.
+Missing/skipped/duplicate/incomplete required cases, a nonzero native command or
+any failed attempt cannot become PASS even if a later retry succeeds. Keep the
+original log and result bundle; fix the underlying failure instead of rerunning
+until a green summary hides it. The collector writes once and hashes the exact
+logs. A new attempt needs fresh evidence paths.
+
+`physical_device: NOT_RUN`, real authentication, real Korean ASR and Apple
+processing remain separate. Missing physical evidence does **not** block an
+otherwise validated test candidate from reaching the user for testing; it does
+block any claim that the installed experience has been accepted. See the
+MFR-T01–T06 protocol in `docs/testing/native-mobile-growth.md`.
+
+This infrastructure change must be committed/reviewed before the existing
+Foundry recipe consumes it. The reviewed-patch path for app features does not
+admit changed recipe, verification script or workflow files. A standalone
+collector invocation still does not prove actual Foundry execution.

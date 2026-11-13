@@ -8,6 +8,10 @@ case "$platform" in
   *) echo 'Mobile delivery supports iOS only. Desktop uses the existing Studio RC pipeline.' >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/../ios"
+# Validate request/trigger/checkout before reading any signing material. The
+# downloaded gate must match this run attempt, including on partial reruns.
+python3 ../scripts/verify-native-candidate.py request --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
+  --output "$RUNNER_TEMP/native-upload-preflight.json"
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"
 git rev-parse HEAD > "$evidence/source.txt"
@@ -117,5 +121,11 @@ xcrun altool --validate-app --type "$upload_type" --file "$package" \
   --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" > "$evidence/validation.log" 2>&1
 xcrun altool --upload-app --type "$upload_type" --file "$package" \
   --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" > "$evidence/upload.log" 2>&1
+# set -e ensures none of these outcomes is recorded after a failed command.
+printf '%s\n' '{"archive":0,"export":0,"validation":0,"upload":0}' > "$private/command-results.json"
 cp "$package" "$evidence/HP-Studio-$platform.$extension"
+python3 ../scripts/verify-native-candidate.py receipt \
+  --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
+  --package "$evidence/HP-Studio-$platform.$extension" --archive-info "$archive/Info.plist" \
+  --command-results "$private/command-results.json" --output "$evidence/upload-receipt.json"
 echo 'Upload command completed; Apple processing and tester availability must be verified separately.'

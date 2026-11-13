@@ -19,7 +19,9 @@ const marker = 'hps-managed-draft/1';
 const candidateMarker = 'hps-release-candidate/1';
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 export const contractSources = ['scripts/release/build-contract.mjs', 'e2e/unified-release/artifact.mjs',
-  '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml'];
+  '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml',
+  'config/macos-distribution.json', 'scripts/release/macos-sign.py',
+  'scripts/release/macos-signing-receipt.mjs'];
 
 // An old candidate would execute its old workflows, ignoring every new safety input.
 // Require the exact reviewed contract revision before the first remote mutation.

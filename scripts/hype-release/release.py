@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import ExitStack
 import json
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from transport import GitHub, GitHubStore, LocalGitStore, NativeGitHub
 import native_testflight
 import routing
 import publisher
+import macos_signing
 
 
 def read(path):
@@ -120,6 +122,13 @@ def parser():
 
 
 def main(argv=None, github=None, actions=None, identity=None):
+    # Only clients constructed by this invocation own grants to revoke. Injected
+    # transports remain the caller's responsibility, including on failure.
+    with ExitStack() as cleanup:
+        return _main(argv, github, actions, identity, cleanup)
+
+
+def _main(argv, github, actions, identity, cleanup):
     a = parser().parse_args(argv)
     candidate, policy = read(a.candidate), policy_contract(read(a.policy))
     native = candidate.get("kind") == native_testflight.KIND
@@ -139,8 +148,12 @@ def main(argv=None, github=None, actions=None, identity=None):
         require(a.state_repo in policy["repositories"], "state repository outside policy")
         if native:
             actor = (identity or GitHub()).actor()  # Human credential: GET /user only.
-            github = github or NativeGitHub(policy["repositories"])
-            actions = actions or NativeGitHub([candidate["repository"]], actions=True)
+            if github is None:
+                github = NativeGitHub(policy["repositories"])
+                cleanup.callback(github.close)
+            if actions is None:
+                actions = NativeGitHub([candidate["repository"]], actions=True)
+                cleanup.callback(actions.close)
         else:
             github = github or GitHub()
             actor = github.actor()
@@ -263,12 +276,15 @@ def main(argv=None, github=None, actions=None, identity=None):
         result = collect(github, candidate, a.directory, tag["tagObject"])
         if s["artifacts"]:
             require(s["artifacts"] == result["artifacts"], "candidate packages changed; cut a new RC")
+        if s.get('macSigning'):
+            require(s['macSigning'] == result['macSigning'], 'Mac signing evidence changed; cut a new RC')
         return session.save({**s, **result})
     if a.command == "report":
         release = verify_remote_packages(github, s)
         return {"files": report(s, release, a.directory), "releaseUrl": release["html_url"], "publication": "NOT_RUN"}
     if a.command == "promote-check":
-        verify_remote_packages(github, s)
+        remote = verify_remote_packages(github, s)
+        macos_signing.verify_remote(github, s, remote)
         return engine_check(a.checkout, a.engine_store, a.engine_policy, a.intent, candidate, s["artifacts"])
     if a.command == "resume-upload":
         operation = s["operations"].get(a.operation)

@@ -122,9 +122,9 @@ export const PROFILE_REJECTED_FRIENDLY =
 export const NATIVE_SEAT_ENDED_FRIENDLY =
   "환불했거나 새 코드로 바뀐 코드라 더 쓸 수 없습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
 export const PAID_PASS_REVOKED_FRIENDLY =
-  "환불했거나 새 코드로 바뀐 이용권이라 더 쓸 수 없어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
+  "환불했거나 새 코드로 바뀐 이용권이라 더 쓸 수 없어요. 만든 파일과 대화는 그대로 있어요.";
 export const PAID_PASS_EXPIRED_FRIENDLY =
-  "이용권 기간이 끝났어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
+  "이용권 기간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
 export const PROFILE_UNKNOWN_COHORT_FRIENDLY =
   "참여 코드에 연결된 수업을 찾을 수 없습니다. 코드 발급 담당자에게 수업 정보를 확인해 주세요.";
 export const PROFILE_SERVER_FRIENDLY =
@@ -175,8 +175,8 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
     return { ...base, reason: "rejected", friendly: PROFILE_REJECTED_FRIENDLY };
   }
   if (status === 403) {
-    // A free trial's end no longer points to a code issuer (REQ-L12 (13)); the start page adds the
-    // '이용권으로 시작하기' pointer itself, and only while passes are sold.
+    // A free trial's end no longer points to a code issuer (REQ-L12 (13)), and names no pass to buy
+    // (no pass is sold and the app has no purchase view, 2026-11-13).
     // Free start (SPEC iteration 4 §1.3): a free grant's sentence gets the free copy, never 체험.
     if (code === "trial_expired") return { ...base, reason: "expired", friendly: serviceLine && /이용권/.test(serviceLine) ? serviceLine : serviceLine && FREE_EXPIRED_SERVICE.test(serviceLine) ? FREE_EXPIRED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY };
     return { ...base, reason: "forbidden", friendly: "이 수업에 참여할 권한이나 진행 중인 세션이 없습니다. 강사에게 참여 등록과 수업 상태를 확인해주세요." };

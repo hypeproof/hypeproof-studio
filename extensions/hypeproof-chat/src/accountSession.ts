@@ -41,6 +41,10 @@ interface Options {
   freeCredential?(): PromiseLike<string | undefined>;
   fetch?: typeof fetch; now?: () => number;
 }
+/** A reflection turn waits on a model; a show-link upload carries about 2 MB plus the picture. */
+const timeoutFor = (path: string, body: unknown) => path === '/me/reflection/turns' ? 120_000 : path === '/me/show-links' && body !== undefined ? 60_000 : 12_000;
+/** REQ-STUDIO-SHOW-LINK: the only show-link routes this client calls (hypeproof-service routes/show-links.ts). */
+export const SHOW_LINK_ROUTE = /^\/me\/(?:show-links(?:\/[0-9a-f]{16}\/revoke)?|consents\/show-share)$/;
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const identity = (v: unknown): AccountIdentity | undefined => record(v) && typeof v.id === 'string' && typeof v.email === 'string'
   ? { id: v.id, email: v.email, display_name: typeof v.display_name === 'string' ? v.display_name : v.email } : undefined;
@@ -111,7 +115,7 @@ export class AccountSession {
     try {
       const r = await this.request(this.options.service.replace(/\/+$/, '') + path, {
         method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(path === '/me/reflection/turns' ? 120_000 : 12_000)]) : AbortSignal.timeout(path === '/me/reflection/turns' ? 120_000 : 12_000),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutFor(path, body))]) : AbortSignal.timeout(timeoutFor(path, body)),
       });
       const value: any = await r.json();
       if (!r.ok) { const code = typeof value?.error === 'string' ? value.error : typeof value?.error?.code === 'string' ? value.error.code : `http_${r.status}`; throw new AccountError(code, friendly(code)); }
@@ -187,6 +191,14 @@ export class AccountSession {
       }
       throw e;
     }
+  }
+  /**
+   * REQ-STUDIO-SHOW-LINK — the person's own show links, with the account session. GET without a body,
+   * POST with one. Called only after the person pressed 링크로 보여주기 (list) or 링크 만들기 / 링크 끄기.
+   */
+  async showLinkRequest(path: string, body?: unknown): Promise<any> {
+    if (!SHOW_LINK_ROUTE.test(path)) throw new Error('Invalid show-link route');
+    return this.authenticated(path, body);
   }
   async refreshView(): Promise<void> {
     const initial = await this.read();
