@@ -219,6 +219,8 @@ export interface ChatConfig {
   update?: UpdateOffer | null;             // #72 — auto-update banner state
   /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
   updateFreeze?: { until: string };
+  /** CGP-SHELL-R-027 — host-checked: the settings dialog shows the deletion request row. */
+  dataDeletion?: true;
   /**
    * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
    * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
@@ -323,6 +325,8 @@ export interface ResolvedProfile {
   trial?: TrialStatus;
   /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
   notify_optin?: { available: boolean; consent_version: string };
+  /** CGP-SHELL-R-027 — the seat may request account and data deletion (Service HPS_DATA_DELETION_REQUESTS, default off). Only `available: true` counts. */
+  data_deletion?: { available: boolean };
   /** REQ-CGP-LEARN-13 (DEC-LEARN-13a) — the Service turns the 109/1388 help lines on for this seat. Only `true` counts; absent → off. */
   safety_help_lines?: boolean;
   /**
@@ -639,6 +643,8 @@ export type WebviewMessage = (
   | {type:'workTakeaway'}
   /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
   | {type:'exportMyWork'}
+  /** CGP-SHELL-R-027 — read the seat's deletion request (`load`) or send one after the in-dialog confirm (`submit`). */
+  | {type:'dataDeletion'; action:'load'|'submit'}
   | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
@@ -1073,7 +1079,7 @@ export type HostMessage = (
   // the host clock when absent) — the createdAt of the persisted line.
   // CGP-ART-R-020 — one successful tool call of a running turn, bound to the task it started in.
   | { type: "taskActivityFact"; streamId: string; fact: import("./taskActivity").TaskActivityFact; activityId?: string; taskId?: string }
-  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
+  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number; /** Present only on a real tool call or its result (ToolEntry.kind). */ kind?: "tool" }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead
@@ -1161,6 +1167,8 @@ export type HostMessage = (
   | { type: "actionResult"; requestId: string; approved: boolean }
   /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
   | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }
+  /** CGP-SHELL-R-027 — the settings row state: the Service's request view, never seat ids. */
+  | ({ type: "dataDeletionState" } & import("./dataDeletionRequest").DataDeletionState)
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the

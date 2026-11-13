@@ -634,6 +634,7 @@ export function App() {
     settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
     dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
+    return userMessageId;
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
@@ -676,6 +677,7 @@ export function App() {
       onSubmit={(form) => postToHost({ type: "publishSubmit", form })}
       onLink={(experimentId, channel, expiresInDays, noticeVersion) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays, ...(noticeVersion ? { noticeVersion } : {}) })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
+      onOpenEvidence={(experimentId) => postToHost({ type: "evidenceOpen", experimentId })}
       onClose={() => { postToHost({ type: "publishClose" }); dispatch({ type: "testPublishClose" }); }}
     /></PanelBoundary>
   ) : null;

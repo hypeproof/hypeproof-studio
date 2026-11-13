@@ -332,6 +332,25 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
 .hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
 @media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
+/* CGP-SHELL-R-027 / DES-SHELL-26: the deletion request. Every word at the caption step (>=14px), every
+   control 44px tall, the chip carries an icon AND a word in the theme foreground (never colour alone),
+   the row and the hold reason wrap at 320px instead of truncating. */
+.hps-data-deletion { margin-block-start: var(--ds-c-studio-chatdetails-space-2); padding-block: var(--ds-c-studio-chatdetails-space-2); border-block-start: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); font-size: var(--hp-font-caption); }
+.hps-data-deletion h3 { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-data-deletion p { margin-block: var(--ds-c-studio-chatdetails-space-1) 0; }
+.hps-deletion-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); margin-block-start: var(--ds-c-studio-chatdetails-space-2); color: var(--vscode-foreground, inherit); }
+.hps-deletion-chip { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); padding-block: var(--ds-c-studio-chatdetails-size-3); padding-inline: var(--ds-c-studio-chatdetails-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid currentColor; border-radius: var(--ds-c-studio-chatdetails-radius-1); font-weight: var(--hp-weight-strong); }
+.hps-deletion-chip > svg { flex: none; }
+.hps-deletion-reason { flex-basis: 100%; overflow-wrap: anywhere; }
+.hps-deletion-confirm { margin-block-start: var(--ds-c-studio-chatdetails-space-2); }
+.hps-deletion-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); margin-block-start: var(--ds-c-studio-chatdetails-space-2); }
+.hps-preferences .hps-deletion-open { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+.hps-deletion-actions button { min-block-size: var(--ds-c-studio-chatdetails-size-8); min-inline-size: var(--ds-c-studio-chatdetails-size-8); padding-inline: var(--ds-c-studio-chatdetails-space-5); font-family: inherit; font-size: var(--hp-font-caption); border: var(--ds-c-studio-chatdetails-size-3) solid currentColor; border-radius: var(--ds-c-studio-chatdetails-radius-1); background: transparent; color: inherit; }
+.hps-deletion-actions .hps-deletion-send { background: var(--vscode-button-background, transparent); color: var(--vscode-button-foreground, inherit); border-color: var(--vscode-button-background, currentColor); }
+@media (forced-colors: active) {
+  .hps-deletion-chip, .hps-deletion-actions button, .hps-preferences .hps-deletion-open { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; }
+  .hps-deletion-actions .hps-deletion-send { background: ButtonFace; color: ButtonText; }
+}
 .hps-shortcut-list { inline-size: 100%; margin: 0; border-collapse: collapse; }
 /* CGP-CHAT-D-030: two columns (key, action). The key cell stays on one line; in a narrow window it
    wraps between key caps, never inside one, so the table stays two columns down to 320px. */

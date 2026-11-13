@@ -315,6 +315,57 @@ fails it (no buttons) and a pressed rule without the edge fails it. Reads are st
 styles and minimum boxes, not text widths, so a runner's fonts do not change the verdict. A real
 voice, a screen reader and the packaged app are reported separately.
 
+## Voice agent-status line (CGP-VOICE-R-007 / CGP-VOICE-D-006)
+
+`test/voice-agent-status.test.tsx` renders the real VoicePanel, owned by the real popup and session
+reducers, under a served-voice profile (read-aloud served, disclosure read) with a scripted
+synthesizer and a real answer read-aloud button, on the minimal DOM. Host events arrive as window
+`message` events through `onHostMessage`, in the shapes `chatPanelProvider` posts (`streamStart`,
+`streamChunk`, `toolLog` with a tool_use id going running to done or error, `approvalWait`,
+`streamEnd`, `streamStopped`, `streamError`). Real tool lines carry the host's `kind: "tool"`; the non-tool lines are posted exactly as the host posts them, without it. Twenty-eight cases: a start is shown with the run-state word
+and the host's label, announced once and read once; a step update of the same call is not announced
+or read again; `끝났어요` appears only after that call's result event; the negative control (prose
+`파일을 저장했어요` and `끝났어요!` with no tool event) leaves `생각 중`, then `준비됨`, with nothing
+announced or read; negative controls for every non-tool `toolLog` the host posts (the adult thinking block `💭 think-N` with prose claiming a save, `⏳ notice:` busy and orchestrator notices, the compaction note, the pending placeholder and its `생각했어요` / `고쳤어요` close) each leave `생각 중` with nothing announced, read or called finished, also between real calls; a result for a call never seen starting is not called done; a source check that only the tool_use / tool_result / browser-loop posts in `chatPanelProvider.ts` carry `kind: "tool"`; failure paths posted through the host's own denial rewrite (`denialToolLine`): a refused approval in both orders and a timed-out one (D1), an SDK safety denial, a failed browser-loop step (D2) and a failed end each replace the running line with `문제가 생겼어요`; a check that `postToolLog` rewrites denials through `denialToolLine`, which keeps `kind`; a call with no result is never called done; a tool failure and a failed reading
+are separate lines, and a failed reading never turns a success into a failure; `소리 끄기` holds every
+reading and stops a running one; an answer reading is never cut off; approval holds its line; another
+stream's events are ignored; stop and errors; pacing at the interval; collapse and expand repeat
+nothing; with voice not served nothing touches the synthesizer; the reducer leaves its state object
+unchanged for prose and malformed messages. Red on main: the file cannot bundle (no reducer). Red on 5be2029c8 (before the `kind` marker): the six
+non-tool and no-start cases and the source check fail (7 of 23). Red on 441ee8b83: the file cannot bundle
+(no `denialToolLine`); with the rewrite mutated back to 441ee8b83's (dropping `kind`) D1, the SDK denial,
+D2 and the rewrite check fail (4 of 28), and without the held result D1 fails. 28 pass at the fix.
+
+`test/voice-agent-status.smoke.mjs` drives the same panel in headless Chromium, dark and light at
+1420 and 320, with and without reduced motion, and forced colours, posting the same host messages
+with `window.postMessage`: the line sits below the state label at 14px or more with a 16px icon that
+neither animates nor transitions, a label long enough to wrap in any font is held to two computed
+line heights while the DOM and the tooltip keep the whole text, the line itself has no live role and
+the single status announcer changes only for a start and a finish, and at 320 nothing scrolls
+sideways. Reads are computed styles and line heights, not text widths, so fonts do not change the
+verdict. Negative control: main's VoicePanel fails it (no line). A real voice, a screen reader and
+the packaged app are reported separately (NOT RUN).
+
+## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)
+
+`test/voice-autoplay-blocked.test.tsx` renders a real read-aloud button under a served-voice profile
+(disclosure read) on the minimal DOM. The scripted synthesizer's utterances are failed by the test with
+`not-allowed`. Cases:
+- A refused start is not shown as reading: `aria-pressed="false"`, no `읽는 중이에요`. Exactly one inline
+  notice `소리가 막혔어요.` appears with one `소리 켜기` button, with no dialog.
+- After one chunk ended and the next was refused, one press reads exactly the unheard chunks in order.
+  The notice is gone and does not come back after a normal end.
+- `소리 끄기` clears the notice.
+- Negative controls: another engine error (`synthesis-failed`) shows no notice, and an unserved seat has
+  nothing to press.
+- The hub refuses `resume` unless this answer is blocked, and `stop` forgets the pending chunks.
+- The style case reads the CSS rule: no animation or transition, wrapping, caption step.
+
+Red on main `97c232ddf`: 5 of 6 cases fail. The unserved-seat negative control passes there too, as it
+should. Four mutants each fail at least one case: treating `not-allowed` as a plain error, resuming
+from the first chunk, showing a blocked reading as pressed, and keeping no pending chunks. A real
+browser autoplay refusal, a screen reader and the packaged app are not run here.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell

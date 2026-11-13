@@ -2,6 +2,7 @@
 // host (publishSession.ts) and the webview (PublishPanel.tsx): no node or vscode imports.
 import type { ProductVerification } from "@hypeproof/measurement-core/verification";
 import type { PublishNoticeView } from "./publishNotice";
+import type { VersionStats } from "./versionStats";
 
 export interface PublishLinkView {
   id: string;
@@ -48,6 +49,8 @@ export interface PublishView {
   stale_at?: number | null;
   /** CGP-ART-R-012: the responsibility notice for the signed-in learner; absent when no one is signed in. */
   publish_notice?: PublishNoticeView | null;
+  /** CGP-ART-R-013: per shown version, sessions opened and finished in the last 7 days against the 7 before. */
+  stats?: Record<string, VersionStats>;
 }
 
 /** CGP-ART-R-011: what the panel says when the sharing state could not be read. */

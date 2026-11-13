@@ -21,7 +21,7 @@ export const HELP_MODE_LABELS: Record<HelpMode, string> = {
 export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form"] as const;
 export const WORK_TEXT_MAX = 1000;
 
-type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string };
+type Step = { id: string; title?: string; help?: { default: string; allowed: string[] }; ui?: string; ui_version?: unknown };
 type Lesson = { sha256: string; version: string; content: { steps: Step[] } };
 export interface LessonFocus { sha256: string; stepId: string; helpMode: HelpMode | null }
 
@@ -30,7 +30,23 @@ const isMode = (x: unknown): x is HelpMode => typeof x === "string" && (HELP_MOD
 /** The surface this App draws for a step: its own kind, or `unsupported:<kind>` (drawn as a notice, never faked). */
 export function surfaceOf(step: Step): string {
   const kind = typeof step.ui === "string" ? step.ui : "chat";
+  if (kind !== "chat" && !rendersPin(kind, step.ui_version)) return "unsupported:" + kind;
   return (SUPPORTED_SURFACES as readonly string[]).includes(kind) ? kind : "unsupported:" + kind;
+}
+
+/**
+ * CGP-LEARN-R-004 — the catalog versions of each block this App draws. A confirmed lesson pins `ui_version` (Service
+ * step-ui-catalog); a lesson frozen before pinning has none and means v1. A version this App does not know is drawn as
+ * the unsupported notice, never as another version's behaviour. Add a version here only together with its rendering.
+ */
+export const RENDERED_UI_VERSIONS: Readonly<Record<string, readonly number[]>> = {
+  canvas_editor: [1], canvas_preview: [1], criterion_form: [1], evidence_note: [1], coach_request: [1], decision_form: [1], metric_board: [1],
+};
+export function rendersPin(kind: string, uiVersion: unknown): boolean {
+  const version = uiVersion === undefined ? 1 : uiVersion;
+  // Own keys only: a lesson's `ui` is data, and "constructor" or "toString" must not resolve through Object.prototype.
+  const drawn = Object.prototype.hasOwnProperty.call(RENDERED_UI_VERSIONS, kind) ? RENDERED_UI_VERSIONS[kind] : undefined;
+  return Number.isSafeInteger(version) && !!drawn && drawn.includes(version as number);
 }
 
 /**
@@ -39,7 +55,7 @@ export function surfaceOf(step: Step): string {
  */
 export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board"] as const;
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
-export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string }
+export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string; uiVersion: number }
 
 /**
  * The block the confirmed lesson version attaches to ONE step, or null. The only source is the served lesson (pinned by its
@@ -50,7 +66,9 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   const step = lesson?.content.steps.find((s) => s.id === stepId);
   const kind = step?.ui;
   if (!lesson || !step || typeof kind !== "string" || !(MATERIAL_KINDS as readonly string[]).includes(kind)) return null;
-  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256 };
+  // CGP-LEARN-R-004 — only a pinned version this App renders; otherwise no block (the step shows the unsupported notice).
+  if (!rendersPin(kind, step.ui_version)) return null;
+  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
 }
 
 /** What a block's state sentence is computed from: the fields as the learner has them now, and the last save, if any. */

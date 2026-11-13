@@ -49,6 +49,7 @@ import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
+import { VoiceConversationControl } from './VoiceConversationControl';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
@@ -124,6 +125,7 @@ import type {
 } from "../../src/protocol";
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
+import { DataDeletionRequest } from "./DataDeletionRequest";
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
@@ -239,7 +241,7 @@ interface Props {
   safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView | null;
   canRetryLast: boolean;
   sendPending?: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean | string;
   onSelectAttempt?: (rootId: string, attemptId: string, choose: boolean) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
@@ -1073,7 +1075,20 @@ export function ChatPanel(props: Props) {
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
   const addon = !props.instructor ? props.composerAddon ?? null : null;
   const AddonScope = addon?.Scope ?? PassThrough;
-  const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceActiveRef = useRef(false);
+  const reportVoiceActive = useCallback((active: boolean) => { voiceActiveRef.current = active; setVoiceActive(active); }, []);
+  const [dictationBusy, setDictationBusy] = useState(false);
+  const dictationBusyRef = useRef(false);
+  const reportDictationBusy = useCallback((busy: boolean) => { dictationBusyRef.current = busy; setDictationBusy(busy); }, []);
+  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy };
+  // Unrelated work belongs to the person. Automatic speech never sends their text/attachments.
+  const voiceInterrupted = unavailable || folderMissing || !!props.questionPanel || !!props.sendLocked ||
+    !!draft || pendingImages.length > 0 || stagedPhotos.length > 0 || imports.length > 0 || queued !== null ||
+    recovered.length > 0 || !!inlineEdit || editingId !== null || composing || dictationBusy ||
+    !!props.fileAttachment || !!props.pageAttachment || !connectivity.online || planAwaiting || attachmentFailures.items.length > 0;
+  const voiceReady = !voiceInterrupted && !streaming && !props.sendPending && !attachmentSend.busy && preparingImages === 0;
+  const voiceSentId = useRef<string | null>(null);
   const quotePart = draftParts.find(part => part.quote);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || !!quotePart || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
@@ -1203,7 +1218,11 @@ export function ChatPanel(props: Props) {
     const parked = text !== undefined;
     setSubmissionNotice(null);
     const sendPrepared = () => {
-    if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
+    if (!sendWhenOnline(() => {
+      const result = props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode);
+      voiceSentId.current = typeof result === 'string' ? result : null;
+      return result;
+    }, parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
     // The host now owns these files (it moves them into images/), so no discard here.
@@ -1227,6 +1246,14 @@ export function ChatPanel(props: Props) {
       return false;
     }
     return sendPrepared();
+  };
+
+  const submitVoice = (text: string): string | null => {
+    if (!voiceReady || dictationBusyRef.current) return null;
+    voiceSentId.current = null;
+    // The text form uses the same reserveRecovery / offline / permission gates above.
+    if (!submit(text)) { if (!fullDraft(draftPartsRef.current)) setDraft(text); return null; }
+    return voiceSentId.current;
   };
 
   const retryRecovered = (request: RecoveredRequest) => {
@@ -2312,6 +2339,8 @@ export function ChatPanel(props: Props) {
 
       <AddonScope api={addonApi}>
       <footer className="hps-input-area">
+      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice }} onActive={reportVoiceActive} />}
+
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
           questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
@@ -2684,6 +2713,8 @@ export function ChatPanel(props: Props) {
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        {/* CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it; read fresh on each opening. */}
+        {config.dataDeletion && preferencesOpen && <DataDeletionRequest />}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
       </ChatPreferences>}
@@ -2713,6 +2744,8 @@ export function ChatPanel(props: Props) {
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        {/* CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it; read fresh on each opening. */}
+        {config.dataDeletion && preferencesOpen && <DataDeletionRequest />}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>

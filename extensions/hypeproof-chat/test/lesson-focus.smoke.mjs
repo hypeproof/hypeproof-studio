@@ -75,4 +75,20 @@ const B = { sha256: "b".repeat(64), version: "m2026.09.22-12", content: { steps:
   assert.equal(seen["x-hps-lesson-step"], "revise"); assert.equal(seen["x-hps-help-mode"], "co_edit");
   ok("both runtimes: the turn's step and help mode go out as x-hps-lesson-step / x-hps-help-mode, validated, never inherited");
 }
+{
+  // CGP-LEARN-R-004 — the pinned catalog version decides; an unpinned (pre-pin) lesson means v1.
+  assert.equal(F.surfaceOf({ id: "a", ui: "criterion_form", ui_version: 1 }), "criterion_form");
+  assert.equal(F.surfaceOf({ id: "a", ui: "criterion_form" }), "criterion_form", "a lesson frozen before pinning is v1");
+  assert.equal(F.surfaceOf({ id: "a", ui: "criterion_form", ui_version: 2 }), "unsupported:criterion_form", "a version this App does not draw is never faked");
+  assert.equal(F.surfaceOf({ id: "a", ui: "decision_form", ui_version: "1" }), "unsupported:decision_form", "a non-integer pin is not v1");
+  assert.equal(F.surfaceOf({ id: "a" }), "chat");
+  for (const kind of F.MATERIAL_KINDS) assert.deepEqual(F.RENDERED_UI_VERSIONS[kind], [1], kind);
+  assert.equal(F.rendersPin("criterion_form", undefined), true); assert.equal(F.rendersPin("criterion_form", 3), false); assert.equal(F.rendersPin("hologram", 1), false);
+  for (const ui of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    assert.equal(F.rendersPin(ui, 1), false, ui);
+    assert.equal(F.surfaceOf({ id: "a", ui }), "unsupported:" + ui, ui + ": an Object.prototype name is not a block, and does not throw");
+    assert.equal(F.stepMaterial({ version: "v", sha256: "s", content: { steps: [{ id: "a", ui }] } }, "a"), null, ui);
+  }
+  ok("block pins: only the catalog versions this App draws; v2 of a v1-only block is the unsupported notice");
+}
 console.log(`${n} lesson focus checks passed`);

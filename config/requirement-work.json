@@ -178,7 +178,7 @@
         "VO-47"
       ],
       "inline_prefixes": [],
-      "sha256": "6700e2aeea78d96feea918b16c3d69ef1d75292169a75f6343eca255b4cc18ac",
+      "sha256": "a1ca3612faecfb44254250b4f4ba566900c105fb79cb32b4d6db084ad93c0026",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/voice-conversation.md",
@@ -254,6 +254,7 @@
         "CH-09",
         "CH-10",
         "CH-11",
+        "CH-12",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -295,7 +296,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "88100af841cc54322ff8c158e43029f7f83c15706979f5145d6f1d4f4740c2bc",
+      "sha256": "88ec11969dc83ff874d562d7dc764e467478d9b20177af0def6effb1ad3bcf18",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -395,7 +396,7 @@
         "ADM-CMT-06"
       ],
       "inline_prefixes": [],
-      "sha256": "bf7e51907078f7860a34ea6e567c33e832cd447261987d4204ffb77471d33199",
+      "sha256": "55e8096e4c5d111fcf745a402d2ca0beaa2e2833b639a9c496fd6588407b24aa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -949,6 +950,11 @@
     {
       "path": "docs/requirements/mobile-growth-roadmap.md",
       "ids": [
+        "MADR-01",
+        "MADR-02",
+        "MADR-03",
+        "MADR-04",
+        "MADR-05",
         "MFR-01",
         "MFR-02",
         "MFR-03",
@@ -974,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "2ed466b5834d97c24dc4e776125ea0513e7bb76d30b41560fa8b4ac85fcb885c",
+      "sha256": "a82184ee6fe06af2f2f2032b84416ce09458c74478253244489a8e7924a68e9b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -1419,7 +1425,8 @@
             "CH-08",
             "CH-09",
             "CH-10",
-            "CH-11"
+            "CH-11",
+            "CH-12"
           ]
         }
       ],
@@ -4802,7 +4809,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "next_action": "Verify the Android MVOICE-02/03 correction in existing #3733/#3735 and iPhone legacy notebook journeys, then observe five Korean turns and offline/permission recovery on both physical platforms. Synthetic automatic callback journeys are not physical acoustic acceptance.",
       "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
       "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
       "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
@@ -5043,6 +5050,50 @@
         "scripts/release/test/install-kit.test.mjs",
         "scripts/release/test/windows-delivery.smoke.mjs",
         "docs/operations/release-casebook/cases.yaml"
+      ]
+    },
+    {
+      "id": "android-personal-reflection-v1",
+      "title": "Same-account questions and voice in the existing native Android app",
+      "issue": 3733,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-01",
+            "MADR-02",
+            "MADR-03",
+            "MADR-04",
+            "MADR-05",
+            "MVOICE-02",
+            "MVOICE-03"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the integrated Android account candidate and MVOICE-02/03 automatic conversation with exact-source native callback/UI evidence; keep live cross-device and physical Korean voice acceptance separate.",
+      "design_delta": "Reuse the existing native Android package, account protocol, reflection API and on-device speech; persist encrypted credentials and account-scoped outbox.",
+      "positive_control": "Android starts with a question and shares exact personal message IDs with iPhone and the existing desktop, even while the desktop is closed.",
+      "negative_control": "Failed persistence, uncertain rotation, stale snapshot, background voice or account switch cannot lose words, replay a paid turn or import another account.",
+      "evidence_required": "Pinned native source/APK, unit/real HTTP and emulator tests, independent review, live Service and physical cross-device acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     },
     {

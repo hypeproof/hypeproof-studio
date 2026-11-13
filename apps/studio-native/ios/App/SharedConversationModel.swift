@@ -173,6 +173,18 @@ private struct SharedCacheFile: Codable {
         signedIn && accountStorageReady && cacheReadable && guestDraftReadable && isReflection
             && !busy && !syncing && guestDraft.canRestore(into: cache)
     }
+    var canRestoreFailedReflectionDraft: Bool {
+        signedIn && accountStorageReady && cacheReadable && isReflection && !busy && !syncing
+            && cache.canRestoreFailedReflectionDraft
+    }
+    @discardableResult func restoreFailedReflectionDraft() -> Bool {
+        guard canRestoreFailedReflectionDraft else { return false }
+        do {
+            try edit(Self.personalID) { _ = $0.restoreFailedReflectionDraft() }
+            notice = "입력란에 가져왔어요. 내용을 확인한 뒤 보내 주세요."
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
     var title: String { conversations.first { $0.id == selected }?.title ?? "대화 이어가기" }
     var canSend: Bool { signedIn && cacheReadable && conversations.contains(where: { $0.id == selected }) && cache.request?.outstanding != true && !busy }
     var sendingCurrentRequest: Bool {

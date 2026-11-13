@@ -8,6 +8,8 @@ import CryptoKit
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String { JourneyTransport.store.trace() }
+    static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
+    static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
@@ -72,7 +74,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -137,6 +139,10 @@ private struct JourneySnapshot: Codable {
     var submittedIDs: [String] = []
     var submittedTexts: [String] = []
     var accepted: [JourneyAcceptedTurn] = []
+    var failed: JourneyAcceptedTurn?
+    var additionalFailures: [JourneyAcceptedTurn]?
+    var historyAccount: Int?
+    var historyAdvances: Int?
     var state = ""
     var challenge = ""
     var callbacks = 0
@@ -165,14 +171,36 @@ private final class JourneyStore: @unchecked Sendable {
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
+        if JourneyConfiguration.scenario == "long-history", value.historyAccount == nil {
+            value.historyAccount = 1; seedHistory(); save()
+        }
+    }
+    private var failedTurns: [JourneyAcceptedTurn] { (value.failed.map { [$0] } ?? []) + (value.additionalFailures ?? []) }
+    private var historyAccount: Int { value.historyAccount ?? 1 }
+    private var sessionID: String { JourneyConfiguration.scenario == "long-history" ? "journey-session-\(historyAccount)" : "journey-session" }
+    private var accessToken: String { JourneyConfiguration.scenario == "long-history" ? "journey-access-\(historyAccount)" : "journey-access" }
+    private var accountID: String { JourneyConfiguration.scenario == "long-history" ? "journey-account-\(historyAccount)" : "journey-account" }
+    private func seedHistory() {
+        value.accepted = (1...40).map { number in
+            JourneyAcceptedTurn(id: "history-\(historyAccount)-\(number)", text: "Account \(historyAccount) thought \(number). I am saving this question to continue later.")
+        }
+    }
+    func advanceHistory() {
+        lock.lock(); defer { save(); lock.unlock() }
+        guard JourneyConfiguration.scenario == "long-history" else { return }
+        let number = value.accepted.count + 1
+        value.accepted.append(JourneyAcceptedTurn(id: "history-\(historyAccount)-\(number)", text: "Account \(historyAccount) thought \(number). A new question from another device."))
+        value.historyAdvances = (value.historyAdvances ?? 0) + 1
     }
     private func save() { if let bytes = try? JSONEncoder().encode(value) { defaults.set(bytes, forKey: key) } }
     func trace() -> String {
         lock.lock(); defer { lock.unlock() }
         let trace: [String: Any] = ["schema": "hps-native-journey-trace/1", "scenario": JourneyConfiguration.scenario,
             "paths": value.paths, "submitted_ids": value.submittedIDs, "submitted_texts": value.submittedTexts,
-            "accepted_turns": value.accepted.count, "browser_callbacks": value.callbacks,
+            "accepted_turns": value.accepted.count, "failed_turns": failedTurns.count, "browser_callbacks": value.callbacks,
             "speech_captures": value.speechCaptures, "desktop_requests": value.desktopRequests,
+            "history_account": historyAccount, "history_advances": value.historyAdvances ?? 0,
+            "history_window_messages": min(80, value.accepted.count * 2 + failedTurns.count), "history_revision": value.accepted.count * 2 + failedTurns.count,
             "voice_start_attempts": value.voiceStartAttempts,
             "history_reads": value.historyReads, "delayed_history_reads": value.delayedHistoryReads,
             "speech_ended_during_history": value.speechEndedDuringHistory,
@@ -252,21 +280,29 @@ private final class JourneyStore: @unchecked Sendable {
     }
     private func reflection(acknowledged: String? = nil) -> [String: Any] {
         var messages: [[String: Any]] = []
+        let failureOffset = failedTurns.count
+        for (index, failed) in failedTurns.enumerated() {
+            messages.append(["id": failed.id, "role": "user", "content": failed.text, "created_at": (index + 1) * 1000])
+        }
         for (index, turn) in value.accepted.enumerated() {
             let userMessage: [String: Any] = [
                 "id": turn.id, "role": "user", "content": turn.text,
-                "created_at": (index * 2 + 1) * 1000,
+                "created_at": (index * 2 + 1 + failureOffset) * 1000,
             ]
             let assistantMessage: [String: Any] = [
                 "id": "answer-" + turn.id, "role": "assistant",
-                "content": "What small change would make tomorrow better?",
-                "created_at": (index * 2 + 2) * 1000,
+                "content": JourneyConfiguration.scenario == "long-history" ? "Account \(historyAccount) answer \(index + 1). What would you like to try next? This saved reply stays with its own conversation." : "What small change would make tomorrow better?",
+                "created_at": (index * 2 + 2 + failureOffset) * 1000,
             ]
             messages.append(userMessage)
             messages.append(assistantMessage)
         }
-        var state: [String: Any] = ["id": "personal-reflection", "revision": value.accepted.count * 2,
-                                   "messages": messages, "has_earlier": false, "turn": NSNull()]
+        var state: [String: Any] = ["id": "personal-reflection", "revision": value.accepted.count * 2 + failureOffset,
+                                   "messages": JourneyConfiguration.scenario == "long-history" ? Array(messages.suffix(80)) : messages,
+                                   "has_earlier": JourneyConfiguration.scenario == "long-history" && messages.count > 80, "turn": NSNull()]
+        if let failed = failedTurns.last {
+            state["turn"] = ["id": failed.id, "text": failed.text, "status": "failed", "created_at": 1000, "updated_at": 1000]
+        }
         if let last = value.accepted.last {
             state["turn"] = ["id": last.id, "text": last.text, "status": "completed", "created_at": 1000, "updated_at": 2000]
         }
@@ -305,14 +341,18 @@ private final class JourneyStore: @unchecked Sendable {
                   body["redirect_uri"] as? String == "hypeproof-studio-mobile://account-return", value.callbacks > 0 else { return (400, ["error": "invalid_request"]) }
             let actual = Data(SHA256.hash(data: Data(verifier.utf8))).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
             guard actual == value.challenge else { return (400, ["error": "invalid_grant"]) }
-            return (200, ["access_token": "journey-access", "refresh_token": String(repeating: "c", count: 64), "expires_in": 3600, "session_id": "journey-session"])
-        case ("POST", "/v1/auth/logout"): return (200, ["ok": true])
+            return (200, ["access_token": accessToken, "refresh_token": String(repeating: "c", count: 64), "expires_in": 3600, "session_id": sessionID])
+        case ("POST", "/v1/auth/logout"):
+            if JourneyConfiguration.scenario == "long-history" {
+                value.historyAccount = historyAccount + 1; seedHistory()
+            }
+            return (200, ["ok": true])
         default: break
         }
-        guard request.value(forHTTPHeaderField: "Authorization") == "Bearer journey-access" else { return (401, ["error": "account_required"]) }
+        guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
         switch (method, path) {
         case ("GET", "/v1/me"):
-            return (200, ["account": ["id": "journey-account", "status": "active"], "session_id": "journey-session"])
+            return (200, ["account": ["id": accountID, "status": "active"], "session_id": sessionID])
         case ("GET", "/v1/me/approval-inbox"):
             return (200, ["schema": "hps-member-approval-inbox/1", "availability": JourneyConfiguration.scenario == "member-inbox" ? "ready" : "not_enrolled", "cards": JourneyConfiguration.scenario == "member-inbox" ? [approvalCard()] : []])
         case ("GET", "/v1/me/approval-inbox/member-card"): return (200, approvalCard())
@@ -322,21 +362,47 @@ private final class JourneyStore: @unchecked Sendable {
             value.approvalDecisionID = id; value.approvalDecisionChoice = choice
             // The durable server decision exists, but the first response is uncertain.
             return (503, ["error": "synthetic_response_lost"])
-        case ("GET", "/v1/me/conversations"): return (200, ["conversations": []])
+        case ("GET", "/v1/me/conversations"):
+            if JourneyConfiguration.scenario == "long-history" {
+                return (200, ["conversations": [["id": "history-peer", "title": "Saved desktop conversation", "host_session_id": "synthetic-host", "revision": 80, "updated_at": 80000]]])
+            }
+            return (200, ["conversations": []])
+        case ("GET", "/v1/me/conversations/history-peer/requests") where JourneyConfiguration.scenario == "long-history":
+            return (200, ["requests": []])
+        case ("GET", "/v1/me/conversations/history-peer/events") where JourneyConfiguration.scenario == "long-history":
+            let after = Int(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "after" })?.value ?? "0") ?? 0
+            var events: [[String: Any]] = []
+            for number in 1...80 where number > after {
+                let message: [String: Any] = ["id": "peer-\(number)", "role": number % 2 == 0 ? "assistant" : "user", "content": "Desktop message \(number). A saved conversation with the same number of messages, but its own reading position.", "created_at": number * 1000]
+                events.append(["seq": number, "client_event_id": "peer-event-\(number)", "message": message])
+            }
+            return (200, ["events": events, "cursor": 80, "has_more": false])
         case ("GET", "/v1/me/reflection"):
             return (200, reflection())
         case ("POST", "/v1/me/reflection/turns"):
             guard let id = body["id"] as? String, let text = body["text"] as? String,
                   let revision = body["revision"] as? Int else { return (400, ["error": "invalid_request"]) }
             value.submittedIDs.append(id); value.submittedTexts.append(text)
-            if JourneyConfiguration.scenario == "access-denied" { return (403, ["error": "reflection_access_required"]) }
             if JourneyConfiguration.scenario == "retry-once", value.retryFailures == 0 {
                 value.retryFailures += 1; return (503, ["error": "fixture_unavailable"])
             }
             if let old = value.accepted.first(where: { $0.id == id }) {
                 return old.text == text ? (200, reflection(acknowledged: id)) : (409, ["error": "reflection_changed"])
             }
-            guard revision == value.accepted.count * 2 else { return (409, ["error": "reflection_changed"]) }
+            // Match Service's persisted failure: the user event and terminal ID
+            // survive a failed response. Replaying that ID cannot run a new turn.
+            if let failed = failedTurns.first(where: { $0.id == id }) {
+                return failed.text == text ? (200, reflection(acknowledged: id)) : (409, ["error": "reflection_changed"])
+            }
+            guard revision == value.accepted.count * 2 + failedTurns.count else { return (409, ["error": "reflection_changed"]) }
+            if JourneyConfiguration.scenario == "access-denied" || (JourneyConfiguration.scenario == "recorded-failure" && failedTurns.isEmpty) {
+                let failed = JourneyAcceptedTurn(id: id, text: text)
+                if value.failed == nil { value.failed = failed }
+                else { value.additionalFailures = (value.additionalFailures ?? []) + [failed] }
+                return JourneyConfiguration.scenario == "access-denied"
+                    ? (403, ["error": "reflection_access_required"])
+                    : (503, ["error": "reflection_ai_unavailable"])
+            }
             value.accepted.append(JourneyAcceptedTurn(id: id, text: text))
             return (200, reflection(acknowledged: id))
         default:

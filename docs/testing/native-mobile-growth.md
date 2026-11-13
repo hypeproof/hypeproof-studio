@@ -21,9 +21,12 @@ inferred from UI use or passing these tests.
 MVOICE-T02/T03 use the current MFR interaction target. Android tests that expect
 a confirmation sheet or manual next-turn tap prove only the previous behavior
 and cannot satisfy these revised cases. Android alignment remains open under
-#3687. The iPhone legacy notebook uses shared automatic controls but needs its
-own revised journey verification; the account-conversation journeys below do
-not establish that acceptance. No native or physical pass is recorded here.
+#3687. Account-conversation journeys own automatic voice acceptance. Under #3985,
+the secondary notebook instead verifies local-only dictation, preserved v1 data,
+reflection/intent/draft recovery, search/export and deliberate return without
+copying a local draft or dispatching an account question. Assertions for its
+removed anonymous AI onboarding are retired, not counted as passed voice tests.
+No native or physical pass is recorded here.
 
 Implementation tests: `IntentTests.swift`, `VoiceTurnTests.swift`,
 `StudioShellTests.swift`, `StudioStateTest.java`, `VoiceSessionTest.java` and
@@ -93,6 +96,61 @@ dispatch, repeated clicks, cancellation and stale/classroom refusals. Existing
 HTTP and VS Code presentation remain fixtures; actual Electron layout/focus and
 release-pinned phone/desktop acceptance are separate observations.
 
+### Android same-account question parity (MADR-01–05, #3733)
+
+Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+:app:assembleDebugAndroidTest` and the existing disposable-emulator
+`scripts/android-verify.sh`. Keep the exact source/tree, APK hash, host and exit.
+
+- `ReflectionStateTest` / `ReflectionModelTest`: persistence-before-send, uncertain
+  retry identity/revision, rejected stale/duplicate history, corrupt-cache
+  read-only behavior, failed-save drafts, account-switch fencing and spent refresh.
+- `NativeDeviceSignInTest` / `DeviceSignInHttpTest` / `NativeHttpDeadlineTest`:
+  actual loopback HTTP serialization/redirect refusal/invalid UTF-8, bounded drip
+  and cancellation; exact browser URL, expiry, throttling and matching `/me`.
+- `DeviceSignInHttpTest` also passes typed monthly-limit and temporary-admission
+  errors through the real transport/model. Only the monthly code promises a
+  monthly reset; generic 429 and 403 retain their existing meaning. Rejected sends
+  preserve credentials, durable request ID/text and a concurrently edited draft;
+  a history GET returning 401 still clears login while keeping the account's
+  records (#3963).
+- `QuestionJourneyTest`: real Android launcher and consent UI, account draft
+  recreation and voice Stop, actual Keystore ciphertext roundtrip,
+  spent refresh and tamper rejection. Network is an in-process fixture restricted
+  to a debug app, never a live account or Korean recognition claim.
+- `QuestionJourneyTest` drives the actual NativeVoice listener → Host → durable
+  ReflectionModel send → matching Service fixture reply → TTS callback → capture
+  path for five synthetic turns from one visible tap, without RMS/end/next input.
+  Reject duplicate finals, wrong/stale TTS IDs, expired/replaced credentials and
+  post-background callbacks; preserve a draft edited during read-aloud.
+- `voiceAdmissionDenialKeepsServiceReasonAndStopsWithoutReplay` sends through the
+  actual NativeVoice listener and QuestionActivity Host into ReflectionModel.
+  A persisted failed-turn fixture returns the monthly-limit error; stopping voice
+  must retain that actionable explanation, the saved request ID/text and login.
+  Late recognizer callbacks cannot send again or start playback/capture (#3971).
+  This checks the failed-send transition, not error persistence across refresh or
+  restart, live admission, physical speech or installed-device acceptance.
+- Native end-of-speech waits at most eight seconds for a final result; duplicate
+  endpoints cannot extend it. No endpoint within 60 seconds, no final within
+  the following eight seconds, or empty speech preserves partial words and
+  never auto-sends or retries.
+- `StudioJourneyTest` retains notebook consent/storage controls and exercises
+  editable final dictation plus grant expiry before final delivery. Audio ports
+  are synthetic per controller instance; microphone, acoustic endpoint quality,
+  installed Korean TTS and five physical spoken turns remain NOT RUN here.
+
+After Service rollout, on a physical Android device sign in through the normal
+browser, send with the desktop closed, then observe identical message IDs on
+existing desktop and iPhone. Interrupt network after submission, reconnect and
+confirm one answer. Confirm Korean recognition/reading, permission denial,
+background/account changes, headphones, offline draft and same-account relaunch.
+Review a making request in the existing desktop. Record real AI cost and any
+entitlement failure rather than bypassing it. Do not publish an APK as live-ready
+before these Service and installed-device checks.
+
+Storage/HTTP design references: Android [Keystore](https://developer.android.com/privacy-and-security/keystore)
+and [AtomicFile](https://developer.android.com/reference/android/util/AtomicFile).
+
 ## iPhone interrupted refresh (MIRS-01, Studio #3736)
 
 `AccountCredentialTests` exercises legacy decode, persisted pending-state reload, no request after failed intent storage, valid save-before-dispatch ordering, unchanged account/session checks, final-write failure and malformed credentials. URLProtocol fixtures check inactive and mismatched `/v1/me` identities without production traffic. `AccountKeychain.verifyNativeStorage` also writes and reloads an encoded pending credential through an isolated actual Keychain item; its existing simulator UI assertion must pass. That probe proves Keychain storage, not physical process-kill or real refresh acceptance.
@@ -119,12 +177,16 @@ the new fixtures as a successful physical retest.
 
 | Contract | Required observation | Failure that must remain visible |
 | --- | --- | --- |
-| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the unsent request intact and no free-access fallback. |
+| MFR-T01 | From an isolated fresh app, press account start, complete the same-device browser callback and real PKCE/account adoption path, send one thought and see its answer with no desktop request. | Expired/cancelled login ends in an actionable state; no indefinite checking. Login success is not AI eligibility: an AI admission 403 remains visible after successful history refresh and relaunch, with the recorded failed user event/request intact and no free-access fallback. Explicit restore only creates a local draft, never an automatic retry or new login. |
 | MFR-T02 | Dictation appends to an existing draft without sending; explicit Send creates one personal-reflection request and displays its answer without a running desktop. | A cleared composer or locally recorded text is not an AI answer. |
 | MFR-T03 | Start voice once, receive a reply and resume capture for the next turn without a recurring consent sheet or pressing an end-of-speech button. | Silence/no transcript cannot create an empty send. Stop cancels the held next capture and retains its partial draft; no second request. |
 | MFR-T03-queued | During a delayed history refresh, finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST or manual retry to make the test pass. |
 | MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
+| MFR-T05-recorded | A Service-shaped failed turn leaves its user event and terminal ID after the first POST. Relaunch, explicitly restore into an empty composer, relaunch again, then explicitly Send. | Restore/relaunch creates no POST; only Send creates a distinct ID at the reconciled revision. The original failed event remains. |
+| MFR-T05-collision | After a recorded failure, write a different draft and relaunch. | Restore stays disabled and preserves the draft. Pure controls also cover unsaved overlays, whitespace and all non-failed states. |
+| MPER-T03-history | Reopen an 80-message cached conversation, switch away while reading an equal-count cached conversation, and change synthetic account. | The correct latest answer is inside the actual viewport; history navigation creates no AI request and cannot retain the other account's messages. |
+| MPER-T03-following | Advance a real App's HTTP snapshot beyond 80 messages without growing its window. At the bottom, follow the new tail; while reading old text, preserve a visible passage until explicit latest or Send. | The catch-up control is at least 44pt. Keyboard input remains reachable; only explicit Send creates the one new request. |
 | MFR-T06 | Collect actual native build/test exits and exact log hashes. Every named required simulator case executes once and passes. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
 | MPER-T01-cancel | Type a first thought before login, cancel the real model's pending login, relaunch and read the same words. | No browser callback, credential exchange or AI turn; cancellation cannot consume the guest draft. |
 | MPER-T03-collision | Sign in with an existing account draft and a different guest draft. Keep the account words; relaunch; explicitly empty that draft and restore guest words. | No overwrite, auto-restore on cold launch or automatic AI request. Guest/account persistence failures preserve the original copy. |
@@ -255,3 +317,33 @@ mobile-conversation-host. Evidence must name the exact source, Node/OS, command 
 exit code. Simulator/native tests, physical iPhone, actual Google/account admission,
 installed desktop focus/navigation and live model quality remain **NOT_RUN** unless
 separately observed. A prepared runner or green build is not that observation.
+
+
+### Android first-use draft — Studio #3946
+
+- 실제 `ReflectionModel` + 기존 device sign-in protocol 제어: 로그인 전 글의 정확한 저장/재열기, 취소·거절·늦은 완료, 빈 계정 초안으로만 이동, 충돌 후 명시 복원, 계정 저장/게스트 삭제 실패의 원본 보존과 전송 0회를 확인한다 (`GuestDraftTest`).
+- 실제 `QuestionActivity` / `AtomicFile` / Keystore 제어: 첫 화면 입력, 동의 취소, 앱 재실행, 로그인 성공/거절, 충돌·복원과 손상 파일 보존을 확인한다. 음성 입력만 합성하고 실제 Host/model/file 경로에서 로그인 전 받아쓰기·백그라운드 중단·늦은 콜백 거부를 확인한다 (`QuestionJourneyTest`).
+- 실제 소프트웨어 키보드를 연 뒤 다섯 줄의 전체 값, 입력창·로그인 버튼이 화면과 키보드 위에 남는지 확인한다. 별도 소유 에뮬레이터에서 시스템 큰 글자/다크 모드로 같은 화면을 기록한다. 기존 기기 기록은 메뉴에서 접근한다.
+- 원래 `QuestionActivity`를 복원하면 로그인 전 입력창 표시 검증이 실패해야 한다. 에뮬레이터의 합성 로그인/음성은 실제 Galaxy 로그인·마이크·접근성 서비스·배포 증거가 아니다. 실행 결과와 패키지 identity는 별도로 기록한다.
+
+### Conversation position and diagnostic geometry — Studio #3962
+
+Native following uses selected-conversation identity, actual layout and the last
+message identity, not only count. Initial cached history and account/conversation
+entry position at the latest exchange. Keyboard or font size changes follow the
+bottom only while the person is already following. Manual reading pauses following;
+a native latest-message action resumes it. Automatic following is instant; the
+explicit action respects Reduce Motion. The desktop already owns equivalent
+useChatViewport behavior and is not reimplemented in this slice.
+
+All DEBUG fixture JSON and theme diagnostics are out-of-flow 1pt accessibility
+elements with explicit values. The central XCTest reader checks their bounds and
+parses those values; screenshots no longer use a large inline JSON transcript.
+The theme assertion still observes the actual SwiftUI environment. The long-history
+revision barrier reads the actual applied model cache, not a transport completion
+guess. These seams compile out of Release. The existing admission-denied journey
+now models Service persistence before 403 and retains the failed user event, reason
+and identity; its former pre-persistence local-retry shortcut is not evidence.
+
+New App journeys and changed AX diagnostics require actual hosted Xcode execution.
+Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
