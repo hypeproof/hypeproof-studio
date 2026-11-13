@@ -60,7 +60,7 @@ const dayLabel=d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10));
 const unconfirmedText=(x,m)=>x.unconfirmed_amount===null?'미확인 (금액 확인 전)':x.unconfirmed_amount>0?amount(x.unconfirmed_amount,m)+' (확정 전)':'0';
 // #270's day row, in the names the chart uses. A malformed amount reads as unknown, never as 0.
 const known=v=>Number.isSafeInteger(v)&&v>=0;
-const dayRow=x=>({day:x.date,confirmed:known(x.confirmed_amount)?x.confirmed_amount:0,reserved:known(x.reserved_amount)?x.reserved_amount:0,
+const dayRow=x=>({day:x.date,confirmed:known(x.confirmed_amount)?x.confirmed_amount:0,reserved:known(x.reserved_amount)?x.reserved_amount:0,confirmed_known:known(x.confirmed_amount),reserved_known:known(x.reserved_amount),
   unconfirmed_amount:known(x.unconfirmed_amount)&&known(x.confirmed_amount)&&known(x.reserved_amount)?x.unconfirmed_amount:null,unknown:!known(x.unconfirmed_amount)||!known(x.confirmed_amount)||!known(x.reserved_amount)});
 function staleText(asOf){return Date.now()-Date.parse(asOf)>STALE_MS?'30분 넘게 지난 숫자 · 새로 확인하세요':'';}
 let dailyMeter={},dailyTable={};
@@ -93,7 +93,7 @@ function renderDaily(b,asOf){const series=Array.isArray(b.daily_usage)?b.daily_u
   const li=el('li');li.dataset.legend=kind;const sw=svg('svg',{viewBox:'0 0 16 16','aria-hidden':'true'});sw.append(svg('rect',{x:2,y:2,width:12,height:12,...attrs}));if(kind==='reserved')sw.insertBefore(defs.cloneNode(true),sw.firstChild);li.append(sw,el('span',label));legend.append(li);}
  const wrap=el('div',undefined,'daily-table');const table=el('table');table.append(el('caption',unit(meter)+' · 최근 14일 (한국 시간)'));
  const hr=el('tr');for(const c of ['날짜','확인된 사용','예약','미확인'])hr.append(el('th',c));const thead=el('thead');thead.append(hr);table.append(thead);
- const tb=el('tbody');for(const x of days){const tr=el('tr');tr.dataset.day=x.day;tr.append(el('td',dayLabel(x.day)),el('td',amount(x.confirmed,meter)),el('td',amount(x.reserved,meter)),el('td',unconfirmedText(x,meter)));tb.append(tr);}table.append(tb);wrap.append(table);
+ const tb=el('tbody');for(const x of days){const tr=el('tr');tr.dataset.day=x.day;tr.append(el('td',dayLabel(x.day)),el('td',x.confirmed_known?amount(x.confirmed,meter):'미확인 (금액 확인 전)'),el('td',x.reserved_known?amount(x.reserved,meter):'미확인 (금액 확인 전)'),el('td',unconfirmedText(x,meter)));tb.append(tr);}table.append(tb);wrap.append(table);
  const showTable=!!dailyTable[b.account.id];wrap.hidden=!showTable;chart.style.display=showTable?'none':'';legend.hidden=showTable;
  const toggle=button(showTable?'그래프로 보기':'표로 보기',()=>{dailyTable[b.account.id]=!showTable;render();});toggle.setAttribute('aria-pressed',String(showTable));toggle.dataset.dailyToggle='';
  // Day labels are HTML under the chart, not SVG text: the chart scales with the column, the labels keep their own size.

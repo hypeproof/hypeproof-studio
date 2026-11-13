@@ -25,7 +25,7 @@ const M = 'currency:USD:micro';
 const days = Array.from({ length: 14 }, (_, i) => `2026-11-${String(i + 1).padStart(2, '0')}`);
 const row = (date, o = {}) => ({ date, confirmed_amount: 0, reserved_amount: 0, unconfirmed_amount: 0, ...o });
 const daily = (meters) => Object.entries(meters).map(([meter, rows]) => ({ meter, time_zone: 'Asia/Seoul', days: rows }));
-const series = days.map((d, i) => i === 13 ? row(d, { confirmed_amount: 2_500_000, reserved_amount: 910_000, unconfirmed_amount: null }) : i === 12 ? row(d, { confirmed_amount: 1_000_000, unconfirmed_amount: 300_000 }) : i === 11 ? row(d, { confirmed_amount: 400_000, unconfirmed_amount: null }) : row(d));
+const series = days.map((d, i) => i === 13 ? row(d, { confirmed_amount: 2_500_000, reserved_amount: 910_000, unconfirmed_amount: null }) : i === 12 ? row(d, { confirmed_amount: 1_000_000, unconfirmed_amount: 0 }) : i === 11 ? row(d, { confirmed_amount: 400_000, unconfirmed_amount: null }) : row(d));
 const budget = (d) => ({ account: { id: 'pool:abc', paused: false }, balances: [{ meter: M, available: 1, spent: 1, held: 0, allocated: 0, unresolved: 0, overrun: 0 }], ...(d === undefined ? {} : { daily_usage: d }), can_edit: false, children: [], requests: [], truncated: false });
 const viewOf = (d, asOf = new Date().toISOString()) => ({ schema: 'hps-class-budget/1', cohort: 'c1', as_of: asOf, budgets: [budget(d)], seats: [], truncated: false, forecast: { state: 'unavailable', reason: '-' } });
 const show = (v) => `(() => { connected = true; cohort = 'c1'; view = ${JSON.stringify(v)}; render(); return true; })()`;
@@ -45,7 +45,7 @@ try {
         tableHidden: box.querySelector('.daily-table').hidden }; })()`);
     const ctx = `${width}px: ${JSON.stringify(m)}`;
     check(m.groups === 14, 'one group per day: ' + ctx);
-    check(JSON.stringify(m.kinds) === JSON.stringify(['2026-11-12:confirmed', '2026-11-12:unconfirmed-unknown', '2026-11-13:confirmed', '2026-11-13:unconfirmed', '2026-11-14:confirmed', '2026-11-14:reserved', '2026-11-14:unconfirmed-unknown']), 'stacks per day, the unknown amount marked: ' + ctx);
+    check(JSON.stringify(m.kinds) === JSON.stringify(['2026-11-12:confirmed', '2026-11-12:unconfirmed-unknown', '2026-11-13:confirmed', '2026-11-14:confirmed', '2026-11-14:reserved', '2026-11-14:unconfirmed-unknown']), 'stacks per day, the unknown amount marked: ' + ctx);
     check(m.legend.length === 3 && m.legend[0].includes('확인된 사용 (채움)') && m.legend[1].includes('예약 (빗금)') && m.legend[2].includes('미확인 (점선 윤곽'), 'legend in words: ' + ctx);
     check(m.head.includes('기준 시각') && m.head.includes('한국 시간 기준') && m.stale, 'as-of time, fresh: ' + ctx);
     check(m.docFits && m.boxRight, 'nothing leaves the page: ' + ctx);
@@ -55,7 +55,7 @@ try {
       const p = id && document.getElementById(id); return { f, pattern: !!p && p.tagName.toLowerCase() === 'pattern' && !!p.querySelector('line') }; })()`);
     check(/^url\(#hatch-/.test(hatch.f) && hatch.pattern, 'reserved is hatched: ' + JSON.stringify(hatch));
     check(await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="confirmed"]'); return r.getAttribute('fill') === 'currentColor'; })()`), 'confirmed is solid');
-    check(await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="unconfirmed"]'); return r.getAttribute('fill') === 'none' && !!r.getAttribute('stroke-dasharray'); })()`), 'unconfirmed is a dashed outline');
+    check(await b.evaluate(`(() => { const r = document.querySelector('[data-daily] [data-kind="unconfirmed-unknown"]'); return !!r && r.getAttribute('fill') === 'none' && !!r.getAttribute('stroke-dasharray'); })()`), 'an unresolved part is a dashed outline');
     // Day labels keep their size whatever the chart scales to: rendered (not computed) height, and no overlap.
     const lab = await b.evaluate(`(() => { const vw = document.documentElement.clientWidth; const r = [...document.querySelectorAll('[data-daily] .daily-days span')].map((s) => { const b = s.getBoundingClientRect(); return { t: s.textContent, h: b.height, l: b.left, r: b.right, sw: s.scrollWidth, cw: s.clientWidth }; }); return { r, vw }; })()`);
     check(JSON.stringify(lab.r.map((x) => x.t)) === JSON.stringify(['2', '4', '6', '8', '10', '12', '14']), 'seven day-of-month labels, the last is today: ' + JSON.stringify(lab));
@@ -68,7 +68,7 @@ try {
       rows: [...box.querySelectorAll('tbody tr')].map((r) => [...r.children].map((c) => c.textContent)), toggle: box.querySelector('[data-daily-toggle]').textContent, fits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1 }; })()`);
     check(!t.hidden && t.chart === 'none' && t.toggle === '그래프로 보기' && t.rows.length === 14, 'table view: ' + JSON.stringify(t));
     check(JSON.stringify(t.rows[13]) === JSON.stringify(['11/14', '2.5', '0.91', '미확인 (금액 확인 전)']), 'last day: ' + JSON.stringify(t.rows[13]));
-    check(JSON.stringify(t.rows[12]) === JSON.stringify(['11/13', '1', '0', '0.3 (확정 전)']), 'a positive unconfirmed amount says it is not final: ' + JSON.stringify(t.rows[12]));
+    check(JSON.stringify(t.rows[12]) === JSON.stringify(['11/13', '1', '0', '0']), 'a fully resolved day: ' + JSON.stringify(t.rows[12]));
     check(JSON.stringify(t.rows[11]) === JSON.stringify(['11/12', '0.4', '0', '미확인 (금액 확인 전)']), 'confirmed plus unresolved: the unknown part is said, never folded into a total: ' + JSON.stringify(t.rows[11]));
     check(!t.rows.some((r) => /건/.test(r.join(' '))), 'no count wording: #270 sends no count');
     check(JSON.stringify(t.rows[0]) === JSON.stringify(['11/1', '0', '0', '0']), 'an empty day: ' + JSON.stringify(t.rows[0]));
@@ -82,12 +82,20 @@ try {
     await b.evaluate(show(viewOf(daily({ [M]: series }))));
     const fc = await b.evaluate(`(() => { const rgb = (c) => (c.match(/[\\d.]+/g) || []).slice(0, 3).map(Number); const lum = (c) => rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
       const bg = (() => { for (let e = document.querySelector('[data-daily]'); e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return getComputedStyle(document.documentElement).backgroundColor; })();
-      const fill = getComputedStyle(document.querySelector('[data-daily] [data-kind="confirmed"]')).fill, stroke = getComputedStyle(document.querySelector('[data-daily] [data-kind="unconfirmed"]')).stroke;
+      const fill = getComputedStyle(document.querySelector('[data-daily] [data-kind="confirmed"]')).fill, stroke = getComputedStyle(document.querySelector('[data-daily] [data-kind="unconfirmed-unknown"]')).stroke;
       const ratio = (a, c) => { const [x, y] = [lum(a), lum(c)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
       return { bg, fill, stroke, fillRatio: ratio(fill, bg), strokeRatio: ratio(stroke, bg) }; })()`);
     check(fc.fillRatio >= 4.5 && fc.strokeRatio >= 4.5, `forced colours ${dark ? 'dark' : 'light'}: chart readable on the canvas: ` + JSON.stringify(fc));
   }
   await b.load(html, { width: 1280, height: 900 });
+  // Shapes #270 does not send today, kept apart from the real fixture: a positive unconfirmed amount says it is not final;
+  // a malformed confirmed or reserved amount reads as unknown in its own cell, never 0.
+  await b.evaluate(show(viewOf(daily({ [M]: days.map((d, i) => i === 13 ? row(d, { confirmed_amount: 1_000_000, unconfirmed_amount: 300_000 }) : i === 12 ? row(d, { confirmed_amount: 'x', reserved_amount: -5 }) : row(d)) }))));
+  await b.evaluate(`document.querySelector('[data-daily-toggle]').click()`);
+  const odd = await b.evaluate(`[...document.querySelectorAll('[data-daily] tbody tr')].slice(-2).map((r) => [...r.children].map((c) => c.textContent))`);
+  check(JSON.stringify(odd[1]) === JSON.stringify(['11/14', '1', '0', '0.3 (확정 전)']), 'positive unconfirmed amount: ' + JSON.stringify(odd[1]));
+  check(JSON.stringify(odd[0]) === JSON.stringify(['11/13', '미확인 (금액 확인 전)', '미확인 (금액 확인 전)', '미확인 (금액 확인 전)']), 'malformed amounts are unknown, never 0: ' + JSON.stringify(odd[0]));
+  await b.evaluate(`document.querySelector('[data-daily-toggle]').click()`); // back to the chart
   // Stale: the read is older than 30 minutes.
   await b.evaluate(show(viewOf(daily({ [M]: series }), new Date(Date.now() - 31 * 60000).toISOString())));
   check(await b.evaluate(`(() => { const s = document.querySelector('[data-stale]'); return !s.hidden && s.textContent === '30분 넘게 지난 숫자 · 새로 확인하세요'; })()`), 'stale label');
