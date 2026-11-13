@@ -23,6 +23,11 @@ approval engine or call a draft a stable customer update.
    cost quote to the returned request digest. Include both platforms, retries and
    storage where applicable. An unknown allowance is not USD 0. Total committed or
    observed incremental cost must stay below USD 1. The helper calls no models.
+   Require a reviewed delivery-coverage plan for every source PR, both supported
+   platforms, and distinct clean-install/upgrade journeys. Fresh installation must
+   use the advertised user path without test-only SDK seeding and reach first
+   answer, file save and preview. Bind setup and previous-package identity to native
+   evidence; a missing journey is BLOCKED even if all selected smokes are green.
 5. Build once via the existing managed annotated tag. Do not also dispatch workflows.
    A lost response is UNKNOWN: observe the exact tag/run before any retry. A failed
    run may use bounded `retry-build`, followed by `reconcile` when its attempt advances.

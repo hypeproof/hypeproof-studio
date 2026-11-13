@@ -97,13 +97,16 @@ def parser():
     remediation_command.add_argument('--plan', action='store_true')
     commands.add_parser("remediation-status").add_argument("--task", required=True)
     commands.add_parser("supersede").add_argument("--replacement", required=True)
-    commands.add_parser("prepare").add_argument("--checkout", required=True)
+    prepare_command = commands.add_parser("prepare")
+    prepare_command.add_argument("--checkout", required=True)
+    prepare_command.add_argument("--workflow-checkout", help="native only: clean trusted-main control checkout")
     for command in ["build", "retry-build", "notes", "upload", "ticket", "testflight"]:
         c = commands.add_parser(command)
         c.add_argument("--operation", required=True)
         c.add_argument("--quote", required=True)
         c.add_argument("--plan", action="store_true", help="print exact request/digest; no writes or quote file read")
         if command in {"build", "testflight"}: c.add_argument("--checkout", required=True)
+        if command == "testflight": c.add_argument("--workflow-checkout", help="clean trusted-main native control checkout")
         if command == "retry-build":
             c.add_argument("--run", type=int, required=True); c.add_argument("--attempt", type=int, required=True)
         if command == "notes": c.add_argument("--file", required=True, help="JSON with name and body")
@@ -132,6 +135,7 @@ def _main(argv, github, actions, identity, cleanup):
     a = parser().parse_args(argv)
     candidate, policy = read(a.candidate), policy_contract(read(a.policy))
     native = candidate.get("kind") == native_testflight.KIND
+    require(native or not getattr(a, 'workflow_checkout', None), 'workflow checkout is only available for native candidates')
     require(native or a.command != "testflight", "testflight requires a native candidate")
     if native:
         # Reject malformed workflow/source identity before even reading account
@@ -264,7 +268,7 @@ def _main(argv, github, actions, identity, cleanup):
     if a.command == "prepare":
         if native:
             require(not any(op["status"] == "UNKNOWN" for op in s["operations"].values()), "reconcile unknown native operation before preparing again")
-            result = native_testflight.prepare(github, actions, candidate, a.checkout)
+            result = native_testflight.prepare(github, actions, candidate, a.checkout, a.workflow_checkout)
             return session.save({**s, "preparation": {**result, "preparedAt": now()}})
         prs = source_prs(github, candidate, a.checkout)
         message = tag_message(candidate, a.checkout)
@@ -337,7 +341,7 @@ def _main(argv, github, actions, identity, cleanup):
             return {"kind": native_testflight.KIND, "candidateDigest": s["candidateDigest"],
                     "request": request, "requestDigest": fingerprint}
         if a.operation not in s["operations"]:
-            fresh = native_testflight.prepare(github, actions, candidate, a.checkout)
+            fresh = native_testflight.prepare(github, actions, candidate, a.checkout, a.workflow_checkout)
             require(native_testflight.request(candidate, a.operation, fresh) == request, "native CI changed; prepare and quote the new request")
         return session.operation(a.operation, native_testflight.KIND, request, read(a.quote),
                                  lambda: native_testflight.dispatch(github, actions, candidate, request, fingerprint))
