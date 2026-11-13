@@ -3,6 +3,7 @@
 // announces the reconnect once without sending anything. Bundled with esbuild, run with plain Node.
 
 import React from "react";
+import ts from "typescript";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync, readdirSync } from "node:fs";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
@@ -228,12 +229,57 @@ t("retry-last (error banner) goes through the guard", () =>
   ok(/onRetry=\{\(\) => \{[^\n]*recoverToComposer\(\(\) => \{ sendWhenOnline\(props\.onRetryLast, 'press'\)/.test(panel), "retry-last"));
 t("ask-again on an answer goes through the guard", () =>
   ok(/onRetry=\{\(prompt, source\) => \{ sendWhenOnline\(\(\) => props\.onRetry\(prompt, source\), 'press'\)/.test(panel), "ask again"));
-t("every host send call in ChatPanel sits on a guarded line (no sixth copy)", () => {
-  const lines = panel.split("\n").filter((l) => /props\.(onSend\(|onEditResend\?\.\(|onRetryLast\b|onRetry\b)/.test(l));
-  const unguarded = lines.filter((l) => !l.includes("sendWhenOnline("));
-  ok(lines.length >= 7, `expected at least 7 send call lines, found ${lines.length}`);
-  ok(unguarded.length === 0, `unguarded: ${unguarded.map((l) => l.trim().slice(0, 80)).join(" | ")}`);
+/** A host call must execute inside the first callback argument of the offline guard.
+ * Walking lexical parents accepts multiline callbacks, not a guard on a nearby line. */
+const hostSendCalls = (source: string) => {
+  const file = ts.createSourceFile('ChatPanel.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const host = (node: ts.Node): node is ts.PropertyAccessExpression => ts.isPropertyAccessExpression(node)
+    && ts.isIdentifier(node.expression) && node.expression.text === 'props'
+    && ['onSend', 'onEditResend', 'onRetryLast', 'onRetry'].includes(node.name.text);
+  const guard = (node: ts.Node): node is ts.CallExpression => ts.isCallExpression(node)
+    && ts.isIdentifier(node.expression) && node.expression.text === 'sendWhenOnline';
+  const guardedCall = (node: ts.Node): boolean => {
+    if (guard(node.parent) && node.parent.arguments[0] === node) return true;
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (ts.isFunctionLike(parent)) {
+        return guard(parent.parent) && parent.parent.arguments[0] === parent;
+      }
+    }
+    return false;
+  };
+  const calls: { line: number; guarded: boolean }[] = [];
+  const visit = (node: ts.Node) => {
+    if (host(node) && !(ts.isConditionalExpression(node.parent) && node.parent.condition === node)) {
+      calls.push({ line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1, guarded: guardedCall(node) });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return calls;
+};
+t("every host send call executes inside the offline guard callback", () => {
+  const calls = hostSendCalls(panel);
+  ok(calls.length >= 7, `expected at least 7 send calls, found ${calls.length}`);
+  ok(calls.every(call => call.guarded), `unguarded call lines: ${calls.filter(call => !call.guarded).map(call => call.line)}`);
   eq((panel.match(/OFFLINE_HELD_NOTES/g) ?? []).length, 2); // import + the one helper
+});
+t("lexical guard accepts multiline and optional calls plus direct guarded retry", () => {
+  const calls = hostSendCalls(`sendWhenOnline(() => {
+    props.onSend(text); props.onEditResend?.(text);
+  }, 'draft'); sendWhenOnline(props.onRetryLast, 'press');`);
+  eq(calls.length, 3); ok(calls.every(call => call.guarded), 'guarded multiline host call refused');
+});
+t("negative controls: adjacent guard and nested deferred callback cannot hide an unguarded send", () => {
+  for (const source of [
+    `sendWhenOnline(() => {}, 'draft'); props.onSend(text);`,
+    `sendWhenOnline(() => { delayed = () => props.onSend(text); }, 'draft'); delayed();`,
+    `sendWhenOnline(() => props.onRetry(text), 'press');`.replace('sendWhenOnline', 'unguarded'),
+    `later(props.onRetryLast);`,
+    `const escaped = props.onSend; escaped(text);`,
+  ]) {
+    const calls = hostSendCalls(source);
+    eq(calls.length, 1); eq(calls[0].guarded, false);
+  }
 });
 
 // F2 — App.tsx and every component: a host message that starts a chat turn is posted only from
