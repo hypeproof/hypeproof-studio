@@ -15,6 +15,15 @@ and cannot trigger a late question redirect. Classroom entry remains explicit.
 See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
 and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
 
+MPER-05 also exposes “만들기로 이어가기” inside the active personal-question
+conversation (#3940), including layouts with the status bar hidden. The host's
+current reflection binding supplies this action; a personal activity alone does
+not. The existing review dialog copies only the person's reviewed words into one
+ordinary unsent task draft. Cancel, stale scope and failed persistence preserve
+the conversation; opening a draft never dispatches AI or tools. This supports
+the Product Intent principles “Human judgment stays visible” and “Minimum
+necessary intervention” without adding a new runtime.
+
 ## Personal task workspace (#1756)
 
 `REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and

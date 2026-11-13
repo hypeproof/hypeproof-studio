@@ -48,6 +48,7 @@ interface Props {
   /** CGP-KNOW-D-002 — the activity's name, drawn as the title above the 작업/자료 tabs (only where the tabs are). */
   activityTitle?: string;
   personalReflection?: boolean;
+  personalMaking?: { scope: string; taskId: string };
   /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
   taskMove?: TaskMoveView;
   children: ReactNode;
@@ -104,7 +105,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, personalReflection = false, taskMove, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, personalReflection = false, personalMaking, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
@@ -745,6 +746,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
+      {personalMaking?.scope === view.scope && personalMaking.taskId === view.activeTaskId && <div className="tw-making-entry">
+        <button type="button" className="tw-quiet" disabled={blocked} data-testid="personal-making-entry" onClick={() => postToHost({ type: 'beginPersonalMaking' })}>만들기로 이어가기</button>
+      </div>}
       {renaming && renameError && <div id="task-rename-error" className="tw-error" role="alert">{renameError}</div>}
       {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && (unsavedHistory
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskSelect', id: view.activeTaskId! })}>대화 저장 다시 시도</button>
