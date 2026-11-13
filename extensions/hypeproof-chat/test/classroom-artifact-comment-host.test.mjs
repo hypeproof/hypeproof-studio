@@ -67,7 +67,7 @@ async function connected(t, world, { actions = true } = {}) {
   const opsActions = { setHold() {}, ...(actions ? { readCollection: async (since, identity) => { reads.push(identity); return spool(world.approvals); }, currentPage: async () => world.page } : {}) };
   const host = new ClassroomOpsHost(context, () => ({ idleMs: 0, status: 'idle' }), opsActions, () => {});
   host.profileResult({ ok: true }, TOKEN);
-  t.after(async () => { await host.disconnectInteractively().catch(() => {}); for (const s of subscriptions) s.dispose?.(); globalThis.fetch = originalFetch; await rm(dir, { recursive: true, force: true }); });
+  t.after(async () => { await host.disconnectInteractively().catch(() => {}); for (const s of subscriptions) s.dispose?.(); globalThis.fetch = originalFetch; await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
   await host.connectInteractively();
   // Wait until the comment is stored (through the real sync loop); whether it is SHOWN is what the tests check.
   const deadline = Date.now() + 5000;

@@ -505,6 +505,30 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 
 검증: 앱 `test/classroom-question-card.test.mjs`(규칙·해시), `test/classroom-question-answer.test.mjs`(호스트), `test/inbox-question-card.test.tsx`(화면), `e2e/classroom/ops-question.mjs`(실제 호스트 + 로컬 Service). Service `worker/test/classroom-question-card.test.mjs`.
 
+<a id="artifact-comments-cgp-art-r-005"></a>
+### Artifact comments · CGP-ART-R-005 · 2026-11-13 (REQ-ART-05 · DES-ART-05)
+
+An instructor leaves a comment on one place of ONE learner's approved page version (#751 U1b). The learner sees it on
+that version in Studio and can reply or mark it handled. The coach is never assigned. Product Intent 2 (visible
+responsibility) and 5 (instructor feedback that the learner acts on). The behaviour may expose ADAPT (does the learner
+change the page after the comment) and OWNERSHIP (does the learner answer for their own result). It makes no
+learning-outcome claim, and no capability label appears. The research rows and the parked questions are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-005).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| ADM-CMT-01 | Service contract (hypeproof/hypeproof-service): content kind `comment`, device capability `inbox_comment`. The anchor is `{artifact_sha256, rect:{x,y,w,h}}` in whole permille of the page or `{artifact_sha256, element}` (plain, one line, ≤ 120). It is never a line number. The body is plain text, ≤ 500 characters, without links. The anchor is the sixth element of the content hash for comments only. A comment is distributed to exactly one seat (`comment_single_target`) and never to a seat other than the first (`comment_other_seat`). It rides the question switch `ops_questions`. | Service `worker/test/classroom-artifact-comment.test.mjs` |
+| ADM-CMT-02 | The learner's answer is `{handled: boolean, reply?: text ≤ 500}`, sent through `POST /v1/classroom/ops/participation/answers` under the class-data consent (ADR 0012). Each answer replaces the last. Secrets are masked. The audit line `comment_answered` carries `actor_kind='student'` and the kind (`reply`/`handled`/`open`), never the text. The instructor is the actor on the comment's revision (`created_by`), so the actors stay apart (SX-45). A consent withdrawal erases the reply. | Service `classroom-artifact-comment.test.mjs` |
+| ADM-CMT-03 | Chalk `/manage`: a verified collection item lists each approved version whose page arrived (`extent.approved_versions`) as `지문 {8} 판에 의견 남기기`, only while comments are possible (question switch on and distribution held). The composer names the learner and version and offers nine 44 px regions (`페이지 위쪽 왼쪽` … `페이지 아래쪽 오른쪽`, stored as a permille third) plus a 500-character field. It says `이 의견은 이 학생 한 명의 Studio에만, 학생이 승인한 이 판 위에 보입니다. 다른 학생에게는 보이지 않고 AI 코치에게도 가지 않습니다. 글자는 그대로 보이며 주소를 써도 눌리는 링크가 되지 않습니다.` `이 학생에게만 보내기` saves one comment and distributes it to that seat. The idempotency keys are fixed until the text or region changes. | `chalk/test/artifact-comment.browser.mjs` |
+| ADM-CMT-04 | Chalk `보낸 질문 카드` lists comments as `의견 · {title}`. A comment shows `승인한 판 지문 {8} · {place}`, `강사(나)의 의견`, the text, and for its one seat `확인함`/`열림` plus `학생 답글: …` as text. The state line names one learner (`{seat} 학생 한 명 · {status}`), never the roster. | `chalk/test/artifact-comment.browser.mjs` |
+| ADM-CMT-05 | Studio accepts a `comment` only in that exact form and hashes it as the Service does. A comment is shown only on a version THIS learner approved on this device: the host reads the learner's own spool sessions (matched by identity, last word wins) and the current `index.html`. It is `current` while the page is that version and `previous` once the page changed, which shows `이전 판에 남긴 의견`. A comment on any other version, or one in a host that cannot read approvals, is not drawn, not counted as new, and cannot be answered. | `test/artifact-comment.test.mjs`, `test/classroom-artifact-comment-host.test.mjs` |
+| ADM-CMT-06 | The inbox draws comments apart from notices, as `결과물에 남긴 강사 의견 {n}개`, grouped `열린 의견` / `확인한 의견`. Each comment has a 16 px pin on a page outline at the anchor (instructor colour: a filled Paper disc with a control-boundary ring, distinct from the learner's outlined, numbered annotations) and the place in words. It shows the fingerprint, `강사` for the instructor's text, and `나 (내가 보낸 답글)` for the learner's own reply. The instructor's text is drawn as the characters typed: no markup and no live link. The unread state is a dot and the words `새 의견 {n}개` in a polite live region. Only `답글 보내기`, `확인했어요` and `다시 열기` send. `답글을 강사에게 보냈습니다.` / `확인했다고 강사에게 보냈습니다.` appear only after the Service's 2xx. No message other than `inboxAnswer`/`inboxOpen` leaves the component, so nothing reaches the coach. Controls are 44 px, text ≥ 14 px, logical CSS, tokens only, with a forced-colours edge. | `test/inbox-artifact-comment.test.tsx` |
+
+Not built (DEC-ART-R-005): a pin inside the live preview tab (no trusted in-tab surface, as for CGP-ART-D-006), and a
+click-to-place anchor in Chalk (it needs a viewer of the approved page, REQ-ART-22). A child profile cannot reply,
+because the class-data consent is adult-only. Whether minors may send a handled state or a reply is a question for Jay
+(DEC-ART-R-005). Verification: [Artifact comments](../testing/classroom-admin.md#artifact-comments-cgp-art-r-005).
+
 ### 신원과 수업 실행 계약
 
 기존 cohort/profile/token/authoring를 정본으로 쓴다. `class_run_id`는 기존 `sessions.session_id`에 1:1 연결한 회차 ID다. 같은 cohort의 누적 roster를 재사용하되 새 `class_run_seats`는 **그 수업 명단의 불변 snapshot + 명시적 변경 revision**이다. 별도 학생 계정을 만들지 않는다. 좌석과 학생의 연결이 바뀌면 이력을 남기고 이전 학생 기록/명령을 새 사용자에게 넘기지 않는다.

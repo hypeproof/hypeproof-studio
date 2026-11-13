@@ -5733,6 +5733,15 @@ separate.
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
 
+## Instructor comments on an approved artifact version (CGP-ART-R-005)
+
+CGP-ART-R-005 / CGP-ART-D-005 (REQ-ART-05) add instructor comments to the learner inbox. A comment is anchored to
+one place of a page version the learner approved (#751 U1b). The rows are ADM-CMT-01 to ADM-CMT-06 in
+[classroom-admin.md](requirements/classroom-admin.md#artifact-comments-cgp-art-r-005). The Studio-side rows are
+ADM-CMT-05 (placed only on this learner's own approved version, current vs previous) and ADM-CMT-06 (side list, pin,
+text as text, reply/handled sent only on a press, nothing to the coach). Choices and the open question about minors
+are in `docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-005).
+
 ## Publish responsibility notice (CGP-ART-R-012)
 
 CGP-ART-R-012 / CGP-ART-D-012 (CGP-ART-013, REQ-ART-12) add a short responsibility notice before

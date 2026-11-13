@@ -896,7 +896,7 @@ export type WebviewMessage = (
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // E5 (#3776) — the learner pressed 제출 or 건너뛰기 on a question card. Nothing else ever sends an answer.
-  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer }
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").InboxAnswer }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
   | { type: "helpRequest" }
   // #751 U1b — the learner opens the approval question for the current index.html (the host asks; nothing is approved or sent by this message).
