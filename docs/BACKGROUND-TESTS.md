@@ -1,5 +1,7 @@
 # Background tests and Studio cleanup
 
+> 작성일 2026-10-20 · 상태: 활성
+
 Shared rule for every agent (Claude Code, Codex, OpenClaw) in every HypeProof repo.
 Jay, 2026-10-18 and again 2026-10-19: "테스트할때는 백그라운드로해주고, studio를 연다면
 꼭 리소스 정리도하고". Other sessions are developing on the same machine while tests run.

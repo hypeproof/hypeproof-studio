@@ -1,5 +1,5 @@
 // CGP-SHELL-R-003 — Chalk forwards the cohort update freeze write (PUT/DELETE /admin/cohorts/:id/update-freeze) to the
-// Service with the Lab-connected issuer, like every instructor write. The pinned service-contracts (0.1.2) does not admit
+// Service with the Lab-connected issuer, like every instructor write. The pinned service-contracts (0.1.5) does not admit
 // the path yet, so the forwarder names it; nothing else under it is admitted. The Service re-checks issuer + scope.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

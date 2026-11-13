@@ -2060,7 +2060,55 @@ Service PR hypeproof/hypeproof-service#428 adds the contract; this slice draws i
 - Who receives it (agent choice): classroom seats of the cohort only (`/v1/profile`, not native trial, not account). Studio re-checks the seat kind and the range against its own clock, so a profile cached before the range ended does not keep freezing.
 - What the freeze does in Studio (agent choice): no chat banner (the class line included), no start-page notice, no background staging; the manual check and install commands and the classroom settings dialog say "선생님이 업데이트 시점을 정했어요. M월 D일까지 지금 버전을 써요." VS Code's native About dialog is not Studio's and is unchanged; the "About/update UI" of the row is the update commands and the settings dialog.
 - Security marker (agent choice): the notes line `<!-- hps-update: security-critical -->`, read by `isSecurityCriticalRelease` in Studio (`updateCheckerHelpers.ts`) and in Chalk (`latest-release.ts`). Hidden by GitHub's renderer and stripped from the notes Studio shows. `mirror-release.yml` copies it, because the member mirror writes its own notes. It copies only when it runs: marking a release after it was mirrored needs a manual `mirror-release` re-dispatch for that tag (the workflow re-edits the notes), or member-mirror installs keep treating it as an ordinary release. A security release still waits for the class hold (REQ-I16) and the learner's restart approval: the row asks that the freeze not block it, not that it install silently.
-- Chalk forwarder (agent choice): Chalk pins service-contracts 0.1.2, which does not admit the new path, so `forward.ts` names `PUT`/`DELETE /admin/cohorts/:id/update-freeze` explicitly, with the same Lab-connection issuer as every write. Bumping the pin is a separate change.
+- Chalk forwarder (agent choice): Chalk pins service-contracts 0.1.5 (0.1.2 when this slice started), whose tarball does not admit the new path, so `forward.ts` names `PUT`/`DELETE /admin/cohorts/:id/update-freeze` explicitly, with the same Lab-connection issuer as every write. Bumping the pin is a separate change.
 - Look (agent choice): the badge sits in the cohort block's legend on `/console`, amber page warn ink with a lock icon and a 1px edge in the same colour; a range that has not started reads `업데이트 고정 예정 M/D~M/D`. The control is two native date inputs (keyboard-operable by the browser) whose range sentence is their description and a polite live region.
 - Not covered: a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu), a real screen reader, staging or production data, a real security-marked release, the KV propagation time.
 - Confirmed by Jay: no.
+
+## CGP-ART-R-004 / CGP-ART-D-004: 이 부분 고치기 in the Chalk plan view (2026-11-13)
+
+Jay approved building it on 2026-11-13. It is an extension of the authoring assistant (CGP-AGENT-R-014), and the approval allows one new Haiku prompt, for this scope only, under these constraints:
+- the same `HPS_AUTHORING_ASSISTANT` flag;
+- the same US$0.20 per instructor per KST day cap;
+- metadata-only logs;
+- the Service, not the model, splices the result back, so every byte outside the section stays unchanged;
+- a Chalk plan view with 이 부분 고치기.
+
+The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed by Jay: yes (2026-11-13) for the approved scope and constraints above. Confirmed by Jay: no for the agent-selected choices below.
+
+- **Generator (agent choice, from the plan).** `chalk-plan/1` files are written by Studio instructor mode through the Chalk tools. Neither hps-authoring-batch nor the assistant route writes them. The assistant's existing prompt and key allow-list cover SessionDesign keys only, and its draft projection drops `plan_ref`. So the section revision is a second task beside it: its own prompt, a `{section_html}` output and the chalk-plan validator. It reuses the assistant's flag, price revision, cap, charge ledger, client and log line.
+- **Anchor (agent choice).** The anchor is `{file, section, marker?:{name,value}}`: a whole section, or an element inside it whose marker value is unique in that section.
+  - Cell markers (`data-chalk-field`, `-role`, `-requires`, `-forbids`, `-derived-from`) are not addressable, because their values repeat by design.
+  - The Service locates the element in the stored file with the parser's tokenizer. Chalk uses the same uniqueness rule, so it only offers what the Service will accept.
+- **Save, not proposal (agent choice).** Unlike CH-10, the result is saved as the next draft revision through the PUT /plan save. Reasons:
+  - The existing FB-01 compare is `GET /diff` between saved revisions.
+  - The FB-05 link (`chalk_feedback_revisions`) needs a revision.
+  - Saving server-side keeps the byte-identical splice from passing back through the browser.
+
+  A draft is never what learners get: freeze, rehearsal and confirmation still gate that.
+- **What the Service refuses (agent choice).** With 422 and nothing stored:
+  - a shape change;
+  - anything PUT /plan refuses;
+  - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
+  - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
+  - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
+  - any parser finding (warn or fail) that the stored plan did not already have.
+
+  The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
+
+  Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
+  - the pointer outline is CSS `:hover` on the innermost mark;
+  - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
+  - keyboard focus shows both the outline and the button, and Enter opens the composer, as the row asks.
+
+  Showing the button on hover alone would need that lock changed. That is a design-system decision, not made here.
+- **Rendering (agent choice).** The plan is parsed with `DOMParser`, rebuilt from a closed tag list, and keeps only `data-chalk-*` attributes. It is drawn as light paper (surface white, ink `#242c28`). The outline uses `ink-50`, about 5.9:1 on the paper, and `Highlight` under forced colors.
+- **Forwarder (agent choice).** Chalk admits the path by name until its service-contracts pin moves past 0.1.5, the same pattern as CGP-SHELL-R-003. The forward budget is 45 s for this path only, because the Service waits up to 30 s on Haiku.
+- **Copy.** The section names, the composer wording and the error sentences are the agent's wording.
+- **Not covered:**
+  - a real Haiku answer: NOT RUN, the model is a fake client in tests;
+  - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
+  - a real screen reader;
+  - staging or production.

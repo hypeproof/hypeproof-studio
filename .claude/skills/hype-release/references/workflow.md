@@ -226,6 +226,15 @@ invoke the same canonical command below; a copied release runtime without that
 broker refuses native operations. No CLI or candidate field selects an alternative
 authentication module, and the broker is never copied into the skill runtime. An old
 client, failed broker or incorrect grant blocks execution without credential fallback.
+
+Within one native command, each repository/profile reuses its own in-memory grant.
+The validated provider expiry must cover the existing request timeout; an expiring
+grant is replaced before a request, never in response to a failed mutation. No token
+is saved or shared between commands. Normal return and exception unwinding revoke
+grants acquired by the command; abrupt process/host loss relies on provider expiry.
+An unconfirmed cleanup emits a sanitized warning without replacing the operation
+result or UNKNOWN failure. Preserve that result and reconcile rather than replaying
+the operation. Injected transports remain owned by their caller.
 The authenticated human identity is read only (`GET /user`); ordinary bot grants
 write the state branch and read source PRs, while a separate Actions grant reads CI
 and dispatches this one workflow. No token enters arguments, state or the report.

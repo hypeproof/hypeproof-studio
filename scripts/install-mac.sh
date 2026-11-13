@@ -14,10 +14,37 @@ REPO="hypeproof/hypeproof-studio-releases"
 APP_NAME="HypeProof Studio"
 TAG="${HPS_VERSION:-latest}"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+INSTALLED=0
+cleanup() {
+  rm -rf "$TMP"
+  [[ -n "${STAGE:-}" ]] || return 0
+  if [[ "$INSTALLED" != 1 && -e "$STAGE/previous.app" ]]; then
+    # Keep or restore the backup if interrupted between the two renames.
+    if [[ ! -e "/Applications/$APP_NAME.app" ]] && mv "$STAGE/previous.app" "/Applications/$APP_NAME.app"; then :
+    else
+      printf '이전 앱 보존 위치: %s/previous.app\n' "$STAGE" >&2
+      return 0
+    fi
+  fi
+  rm -rf "$STAGE"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 say() { printf "\n\033[1;35m▶ %s\033[0m\n" "$*"; }
 err() { printf "\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
+
+# Fixed release identity; neither downloaded metadata nor the installed app chooses it.
+verify_signed_app() {
+  local app="$1" bid assessment
+  bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") || return 1
+  [[ "$bid" == 'ai.hypeproof.studio' ]] || return 1
+  /usr/bin/codesign --verify --deep --strict --all-architectures "$app" || return 1
+  /usr/bin/codesign --verify --strict --all-architectures '-R=identifier "ai.hypeproof.studio" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "RZBNT9ZB67"' "$app" || return 1
+  assessment=$(LC_ALL=C /usr/sbin/spctl --assess --type execute --verbose=4 "$app" 2>&1) || { printf '%s\n' "$assessment" >&2; return 1; }
+  # Only one authority line is valid; text in a path must not impersonate it.
+  [[ "$(printf '%s\n' "$assessment" | /usr/bin/sed -n 's/^source=//p')" == 'Notarized Developer ID' ]] || return 1
+}
 
 # 1. Arch check — HypeProof Studio ships an Apple Silicon (arm64) build only.
 #    build-mac.yml is arm64-only, so no darwin-x64 asset is ever produced; an
@@ -62,16 +89,26 @@ say "Extracting..."
 APP_PATH=$(find "$TMP" -maxdepth 3 -name "$APP_NAME.app" -type d | head -1)
 [[ -n "$APP_PATH" ]] || err "$APP_NAME.app not found inside zip"
 
-# 5. Install to /Applications
+# 5. Verify before staging, then verify the exact staged copy before replacing.
+verify_signed_app "$APP_PATH" || err "공식 서명과 Apple 공증을 확인하지 못했습니다. 기존 앱은 변경하지 않았습니다."
 say "Installing to /Applications"
-if [[ -d "/Applications/$APP_NAME.app" ]]; then
-  rm -rf "/Applications/$APP_NAME.app"
+STAGE="$(mktemp -d /Applications/.hps-install.XXXXXX)"
+OLD="$STAGE/previous.app"
+NEXT="$STAGE/$APP_NAME.app"
+cp -R "$APP_PATH" "$NEXT"
+verify_signed_app "$NEXT" || err "복사된 앱의 보안 검증에 실패했습니다. 기존 앱은 변경하지 않았습니다."
+if [[ -e "/Applications/$APP_NAME.app" ]]; then
+  mv "/Applications/$APP_NAME.app" "$OLD"
 fi
-cp -R "$APP_PATH" "/Applications/"
-
-# 6. Remove Gatekeeper quarantine (unsigned build)
-say "Clearing quarantine attributes (unsigned build)"
-xattr -dr com.apple.quarantine "/Applications/$APP_NAME.app" || true
+if ! mv "$NEXT" "/Applications/$APP_NAME.app"; then
+  # Keep the backup outside the cleanup trap if restoration itself fails.
+  if [[ -e "$OLD" ]] && ! mv "$OLD" "/Applications/$APP_NAME.app"; then
+    backup="$STAGE"; STAGE=""
+    err "이전 앱을 복원하지 못했습니다. 보존 위치: $backup/previous.app"
+  fi
+  err "앱을 설치하지 못했습니다. 이전 설치를 복원했습니다."
+fi
+INSTALLED=1
 
 # 7. Launch
 say "Done. Launching..."
@@ -81,9 +118,8 @@ cat <<EOF
 
 ✅ $APP_NAME 설치 완료.
 
-이 빌드는 아직 Apple 공증(notarization)을 받지 않았습니다. 이 명령은 터미널로 받아 설치해서
-보통 경고 없이 열립니다. macOS가 앱을 막으면 보안 설정을 바꾸거나 우회하지 말고, 이 설치 명령을
-한 번 더 실행하세요.
+공식 Developer ID 서명과 Apple 공증을 확인한 앱입니다.
+macOS가 앱을 막으면 보안 설정을 바꾸거나 우회하지 말고 오류 내용을 알려 주세요.
 
 문제가 있으면: https://github.com/$REPO/issues
 EOF

@@ -20,26 +20,49 @@ assert.throws(()=>assertReceipt(good,{sha,version,platform,assets:{...assets,'un
 // Exercise the public CLI verdict, including its nonzero process exit, with
 // synthetic bytes; these fixtures are not release acceptance evidence.
 const fs=await import('node:fs'),path=await import('node:path'),os=await import('node:os');
-const {spawnSync}=await import('node:child_process');const {sha256}=await import('./artifact.mjs');
+const {execFileSync,spawnSync}=await import('node:child_process');const {sha256}=await import('./artifact.mjs');
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'hps-release-control-'));
 try{
+ // Readable source is required even for legacy packages. Isolate candidate Git
+ // objects so this fixture works in shallow CI without trusting the test SHA.
+ const source=path.join(directory,'source');fs.mkdirSync(source);
+ const env={...process.env,GIT_DIR:path.join(source,'.git'),GIT_WORK_TREE:source};
+ const git=(...args)=>execFileSync('git',args,{env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ git('init','-q');git('config','user.name','Release gate fixture');git('config','user.email','release-gate@example.invalid');
+ git('-c','commit.gpgsign=false','commit','--allow-empty','-qm','legacy candidate');
+ const legacySha=git('rev-parse','HEAD');
  const actual={};for(const name of [...Object.keys(assets),...Object.keys(windowsAssets)]){fs.writeFileSync(path.join(directory,name),'synthetic package');actual[name]=sha256(path.join(directory,name));}
  const receipts=[{...structuredClone(good),assets:actual},{...structuredClone(windows),assets:actual}];
  const evidence={schema:'hps-unified-release/1',receipts};
  const file=path.join(directory,'unified-acceptance.json');
- const run=()=>spawnSync(process.execPath,[new URL('../../scripts/check-unified-release.mjs',import.meta.url).pathname,directory,sha,version],{encoding:'utf8'}).status;
- fs.writeFileSync(file,JSON.stringify(evidence));assert.equal(run(),0);
+ const bindSource=sourceSha=>{
+  for(const receipt of receipts){receipt.sourceSha=sourceSha;receipt.app.sha=sourceSha;for(const activity of receipt.activities)activity.serviceSha=sourceSha;}
+  fs.writeFileSync(file,JSON.stringify(evidence));
+ };
+ const expectExit=(expected,sourceSha=legacySha)=>{
+  const run=spawnSync(process.execPath,[new URL('../../scripts/check-unified-release.mjs',import.meta.url).pathname,directory,sourceSha,version],{encoding:'utf8',env});
+  assert.ifError(run.error);assert.equal(run.status,expected,run.stderr||run.stdout);
+ };
+ bindSource(legacySha);expectExit(0);
+ // Unknown source is not legacy; an official candidate cannot reuse an unsigned
+ // legacy fixture. All other receipt/source fields agree in these controls.
+ bindSource(sha);expectExit(1,sha);
+ fs.mkdirSync(path.join(source,'config'));
+ fs.copyFileSync(new URL('../../config/macos-distribution.json',import.meta.url),path.join(source,'config/macos-distribution.json'));
+ git('add','config/macos-distribution.json');git('-c','commit.gpgsign=false','commit','-qm','official candidate');
+ const officialSha=git('rev-parse','HEAD');bindSource(officialSha);expectExit(1,officialSha);
+ bindSource(legacySha);expectExit(0);
  // The per-release Test Kit zip is generated after acceptance and is not an App package:
  // its presence keeps the verdict (positive control); any other new zip still changes the set.
  const kit=path.join(directory,'HypeProof-v1.2.3-Test-Kit.zip'),stray=path.join(directory,'HypeProof-v1.2.3-Extra.zip');
- fs.writeFileSync(kit,'kit');assert.equal(run(),0);
- fs.writeFileSync(stray,'stray');assert.notEqual(run(),0);
+ fs.writeFileSync(kit,'kit');expectExit(0);
+ fs.writeFileSync(stray,'stray');expectExit(1);
  fs.unlinkSync(kit);fs.unlinkSync(stray);
- evidence.receipts[1].publicService.version='different';fs.writeFileSync(file,JSON.stringify(evidence));assert.notEqual(run(),0);
+ evidence.receipts[1].publicService.version='different';fs.writeFileSync(file,JSON.stringify(evidence));expectExit(1);
  evidence.receipts[1].publicService.version='w-test';fs.writeFileSync(file,JSON.stringify(evidence));
- fs.appendFileSync(path.join(directory,'HypeProof-Studio-darwin-arm64.zip'),'changed');assert.notEqual(run(),0);
- fs.unlinkSync(file);assert.notEqual(run(),0);
- console.log('PASS Windows installer and release CLI controls, current-byte and public Service mismatch');
+ fs.appendFileSync(path.join(directory,'HypeProof-Studio-darwin-arm64.zip'),'changed');expectExit(1);
+ fs.unlinkSync(file);expectExit(1);
+ console.log('PASS Windows installer and release CLI controls: readable legacy source, unknown source, missing official proof, current-byte and public Service mismatch');
 }finally{fs.rmSync(directory,{recursive:true,force:true});}
 
 // Installer product.json: Inno Setup adds `target` and re-serializes with tabs (VS Code

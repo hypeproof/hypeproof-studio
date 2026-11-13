@@ -25,6 +25,15 @@ import { isIssuerAllowedEndpoint } from "../shared.ts";
 import { completionProblems } from "../lib/completion-checklist.ts";
 import { CONNECT_SECRET_HEADER, connectSecret, instructorAuthorization } from "../lib/connect.ts";
 
+const SECTION_REVISION = /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/plan\/section-revision$/;
+export const isSectionRevision = (pathname: string, method: string) => method === "POST" && SECTION_REVISION.test(pathname);
+// The section revision waits on one Haiku call (Service timeout 30 s); every other forward keeps its short budget.
+export function forwardTimeoutMs(pathname: string, method: string, distribution: boolean): number {
+  if (distribution && method === "POST") return 60_000;
+  if (isSectionRevision(pathname, method)) return 45_000;
+  return 8_000;
+}
+
 type Ctx = Context<{ Bindings: ChalkEnv; Variables: { requestId: string } }>;
 
 export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
@@ -38,11 +47,15 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // Lab registers this batch in the participant distribution board; the Service
   // still authorizes, rosters and signs every student token behind that adapter.
   const distribution = (method === 'POST' || method === 'GET') && url.pathname === '/workshop/boa-tokens';
-  // CGP-SHELL-R-003 — the cohort's Studio update freeze (instructor write). The Service admits it in service-contracts
-  // after 0.1.2; until Chalk's pin moves past that, it is named here. Same issuer-from-connection path as every write;
+  // CGP-ART-R-004 — revise one marked plan section (instructor write). The Service admits it in service-contracts 0.1.6
+  // (hypeproof-service#433); until Chalk's pin moves past 0.1.5 it is named here. The Service re-checks the issuer,
+  // course ownership, the draft revision and the authoring assistant's money cap, and answers 404 while the flag is off.
+  const sectionRevision = isSectionRevision(url.pathname, method);
+  // CGP-SHELL-R-003 — the cohort's Studio update freeze (instructor write). The Service admits it in its service-contracts
+  // source after 0.1.5 (the pinned 0.1.5 tarball does not); until Chalk's pin includes it, it is named here. Same issuer-from-connection path as every write;
   // the Service re-checks the issuer and can_start_session on the cohort.
   const updateFreeze = (method === 'PUT' || method === 'DELETE') && /^\/admin\/cohorts\/[^/]+\/update-freeze$/.test(url.pathname);
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !updateFreeze) {
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution && !sectionRevision && !updateFreeze) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,
@@ -104,7 +117,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   try {
     // workerd rejects redirect: "error" (it throws before sending), so take
     // "manual" and refuse any 3xx ourselves.
-    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(distribution && method === 'POST' ? 60_000 : 8_000) });
+    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(forwardTimeoutMs(url.pathname, method, distribution)) });
     if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err instanceof Error ? err.name : 'upstream error');

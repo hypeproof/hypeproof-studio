@@ -53,6 +53,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # verify the source build's immutable Mac signing receipt
 
 concurrency:
   group: mirror-release-${{ inputs.tag || github.event.release.tag_name }}
@@ -189,7 +190,7 @@ jobs:
           GH_TOKEN="$GITHUB_TOKEN_SOURCE" gh release download "$TAG" --repo "$SOURCE_REPO" --dir dist
           # Manual dispatch and partial-asset overrides cannot bypass acceptance.
           git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
-          node scripts/check-unified-release.mjs dist "$(git rev-parse "$TAG^{commit}")" "${TAG#v}"
+          GH_TOKEN="$GITHUB_TOKEN_SOURCE" node scripts/check-unified-release.mjs dist "$(git rev-parse "$TAG^{commit}")" "${TAG#v}"
           # studio-public-sdk-seed: releases published since that change carry the
           # native SDK seed (claude-agent-sdk-<platform>-<version>.tgz + .sha256 +
           # sdk-seed.json), mirrored with dist/* below. Re-check the bytes so the

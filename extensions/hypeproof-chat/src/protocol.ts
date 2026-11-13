@@ -798,9 +798,6 @@ export type WebviewMessage = (
   | { type: "doctorNoticeAnswer"; id: string; fix: boolean }
   | { type: "runDoctor" }
   | { type: "problemReportAutoSetting"; enabled: boolean }
-  /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
-  // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
-  | { type: "trialEndCardPasses"; surface?: "header_menu" }
   /** CONV-FUNNEL-R-003 — the person pressed the end card's escape (오늘은 여기까지); the webview closes the card. */
   | { type: "trialEndCardDismiss" }
   | { type: "trialEndCardClaude"; draft: string }

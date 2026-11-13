@@ -48,9 +48,12 @@ checkout. That is how the repack path finds a reusable release.
    `scripts/inject-builtin-extensions.sh` the full path uses (extension, webview,
    vendored Agent SDK, version stamp), runs `scripts/stamp-mac-app.sh`, checks the
    checksums again and compares the shipped extension with the fresh build.
-3. The same steps as the full path: stamp, import certificate, `sign-mac.sh`,
-   `verify-branding.sh` with `REQUIRE_SDK_VENDOR=1`, zip, artifact, live-session freeze,
-   draft upload, acceptance dispatch.
+3. The same steps as the full path: stamp, `verify-branding.sh` with
+   `REQUIRE_SDK_VENDOR=1`, Developer ID signing, notarization, stapling, Gatekeeper,
+   final ZIP and immutable signing receipt, artifact, live-session freeze, draft
+   upload, acceptance dispatch. [Official signing credentials and failure
+   recovery](macos-developer-id.md) are checked before either expensive path;
+   absent credentials no longer fall back to ad-hoc signing.
 
 ### Full
 

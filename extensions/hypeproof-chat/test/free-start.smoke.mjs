@@ -180,11 +180,11 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(purchase.freeDailyCapReached(freeSpent), false);
   noTrialWord(purchase.FREE_DAILY_CAP_NOTICE, 'daily cap notice');
   // Notices: free seat gets free copy; code trial keeps its sentence byte for byte.
-  assert.equal(purchase.trialEndNotice('exhausted', false, true), '무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
-  assert.equal(purchase.trialEndNotice('expired', true, true), "무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요. 계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.");
-  assert.equal(purchase.trialEndNotice('exhausted', false), '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
-  assert.equal(purchase.withTrialPassPointer(purchase.FREE_EXPIRED_FRIENDLY, true), "무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요. 계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.");
-  assert.equal(purchase.withTrialPassPointer(purchase.FREE_EXPIRED_FRIENDLY, false), purchase.FREE_EXPIRED_FRIENDLY);
+  assert.equal(purchase.trialEndNotice('exhausted', true), '무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  // 2026-11-13: no pass pointer (no pass is sold, no purchase view).
+  assert.equal(purchase.trialEndNotice('expired', true), '무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(purchase.trialEndNotice('exhausted'), '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(purchase.withTrialPassPointer, undefined);
   // Error banner.
   const b = banner.errorBannerPresentation;
   assert.deepEqual({ ...b(purchase.FREE_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '무료 사용량을 모두 썼어요' });

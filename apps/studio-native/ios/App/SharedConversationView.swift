@@ -244,6 +244,11 @@ struct SharedConversationView: View {
     }
     private func insert(_ text: String) { voice.stop(); focused = true; guard model.cache.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { model.error = "작성 중인 글을 남겨 두었어요. 먼저 보내거나 고쳐 주세요."; return }; model.editDraft(text) }
     private func beginVoice(_ mode: VoiceTurn.Mode) {
+#if DEBUG
+        NativeJourneyFixture.voiceStartAttempt(mode: mode == .conversation ? "conversation" : "dictation",
+                                              hasSelection: model.selected != nil, canSend: model.canSend,
+                                              draftEmpty: model.cache.draft.isEmpty)
+#endif
         guard let id = model.selected, model.canSend else { return }
         guard mode != .conversation || model.cache.draft.isEmpty else { return }
         focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.cache.draft

@@ -9,18 +9,16 @@ import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
-import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, pollOrder, restorePendingOrder, waitDecision, type PendingOrder, type PurchaseView } from "./passPurchase";
 import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
-import { qrDataUrl } from "./testQr";
 import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
-import { passSurface, type PassSurface, type PurchasePathEvent } from "./funnelEvents";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
 import { TEXT_SIZE_KEY } from "./textSize";
@@ -86,15 +84,14 @@ export class StartPage {
   // Invalid arrival may list saved activities, but only explicit entry reactivates its profile.
   private deferProfileUntilEntry = false;
   private candidate?: Candidate;
-  // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
-  private products?: PassProduct[] | null;
+  // REQ-L12 ⑤ — legacy order recovery only. New passes are not sold (2026-11-11) and this build has
+  // no purchase view (2026-11-13): no catalogue read, no order creation. An order saved by an older
+  // build is still waited on, claimed and recovered here.
   // TUX-SP-12 — what the Service advertises about the trial before entry. `null`: not advertised (or unreadable).
   private trialOffer?: TrialOffer | null;
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
-  /** TUX-COND-07 — one press of the chat card's "이용권 살펴보기"; cleared with the tab. */
-  private purchaseFocus?: number;
   private purchaseTimer?: ReturnType<typeof setTimeout>;
   /** A check is on the wire; a purchase-return link arriving meanwhile does not start a second one. */
   private purchaseTickRunning = false;
@@ -107,29 +104,12 @@ export class StartPage {
   private freeRefusal?: FreeClaimRefusal;
   /** REQ-STUDIO-FREE-DAILY-REFILL — the `refills_at` values this window already re-claimed for (once each). */
   private readonly refillsClaimed = new Set<number>();
-  /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
+  /** The current seat is the free allowance (read in refresh; its credential links a sign-in, CONV-FUNNEL-R-007). */
   private freeSeatNow = false;
-  /** No activity at all while the Service advertises free start: a newcomer buying before any use. */
-  private freeNewcomer = false;
-  /** This window's Service refused an order with `account_required` (login at purchase). */
-  private accountRequired = false;
-  /**
-   * CONV-PURCHASE-R-002 — the pass chosen when the purchase-time sign-in began. Host memory only:
-   * a catalogue product id, never a secret, never in a URL. Given back to the list while it is open.
-   */
-  private purchasePick?: string;
-  /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
-  private guardianCheckout?: { url: string; qr: string };
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
   private offerWaited = false;
   /** REQ-STUDIO-JOIN-LINK — the class a join link named, until a code is confirmed or the learner drops it. */
   private joinLink?: { classId: string; seq: number };
-  /** CONV-FUNNEL-R-006 — where the pass list on screen was opened from (end card, header link, start page). */
-  private passListSurface: PassSurface = "start_page";
-  /** CONV-FUNNEL-R-006 — the pass list was on screen at the last paint; a new appearance counts once. */
-  private passListShown = false;
-  /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
-  private purchaseSignIn?: PassSurface;
   private useGrantAfterSignIn = false;
   private enteringAccountGrant = false;
   private accountEntryRevision = 0;
@@ -157,18 +137,10 @@ export class StartPage {
   }
 
   accountChanged(): void {
-    // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
     const account = this.accounts?.view();
     if (this.reflectionEntry && ((this.reflectionEntry.accountId && account?.account?.id !== this.reflectionEntry.accountId)
         || (this.reflectionEntry.waiting && account?.status === 'signedOut' && !account.busy))) this.reflectionEntry = undefined;
-    if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
-    else if (this.purchaseSignIn && (!account || (account.status === "signedOut" && !account.busy))) this.purchaseSignIn = undefined;
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
-    // Signed in after a login-at-purchase prompt: the prompt has been answered.
-    if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
-    // CONV-PURCHASE-R-002 — the chosen pass comes back only to the list it was chosen on. Signed in
-    // anywhere else (waiting, stopped, list closed): nothing is restored later.
-    if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
     void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
   }
@@ -483,10 +455,8 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
-      // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
-      // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
-      this.passListShown = true; this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.stopPurchaseWait();
+      this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -507,57 +477,14 @@ export class StartPage {
    */
   async freeSignInCredential(): Promise<string | undefined> { return this.freeSeatNow ? await this.currentToken() : undefined; }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
-  /**
-   * Login at purchase (Jay 2026-10-19, "결제할때 구글로그인 필수로 하자"). A free seat, a newcomer
-   * under free start, and any purchase after the Service answered `account_required` need a Google
-   * account. The Service's free-start readiness requires HPS_PURCHASE_ACCOUNT_REQUIRED, so an
-   * advertised free start means anonymous orders are refused anyway. Code-issued and class seats
-   * keep today's path until the Service says otherwise. Never asked before purchase: the first
-   * screen has no login.
-   */
-  private loginAtPurchase(): boolean { return this.freeSeatNow || this.freeNewcomer || this.accountRequired; }
-  /**
-   * CONV-FUNNEL-R-006 — one purchase-path funnel event for a free seat (Service #168). The chat host's
-   * reporter sends it with the seat's grant token, only when the Service's probe lists the type, and
-   * never throws. Any other seat (pass, code-issued trial, class, none) sends nothing.
-   */
-  private purchasePathEvent(type: PurchasePathEvent, surface: PassSurface = this.passListSurface): void {
-    if (!this.freeSeatNow) return;
-    try { this.chat.funnelEmit?.({ type, surface }); } catch { /* telemetry never interrupts a purchase */ }
-  }
-  /** What blocks checkout for want of an account; undefined when checkout may go ahead. */
-  private loginGate(): PurchaseView["login"] {
-    if (!this.loginAtPurchase()) return undefined;
-    if (!this.accounts) return "unavailable";
-    return this.accounts.view().status === "signedIn" ? undefined : "signIn";
-  }
+  /** REQ-L12 ⑤ — what the start page shows of a legacy order. No secret, no code. */
   private purchaseView(): PurchaseView {
-    const payerAdult = this.context.globalState?.get<unknown>(PAYER_ADULT_KEY);
-    const login = this.order ? undefined : this.loginGate();
     return {
-      ...(login ? { login } : {}),
-      ...(this.freeSeatNow ? { freeSeat: true, ...(typeof payerAdult === "boolean" ? { payerAdult } : {}) } : {}),
-      ...(this.guardianCheckout && this.order ? { guardian: this.guardianCheckout } : {}),
-      available: !!this.products?.length || !!this.order,
-      ...(this.products?.length ? { products: this.products } : {}),
+      available: !!this.order,
       ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
-      ...(this.purchaseFocus ? { focus: this.purchaseFocus } : {}),
-      ...(this.selectedPass() ? { selected: this.selectedPass() } : {}),
     };
-  }
-  /** CONV-PURCHASE-R-002 — remember the chosen pass when the purchase-time sign-in begins. */
-  private notePurchasePick(productId: unknown): void {
-    if (typeof productId !== "string" || this.purchaseStage !== "choosing" || this.order) return;
-    if (!this.products?.some(p => p.id === productId)) return;
-    this.purchasePick = productId;
-  }
-  /** The remembered pass, only while the pass list is open and still sells it. */
-  private selectedPass(): string | undefined {
-    const pick = this.purchasePick;
-    if (!pick || this.purchaseStage !== "choosing" || this.order) return undefined;
-    return this.products?.some(p => p.id === pick) ? pick : undefined;
   }
   /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
   private async loadTrialOffer(): Promise<void> {
@@ -689,19 +616,6 @@ export class StartPage {
     }
   }
   /**
-   * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
-   * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
-   */
-  async showPurchase(surface?: unknown): Promise<void> {
-    this.reflectionEntry = undefined;
-    // CONV-FUNNEL-R-006 — the command argument names the surface; anything else is the end card's.
-    this.passListSurface = passSurface(surface, "end_card");
-    await this.show();
-    await this.handlePurchase({ type: "purchaseOpen" });
-    this.purchaseFocus = Date.now();
-    await this.refresh();
-  }
-  /**
    * Epic #3418 — one read per window and account: the store entry is drawn only when the Service
    * answers the store for this account (a rollout may open it to listed accounts only).
    */
@@ -716,11 +630,6 @@ export class StartPage {
     const before = this.storeOn;
     this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => token }).items().then(() => true, () => false);
     return before !== this.storeOn;
-  }
-  /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
-  private async loadProducts(force = false): Promise<void> {
-    if (this.products !== undefined && !force) return;
-    this.products = await fetchProducts(this.settings().proxyUrl);
   }
   private async savedOrder(): Promise<PendingOrder | null> {
     const { proxyUrl, siteBase } = this.settings();
@@ -748,7 +657,7 @@ export class StartPage {
   private async endPurchase(message: string): Promise<void> {
     this.stopPurchaseWait();
     await this.context.secrets.delete(PENDING_PURCHASE_KEY);
-    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message; this.guardianCheckout = undefined;
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
     await this.refresh();
   }
   private async purchaseTick(): Promise<void> {
@@ -833,86 +742,34 @@ export class StartPage {
     c.workspace = ordinary; c.replacesFree = undefined;
     this.error = undefined;
   }
+  /** REQ-L12 ⑤ — the recovery intents for a legacy order. There is no way to start a new order here. */
   private async handlePurchase(msg: StartRequest): Promise<void> {
-    if (msg.type === "purchaseOpen") {
-      // Every open is a new view of the list, even when it was already on screen.
-      this.passListShown = false;
-      await this.loadProducts(true);
-      if (!this.order) { this.purchaseStage = this.products?.length ? "choosing" : "stopped"; this.purchaseMessage = this.products?.length ? undefined : PURCHASE_COPY.unavailable; }
-      await this.refresh(); return;
-    }
     if (msg.type === "purchaseCancel") {
       // Cancelling stops the wait only. A saved paid order is never thrown away from here.
-      this.stopPurchaseWait(); this.purchaseFocus = undefined;
+      this.stopPurchaseWait();
       if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
-      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseHide") {
       // Back to the other ways to start. The order stays saved and the choice list offers it again.
-      this.stopPurchaseWait(); this.purchaseFocus = undefined;
+      this.stopPurchaseWait();
       if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
-      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseReopen") {
-      if (this.order && await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl))) this.purchasePathEvent("checkout_opened");
+      // An order an older build started may still be unpaid: the person can reopen its own checkout page.
+      if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
       return;
     }
     if (msg.type === "purchaseRetry") {
       const order = this.order ?? await this.savedOrder();
-      if (!order) { this.purchaseStage = this.products?.length ? "choosing" : undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
+      if (!order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
       this.order = order;
       if (order.claimed) { await this.claimPurchase(order); return; }
       this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       await this.refresh(); this.schedulePurchasePoll(0); return;
     }
-    if (msg.type === "purchasePayer") {
-      if (typeof msg.adult === "boolean") await this.context.globalState?.update(PAYER_ADULT_KEY, msg.adult);
-      await this.refresh(); return;
-    }
-    if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
-    if (!this.products?.some(p => p.id === msg.productId)) return;
-    // Login at purchase without an account runtime: no anonymous fallback. The view offers no pay
-    // button in this state; this guards a stale view.
-    if (this.loginGate() === "unavailable") { this.purchaseStage = "choosing"; this.purchaseMessage = undefined; await this.refresh(); return; }
-    const { proxyUrl, siteBase } = this.settings();
-    this.busy = true; await this.refresh();
-    try {
-      if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
-      const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
-      if (this.accounts && !accountToken) {
-        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; this.notePurchasePick(msg.productId); return; }
-        throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
-      }
-      // CONV-PURCHASE-R-002 — the pay press is the person's latest choice. A remembered pick is spent
-      // here, so a failed order and a retry never bring an older pass back over it.
-      this.purchasePick = undefined;
-      // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
-      // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
-      const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
-      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken, freeCredential);
-      if (result === "account_required") {
-        // The Service requires a Google account for this order. Back to the list with the sign-in
-        // as the Primary (or the calm notice without an account runtime); nothing was ordered.
-        this.accountRequired = true; this.purchaseStage = "choosing";
-        this.purchaseMessage = this.accounts ? PURCHASE_COPY.signInFirst : undefined;
-        if (this.accounts) this.notePurchasePick(msg.productId);
-        if (this.accounts && accountToken) await this.accounts.refreshView();
-        return;
-      }
-      const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
-      if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
-      // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
-      await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
-      this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
-      // Under 19 on a free seat: the guardian pays on their own phone, so the page is shown here as a link and QR.
-      if (msg.guardian && this.freeSeatNow) this.guardianCheckout = { url: order.checkoutUrl, qr: qrDataUrl(order.checkoutUrl) };
-      else { this.guardianCheckout = undefined; if (await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl))) this.purchasePathEvent("checkout_opened"); }
-      this.schedulePurchasePoll();
-    } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
-    finally { this.busy = false; await this.refresh(); }
   }
 
   /**
@@ -944,13 +801,6 @@ export class StartPage {
     if (stillWanted && !stillWanted()) throw new AccountError("entry_changed", "활동 연결을 취소했어요. 선택한 활동을 계속 사용하세요.");
     if (!this.candidate || this.candidate.token !== activated.token) throw new AccountError('pass_profile_unavailable', '이용권 정보를 확인하지 못했어요. 새로고침 후 다시 선택해 주세요.');
     this.candidate.accountPass = activated.binding;
-    // An existing grant is not a checkout. Reveal its confirmation card after activation.
-    // A real order being claimed keeps its own connecting/error recovery lifecycle.
-    if (this.purchaseStage === "choosing" && !this.order) {
-      this.purchaseStage = undefined;
-      this.purchaseMessage = undefined;
-      this.purchasePick = undefined;
-    }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -962,7 +812,6 @@ export class StartPage {
     // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
     const running = this.candidate ? null : p;
     this.freeSeatNow = isFreeSeat(running);
-    this.freeNewcomer = !p && this.freeStartOn();
     const freeStart = this.freeStartView(running);
     const state: StartState = {
       automationsEnabled: !this.candidate && p?.automations?.enabled === true,
@@ -974,9 +823,8 @@ export class StartPage {
       started: !this.candidate && this.started && !!p,
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
-      // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
       // The free card states a free seat's end itself (freeStart.ended), so its failure sentence is not repeated.
-      error: withTrialPassPointer(this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
+      error: this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined),
       ...(this.error !== undefined && this.errorAtCode ? { errorAt: "code" as const } : {}),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
@@ -997,12 +845,6 @@ export class StartPage {
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
-    // studio-funnel-events — the pass offer is on screen: the choice list shows it while no activity card is.
-    if (this.panel && state.purchase?.available && !state.profile) this.chat.funnelEmit?.({ type: "offer_viewed", surface: "start_page" });
-    // CONV-FUNNEL-R-006 — the pass list appears on screen (each open, and each return to it from another stage).
-    const listShown = !!this.panel && this.purchaseStage === "choosing" && !!this.products?.length && !this.order;
-    if (listShown && !this.passListShown) this.purchasePathEvent("pass_list_viewed");
-    this.passListShown = listShown;
     await this.panel?.webview.postMessage({ type: "startState", state });
     if (this.panel) this.maybeRefill(running);
   }
@@ -1079,11 +921,6 @@ export class StartPage {
       this.error = undefined;
       try {
         if (msg.type === "accountSignIn") {
-          if (this.loginGate() === "signIn") {
-            this.notePurchasePick(msg.productId);
-            // CONV-FUNNEL-R-006 — the purchase-time sign-in begins from the pass list.
-            if (this.purchaseStage === "choosing" && !this.order && this.freeSeatNow) { this.purchaseSignIn = this.passListSurface; this.purchasePathEvent("sign_in_started"); }
-          }
           this.useGrantAfterSignIn = true;
           await this.accounts.start();
           if (this.accounts.view().status === "signedIn") await this.finishAccountSignIn();
@@ -1116,17 +953,14 @@ export class StartPage {
         const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
         await Promise.race([this.loadTrialOffer(), bound]);
       }
-      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
+      await this.refresh(); void Promise.all([this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
     if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
     if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
     if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
     if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
     if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
-    // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
-    if (msg.type === "purchaseOpen") { this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" }); this.passListSurface = "start_page"; }
-    if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
+    if (msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "inboxAnswer") { await this.chat.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return; }

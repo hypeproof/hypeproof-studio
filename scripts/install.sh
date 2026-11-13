@@ -675,7 +675,35 @@ gh_asset_url() {
   done
 }
 
-install_studio_mac() {
+# Fixed official identity, including for public kits with no source policy files.
+# Subshell scope keeps verification scratch variables out of the bootstrap.
+verify_signed_studio_mac() (
+  _signed_app="$1"
+  _bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$_signed_app/Contents/Info.plist") || return 1
+  [ "$_bid" = 'ai.hypeproof.studio' ] || return 1
+  /usr/bin/codesign --verify --deep --strict --all-architectures "$_signed_app" || return 1
+  /usr/bin/codesign --verify --strict --all-architectures '-R=identifier "ai.hypeproof.studio" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "RZBNT9ZB67"' "$_signed_app" || return 1
+  _assessment=$(LC_ALL=C /usr/sbin/spctl --assess --type execute --verbose=4 "$_signed_app" 2>&1) || { printf '%s\n' "$_assessment" >&2; return 1; }
+  [ "$(printf '%s\n' "$_assessment" | /usr/bin/sed -n 's/^source=//p')" = 'Notarized Developer ID' ] || return 1
+)
+
+install_studio_mac() (
+  _tmp=""; _stage=""; _installed=0
+  cleanup_studio_mac() {
+    [ -z "$_tmp" ] || rm -rf "$_tmp"
+    [ -n "$_stage" ] || return 0
+    if [ "$_installed" != 1 ] && [ -e "$_stage/previous.app" ]; then
+      # An exit/signal between the two renames must not delete the sole old app.
+      if [ ! -e "$STUDIO_APP" ] && mv "$_stage/previous.app" "$STUDIO_APP"; then :
+      else
+        printf '이전 앱 보존 위치: %s/previous.app\n' "$_stage" >&2
+        return 0
+      fi
+    fi
+    rm -rf "$_stage"
+  }
+  trap cleanup_studio_mac 0
+  trap 'exit 1' HUP INT TERM
   _glob=""
   case "$PLATFORM" in
     darwin-arm64) _glob="$STUDIO_ASSET_GLOB_DARWIN_ARM64" ;;
@@ -688,9 +716,11 @@ install_studio_mac() {
     darwin-x64)   die "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: hypeproof/hypeproof-studio#331)" ;;
   esac
   if [ -d "$STUDIO_APP" ]; then
-    # Idempotent upgrade: only replace if version differs.
+    # A version match alone must not accept a legacy ad-hoc installation.
     _cur="$(defaults read "${STUDIO_APP}/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "?")"
-    if [ "$_cur" = "$STUDIO_VERSION" ]; then ok "Studio ${STUDIO_VERSION} 이 이미 설치되어 있습니다"; return 0; fi
+    if [ "$_cur" = "$STUDIO_VERSION" ] && verify_signed_studio_mac "$STUDIO_APP"; then
+      ok "Studio ${STUDIO_VERSION} 이 이미 설치되어 있습니다"; return 0
+    fi
     info "Studio ${_cur} → ${STUDIO_VERSION} 업데이트"
   fi
   if [ -n "$KIT_DIR" ]; then
@@ -717,14 +747,30 @@ install_studio_mac() {
   ( cd "$_tmp" && unzip -q -o "$_zip" ) || die "unzip failed"
   _app="$(cd "$_tmp" && find . -maxdepth 2 -name '*.app' -type d | head -n1)"
   [ -n "$_app" ] || die "no .app found in downloaded archive"
-  rm -rf "$STUDIO_APP"
-  cp -R "${_tmp}/${_app#./}" "$STUDIO_APP" 2>/dev/null || \
-    ditto "${_tmp}/${_app#./}" "$STUDIO_APP"
-  xattr -dr com.apple.quarantine "$STUDIO_APP" 2>/dev/null || true
-  rm -rf "$_tmp"
+  _app="${_tmp}/${_app#./}"
+  verify_signed_studio_mac "$_app" || die "공식 서명과 Apple 공증을 확인하지 못했습니다. 기존 앱은 변경하지 않았습니다."
+  # Stage on the destination volume; keep the existing app until both checks pass.
+  _stage="$(mktemp -d "${APPS_DIR}/.hps-install.XXXXXX")" || die "앱 설치 준비에 실패했습니다."
+  _next="${_stage}/HypeProof Studio.app"; _old="${_stage}/previous.app"
+  if ! cp -R "$_app" "$_next" 2>/dev/null; then
+    rm -rf "$_next"
+    ditto "$_app" "$_next" || die "앱 복사에 실패했습니다. 기존 앱은 변경하지 않았습니다."
+  fi
+  verify_signed_studio_mac "$_next" || die "복사된 앱의 보안 검증에 실패했습니다. 기존 앱은 변경하지 않았습니다."
+  if [ -e "$STUDIO_APP" ]; then
+    mv "$STUDIO_APP" "$_old" || die "기존 앱을 보관하지 못했습니다. 설치를 중단합니다."
+  fi
+  if ! mv "$_next" "$STUDIO_APP"; then
+    if [ -e "$_old" ] && ! mv "$_old" "$STUDIO_APP"; then
+      _backup="$_old"; _stage=""
+      die "이전 앱을 복원하지 못했습니다. 보존 위치: $_backup"
+    fi
+    die "앱을 설치하지 못했습니다. 이전 설치를 복원했습니다."
+  fi
+  _installed=1
   receipt_note "studio" "$STUDIO_VERSION"
   ok "Studio ${STUDIO_VERSION} 설치 완료 (${APPS_DIR})"
-}
+)
 
 # Resolve the canonical seed script: prefer a local sibling (repo checkout or a
 # curl -O download); otherwise fetch it from the same raw base as install.sh.

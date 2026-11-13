@@ -458,11 +458,13 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
   const funnelSrc = readFileSync(new URL("../src/funnelEvents.ts", import.meta.url), "utf8");
   assert.ok(!/from ["']vscode["']/.test(funnelSrc), "funnelEvents.ts stays pure (no vscode)");
   const start = readFileSync(new URL("../src/startPage.ts", import.meta.url), "utf8");
-  for (const e of ["offer_viewed", "offer_clicked", "offer_dismissed"]) assert.ok(start.includes(`type: "${e}"`), `start page emits ${e}`);
-  for (const e of PURCHASE_PATH_EVENTS) assert.ok(start.includes(`"${e}"`), `start page emits ${e}`);
+  // 2026-11-13 (REQ-L12 ①–④ removed): no pass offer, pass list or checkout exists in the app any more,
+  // so neither host emits an offer or purchase-path event and the pass-list command is gone.
+  for (const e of ["offer_viewed", "offer_clicked", "offer_dismissed"]) assert.ok(!start.includes(`type: "${e}"`), `start page no longer emits ${e}`);
+  for (const e of PURCHASE_PATH_EVENTS) assert.ok(!start.includes(`"${e}"`), `start page no longer emits ${e}`);
+  assert.ok(!/offer_viewed|offer_clicked/.test(host.match(/this\.funnel\?\.emit\([^)]*\)|emitEndCardOffer\("[a-z_]+"\)/g)?.join("\n") ?? ""), "the chat no longer counts a pass offer as viewed or clicked");
   const ext = readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
-  assert.match(ext, /registerCommand\("hypeproof-chat\.showPasses", \(surface\?: unknown\) => startPage\.showPurchase\(surface\)\)/, "the command forwards the surface to the start page");
-  assert.match(host, /executeCommand\("hypeproof-chat\.showPasses", msg\.surface === "header_menu" \? "header_menu" : "end_card"\)/, "the chat names the surface the pass list was opened from");
+  assert.ok(!/hypeproof-chat\.showPasses/.test(ext + host), "the pass-list command is gone");
   assert.ok(!/event: "/.test(start.match(/funnelEmit\?\.\([^)]*\)/g)?.join("\n") ?? ""), "no revision-1 {event} calls");
 }
 

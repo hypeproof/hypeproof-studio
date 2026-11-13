@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Local development/test sealing only. Official full/repack releases use
+# scripts/release/macos-sign.py and require Developer ID + notarization (#620).
+# This script cannot produce an official release signing receipt.
 # Re-seal the built macOS .app so its code signature is VALID.
 #
 # WHY THIS EXISTS
@@ -24,14 +27,12 @@
 # release artifact: verify exit 1 → 0, seal restored (4959 files), and the bundle
 # identifier is corrected from "Electron" to ai.hypeproof.studio as a side effect.
 #
-# THE REAL FIX (still open)
-# -------------------------
-# A Developer ID certificate + notarization removes the Gatekeeper prompt entirely.
-# VSCodium's build/osx/prepare_assets.sh already implements it end-to-end (codesign
-# → notarytool → stapler); it is skipped because CERTIFICATE_OSX_P12_DATA is unset.
-# Set CODESIGN_IDENTITY to a Developer ID to sign with it here, but note that a
-# notarization-grade signature also needs inside-out signing of nested code — use
-# prepare_assets.sh with the certificate secrets for that, not this script.
+# OFFICIAL DISTRIBUTION (#620)
+# ---------------------------
+# scripts/release/macos-sign.py implements inside-out Developer ID signing,
+# hardened runtime, timestamp, notarization, stapling and Gatekeeper gates for
+# both full and repack builds. See docs/dev/macos-developer-id.md. Passing a
+# Developer ID to this legacy helper does NOT produce release-grade evidence.
 #
 # Usage: bash scripts/sign-mac.sh [path/to/App.app]
 #        CODESIGN_IDENTITY=- (default: ad-hoc)

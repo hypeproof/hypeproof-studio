@@ -10,8 +10,8 @@
 //
 // Both install exactly this release: the tag, the source commit, the SHA-256 of
 // HypeProof-Studio-darwin-arm64.zip and of the native SDK seed are baked in. The zip is
-// not notarized, so a browser download is quarantined and Gatekeeper refuses it; curl
-// adds no quarantine flag, which is why the curl one-liner is the primary path.
+// verified before placement. The candidate's signing policy is baked into the
+// installer: official candidates require Developer ID and Gatekeeper acceptance.
 //
 // CLI:
 //   install-kit.mjs render --tag vX --source-sha SHA --zip-sha256 HEX
@@ -36,6 +36,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
+import {signingPolicy} from './macos-signing-receipt.mjs';
 
 const TEMPLATES = fileURLToPath(new URL('./templates/', import.meta.url));
 export const REPO = 'hypeproof/hypeproof-studio';
@@ -131,6 +132,7 @@ export function renderInstaller(opts) {
     SEED_NAME: seedName, SEED_SHA256: seedSha256, SEED_VERSION: SEED_RE.exec(seedName)?.[1] ?? '',
     SEEDER_SHA256: seederSha256, PRERELEASE: prerelease ? '1' : '0', FREE_START: isFreeStart(tag) ? '1' : '0',
     KIT_DIR_NAME: kitDirName(tag), START_COMMAND: start,
+    OFFICIAL_SIGNING: signingPolicy(sourceSha) ? '1' : '0',
   });
 }
 
@@ -164,7 +166,7 @@ export function renderReadme({tag, sourceSha, zipSha256}) {
     '',
     '가장 쉬운 설치 (권장): 터미널에 아래 한 줄을 붙여넣고 Enter',
     `  ${oneLiner(tag)}`,
-    '  브라우저로 받은 파일과 달리 macOS가 막지 않습니다. 설치 위치는 아래와 같습니다.',
+    '  내려받은 앱을 확인한 뒤 설치합니다. macOS 보안 검증에 실패하면 설치를 멈춥니다.',
     '',
     '이 키트로 설치하기',
     `1. ${kitZipName(tag)} 을 더블클릭해 압축을 풉니다.`,
@@ -204,7 +206,7 @@ export function notesSection(tag) {
     oneLiner(tag),
     '```',
     '',
-    `Installs ${where}. The script is pinned to \`${tag}\`: it downloads the darwin-arm64 zip with curl, checks its SHA-256 and the app version, and seeds the coach SDK binary from this release. No sudo. curl downloads are not quarantined, so Gatekeeper does not block the app the way it blocks a browser-downloaded zip.`,
+    `Installs ${where}. The script is pinned to \`${tag}\`: it checks the archive SHA-256, app version and source, and seeds the coach SDK binary from this release. Official signed candidates also require the expected Developer ID identity and notarized Gatekeeper acceptance before replacing an app. No sudo or quarantine removal.`,
     '',
     `Testers who prefer double-click: \`${kitZipName(tag)}\` (INSTALL/START .command files and a Korean READ-ME). macOS may refuse a .command file downloaded in a browser; use the one-liner then.`,
     NOTES_END,

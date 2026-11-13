@@ -20,7 +20,7 @@ import { exportWork, collectWorkFolder, WorkExportTooLarge, WORK_EXPORT_LIMITS, 
 import { createTaskHarness } from './task-workspace-harness.mjs';
 
 const require = createRequire(import.meta.url);
-const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'work-export-')));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'work-export-')));
 const TOKEN = 'hps_student_token_9f8e7d6c5b4a';
 const ACTIVITY_TOKEN = 'hps_activity_token_1a2b3c4d5e';
 
@@ -72,7 +72,7 @@ function fixture(name) {
   put(root, 'evil\u202etxt.txt', 'bidi-name');
   put(base, 'outside/secret.txt', 'outside-the-folder');
   fs.symlinkSync(path.join(base, 'outside/secret.txt'), path.join(root, 'link.txt'));
-  fs.symlinkSync(path.join(base, 'outside'), path.join(root, 'linkdir'));
+  fs.symlinkSync(path.join(base, 'outside'), path.join(root, 'linkdir'), 'dir');
   return root;
 }
 const EXPECTED_FILES = ['작업 폴더/config.js', '작업 폴더/images/logo.png', '작업 폴더/index.html', '작업 폴더/style.css', '작업 폴더/sub/dir/app.js', '작업 폴더/한글 이름.txt'];
@@ -154,7 +154,7 @@ try {
   assert.equal(fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('꽃집'), true);
 
   // Destination inside the work folder (also through a link) is refused, nothing written.
-  fs.symlinkSync(path.join(root, 'sub'), path.join(base, 'into-source'));
+  fs.symlinkSync(path.join(root, 'sub'), path.join(base, 'into-source'), 'dir');
   for (const inside of [root, path.join(root, 'sub'), path.join(base, 'into-source')]) {
     const before = fs.readdirSync(path.join(root, 'sub'));
     await assert.rejects(exportWork({ root, destination: inside, secrets: [], tasks: [], now }), /destination_inside/);
@@ -209,8 +209,10 @@ try {
     put(r, 'utf16-shape.txt', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('key ' + ANT, 'utf16le')]));
     for (const [i, pre] of ['', 'a', 'ab'].entries()) put(r, `b64-${i}.txt`, 'data:' + Buffer.from(pre + KNOWN + 'tail').toString('base64'));
     put(r, 'b64url.txt', Buffer.from('~~' + KNOWN + '??>>').toString('base64url'));
-    put(r, '..\\..\\evil.txt', 'zip-slip-for-windows');
-    put(r, 'C:evil.txt', 'drive-letter-name');
+    // These are ordinary POSIX filenames, but on Windows they mean traversal or an ADS.
+    // Never create them on Windows; the buildZip negative controls below still reject both shapes.
+    const hostileNames = process.platform === 'win32' ? [] : ['..\\..\\evil.txt', 'C:evil.txt'];
+    for (const name of hostileNames) put(r, name, 'zip-slip-drive-letter-name');
     put(base, 'probe-outside/real-secret.txt', 'outside-hardlinked-content');
     fs.linkSync(path.join(base, 'probe-outside/real-secret.txt'), path.join(r, 'hard.txt'));
     // Positive controls: ordinary code and data stay.
@@ -246,10 +248,10 @@ try {
       'ok risk-assessment-for-the-project-2026 hps_request_id max_tokens: 4096 type="password"', 'positive control: ordinary text is untouched');
     const notice = z.get('내보내기-안내.txt').toString('utf8');
     for (const listed of ['"raw-ant.txt"', '"ant-nodigit.txt"', '"notes.md"', '"more.md"', '"oai.txt"', '"jwt.txt"', '"token-only.json"', '"account.json"', '"cfg.yaml"', '"headers.txt"', '"ssh.txt"',
-      '"utf8-known.txt"', '"utf16le.txt"', '"utf16be.txt"', '"utf16-shape.txt"', '"b64-0.txt"', '"b64-1.txt"', '"b64-2.txt"', '"b64url.txt"', JSON.stringify('..\\..\\evil.txt'), '"C:evil.txt"', '"hard.txt"'])
+      '"utf8-known.txt"', '"utf16le.txt"', '"utf16be.txt"', '"utf16-shape.txt"', '"b64-0.txt"', '"b64-1.txt"', '"b64-2.txt"', '"b64url.txt"', ...hostileNames.map(name => JSON.stringify(name)), '"hard.txt"'])
       assert.ok(notice.includes(listed), 'notice lists ' + listed);
     assert.match(notice, /"hard.txt": 작업 폴더 밖의 파일과 이어진 파일이에요/);
-    assert.match(notice, /"C:evil.txt": 이름에 \\ 또는 : 가 있어서/);
+    if (hostileNames.length) assert.match(notice, /"C:evil.txt": 이름에 \\ 또는 : 가 있어서/);
     // The zip writer refuses an escaping name even if a caller hands one in.
     for (const bad of ['../x', 'a/../../x', '/abs', 'a\\b', 'C:x', 'a//b', './x', ''])
       await assert.rejects(buildZip([{ name: bad, bytes: Buffer.from('x'), mtime: now }]), /work_export_unsafe_name/, 'refused: ' + JSON.stringify(bad));
@@ -421,7 +423,12 @@ try {
     // VS Code's notification link syntax (base/common/linkedText.ts); a match runs with allowCommands.
     const LINK = /\[([^\]]+)\]\(((?:https?:\/\/|command:|file:)[^\)\s]+)(?: (["'])(.+?)(\3))?\)/i;
     const many = path.join(base, 'many'); for (let i = 0; i < 120; i++) put(many, `p/${String(i).padStart(3, '0')}.txt`, 'page ' + i);
-    const hostile = path.join(base, '[열기](command:workbench.action.terminal.new)', 'a\u202egpj.exe\u2028b');
+    // NTFS forbids colons in directory names; exercise the exact command-link sanitizer
+    // directly on every OS, and retain real-disk notification checks with a valid name.
+    const commandFolder = '[열기](command:workbench.action.terminal.new)';
+    assert.equal(mod.exports.displayFolder(commandFolder), '［열기］(command:workbench.action.terminal.new)');
+    const diskCommandFolder = process.platform === 'win32' ? commandFolder.replace(':', '：') : commandFolder;
+    const hostile = path.join(base, diskCommandFolder, 'a\u202egpj.exe\u2028b');
     fs.mkdirSync(hostile, { recursive: true });
     const reports = [];
     const saveProgress = vscode.window.withProgress;
@@ -438,7 +445,7 @@ try {
     assert.ok(line.startsWith('저장했어요: '), line);
     assert.ok(!LINK.test(line), 'no notification link forms from the folder name: ' + line);
     assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/u.test(line), 'no control or bidi character in the line');
-    assert.ok(line.includes('［열기］(command:workbench.action.terminal.new)'), 'the folder is still readable: ' + line);
+    assert.ok(line.includes(mod.exports.displayFolder(diskCommandFolder)), 'the folder is still readable: ' + line);
     assert.ok(line.includes('a\ufffdgpj.exe\ufffdb'), 'hidden characters show as a mark: ' + line);
     assert.ok(Array.from(line).length < 1000, 'under the notification cut at 1000 characters');
     assert.ok(line.includes(' · ' + path.basename(zip) + ' · 작업 파일 120개 · 대화 0개'), 'file name and counts stay whole: ' + line);
@@ -449,7 +456,7 @@ try {
     const long = mod.exports.displayFolder('/Users/학생/' + 'x'.repeat(2000) + '/끝 폴더');
     assert.equal(Array.from(long).length, 120); assert.ok(long.startsWith('/Users/학생/x') && long.endsWith('x/끝 폴더') && long.includes('…'), long);
     // A hostile work folder name reaches the same line through the zip name: still no link and no hidden mark.
-    const hostileRoot = path.join(base, 'w\u200f\u061c\u200b\ufeff\u2060ork[a](command:x)'); put(hostileRoot, 'a.txt', 'a');
+    const hostileRoot = path.join(base, 'w\u200f\u061c\u200b\ufeff\u2060ork[a](command' + (process.platform === 'win32' ? '：' : ':') + 'x)'); put(hostileRoot, 'a.txt', 'a');
     const info1 = shown.info.length;
     pick = async () => [{ scheme: 'file', fsPath: hostile }];
     const zip2 = await mod.exports.runWorkExport({ root: hostileRoot, secrets: [], tasks: [], current: () => true });

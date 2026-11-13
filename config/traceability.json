@@ -6098,6 +6098,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Daily release coordinator (#1757)"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Build and publication boundary"
         }
       ]
     },
@@ -6115,6 +6119,14 @@
         },
         {
           "path": "scripts/release/engine/policy.example.json"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Immutable receipt and consumer contract"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Entitlement review"
         }
       ]
     },
@@ -6145,6 +6157,33 @@
         },
         {
           "path": "scripts/release/engine/provenance.json"
+        },
+        {
+          "path": "scripts/release/macos-sign.py"
+        },
+        {
+          "path": "scripts/release/import-macos-signing.sh"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/app.plist"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/jit.plist"
+        },
+        {
+          "path": "scripts/release/macos-entitlements/plugin.plist"
+        },
+        {
+          "path": ".github/workflows/build-mac.yml"
+        },
+        {
+          "path": "config/macos-distribution.json"
+        },
+        {
+          "path": "scripts/release/macos-signing-receipt.mjs"
+        },
+        {
+          "path": "scripts/check-unified-release.mjs"
         }
       ]
     },
@@ -6165,6 +6204,16 @@
         },
         {
           "path": "scripts/release/test/engine-package.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/test_macos_sign.py"
+        },
+        {
+          "path": "docs/dev/macos-developer-id.md",
+          "section": "## Acceptance and current evidence boundary"
+        },
+        {
+          "path": "scripts/release/test/macos-signing-receipt.test.mjs"
         }
       ]
     },
@@ -12209,9 +12258,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
         }
       ]
     },
@@ -17899,6 +17945,15 @@
         },
         {
           "path": "apps/studio-native/tests/test_android_environment.py"
+        },
+        {
+          "path": "apps/studio-native/scripts/android-emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_android_emulator.py"
+        },
+        {
+          "path": "apps/studio-native/tests/test_ios_cleanup.py"
         }
       ]
     },
@@ -18945,6 +19000,62 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/show-link.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-GUARDIAN",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-GUARDIAN",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-GUARDIAN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "section": "## 검증 계획"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-INVITE-SEAT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-CAPABILITY-ACCESS",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-INVITE-SEAT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-INVITE-SEAT"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "section": "## 검증"
         }
       ]
     }

@@ -253,6 +253,7 @@
         "CH-08",
         "CH-09",
         "CH-10",
+        "CH-11",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -294,7 +295,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "9727acfd579ace0bf221f7cab3bde02384b68a563d6abf3c1c241885610453d2",
+      "sha256": "8f0949ad39b0000fb02f6088c9aae150517281554ff9abfe8ad48f9b827ec511",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -388,7 +389,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "b4e07075f7fca76c74307cc9d9aa2e2000c335ad4536dd99d4931a380c8e0452",
+      "sha256": "050962daddcfbbb0bb85b97386d2a7c9e4bb83a397a09a6a9a67275d8286ad25",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -501,6 +502,18 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/philosophy-alignment-2026-09-08.md",
       "test": "docs/testing/capability-and-access.md"
+    },
+    {
+      "path": "docs/requirements/invite-seat.md",
+      "ids": [
+        "INV-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "15f590726ae90922e66dc9b3b893a9d35bdd0bcf371e9045362b0c19183131eb",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/invite-seat.md",
+      "test": "docs/requirements/invite-seat.md"
     },
     {
       "path": "docs/requirements/independent-course.md",
@@ -797,6 +810,41 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
       "test": "docs/requirements/private-release-access.md"
+    },
+    {
+      "path": "docs/requirements/guardian-child-profile.md",
+      "ids": [
+        "GRD-01",
+        "GRD-02",
+        "GRD-03",
+        "GRD-04",
+        "GRD-05",
+        "GRD-06",
+        "GRD-07",
+        "GRD-08",
+        "GRD-09",
+        "GRD-10",
+        "GRD-11",
+        "GRD-12",
+        "GRD-13",
+        "GRD-14",
+        "GRD-15",
+        "GRD-16",
+        "GRD-17",
+        "GRD-18",
+        "GRD-19",
+        "GRD-20",
+        "GRD-21",
+        "GRD-22",
+        "GRD-23",
+        "GRD-24"
+      ],
+      "inline_prefixes": [],
+      "sha256": "2b13a39c8c915373efa68dfe3ff34a71b4b204f208a14d3a59196b2100bb8c6b",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/guardian-child-profile.md",
+      "test": "docs/requirements/guardian-child-profile.md"
     },
     {
       "path": "docs/requirements/email-automation.md",
@@ -1344,7 +1392,8 @@
             "ENV-07",
             "CH-08",
             "CH-09",
-            "CH-10"
+            "CH-10",
+            "CH-11"
           ]
         }
       ],
@@ -1483,6 +1532,109 @@
       "verification_inputs": [
         "docs/requirements/classroom-join-code.md",
         "docs/testing/classroom-admin.md"
+      ]
+    },
+    {
+      "id": "guardian-contract",
+      "title": "보호자 계정·자녀 프로필: Service 계약 확정",
+      "issue": 3847,
+      "kind": "design",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "ids": [
+            "GRD-01",
+            "GRD-02",
+            "GRD-03",
+            "GRD-04",
+            "GRD-05",
+            "GRD-06",
+            "GRD-07",
+            "GRD-08",
+            "GRD-09",
+            "GRD-10",
+            "GRD-11",
+            "GRD-12",
+            "GRD-13",
+            "GRD-14",
+            "GRD-15",
+            "GRD-16",
+            "GRD-17",
+            "GRD-18",
+            "GRD-19",
+            "GRD-20",
+            "GRD-21",
+            "GRD-22",
+            "GRD-23",
+            "GRD-24"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "초안 검토(TJ-kr, jayleekr) 뒤 열린 질문 Q1–Q11의 답을 문서에 반영하고, hypeproof-service에 계약 이슈를 열어 엔드포인트·저장·스위치·자녀 좌석 프로필을 확정한다. 동의 확인 방법과 약관 조항은 법률 검토를 받는다.",
+      "design_delta": "보호자는 초대받은 계정에 보호자 등록을 더한 것이고, 아이는 계정 없이 자녀 프로필로만 있다. 자녀 좌석은 기존 좌석 원장·예산 미들웨어·minor_cohort 자세를 재사용하고 보호자의 월 상한을 함께 쓴다.",
+      "positive_control": "확정 계약으로 보호자 등록 → 동의 → 자녀 프로필 → 아이 기기 연결 → 아이 요청 → 보호자 보기·삭제가 합성 Service에서 끝까지 통과한다.",
+      "negative_control": "보호자 등록·동의 없이 자녀 프로필 생성, 만 14세 이상 생일, 금지 필드, 아이 자격으로 보호자 route, 철회 뒤 요청, 자녀 좌석의 연결·공개·스토어·초대 요청은 모두 거절된다.",
+      "evidence_required": "확정 계약 문서의 SHA, Service 계약 이슈·PR, 법률 검토 기록. 문서 검토만으로 구현 완료를 주장하지 않는다.",
+      "implementation_paths": [
+        "docs/requirements/guardian-child-profile.md"
+      ],
+      "verification_inputs": [
+        "docs/requirements/guardian-child-profile.md"
+      ]
+    },
+    {
+      "id": "guardian-child-profile",
+      "title": "보호자 계정·자녀 프로필: Service·Lab·Studio 구현과 세바시 PoC 전 인수",
+      "issue": 3847,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/guardian-child-profile.md",
+          "ids": [
+            "GRD-01",
+            "GRD-02",
+            "GRD-03",
+            "GRD-04",
+            "GRD-05",
+            "GRD-06",
+            "GRD-07",
+            "GRD-08",
+            "GRD-09",
+            "GRD-10",
+            "GRD-11",
+            "GRD-12",
+            "GRD-13",
+            "GRD-14",
+            "GRD-15",
+            "GRD-16",
+            "GRD-17",
+            "GRD-18",
+            "GRD-19",
+            "GRD-20",
+            "GRD-21",
+            "GRD-22",
+            "GRD-23",
+            "GRD-24"
+          ]
+        }
+      ],
+      "depends_on": [
+        "guardian-contract"
+      ],
+      "next_action": "Service 계약 구현(스위치 꺼짐 기본) 뒤 Lab 보호자 화면과 Studio 자녀 프로필 모드, 수업 끝 집에서 이어 하기 코드를 낸다. 2027-01 PoC 전에 보호자 한 명이 처음부터 끝까지 해 본다.",
+      "design_delta": "Studio는 자녀 좌석에서 계정·연결·공개·스토어·초대 메뉴를 그리지 않고 기기 안 미리보기만 둔다. 보호자로 돌아가기는 Service가 확인하는 보호자 확인 번호로만 풀린다.",
+      "positive_control": "보호자 기기와 아이 기기 각각에서 자녀 프로필로 이어 만들기가 되고, 보호자 화면에서 보기·항목별 삭제·전체 삭제가 반영된다. 수업 작업 가져오기로 아이 작업 파일만 온다.",
+      "negative_control": "오프라인에서 보호자 쪽으로 풀리지 않음, 끊은 기기 401, 삭제 뒤 410, 만 14세 다음 달 새 요청 거절, 한도 거절에 금액 없음, 수업 로그가 집으로 오지 않음, 스위치 꺼짐에서 기존 동작 불변.",
+      "evidence_required": "Service·Lab·Studio SHA, 테스트 명령과 결과, 실제 Mac 화면, 보호자 한 명의 끝까지 확인. 합성·실기·사람 결과를 나눠 적는다.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src",
+        "extensions/hypeproof-chat/webview-ui/src"
+      ],
+      "verification_inputs": [
+        "docs/requirements/guardian-child-profile.md"
       ]
     },
     {
@@ -4400,6 +4552,34 @@
       ]
     },
     {
+      "id": "invite-seat-acceptance",
+      "title": "초대 좌석(INV-01)의 출시된 앱 행별 대조",
+      "issue": 3849,
+      "kind": "validation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "ids": [
+            "INV-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "초대받은 계정으로 출시된 Studio에 로그인해 이용권 카드·시작, 월 한도에 닿은 계정의 거절 문장, super와 초대를 함께 가진 계정을 확인하고 결과를 #3849에 남긴다.",
+      "design_delta": "새 동작 없음. 이미 출시된 앱과 Service #394·#403의 동작을 INV-01 한 행으로 고정한다. “무제한” 문구는 Jay 2026-11-13 결정으로 그대로 둔다.",
+      "positive_control": "초대받은 계정이 super 이용권 카드로 시작하고, 한도에 닿으면 Service 문장 그대로 멈추며 다음 KST 달에 다시 쓴다.",
+      "negative_control": "한도 거절에 금액·남은 금액·구매 카드·하루 다시 채움 문구가 없고, super 계정은 초대 좌석으로 내려가지 않으며, 앱이 초대 코드를 입력받지 않는다.",
+      "evidence_required": "Studio 앱 버전, Service SHA, 계정 종류(합성/실제), 화면과 응답 코드. 합성 Service 결과를 운영 결과로 주장하지 않는다.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx",
+        "extensions/hypeproof-chat/src/trialEndCard.ts"
+      ],
+      "verification_inputs": [
+        "docs/requirements/invite-seat.md"
+      ]
+    },
+    {
       "id": "personal-claude-customer-continuation",
       "title": "Preserve personal work through reviewed official Claude Code handoff",
       "issue": 2485,
@@ -4430,8 +4610,7 @@
         "extensions/hypeproof-chat/src/personalContinuation",
         "extensions/hypeproof-chat/src/personalContinuationHost.ts",
         "extensions/hypeproof-chat/src/personalContinuationView.ts",
-        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
-        "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/personal-continuation-core.smoke.mjs",
