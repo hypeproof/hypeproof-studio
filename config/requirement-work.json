@@ -503,6 +503,18 @@
       "test": "docs/testing/capability-and-access.md"
     },
     {
+      "path": "docs/requirements/invite-seat.md",
+      "ids": [
+        "INV-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "15f590726ae90922e66dc9b3b893a9d35bdd0bcf371e9045362b0c19183131eb",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/invite-seat.md",
+      "test": "docs/requirements/invite-seat.md"
+    },
+    {
       "path": "docs/requirements/independent-course.md",
       "ids": [
         "IC-01",
@@ -4397,6 +4409,34 @@
         "extensions/hypeproof-chat/test/join-link.smoke.mjs",
         "chalk/test/join-link.test.mjs",
         "e2e/start-page/join-link.mjs"
+      ]
+    },
+    {
+      "id": "invite-seat-acceptance",
+      "title": "초대 좌석(INV-01)의 출시된 앱 행별 대조",
+      "issue": 3849,
+      "kind": "validation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/invite-seat.md",
+          "ids": [
+            "INV-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "초대받은 계정으로 출시된 Studio에 로그인해 이용권 카드·시작, 월 한도에 닿은 계정의 거절 문장, super와 초대를 함께 가진 계정을 확인하고 결과를 #3849에 남긴다.",
+      "design_delta": "새 동작 없음. 이미 출시된 앱과 Service #394·#403의 동작을 INV-01 한 행으로 고정한다. “무제한” 문구는 Jay 2026-11-13 결정으로 그대로 둔다.",
+      "positive_control": "초대받은 계정이 super 이용권 카드로 시작하고, 한도에 닿으면 Service 문장 그대로 멈추며 다음 KST 달에 다시 쓴다.",
+      "negative_control": "한도 거절에 금액·남은 금액·구매 카드·하루 다시 채움 문구가 없고, super 계정은 초대 좌석으로 내려가지 않으며, 앱이 초대 코드를 입력받지 않는다.",
+      "evidence_required": "Studio 앱 버전, Service SHA, 계정 종류(합성/실제), 화면과 응답 코드. 합성 Service 결과를 운영 결과로 주장하지 않는다.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx",
+        "extensions/hypeproof-chat/src/trialEndCard.ts"
+      ],
+      "verification_inputs": [
+        "docs/requirements/invite-seat.md"
       ]
     },
     {
