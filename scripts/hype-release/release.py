@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import ExitStack
 import json
 import subprocess
 import sys
@@ -121,6 +122,13 @@ def parser():
 
 
 def main(argv=None, github=None, actions=None, identity=None):
+    # Only clients constructed by this invocation own grants to revoke. Injected
+    # transports remain the caller's responsibility, including on failure.
+    with ExitStack() as cleanup:
+        return _main(argv, github, actions, identity, cleanup)
+
+
+def _main(argv, github, actions, identity, cleanup):
     a = parser().parse_args(argv)
     candidate, policy = read(a.candidate), policy_contract(read(a.policy))
     native = candidate.get("kind") == native_testflight.KIND
@@ -140,8 +148,12 @@ def main(argv=None, github=None, actions=None, identity=None):
         require(a.state_repo in policy["repositories"], "state repository outside policy")
         if native:
             actor = (identity or GitHub()).actor()  # Human credential: GET /user only.
-            github = github or NativeGitHub(policy["repositories"])
-            actions = actions or NativeGitHub([candidate["repository"]], actions=True)
+            if github is None:
+                github = NativeGitHub(policy["repositories"])
+                cleanup.callback(github.close)
+            if actions is None:
+                actions = NativeGitHub([candidate["repository"]], actions=True)
+                cleanup.callback(actions.close)
         else:
             github = github or GitHub()
             actor = github.actor()
