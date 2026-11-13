@@ -19,6 +19,9 @@ capture_failure() {
   status=$?
   trap - EXIT
   if [[ "$status" != 0 ]]; then
+    # These files were captured by Espresso before ActivityScenario teardown.
+    # Keep the original failure even if pulling diagnostics also fails.
+    adb -s "$ANDROID_SERIAL" pull /sdcard/Android/data/ai.hypeproof.studio.mobile.preview/files/evidence/failures "$evidence/before-teardown" > "$evidence/before-teardown-pull.log" 2>&1 || true
     adb -s "$ANDROID_SERIAL" shell dumpsys window > "$evidence/failure-window.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" shell dumpsys power > "$evidence/failure-power.txt" 2>&1 || true
     adb -s "$ANDROID_SERIAL" exec-out screencap -p > "$evidence/failure-screen.png" 2>/dev/null || true
@@ -57,7 +60,15 @@ if [[ "$ready" != 1 ]]; then
   echo 'Disposable emulator is not ready; instrumentation was not started. Inspect the retained readiness and failure evidence.' >&2
   exit 2
 fi
-adb -s "$ANDROID_SERIAL" shell am instrument -w -r ai.hypeproof.studio.mobile.preview.test/androidx.test.runner.AndroidJUnitRunner > "$evidence/native-ui.log" 2>&1
+instrumentation_args=()
+if [[ -n "${HPS_ANDROID_FAILURE_PROBE:-}" ]]; then
+  if [[ "$HPS_ANDROID_FAILURE_PROBE" != before-teardown ]]; then
+    echo 'Unknown Android failure evidence probe.' >&2
+    exit 2
+  fi
+  instrumentation_args=(-e class ai.hypeproof.studio.StudioJourneyTest#reflectionIsOptionalPersistentAndExcludedFromAIContext -e hpsFailureProbe before-teardown)
+fi
+adb -s "$ANDROID_SERIAL" shell am instrument -w -r "${instrumentation_args[@]}" ai.hypeproof.studio.mobile.preview.test/androidx.test.runner.AndroidJUnitRunner > "$evidence/native-ui.log" 2>&1
 python3 - "$evidence/native-ui.log" <<'PY'
 import re,sys
 log=open(sys.argv[1]).read()
