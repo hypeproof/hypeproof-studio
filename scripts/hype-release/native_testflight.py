@@ -18,7 +18,7 @@ KIND = 'native-testflight'
 CI_FIELDS = ('native_tree', 'native_workflow', 'native_run_id', 'native_run_attempt', 'artifact_id')
 
 
-def workflow_contract(root, candidate):
+def workflow_contract(root, candidate, *, separate_source=False):
     # Use the repository's existing PyYAML dependency only for this native path.
     # Source SHA binds these bytes; this is target validation, not a new approval gate.
     try:
@@ -35,10 +35,13 @@ def workflow_contract(root, candidate):
     events = workflow.get('on', workflow.get(True))
     dispatch = events.get('workflow_dispatch') if isinstance(events, dict) else None
     inputs = dispatch.get('inputs') if isinstance(dispatch, dict) else None
+    fields = ('expected_sha', 'operation_id', 'request_digest')
+    if separate_source:
+        fields += ('expected_workflow_sha',)
     require(isinstance(inputs, dict) and all(isinstance(inputs.get(key), dict)
             and inputs[key].get('type') == 'string'
-            for key in ('expected_sha', 'operation_id', 'request_digest')),
-            'native workflow_dispatch requires string inputs expected_sha, operation_id, request_digest')
+            for key in fields),
+            'native workflow_dispatch requires string inputs ' + ', '.join(fields))
     upload = workflow['jobs'].get('upload', {})
     require(isinstance(upload, dict) and isinstance(upload.get('strategy'), dict)
             and isinstance(upload['strategy'].get('matrix'), dict), 'malformed native upload strategy')
@@ -47,21 +50,38 @@ def workflow_contract(root, candidate):
             'native workflow target environment/platform differs from candidate')
 
 
-def prepare(github, actions, candidate, checkout):
+def prepare(github, actions, candidate, checkout, workflow_checkout=None):
     root = product_checkout(checkout, candidate)
-    assert_ref(github, candidate)  # Confirm the official source before loading product code.
-    workflow_contract(root, candidate)
+    control = root
+    workflow_sha = None
+    if workflow_checkout is not None:
+        workflow_sha = github.api(f"repos/{candidate['repository']}/git/ref/heads/{candidate['ref']}").get('object', {}).get('sha')
+        require(isinstance(workflow_sha, str) and re.fullmatch('[a-f0-9]{40}', workflow_sha),
+                'invalid trusted workflow source')
+        control = product_checkout(workflow_checkout, {**candidate, 'sourceSha': workflow_sha})
+    assert_ref(github, candidate, workflow_sha)  # Verify trusted main before loading control code.
+    if workflow_sha is not None:
+        require(not subprocess.check_output(['git', '-C', str(control), 'status', '--porcelain',
+                                             '--untracked-files=normal'], text=True).strip(),
+                'native control checkout must be clean')
+    workflow_contract(control, candidate, separate_source=workflow_sha is not None)
     prs = source_prs(github, candidate, root)
-    module_path = root / 'apps/studio-native/scripts/verify-native-candidate.py'
+    module_path = control / 'apps/studio-native/scripts/verify-native-candidate.py'
     require(module_path.is_file() and not module_path.is_symlink(), 'existing native candidate gate required')
     # Execute the exact product's gate, without creating __pycache__ in its clean checkout.
     gate = types.ModuleType('hype_release_product_native_gate')
     gate.__file__ = str(module_path)
-    source_bytes = subprocess.check_output(['git', '-C', str(root), 'show',
-        candidate['sourceSha'] + ':apps/studio-native/scripts/verify-native-candidate.py'])
+    source_bytes = subprocess.check_output(['git', '-C', str(control), 'show',
+        (workflow_sha or candidate['sourceSha']) + ':apps/studio-native/scripts/verify-native-candidate.py'])
     require(module_path.read_bytes() == source_bytes, 'native gate differs from exact tracked source')
     exec(compile(source_bytes, str(module_path), 'exec'), gate.__dict__)
     try:
+        if workflow_sha is not None:
+            require(callable(getattr(gate, 'verify_workflow_ancestry', None)),
+                    'trusted native workflow lacks separate-source ancestry verification')
+            control_source = gate.source_identity(control)
+            require(control_source['checkout_sha'] == workflow_sha, 'native control checkout source mismatch')
+            gate.verify_workflow_ancestry(candidate['sourceSha'], workflow_sha, read=github.api)
         source = gate.source_identity(root)
         result = gate.wait_for_candidate(source, candidate['sourceSha'], timeout=1, interval=0,
                                          read=lambda path, binary=False: actions.api(path, binary=binary))
@@ -70,34 +90,66 @@ def prepare(github, actions, candidate, checkout):
     require(result.get('schema') == 'hps-native-release-gate/1' and result.get('verdict') == 'PASS'
             and result.get('release_checkout_sha') == candidate['sourceSha']
             and result.get('source_head_sha') == candidate['sourceSha'], 'native gate source mismatch')
-    assert_ref(github, candidate)
+    if workflow_sha is not None:
+        result = {**result, 'schema': 'hps-native-release-gate/2', 'workflow_source_sha': workflow_sha}
+    assert_ref(github, candidate, workflow_sha)
     return {'sourcePrs': prs, 'nativeGate': result}
 
 
-def assert_ref(github, candidate):
+def assert_ref(github, candidate, workflow_sha=None):
     ref = github.api(f"repos/{candidate['repository']}/git/ref/heads/{candidate['ref']}")
-    require(ref.get('object', {}).get('sha') == candidate['sourceSha']
+    require(ref.get('object', {}).get('sha') == (workflow_sha or candidate['sourceSha'])
             and ref['object'].get('type') == 'commit', 'native dispatch ref moved from exact candidate')
 
 
 def request(candidate, operation_id, preparation):
     require(re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', operation_id), 'invalid operation ID')
     gate = preparation['nativeGate']
-    return {'adapter': 'hps-native-testflight/1', 'operationId': operation_id,
+    version = 2 if gate.get('schema') == 'hps-native-release-gate/2' else 1
+    require(gate.get('schema') == f'hps-native-release-gate/{version}', 'unsupported native gate schema')
+    workflow = {}
+    if version == 2:
+        value = gate.get('workflow_source_sha')
+        require(isinstance(value, str) and re.fullmatch('[a-f0-9]{40}', value), 'invalid prepared workflow source')
+        workflow['workflowSourceSha'] = value
+    return {'adapter': f'hps-native-testflight/{version}', 'operationId': operation_id, **workflow,
             **{key: candidate[key] for key in ('repository', 'sourceSha', 'workflow', 'environment', 'platform', 'ref')},
             'nativeCI': {key: gate[key] for key in CI_FIELDS}}
 
 
 def deployment_request(req, fingerprint):
-    return {'schema': 'hps-native-deployment-request/1', 'expected_sha': req['sourceSha'],
+    version = request_version(req)
+    return {'schema': f'hps-native-deployment-request/{version}', 'expected_sha': req['sourceSha'],
+            **({'workflow_sha': workflow_source(req)} if version == 2 else {}),
             'operation_id': req['operationId'], 'request_digest': fingerprint}
 
 
+def request_version(req):
+    adapter = req.get('adapter')
+    require(adapter in ('hps-native-testflight/1', 'hps-native-testflight/2'), 'unsupported native request adapter')
+    version = 2 if adapter.endswith('/2') else 1
+    require((version == 2) == ('workflowSourceSha' in req), 'native request workflow identity/schema mismatch')
+    if version == 2:
+        require(isinstance(req['workflowSourceSha'], str) and re.fullmatch('[a-f0-9]{40}', req['workflowSourceSha']),
+                'invalid native workflow source')
+    return version
+
+
+def workflow_source(req):
+    return req['workflowSourceSha'] if request_version(req) == 2 else req['sourceSha']
+
+
 def dispatch(github, actions, candidate, req, fingerprint):
-    assert_ref(github, candidate)
+    require(req['sourceSha'] == candidate['sourceSha'] and
+            all(req[key] == candidate[key] for key in ('repository', 'workflow', 'ref', 'environment', 'platform')),
+            'native dispatch request differs from candidate')
+    require(fingerprint == digest({'kind': KIND, 'request': req}), 'native dispatch request digest changed')
+    assert_ref(github, candidate, workflow_source(req))
+    inputs = {'expected_sha': req['sourceSha'], 'operation_id': req['operationId'], 'request_digest': fingerprint}
+    if request_version(req) == 2:
+        inputs['expected_workflow_sha'] = req['workflowSourceSha']
     actions.api(f"repos/{req['repository']}/actions/workflows/{req['workflow']}/dispatches", 'POST',
-                {'ref': req['ref'], 'inputs': {'expected_sha': req['sourceSha'],
-                 'operation_id': req['operationId'], 'request_digest': fingerprint}})
+                {'ref': req['ref'], 'inputs': inputs})
     # A successful HTTP response proves no upload. Session.operation retains UNKNOWN.
     return None
 
@@ -118,7 +170,7 @@ def validate_run(run, req, title):
     require(type(run.get('id')) is int and run['id'] > 0 and
             type(run.get('run_attempt')) is int and run['run_attempt'] > 0 and
             type(run.get('run_number')) is int and run['run_number'] > 0, 'invalid native run identity')
-    require(run.get('head_sha') == req['sourceSha'] and run.get('head_branch') == req['ref']
+    require(run.get('head_sha') == workflow_source(req) and run.get('head_branch') == req['ref']
             and run.get('event') == 'workflow_dispatch' and run.get('display_title') == title
             and run.get('path') == '.github/workflows/' + req['workflow']
             and run.get('head_repository', {}).get('full_name') == req['repository'],
@@ -131,7 +183,7 @@ def select_artifact(rows, name, run, req):
     artifact = matches[0]
     origin = artifact.get('workflow_run', {})
     require(type(artifact.get('id')) is int and artifact['id'] > 0 and artifact.get('expired') is False
-            and type(origin.get('id')) is int and origin.get('id') == run['id'] and origin.get('head_sha') == req['sourceSha'],
+            and type(origin.get('id')) is int and origin.get('id') == run['id'] and origin.get('head_sha') == workflow_source(req),
             'native artifact expired or belongs to another source/run')
     return artifact
 
@@ -190,6 +242,10 @@ def settle_upload(state, operation_id, observation):
             and receipt['repository'] == req['repository'] and receipt['source_sha'] == req['sourceSha']
             and receipt['run_id'] == observation['runId'] and receipt['run_attempt'] == observation['runAttempt'],
             'native observation does not bind the collected upload')
+    if request_version(req) == 2:
+        require(observation.get('workflowSourceSha') == req['workflowSourceSha']
+                and receipt.get('workflow_source_sha') == req['workflowSourceSha'],
+                'native observation workflow identity differs from operation')
     artifact = {
         'id': f"native-{req['platform']}-ipa-{observation['runId']}-{observation['runAttempt']}",
         'name': 'HP-Studio-ios.ipa', 'sha256': receipt['package_sha256'], 'size': receipt['package_size'],
@@ -200,6 +256,8 @@ def settle_upload(state, operation_id, observation):
                        'gateArtifactId': observation['gateArtifactId'], 'uploadArtifactId': observation['uploadArtifactId'],
                        'nativeCI': req['nativeCI'], 'receiptDigest': digest(receipt)},
     }
+    if request_version(req) == 2:
+        artifact['provenance']['workflowSourceSha'] = req['workflowSourceSha']
     matches = [row for row in state['artifacts'] if row['id'] == artifact['id']]
     require(len(matches) <= 1 and (not matches or matches[0] == artifact),
             'verified native package identity conflicts with retained evidence')
@@ -213,9 +271,11 @@ def settle_upload(state, operation_id, observation):
 
 def _observe(actions, req, fingerprint):
     require(fingerprint == digest({'kind': KIND, 'request': req}), 'operation request digest changed')
+    version = request_version(req)
+    workflow_sha = workflow_source(req)
     base = f"repos/{req['repository']}/actions"
     title = f"studio-testflight:{req['operationId']}:{fingerprint}"
-    runs = paged(actions, base + f"/workflows/{req['workflow']}/runs?head_sha={req['sourceSha']}", 'workflow_runs')
+    runs = paged(actions, base + f"/workflows/{req['workflow']}/runs?head_sha={workflow_sha}", 'workflow_runs')
     matches = [r for r in runs if r.get('display_title') == title]
     require(len(matches) <= 1, 'ambiguous native request runs; never select latest')
     if not matches:
@@ -234,12 +294,14 @@ def _observe(actions, req, fingerprint):
         actions.artifact_zip(req['repository'], upload_artifact['id'], upload_path)
         with open_archive(gate_path) as archive:
             gate = document(archive, 'native-release-gate.json')
-        require(gate.get('schema') == 'hps-native-release-gate/1' and gate.get('verdict') == 'PASS'
+        require(gate.get('schema') == f'hps-native-release-gate/{version}' and gate.get('verdict') == 'PASS'
                 and gate.get('deployment_request') == expected and gate.get('release_run_id') == run['id']
                 and gate.get('release_run_attempt') == run['run_attempt']
                 and gate.get('release_checkout_sha') == req['sourceSha'] and gate.get('source_head_sha') == req['sourceSha']
                 and all(gate.get(key) == value for key, value in req['nativeCI'].items()),
                 'native gate is stale or does not bind this operation/attempt')
+        require((gate.get('workflow_source_sha') == workflow_sha) if version == 2 else ('workflow_source_sha' not in gate),
+                'native gate workflow identity/schema mismatch')
         require(all(type(gate.get(key)) is int and gate[key] > 0 for key in
                     ('release_run_id', 'release_run_attempt', 'native_run_id', 'native_run_attempt', 'artifact_id')),
                 'native gate has invalid numeric identities')
@@ -250,7 +312,7 @@ def _observe(actions, req, fingerprint):
                 and ci.get('head_repository', {}).get('full_name') == req['repository'], 'native CI eligibility changed')
         with open_archive(upload_path) as archive:
             receipt = document(archive, 'upload-receipt.json')
-            require(receipt.get('schema') == 'hps-native-upload-receipt/1'
+            require(receipt.get('schema') == f'hps-native-upload-receipt/{version}'
                     and receipt.get('repository') == req['repository'] and receipt.get('source_sha') == req['sourceSha']
                     and receipt.get('run_id') == run['id'] and receipt.get('run_attempt') == run['run_attempt']
                     and receipt.get('deployment_request') == expected and receipt.get('platform') == req['platform']
@@ -258,6 +320,8 @@ def _observe(actions, req, fingerprint):
                     and receipt.get('bundle_id') == 'ai.hypeproof.studio.mobile' and receipt.get('state') == 'uploaded'
                     and receipt.get('apple_processing') == 'NOT_OBSERVED' and receipt.get('tester_availability') == 'NOT_OBSERVED',
                     'upload receipt source/request/attempt/state mismatch')
+            require((receipt.get('workflow_source_sha') == workflow_sha) if version == 2 else ('workflow_source_sha' not in receipt),
+                    'upload receipt workflow identity/schema mismatch')
             require(all(type(receipt.get(key)) is int and receipt[key] > 0 for key in ('run_id', 'run_attempt')),
                     'upload receipt has invalid numeric identities')
             require(receipt.get('commands') == {name: {'exit_code': 0} for name in ('archive', 'export', 'validation', 'upload')},
@@ -283,12 +347,14 @@ def _observe(actions, req, fingerprint):
     require(all(latest_ci.get(key) == ci.get(key) for key in
                 ('id', 'run_attempt', 'head_sha', 'status', 'conclusion', 'path', 'head_repository')),
             'native CI changed during receipt verification')
-    final_runs = paged(actions, base + f"/workflows/{req['workflow']}/runs?head_sha={req['sourceSha']}", 'workflow_runs')
+    final_runs = paged(actions, base + f"/workflows/{req['workflow']}/runs?head_sha={workflow_sha}", 'workflow_runs')
     final_matches = [row for row in final_runs if row.get('display_title') == title]
     require(len(final_matches) == 1 and final_matches[0].get('id') == run['id']
             and final_matches[0].get('run_attempt') == run['run_attempt'],
             'native request run set changed during receipt verification')
-    return {'state': 'uploaded', 'sourceSha': req['sourceSha'], 'runId': run['id'], 'runAttempt': run['run_attempt'],
+    return {'state': 'uploaded', 'sourceSha': req['sourceSha'],
+            **({'workflowSourceSha': workflow_sha} if version == 2 else {}),
+            'runId': run['id'], 'runAttempt': run['run_attempt'],
             'gateArtifactId': gate_artifact['id'], 'uploadArtifactId': upload_artifact['id'], 'receipt': receipt,
             'appleProcessing': 'NOT_OBSERVED', 'testerAvailability': 'NOT_OBSERVED',
             'simulatorJourney': 'NOT_RUN', 'signedInJourney': 'NOT_RUN', 'deviceAcceptance': 'NOT_RUN',

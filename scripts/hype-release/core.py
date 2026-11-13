@@ -139,7 +139,20 @@ def evidence_key(identity):
     require(re.fullmatch(r"[a-f0-9]{40}", identity["sourceSha"]), "invalid evidence source SHA")
     if kind != "source":
         require(re.fullmatch(r"[a-f0-9]{64}", identity["artifactSha256"]), "invalid artifact digest")
-    return digest({"kind": kind, **{k: identity[k] for k in fields[kind]}})
+    bound = {"kind": kind, **{k: identity[k] for k in fields[kind]}}
+    if 'installation' in identity:
+        setup = identity['installation']
+        require(kind == 'installed-app' and isinstance(setup, dict), 'installation needs installed-app evidence')
+        scenario = setup.get('scenario')
+        require(scenario in {'clean-install', 'upgrade', 'existing'}, 'invalid installation scenario')
+        keys = {'scenario', 'dependencyProvisioning'} | ({'previousArtifactSha256'} if scenario == 'upgrade' else set())
+        require(set(setup) == keys and setup.get('dependencyProvisioning') in {'installer', 'user-flow', 'preseeded'},
+                'complete installation setup required')
+        if scenario == 'upgrade':
+            require(isinstance(setup['previousArtifactSha256'], str) and
+                    re.fullmatch(r'[a-f0-9]{64}', setup['previousArtifactSha256']), 'previous package digest required')
+        bound['installation'] = setup
+    return digest(bound)
 
 
 def record_check(state, check):

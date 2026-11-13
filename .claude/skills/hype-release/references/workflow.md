@@ -211,7 +211,10 @@ Harness does not implement signing, provisioning or a second approval engine.
 Copy `examples/native-candidate.json` and replace its source/PR/change placeholders.
 There is no RC tag or desktop version in this candidate. The first supported target
 is Studio iOS, `studio-apple-testflight.yml`, `apple-native-preview`, ref `main`.
-The exact source must still be that ref's tip immediately before dispatch.
+The original v1 operation requires the exact app source to remain that ref's tip
+immediately before dispatch. The v2 operation below independently pins the tested
+app source and the trusted main workflow source, so unrelated main changes do not
+require testing a different app candidate.
 Malformed native workflow/source identity is refused before account attribution,
 broker loading or coordination-store access, as well as at the existing state gate.
 Preparation also requires the workflow's `workflow_dispatch` to declare the three
@@ -288,6 +291,50 @@ UNKNOWN fence and CAS state store as desktop RCs. Existing desktop state branch
 keys and commands retain their behavior. Desktop collect/report/promote commands
 are intentionally unavailable for native candidates; `status` is the native
 handoff record until separate Apple/device observations exist.
+
+### Fixed app candidate with a separately pinned workflow (#609)
+
+Use the same candidate file and state branch. Keep `sourceSha` at the exact tested,
+merged app commit. Give `prepare` and `testflight` both `--checkout <app-candidate>`
+and `--workflow-checkout <trusted-main-control>`. Each must be a clean checkout
+from the configured Studio repository. The control checkout must be the observed
+main tip and declare the fourth string input `expected_workflow_sha`.
+
+Preparation loads the existing candidate verifier from that pinned control commit,
+not from the older app candidate. It proves candidate-to-workflow-to-current-main
+ancestry through the product's GET-only verifier and preserves the exact app CI
+source/run/attempt/artifact/tree/workflow checks. The prepared request is
+`hps-native-testflight/2` with `workflowSourceSha`; the original candidate SHA and
+the five native CI identity fields remain unchanged. The cost quote binds this
+whole request, including the control version.
+
+Dispatch still targets `main`. It adds `expected_workflow_sha` to the existing
+three inputs and refuses a changed main tip before the write. The Studio workflow
+also checks its actual trigger/workflow identity before signing, checks ancestry
+again, and uses separate control/app checkouts. Never spoof `GITHUB_SHA`, move a
+legacy branch, accept an unmerged app or infer full-source CI from tree equality.
+If main moves before dispatch, update only the clean control checkout, prepare
+again and issue a new request-bound quote. This does not rerun the fixed app's CI.
+If a dispatch was reserved or its response is uncertain, preserve that frozen
+operation and reconcile/investigate it; this change adds no automatic retry or
+UNKNOWN unlock. Later main advancement cannot mutate either running checkout.
+
+V2 deployment requests use `hps-native-deployment-request/2` and `workflow_sha`.
+Gate and upload receipts use their `/2` schemas with `workflow_source_sha`.
+The Actions run and artifact origins must match the workflow SHA; the IPA,
+`source_sha`, `source_head_sha`, `release_checkout_sha` and native CI still match
+the app candidate. Upload artifact names still contain the app candidate SHA.
+Reconciliation validates both identities and records `workflowSourceSha` in the
+collected package provenance. Missing, mixed or changed identities cannot finish
+the operation. V1 records keep their original equal-source rules and remain
+reconcilable; no historical evidence is reinterpreted as v2.
+
+```bash
+"${native[@]}" prepare --checkout /exact/app-candidate --workflow-checkout /exact/trusted-main
+"${native[@]}" testflight --checkout /exact/app-candidate --workflow-checkout /exact/trusted-main \
+  --operation ios-upload-1 --quote /tmp/native-quote.json --plan
+# Confirm this returned request and quote, then repeat without --plan.
+```
 
 Upload, simulator journey, signed-in journey and physical-device acceptance are
 separate evidence boundaries. Native results explicitly retain `simulatorJourney`,

@@ -160,7 +160,9 @@ class NativeGitHub(GitHub):
             allowed = (method == "GET" and suffix.startswith("/actions/")) or (
                 method == "POST" and suffix == "/actions/workflows/studio-apple-testflight.yml/dispatches")
         else:
-            allowed = (method == "GET" and (not suffix or suffix.startswith(("/git/", "/contents/", "/pulls/")))) or (
+            ancestry_read = repo == 'hypeproof/hypeproof-studio' and re.fullmatch(
+                r'/compare/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1)?', suffix)
+            allowed = (method == "GET" and (not suffix or ancestry_read or suffix.startswith(("/git/", "/contents/", "/pulls/")))) or (
                 method in {"POST", "PATCH"} and suffix.startswith("/git/"))
         require(allowed, "native endpoint does not match credential profile")
         grant = self._grants.get(repo)

@@ -6286,6 +6286,9 @@
           "path": "scripts/release/select-cases.mjs"
         },
         {
+          "path": "scripts/release/published-baseline.mjs"
+        },
+        {
           "path": "scripts/release/daily-gate.mjs"
         },
         {
