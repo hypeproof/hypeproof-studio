@@ -19,13 +19,17 @@ import json,os,pathlib,signal,socket,subprocess,sys,time
 s=pathlib.Path(os.environ['MOCK_STATE']); mode=os.environ['MOCK_MODE']
 tool=pathlib.Path(sys.argv[0]).name; args=sys.argv[1:]
 with (s/'calls.jsonl').open('a') as f: f.write(json.dumps([tool,*args])+'\n')
+def publish(name,value):
+ target=s/name; temporary=s/(name+'.publishing')
+ temporary.write_text(value);temporary.replace(target)
 if args in [['version'],['-version']]:print('synthetic SDK fixture 1');sys.exit(0)
 if tool=='adb' and args[:1]==['-L']:
  if mode=='adb_early_exit':sys.exit(7)
  assert args[1].startswith('tcp:') and args[1].count(':')==1 and args[2:]==['nodaemon','server']
  port=int(args[1].split(':')[1]);listener=socket.socket()
- listener.bind(('0.0.0.0' if mode=='adb_wildcard' else '127.0.0.1',port));listener.listen()
- (s/'adb-pid').write_text(str(os.getpid()));(s/'adb-port').write_text(str(port))
+ listener.bind(('0.0.0.0' if mode=='adb_wildcard' else '127.0.0.1',port))
+ publish('adb-pid',str(os.getpid()));publish('adb-port',str(port))
+ listener.listen()
  while True:time.sleep(.02)
 if tool=='avdmanager':
  name=args[args.index('--name')+1]; p=pathlib.Path(os.environ['ANDROID_AVD_HOME'])/(name+'.avd');p.mkdir()
@@ -33,7 +37,14 @@ if tool=='avdmanager':
 elif tool=='emulator':
  assert os.environ['ANDROID_ADB_SERVER_PORT']==(s/'adb-port').read_text()
  assert os.environ['ADB_SERVER_SOCKET']=='tcp:127.0.0.1:'+(s/'adb-port').read_text()
- (s/'name').write_text(args[args.index('-avd')+1]);(s/'pid').write_text(str(os.getpid()))
+ publish('pid',str(os.getpid()))
+ if mode=='held_name_publication':
+  (s/'name.publishing').write_text('')
+  deadline=time.monotonic()+2
+  while not (s/'name-read-before-publish').exists():
+   if time.monotonic()>deadline:sys.exit(8)
+   time.sleep(.01)
+ publish('name',args[args.index('-avd')+1])
  def stop(*_):
   (s/'stopped').write_text('owned emulator terminated');sys.exit(0)
  signal.signal(signal.SIGTERM,stop)
@@ -49,7 +60,9 @@ elif tool=='adb':
  assert os.environ['ANDROID_ADB_SERVER_PORT']==(s/'adb-port').read_text()
  os.kill(int((s/'adb-pid').read_text()),0)
  args=args[2:]
- if not (s/'name').exists():sys.exit(1)
+ if not (s/'name').exists():
+  if mode=='held_name_publication':(s/'name-read-before-publish').touch()
+  sys.exit(1)
  if mode=='failed_test_hung_diagnostics' and (s/'verification').exists():
   (s/'diagnostic-started').touch()
   print('partial failure diagnostic',flush=True);time.sleep(60)
@@ -168,6 +181,14 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
         self.assertTrue(all(value == "PASS" for value in receipt["phases"].values()))
         self.assertTrue((self.state / "stopped").exists())
         self.assertIn(["adb", "-s", f"emulator-{self.port}", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], calls)
+
+    def test_sdk_fixture_publishes_complete_identity_after_an_early_read(self):
+        code, receipt, _ = self.finish(self.start("held_name_publication"))
+        self.assertEqual(code, 0)
+        self.assertTrue((self.state / "name-read-before-publish").exists())
+        self.assertEqual((self.state / "name").read_text(), receipt["avd"])
+        self.assertTrue(receipt["verification_started"])
+        self.assertEqual((self.state / "verification").read_text(), "started\n")
 
     def test_absent_focus_blocks_tests_and_retains_observations(self):
         code, receipt, _ = self.finish(self.start("no_focus", boot=.7))
