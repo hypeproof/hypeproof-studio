@@ -117,6 +117,8 @@ test('the real PublishSession: never waits for the counts, reads in parallel, ca
   view = await session.view();
   assert.equal(view.stats.v1.state, 'unknown', 'a failed read makes its version unknown');
 
+  // That view started the seventh experiment's read (it is not capped out any more); let it settle first.
+  await new Promise((r) => setTimeout(r, 50));
   // A read that never answers is cut off by the timeout; the panel kept drawing meanwhile.
   t += 61_000; mode = 'hang'; next = changes();
   const started = Date.now();
