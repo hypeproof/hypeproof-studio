@@ -72,6 +72,16 @@ final class ReflectionModel {
             store.saveGuestDraft("");guestDraft="";notice="로그인 전 글을 가져왔어요. 보내기를 눌러야 전송돼요.";changed.run();return true;}
         catch(Exception e){error="로그인 전 글을 모두 옮기지 못했어요. 원본은 남아 있어요. 다시 저장하거나 확인해 주세요.";changed.run();return false;}
     }
+    boolean canRestoreFailedDraft(){
+        return !closed&&!busy&&!signing&&!readOnly&&!brokenCredentials&&credentials!=null&&state!=null
+            &&credentials.account().equals(state.account)&&draft.isEmpty()&&state.failedDraftText()!=null;
+    }
+    boolean restoreFailedDraft(){
+        if(!canRestoreFailedDraft())return false;
+        boolean restored=save(next->{if(!next.restoreFailedDraft())throw new Exception("restore_not_available");});
+        if(restored){error="";notice="입력란에 가져왔어요. 내용을 확인한 뒤 보내 주세요.";}
+        changed.run();return restored;
+    }
     void login(Consumer<String> approval){
         if(closed||busy||credentials!=null||brokenCredentials)return;
         invalidate();error="";busy=true;signing=true;long ticket=epoch;NativeDeviceSignIn.Cancel operation=new NativeDeviceSignIn.Cancel();cancel=operation;changed.run();

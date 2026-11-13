@@ -40,6 +40,17 @@ final class ReflectionState {
     }
     String status(){return request==null?"":request.optString("status");}
     boolean outstanding(){return Set.of("local","pending","running").contains(status());}
+    /** Only a server-confirmed terminal failure can become a new draft. */
+    String failedDraftText(){
+        if(!status().equals("failed"))return null;
+        String text=request.optString("text");
+        return text.trim().isEmpty()||text.length()>4000||text.indexOf('\0')>=0?null:text;
+    }
+    boolean restoreFailedDraft(){
+        String text=failedDraftText();if(!draft.isEmpty()||text==null)return false;
+        // Keep the failed request and transcript. Only a later explicit Send allocates a new ID.
+        draft=text;return true;
+    }
     void enqueue() throws Exception {
         String text=draft.trim();if(outstanding()||text.isEmpty()||text.length()>4000||text.indexOf('\0')>=0)throw new Exception("invalid_turn");
         long now=System.currentTimeMillis();request=new JSONObject().put("id",UUID.randomUUID().toString()).put("text",text).put("status","local").put("created_at",now).put("updated_at",now).put("expected_revision",revision);draft="";

@@ -171,9 +171,12 @@ public class QuestionJourneyTest {
     }
 
     private VoiceFixture conversation(java.util.List<String> submitted)throws Exception{
-        return conversation(submitted,null);
+        return conversation(submitted,(String)null);
     }
     private VoiceFixture conversation(java.util.List<String> submitted,String denial)throws Exception{
+        return conversation(submitted,()->denial);
+    }
+    private VoiceFixture conversation(java.util.List<String> submitted,java.util.function.Supplier<String> denial)throws Exception{
         ReflectionStorage store=new ReflectionStorage(context);
         store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         store.save(new ReflectionState("test-account"));
@@ -183,13 +186,14 @@ public class QuestionJourneyTest {
             synchronized(submitted){
                 if(path.equals("/me/reflection/turns")){
                     assertNotNull(body);String id=body.get("id"),text=body.get("text");
-                    ReflectionState durable=store.load("test-account");assertEquals(id,durable.request.getString("id"));assertEquals(text,durable.request.getString("text"));
+                    ReflectionState durable=store.load("test-account");assertEquals(id,durable.request.getString("id"));assertEquals(text,durable.request.getString("text"));assertEquals(String.valueOf(revision[0]),body.get("revision"));assertEquals(body.get("revision"),durable.submission().get("revision"));
                     assertFalse(submitted.contains(id));submitted.add(id);
                     messages.put(new JSONObject().put("id",id).put("role","user").put("content",text).put("created_at",1000+revision[0]));
-                    if(denial!=null){
+                    String denied=denial.get();
+                    if(denied!=null){
                         // Service persists the failed user turn before admission rejects execution.
                         turn[0]=new JSONObject().put("id",id).put("text",text).put("status","failed").put("created_at",1000).put("updated_at",1001);revision[0]++;
-                        return new NativeDeviceSignIn.Reply(403,Map.of("error",denial));
+                        return new NativeDeviceSignIn.Reply(403,Map.of("error",denied));
                     }
                     messages.put(new JSONObject().put("id","answer-"+id).put("role","assistant").put("content","내 생각의 답변 "+submitted.size()).put("created_at",1001+revision[0]));
                     turn[0]=new JSONObject().put("id",id).put("text",text).put("status","completed").put("created_at",1000).put("updated_at",1001);revision[0]++;
@@ -212,6 +216,63 @@ public class QuestionJourneyTest {
         app.onActivity(a->{voice.result("오래된 최종 결과");voice.endpoint();});drain();
         assertFalse(voice.controller.session.active());assertEquals(1,voice.starts);assertEquals(1,submitted.size());assertTrue(voice.spoken.isEmpty());
         screen("android-voice-admission-denial");
+    }
+    private void confirmFailedTurn()throws Exception{
+        onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).perform(click());ready();drain();
+        onView(withText("입력란에 가져오기")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;assertTrue(v.getHeight()>=48*v.getResources().getDisplayMetrics().density);});
+    }
+    @Test public void confirmedFailedQuestionRestoresAfterRestartAndSendsOnlyOnLaterTap()throws Exception{
+        java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());
+        var denial=new java.util.concurrent.atomic.AtomicReference<String>("reflection_monthly_limit");VoiceFixture first=conversation(submitted,denial::get);
+        String words="다시 확인하고 보낼 내 이야기";onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->first.result(words));ready();drain();
+        assertFalse(first.controller.session.active());ReflectionStorage store=new ReflectionStorage(context);String failedID=store.load("test-account").request.getString("id");
+        assertEquals(1,submitted.size());
+        confirmFailedTurn();assertEquals("failed",store.load("test-account").status());
+        onView(withText(words)).check(matches(isDisplayed())); // duplicate failed bubbles make this ambiguous
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();
+        onView(withText(words)).check(matches(isDisplayed()));onView(withContentDescription("질문 대화 입력")).check(matches(withText("")));
+        VoiceFixture restarted=new VoiceFixture();app.onActivity(a->restarted.install(a));assertEquals(0,restarted.starts);
+        onView(withText("입력란에 가져오기")).check(matches(isEnabled())).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText(words))).perform(closeSoftKeyboard());
+        assertEquals(1,submitted.size());assertEquals(0,restarted.starts);assertTrue(restarted.spoken.isEmpty());assertFalse(restarted.controller.session.active());
+        ReflectionState restored=store.load("test-account");assertEquals(words,restored.draft);assertEquals(failedID,restored.request.getString("id"));assertEquals("failed",restored.status());assertEquals(1,restored.messages.length());screen("android-failed-restored");
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText(words)));assertEquals(1,submitted.size());
+        denial.set(null);long expected=store.load("test-account").revision;
+        onView(withText("보내기")).perform(click());ready();drain();
+        assertEquals(2,submitted.size());assertNotEquals(failedID,submitted.get(1));ReflectionState done=store.load("test-account");assertEquals("completed",done.status());assertEquals(submitted.get(1),done.request.getString("id"));assertEquals(expected+1,done.revision);assertEquals("",done.draft);assertEquals(3,done.messages.length());screen("android-failed-resent");
+    }
+    @Test public void failedRestoreDoesNotOverwriteDraftOrAdoptAWriteFailure()throws Exception{
+        java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted,"reflection_admission_unavailable");
+        String words="지켜야 하는 실패 질문";onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.result(words));ready();drain();confirmFailedTurn();
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText("따로 쓰던 초안"),closeSoftKeyboard());
+        onView(withText("입력란에 가져오기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
+        ReflectionStorage store=new ReflectionStorage(context);String failedID=store.load("test-account").request.getString("id");
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();onView(withContentDescription("질문 대화 입력")).check(matches(withText("따로 쓰던 초안")));onView(withText("입력란에 가져오기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
+        onView(withContentDescription("질문 대화 입력")).perform(replaceText(""),closeSoftKeyboard());
+        File disk=new File(new File(context.getNoBackupFilesDir(),"reflection"),"conversation-test-account.json"),blocked=new File(disk+".new");byte[] before=Files.readAllBytes(disk.toPath());assertTrue(blocked.mkdir());
+        try{
+            onView(withText("입력란에 가져오기")).perform(click());
+            onView(withContentDescription("질문 대화 입력")).check(matches(withText("")));
+            onView(withText("기록을 저장하지 못했어요. 작성한 글은 화면에 남아 있어요. 다시 저장하거나 내보내 주세요.")).check(matches(isDisplayed()));
+            assertArrayEquals(before,Files.readAllBytes(disk.toPath()));assertEquals(failedID,store.load("test-account").request.getString("id"));assertEquals(1,submitted.size());
+            app.onActivity(a->{try{var f=QuestionActivity.class.getDeclaredField("model");f.setAccessible(true);ReflectionModel model=(ReflectionModel)f.get(a);assertEquals("",model.state.draft);assertEquals(failedID,model.state.request.getString("id"));}catch(Exception e){throw new AssertionError(e);}});
+        }finally{if(blocked.exists())assertTrue(blocked.delete());assertFalse(blocked.exists());}
+        onView(withText("입력란에 가져오기")).perform(click());onView(withContentDescription("질문 대화 입력")).check(matches(withText(words))).perform(closeSoftKeyboard());assertEquals(words,store.load("test-account").draft);assertEquals(1,submitted.size());
+    }
+    @Test public void sameIDWithDifferentHistoryTextKeepsUncertainOriginalVisible()throws Exception{
+        ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        String original="미확인 원래 문장",different="같은 ID로 온 다른 문장";ReflectionState state=new ReflectionState("test-account");state.draft=original;state.enqueue();store.save(state);String id=state.request.getString("id");
+        java.util.concurrent.atomic.AtomicInteger sends=new java.util.concurrent.atomic.AtomicInteger();
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            if(body!=null)sends.incrementAndGet();assertEquals("/me/reflection",path);
+            JSONArray messages=new JSONArray().put(new JSONObject().put("id",id).put("role","user").put("content",different).put("created_at",1000));
+            return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",5).put("messages",messages).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+        };
+        app=ActivityScenario.launch(QuestionActivity.class);ready();drain();
+        onView(withText(different)).check(matches(isDisplayed()));onView(withText(original)).check(matches(isDisplayed()));onView(withText("입력란에 가져오기")).check(doesNotExist());
+        assertEquals("local",store.load("test-account").status());assertEquals(id,store.load("test-account").request.getString("id"));assertEquals(original,store.load("test-account").request.getString("text"));assertEquals(0,sends.get());
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();onView(withText(original)).check(matches(isDisplayed()));assertEquals(id,store.load("test-account").request.getString("id"));assertEquals(0,sends.get());screen("android-uncertain-original-retained");
     }
     @Test public void oneTapFiveAutomaticTurnsUseDurableOwnRepliesWithoutRmsOrNextTap()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted);
