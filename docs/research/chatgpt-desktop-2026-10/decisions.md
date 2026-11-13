@@ -518,6 +518,21 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
 
+## DEC-SHELL-R-031: daily class usage in Chalk budgets (2026-11-14, agent choice)
+
+- Day basis (agent choice): Korea time (`Asia/Seoul`, fixed +09:00), because every class runs in Korea. A UTC day would
+  split one evening class across two bars. The basis is named in the response and in the header.
+- Source (agent choice): the existing `budget_line_balances` view, grouped by reservation time, in one bounded query per
+  class budget. There is no new table and no stored aggregate. Same-day figures move as attempts are priced.
+- Unknown amounts (agent choice): a non-final line with no observed amount gets a dashed cap in the chart and
+  `미확인 n건 (금액 확인 전)` in the table. It is never drawn or written as 0 (AB-15).
+- Colour (agent choice): the chart is monochrome (`currentColor`). Solid, hatched and dashed patterns plus a worded legend
+  carry the meaning, which also keeps forced-colours mode readable.
+- Stale (agent choice): the page reads once per open or refresh. After 30 minutes the header says so, and a minute timer
+  updates that label without reading again.
+
+Confirmed by Jay: no.
+
 ## DEC-ART-R-013: 7-day counts per test version (2026-11-13, agent choice)
 
 - Source (agent choice): the existing evidence read (`GET /v1/curriculum/experiments/:id/evidence`), whose sessions
