@@ -216,8 +216,8 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor func testOrdinaryAccountDoesNotShowMemberApprovalEntry() throws {
         let app = launch("first-answer"); signIn(app)
-        let observed = app.staticTexts["nativeJourneyTrace"]
-        expectation(for: NSPredicate(format: "label CONTAINS %@", "approval-inbox"), evaluatedWith: observed)
+        let observed = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "approval-inbox"), evaluatedWith: observed)
         waitForExpectations(timeout: 10)
         let paths = try XCTUnwrap(trace(app)["paths"] as? [String])
         XCTAssertEqual(paths.filter { $0 == "GET /v1/me/approval-inbox" }.count, 1)
