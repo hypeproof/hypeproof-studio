@@ -35,6 +35,8 @@ assert.equal(themeState({ colorTheme: HP_DARK_THEME, explicitTheme: undefined, a
 assert.equal(themeState({ colorTheme: HP_LIGHT_THEME, explicitTheme: HP_LIGHT_THEME, autoDetect: false }), 'light');
 assert.equal(themeState({ colorTheme: HP_LIGHT_THEME, explicitTheme: HP_DARK_THEME, autoDetect: true }), 'system', 'auto-detect wins over a pinned HP theme');
 assert.equal(themeState({ colorTheme: 'Solarized Dark', explicitTheme: 'Solarized Dark', autoDetect: true }), 'custom', 'a theme the learner chose in VS Code is theirs');
+assert.equal(themeState({ colorTheme: 'Default High Contrast', explicitTheme: 'Default High Contrast', autoDetect: false }), 'custom', 'a high-contrast theme the learner chose is kept');
+for (const c of ['dark', 'light', 'system']) assert.ok(J(themeWrites(c)).every((w) => !/HighContrast|highContrast/.test(w.key)), 'no write touches the high-contrast auto switch: ' + c);
 assert.deepEqual(J(themeWrites('light')), [{ section: 'window', key: 'autoDetectColorScheme', value: false }, { section: 'workbench', key: 'colorTheme', value: 'HypeProof Studio Light' }]);
 assert.deepEqual(J(themeWrites('system')), [{ section: 'window', key: 'autoDetectColorScheme', value: true }], 'system leaves the theme setting alone');
 assert.deepEqual(J(parseStartSettingWrite({ key: 'theme', value: 'system' })), { key: 'theme', value: 'system' });
