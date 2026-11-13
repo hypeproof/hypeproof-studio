@@ -171,4 +171,13 @@ print(json.dumps(result))
         from test_native_deployment_contract import DeploymentContracts
         DeploymentContracts.test_actual_upload_tail_records_only_complete_command_success(self)
 
+    def test_v2_receipt_preserves_archived_marketing_version_and_build(self):
+        from test_native_deployment_contract import DeploymentContracts
+        with tempfile.TemporaryDirectory() as directory:
+            package, info, outcomes = DeploymentContracts.make_receipt_inputs(self, Path(directory))
+            identity = gate.release_identity(SOURCE, ENV, read=Mock(side_effect=proofs()))
+            actual = gate.upload_receipt(identity, package, info, outcomes, ENV)
+            self.assertEqual(actual['schema'], 'hps-native-upload-receipt/2')
+            self.assertEqual((actual['version'], actual['build']), ('0.2.0', '19.2'))
+
 if __name__ == '__main__': unittest.main()

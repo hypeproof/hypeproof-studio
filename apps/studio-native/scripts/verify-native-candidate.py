@@ -127,8 +127,8 @@ def upload_receipt(identity, package, archive_info, command_results, environ):
     with package.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
-    version = '2' if identity.get('workflow_source_sha') else '1'
-    return {'schema': 'hps-native-upload-receipt/' + version, 'repository': REPOSITORY, **identity,
+    schema_version = '2' if identity.get('workflow_source_sha') else '1'
+    return {'schema': 'hps-native-upload-receipt/' + schema_version, 'repository': REPOSITORY, **identity,
             'platform': 'ios', 'bundle_id': bundle, 'version': version, 'build': build,
             'package_sha256': digest.hexdigest(), 'package_size': package.stat().st_size,
             'commands': {name: {'exit_code': commands[name]} for name in expected_commands},

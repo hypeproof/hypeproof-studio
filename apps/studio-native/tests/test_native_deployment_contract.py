@@ -152,6 +152,7 @@ class DeploymentContracts(unittest.TestCase):
             actual = gate.upload_receipt(identity, package, info, outcomes, ENV)
             self.assertEqual(actual['package_sha256'], hashlib.sha256(package.read_bytes()).hexdigest())
             self.assertEqual(actual['package_size'], package.stat().st_size)
+            self.assertEqual((actual['version'], actual['build']), ('0.2.0', '19.2'))
             self.assertEqual(actual['deployment_request'], identity['deployment_request'])
             self.assertEqual(actual['commands']['upload'], {'exit_code': 0})
             self.assertEqual(actual['state'], 'uploaded')
@@ -217,6 +218,7 @@ print('fixture command completed')
                 else:
                     self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
                     value = json.loads(receipt.read_text()); self.assertEqual(value['state'], 'uploaded')
+                    self.assertEqual((value['version'], value['build']), ('0.2.0', '19.2'))
                     self.assertEqual((temp / 'calls').read_text().splitlines(), ['archive', 'export', 'validation', 'upload'])
                     self.assertEqual(value['source_sha'], env['NATIVE_EXPECTED_SHA'])
                     if env.get('NATIVE_EXPECTED_WORKFLOW_SHA'):
