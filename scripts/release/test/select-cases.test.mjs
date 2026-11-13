@@ -7,9 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
-import {CASEBOOK_DIR, loadCasebook, parseYaml, validateCasebook} from '../casebook.mjs';
+import {CASEBOOK_DIR, appliesToTarget, caseTargets, loadCasebook, parseYaml, validateCasebook} from '../casebook.mjs';
 import {appChanged, decide} from '../daily-gate.mjs';
-import {idsFromDiff, isRecentEscape, linkedTouched, parseCliArgs, parseReleasePrBody, rangeForPr, renderMarkdown, requirementIds, run, selectCases} from '../select-cases.mjs';
+import {idsFromDiff, isRecentEscape, linkedTouched, parseCliArgs, parseReleasePrBody, rangeForPr, renderJson, renderMarkdown, requirementIds, run, selectCases} from '../select-cases.mjs';
 import {CLEAR, HOLD, extractRun, validateRun} from '../validate-blackbox-run.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -102,13 +102,56 @@ test('validateCasebook: a well-formed case passes; each broken field is named', 
   }
 });
 
+test('case targets default only when omitted and refuse invalid scopes instead of selecting nothing', () => {
+  assert.deepEqual(caseTargets(kase('BB-001')), ['desktop']);
+  assert.equal(appliesToTarget(kase('BB-001'), 'ios'), false);
+  assert.deepEqual(validateCasebook(book([kase('BB-001', {targets: ['ios', 'android']})])), []);
+  for (const targets of [null, '', 'ios', [], [''], ['watchos'], ['ios', 'ios'], ['ios', 1], {}]) {
+    const c = kase('BB-001', {targets});
+    assert.match(validateCasebook(book([c])).join('\n'), /BB-001: targets/);
+    assert.throws(() => selectCases(book([c]), {today: '2026-11-12'}), /targets/);
+  }
+  for (const target of ['', 'IOS', 'watchos', null]) {
+    assert.throws(() => selectCases(book([]), {today: '2026-11-12', target}), /target must/);
+    assert.throws(() => parseCliArgs(['--target', String(target)]), /target must/);
+  }
+  assert.deepEqual(parseCliArgs(['--target', 'ios', '--json']), {target: 'ios', json: true});
+  assert.throws(() => parseCliArgs(['--target']), /argument missing/);
+});
+
+test('iPhone escaped cases stay active and link every required simulator journey without physical acceptance', () => {
+  const real = loadCasebook();
+  const native = real.cases.filter(c => c.journey === 'CUJ-8');
+  assert.equal(native.length, 5);
+  for (const c of native) {
+    assert.deepEqual(c.targets, ['ios']);
+    assert.equal(c.status, 'active');
+    assert.equal(c.origin.kind, 'escaped-bug');
+    assert.match(c.origin.ref, /#3771\b/);
+    assert.match(c.origin.ref, /#3784\b/);
+    assert.ok(c.requirements.every(id => /^MFR-\d{2}$/.test(id)));
+  }
+  const root = path.resolve(here, '../../..');
+  const collector = fs.readFileSync(path.join(root, 'apps/studio-native/scripts/collect-native-journeys.py'), 'utf8');
+  const required = [...collector.split('REQUIRED = {')[1].split('\n}')[0].matchAll(/'([^']+)': '(test[^']+)'/g)].map(m => m[2]);
+  assert.equal(required.length, 8, 'Update the casebook mapping when the required native journeys change');
+  const notes = native.map(c => c.notes).join('\n');
+  const readme = fs.readFileSync(path.join(CASEBOOK_DIR, 'README.md'), 'utf8');
+  for (const name of required) {
+    assert.ok(notes.includes(name), `${name} has no active escaped case`);
+    assert.ok(readme.includes('`' + name + '`'), `${name} has no process evidence mapping`);
+  }
+  assert.deepEqual(selectCases(real, {today: '2026-11-12', target: 'ios'}).map(c => c.id), native.map(c => c.id));
+  assert.ok(selectCases(real, {today: '2026-11-12', touched: native.flatMap(c => c.requirements)}).every(c => c.journey !== 'CUJ-8'));
+});
+
 // --- requirement id extraction ----------------------------------------------------------------
 
 test('requirementIds finds each family once and ignores look-alikes', () => {
-  assert.deepEqual(requirementIds('fix (REQ-STUDIO-FREE-START) TUX-SP-14A US-04 PRA-01 CGP-CHAT-R-012 REQ-STUDIO-FREE-START'),
-    ['REQ-STUDIO-FREE-START', 'TUX-SP-14A', 'US-04', 'PRA-01', 'CGP-CHAT-R-012']);
+  assert.deepEqual(requirementIds('fix (REQ-STUDIO-FREE-START) TUX-SP-14A US-04 PRA-01 CGP-CHAT-R-012 REQ-STUDIO-FREE-START MFR-02'),
+    ['REQ-STUDIO-FREE-START', 'TUX-SP-14A', 'US-04', 'PRA-01', 'CGP-CHAT-R-012', 'MFR-02']);
   // negative controls: lowercase, a bare prefix, an issue number
-  assert.deepEqual(requirementIds('req-studio-x, REQ- alone, #2094, US-4'), []);
+  assert.deepEqual(requirementIds('req-studio-x, REQ- alone, #2094, US-4, MFR-2, MFR-002, mfr-02'), []);
 });
 
 test('idsFromDiff counts changed lines only, not context or file headers', () => {
@@ -150,6 +193,30 @@ test('selectCases: P0 always, touched requirements, recent escapes; nothing else
   ]);
 });
 
+test('target applies before every selection reason; shared cases keep reasons and retirement rules', () => {
+  const b = book([
+    kase('BB-001', {priority: 'P0'}),
+    kase('BB-002', {targets: ['ios'], priority: 'P0'}),
+    kase('BB-003', {targets: ['ios'], requirements: ['MFR-02']}),
+    kase('BB-004', {targets: ['ios'], origin: {kind: 'escaped-bug', date: '2026-11-12', ref: '#3771'}}),
+    kase('BB-005', {targets: ['desktop', 'ios'], priority: 'P0'}),
+    kase('BB-006', {targets: ['ios'], priority: 'P0', status: '자동화됨', automated_by: 'ci.yml'}),
+    kase('BB-007', {targets: ['android'], priority: 'P0'}),
+  ]);
+  const meta = {today: '2026-11-12', touched: ['MFR-02']};
+  assert.deepEqual(selectCases(b, meta).map(c => c.id), ['BB-001', 'BB-005']);
+  assert.deepEqual(selectCases(b, {...meta, target: 'desktop'}), selectCases(b, meta));
+  const selected = selectCases(b, {...meta, target: 'ios'});
+  assert.deepEqual(selected.map(c => [c.id, c.reasons]), [
+    ['BB-002', ['p0']], ['BB-003', ['touched:MFR-02']], ['BB-004', ['escaped:2026-11-12']], ['BB-005', ['p0']],
+  ]);
+  assert.deepEqual(selectCases(b, {...meta, target: 'android'}).map(c => c.id), ['BB-007']);
+  const json = renderJson(selected, {...meta, target: 'ios'});
+  assert.equal(json.target, 'ios');
+  assert.deepEqual(json.cases.map(c => c.targets), [['ios'], ['ios'], ['ios'], ['desktop', 'ios']]);
+  assert.match(renderMarkdown(b, selected, {...meta, target: 'ios'}), /대상 `ios`/);
+});
+
 test('isRecentEscape window is the last 14 days, today included, future excluded', () => {
   const esc = date => ({origin: {kind: 'escaped-bug', date, ref: 'x'}});
   assert.equal(isRecentEscape(esc('2026-10-20'), '2026-10-20'), true);
@@ -186,15 +253,19 @@ test('run: touched ids come from commit bodies and requirement-doc diffs since t
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, 'journeys.yaml'), 'journeys:\n  - id: CUJ-1\n    title: J\n    goal: g\n');
   const c = (id, req, pri = 'P1') => `  - id: ${id}\n    journey: CUJ-1\n    priority: ${pri}\n    title: t\n    requirements: [${req}]\n    steps:\n      - s\n    expect:\n      - e\n    origin:\n      kind: design\n`;
-  fs.writeFileSync(path.join(dir, 'cases.yaml'), `cases:\n${c('BB-001', 'REQ-BODY')}${c('BB-002', 'REQ-DOC')}${c('BB-003', 'REQ-OLD')}${c('BB-004', 'REQ-BEFORE')}`);
+  fs.writeFileSync(path.join(dir, 'cases.yaml'), `cases:\n${c('BB-001', 'REQ-BODY')}${c('BB-002', 'REQ-DOC')}${c('BB-003', 'REQ-OLD')}${c('BB-004', 'REQ-BEFORE')}${c('BB-005', 'MFR-02', 'P0')}    targets: [ios]\n`);
   const out = path.join(tmp, 'out');
   const {json, markdown} = run({root: tmp, candidate: 'main', today: '2026-10-20', out, dir});
   assert.equal(json.baseline, 'v1.0.0');
   assert.deepEqual(json.touched_requirements, ['REQ-BODY', 'REQ-DOC']);
   // positive: BB-001 (body), BB-002 (changed doc row); negative: BB-003 (unchanged row), BB-004 (before the tag)
   assert.deepEqual(json.cases.map(x => x.id), ['BB-001', 'BB-002']);
+  assert.equal(json.target, 'desktop');
   assert.ok(fs.existsSync(path.join(out, 'cases.json')) && fs.existsSync(path.join(out, 'cases.md')));
   assert.match(markdown, /BB-001/);
+  const native = run({root: tmp, candidate: 'main', today: '2026-10-20', dir, target: 'ios'});
+  assert.equal(native.json.target, 'ios');
+  assert.deepEqual(native.json.cases.map(c => c.id), ['BB-005']);
   fs.rmSync(tmp, {recursive: true, force: true});
 });
 

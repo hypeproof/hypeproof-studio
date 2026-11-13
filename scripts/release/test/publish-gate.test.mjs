@@ -162,12 +162,33 @@ test('hotfix route records its path for the release notes', () => {
   assert.match(v.notesLine, /^Release casebook: hotfix route/);
 });
 
-test('p0CaseIds reads the real casebook: every P0 that CI does not run', () => {
+test('p0CaseIds reads the real casebook: every active desktop P0, leaving iPhone evidence separate', () => {
   const file = fileURLToPath(new URL('../../../docs/operations/release-casebook/cases.yaml', import.meta.url));
   const cases = parseYaml(fs.readFileSync(file, 'utf8'), 'cases.yaml').cases;
   const ids = p0CaseIds(cases);
   assert.ok(ids.length > 0);
   assert.ok(ids.includes('BB-001'));
-  for (const c of cases) assert.equal(ids.includes(c.id), c.priority === 'P0' && c.status !== '자동화됨');
+  for (const c of cases) assert.equal(ids.includes(c.id), (c.targets ?? ['desktop']).includes('desktop') && c.priority === 'P0' && c.status !== '자동화됨');
+  assert.deepEqual(p0CaseIds(cases, {target: 'ios'}), ['BB-033', 'BB-034', 'BB-035', 'BB-036', 'BB-037']);
   assert.equal(casebookEvidence({number: 9, head: HEAD, p0: []}).ok, true);
+});
+
+test('native P0 cases do not change desktop approval requirements; malformed targets still refuse', () => {
+  const cases = [
+    {id: 'BB-001', priority: 'P0'},
+    {id: 'BB-005', priority: 'P0', targets: ['desktop', 'ios']},
+    {id: 'BB-033', priority: 'P0', targets: ['ios']},
+    {id: 'BB-034', priority: 'P0', targets: ['ios'], status: '자동화됨'},
+  ];
+  const desktop = p0CaseIds(cases);
+  assert.deepEqual(desktop, P0);
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: desktop, releasePrs: releasePr(approved)}).allow, true);
+  assert.equal(decide({tag: TAG, tagSha: SHA, rcTags: rc, writers, p0: desktop,
+    releasePrs: releasePr(approved, ['release'], [runComment({rows: [{id: 'BB-033', result: 'PASS'}]})])}).allow, false);
+  assert.deepEqual(p0CaseIds(cases, {target: 'ios'}), ['BB-005', 'BB-033']);
+  for (const targets of [[], null, 'ios', ['watchos'], ['ios', 'ios']]) {
+    // Invalid non-P0 metadata cannot disappear before validation either.
+    assert.throws(() => p0CaseIds([...cases, {id: 'BB-035', priority: 'P1', targets}]), /targets/);
+  }
+  assert.throws(() => p0CaseIds([], {target: 'watchos'}), /target must/);
 });

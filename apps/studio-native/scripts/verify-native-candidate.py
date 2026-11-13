@@ -2,10 +2,12 @@
 """Bind signed preview eligibility to successful native CI; no signing or writes."""
 from __future__ import annotations
 import argparse
+import hashlib
 import io
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import stat
 import subprocess
@@ -29,6 +31,87 @@ def integer(value):
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise Refused('Expected a positive run identity')
     return value
+
+def repository_root():
+    # Resolve from this tracked script, never from the caller's shell directory.
+    location = Path(__file__).resolve().parents[3]
+    return Path(subprocess.check_output(['git', '-C', str(location), 'rev-parse', '--show-toplevel'], text=True).strip())
+
+def deployment_request(environ, checkout):
+    values = [environ.get(key, '') for key in ('NATIVE_EXPECTED_SHA', 'NATIVE_OPERATION_ID', 'NATIVE_REQUEST_DIGEST')]
+    if not any(values):
+        return None  # Existing push and manual dispatch remain supported.
+    if not all(values):
+        raise Refused('Deployment request fields must be supplied together')
+    expected, operation, fingerprint = values
+    sha(expected)
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', operation) or not re.fullmatch(r'[a-f0-9]{64}', fingerprint):
+        raise Refused('Malformed deployment operation or request digest')
+    if expected != checkout or expected != sha(environ.get('GITHUB_SHA')):
+        raise Refused('Deployment request source differs from trigger or checkout')
+    return {'schema': 'hps-native-deployment-request/1', 'expected_sha': expected,
+            'operation_id': operation, 'request_digest': fingerprint}
+
+def release_identity(source, environ):
+    head = sha(environ.get('GITHUB_SHA'))
+    if source['checkout_sha'] != head:
+        raise Refused('Release checkout differs from triggering source')
+    return {'source_sha': head,
+            'run_id': integer(int(environ['GITHUB_RUN_ID'])),
+            'run_attempt': integer(int(environ['GITHUB_RUN_ATTEMPT'])),
+            'deployment_request': deployment_request(environ, source['checkout_sha'])}
+
+def verify_release_gate(path, source, identity):
+    # Failed-job-only reruns can retain a successful dependency from an older
+    # attempt. Require the downloaded current-attempt artifact before signing,
+    # then check it again when recording the upload observation.
+    if path is None or path.is_symlink() or not path.is_file() or path.stat().st_size > 16384:
+        raise Refused('A regular current-attempt native release gate is required; rerun all jobs')
+    document = json.loads(path.read_text())
+    if not isinstance(document, dict) or document.get('schema') != 'hps-native-release-gate/1' or document.get('verdict') != 'PASS':
+        raise Refused('Native release gate must be a successful gate document')
+    for field in ('release_checkout_sha', 'source_head_sha'):
+        if sha(document.get(field)) != identity['source_sha']:
+            raise Refused('Native release gate source differs from upload source')
+    if (integer(document.get('release_run_id')) != identity['run_id']
+            or integer(document.get('release_run_attempt')) != identity['run_attempt']):
+        raise Refused('Native release gate belongs to another run or attempt; rerun all jobs')
+    if 'deployment_request' not in document or document['deployment_request'] != identity['deployment_request']:
+        raise Refused('Native release gate deployment request differs from upload request')
+    if document.get('signing') != 'NOT_RUN' or document.get('deployment') != 'NOT_RUN':
+        raise Refused('Unexpected native release gate stage')
+    for field in ('native_tree', 'native_workflow'):
+        if sha(document.get(field)) != source[field]:
+            raise Refused('Native release gate source mismatch: ' + field)
+    return {**{field: integer(document.get(field)) for field in ('native_run_id', 'native_run_attempt', 'artifact_id')},
+            **{field: document[field] for field in ('native_tree', 'native_workflow')}}
+
+def upload_receipt(identity, package, archive_info, command_results, environ):
+    # Only the trusted upload script supplies these command outcomes, after each
+    # command has returned. This is an upload observation, not Apple availability.
+    commands = json.loads(command_results.read_text())
+    expected_commands = ('archive', 'export', 'validation', 'upload')
+    if not isinstance(commands, dict) or set(commands) != set(expected_commands) or any(
+            type(commands[name]) is not int or commands[name] != 0 for name in expected_commands):
+        raise Refused('Successful archive, export, validation and upload outcomes required')
+    if package.is_symlink() or not package.is_file() or package.suffix != '.ipa' or package.stat().st_size == 0:
+        raise Refused('A nonempty regular IPA is required')
+    info = plistlib.loads(archive_info.read_bytes()).get('ApplicationProperties', {})
+    bundle, version, build = (info.get(key) for key in ('CFBundleIdentifier', 'CFBundleShortVersionString', 'CFBundleVersion'))
+    if bundle != 'ai.hypeproof.studio.mobile' or not isinstance(version, str) or not re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', version):
+        raise Refused('Unexpected archived app identity')
+    run_number = integer(int(environ['GITHUB_RUN_NUMBER']))
+    if build != f"{run_number}.{identity['run_attempt']}":
+        raise Refused('Archived build number differs from this run attempt')
+    digest = hashlib.sha256()
+    with package.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return {'schema': 'hps-native-upload-receipt/1', 'repository': REPOSITORY, **identity,
+            'platform': 'ios', 'bundle_id': bundle, 'version': version, 'build': build,
+            'package_sha256': digest.hexdigest(), 'package_size': package.stat().st_size,
+            'commands': {name: {'exit_code': commands[name]} for name in expected_commands},
+            'state': 'uploaded', 'apple_processing': 'NOT_OBSERVED', 'tester_availability': 'NOT_OBSERVED'}
 
 def source_identity(root):
     def git(*args):
@@ -151,24 +234,39 @@ def wait_for_candidate(expected, head, timeout, interval, read=api, clock=time.m
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('identity', 'gate'))
+    parser.add_argument('mode', choices=('identity', 'gate', 'request', 'receipt'))
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--timeout', type=int, default=1500)
     parser.add_argument('--interval', type=int, default=30)
+    parser.add_argument('--package', type=Path)
+    parser.add_argument('--archive-info', type=Path)
+    parser.add_argument('--command-results', type=Path)
+    parser.add_argument('--release-gate', type=Path)
     args = parser.parse_args()
     if os.environ.get('GITHUB_REPOSITORY') != REPOSITORY:
         raise Refused('Unexpected repository')
     if not 1 <= args.timeout <= 1800 or not 10 <= args.interval <= 60:
         raise Refused('Polling bounds exceeded')
-    source = source_identity(Path.cwd())
+    source = source_identity(repository_root())
     if args.mode == 'identity':
         result = identity_document(source, os.environ['NATIVE_SOURCE_HEAD'], int(os.environ['GITHUB_RUN_ID']), int(os.environ['GITHUB_RUN_ATTEMPT']))
     else:
-        head = sha(os.environ['GITHUB_SHA'])
-        if source['checkout_sha'] != head:
-            raise Refused('Release checkout differs from triggering source')
-        result = wait_for_candidate(source, head, args.timeout, args.interval)
-    args.output.write_text(json.dumps(result, indent=2) + '\n')
+        identity = release_identity(source, os.environ)
+        if args.mode == 'gate':
+            result = wait_for_candidate(source, identity['source_sha'], args.timeout, args.interval)
+            result.update(deployment_request=identity['deployment_request'],
+                          release_run_id=identity['run_id'], release_run_attempt=identity['run_attempt'])
+        else:
+            identity['native_gate'] = verify_release_gate(args.release_gate, source, identity)
+            if args.mode == 'request':
+                result = {'schema': 'hps-native-upload-preflight/1', 'repository': REPOSITORY, **identity}
+            else:
+                if not all((args.package, args.archive_info, args.command_results)):
+                    raise Refused('Receipt requires package, archive info and command outcomes')
+                result = upload_receipt(identity, args.package, args.archive_info, args.command_results, os.environ)
+    # A rerun uses a fresh runner. Never overwrite an existing upload observation.
+    with args.output.open('x' if args.mode == 'receipt' else 'w') as output:
+        output.write(json.dumps(result, indent=2) + '\n')
     print(f"{args.mode}: PASS; receipt {args.output}")
 
 if __name__ == '__main__':

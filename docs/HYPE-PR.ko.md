@@ -30,11 +30,16 @@ auto-merge는 필수 보호 조건이 모두 통과하면 GitHub가 순서대로
 읽으므로 **PyYAML**이 필요하다. 선언은 harness 루트의 매니페스트에 있다.
 
 ```bash
-python3 -m pip install -r requirements.txt       # 도구 실행
-python3 -m pip install -r requirements-dev.txt   # 테스트까지
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt       # 도구 실행
+python -m pip install -r requirements-dev.txt   # 테스트까지
+python scripts/dev-environment/check.py --host
 ```
 
-CI가 검증하는 버전은 **Python 3.11+**이다(`.github/workflows/test.yml`).
+최소 버전은 **Python 3.11**이다. 전체 기존 테스트는 3.11에서, 환경 회귀 검사는
+3.11·3.14 / Ubuntu·macOS 조합에서 실행한다(`.github/workflows/dev-environment.yml`).
+중간 버전·다른 OS의 전체 호환성을 뜻하지 않는다.
 
 의존성은 **harness checkout의 인터프리터**에 있어야 한다. consumer 사본의
 `scripts/hype-pr/pr.py`는 `policy/repos.yaml`이 없으면 canonical harness로

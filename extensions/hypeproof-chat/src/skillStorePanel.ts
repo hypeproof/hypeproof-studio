@@ -147,6 +147,14 @@ export function registerSkillStore(context: vscode.ExtensionContext, deps: Skill
         const seller = await c.seller().catch(() => undefined);
         if (seller) state = { ...state, seller };
       }
+      // An earlier try committed but its answer was lost: take the recorded choice and go on to the publish.
+      if (error instanceof StoreClientError && error.code === "attribution_already_set") {
+        const seller = await c.seller().catch(() => undefined);
+        if (seller?.attribution?.decided) {
+          state = { ...state, seller };
+          return;
+        }
+      }
       throw error;
     }
     // Recorded at once: if the publish after it fails, a retry must not register a second time.

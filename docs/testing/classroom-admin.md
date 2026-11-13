@@ -1560,6 +1560,23 @@ collection contract.
 
 **NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
 
+<a id="e5-instructor-ops-run"></a>
+
+## 재직자 수업의 강사 운영 · 2026-11-12 (E5 · #3775–#3778)
+
+요구: [재직자 수업의 강사 운영](../requirements/classroom-admin.md#e5-instructor-ops). 모든 시험은 실제 Chalk `/manage`와 그 스크립트(Chromium), Chalk worker와 전달 경로, Service testkit의 라우터 + SQLite로 돈다. 공통 준비는 `e2e/classroom/e5-chalk.mjs`.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `e2e/classroom/ops-run-team.mjs` (`npm run test:classroom-ops-run-team`, #3775) | 배정 없는 fixture(`ownership: 'strict'`). 담당 강사가 화면에서 명단과 네 가지 기능을 저장(질문 카드 → 학생에게 보내기 자동 켜짐, 보내기 끄면 질문 카드 꺼짐)하고 DB `flags_json`에 네 값이 들어간다. 운영 강사 칸·내 강사 ID 복사(클립보드 값 확인). 배정 안 된 강사 B: 학생 0명, `not_run_instructor` 문구와 담당 강사 ID, 자기 ID. 담당 강사가 B를 추가 → B가 명단을 보고 공동 강사로 표시, 추가 양식 없음·나가기 있음, 낡은 화면의 추가 시도는 `owner_only` 문구. B가 나가고, 담당 강사가 다시 추가한 뒤 뺀다(DB에 removed). override 강사: “관리자 열람 — 기록이 남습니다”와 `instructor_override` 감사. 좌석 A1의 동의를 운영 자격증명으로 기록하면 A1 “동의함”, A2·A3 “동의 전”, 세 좌석 모두 보인다 | 2026-11-12 7/7 PASS |
+| `e2e/classroom/ops-question-card.mjs` (`npm run test:classroom-ops-question-card`, #3776) | 질문 카드가 꺼진 수업에는 작성란이 없고, 화면에서 켜고 저장하면 생긴다. 보기 1개·중복 보기는 화면이 막고, 미리 보기와 확인 단계(확인 전 `/contents`·`/distributions` 요청 0건). ‘모든 좌석’은 명단 3석 전부가 대상(DB `targets_json`). 기기 쪽은 Service sync 규약을 직접 몬다: A1 기기가 받아 두면 전달됨, 질문 카드를 모르는 앱 A2는 “앱 업데이트 필요”, 미연결 A3는 “미연결 — 연결되면 전달” → 연결 뒤 대기하던 카드를 받아 전달됨. 동의 뒤 A1 답(2번)·A3 건너뜀 → 답함·보기별 수·요약. 선택한 좌석에만 짧은 답 카드, `<img onerror>` 답은 글자 그대로(img 0개, 스크립트 실행 없음), 회수(DB `revoked_at`) 뒤에도 받은 답은 남고 새 답은 `withdrawn`. 질문 화면 어디에도 열람·읽음 문구 없음 | 2026-11-12 6/6 PASS |
+| `chalk/test/instructor-names.test.mjs` (`chalk` `npm test`에 포함, #3777) | 페이지에 그대로 들어가는 kit: `handle,name` 미리 보기 → 코호트별 저장·읽기, 이름 없는 줄·잘못된 handle은 바뀌지 않음, 다른 코호트는 0명, 지우기 뒤 저장소 0. 깨진 JSON·배열·bidi/zero-width·41자·제어 문자·잘못된 id·문자열 아닌 값은 버리고, 예외를 던지는 저장소는 빈 값·실패로 답한다. `/manage`가 kit 두 개를 그대로 싣는다 | 2026-11-12 3/3 PASS |
+| `e2e/classroom/ops-names.mjs` (`npm run test:classroom-ops-names`, #3777) | 붙여넣은 `handle,name`(수식 줄 1개 ‘확인 필요’) 저장 → 좌석 칸 “A1 김민지 student-a”, `<b>박</b>하늘`은 글자 그대로(b 요소 0개), 이름 없는 A4는 handle. 찾기에서 이름으로 1명. 질문 카드 답 화면 “김민지 (student-a)” · A4 “student-d”. 다시 불러와도 이 기기에 남고, 실행 중 페이지 요청 29건의 URL·본문과 Service 감사 기록 어디에도 이름이 없다. 지우기 뒤 화면·저장소 모두 비어 있다 | 2026-11-12 4/4 PASS |
+| 기존 계약 보정 (#3777) | `chalk/test/classroom.test.mjs`·`classroom-ops.test.mjs`의 “/manage 스크립트에 브라우저 저장소 없음” 검사는 이름 접근자 `namesStore`와(#3778부터) 탭 보관 접근자 `tabStore`만 빼고 그대로 본다(각 접근자가 정확히 한 번 있어야 하고, 뺀 나머지에 `localStorage`·`sessionStorage`가 없어야 한다). 티켓·토큰을 저장하지 않는다는 뜻은 그대로다 | PASS |
+| `e2e/classroom/ops-join-code.mjs` (`npm run test:classroom-ops-join-code`, #3778) | ‘수업 코드’ → 30분 → 만들기: `XXXX-XXXX`(혼동 문자 없음), 글자 크기 32px 이상, 만료·“이 수업 명단에 있는 수강생만 연결됩니다”·연결 0회, DB 만료가 30분. 평문은 그 탭 `sessionStorage`에만 있고 `localStorage`에는 없다. 명단의 학습 토큰 두 개가 코드로 연결(소문자·하이픈 없는 입력 포함) → 연결 2회, 명단 밖 handle은 `seat_not_found`. 같은 탭을 다시 불러오면 코드가 다시 보이고, 다른 탭은 코드 없이 “만든 탭에서만” 안내. 다른 탭에서 새 코드 → 이전 코드 `code_invalid`, 첫 탭은 보관값을 지움. 폐기 → 활성 코드 0, 그 코드도 `code_invalid`. 좌석 상세의 12자리 코드 발급은 그대로 | 2026-11-12 5/5 PASS |
+
+**NOT RUN**: 실제 Studio 앱(이 체크아웃의 앱은 아직 `inbox_question`을 선언하지 않아 기기는 Service sync 규약으로 대신 몰았다), 운영 Service·D1, Lab의 실제 member handle과 issuer `u`가 다른 계정, Windows 브라우저.
+
 <a id="help-queue-keyboard-triage-run"></a>
 
 ## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)

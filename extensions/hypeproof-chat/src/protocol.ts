@@ -723,7 +723,7 @@ export type WebviewMessage = (
   | { type: "publishClose" }
   | { type: "publishCopy"; versionId: string }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }
-  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number }
+  | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number; noticeVersion?: string }
   | { type: "publishRevoke"; linkId: string }
   // cr-evidence — the experiment evidence panel (CR-24–CR-27, CR-69; CR switch only, re-checked by the host).
   | { type: "evidenceOpen"; experimentId?: string }
@@ -898,6 +898,8 @@ export type WebviewMessage = (
   | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
+  // E5 (#3776) — the learner pressed 제출 or 건너뛰기 on a question card. Nothing else ever sends an answer.
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
   | { type: "helpRequest" }
   // #751 U1b — the learner opens the approval question for the current index.html (the host asks; nothing is approved or sent by this message).

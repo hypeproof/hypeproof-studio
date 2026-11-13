@@ -7,7 +7,9 @@
 // profile; a new profile that makes a role ambiguous fails loudly here instead
 // of silently changing what a test covers.
 export function serviceProfiles(listProfiles) {
-  const all = listProfiles().filter((p) => !p.synthetic);
+  // Execution templates (a class opened from a template, Service #378) are copies of a role, not another customer
+  // profile: they are left out so a role keeps exactly one match.
+  const all = listProfiles().filter((p) => !p.synthetic && !p.execution_template);
   const one = (role, test) => {
     const found = all.filter(test);
     if (found.length !== 1) {

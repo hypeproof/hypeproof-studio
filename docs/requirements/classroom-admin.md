@@ -414,6 +414,8 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 
 결정은 [ADR 0012](../adr/0012-employee-class-data-ownership.md)에 있다. 이 절은 화면과 API 계약만 적는다.
 
+수업 코드 하나로 좌석을 연결하는 계약(E5 #3778)은 [수업 코드 한 번으로 좌석 연결](classroom-join-code.md)에 있다.
+
 | 항목 | 계약 |
 |---|---|
 | 안내문 | Service `GET /v1/classroom/ops/participation/notice`가 `{notice:{version,title,body,accept,decline},policy}`를 준다. 자격 증명 없이 읽는다. 앱은 이 글을 그대로 보여 준다 |
@@ -427,6 +429,81 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 | 옛 Service | 안내문 경로가 없으면(404, `ops_disabled` 아님) 예전처럼 연결하고 동의를 주장하지 않는다. 답변 기능은 쓸 수 없다 |
 
 검증: Service `worker/test/classroom-participation.test.mjs`, 앱 `extensions/hypeproof-chat/test/classroom-participation-consent.test.mjs`.
+
+<a id="e5-instructor-ops"></a>
+
+### 재직자 수업의 강사 운영 · 2026-11-12 (E5 · #3775–#3778)
+
+출처: 후원사 요청(2026-11-12). 성인 20–30명의 하루 재직자 수업을 Jay가 아닌 강사가 Chalk에서 열고 운영한다. Service 계약은 hypeproof-service E5 스택(`class-run-instructors`·`classroom-questions`·`class-run-join-codes`·`classroom-participation`)이다. 이 절은 Chalk `/manage`가 그 계약을 어떻게 보여 주는지만 정한다.
+
+#### 수업 운영 기능과 운영 강사 (#3775)
+
+| 항목 | 계약 |
+|---|---|
+| 강사 운영 기능 | ‘이번 수업 명단·관측 설정’ 안에 네 가지를 한 묶음으로 보인다: **관측**(`ops_observe`) · **학생에게 보내기**(`ops_distribute`) · **질문 카드**(`ops_questions`) · **기록 회수**(`ops_collect`). 저장은 기존 `PUT …/runs/:run`의 `flags`이고 Service가 저장된 값과 합친다. 원격 조치·보고서·발송 스위치는 그대로 둔다 |
+| 질문 카드와 보내기 | 질문 카드는 ‘학생에게 보내기’ 통로로 전달된다. 질문 카드를 켜면 학생에게 보내기도 켜지고, 학생에게 보내기를 끄면 질문 카드도 꺼진다. 화면은 그때마다 그 사실을 한 줄로 말한다(저장 전) |
+| 운영 강사 | `/status`의 `instructors`(`viewer_role`, `list`)로 담당 강사(owner)와 공동 강사, 내 역할을 보인다. 내 강사 ID(`viewer`)는 복사 버튼과 함께 보여 동료가 추가될 수 있게 한다 |
+| 추가·빼기·나가기 | 담당 강사는 강사 ID로 공동 강사를 추가(`POST /instructors`)하고 뺀다(`DELETE /instructors/:id`). 공동 강사는 자기만 나갈 수 있다. 담당 강사는 빠지지 않는다 |
+| 배정되지 않은 강사 | 403 `not_run_instructor`이면 학생을 한 명도 보이지 않고 “이 수업은 배정된 강사만 운영합니다. 담당 강사(owner)에게 공동 강사 추가를 요청하세요.”와 담당 강사 ID를 보인다. 이때 `/status`가 없으므로 내 강사 ID는 Chalk `/connect/status`의 `instructor_id`(Lab 연결 issuer의 `u`, 토큰 아님)에서 읽는다. `owner_only`는 “담당 강사(owner)만 공동 강사를 추가하거나 다른 강사를 뺄 수 있습니다.” |
+| 관리자 열람 | `viewer_role`이 `override`이면 수업 정보와 운영 강사 칸에 “관리자 열람 — 기록이 남습니다”를 쓴다. Service가 요청마다 `instructor_override`를 감사 기록에 남긴다 |
+| 참여 동의 | 좌석 행마다 `participation_consent`를 “동의함 / 동의 전”으로 보인다. 동의 전 좌석도 숨기거나 거르지 않는다. 동의 전 좌석은 질문 카드에 답을 보낼 수 없다(Service가 409 `consent_required`) |
+
+#### 질문 카드 보내기 (#3776)
+
+| 항목 | 계약 |
+|---|---|
+| 보이는 조건 | 이 수업의 질문 카드(`ops_questions`)와 학생에게 보내기가 켜져 있고 강사 연결이 `distribute` 권한을 가질 때만 선택 줄에 ‘질문 카드 보내기’가 보인다 |
+| 작성 | 질문(평문 2,000자), 카드 제목(80자, 비우면 ‘강사 질문’), 답 형식 객관식(보기 2–6개, 한 줄에 하나, 각 80자, 중복 불가) 또는 짧은 답(500자). 화면이 먼저 형식을 확인하고 최종 판단은 Service(`content_invalid`)가 한다 |
+| 미리 보기 | 학생 보관함에 보일 제목·질문·보기(또는 짧은 답 칸)와 “학생은 답하거나 건너뛸 수 있습니다.”를 글자 그대로 보인다 |
+| 받을 학생 | ‘모든 좌석’ = 이번 수업 명단의 모든 좌석(지금 연결 안 된 학생은 연결되면 받는다). ‘선택한 좌석’ = 학생 목록에서 고른 좌석(기존 선택을 그대로 쓴다). 확인 단계에서 대상 수와 지금 연결·미연결 수를 말하고, 확인 전에는 아무것도 저장·전송하지 않는다 |
+| 보내기 | `POST /contents {kind:'question', title, body, question}` → `POST /distributions {targets, expected_roster_revision}`. 두 요청의 idempotency key는 확인 단계에서 정하므로 다시 눌러도 카드가 두 번 가지 않는다 |
+| 보낸 질문 카드 | 이 수업의 질문 카드 목록(`GET /contents`의 `kind:'question'`). 카드마다 `GET /questions/:object/answers`로 좌석별 연결·상태·답을 보인다. 목록이 열려 있는 동안 학생 현황과 같은 간격(10초, ‘지금 갱신’)으로 다시 읽는다 |
+| 상태 | 전달 전 · 전달됨 · 답함 세 가지뿐이다. 전달됨은 학생 기기가 그 판을 받아 두었다는 Service의 확인이다. 열람·읽음은 기록되지 않으므로 어떤 문구로도 쓰지 않는다 |
+| 전달 전 사유 | `delivery.state`와 좌석 연결로 말한다: 미연결(`accepted`·연결 없음) → “미연결 — 연결되면 전달”, `unsupported` → “앱 업데이트 필요 — 이 앱은 질문 카드를 받지 못합니다”, `offered`·`received` → “기기 확인 대기”, `not_sent` → “이 좌석에는 보내지 않음”, 회수·만료·실패·좌석 변경은 각각의 말 |
+| 답 | 객관식은 보기별 답한 수와 좌석별 “N번 · 보기”, 짧은 답은 학생이 쓴 글을 글자 그대로(`textContent`), 건너뛰면 “건너뜀” |
+| 회수 | ‘이 질문 카드 회수’ → 확인 → 그 카드의 살아 있는 배포마다 `POST /distributions/:id/revoke {expected_row_revision}`. 이미 받은 답은 남는다 |
+
+#### 수강생 이름은 강사 기기에만 (#3777)
+
+| 항목 | 계약 |
+|---|---|
+| 저장 위치 | handle→이름 대응은 강사 브라우저의 `localStorage`(`chalk.learner-names.v1.<cohort>`)에만 둔다. Service에는 이름을 보내지 않는다. 다른 기기·다른 브라우저에서는 보이지 않는다 |
+| 가져오기 | `/manage`의 ‘수강생 이름 (이 기기에만 저장)’에 `handle,name` CSV를 붙여넣거나 파일로 넣는다. 파싱·검사는 명단 CSV kit(`roster-csv.ts`)를 그대로 쓰므로 수식 칸·잘못된 handle·40자 넘는 이름은 ‘확인 필요’로 저장하지 않는다. `/console`의 명단 가져오기는 지금처럼 handle만 보내고 이름을 저장하지 않는다 |
+| 보이는 곳 | 학생 목록의 좌석 칸(좌석 · 이름 · handle), 학생 찾기(이름으로도 찾는다), 질문 카드 답 화면(“이름 (handle)”). 이름이 없으면 handle만 보인다. 이름은 글자 그대로(`textContent`, `<bdi>`) 그린다 |
+| 지우기 | ‘이 기기의 이름 지우기’가 그 코호트의 저장값을 지운다. 저장값이 깨졌거나 읽을 수 없으면 비어 있는 것으로 읽는다 |
+| 보내지 않음 | 요청 본문을 만드는 코드는 이름을 읽지 않는다. 브라우저 시험이 페이지의 모든 요청 URL·본문에 이름이 없음을 확인한다 |
+
+#### 수업 코드 하나로 연결 (#3778)
+
+계약 원문: [수업 코드 한 번으로 좌석 연결](classroom-join-code.md). Chalk 화면은 다음과 같다.
+
+| 항목 | 계약 |
+|---|---|
+| 자리 | 상단 연결 영역의 ‘참여 링크 복사’ 옆 ‘수업 코드’ 버튼이 머리글 아래 ‘수업 코드로 연결’ 칸을 연다. 연결 전에는 버튼이 없다 |
+| 만들기 | 유효 시간(30분·60분(기본)·2시간·4시간·8시간)을 고르고 ‘수업 코드 만들기’ → `POST /join-codes {ttl_minutes}`. 살아 있는 코드가 있으면 “새 코드를 만들면 지금 코드는 바로 폐기”를 확인받는다 |
+| 보이기 | 코드를 40px(32px 이상)로, 만료 시각·남은 분과 “이 수업 명단에 있는 수강생만 연결됩니다”, 이 코드로 연결한 횟수(`uses`)를 함께 쓴다. 칸이 열려 있는 동안 학생 현황과 같은 간격으로 `GET /join-codes`를 다시 읽는다 |
+| 평문 보관 | 평문 코드는 만든 응답에서만 오므로 그 탭의 `sessionStorage`에만 둔다(같은 탭을 다시 불러오면 다시 보인다). 다른 탭·기기에서는 “살아 있는 수업 코드가 있습니다. 코드는 만든 탭에서만 다시 볼 수 있습니다.”라고만 쓴다. 서버에서 그 코드가 만료·폐기·대체되면 탭의 보관값도 지운다 |
+| 폐기 | ‘코드 폐기’ → 확인 → `DELETE /join-codes/:id`. 폐기한 코드로는 새로 연결되지 않고 이미 연결된 좌석은 그대로다 |
+| 오류 | `ops_observe_disabled` → 관측을 켜라는 안내, `run_ended`, `not_run_instructor`(#3775 문구), `manage` 권한 없음을 각각 말한다 |
+| 좌석별 코드 | 학생 상세의 좌석별 12자리 연결 코드 발급은 그대로 둔다 |
+
+검증: [재직자 수업의 강사 운영](../testing/classroom-admin.md#e5-instructor-ops-run).
+
+### 질문 카드 · 수강생 앱 · 2026-11-12 (E5 #3776 · DEC-030)
+
+강사가 보낸 질문 카드는 공지·자료와 같은 보관함에 들어온다. 이 절은 앱 쪽 계약만 적는다.
+
+| 항목 | 계약 |
+|---|---|
+| 받기 | 앱은 연결과 sync에서 능력 `inbox_question`을 밝힌다. 카드는 `kind:'question'`과 `question:{type:'choice',options}` 또는 `{type:'text'}`를 싣는다. 선택지는 2~6개, 줄바꿈 없는 80자 이하, 서로 달라야 한다. 이 모양이 아니면 받지 않는다 |
+| 해시 | `sha256(JSON [schema, kind, title, body, links, ['choice', options] | ['text']])`. 여섯째 요소는 질문에만 붙고 공지·자료·프롬프트·설정의 해시는 그대로다. 디스크에서 선택지가 바뀐 카드는 읽을 수 없는 카드로 보인다 |
+| 화면 | 질문 글은 글자 그대로 보인다. 선택형은 라디오 목록과 ‘제출’, 서술형은 500자 입력칸과 ‘제출’이다. ‘건너뛰기’는 늘 있다. 고르거나 적는 것만으로는 아무것도 보내지 않는다 |
+| 보내기 | 학생이 누를 때만 `POST /v1/classroom/ops/participation/answers`를 좌석 자격 증명으로 보낸다. 같은 답을 다시 보내면 같은 `idempotency_key`를 쓰고, 바꾼 답은 새 키를 쓴다 |
+| 보냈다는 말 | Service가 2xx로 답한 뒤에만 “답변을 보냈습니다”와 ‘답 바꾸기’를 보인다. 그 답은 (카드, 판) 단위로 이 기기에만 남아 재시작 뒤에도 보인다. 새 판이 오거나 회수되면 지운다 |
+| 동의 없음 | 409 `consent_required`면 연결 때와 같은 안내문 모달을 띄우고, 동의가 기록되면 같은 답을 한 번 다시 보낸다. 거절하거나 닫으면 보내지 않고 카드를 남긴 채 “동의하지 않아 답을 보내지 않았습니다.”라고 말한다 |
+| 거절 응답 | `withdrawn`·`not_offered`·`content_mismatch`·`run_ended`·`ops_questions_disabled`·`answer_invalid`·연결 종료(401)·네트워크 오류마다 “…답을 보내지 않았습니다” 꼴의 짧은 문장을 카드 아래에 보인다 |
+
+검증: 앱 `test/classroom-question-card.test.mjs`(규칙·해시), `test/classroom-question-answer.test.mjs`(호스트), `test/inbox-question-card.test.tsx`(화면), `e2e/classroom/ops-question.mjs`(실제 호스트 + 로컬 Service). Service `worker/test/classroom-question-card.test.mjs`.
 
 ### 신원과 수업 실행 계약
 

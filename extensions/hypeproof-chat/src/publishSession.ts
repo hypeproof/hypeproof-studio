@@ -22,12 +22,18 @@ import { productVerification } from "@hypeproof/measurement-core/verification";
 import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import { buildPublishSet, publishSetRefusalText, type PublishSet } from "./publishSet.ts";
 import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./galleryPublish.ts";
+import { PUBLISH_NOTICE_NOT_SAVED, PUBLISH_NOTICE_REQUIRED, PUBLISH_NOTICE_VERSION, type PublishNoticePort } from "./publishNotice.ts";
 import { SHARING_UNKNOWN, type PublishExperimentView, type PublishForm, type PublishLinkView, type PublishView } from "./publishView.ts";
 
 export interface PublishPorts {
   // Required key (REQ-KNOW-63): a caller that forgets the wiring fails to compile, not closed at run time.
   previewVisitor: VisitorPreview;
   confirmOutbound?: OutboundConfirmation;
+  /**
+   * CGP-ART-R-012: the responsibility-notice record. Required, and a missing one at run time
+   * refuses every new link (fail closed): no link is made before the learner read the notice.
+   */
+  publishNotice: PublishNoticePort;
   scopeKey?(): string;
   privateDirectories?(): string[];
   switchOn(): boolean;
@@ -253,6 +259,8 @@ export class PublishSession {
     if (!this.ports.switchOn()) return { ...empty, reason: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ...empty, reason: SIGN_IN };
+    const publishNotice = { version: PUBLISH_NOTICE_VERSION, acknowledged: this.ports.publishNotice?.acknowledged(client.token, PUBLISH_NOTICE_VERSION) === true };
+    empty.publish_notice = publishNotice;
     const resolved = await this.resolveProject(client);
     const state = resolved.ok ? resolved.state : null;
     if (!resolved.ok) notice ??= resolved.message;
@@ -348,6 +356,8 @@ export class PublishSession {
     const scope = this.ports.scopeKey?.(), root = this.ports.root(), entry = this.ports.entry();
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
+    const noticeRefusal = await this.noticeGate(client.token, form.notice_version);
+    if (noticeRefusal) return noticeRefusal;
     const expiresAt = this.now() + days * DAY;
     const current = async () => { const token = await this.ports.token(); return token === client.token && this.ports.switchOn() && this.ports.scopeKey?.() === scope && this.ports.root() === root && this.ports.entry() === entry && this.ports.base() === client.base; };
     const originalFetch = client.fetchImpl ?? fetch;
@@ -419,6 +429,21 @@ export class PublishSession {
     return { ok: true, share_url: link.body.share_url };
   }
 
+  /**
+   * CGP-ART-R-012: no new link before the signed-in learner acknowledged the current notice. An
+   * acknowledgment that came with this request is recorded first, and only for the current
+   * version (a panel drawn for an older notice must show the new one). Null lets the request on.
+   */
+  private async noticeGate(token: string, acknowledgedNow: unknown): Promise<{ ok: false; message: string } | null> {
+    const port = this.ports.publishNotice;
+    if (!port) return { ok: false, message: PUBLISH_NOTICE_REQUIRED };
+    if (acknowledgedNow !== undefined) {
+      if (acknowledgedNow !== PUBLISH_NOTICE_VERSION) return { ok: false, message: PUBLISH_NOTICE_REQUIRED };
+      if (!await port.record(token, PUBLISH_NOTICE_VERSION)) return { ok: false, message: PUBLISH_NOTICE_NOT_SAVED };
+    }
+    return port.acknowledged(token, PUBLISH_NOTICE_VERSION) ? null : { ok: false, message: PUBLISH_NOTICE_REQUIRED };
+  }
+
   private issue(client: Client, experimentId: string, channel: string | undefined, days: number, expiresAt = this.now() + days * DAY) {
     return curriculumRequest<{ share_url: string; test_origin: string }>(client, "POST", `/experiments/${encodeURIComponent(experimentId)}/links`, {
       expires_at: expiresAt,
@@ -432,13 +457,13 @@ export class PublishSession {
   }
 
   /** Another channel's link for a running experiment (CR-73). */
-  async link(experimentId: string, form: { channel?: string; expires_in_days?: number }) {
+  async link(experimentId: string, form: { channel?: string; expires_in_days?: number; notice_version?: string }) {
     if (this.outboundBusy) return { ok: false as const, message: "이미 보내기를 확인하고 있어요." };
     this.outboundBusy = true;
     try { return await this.linkOnce(experimentId, form); } finally { this.outboundBusy = false; }
   }
 
-  private async linkOnce(experimentId: string, form: { channel?: string; expires_in_days?: number }): Promise<{ ok: true; share_url: string } | { ok: false; message: string }> {
+  private async linkOnce(experimentId: string, form: { channel?: string; expires_in_days?: number; notice_version?: string }): Promise<{ ok: true; share_url: string } | { ok: false; message: string }> {
     form = structuredClone(form);
     if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const days = form.expires_in_days;
@@ -446,6 +471,8 @@ export class PublishSession {
     const scope = this.ports.scopeKey?.(), root = this.ports.root(), entry = this.ports.entry();
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
+    const noticeRefusal = await this.noticeGate(client.token, form.notice_version);
+    if (noticeRefusal) return noticeRefusal;
     const expiresAt = this.now() + days * DAY;
     const current = async () => { const token = await this.ports.token(); return token === client.token && this.ports.switchOn() && this.ports.scopeKey?.() === scope && this.ports.root() === root && this.ports.entry() === entry && this.ports.base() === client.base; };
     const originalFetch = client.fetchImpl ?? fetch;

@@ -1129,6 +1129,7 @@ export class StartPage {
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
+    if (msg.type === "inboxAnswer") { await this.chat.inboxSource?.inboxAnswer?.(msg.objectId, msg.revision, msg.generation, msg.answer); return; }
     if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
     if (msg.type === "reportProblem") { await vscode.commands.executeCommand("hypeproof-chat.reportProblem", "start_page"); return; }
     if (msg.type === "openSkillStore") { await vscode.commands.executeCommand("hypeproof-chat.skillStore"); return; }

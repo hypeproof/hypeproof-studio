@@ -197,12 +197,15 @@ DES-ART-20 status (2026-10-27): built in REQ-STUDIO-TASK-ACTIVITY (`docs/studio-
 2. **Revert for minors (REQ-ART-02).** `adultArchive.ts` archives only for adults. Jay needs to decide whether a per-turn pre-image for minors is acceptable storage-wise, and whether it counts as "raw input retention". It is the learner's own file, so I assume not.
 3. **External links for minors (REQ-ART-08).** Should a minor's blocked click notify the instructor (Chalk help queue), or only block? This depends on the SX-41 and help-channel decisions.
 4. **Instructor confirmation (REQ-ART-12).** This adds latency to CR-20 (second device opens within 1 minute). Should the clock start at instructor confirmation for minor cohorts?
+   Agent answer (2026-11-12, conservative, not confirmed by Jay): yes. For a minor cohort the clock starts at confirmation and the wait is recorded separately, never as a miss (`decisions.md`, DEC-ART-R-012).
 5. **Template picker source (REQ-ART-14).** Do Chalk lesson templates live in the KB (KB-03, versioned) or in the cohort profile? ChatGPT's picker reads skills (`CODEX_ARTIFACT_TEMPLATE_SKILLS`) and plugin caches. The Studio analogue would be CR-43 skills.
 6. **Analytics view (REQ-ART-13).** No learner-facing counts UI was found in `src/`. A webview UI may exist outside this snapshot, because `webview-ui/` was not included.
 7. **Image generation (ART-40) is deliberately DEFER.** Needs Jay's call on cost, minors' likeness (reference photos of people), and provider policy.
 8. **Office formats (ART-35, 36).** If a non-web track (dental admin, founder decks as PPTX) appears, revisit spreadsheet and presentation editing. Today CR-42 fixes HTML as the entry format.
 9. **Plugins, skills and auth rows (ART-56, 57, 58)** are inventoried here because their namespaces start with `browser*`. Parity decisions belong to the plugins, skills and account domain files. Check for duplicate IDs at merge.
 10. **Not verified at runtime.** All Studio coverage claims come from source and docs in the snapshot, not from running Studio. "No coverage found" means bounded searches of `extensions/hypeproof-chat/src`, `chalk/src/ui` and `docs/requirements`.
+
+REQ-ART-12 / DES-ART-12 status (2026-11-12): the notice for every seat is built in REQ-STUDIO-PUBLISH-NOTICE (`docs/studio-requirements.md`, "Publish responsibility notice (CGP-ART-R-012)"). The minor-cohort confirmation, its waiting state and the Chalk badge are not built; the plan is in `decisions.md` (DEC-ART-R-012).
 
 ### REQ-ART-03 implementation contract (CGP-ART-R-003)
 

@@ -2617,7 +2617,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-I7 | 더블-클릭 idempotency | 같은 version 의 inflight Promise 재사용 | U |
 | REQ-I11 | 실패한 확인은 최신 버전 판정이 아니다 (#730) | HTTP 오류·시간 초과·잘못된 응답·지원하지 않는 OS/아키텍처·새 릴리스의 설치 파일 누락을 오류로 표시한다. 백그라운드 확인 실패는 기존 배너를 지우지 않는다. 릴리스 API 제한 15초 | U (`test/update-orchestration`, `test/update-transport`) + E (`e2e/update-check/run.mjs`, 확인만 수행) |
 | REQ-I12 | 검증된 다운로드 (#730) | 공개 미러의 HTTPS asset URL만 허용. 60초 무응답·10분 전체 제한, 스트림 backpressure와 파일 오류 전파, 선언 크기와 SHA-256 일치 필수. 손상·중단 파일은 제거하며 기존 파일은 덮거나 지우지 않는다. SHA-256은 코드 서명 인증을 대신하지 않는다 | U (`test/update-transport`) |
-| REQ-I13 | 기존 앱 보존 (#730) | macOS는 같은 볼륨에 staging·backup 후 교체. 백업 실패 시 기존 앱 삭제 금지, 교체 실패 시 복구. 종료 취소·계속 실행 상태면 Mac/Windows 모두 설치 중단. Windows wrapper는 BOM을 유지하고 오류를 숨기지 않는다 | U (`test/update-installer`, `test/update-windows-wrapper`, OS별 CI fixture 실행) + M (실제 패키지 교체·재시작은 별도 릴리스 게이트) |
+| REQ-I13 | [기존 앱 보존](dev/macos-update-verification.md) (#730, #3811) | macOS는 재시작 안내 전과 같은 볼륨에 복사한 최종 앱의 교체 직전에 codesign strict·deep·전체 아키텍처 검증, Apple Developer ID Application 인증서·고정 Team ID `RZBNT9ZB67`·번들 `ai.hypeproof.studio`, Gatekeeper의 `Notarized Developer ID` 판정을 모두 요구한다. 다운로드 메타데이터나 기존 로컬 서명에서 신뢰 기준을 가져오지 않고 quarantine을 제거하지 않는다. 실패하면 현재 앱을 그대로 둔다. 같은 볼륨에 staging·backup 후 교체. 백업 실패 시 기존 앱 삭제 금지, 교체 실패 시 복구. 종료 취소·계속 실행 상태면 Mac/Windows 모두 설치 중단. Windows wrapper는 BOM을 유지하고 오류를 숨기지 않는다 | U (`test/update-installer`: 실제 bash 교체·복구, Apple 도구는 mock; `test/update-stage-host`: 호스트 검증 실패; `test/update-windows-wrapper`) + M (실제 서명 패키지 N-1→N 교체·재시작은 별도 릴리스 게이트) |
 | REQ-I14 | Without release access, point to the homepage download (trial-diagnosis I5, PRA-01, TUX-COND-02) | When no member credential can read the private release mirror (no env token and no `gh` login, or a token the mirror answers with 401/404), the check fails with `UpdateAccessError`; the private mirror is never called anonymously. The manual check shows an info notification "이 Studio에서는 앱 안에서 새 버전을 확인할 수 없어요. 새 버전은 홈페이지에서 받을 수 있어요." with "홈페이지 열기" (`https://hypeproof-ai.xyz/download`) — never `gh auth login`, `HPS_RELEASE_TOKEN` or "잠시 후 다시 시도". The automatic check is not silent: once per installed app version (globalState `hypeproofChat.updateAccessNotice`) it shows the non-modal line "새 버전은 홈페이지에서 받을 수 있어요." (not the status bar, which Studio hides by default). It neither pushes nor clears a banner. The member path (banner, up-to-date verdict, retry copy for transient failures, silent transient automatic failures per REQ-I11) is unchanged | U (`test/update-access-copy`: bundled updateChecker + `vscode` stub; no credential and token without access (positive), member token (control)) |
 | REQ-I15 | Non-member updates read the public release (D19, TUX-COND-02, PRA-01) | Behind the machine setting `hypeproofChat.publicUpdates` (default `false`) or the free-start signal registered with `registerPublicUpdateSignal` (the Service offer). Off: REQ-I14 exactly, no request at all without a credential. On: a member credential the private mirror accepts keeps the private mirror only (a transient mirror failure is not rerouted). With no credential, or a token the mirror answers 401/404, the check reads `https://api.github.com/repos/hypeproof/hypeproof-studio/releases/latest` anonymously — the release the Lab download and its code-free kit serve (Lab `PUBLIC_RELEASE_REPO`); the private mirror is never called anonymously. The update asset must belong to the repository the release was read from; a public asset downloads with no Authorization header, a mirror asset keeps the member token; size and SHA-256 checks are unchanged. An anonymous rate limit (429, or 403 marked by `x-ratelimit-remaining: 0`, a `retry-after` header or a "rate limit" body) is "check later": the automatic check stays silent and keeps any banner, a manual check shows the info line "지금은 새 버전을 확인할 수 없어요. 한 시간쯤 뒤에 다시 확인해 주세요." (no warning, no error banner). Public 404, and a public 403 that is not a rate limit (an abuse block or an access change, so a non-member is never left silently un-updated), is REQ-I14's homepage copy. The banner's install re-check gives an access or rate-limit failure the same manual-check copy, never an error line with the internal English detail; other install failures keep the error line. Follow-up: the Service free-start offer must call `registerPublicUpdateSignal` (offer-parsing branch) so free-start seats do not ship with the setting as the only switch. Cadence unchanged (30 s, then 24 h). No user-facing copy mentions `gh auth login`, a token or 체험 | U (`test/update-public-source`: setting off and member token (negative controls), asset from the other repository refused (negative), non-rate-limit 403 not deferred (negative), member 503 never reaches the public release (negative, request list), a real install failure stays an error (negative), no credential / refused token / rate-limit 403 (body, header, retry-after) / 429 / 404 / install copy / signal (positive)) |
 | REQ-STUDIO-START-UPDATE-NOTICE | The start page shows the update the chat banner offers (Jay 2026-10-29, "첫 기본화면에서도 새버전이 뜨도록해야하는데"; issue #3207). Before this, `scheduleUpdateChecks` pushed a found update only to the chat panel (`setAvailableUpdate`), so a person on the start page (every launch lands there first) saw nothing: a 2026.1020.2 app started on 2026-10-29 had no visible sign of v2026.1029.0 although both release sources served it and no dismissal was stored. Now `setAvailableUpdate` notifies listeners and an open start page redraws with `update: { version, heldForClass? }`: one row under the top bar, `새 버전이 나왔습니다 v… 업데이트하면 Studio가 다시 시작됩니다.` with `업데이트` (runs `hypeproof-chat.installUpdate`, which keeps its class and active-turn guards) and `나중에` (runs `hypeproof-chat.dismissUpdate`: the same 7-day per-version dismissal as the banner, which also clears the banner). During a class seat it is a status line `수업이 끝나면 설치할 수 있습니다.` with no button (CGP-SHELL-R-001). No offer, a current version or a dismissed version draws nothing. Also on first launch: the offer appears when the first check finishes (30 s after activation). A transient check failure (not an access or rate-limit answer) now retries after 15 minutes, at most 3 times per 24-hour cycle, instead of waiting a day (REQ-I11 still holds: a failure never clears an offer). **Not claimed:** a real packaged app showing the notice. | `src/startUpdateNotice.ts`, `src/startPage.ts`, `src/startPageProtocol.ts`, `src/chatPanelProvider.ts` (`onAvailableUpdateChanged`), `src/updateChecker.ts` (retry), `webview-ui/src/StartPage.tsx`, `webview-ui/src/start.css`; `test/start-update-notice.smoke.mjs` (pure + host: shows when newer, hidden when none/dismissed, class hold, commands), `test/start-update-notice-render.test.tsx` (rendered row: version and buttons, nothing without an offer, no button during class), `test/update-orchestration.smoke.mjs` (retry cases) |
@@ -4407,6 +4407,14 @@ screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 �
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
 
+Studio #3771 extends this same casebook to native iPhone first-use failures.
+Cases declare validated release targets; omission retains the existing desktop
+scope. Selection and the desktop publication P0 list use the same target rule.
+Native login, dictation-to-answer and hands-free recovery remain active cases,
+even when corresponding simulator controls pass. A TestFlight test candidate
+may be distributed to collect physical evidence; that distribution is not a
+physical acceptance result or permission to retire the case.
+
 Verification: `scripts/release/test/select-cases.test.mjs` (YAML subset parser with refusal controls
 and a PyYAML cross-check of the real casebook; selection positive controls and negative controls for an
 untouched P1, a 14-day-old escape, an automated P0 and a touched parent; an end-to-end temporary git
@@ -5724,6 +5732,20 @@ separate.
 | ID | Requirement | Evidence |
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
+
+## Publish responsibility notice (CGP-ART-R-012)
+
+CGP-ART-R-012 / CGP-ART-D-012 (CGP-ART-013, REQ-ART-12) add a short responsibility notice before
+a learner's first test-version link. It exposes the learner's own responsibility for what they
+publish (Product Intent 2, visible responsibility; OWNERSHIP hypothesis) and makes no
+learning-outcome claim; no capability label appears. This slice is the notice for every seat.
+The minor-cohort instructor confirmation (REQ-ART-12 parts 2 and 3) is not built: it needs a
+Service link state, a Chalk list and the SX-41 policy flag, planned in `decisions.md`
+(DEC-ART-R-012). Until it exists, a minor cohort's link opens as it did before this change.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-PUBLISH-NOTICE | Pressing `공개하고 테스트 시작`, or `링크 하나 더 만들기`, when the signed-in learner has not acknowledged the current notice version opens an inline sheet beside that button: the title `공개하기 전에 확인해요`, three bullets (`링크를 받은 사람은 누구나 이 페이지를 볼 수 있어요.`, `페이지에 담긴 내용은 공개한 내가 책임져요.`, `이름이나 연락처 같은 개인정보를 모으지 않는지 확인해요.`), `알겠어요` and `취소`. Focus moves to `알겠어요`; `취소` and Escape send nothing and return focus to the opener. `알겠어요` sends the pending action with the notice version. The host enforces the gate: `PublishSession` refuses every new link (`submit` and `link`) before any visitor preview, checklist or request unless the learner's acknowledgment of the current version is recorded, answering `공개하기 전에 안내를 먼저 읽어 주세요.`; an acknowledgment for another version is refused and not recorded; an acknowledgment that cannot be saved answers `안내를 읽은 기록을 저장하지 못했어요. 다시 시도해 주세요.` and sends nothing. The record is in machine `globalState`, keyed by the token's owner digest (`crBytesOwner`, never the identity) and the notice version, written once (the first time is kept), bounded, and read as empty when malformed. A token without an owner, or a missing ledger, never passes. Changing the notice copy means a new version, and every learner reads it again. Bullets fit two lines at 320 px, also under a font-independent bound (each Hangul syllable 1 em, other characters 0.6 em); buttons are at least 44 px with text at least 14 px, logical properties and tokens only, a focus ring, and edges in forced colours. | `test/publish-notice.smoke.mjs` (real `PublishSession`, ledger and owner digest; negative and fail-closed controls), `test/publish-notice.test.tsx` (real `PublishPanel`: sheet, 취소, Escape, 알겠어요 for both actions, focus), `test/publish-notice-layout.smoke.mjs` (headless Chromium, 320/800/1420, both themes, personal and classroom, forced colours); CGP-ART-013 / REQ-ART-12 / DES-ART-12; Product Intent 2. |
 
 ## Task activity summary (CGP-ART-R-020)
 
@@ -9089,7 +9111,7 @@ Custody follows the Epic's design v1 (comment on #3418): the seller's private la
 | REQ-STORE-LOCAL-SEAL | The creator's automation draft in `globalState` (`hps.automation.recipe.<namespace>`) is stored as AES-256-GCM ciphertext under a per-device key kept in SecretStorage (design v1 D7); the AAD binds it to its namespace, so a copied value opens neither in another activity's slot nor with another device's key. A plaintext draft written before this is sealed in place when the automation next opens. The key is created only when a draft is first written. | `automationDraftSeal.ts`, `automationHost.ts` · `store-mail-custody.smoke.mjs`, `automation-conversation-host.smoke.mjs` |
 | REQ-STORE-REFUND | Within `refund.window_days` of payment and before the first run, a refund cancels the whole payment at the gateway, removes the install and reverses every ledger line under the sale's own `policy_version` (`refund.after_split`, unsettled case). After the first run or past the window the refund button is absent and the reason is shown. A gateway cancel failure leaves the sale, install and ledger unchanged. | W `skill-store.test.tsx` · Service `store.test.mjs` refund tests |
 | REQ-STORE-SETTLEMENT | The seller view lists each sale with gross, PG fee (`pg.fee`, deducted first, labelled 예상 while `pg.fee_rate_bps` is a placeholder), seller share (`split.seller_bps`), commission (`split.commission_bps`) and its partner/instructor parts (`referral.*`, to the partner and instructor the seller registered, `attribution.*`), policy version and status (refund window, refund in progress, payout hold by `tier.*` hold days, payable, refunded). Totals for refund window, payout hold, payable and refunded are shown before any payout account exists. Balances under `payout.min_krw` are marked as rolling over. No transfer exists yet: the view says so. | W `skill-store.test.tsx` · Service `store.test.mjs` sale, no-code and earnings tests |
-| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. Entering a code shows the consent to provide the seller's display name and sale amounts to that partner/instructor for settlement; publishing with a code needs it checked, and 「코드 없이 진행」 clears the codes so the publication registers none. The choice is registered once (`attribution.seller_editable`); afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
+| REQ-STORE-ATTRIBUTION | Before a seller's first publication, 「내 스토어」 offers optional 파트너 코드 and 강사 코드 fields. A typed code must be checked (「코드 확인」) and its names shown before 「스토어에 등록」 or 「스토어에 올리기」 is enabled; with no code the publication registers none. Entering a code shows the consent to provide the seller's display name and sale amounts to that partner/instructor for settlement; publishing with a code needs it checked, and 「코드 없이 진행」 clears the codes so the publication registers none. The choice is registered once (`attribution.seller_editable`); if a registration committed but its answer was lost, the retry reads the recorded choice back and continues the publish. Afterwards the panel shows the registered names and that only the operator team changes them. An instructor code alone also registers the instructor's partner (`attribution.instructor_implies_partner`). The Service refuses a first publication without the choice. Codes come only from the operator registry; lookups are limited (`attribution.lookups_per_hour`). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` registry and first-publication tests |
 | REQ-STORE-PAYOUT-ACCOUNT | The payout account is asked for only once the payable balance reaches `payout.account_prompt_krw`; before that the view says when it will be asked. The form takes bank, account number and holder; a minor seller is asked for a linked adult's account and sees that payout waits for the adult's verification (`linked_adult.verification`). After saving, only the bank and last four digits are shown; the panel keeps no copy of the number. Holder verification is a sandbox check until the payout agency contract (#3419). | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · Service `store.test.mjs` payout-account and minor tests |
 | REQ-STORE-IDENTITY | An unverified seller (`tier.none`, cap `tier.none.cap_krw`) sees 「휴대폰 본인인증」 in 「내 스토어」. It opens only the Service's own verification page for that session in the browser, and the panel waits until the Service reports the outcome: verified (the seller's tier and cap follow), failed, expired or 「기다리지 않기」. The verified birth date replaces the self-declared year, so a 14–18 seller lands in `tier.minor` and under `age.minor_min` is refused. One person verifies one store account. Only the outcome is stored (no name, phone or birth date). Until the provider contract (#3419) the provider is a sandbox and the page says so. | W `skill-store.test.tsx` · H `skill-store-panel.smoke.mjs` · `skill-store-client.smoke.mjs` · Service `store.test.mjs` identity tests |
 | REQ-STORE-COURSE-BLOCK | A course whose profile does not sell (every minor cohort; any profile with `store.sell: false`) keeps everyone on its seats, and every account marked as coming from it, from listing or selling store skills. 「내 스토어」 then shows 「이 과정에서는 스킬을 팔 수 없어요…」 with no code step and no listing forms; the settlement history stays. Their listed skills are not shown or sold, and buyers who hold one keep running it. Marks come from the account's own seat token or an operator (audited). | W `skill-store.test.tsx` · Service `store.test.mjs` course block test |
@@ -9140,7 +9162,9 @@ voice changes need their own package/device evidence.
 `ST-REQ-MOBILE-VOICE` / MVOICE-01–05 in the [mobile roadmap](requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687)
 extend expression with project-bound editable dictation and consented final-text
 auto-send/read-aloud. System on-device recognition is required with no cloud
-recognizer fallback. Next-turn recording requires a visible tap; stop, background,
+recognizer fallback. Next-turn recording originally required a visible tap;
+MFR-03 below supersedes that step within a deliberately started foreground voice
+session. Stop, background,
 permission denial and expired access preserve text and fence late callbacks.
 The shared Service owns policy/admission. Core/native fixtures do not establish
 physical Korean ASR, five-turn acceptance or a human growth outcome.
@@ -9148,6 +9172,35 @@ physical Korean ASR, five-turn acceptance or a human growth outcome.
 ### Native iPhone credential continuity — MIRS-01
 
 The existing iPhone personal conversation preserves account identity across one-use credential refresh and app interruption. Refresh intent is durable before network dispatch; uncertain or mismatched results require fresh login without deleting conversation records. Contract and evidence: [mobile growth](requirements/mobile-growth-roadmap.md#iphone-credential-continuity-mirs-01-studio-3736), [native verification](testing/native-mobile-growth.md#iphone-interrupted-refresh-mirs-01-studio-3736). Studio #3736 refines MPER-03; source/simulator success does not establish physical or live-authentication acceptance.
+
+
+### Native first-use and hands-free correction — MFR-01–06
+
+Studio #3771 applies minimum necessary intervention to existing native iPhone:
+code-free same-device login, durable Send during sync, persistent failure reasons,
+automatic voice endpoints and foreground-only next-turn listening. See
+[required behavior](requirements/mobile-growth-roadmap.md#native-login-and-conversation-friction-correction--mfr-0106-studio-3771)
+and [journey verification](testing/native-mobile-growth.md). This is source work;
+actual provider sign-in, physical audio and distributed-package acceptance must
+be reported separately. Existing desktop execution remains unchanged.
+
+Every escaped user failure follows the same delivery loop: retain the observed
+version and failure (or mark the installed version unknown), add its requirement
+and release-casebook scenario, reproduce the failed boundary, fix it, run the
+exact-source native journeys, distribute a verified test candidate, and record
+the installed retest separately. Missing, skipped or failed required journeys
+cannot pass the native gate. Compilation, simulator, uploaded package, tester
+availability and actual device behavior remain distinct states throughout.
+
+### Correlated iPhone testing delivery — MTF-01
+
+`ST-REQ-NATIVE-DEPLOYMENT-RECEIPT` binds optional Harness requests and upload
+receipts to the existing exact-source native CI and Apple environment gates.
+Partial inputs/source movement or an older release-attempt gate refuse signing.
+The exact current-attempt gate is checked before signing and receipt emission;
+failed-job-only reruns must not reuse an older successful gate. Successful command completion
+does not claim Apple processing or tester availability. See [MTF-01](requirements/mobile-growth-roadmap.md#correlated-native-deployment--mtf-01)
+and [MTF-T01](testing/native-mobile-growth.md#testflight-request-and-receipt--mtf-t01).
 
 ## Show what I made (#3794 slice 1)
 
@@ -9183,10 +9236,40 @@ setting `hypeproofChat.showWhatIMadeEnabled` turns it off. Uploading and sharing
   sha256 are listed in `media/show/VENDORED.json`.
 - No telemetry and no new network call.
 
-Out of scope (TODO #3794): Service upload and the `-try` share link, MP4/WebM export, mobile, the consent-version
-bump.
+Out of scope for slice 1 (TODO #3794): MP4/WebM export and mobile. Sharing is slice 2, below.
 
 Evidence: `test/show-what-i-made.smoke.mjs` (vendored pins, composition contract, escaping, flow state machine,
 host writes and refusals, headless offline playback sought to fixed times, panel layout at 360/800/1420) and
 `scripts/check-show-composition.mjs` (HyperFrames checker, run on a worker with a pinned CLI). Not covered: the
 installed Electron app. A real-app run of the panel is NOT RUN in this slice.
+
+## Show what I made as a link (#3794 slice 2)
+
+`REQ-STUDIO-SHOW-LINK` follows `REQ-STUDIO-SHOW-WHAT-I-MADE` and hypeproof/hypeproof-studio#3794 (Jay, 2026-11-12:
+link-first sharing, consent item, cost-first, nothing sent before the press). Desktop only, behind the machine setting
+`hypeproofChat.showLinkEnabled` (default off until the Service ships `HPS_SHOW_LINKS`), and only with a signed-in
+personal account (14+; a classroom code never reaches it).
+
+- After `이대로 할래요`, the accepted view offers `링크로 보여주기`. Reaching the accepted view sends nothing.
+  Pressing it reads only the person's own link list and consent state (`GET /v1/me/show-links`, account session).
+- The review lists every file that will be uploaded, by name, role and exact size: `index.html` (the scene),
+  `material-N.<ext>` (the picture copy that played) and the four vendored playback files (pinned by sha256 in
+  `media/show/VENDORED.json`). It shows the words the viewer will read (the headline and the closing line), plays the
+  scene, and says who can see it: anyone with the link, no login, not in search, and `링크 끄기` turns it off and
+  deletes the uploaded scene and picture.
+- Consent item `내가 만든 것을 영상·링크로 공유` (Service `SHOW_CONSENT_VERSION` 2026-11-12.5, its own record, never a
+  privacy-policy consent). Without the box checked `링크 만들기` sends nothing. Once given it is remembered by the Service.
+- `링크 만들기` records the consent when needed, then uploads exactly the bytes listed, with one request id per press
+  (a retry is the same link). A hand-edited `index.html` or a changed vendored copy is refused before anything is
+  sent; a picture over 10 MB is refused. The Service regenerates the template and refuses any other script.
+- The shared view shows the link (`https://show-<id>-try.hypeproof-ai.xyz/<key>/`, checked before it is shown),
+  `링크 복사` and `링크 끄기`. `share.json` beside the composition holds link ids, URLs and press counts (open,
+  share, copy, revoke), never the person's words.
+- No model call. Cost per upload about US$0.00001 and per view about US$0.000004; per account at most 20 live links,
+  100 MB and 20 uploads a day (hypeproof-service `DEPLOY.md`, "Show links").
+
+Evidence: `test/show-link.smoke.mjs` (cross-repo template digest, consent item, routes, link shape, reducer, bundle
+pins and cap, host against a recording Service: flag and sign-in gates, nothing before the press, the exact files,
+consent gate, upload bytes, copy, revoke, share.json, bad link, error lines). The served page's 0 third-party requests
+and CSP are proven in hypeproof-service `test/show-links.test.mjs` in headless Chromium. Not covered: the installed
+Electron app and a deployed Service; both are NOT RUN in this slice.

@@ -59,6 +59,7 @@ export const COMPONENTS = {
   // VerifyView the host computed and never decides "검증됨" itself.
   VerifyPanel: { from: "./src/VerifyPanel.tsx", exportName: "VerifyPanel" },
   PublishPanel: { from: "./src/PublishPanel.tsx", exportName: "PublishPanel" },
+  PublishNoticeSheet: { from: "./src/PublishPanel.tsx", exportName: "PublishNoticeSheet" },
   // cr-evidence (#1394) — the experiment evidence panel.
   EvidencePanel: { from: "./src/EvidencePanel.tsx", exportName: "EvidencePanel" },
   // cr-memory (#1395) — the Venture Memory panel; draws the MemoryView the host read.
