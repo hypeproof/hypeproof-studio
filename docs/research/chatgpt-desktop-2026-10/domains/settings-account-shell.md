@@ -299,6 +299,10 @@ REQ-SHELL-17 status (2026-11-14): already shipped. The learner chooses the chat 
 
 REQ-SHELL-18 / DES-SHELL-17 status (2026-11-14): already shipped. Studio webviews honour `workbench.reduceMotion` in #1896. The three-way host preference (on / off / follow the OS), which is Studio's own setting, comes from #2433 (CGP-DS-D-012).
 
+REQ-SHELL-26 status (2026-11-14): covered, and more strictly than the row asks. Minor cohorts' chat links stay inside the safe browser (#1862, CGP-ART-R-008). Since #3489 (CGP-ART-D-008, Jay 2026-11-04), the served profile turns on the minor safe-link allowlist block, so a minor's link outside the cohort allowlist is blocked with a notice instead of opened after a confirmation. The adult confirmation dialog names the host on its message line, with the full address as detail (#3484).
+
+REQ-SHELL-30 status (2026-11-14): already shipped. `선생님께 더 요청하기` with a reason of at most 200 characters, and the request state in Studio (`AccessControl.tsx`, CGP-SHELL-D-029, #2710), on the Service's `POST /v1/access/requests`; instructors review requests in Chalk `/budgets`.
+
 REQ-SHELL-31 / DES-SHELL-30 status (2026-11-14): built as AB-19 (`docs/requirements/access-budget-settlement.md`, "Chalk daily class usage"). The Chalk chart reads the daily view from hypeproof/hypeproof-service#270 and stays draft until #270 is live. Days follow Korea time (`decisions.md`, DEC-SHELL-R-031).
 
 DES-SHELL-34 status (2026-10-28, CGP-SHELL-D-034): already met on main by the CGP-SHELL-R-035 build. The panel draws the
