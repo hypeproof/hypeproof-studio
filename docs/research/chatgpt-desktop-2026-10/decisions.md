@@ -2289,3 +2289,25 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-KNOW-R-028 / CGP-KNOW-D-028: per-task memory switches (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Task memory switches" (REQ-STUDIO-TASK-MEMORY-SWITCHES).
+
+- **Place (agent choice).** The switches sit in the personal settings dialog, under the memory list, not in the rail's
+  per-task menu. That menu is a `role="menu"` holding only `옮기기`, and native checkboxes do not belong in a menu. The
+  dialog already shows the activity's memory, and DES-KNOW-46 asks for native checkboxes with visible labels.
+- **Defaults (agent choice).** Both are on, which is today's behaviour. DEC-01 keeps memory always on, and no profile key
+  serves per-task defaults, so none is invented. A served default can be read later without changing the ledger.
+- **Lock (agent choice).** "쓰기 locks after the first send" is read as: once the task has any message. The host decides
+  it from the task's message count, and the webview cannot unlock it.
+- **Keep off covers:** the `remember` tool, the one memory write path, and the SDK runtime's file tools aimed at
+  `.hypeproof/memory/`.
+- **Shell (agent choice).** The SDK runtime also denies any shell command that names `.hypeproof`. This is a coarse,
+  deny-only check, chosen over parsing shell syntax. A command that builds the path at run time, and the local CLI
+  runtime's shell, are still open. The row is therefore partially met, and #4014 tracks a check of the
+  memory folder after each turn.
+- **Storage.** `workspaceState`, booleans per scope and task. Nothing leaves the device.
+- **Seats.** Minors on personal and trial activities get the same switches, because memory is on for them too (DEC-02).
+  Class, lesson and instructor seats have no memory store and so no switches.
+- Confirmed by Jay: no.

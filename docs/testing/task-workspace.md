@@ -366,6 +366,40 @@ should. Four mutants each fail at least one case: treating `not-allowed` as a pl
 from the first chunk, showing a blocked reading as pressed, and keeping no pending chunks. A real
 browser autoplay refusal, a screen reader and the packaged app are not run here.
 
+## Task memory switches (CGP-KNOW-R-028 / CGP-KNOW-D-028)
+
+`test/task-memory-switches.smoke.mjs` runs the real provider (task harness) on real files, plus the Agent SDK runtime
+bundled as it ships. Cases:
+- **Ledger rules:** defaults on; malformed values fall back to on; entries equal to the default are pruned; the lock and
+  bounds hold.
+- **Defaults:** `remember` writes.
+- **Keep off:** no tool; `recordTurnMemoryWrite` refuses; the coach's `Write`/`Edit` into `.hypeproof/memory/` (nested
+  too) is refused with the sentence; nothing reaches the disk. Negative controls: a page write, a sibling name and a
+  `Read` are untouched.
+- **Shell (keep off):** commands naming `.hypeproof` are refused, in any case, as an absolute path, and for reads.
+  Negative controls: `npm test`, `ls` and `echo memory > notes.md` are untouched. With keep on, the shell is decided as
+  before. No request leaves the client while keep is off (a fetch tripwire).
+- **Mid-turn:** a host made before keep went off refuses its next call; keep back on offers it again.
+- **Use:** with the first-use notice seen, use on carries the stored item (positive control); use off carries nothing.
+- **Lock:** use is locked after a message, and keep still changes.
+- **Stale task:** a stale task id changes nothing.
+- **No store binding:** class and instructor seats have no view.
+- **SDK runtime:** `canUseTool`, with the provider's own check, denies a `Write` into the memory folder and a `Bash`
+  command naming it, with the sentence. A page write is left to the usual policy.
+
+Mutants on snts each fail it: use gate off, keep gate off, file-tool guard off, shell check off, SDK hook off, lock ignored. Removing the
+host's task-id check is equivalent, because the stale message changes nothing even without it.
+
+`test/task-memory-switches.test.tsx` renders the group on the minimal DOM:
+- two labelled native checkboxes under the legend;
+- each change posts one `taskMemorySet` for the open task;
+- locked: the use box is disabled, and its `aria-describedby` points at the lock glyph and reason; keep is still free
+  and has its hint;
+- one mount in the personal dialog, gated on the host view;
+- 44px rows, the caption step, and no physical box properties.
+
+A real coach shell command and the packaged app are not run here.
+
 ## Shell row and 실행 중인 것 (CGP-AGENT-D-025 / DES-CGP-AGENT-60)
 
 - `test/shell-row-copy.test.tsx`: the real App on the minimal DOM. A host `toolLog` with a shell

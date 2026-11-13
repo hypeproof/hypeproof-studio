@@ -228,6 +228,11 @@ export interface SdkCoachArgs {
   /** REQ-STUDIO-MEMORY-REMEMBER-TOOL — present only on a personal activity (the host decides); absent, no `remember` tool exists. */
   memoryRememberHost?: MemoryRememberHost;
   /**
+   * CGP-KNOW-R-028 — a file-tool write the host refuses because it lands in the activity's memory folder while this
+   * task's "이 작업을 기억에 남기기" is off: the refusal sentence, or null. Checked on the absolute path, before the policy.
+   */
+  memoryFolderRefusal?: (toolName: string, input: unknown) => string | null;
+  /**
    * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
    * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
    * well-formed `orchestrator` value, then A2's orchestratorBindingFor). Then the turn
@@ -850,6 +855,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         }
       }
       input = abs.input as typeof input;
+      const memoryRefusal = args.memoryFolderRefusal?.(name, input) ?? null;
+      if (memoryRefusal) { decision(false); return { behavior: "deny" as const, message: memoryRefusal }; }
       const verdict = evaluateSdkToolUse({
         toolName: name,
         input,

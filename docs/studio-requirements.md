@@ -9303,6 +9303,54 @@ REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-USE.
   `test/memory-remember-tool.smoke.mjs` (the tool on both runtimes, the real provider, class refusal, traversal and oversize,
   a minor seat, persisted undo, the oversized replaced file).
 
+## Task memory switches: use memory / remember this task (CGP-KNOW-R-028, CGP-KNOW-D-028)
+
+`REQ-STUDIO-TASK-MEMORY-SWITCHES` implements REQ-KNOW-46 / DES-KNOW-46. PI#2 (the learner sees and decides what the AI
+keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMORY-USE and the memory write line above.
+
+- **Where.** In the personal settings dialog, under the memory list, a group `이 작업의 기억` holds two native
+  checkboxes with visible labels: `이 작업에서 기억 쓰기` and `이 작업을 기억에 남기기`. Each has a one-line hint, a
+  44px row and the caption step, and none uses a physical box property. The host draws the group only where the memory
+  store binding exists (personal and trial activities, minors included) and the open task is an ordinary one. An
+  instructor, a class or lesson seat, or a `기록 없이 묻기` task gets no group; a temporary task keeps its own no-write
+  rule (R-029).
+- **Defaults.** Both switches are on, which is today's behaviour. No Service profile key serves other defaults yet, so
+  none is read.
+- **기억 쓰기 (use).** Off: the task's requests carry no memory (`takeMemoryContext` returns nothing before reading the
+  store). It is locked once the task has a message: the box is disabled, with a lock glyph and the reason
+  `첫 메시지를 보낸 뒤에는 바꿀 수 없어요. 새 작업에서 다시 정할 수 있어요.` as text tied to it (`aria-describedby`). The
+  host decides the lock from the task's own message count and refuses a locked change, whatever the webview sends.
+- **기억에 남기기 (keep).** It can change at any time. Off: no memory write comes from this task's turns.
+  - The `remember` tool is not offered.
+  - A host made earlier refuses its next call.
+  - `recordTurnMemoryWrite()` refuses (`memoryWriteRefusal`, the same path as REQ-KNOW-47).
+  - The coach's own file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) are denied in the Agent SDK runtime when
+    they target the activity's `.hypeproof/memory/`, with `이 작업은 기억에 남기지 않게 해 두었어요`.
+  - In the same runtime, any shell command that names `.hypeproof`, in any case and in any form of the path, is denied
+    before the policy runs. This is a coarse, deny-only string check, and it refuses reads as well as writes.
+
+  These checks run in the host, where the write happens: the webview only asks. Memory is local files, so no request
+  leaves the client either way (tested).
+
+  Each turn is bound to the task it began in, so a task switch mid-turn cannot move its writes. Turning keep off mid-turn
+  stops the next write.
+- **Storage.** `workspaceState` key `hps.taskMemory.v1`: per activity scope, per task id, the two booleans. An entry
+  equal to the default is removed. At most 50 scopes and 200 tasks per scope are kept, and the oldest go first. A
+  malformed value falls back to on. No memory text and no task title are stored.
+
+**Status: partially met.** Keep off cannot yet stop a shell command that builds the path at run time (a variable, a glob,
+`cd` steps), and it does not cover the local CLI runtime's shell. Either could still write into `.hypeproof/memory/`. The
+follow-up issue #4014 tracks a check of the memory folder after each keep-off turn. Until it lands, the row is not fully met.
+
+- **Policy.** The switches only narrow what the served memory policy allows. Where memory is not available for the seat
+  (no store binding: class, lesson and instructor seats), there is no group and no write path.
+- **Evaluation surface.** The group lives in the settings dialog, not on the work screen. It shows no score, label or
+  evaluation sentence (SX-01/06/07/59).
+- **Lock timing.** Any message in the task counts, including a stored tool line before the first send.
+
+Tests: `test/task-memory-switches.smoke.mjs` (ledger rules, the real provider on real files, the bundled SDK runtime's
+`canUseTool`), `test/task-memory-switches.test.tsx` (render, posts, lock, mount, style floors).
+
 ## Public skill store (#3418)
 
 [Intent](intents/skill-store.md) INT-ST-01..03. Rows cite keys of [docs/policy/skill-store-policy.md](policy/skill-store-policy.md); a policy value change does not reopen a row.

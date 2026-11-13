@@ -332,6 +332,16 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
 .hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
 @media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
+/* CGP-KNOW-R-028 / DES-KNOW-46: the open task's two memory switches. Native checkboxes with visible labels, each row
+   a 44px target, every word at the caption step, the lock glyph and its reason as text (never the disabled grey alone). */
+.hps-task-memory { margin: 0; padding-block: var(--ds-c-studio-chatdetails-space-2); padding-inline: 0; border: 0; border-block-end: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); font-size: var(--hp-font-caption); }
+.hps-task-memory > legend { padding: 0; font-weight: var(--hp-weight-strong); font-size: var(--hp-font-caption); }
+.hps-task-memory-row { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); min-block-size: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
+.hps-task-memory-row > input { flex: none; margin: 0; inline-size: var(--ds-c-studio-chatdetails-space-5); block-size: var(--ds-c-studio-chatdetails-space-5); }
+.hps-task-memory-row:has(input:disabled) { cursor: default; }
+.hps-preferences .hps-task-memory-hint, .hps-preferences .hps-task-memory-lock { margin-block: 0 var(--ds-c-studio-chatdetails-space-1); font-size: var(--hp-font-caption); }
+.hps-preferences .hps-task-memory-lock { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); color: var(--vscode-foreground, inherit); }
+.hps-task-memory-lock > svg { flex: none; }
 /* CGP-SHELL-R-027 / DES-SHELL-26: the deletion request. Every word at the caption step (>=14px), every
    control 44px tall, the chip carries an icon AND a word in the theme foreground (never colour alone),
    the row and the hold reason wrap at 320px instead of truncating. */

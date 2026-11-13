@@ -416,6 +416,7 @@ import { MEMORY_REMEMBER_TURN_CAP, type MemoryRememberHost } from "./memoryRemem
 import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
@@ -7664,6 +7665,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const activity = activityConnections(this.context)?.scope;
     if (!binding || !personalMemoryActivity(activityConnections(this.context)?.current, profile)) return null;
     if (!memoryNoticeSeen(this.context.workspaceState.get(MEMORY_NOTICE_KEY), activity)) return null;
+    // CGP-KNOW-R-028 — "이 작업에서 기억 쓰기" off: this task's requests carry no memory at all.
+    if (!this.taskMemorySwitches(binding.scope, this.activeTaskId()).use) return null;
     const items = await new ActivityMemory(binding.root).contextItems().catch(() => null);
     const after = this.activityMemoryBinding;
     if (!items || !after || after.scope !== binding.scope || after.root !== binding.root || activityConnections(this.context)?.scope !== activity) return null;
@@ -7711,8 +7714,78 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private rememberedNames = new Map<string, Set<string>>();
   private rememberTurnWrites = new Map<string, number>();
-  private memoryWriteRefusal(binding: { root: string }, streamId: string): string | null {
-    return this.folderWriteRefusalFor(path.join(binding.root, ".hypeproof", "memory"), streamId);
+  private memoryWriteRefusal(binding: { root: string; scope?: string }, streamId: string): string | null {
+    const folder = this.folderWriteRefusalFor(path.join(binding.root, ".hypeproof", "memory"), streamId);
+    if (folder) return folder;
+    // CGP-KNOW-R-028 — "이 작업을 기억에 남기기" off for the task the turn began in (or, read again now, for that task):
+    // no memory write from it, whatever the runtime. Turning it off mid-turn stops the next write too.
+    const scope = binding.scope ?? this.activityMemoryBinding?.scope;
+    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+    if (scope && !this.taskMemorySwitches(scope, task).keep) return TASK_MEMORY_COPY.keepRefusal;
+    return null;
+  }
+  /**
+   * CGP-KNOW-R-028 — the coach's own file tools (Write, Edit, MultiEdit, NotebookEdit) writing into the activity's
+   * `.hypeproof/memory/`, and any shell command that names `.hypeproof`, while this task's keep switch is off: refused
+   * like the remember tool. The shell check is a string check (see the requirement's "not covered").
+   */
+  memoryFolderWriteRefusal(streamId: string, toolName: string, input: unknown): string | null {
+    const shell = toolName === "Bash";
+    if (!shell && !["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(toolName)) return null;
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    if (!binding || !input || typeof input !== "object") return null;
+    if (shell) {
+      // Coarse and deny-only: while keep is off, a shell command that names `.hypeproof` (any case, any form of the
+      // path) is refused, reads included. A command that builds the name at run time is not caught (requirement row).
+      const command = (input as Record<string, unknown>).command;
+      if (typeof command !== "string" || !/\.hypeproof/i.test(command)) return null;
+      const turnTask = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+      return this.taskMemorySwitches(binding.scope, turnTask).keep ? null : TASK_MEMORY_COPY.keepRefusal;
+    }
+    const target = (input as Record<string, unknown>).file_path ?? (input as Record<string, unknown>).notebook_path;
+    if (typeof target !== "string" || !path.isAbsolute(target)) return null;
+    const folder = path.join(binding.root, ".hypeproof", "memory");
+    const rel = path.relative(folder, path.resolve(target));
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+    const task = this.taskMemoryStreams?.get(streamId) ?? this.activeTaskId();
+    return this.taskMemorySwitches(binding.scope, task).keep ? null : TASK_MEMORY_COPY.keepRefusal;
+  }
+  /** CGP-KNOW-R-028 — the task each turn began in, so a task switch mid-turn cannot move its writes. */
+  private taskMemoryStreams?: Map<string, string | null>;
+  private activeTaskId(): string | null {
+    return this.currentTaskStore?.()?.getView().activeTaskId ?? null;
+  }
+  private taskMemoryLedger() {
+    try { return acceptTaskMemory(this.context.workspaceState.get(TASK_MEMORY_KEY)); } catch { return acceptTaskMemory(null); }
+  }
+  private taskMemorySwitches(scope: string, taskId: string | null) {
+    return switchesFor(this.taskMemoryLedger(), scope, taskId);
+  }
+  /**
+   * CGP-KNOW-R-028 / DES-KNOW-46 — the two switches for the open task, where the memory store exists (the R-005
+   * binding) and the task is an ordinary one: a temporary task keeps its own rule (nothing written, R-029).
+   */
+  taskMemoryView(): TaskMemoryView | undefined {
+    if (this._instructorMode?.isInstructor !== false || this.inTemporaryTask()) return undefined;
+    const binding = this.activityMemoryBinding;
+    const view = this.currentTaskStore?.()?.getView();
+    const taskId = view?.activeTaskId;
+    const task = taskId ? view?.tasks.find(t => t.id === taskId) : undefined;
+    if (!binding || !taskId || !task) return undefined;
+    const sw = this.taskMemorySwitches(binding.scope, taskId);
+    return { taskId, use: sw.use, keep: sw.keep, useLocked: useLocked(task.messageCount) };
+  }
+  private async setTaskMemory(msg: { taskId?: unknown; use?: unknown; keep?: unknown }): Promise<void> {
+    const view = this.taskMemoryView();
+    const binding = this.activityMemoryBinding;
+    // Only the open task, only where the switches are drawn; the lock is the host's, from the task's own messages.
+    if (!view || !binding || msg.taskId !== view.taskId) { await this.postConfig(); return; }
+    const change: { use?: boolean; keep?: boolean } = {};
+    if (msg.use !== undefined) change.use = msg.use as boolean;
+    if (msg.keep !== undefined) change.keep = msg.keep as boolean;
+    const result = setSwitches(this.taskMemoryLedger(), binding.scope, view.taskId, change, view.useLocked);
+    if (result.ok) await this.context.workspaceState.update(TASK_MEMORY_KEY, result.ledger);
+    await this.postConfig();
   }
   memoryRememberHostFor(streamId: string): MemoryRememberHost | undefined {
     const pinned = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
@@ -8717,6 +8790,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "activityMemoryRequest": await this.postActivityMemory(); return;
       case "memoryWriteUndo": await this.runMemoryWriteUndo(msg); return;
+      case "taskMemorySet": await this.setTaskMemory(msg); return;
       case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
       case "memoryNoticeRequest": case "memoryNoticeAck": await this.answerMemoryNotice(msg, source); return;
       case "memoryUseRequest": await this.runMemoryUse(msg); return;
@@ -9814,6 +9888,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
     if (temporaryTurn) (this.temporaryStreams ??= new Set()).add(streamId);
+    // CGP-KNOW-R-028 — the task this turn belongs to, for the keep switch.
+    this.taskMemoryStreams ??= new Map();
+    this.taskMemoryStreams.set(streamId, this.activeTaskId());
+    while (this.taskMemoryStreams.size > 64) this.taskMemoryStreams.delete(this.taskMemoryStreams.keys().next().value as string);
     if (memoryTurn) { this.memoryTurns ??= new Map(); this.memoryTurns.set(streamId, { scope: memoryTurn.scope, used: memoryTurn.used }); }
     // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
     // policy: the details list is where each request's agent and model are shown.
@@ -10615,6 +10693,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             onDelta,
             onRefusal,
             onActivity,
+            // CGP-KNOW-R-028 — keep-off refusals for the coach's own file tools and shell, before the policy.
+            memoryFolderRefusal: (toolName: string, input: unknown) => this.memoryFolderWriteRefusal(streamId, toolName, input),
             // #580 — SDK-path usage: the assistant message is the per-request unit
             // (one record even when a single API response arrives split across several
             // messages, via requestKey dedupe), and the result message is the turn
@@ -11990,6 +12070,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
         ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
+        // CGP-KNOW-R-028 — the open task's two memory switches (absent: no store, a temporary task, an instructor).
+        ...(!isInstructor && this.taskMemoryView?.() ? { taskMemory: this.taskMemoryView()! } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.

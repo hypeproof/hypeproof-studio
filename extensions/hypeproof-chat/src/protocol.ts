@@ -221,6 +221,8 @@ export interface ChatConfig {
   update?: UpdateOffer | null;             // #72 — auto-update banner state
   /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
   updateFreeze?: { until: string };
+  /** CGP-KNOW-R-028 — the open task's two memory switches (host-computed; the lock comes from the task's messages). */
+  taskMemory?: import('./taskMemorySwitches').TaskMemoryView;
   /** CGP-SHELL-R-027 — host-checked: the settings dialog shows the deletion request row. */
   dataDeletion?: true;
   /**
@@ -650,6 +652,8 @@ export type WebviewMessage = (
   | {type:'workTakeaway'}
   /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
   | {type:'exportMyWork'}
+  /** CGP-KNOW-R-028 — one of the open task's memory switches changed in the settings dialog. The host re-checks the task and the lock. */
+  | {type:'taskMemorySet'; taskId:string; use?:boolean; keep?:boolean}
   /** CGP-SHELL-R-027 — read the seat's deletion request (`load`) or send one after the in-dialog confirm (`submit`). */
   | {type:'dataDeletion'; action:'load'|'submit'}
   | {type:'activityLocalFile'; action:'open'|'export'}
