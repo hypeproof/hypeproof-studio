@@ -19435,6 +19435,86 @@
           "section": "## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-ANDROID-REFLECTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "section": "### Android personal questions · issue #3733"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ANDROID-REFLECTION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANDROID-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANDROID-REFLECTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANDROID-REFLECTION",
+        "ST-IMP-ANDROID-REFLECTION"
+      ],
+      "sources": [
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
+        },
+        {
+          "path": "docs/testing/native-mobile-growth.md"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
+        }
+      ]
     }
   ]
 }

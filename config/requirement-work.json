@@ -950,6 +950,11 @@
     {
       "path": "docs/requirements/mobile-growth-roadmap.md",
       "ids": [
+        "MADR-01",
+        "MADR-02",
+        "MADR-03",
+        "MADR-04",
+        "MADR-05",
         "MFR-01",
         "MFR-02",
         "MFR-03",
@@ -975,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "2ed466b5834d97c24dc4e776125ea0513e7bb76d30b41560fa8b4ac85fcb885c",
+      "sha256": "c92f67cf618875c853f21424d4f017d7865b9d01d50aa003542fb44875bba44f",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -4785,7 +4790,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Use the iPhone account-conversation correction in #3771 as the first slice; align Android with MVOICE-02/03 and verify iPhone legacy notebook journeys using its existing shared automatic controls, then observe five Korean turns and offline/permission recovery on both physical platforms. Do not count older manual-control tests as continuous-conversation acceptance.",
+      "next_action": "Verify the Android MVOICE-02/03 correction in existing #3733/#3735 and iPhone legacy notebook journeys, then observe five Korean turns and offline/permission recovery on both physical platforms. Synthetic automatic callback journeys are not physical acoustic acceptance.",
       "design_delta": "Editable dictation plus one-start continuous conversation: on-device recognition, silence endpoints, own-reply read-aloud and foreground-only next capture; no recurring confirmation, end-speech or next-turn tap. Existing OS permission, AI/storage consent and Service monetary admission remain.",
       "positive_control": "Dictation stays editable until Send; a deliberately started conversation obtains its own answer and listens for the next turn without another tap, until stopped.",
       "negative_control": "Silence without words, stale callbacks, background, Stop, account/conversation change, expired access or unsent draft cannot send or reopen capture; returning to foreground requires a new start.",
@@ -5026,6 +5031,50 @@
         "scripts/release/test/install-kit.test.mjs",
         "scripts/release/test/windows-delivery.smoke.mjs",
         "docs/operations/release-casebook/cases.yaml"
+      ]
+    },
+    {
+      "id": "android-personal-reflection-v1",
+      "title": "Same-account questions and voice in the existing native Android app",
+      "issue": 3733,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-01",
+            "MADR-02",
+            "MADR-03",
+            "MADR-04",
+            "MADR-05",
+            "MVOICE-02",
+            "MVOICE-03"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the integrated Android account candidate and MVOICE-02/03 automatic conversation with exact-source native callback/UI evidence; keep live cross-device and physical Korean voice acceptance separate.",
+      "design_delta": "Reuse the existing native Android package, account protocol, reflection API and on-device speech; persist encrypted credentials and account-scoped outbox.",
+      "positive_control": "Android starts with a question and shares exact personal message IDs with iPhone and the existing desktop, even while the desktop is closed.",
+      "negative_control": "Failed persistence, uncertain rotation, stale snapshot, background voice or account switch cannot lose words, replay a paid turn or import another account.",
+      "evidence_required": "Pinned native source/APK, unit/real HTTP and emulator tests, independent review, live Service and physical cross-device acceptance.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeDeviceSignIn.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/DeviceSignInHttp.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeHttpDeadline.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStateTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionModelTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     }
   ]
