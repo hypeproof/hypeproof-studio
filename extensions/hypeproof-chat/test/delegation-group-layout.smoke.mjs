@@ -7,18 +7,31 @@ const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')thr
 const built=await build({entryPoints:['webview-ui/src/main.tsx'],bundle:true,write:false,outdir:'out',format:'iife',platform:'browser',loader:{'.svg':'dataurl','.png':'dataurl'}});
 const css=built.outputFiles.find(f=>f.path.endsWith('.css')).text,js=built.outputFiles.find(f=>f.path.endsWith('.js')).text;
 const browser=await launch(bin);let cases=0;
+async function waitFor(expression,label,context){
+ const deadline=Date.now()+5000;
+ do{
+  if(await browser.evaluate(expression))return;
+  await new Promise(resolve=>setTimeout(resolve,25));
+ }while(Date.now()<deadline);
+ const state=await browser.evaluate("({ready:window.messages?.some(m=>m.type==='ready'),errors:window.errors,rollup:document.querySelector('.hps-delegation-toggle')?.textContent,rootText:document.getElementById('root')?.textContent?.slice(0,300)})");
+ assert.fail(`${label} did not settle within 5000ms: ${JSON.stringify({context,state})}`);
+}
 try{
  for(const seat of ['personal','classroom'])for(const themeName of ['Dark+','Light+'])for(const width of [320,800,1420])for(const long of [false,true]){
   const theme=THEMES[themeName],dark=theme.kind==='dark';const vars=Object.entries(theme).filter(([k,v])=>!['kind','file'].includes(k)&&v!==null).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
   await browser.send('Page.navigate',{url:'about:blank'});
   await browser.load(`<!doctype html><html class="${KIND_CLASS[theme.kind]}" style="${vars};--vscode-editor-foreground:${theme.foreground};--vscode-errorForeground:${dark?'#f48771':'#a1260d'};--vscode-editor-font-family:monospace"><head><style>${css}</style></head><body class="${KIND_CLASS[theme.kind]}"><div id="root"></div><script>window.errors=[];window.addEventListener("error",e=>errors.push(e.message));window.messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>messages.push(m),getState(){},setState(){}});${js.replaceAll('</script','<\\/script')}</script></body></html>`,{width,height:900,dark});
+  // App installs its host listener in an effect before posting ready. Sending
+  // fixtures before that handshake loses them on a cold or busy browser.
+  const context={seat,themeName,width,long};
+  await waitFor("window.messages?.some(m=>m.type==='ready')",'App ready',context);
   const config={proxyUrl:'http://controlled.invalid/v1',model:'sonnet',hasToken:true,coach:{name:'코치',personality:'',configured:true},activity:{id:'activity',name:'작업',kind:seat,workspace:'/synthetic',verified:true},taskWorkspace:seat==='personal'?{scope:'s',revision:1,tasks:[{id:'task',title:'작업',createdAt:1,updatedAt:1,messageCount:0}],activeTaskId:'task',sourceSelection:null}:undefined,profile:{profile_id:'synthetic',activity_kind:seat,observation:null,lesson:null,rehearsal:null,welcome:{greeting_md:'안녕하세요'},model_selection:null,ux:{coach:{naming_mode:'fixed',fallback_name:'코치'},suggestions:{initial:[],follow_up:[]},hints:{short_input:{enabled:false},roll_input_button:{enabled:false}},retry_button:{enabled:false}}},textSize:'base'};
   await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'config',config:${JSON.stringify(config)}}}))`);
 
   const helper=long?'W'.repeat(30):'코드리뷰어',task=long?'긴작업이름'.repeat(12):'코드 확인';
   const messages=[{id:'u1',role:'user',content:'검토해 줘',createdAt:1},{id:'delegate-one@s1',role:'tool',content:'',createdAt:2,tool:{icon:'🤝',label:helper+' · '+task+'\n\n검토 결과입니다.',state:'done'}},{id:'delegate-two@s1',role:'tool',content:'',createdAt:3,tool:{icon:'🤝',label:'리서처 · 근거 확인',state:'running'}},{id:'delegate-one~child',role:'tool',content:'',createdAt:4,tool:{icon:'🔧',label:'Read(index.html)',state:'done'}}];
   for(const msg of [{type:'history',messages},{type:'streamStart',streamId:'s1',messageId:'a1'}])await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(msg)}}))`);
-  await new Promise(r=>setTimeout(r,80));
+  await waitFor("document.querySelector('.hps-delegation-toggle')?.textContent==='도우미 2명 · 1명 끝남'",'actual App roll-up',context);
   assert.equal(await browser.evaluate("document.querySelector('.hps-delegation-toggle')?.textContent"),'도우미 2명 · 1명 끝남','actual App roll-up');
   assert.equal(await browser.evaluate("document.querySelectorAll('.hps-delegation-panel').length"),0);
   await browser.evaluate("document.querySelector('.hps-delegation-toggle').focus();document.querySelector('.hps-delegation-toggle').click()");
