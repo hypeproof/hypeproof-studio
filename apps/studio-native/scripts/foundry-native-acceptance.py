@@ -235,6 +235,8 @@ def android_command(script: Path, output: Path) -> list[str]:
         raise Refused("Android requires an absolute ANDROID_SDK_ROOT or ANDROID_HOME")
     routing = adb_environment()
     port = routing.get("ANDROID_ADB_SERVER_PORT") or routing.get("ADB_SERVER_SOCKET", "tcp:127.0.0.1:5047").rsplit(":", 1)[-1]
+    if "ADB_SERVER_SOCKET" in routing and routing["ADB_SERVER_SOCKET"] != "tcp:127.0.0.1:" + port:
+        raise Refused("Owned Android bootstrap requires a numeric loopback ADB socket")
     return [sys.executable, str(script), "--sdk-root", sdk, "--work-dir", str(output / "work"),
             "--port", serial.split("-")[1], "--adb-port", port]
 

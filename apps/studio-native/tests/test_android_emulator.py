@@ -48,6 +48,8 @@ elif tool=='adb':
  os.kill(int((s/'adb-pid').read_text()),0)
  args=args[2:]
  if not (s/'name').exists():sys.exit(1)
+ if mode=='failed_test_hung_diagnostics' and (s/'verification').exists():
+  print('partial failure diagnostic',flush=True);time.sleep(60)
  if args==['emu','avd','name']:print('foreign-avd' if mode=='foreign_serial' else (s/'name').read_text());print('OK')
  elif args==['shell','getprop','ro.kernel.qemu']:print('0' if mode=='not_emulator' else '1')
  elif args==['shell','getprop','sys.boot_completed']:
@@ -66,9 +68,10 @@ elif tool=='adb':
 '''
 VERIFY = r'''#!/bin/bash
 printf 'started\n' >> "$MOCK_STATE/verification"
-if [ "$MOCK_MODE" = verify_failure ]; then exit 23; fi
+if [ "$MOCK_MODE" = verify_failure ] || [ "$MOCK_MODE" = failed_test_hung_diagnostics ]; then exit 23; fi
 if [ "$MOCK_MODE" = emulator_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/pid")"; sleep 2; fi
 if [ "$MOCK_MODE" = adb_dies_in_test ]; then kill -TERM "$(cat "$MOCK_STATE/adb-pid")"; sleep 2; fi
+if [ "$MOCK_MODE" = native_and_adb_fail ]; then kill -TERM "$(cat "$MOCK_STATE/adb-pid")"; exit 23; fi
 if [ "$MOCK_MODE" = interrupt_test ] || [ "$MOCK_MODE" = test_timeout ]; then sleep 60; fi
 exit 0
 '''
@@ -110,11 +113,15 @@ class AndroidEmulatorBootstrap(unittest.TestCase):
             except ProcessLookupError: pass
         self.temp.cleanup()
 
-    def start(self, mode, boot=3, test=3, routing=None, injection=None):
+    def start(self, mode, boot=3, test=3, routing=None, injection=None, adapter_timeout=None, adapter_source=None):
         entry = self.native / "scripts/android-emulator.py"
         if injection:
             driver = self.root / "inject.py"
             driver.write_text("import importlib.util\ns=importlib.util.spec_from_file_location('bootstrap'," + repr(str(entry)) + ")\nm=importlib.util.module_from_spec(s);s.loader.exec_module(m)\n" + injection + "\nraise SystemExit(m.main())\n")
+            entry = driver
+        if adapter_timeout:
+            driver = self.root / "adapter-driver.py"
+            driver.write_text("import importlib.util,pathlib,sys\ns=importlib.util.spec_from_file_location('adapter'," + repr(str(adapter_source or SCRIPTS / 'foundry-native-acceptance.py')) + ")\nm=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nr=m.invoke([sys.executable," + repr(str(entry)) + ",*sys.argv[1:]],pathlib.Path(" + repr(str(self.root)) + "),pathlib.Path(" + repr(str(self.root / 'outer.log')) + ")," + str(adapter_timeout) + ")\nraise SystemExit(r['exit_code'])\n")
             entry = driver
         env = dict(os.environ, MOCK_STATE=str(self.state), MOCK_MODE=mode, PYTHONDONTWRITEBYTECODE="1")
         for key in ("ADB_SERVER_SOCKET", "ANDROID_ADB_SERVER_PORT", "ANDROID_ADB_SERVER_ADDRESS"):
@@ -301,6 +308,27 @@ m.stop_owned=fail"""
         self.assertEqual(receipt["phases"]["cleanup"], "FAIL")
         self.assertIn("verifier", receipt["cleanup_errors"])
         self.assertTrue(receipt["verifier_reaped"])
+
+    def test_observed_native_failure_survives_adb_exit(self):
+        code, receipt, _ = self.finish(self.start("native_and_adb_fail"))
+        self.assertEqual(code, 23)
+        self.assertEqual(receipt["verification_exit_code"], 23)
+        self.assertEqual(receipt["reason"], "adb_server_exited")
+
+    def test_adapter_timeout_waits_for_bootstrap_with_hung_diagnostics_and_preserves_peer(self):
+        # invoke intentionally sanitizes the environment; inject only these two
+        # synthetic SDK controls into its test-owned subprocess environment.
+        script = SCRIPTS / "foundry-native-acceptance.py"
+        copy = self.root / "adapter-fixture.py"
+        copy.write_text(script.read_text().replace('"PATH", "HOME", "TMPDIR"', '"MOCK_STATE", "MOCK_MODE", "PATH", "HOME", "TMPDIR"'))
+        peer = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.children.append(peer)
+        code, receipt, _ = self.finish(self.start("failed_test_hung_diagnostics", adapter_timeout=2, adapter_source=copy))
+        self.assertEqual(code, 124)
+        self.assertEqual(receipt["verification_exit_code"], 23)
+        self.assertEqual(receipt["exit_code"], 23)
+        self.assertEqual(receipt["phases"]["cleanup"], "PASS")
+        self.assertIsNone(peer.poll())
 
     def assert_descendant_stopped(self):
         pid = int((self.state / "child-pid").read_text())

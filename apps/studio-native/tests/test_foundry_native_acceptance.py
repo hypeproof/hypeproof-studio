@@ -183,6 +183,12 @@ class AcceptanceContract(unittest.TestCase):
             code, receipt = adapter.accept(self.root, "android", expected_script=before["sha256"])
         self.assertEqual(code, 2); command.assert_not_called()
 
+    def test_android_owned_route_refuses_localhost_before_launch(self):
+        with patch.dict(os.environ, {"ADB_SERVER_SOCKET": "tcp:localhost:5047"}), patch.object(adapter, "invoke") as command:
+            code, receipt = adapter.accept(self.root, "android")
+        self.assertEqual(code, 2); command.assert_not_called()
+        self.assertIn("numeric loopback", receipt["reason"])
+
     def test_unexpected_owned_adapter_exception_after_zero_exit_cannot_pass(self):
         with patch.object(adapter, "invoke", side_effect=self.command("android")), patch.object(adapter, "collect", side_effect=RuntimeError("synthetic final inventory failure")):
             code, receipt = adapter.accept(self.root, "android")

@@ -54,8 +54,10 @@ prove microphone quality, Korean ASR, natural-language policy or learning. Actua
 five-turn spoken sessions on iPhone and Android remain separate acceptance.
 Question policy/measurement are shared Service work, not a mobile prompt fork.
 
-Run `bash apps/studio-native/scripts/android-verify.sh` with JDK 17, SDK 35,
-Gradle 8.9 and `ANDROID_SERIAL` set to a **disposable emulator**. It rejects
+Run `python3 apps/studio-native/scripts/android-emulator.py --sdk-root "$ANDROID_HOME" --work-dir /absolute/task-owned/avds`
+on Linux with JDK 17, SDK 35 and Gradle 8.9. This owns a private loopback ADB
+server and disposable emulator, then calls the existing verifier. Busy ports
+are refused; use `--port` and `--adb-port` for explicit free private ports. It rejects
 physical devices before instrumentation replaces local preview records.
 Screenshots/logs go to `apps/studio-native/evidence/android/`. The detailed
 requirements and physical acceptance are in the [mobile roadmap](../../docs/requirements/mobile-growth-roadmap.md#native-voice-client-slice--3687).

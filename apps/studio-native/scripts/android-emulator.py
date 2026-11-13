@@ -269,6 +269,7 @@ class Bootstrap:
                 if time.monotonic() >= deadline:
                     raise Stopped("native_verification_timeout", 124)
                 time.sleep(0.1)
+            self.receipt["verification_exit_code"] = self.verifier.returncode
             self.alive()
             # Main owns cleanup independently; a cleanup exception must not
             # overwrite the native command's already observed exit status.
@@ -332,7 +333,10 @@ def main():
         bootstrap.receipt["verification_exit_code"] = code
         bootstrap.receipt["state"] = "verified" if code == 0 else "native_verification_failed"
     except Exception as error:
-        code = error.code if isinstance(error, Stopped) else 2
+        native_code = bootstrap.receipt.get("verification_exit_code")
+        code = native_code if native_code else (error.code if isinstance(error, Stopped) else 2)
+        if code < 0:
+            code = 128 - code
         bootstrap.receipt["phases"][phase] = "FAIL"
         bootstrap.receipt.update(state="failed", reason=error.reason if isinstance(error, Stopped) else str(error))
     finally:
