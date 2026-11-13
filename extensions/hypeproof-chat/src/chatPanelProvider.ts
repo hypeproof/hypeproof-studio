@@ -48,6 +48,8 @@ import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
 import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
 import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
+import { cliLoginOk, locateCli } from './localRuntime/cliLocate';
+import { instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
@@ -62,6 +64,33 @@ import { chalkToolsEnabled } from './chalk/tools';
 import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
 import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
+
+/** #3597 — the release gate state a provider holds; a module function keeps plain-object test hosts working (#3580). */
+interface ReleaseGateHost {
+  cachedProfile?: { rehearsal?: boolean } | null;
+  releaseGateKey?: string;
+  releaseGateInputs: { isInstructor: boolean; panelMode: string };
+  releaseGateReason?: string;
+  releaseRuntime: LocalRuntimeConfig | null;
+  releaseRuntimeNotice: string;
+}
+
+/** #3597 — computes the release gate. Re-run when the key changes, or with `force` for a closed gate that may now open. */
+async function refreshReleaseGate(host: ReleaseGateHost, isInstructor: boolean, panelMode: string, force = false): Promise<void> {
+  const subscriptionSetting = vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('instructorSubscription', false) === true;
+  const rehearsal = !!host.cachedProfile?.rehearsal;
+  const key = JSON.stringify([isInstructor, panelMode, subscriptionSetting, rehearsal]);
+  if (!force && key === host.releaseGateKey) return;
+  host.releaseGateKey = key;
+  host.releaseGateInputs = { isInstructor, panelMode };
+  const gate = await releaseInstructorRuntime({ isInstructor, panelMode, rehearsal, setting: subscriptionSetting }, {
+    locate: (provider) => locateCli(provider),
+    loginOk: (executable, provider) => cliLoginOk(executable, provider),
+  });
+  host.releaseRuntime = gate.ok ? gate.config : null;
+  host.releaseRuntimeNotice = gate.ok ? '' : releaseGateNotice(gate.reason as ReleaseGateReason);
+  host.releaseGateReason = gate.ok ? undefined : gate.reason;
+}
 
 /** The first-turn note a project switch leaves for the folder it opens (takeProjectSwitchBrief). */
 const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
@@ -717,6 +746,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
     }
     await this.applyReflectionSnapshot(b,value);
+    // A new reflection binding is saved after task creation; publish it to the visible action now.
+    await this.postConfig();
   }
   async refreshPersonalReflection(): Promise<void> {
     const b=this.reflectionBinding();
@@ -1141,6 +1172,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _instructorMode = new InstructorModeManager();
   private chalkContract: ChalkContractHost | null = null;
   private contractView: ContractView = {};
+  /** #3597 — the instructor's own CLI on the release app (null unless the gate is open). */
+  private releaseRuntime: LocalRuntimeConfig | null = null;
+  private releaseRuntimeNotice = '';
+  private releaseGateReason: string | undefined;
+  private releaseGateInputs: { isInstructor: boolean; panelMode: string } = { isInstructor: false, panelMode: '' };
+  private releaseGateKey = '';
+
   // Verdict syncs run one at a time, so an activation never races the deactivation before it.
   private contractSync: Promise<void> = Promise.resolve();
   private nativeObservationError: string | null = null;
@@ -8174,7 +8212,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const host = this.chalkContract;
     if (!host) return;
     let local: LocalRuntimeConfig | null = null;
-    try { local = localRuntimeConfig(vscode.env.appName, s.proxyUrl); } catch { local = null; }
+    try { local = (localRuntimeConfig(vscode.env.appName, s.proxyUrl) ?? instructorLocalRuntime(s.isInstructor, this.releaseRuntime)); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
     // Same choices as the legacy panel (instructorModelChoices); only with a local runner (#3564).
     const models = contractModels(local ? localModelSelection(local) : null);
@@ -8198,12 +8236,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
-      try { return localRuntimeConfig(vscode.env.appName, proxyUrl()); } catch { return null; }
+      try { return (localRuntimeConfig(vscode.env.appName, proxyUrl()) ?? instructorLocalRuntime(!!this.contractView.token, this.releaseRuntime)); } catch { return null; }
     };
     return {
       available: () => local() !== null,
       executorModel: () => local()?.model,
-      run: (input) => this.runContractTurn(input, local()),
+      run: async (input) => {
+        // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
+        if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
+        return this.runContractTurn(input, local());
+      },
       previewOpen: (webPath) => this.contractPreviewOpen(webPath),
     };
   }
@@ -8413,6 +8455,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
     if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
+    if (msg.type === 'beginPersonalMaking') {
+      try { await this.beginPersonalMaking(); }
+      catch (error) { await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '제작 초안을 열지 못했어요.' }); }
+      return;
+    }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -9574,7 +9621,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const runtime: 'proxy' | 'agent-sdk' = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: profile?.coach_runtime, minorCohort: profile?.minor_cohort,
     });
-    const toolSeat = { profile, runtime, local: !!localRuntimeConfig(vscode.env.appName, proxyUrl), instructor: this._instructorMode.isInstructor === true };
+    const toolSeat = { profile, runtime, local: !!(localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime)), instructor: this._instructorMode.isInstructor === true };
     const toolDenial = mode === 'web-search' ? turnToolsDenialSource(toolSeat) : undefined;
     if (toolDenial) await this.postDenialNotice(toolDenial);
     requireTurnTools(mode, turnToolsAvailability(toolSeat));
@@ -10349,7 +10396,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // best-effort.
       await lowDiskCheck;
       await withCoachSeatLock(coachSeatKeyFor({ token: token ?? undefined, profile: profile ?? undefined }), async () => {
-      const local = localRuntimeConfig(vscode.env.appName, proxyUrl);
+      // #3608 — a learner turn never reads the release runner; an instructor turn re-checks a gate closed for no CLI or a failed login.
+      if (this._instructorMode.isInstructor === true && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
+      const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime);
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
@@ -10425,7 +10474,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
         }
       } else if (this._instructorMode.isInstructor === true) {
-        throw new Error('강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
+        throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
       } else if (runtime === "agent-sdk") {
         if (!profile) {
           throw new Error(profileNotReadyNotice(this.coachDisplayName()));
@@ -11725,7 +11774,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.effortTurn = undefined; this.effortResult = undefined; this.effortNotice = undefined;
     }
     if (scope!==activityConnections(this.context)?.scope) return;
-    const local=localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'));
+    const local=(localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime));
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     // #1298 A-01 — student slot takes priority. If the student token is active
     // (present, not expired, not hard-rejected), skip the instructor check entirely
@@ -11752,6 +11801,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._instructorMode.reset();
       isInstructor = false;
     }
+    // #3597 — the release app's instructor CLI gate (re-checked only when its inputs change).
+    await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
     // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
     const chalkInstructorTab = chalkInstructorTabField(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime'), isInstructor);
     if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
@@ -12295,6 +12346,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'config') {
+      const binding = this.reflectionBinding();
+      const view = msg.config.taskWorkspace;
+      msg = { ...msg, config: { ...msg.config, personalMaking: binding && this.reflectionAccounts && !msg.config.isInstructor
+        && view && binding.workspace === view.scope && binding.task === view.activeTaskId
+        ? { scope: binding.workspace, taskId: binding.task } : undefined } };
+    }
     if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();

@@ -1,5 +1,25 @@
 # Studio behavioral requirements
 
+## iPhone conversation from first use (#3937)
+
+MPER-01/03/04 require a usable question and composer on the first screen, including
+before login. Typed or dictated guest words stay local through cancellation,
+failed login and relaunch. Explicit successful login moves them only into an empty
+personal local draft; sending remains a separate action. Existing account drafts
+and outstanding turns are never replaced. Cached personal history opens without
+waiting for the network, and refresh does not change an explicit selection.
+
+The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
+prose, user bubbles, one rounded composer and secondary history navigation. It
+uses native system surfaces, desktop accent roles and Dynamic Type. The existing
+local notebook remains reachable from the menu. There is no new Mac application.
+Voice stops on navigation and draft restoration; accessibility retains message
+authorship. The bounded implementation and acceptance contract are in
+[mobile growth](requirements/mobile-growth-roadmap.md#conversation-from-the-first-screen-studio-3937)
+and [native verification](testing/native-mobile-growth.md). Source/fixture checks,
+native screenshots, real account login and installed-device acceptance remain
+separate; this slice does not claim full desktop or Android parity.
+
 ## Personal question entry (#3798)
 
 MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
@@ -14,6 +34,15 @@ and cannot trigger a late question redirect. Classroom entry remains explicit.
 
 See [MPER design](requirements/mobile-growth-roadmap.md#desktop-visible-question-entry-studio-3798)
 and [entry acceptance](testing/native-mobile-growth.md#desktop-visible-question-entry-3798).
+
+MPER-05 also exposes “만들기로 이어가기” inside the active personal-question
+conversation (#3940), including layouts with the status bar hidden. The host's
+current reflection binding supplies this action; a personal activity alone does
+not. The existing review dialog copies only the person's reviewed words into one
+ordinary unsent task draft. Cancel, stale scope and failed persistence preserve
+the conversation; opening a draft never dispatches AI or tools. This supports
+the Product Intent principles “Human judgment stays visible” and “Minimum
+necessary intervention” without adding a new runtime.
 
 ## Personal task workspace (#1756)
 
@@ -3070,6 +3099,7 @@ PR — 이 도메인은 "각 PC 에 빠짐없이, 깨지지 않게 쌓인다"까
 | REQ-STUDIO-CHALK-AUTHORING-UI | Instructor can import and edit course drafts, save/reopen and view frozen versions | Preserve edits on 401/403/409; no token in URLs/storage/export; support request draft is explicitly unsubmitted | Surface; `e2e/chalk-authoring/run.mjs` |
 | REQ-STUDIO-LOCAL-TURN-BUDGET | A local turn's 180 s budget counts only active model time. Time spent waiting for a person (an approval, the overwrite confirmation, an email question) does not count, and a turn that ends while the person is answering denies that answer, so a late approval or confirmation never runs the write. | Fake-clock checks: a 200 s wait does not stop the turn; 180 s of active time after the answer does; a late approval or pick after the turn ended is denied and the file is unchanged. Email wait behaviour unchanged. The Chalk-side wait for a tool result is not counted here (see the PR). | Unit (`test/human-wait.smoke.mjs`, `test/local-email-runtime.smoke.mjs`); agent Dev run (👁) pending |
 | REQ-STUDIO-LOCAL-BROWSER-OPEN | On the instructor local runner (legacy turn and Chalk contract turn) `browser_open` follows the student rule (REQ-M20/M28): an outside address is asked once through the turn's approval gate and not opened if refused; loopback (127.0.0.1, localhost, [::1]) and an address already open are not asked; `live_preview_start` is not asked; a policy-denied address is not opened. The judgement is `evaluateSdkToolUse`; remembered origins are the host's. 0.0.0.0 stays asked (known, unchanged). | `test/local-browser-open-approval.smoke.mjs` (loopback allow, outside ask/refuse, already open, live preview, deny, origin memory, budget during the wait, late answer denied); agent Dev run (👁) pending | Unit (`test/local-browser-open-approval.smoke.mjs`); wiring by source (`src/chatPanelProvider.ts`) |
+| REQ-STUDIO-INSTRUCTOR-SUBSCRIPTION | On the release app, an instructor can run the instructor turn with their own Claude or Codex CLI subscription. The gate opens only when the server verifies instructor mode (whoami), the setting `hypeproofChat.instructorSubscription` is on (default off, machine scope), the seat is the instructor's own panel (not a student slot), the seat is not a rehearsal, and a CLI is found at an absolute path and its status command succeeds. A learner never gets it. Credentials are never read, stored or logged: only the status command's exit status is used, and the CLI child environment drops vendor keys, `HPS_*` values and token-shaped names. The Dev-only runner (`HPS_DEV_RUNTIME`) stays closed on the release app name. | `test/release-instructor-runner.smoke.mjs` (open on the release name with instructor and setting on; closed for learner, student slot, setting off, rehearsal, no CLI, relative path, login failure; Dev env ignored on the release name; no credential file read; env allowlist); release-build check by JY (NOT RUN here) | Unit (`test/release-instructor-runner.smoke.mjs`); agent Dev run (👁) pending |
 | REQ-STUDIO-CHALK-RUNTIME-SWITCH | Changing `hypeproofChat.instructorRuntime` takes effect without a reload. Leaving `chalk-extension` ends the active Chalk session once (`deactivateInstructor` with `reason: "runtimeChanged"`); with no session nothing is sent. Returning to `chalk-extension` activates again with a new nonce. | After the switch to legacy, a turn with the old nonce is refused `noSession`; the switch runs from the configuration event alone, and the session ends before the refresh, so a failing refresh (profile or whoami) cannot keep it alive and the chat view need not be resolved. Chalk-side screen text: hypeproof/hypeproof-chalk#38, checked in an agent Dev run (👁). | Unit (`test/chalk-contract.smoke.mjs`, runtime switch checks incl. a rejecting refresh, via `applyInstructorRuntimeSetting`); wiring by source (`src/extension.ts` listener); Dev run pending |
 
 REQ-A8 fixture isolation: both the environment flag and the existing user-data test-state file keep an explicitly opened practice folder. The activation verdict is shared with spool suppression and passed through onboarding and token changes (#713). Normal cohort switching remains unchanged.
@@ -4389,15 +4419,15 @@ black-box cases that hang under the core user journeys in
 [docs/operations/release-casebook/](operations/release-casebook/README.md) (`journeys.yaml`
 CUJ-1–4, `cases.yaml` BB-nnn with priority, linked requirement ids, steps, verbatim expected
 Korean copy, origin and optional `automated_by`). `scripts/release/select-cases.mjs` selects,
-from local git only, every P0 case, every case linked to a requirement id touched since the last
-stable `v` tag (commit subjects/bodies and changed lines of requirement docs; a touched child id
+every P0 case, every case linked to a requirement id touched since the latest published stable
+GitHub release (local commit subjects/bodies and changed requirement-doc lines; a touched child id
 reaches its parent case) and every escaped-bug case dated within 14 days; `자동화됨` cases are
 never selected. release-cut puts the rc install one-liner first in the release PR body, lists the
 touched requirement ids and the selected checklist, and the release PR carries the `release` label
 (created when missing, re-applied when a later rc updates the PR). A broken casebook does not stop
 the cut; the body says the selection failed and the manager runs every P0 case. `release-cut.yml`
 also runs at 17:00 KST: `scripts/release/daily-gate.mjs` skips the run when the repository variable
-`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the last stable tag,
+`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the latest published stable release,
 or when the live-class freeze (`scripts/check-live-sessions.mjs`) does not answer `proceed`, and
 otherwise cuts with `mode=create` (`dry-run` when the variable says so); a manual dispatch keeps its
 inputs and defaults to dry-run. Existing smoke, NOT_RUN, publish-gate and freeze gates are
@@ -4406,6 +4436,9 @@ one `hps-blackbox-run/1` result (`scripts/release/validate-blackbox-run.mjs`: a 
 screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 보류 권장`, every selected
 case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
 case; a case whose automation has not failed for six months moves to `자동화됨`.
+Draft releases and tag-only promotions cannot narrow the default range. Missing release metadata
+or a published tag absent from the candidate ancestry stops selection without a tag fallback (#3910).
+Explicit baseline/PR ranges and dry-run trial ranges remain explicit overrides.
 
 Studio #3771 extends this same casebook to native iPhone first-use failures.
 Cases declare validated release targets; omission retains the existing desktop
@@ -5732,6 +5765,15 @@ separate.
 | ID | Requirement | Evidence |
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
+
+## Instructor comments on an approved artifact version (CGP-ART-R-005)
+
+CGP-ART-R-005 / CGP-ART-D-005 (REQ-ART-05) add instructor comments to the learner inbox. A comment is anchored to
+one place of a page version the learner approved (#751 U1b). The rows are ADM-CMT-01 to ADM-CMT-06 in
+[classroom-admin.md](requirements/classroom-admin.md#artifact-comments-cgp-art-r-005). The Studio-side rows are
+ADM-CMT-05 (placed only on this learner's own approved version, current vs previous) and ADM-CMT-06 (side list, pin,
+text as text, reply/handled sent only on a press, nothing to the coach). Choices and the open question about minors
+are in `docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-005).
 
 ## Publish responsibility notice (CGP-ART-R-012)
 

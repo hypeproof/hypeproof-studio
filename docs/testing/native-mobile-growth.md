@@ -77,12 +77,21 @@ Use the existing Studio desktop RC plus the native iPhone candidate and deployed
 
 1. MPER-01 / MPER-04: Sign into the same account with an active entitlement. iPhone offers an everyday question; no age/job form or manual computer pairing step appears. Consent discloses server storage and AI processing.
 2. MPER-02: With the desktop closed, send a personal experience by text; confirm one Service answer. Open the existing desktop, select “나의 질문”, and observe the same original message IDs in its normal task store.
-3. MPER-02 / MPER-05: Switch to a build task and back using “나의 질문”. Select “만들기로 이어가기”, review the user-authored intention, and observe one ordinary task with only that unsent draft. No copied private transcript, duplicate reflection task or SDK tool execution. Cancel/account change creates no task; a failed save reopens the exact reviewed words and preserves the original conversation.
+3. MPER-02 / MPER-05: Switch to a build task and back using “나의 질문”. With the status bar hidden, select the visible “만들기로 이어가기” action in the question conversation, review the user-authored intention, and observe one ordinary task with only that unsent draft. No copied private transcript, duplicate reflection task or SDK tool execution. Cancel/account change creates no task; a failed save reopens the exact reviewed words and preserves the original conversation. Ordinary/classroom tasks do not expose this action; stale task/activity messages cannot open its review.
 4. MPER-03: Disconnect after send, then retry/reconnect: words remain, the same ID is reconciled and no extra AI call is made. Modify the account during a pending response: old output is never imported.
 5. MPER-03 / MPER-04: Stop an active response: late output is fenced; submitted words remain. Explain that already-dispatched processing can cost money. Actual microphone/voice checks remain physical-device gates.
 6. MPER-03 / MPER-04: Read a stale or malformed snapshot, including duplicate IDs: retain original history and draft. Export/erasure includes server-stored personal reflection.
 
 Source checks: `test:personal-reflection`, `test:mobile-conversation`, Swift `ConversationSyncTests`, `StudioShellTests`, Service `test:conversation-sync`. Type/build/fixture success is not a judgment of question quality or installed-device acceptance. Local iOS verification on 2026-11-11 is BLOCKED by missing Xcode; use the repository's native macOS CI and retain that run's exact source identity.
+
+The #3940 `personal-making-entry.test.tsx` control renders the actual App and uses
+the existing account/reflection host and disk task store. The original source
+must fail at the missing visible action. It checks reviewed words in the visible
+unsent composer and reopened store, unchanged source history, no Service/tool
+dispatch, repeated clicks, cancellation and stale/classroom refusals. Existing
+`mobile-conversation-host.test.mjs` retains account-change and failed-save controls.
+HTTP and VS Code presentation remain fixtures; actual Electron layout/focus and
+release-pinned phone/desktop acceptance are separate observations.
 
 ### Android same-account question parity (MADR-01–05, #3733)
 
@@ -158,7 +167,21 @@ the new fixtures as a successful physical retest.
 | MFR-T03-queued | During a delayed history refresh, finish a voice turn; after refresh, send exactly once, show its reply and resume listening. The trace must prove speech ended while that history read was pending. | A queued local request must retain its voice continuation; no lost reply, duplicate POST or manual retry to make the test pass. |
 | MFR-T04 | Background during a partial capture, return and relaunch; microphone stays stopped and unsent words remain. Explicit Send can then obtain an answer. | Returning to foreground must not silently restart recording or send the draft. |
 | MFR-T05 | First POST fails; retry remains available with the original words. Relaunch and explicitly retry: the same request ID and text are reused and accepted once. | No automatic resend, lost outbox or duplicate accepted turn. |
-| MFR-T06 | Collect actual native build/test exits and exact log hashes. All eight named simulator cases execute once and pass. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+| MFR-T06 | Collect actual native build/test exits and exact log hashes. Every named required simulator case executes once and passes. | Missing, skipped, duplicate, incomplete or failed cases never count as passed because the build succeeded. Original failed evidence is immutable. |
+| MPER-T01-cancel | Type a first thought before login, cancel the real model's pending login, relaunch and read the same words. | No browser callback, credential exchange or AI turn; cancellation cannot consume the guest draft. |
+| MPER-T03-collision | Sign in with an existing account draft and a different guest draft. Keep the account words; relaunch; explicitly empty that draft and restore guest words. | No overwrite, auto-restore on cold launch or automatic AI request. Guest/account persistence failures preserve the original copy. |
+| MPER-T01-layout | In dark mode with accessibility XXXL text, type five lines with the keyboard visible. Composer and login remain reachable above the keyboard and below navigation. | Native screenshots of first use and keyboard state are retained. They do not prove physical-device accessibility or VoiceOver quality. |
+
+For Studio #3937, MFR-T01 starts by typing before authentication and proves zero
+network paths before login and zero AI turns after account adoption until explicit
+Send. Its failure case verifies the same draft survives relaunch. Local notebook
+capture/relaunch is still exercised through the secondary menu. Message roles
+remain in accessibility labels even when visible role headings are removed.
+`ios-verify.sh` exports the actual XCTest attachments under `journey-attachments/`
+for visual review; the unrelated post-suite launch screenshot cannot substitute
+for those journey states. GuestDraft unit controls exercise persisted reload,
+draft/outbox collision, account-write failure, guest-cleanup failure and unreadable
+files. These are test definitions, not completed native or physical acceptance.
 
 `StudioJourneyTests` in the existing Xcode-wired `StudioShellTests.swift` covers
 these cases. `NativeJourneyFixture` replaces only external transport and supplies

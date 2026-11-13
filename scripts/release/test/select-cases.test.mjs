@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {CASEBOOK_DIR, appliesToTarget, caseTargets, loadCasebook, parseYaml, validateCasebook} from '../casebook.mjs';
 import {appChanged, decide} from '../daily-gate.mjs';
 import {idsFromDiff, isRecentEscape, linkedTouched, parseCliArgs, parseReleasePrBody, rangeForPr, renderJson, renderMarkdown, requirementIds, run, selectCases} from '../select-cases.mjs';
+import {lastPublishedRelease, publishedBaseline} from '../published-baseline.mjs';
 import {CLEAR, HOLD, extractRun, validateRun} from '../validate-blackbox-run.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -134,8 +135,11 @@ test('iPhone escaped cases stay active and link every required simulator journey
   const root = path.resolve(here, '../../..');
   const collector = fs.readFileSync(path.join(root, 'apps/studio-native/scripts/collect-native-journeys.py'), 'utf8');
   const required = [...collector.split('REQUIRED = {')[1].split('\n}')[0].matchAll(/'([^']+)': '(test[^']+)'/g)].map(m => m[2]);
-  assert.equal(required.length, 8, 'Update the casebook mapping when the required native journeys change');
+  assert.ok(required.includes('testFirstInstallSignInToFirstAnswerWithoutDesktop'), 'The collector must contain the first-use journey');
+  assert.equal(new Set(required).size, required.length, 'Required journeys must not be duplicated');
   const notes = native.map(c => c.notes).join('\n');
+  const documented = [...new Set(notes.match(/\btest[A-Z][A-Za-z0-9]+/g) ?? [])];
+  assert.deepEqual([...required].sort(), documented.sort(), 'Every documented native journey must remain required, and every required journey must have a case');
   const readme = fs.readFileSync(path.join(CASEBOOK_DIR, 'README.md'), 'utf8');
   for (const name of required) {
     assert.ok(notes.includes(name), `${name} has no active escaped case`);
@@ -235,8 +239,8 @@ test('renderMarkdown groups by journey, gives a checkbox per case and lists touc
   assert.match(md, /`REQ-A1`/);
 });
 
-// End to end over a throwaway git repository: the range since the last stable tag decides.
-test('run: touched ids come from commit bodies and requirement-doc diffs since the last stable tag', () => {
+// End to end over a throwaway git repository: the range since the published release despite a newer draft tag decides.
+test('run: touched ids come from commit bodies and requirement-doc diffs since the published release despite a newer draft tag', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-cases-'));
   const g = (...a) => execFileSync('git', ['-C', tmp, ...a], {encoding: 'utf8', env: {...process.env,
     GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x'}});
@@ -254,8 +258,10 @@ test('run: touched ids come from commit bodies and requirement-doc diffs since t
   fs.writeFileSync(path.join(dir, 'journeys.yaml'), 'journeys:\n  - id: CUJ-1\n    title: J\n    goal: g\n');
   const c = (id, req, pri = 'P1') => `  - id: ${id}\n    journey: CUJ-1\n    priority: ${pri}\n    title: t\n    requirements: [${req}]\n    steps:\n      - s\n    expect:\n      - e\n    origin:\n      kind: design\n`;
   fs.writeFileSync(path.join(dir, 'cases.yaml'), `cases:\n${c('BB-001', 'REQ-BODY')}${c('BB-002', 'REQ-DOC')}${c('BB-003', 'REQ-OLD')}${c('BB-004', 'REQ-BEFORE')}${c('BB-005', 'MFR-02', 'P0')}    targets: [ios]\n`);
+  g('tag', 'v1.0.1'); // Draft promotion: newer than the release users can install.
+  const releaseExec = () => JSON.stringify({tag_name: 'v1.0.0', draft: false, prerelease: false, published_at: '2026-10-20T00:00:00Z'});
   const out = path.join(tmp, 'out');
-  const {json, markdown} = run({root: tmp, candidate: 'main', today: '2026-10-20', out, dir});
+  const {json, markdown} = run({root: tmp, releaseExec, candidate: 'main', today: '2026-10-20', out, dir});
   assert.equal(json.baseline, 'v1.0.0');
   assert.deepEqual(json.touched_requirements, ['REQ-BODY', 'REQ-DOC']);
   // positive: BB-001 (body), BB-002 (changed doc row); negative: BB-003 (unchanged row), BB-004 (before the tag)
@@ -263,7 +269,7 @@ test('run: touched ids come from commit bodies and requirement-doc diffs since t
   assert.equal(json.target, 'desktop');
   assert.ok(fs.existsSync(path.join(out, 'cases.json')) && fs.existsSync(path.join(out, 'cases.md')));
   assert.match(markdown, /BB-001/);
-  const native = run({root: tmp, candidate: 'main', today: '2026-10-20', dir, target: 'ios'});
+  const native = run({root: tmp, baseline: 'v1.0.0', releaseExec: () => { throw new Error('offline'); }, candidate: 'main', today: '2026-10-20', dir, target: 'ios'});
   assert.equal(native.json.target, 'ios');
   assert.deepEqual(native.json.cases.map(c => c.id), ['BB-005']);
   fs.rmSync(tmp, {recursive: true, force: true});
@@ -409,4 +415,30 @@ test('the release PR template puts the rc one-liner first and carries the case c
   assert.ok(tpl.indexOf('{{INSTALL_ONELINER}}') < tpl.indexOf('## 1. Candidate'));
   assert.ok(tpl.indexOf('{{INSTALL_WINDOWS}}') < tpl.indexOf('## 1. Candidate'), 'the Windows rc command sits next to the Mac one');
   for (const k of ['{{BLACKBOX_CASES}}', '{{CHANGED_REQUIREMENTS}}']) assert.ok(tpl.includes(k), k);
+});
+
+// The latest-release API excludes drafts and prereleases; still validate its response.
+test('published baseline uses the release API and rejects unavailable or invalid metadata', () => {
+  const valid = {tag_name: 'v2026.1109.0', draft: false, prerelease: false, published_at: '2026-11-09T00:00:00Z'};
+  assert.equal(lastPublishedRelease((command, args) => {
+    assert.equal(command, 'gh');
+    assert.deepEqual(args, ['api', 'repos/hypeproof/hypeproof-studio/releases/latest']);
+    return JSON.stringify(valid);
+  }), valid.tag_name);
+  for (const bad of [null, {}, {...valid, draft: true}, {...valid, prerelease: true},
+    {...valid, published_at: null}, {...valid, tag_name: 'v2026.1113.0-rc.1'}, {...valid, tag_name: '../main'}]) {
+    assert.throws(() => lastPublishedRelease(() => JSON.stringify(bad)), /not a published stable/);
+  }
+  assert.throws(() => lastPublishedRelease(() => { throw new Error('HTTP 404'); }), /refusing a tag fallback/);
+  assert.throws(() => lastPublishedRelease(() => 'bad json'), /refusing a tag fallback/);
+  assert.throws(() => publishedBaseline(() => { throw new Error('missing or divergent tag'); }, 'candidate', () => JSON.stringify(valid)),
+    /missing locally or is not an ancestor/);
+});
+
+test('scheduled gate receives read authentication for published-release lookup', () => {
+  const workflow = fs.readFileSync(path.resolve(here, '../../../.github/workflows/release-cut.yml'), 'utf8');
+  const gate = workflow.split('\n  gate:')[1].split('\n  alarm:')[0];
+  const decisionStep = gate.slice(gate.indexOf('      - name: Decide'));
+  assert.match(decisionStep, /GH_TOKEN: \$\{\{ github.token \}\}/);
+  assert.match(decisionStep, /run: node scripts\/release\/daily-gate\.mjs/);
 });

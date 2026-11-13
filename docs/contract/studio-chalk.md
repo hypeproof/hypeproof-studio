@@ -128,6 +128,8 @@ Chalk calls these Studio commands. Each carries `contractVersion` and `sessionNo
 - `model` in `runLocalTurn` is optional. Studio records it and reports it back as `requestedModel`. It does not change which model runs.
 - The executor runs with its own model (`executorModel`). This keeps the legacy behavior.
 
+- On the release app, the instructor's own CLI (`hypeproofChat.instructorSubscription`, default off, machine scope) is the runner for the instructor turn when the Studio gate is open (#3597). The contract is unchanged; `connection` keeps its three values. The CLI's login file is never read; only the CLI's status command's exit status is used.
+
 ## 8. Working folder
 
 - Studio runs turns in its own coach folder. The `cwd` argument is informational for Chalk and is not used to choose the folder.
