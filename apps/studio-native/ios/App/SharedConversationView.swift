@@ -145,10 +145,7 @@ struct SharedConversationView: View {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
         }) { historySheet }
         .sheet(isPresented: $showNotebook) {
-            StudioHome().safeAreaInset(edge: .top) {
-                HStack { Text("이 기기에 저장된 기록").font(.caption).foregroundStyle(.secondary); Spacer(); Button("대화로 돌아가기") { showNotebook = false } }
-                    .padding(.horizontal, 20).padding(.vertical, 10).background(.regularMaterial)
-            }
+            StudioHome(onReturnToConversation: { showNotebook = false })
         }
         .sheet(isPresented: $showPrivacy) {
             NavigationStack {
@@ -244,7 +241,7 @@ struct SharedConversationView: View {
                     }
                     if let request = model.cache.request {
                         VStack(alignment: .leading, spacing: 8) {
-                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" })) {
+                            if request.status != "completed" && (!model.isReflection || !model.cache.messages.contains(where: { $0.id == request.id && $0.role == "user" && $0.content == request.text })) {
                                 Text(request.text).textSelection(.enabled)
                             }
                             Text(model.isReflection ? request.reflectionStatusLabel : request.statusLabel).font(.caption).foregroundStyle(.secondary)
@@ -256,6 +253,16 @@ struct SharedConversationView: View {
                                 .buttonStyle(.bordered).font(.callout)
                                 .disabled(!model.canRestoreFailedReflectionDraft).accessibilityIdentifier("restoreFailedReflectionDraft")
                                 if !model.draftText.isEmpty { Text("작성 중인 글을 먼저 확인해 주세요. 보낸 이야기는 그대로 남아 있어요.").font(.caption).foregroundStyle(.secondary) }
+                            }
+                            if model.isReflection && request.outstanding {
+                                Button {
+                                    voice.stop(); voiceRequestID = nil; voiceCompletionWaitStarted = nil
+                                    model.stopReflection()
+                                } label: {
+                                    Label(model.stoppingReflection ? "중지 확인 중" : "답변 중지", systemImage: "stop.fill").frame(minHeight: 44)
+                                }
+                                .buttonStyle(.bordered).disabled(!model.canStopReflection)
+                                .accessibilityIdentifier("sharedResponseStop")
                             }
                             if !model.isReflection && request.status == "pending" { Button("대기 중인 요청 취소") { model.cancelPending() }.disabled(model.busy || model.syncing) }
                         if model.isReflection && request.status == "running" && Date().timeIntervalSince1970 * 1000 - request.updated_at > 120000 {
@@ -449,7 +456,15 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                if NativeJourneyFixture.responseStop {
+                    // Observe a genuinely in-flight transport without changing
+                    // production state or occupying transcript layout.
+                    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                        journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                    }
+                } else {
+                    journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
+                }
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))

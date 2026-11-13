@@ -25,11 +25,20 @@ final class ReflectionModel {
     private final Runnable changed;
     private NativeDeviceSignIn.Cancel cancel;
     private long epoch;
+    private NativeDeviceSignIn.Cancel stopCancel;
+    private ResponseFlight responseFlight;
+    private static final class ResponseFlight {
+        final NativeDeviceSignIn.Credentials credentials;final NativeDeviceSignIn.Cancel operation;final String id,text;
+        boolean suppressed,finished,dispatched;String failure;
+        ResponseFlight(NativeDeviceSignIn.Credentials c,NativeDeviceSignIn.Cancel operation,JSONObject request){this.credentials=c;this.operation=operation;id=request.optString("id");text=request.optString("text");}
+        synchronized boolean claimDispatch(){if(suppressed)return false;dispatched=true;return true;}
+        synchronized boolean suppress(){suppressed=true;return !dispatched;}
+    }
     private volatile boolean closed;
     final Map<String,String> unsavedDrafts=new HashMap<>();
     NativeDeviceSignIn.Credentials credentials;
     ReflectionState state;
-    boolean busy,signing,readOnly,brokenCredentials,guestReadOnly;
+    boolean busy,signing,readOnly,brokenCredentials,guestReadOnly,stoppingResponse;
     String draft="",guestDraft="",error="",notice="";
     ReflectionModel(Store store,NativeDeviceSignIn auth,NativeDeviceSignIn.Transport http,ExecutorService worker,Consumer<Runnable> ui,Runnable changed){this.store=store;this.auth=auth;this.http=http;this.worker=worker;this.ui=ui;this.changed=changed;}
     void restore(){
@@ -46,7 +55,7 @@ final class ReflectionModel {
     }
     String account(){return credentials==null?null:credentials.account();}
     private boolean live(long ticket,String account){return !closed&&epoch==ticket&&Objects.equals(account,account());}
-    private void invalidate(){epoch++;if(cancel!=null)cancel.cancel();cancel=null;busy=false;signing=false;}
+    private void invalidate(){epoch++;if(cancel!=null)cancel.cancel();if(stopCancel!=null)stopCancel.cancel();cancel=null;stopCancel=null;responseFlight=null;busy=false;signing=false;stoppingResponse=false;}
     interface Edit {void apply(ReflectionState next) throws Exception;}
     private boolean save(Edit edit){
         if(state==null||readOnly)return false;
@@ -134,22 +143,103 @@ final class ReflectionModel {
         if(state==null||!state.status().equals("local"))return;
         try{request("/me/reflection/turns",state.submission(),true);}catch(Exception e){error="전송할 기록을 확인하지 못했어요.";changed.run();}
     });}
-    void stopResponse(){authorized(()->{
-        if(state==null||!Set.of("running","pending").contains(state.status()))return;
-        request("/me/reflection/turns/"+state.request.optString("id")+"/cancel",Map.of(),false);
-    });}
+    boolean canStopResponse(){
+        if(closed||stoppingResponse||readOnly||credentials==null||state==null||!state.outstanding())return false;
+        if(busy)return responseFlight!=null&&!responseFlight.suppressed&&credentials.equals(responseFlight.credentials)
+            &&responseFlight.id.equals(state.request.optString("id"));
+        return Set.of("running","pending").contains(state.status());
+    }
+    void stopResponse(){
+        if(!canStopResponse())return;
+        if(busy)beginResponseStop();else authorized(this::beginResponseStop);
+    }
+    private static long stopRemaining(long deadline)throws Exception{
+        long remaining=java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(deadline-System.nanoTime());
+        if(remaining<=0)throw new Exception("stop_timeout");return remaining;
+    }
+    private void beginResponseStop(){
+        if(!canStopResponse())return;
+        final ReflectionState original;try{original=state.copy();}catch(Exception e){return;}
+        final String id=original.request.optString("id"),text=original.request.optString("text");
+        final NativeDeviceSignIn.Credentials current=credentials;
+        final long ticket=epoch;final ResponseFlight flight=responseFlight;
+        if(flight!=null&&flight.suppress()){
+            // Stop wins the queued-work race. Nothing has been dispatched, so
+            // preserve the local outbox rather than inventing server cancellation.
+            flight.operation.cancel();epoch++;cancel=null;responseFlight=null;busy=false;
+            notice="전송을 시작하지 않았어요. 글은 기기에 남아 있어요.";changed.run();return;
+        }
+        final NativeDeviceSignIn.Cancel stopping=new NativeDeviceSignIn.Cancel();stopCancel=stopping;
+        stoppingResponse=true;busy=true;error="";notice="답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.";changed.run();
+        worker.execute(()->{
+            JSONObject confirmed=null;String problem=null;
+            try{
+                long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+                for(int check=0;check<10&&!stopping.isCancelled();check++){
+                    NativeDeviceSignIn.Reply read=http.call("/me/reflection",null,current.bearer(),stopping,stopRemaining(deadline));
+                    if(read.status()<200||read.status()>=300||read.body().containsKey("error"))throw new Exception("stop_read_failed");
+                    JSONObject snapshot=new JSONObject(read.body());ReflectionState checked=original.copy();checked.apply(snapshot);
+                    JSONObject turn=snapshot.getJSONObject("state").optJSONObject("turn");
+                    // /cancel before registration is a no-op. Observe this exact
+                    // submitted text first, without replaying the original POST.
+                    if(turn!=null&&id.equals(turn.optString("id"))&&text.equals(turn.optString("text"))){
+                        if(Set.of("pending","running").contains(turn.optString("status"))){
+                            NativeDeviceSignIn.Reply reply=http.call("/me/reflection/turns/"+id+"/cancel",Map.of(),current.bearer(),stopping,stopRemaining(deadline));
+                            if(reply.status()<200||reply.status()>=300||reply.body().containsKey("error"))throw new Exception("stop_not_acknowledged");
+                            snapshot=new JSONObject(reply.body());checked=original.copy();checked.apply(snapshot);
+                            turn=snapshot.getJSONObject("state").optJSONObject("turn");
+                        }
+                        if(turn==null||!id.equals(turn.optString("id"))||!text.equals(turn.optString("text"))
+                            ||!Set.of("cancelled","completed","failed","unknown").contains(turn.optString("status")))throw new Exception("stop_not_acknowledged");
+                        confirmed=snapshot;break;
+                    }
+                    if(check<9)stopping.pause(Math.min(200,stopRemaining(deadline)));
+                }
+                if(confirmed==null)throw new Exception("stop_not_registered");
+            }catch(Exception e){problem="아직 중지를 확인하지 못했어요. 보낸 글은 남아 있어요. 대화를 다시 확인해 주세요.";}
+            JSONObject result=confirmed;String failure=problem;
+            ui.accept(()->{
+                if(!live(ticket,current.account())||!current.equals(credentials)||stopCancel!=stopping)return;
+                stopCancel=null;stoppingResponse=false;
+                boolean waitForFailure=false;
+                if(result!=null&&state!=null&&state.request!=null&&id.equals(state.request.optString("id"))&&text.equals(state.request.optString("text"))){
+                    if(save(next->next.apply(result))){
+                        String status=state.status();waitForFailure=status.equals("failed")&&flight!=null&&!flight.finished;
+                        error=status.equals("failed")&&flight!=null&&flight.failure!=null?flight.failure:"";
+                        notice=status.equals("cancelled")?"답변 받기를 중지했어요. 이미 실행된 AI 비용은 발생할 수 있어요.":status.equals("completed")?"답변이 이미 도착했어요. 대화에서 확인해 주세요.":status.equals("failed")?"답변을 받지 못했어요. 보낸 이야기는 남아 있어요.":"완료 여부를 확인하지 못했어요. 자동으로 다시 보내지 않아요.";
+                    }
+                }else if(failure!=null)error=failure;
+                // A failed row may precede its typed admission error body. Keep
+                // that bounded original response only until its reason arrives.
+                if(flight!=null&&!waitForFailure)flight.operation.cancel();
+                busy=waitForFailure;changed.run();
+            });
+        });
+    }
     void abandon(){authorized(()->{
         if(state==null||!Set.of("running","pending").contains(state.status()))return;
         request("/me/reflection/turns/"+state.request.optString("id")+"/abandon",Map.of(),false);
     });}
     private void request(String path,Map<String,String> body,boolean sending){
         if(closed||busy||credentials==null)return;
-        NativeDeviceSignIn.Credentials current=credentials;busy=true;long ticket=++epoch;NativeDeviceSignIn.Cancel operation=new NativeDeviceSignIn.Cancel();cancel=operation;error="";changed.run();
+        NativeDeviceSignIn.Credentials current=credentials;busy=true;long ticket=++epoch;NativeDeviceSignIn.Cancel operation=new NativeDeviceSignIn.Cancel();cancel=operation;error="";
+        final ResponseFlight flight=sending?new ResponseFlight(current,operation,state.request):null;
+        responseFlight=flight;changed.run();
         worker.execute(()->{
-            NativeDeviceSignIn.Reply received=null;try{received=http.call(path,body,current.bearer(),operation);}catch(Exception ignored){}
+            NativeDeviceSignIn.Reply received=null;try{if(flight==null||flight.claimDispatch())received=http.call(path,body,current.bearer(),operation);}catch(Exception ignored){}
             NativeDeviceSignIn.Reply result=received;
             ui.accept(()->{
-                if(!live(ticket,current.account()))return;busy=false;
+                if(!live(ticket,current.account())||!current.equals(credentials))return;
+                if(flight!=null){
+                    flight.finished=true;
+                    if(flight.suppressed){
+                        if(result!=null&&result.status()==401){logout();error="같은 계정으로 다시 연결해 주세요. 저장한 글은 남아 있어요.";changed.run();return;}
+                        if(result!=null&&result.status()>=400&&result.body().containsKey("error"))flight.failure=responseError(result);
+                        if(state!=null&&state.status().equals("failed")&&flight.id.equals(state.request.optString("id"))&&flight.text.equals(state.request.optString("text"))&&flight.failure!=null)error=flight.failure;
+                        if(!stoppingResponse){busy=false;responseFlight=null;}changed.run();return;
+                    }
+                }
+                responseFlight=null;busy=false;
                 if(result==null){error="연결을 확인하지 못했어요. 전송한 글은 남아 있어요. 대화를 확인한 뒤 같은 요청으로 다시 시도할 수 있어요.";changed.run();return;}
                 if(result.status()==401){logout();error="같은 계정으로 다시 연결해 주세요. 저장한 글은 남아 있어요.";changed.run();return;}
                 if(result.status()<200||result.status()>=300||result.body().containsKey("error")){
@@ -158,9 +248,7 @@ final class ReflectionModel {
                         // The server rejected this ID before dispatch. Preserve its words as a draft.
                         save(next->{if(next.status().equals("local")){String submitted=next.request.getString("text");if(!next.draft.isEmpty()&&!next.draft.equals(submitted))throw new Exception("preserve_both");next.draft=submitted;next.request=null;}});
                     }
-                    if(code.equals("reflection_monthly_limit"))error="이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
-                    else if(code.equals("reflection_admission_unavailable"))error="AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.";
-                    else error=result.status()==403?"이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.":result.status()==429?"이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요.":"대화 상태가 바뀌었거나 응답을 받지 못했어요. 먼저 대화를 확인해 주세요.";
+                    error=responseError(result);
                     changed.run();return;
                 }
                 try{JSONObject snapshot=new JSONObject(result.body());ReflectionState candidate=state.copy();candidate.apply(snapshot);if(save(next->next.apply(snapshot)))notice="같은 계정의 대화를 확인했어요.";}
@@ -168,6 +256,12 @@ final class ReflectionModel {
                 changed.run();
             });
         });
+    }
+    private static String responseError(NativeDeviceSignIn.Reply result){
+        String code=String.valueOf(result.body().get("error"));
+        if(code.equals("reflection_monthly_limit"))return "이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+        if(code.equals("reflection_admission_unavailable"))return "AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.";
+        return result.status()==403?"이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.":result.status()==429?"이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요.":"대화 상태가 바뀌었거나 응답을 받지 못했어요. 먼저 대화를 확인해 주세요.";
     }
     void close(){closed=true;invalidate();}
 }
