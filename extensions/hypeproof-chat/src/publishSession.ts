@@ -23,6 +23,7 @@ import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observ
 import { buildPublishSet, publishSetRefusalText, type PublishSet } from "./publishSet.ts";
 import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./galleryPublish.ts";
 import { PUBLISH_NOTICE_NOT_SAVED, PUBLISH_NOTICE_REQUIRED, PUBLISH_NOTICE_VERSION, type PublishNoticePort } from "./publishNotice.ts";
+import { versionStats, type StatSession, type VersionStats } from "./versionStats.ts";
 import { SHARING_UNKNOWN, type PublishExperimentView, type PublishForm, type PublishLinkView, type PublishView } from "./publishView.ts";
 
 export interface PublishPorts {
@@ -73,6 +74,8 @@ export function publishTiming(startedAt: number, endedAt: number, phases: Record
 }
 
 type Client = { base: string; token: string; fetchImpl?: typeof fetch };
+/** CGP-ART-R-013: how long an experiment's evidence read is reused, and how many new reads one panel view may make. */
+export const STATS_TTL_MS = 60_000, STATS_MAX_READS = 6;
 
 type ProjectState = {
   project: { id: string; title: string; members?: string[] };
@@ -292,9 +295,11 @@ export class PublishSession {
         sessions: counts ? (counts[e.id] ?? { channels: {}, unlabelled: 0, unknown: 0 }) : null,
       });
     }
+    const stats = await this.statsFor(client, [...new Set([version.id, ...experiments.map((e) => e.product_version_id)])].filter((v): v is string => !!v), experiments);
     return {
       ...empty,
       available: true,
+      stats,
       project: state ? { id: state.project.id, title: state.project.title } : null,
       version,
       verification,
@@ -302,6 +307,42 @@ export class PublishSession {
       experiments: experiments.reverse(),
       notice,
     };
+  }
+
+  /** CGP-ART-R-013: experiment id → its sessions as last read, for one token, at most STATS_TTL_MS old. */
+  private readonly sessionsRead = new Map<string, { at: number; token: string; sessions: StatSession[] }>();
+  /**
+   * The counts of each shown version, from the experiments' evidence reads (CR-23 sessions, recomputed by the Service on
+   * every read). At most STATS_MAX_READS new reads per view and a cache of STATS_TTL_MS, so the panel's own refresh does
+   * not turn into one evidence read per experiment every time. A version whose reads are not all in hand says unknown.
+   */
+  private async statsFor(client: Client, versions: string[], experiments: PublishExperimentView[]): Promise<Record<string, VersionStats>> {
+    const now = this.now(), out: Record<string, VersionStats> = {};
+    let reads = 0;
+    const sessionsOf = async (id: string): Promise<StatSession[] | null> => {
+      const hit = this.sessionsRead.get(id);
+      if (hit && hit.token === client.token && now - hit.at < STATS_TTL_MS) return hit.sessions;
+      if (reads >= STATS_MAX_READS) return null;
+      reads++;
+      const r = await curriculumRequest<{ evidence?: { sessions?: unknown } }>(client, "GET", `/experiments/${encodeURIComponent(id)}/evidence`);
+      const raw = r.ok && Array.isArray(r.body.evidence?.sessions) ? r.body.evidence!.sessions as Array<Record<string, unknown>> : null;
+      // Only what the counts and the source list need: no pseudonym or any other participant field is kept (CR-65).
+      const sessions = raw ? raw.filter((x) => x && typeof x.session_id === "string" && typeof x.at === "number").map((x) => ({
+        session_id: x.session_id as string, at: x.at as number, product_version: typeof x.product_version === "string" ? x.product_version : null,
+        tasks: x.tasks && typeof x.tasks === "object" ? x.tasks as StatSession["tasks"] : {}, pages: Number(x.pages) || 0, clicks: Number(x.clicks) || 0,
+      })) : null;
+      // A failed read is not kept: the next view asks again (and says unknown until then).
+      if (sessions) this.sessionsRead.set(id, { at: now, token: client.token, sessions });
+      return sessions;
+    };
+    for (const v of versions) {
+      const mine = experiments.filter((e) => e.product_version_id === v);
+      if (!mine.length) continue;
+      const withSessions = [];
+      for (const e of mine) withSessions.push({ id: e.id, product_version_id: e.product_version_id, sessions: await sessionsOf(e.id) });
+      out[v] = versionStats(v, withSessions, now);
+    }
+    return out;
   }
 
   private linkView(l: ProjectState["links"][number]): PublishLinkView {

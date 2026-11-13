@@ -5736,6 +5736,17 @@ separate.
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
 
+## Test version 7-day counts (CGP-ART-R-013)
+
+CGP-ART-R-013 / CGP-ART-D-013 (REQ-ART-13, CGP-ART-14) add two counts under each test version in the publish panel.
+They show what participants did with the learner's product: a usage observation, never a demand or learning-outcome
+claim (SX-58). The counts may expose ADAPT (does the learner change the next version after seeing them). Choices are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-013).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-PUBLISH-STATS | Each version row of the publish panel (beside REQ-STUDIO-PUBLISH-SHARING) shows two tiles, `열어 본 횟수 · 지난 7일` and `끝까지 한 횟수 · 지난 7일`, from the Service's participant sessions only (CR-23). The source is `GET /v1/curriculum/experiments/:id/evidence` for that version's experiments, recomputed from stored events on every read. A session counts for the version it records, else its experiment's pinned version, and is counted once. "Finished" means at least one completed task. The windows are the last 7 days and the 7 before, by the session's open time. The change is `▲ 지난주보다 +n`, `▼ 지난주보다 -n` or `지난주와 같아요`, with tabular figures and never colour alone. Each tile is a button that expands exactly the sessions it counted (CR-27): `참가 세션 {6} · {time} · 화면 n · 누름 n · 끝까지 함`, and `실험 기록에서 보기` opens that experiment's evidence panel. No pseudonym or other participant identity is kept or shown (CR-65, CR-72). With no session in the 14 days, `아직 연 사람이 없어요` replaces the tiles. A version whose evidence could not be read says `횟수를 확인하지 못했어요`, never 0. While the sharing state is stale, no tiles are drawn. There are no charts. The host makes at most 6 new evidence reads per panel view, keeps a successful read for 60 s and never caches a failure. | `extensions/hypeproof-chat/test/version-stats.test.mjs`, `extensions/hypeproof-chat/test/version-stats-tiles.test.tsx` |
+
 ## Instructor comments on an approved artifact version (CGP-ART-R-005)
 
 CGP-ART-R-005 / CGP-ART-D-005 (REQ-ART-05) add instructor comments to the learner inbox. A comment is anchored to
