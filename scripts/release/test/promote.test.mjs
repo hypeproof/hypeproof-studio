@@ -1,11 +1,14 @@
 // Controls for release promotion (#3172). Pure decisions plus the workflow wiring; no GitHub calls.
 //   node --test scripts/release/test/promote.test.mjs
 import assert from 'node:assert/strict';
+import {fixture as machineFixture} from './machine-publication.controls.mjs';
 import fs from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan} from '../promote.mjs';
+import {acceptanceSource, branchVersion, promotionDecision, recordedRcTag, uploadPlan, rcTagsOf} from '../promote.mjs';
 import {buildTagMessage, expectedAppVersion, resolveBuildContract} from '../build-contract.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -35,6 +38,35 @@ const good = () => ({
   rcRelease: {isDraft: false, assets: rcAssets}, mergeState: 'CLEAN',
 });
 const with_ = (patch) => { const f = good(); for (const [k, v] of Object.entries(patch)) f[k] = typeof v === 'function' ? v(f[k]) : v; return f; };
+
+test('RC reads use current remote refs and peel annotated tags without a cached checkout list', () => {
+  let phase = 1;
+  const read = (...args) => {
+    assert.deepEqual(args, ['ls-remote','--tags','origin',`refs/tags/${V}-rc.*`]);
+    return `${OTHER}\trefs/tags/${V}-rc.1\n${CAND}\trefs/tags/${V}-rc.1^{}\n` +
+      (phase === 2 ? `${HEAD}\trefs/tags/${V}-rc.2\n` : '');
+  };
+  assert.deepEqual(rcTagsOf(V, read), [{name: `${V}-rc.1`, sha: CAND}]);
+  phase = 2;
+  assert.equal(rcTagsOf(V, read).length, 2);
+});
+
+test('verified complete machine PASS promotes without human review; invalid machine evidence never falls back to approval', t => {
+  const f = machineFixture(t), c = f.contract, authority = f.verify();
+  const facts = good();
+  facts.pr = {...facts.pr, number: c.releasePr, head: c.releaseHead, headRef: `release/${c.version}`, reviews: [], comments: []};
+  facts.commit = {...facts.commit, sha: c.releaseHead, parents: [c.candidate], message: `release: record ${c.rcTag}`, files: [`releases/${c.version}.md`]};
+  facts.rcTags = [{name: c.rcTag, sha: c.candidate}];
+  facts.rcRelease.assets = [...c.artifacts.map(a => ({name: a.name, digest: 'sha256:' + a.sha256})), {name: 'unified-acceptance.json'}];
+  facts.writers = new Set();
+  assert.equal(promotionDecision(facts).allow, false);
+  assert.equal(promotionDecision({...facts, machineAuthority: authority}).allow, true);
+  facts.pr.reviews = [{user: 'minhan', state: 'APPROVED', commit: c.releaseHead}];
+  facts.pr.comments = [OVERRIDE]; facts.writers.add('minhan');
+  for (const change of [{allow: false}, {candidate: OTHER}, {releaseHead: OTHER}, {tag: 'v2026.1109.9'}, {status: 'READY'}]) {
+    assert.equal(promotionDecision({...facts, machineAuthority: {...authority, ...change}}).allow, false);
+  }
+});
 
 test('branch and record parsing', () => {
   assert.equal(branchVersion(`release/${V}`), V);
@@ -174,7 +206,8 @@ test('release-promote runs main\'s code on an approval and never on another revi
   assert.deepEqual(doc[true].pull_request_review.types, ['submitted']);
   assert.match(job.if, /github\.event\.review\.state == 'approved'/);
   assert.match(job.if, /contains\(github\.event\.pull_request\.labels\.\*\.name, 'release'\)/);
-  assert.equal(job.steps[0].with.ref, '${{ github.event.repository.default_branch }}');
+  assert.equal(job.steps[0].with.ref, "${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.repository.default_branch }}",
+    'dispatch source is immutable; approvals keep the default-branch policy');
   for (const step of job.steps) assert.doesNotMatch(step.run ?? '', /\$\{\{/, 'values enter the shell through env');
   const promote = job.steps.find(s => s.name === 'Promote the approved rc');
   assert.equal(promote.env.GH_TOKEN, '${{ github.token }}', 'the workflow token: its tag push starts no build');
@@ -199,4 +232,66 @@ test('#3513: studio-pr-ci runs every release control, so a change that breaks on
   assert.deepEqual(missing, [], 'add these to a `node --test` line in .github/workflows/pr-ci.yml');
   // release-promote's own Controls step runs these two before it touches a tag.
   assert.match(fs.readFileSync(`${root}.github/workflows/release-promote.yml`, 'utf8'), /node --test scripts\/release\/test\/promote\.test\.mjs scripts\/release\/test\/publish-gate\.test\.mjs/);
+});
+
+test('actual final publication block refuses failed machine/freeze gates and observes publication before dispatch', {skip: process.platform === 'win32'}, t => {
+  const doc = workflow('verify-unified-release.yml'), steps = doc.jobs.publish.steps;
+  assert.equal(steps[0].with.ref, '${{ github.event.repository.default_branch }}');
+  const final = steps.find(s => s.name === 'Publish and dispatch the public mirror');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'machine-publish-boundary-'));
+  t.after(() => fs.rmSync(temp, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(temp, 'dist'));
+  fs.writeFileSync(path.join(temp, 'dist/unified-acceptance.json'), '{}');
+  const stub = `#!/usr/bin/python3
+import json, os, pathlib, sys
+name=pathlib.Path(sys.argv[0]).name; args=sys.argv[1:]
+def record(value):
+    with open(os.environ['BOUNDARY_LOG'], 'a') as f: f.write(value+'\\n')
+if name=='gh':
+    if args[:2]==['release','view']:
+        print('true' if 'isDraft' in args else '{}')
+    elif args[:2]==['release','upload']: record('UPLOAD')
+    elif args[:2]==['release','edit'] and '--draft=false' in args: record('PUBLISH')
+    elif args and args[0]=='api':
+        record('OBSERVE'); print(json.dumps({'draft':os.environ.get('FAIL_OBSERVATION')=='1','prerelease':False,'tag_name':os.environ['TAG']}))
+    elif args[:2]==['workflow','run']: record('DISPATCH')
+    else: raise SystemExit('unexpected gh operation')
+elif name=='node':
+    if args[0]=='--input-type=module': os.execv(os.environ['REAL_NODE'], [os.environ['REAL_NODE'], *args])
+    elif args[0].endswith('/platforms.mjs'): print('["darwin-arm64"]')
+    elif args[0].endswith('/install-kit.mjs'): sys.stdin.read()
+    elif args[0].endswith('/publish-gate.mjs'):
+        record('MACHINE'); raise SystemExit(int(os.environ.get('FAIL_MACHINE','0')))
+    else: raise SystemExit('unexpected node operation')
+elif name=='bash' and args[0].endswith('/release-freeze-gate.sh'):
+    assert os.environ.get('HPS_FREEZE_OVERRIDE')=='false'
+    record('FREEZE'); raise SystemExit(int(os.environ.get('FAIL_FREEZE','0')))
+else: raise SystemExit('unexpected executable')
+`;
+  for (const name of ['gh','node','bash']) fs.writeFileSync(path.join(temp, name), stub, {mode: 0o755});
+  for (const [label, extra] of Object.entries({pass: {}, machine: {FAIL_MACHINE: '1'}, freeze: {FAIL_FREEZE: '1'}, uncertain: {FAIL_OBSERVATION: '1'}})) {
+    const log = path.join(temp, label + '.log');
+    const run = spawnSync('/bin/bash', ['-c', final.run], {cwd: temp, encoding: 'utf8', env: {...process.env,
+      PATH: temp + ':' + process.env.PATH, BOUNDARY_LOG: log, REAL_NODE: process.execPath,
+      TAG: V, MACHINE_PR: '33', SOURCE_SHA: CAND, GITHUB_REPOSITORY: 'hypeproof/hypeproof-studio', RUNNER_TEMP: temp,
+      FAIL_MACHINE: '0', FAIL_FREEZE: '0', FAIL_OBSERVATION: '0', ...extra}});
+    const events = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [];
+    if (label === 'pass') {
+      assert.equal(run.status, 0, run.stderr);
+      assert.deepEqual(events, ['UPLOAD','MACHINE','FREEZE','PUBLISH','OBSERVE','DISPATCH','DISPATCH']);
+    } else {
+      assert.notEqual(run.status, 0, label);
+      assert.equal(events.includes('DISPATCH'), false, label);
+      assert.equal(events.includes('PUBLISH'), label === 'uncertain', label);
+    }
+  }
+});
+
+test('machine evidence capabilities are read-only and scoped to one fixed private repository', () => {
+  for (const name of ['release-promote.yml','verify-unified-release.yml']) {
+    const doc = workflow(name);
+    const readers = Object.values(doc.jobs).flatMap(job => job.steps ?? []).filter(s => s.with?.repositories === 'hypeproof-studio-releases');
+    assert.ok(readers.length > 0);
+    for (const step of readers) assert.equal(step.with['permission-contents'], 'read');
+  }
 });

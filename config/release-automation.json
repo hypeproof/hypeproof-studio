@@ -1,0 +1,25 @@
+{
+  "schema": "hps-release-automation/1",
+  "repository": "hypeproof/hypeproof-studio",
+  "revision": "machine-rollout-1",
+  "mode": "shadow",
+  "evidenceRepository": "hypeproof/hypeproof-studio-releases",
+  "maxAgeSeconds": 3600,
+  "harnessRevision": null,
+  "harnessTestRevision": null,
+  "attestors": [],
+  "casePlatforms": {
+    "BB-001": ["darwin-arm64"],
+    "BB-002": ["darwin-arm64"],
+    "BB-003": ["darwin-arm64"]
+  },
+  "engine": {
+    "reporters": [],
+    "requiredWork": [{"id": "acceptance", "resourceId": "included-release-runner"}, {"id": "desktop", "resourceId": "included-desktop-runner"}],
+    "fixResourceId": "included-development-runner",
+    "quotaMaxAgeSeconds": 600,
+    "maxAttemptsPerStage": 2,
+    "maxFixAttempts": 1,
+    "managerRoster": {"revision": "machine-no-per-candidate-approval", "terms": []}
+  }
+}

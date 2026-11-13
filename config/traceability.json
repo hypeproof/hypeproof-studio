@@ -6095,6 +6095,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Daily release coordinator (#1757)"
+        },
+        {
+          "path": "docs/dev/release-machine.md",
+          "section": "## Requirements"
         }
       ]
     },
@@ -6112,6 +6116,13 @@
         },
         {
           "path": "scripts/release/engine/policy.example.json"
+        },
+        {
+          "path": "docs/dev/release-machine.md",
+          "section": "## Design"
+        },
+        {
+          "path": "config/release-automation.json"
         }
       ]
     },
@@ -6142,6 +6153,24 @@
         },
         {
           "path": "scripts/release/engine/provenance.json"
+        },
+        {
+          "path": "scripts/release/machine-publication.mjs"
+        },
+        {
+          "path": "scripts/release/machine-evidence.mjs"
+        },
+        {
+          "path": "scripts/release/publish-gate.mjs"
+        },
+        {
+          "path": "config/release-automation.json"
+        },
+        {
+          "path": "scripts/release/native-producer.mjs"
+        },
+        {
+          "path": "scripts/release/publisher-anchor.mjs"
         }
       ]
     },
@@ -6165,6 +6194,19 @@
         },
         {
           "path": "scripts/release/test/machine-authority.controls.mjs"
+        },
+        {
+          "path": "scripts/release/test/machine-publication.controls.mjs"
+        },
+        {
+          "path": "docs/dev/release-machine.md",
+          "section": "## Verification and rollout"
+        },
+        {
+          "path": "scripts/release/test/native-producer.controls.mjs"
+        },
+        {
+          "path": "scripts/release/test/live-anchor.controls.mjs"
         }
       ]
     },
