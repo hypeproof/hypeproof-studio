@@ -32,8 +32,16 @@ console.log("=== 허용 목록 ===");
 await t("A1 claude 허용 목록은 sonnet·opus 두 개다 (fable·haiku 없음)", () => {
   assert.deepEqual([...INSTRUCTOR_MODEL_ALLOWLIST.claude], ["sonnet", "opus"]);
 });
-await t("A2 codex 허용 목록은 default 한 개다", () => {
-  assert.deepEqual([...INSTRUCTOR_MODEL_ALLOWLIST.codex], ["default"]);
+await t("A2 codex 허용 목록은 비어 있다 (codex 는 설정된 모델 하나만 쓴다)", () => {
+  assert.deepEqual([...INSTRUCTOR_MODEL_ALLOWLIST.codex], []);
+});
+await t("A5 codex 설정 모델 gpt-x 면 선택지는 gpt-x 하나다 (default 같은 가짜 ID 를 넣지 않는다)", () => {
+  const m = instructorModelChoices({ provider: "codex", model: "gpt-x" });
+  assert.equal(m.default, "gpt-x");
+  assert.deepEqual(ids(m), ["gpt-x"]);
+});
+await t("N6 codex 설정 모델 gpt-x 에서 요청 default 는 gpt-x 로 실행된다 (default 로 바꾸지 않는다)", () => {
+  assert.equal(executorModelFor({ provider: "codex", model: "gpt-x" }, "default"), "gpt-x");
 });
 await t("A3 목록은 기본 모델을 포함하고, 기본값을 기본으로 보낸다", () => {
   const m = instructorModelChoices(CLAUDE);

@@ -5,10 +5,14 @@
 
 export type InstructorProvider = "claude" | "codex";
 
-/** Models an instructor may pick. claude: CLI --model aliases. codex: the CLI default only (-m takes free text, so no other value). */
+/**
+ * Extra models an instructor may pick, besides the configured model (which is always included).
+ * claude: CLI --model aliases. codex: none. The codex model is the configured one only: "default" is not a
+ * model id, and codex model/list refuses an unknown id (codex_model_unavailable).
+ */
 export const INSTRUCTOR_MODEL_ALLOWLIST: Readonly<Record<InstructorProvider, readonly string[]>> = {
   claude: ["sonnet", "opus"],
-  codex: ["default"],
+  codex: [],
 };
 
 export interface InstructorModelChoice {

@@ -85,7 +85,7 @@ Studio sends `done` exactly once per turn.
 - Studio's source for the value is the legacy computation (`chatPanelProvider.ts`, `instructorConnection`), which depends on the local executor. The value is fixed for the life of a process. A change (for example, a restart with other settings) starts a new session, so `activateInstructor` carries the new value. No separate notification is needed.
 
 - `models` (optional in `activateInstructor`, added 2026-11-07, #3564): `{ default: string, choices: [{ alias, id, label }] }`.
-  - Studio sends it only when a local runner exists. Its choices are the allowlist for the local provider (`instructorModelChoices`, chalk#25): claude `sonnet` and `opus`, codex `default`. The default is always included. The legacy panel is not affected; it keeps `localModelSelection` (one choice).
+  - Studio sends it only when a local runner exists. Its choices are the allowlist for the local provider (`instructorModelChoices`, chalk#25): claude `sonnet` and `opus`; codex has no extra choice (only the configured model). The configured model is always included. The legacy panel is not affected; it keeps `localModelSelection` (one choice).
   - The model that runs a turn is the `model?` Chalk sends in `runLocalTurn`, when it is one of these choices. Otherwise the turn runs on the default (see §7).
   - Absent means no choices are known. Chalk must then show no model choice (the band shows "—" as before).
   - Chalk reads the named field and ignores fields it does not know. A Chalk without this change still activates.
