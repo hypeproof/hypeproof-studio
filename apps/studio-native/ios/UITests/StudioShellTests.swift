@@ -165,6 +165,25 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertLessThanOrEqual(element.frame.height, 2)
         return element
     }
+    @MainActor private func readinessFailure(_ name: String, app: XCUIApplication, queries: [(String, XCUIElement)]) {
+        // Capture the failed observation without another action, wait or assertion.
+        // An unresolved query alone omits the hierarchy needed to distinguish a
+        // stale lookup from a visible element outside the transcript viewport.
+        var observations = ["window=\(app.frame)"]
+        for (label, element) in queries {
+            let exists = element.exists
+            observations.append("\(label): exists=\(exists); query=\(element.debugDescription)")
+            if exists {
+                observations.append("\(label): frame=\(element.frame); enabled=\(element.isEnabled); hittable=\(element.isHittable); label=\(element.label); value=\(String(describing: element.value)); placeholder=\(String(describing: element.placeholderValue))")
+            }
+        }
+        let traceElement = app.descendants(matching: .any).matching(identifier: "nativeJourneyTrace").firstMatch
+        let rawTrace = traceElement.exists ? (traceElement.value as? String ?? "trace value absent") : "trace absent"
+        let details = XCTAttachment(string: observations.joined(separator: "\n")); details.name = name + "-queries-and-frames"; details.lifetime = .keepAlways; add(details)
+        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        let trace = XCTAttachment(string: rawTrace); trace.name = name + "-synthetic-trace"; trace.lifetime = .keepAlways; add(trace)
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
     @MainActor private func trace(_ app: XCUIApplication) throws -> [String: Any] {
         let element = diagnostic("nativeJourneyTrace", in: app)
         let value = try XCTUnwrap(element.value as? String)
@@ -474,7 +493,21 @@ final class StudioJourneyTests: XCTestCase {
     }
     @MainActor private func signInToHistory(_ app: XCUIApplication, account: Int = 1) {
         let login = app.buttons["linkDesktop"]; enabled(login); login.tap()
-        waitForTranscript(historyReply(40, account: account, in: app), in: app)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard !app.buttons["linkDesktop"].exists, !app.buttons["accountCancel"].exists else { return false }
+            // Resolve the exact account/reply after adoption on every evaluation,
+            // rather than retaining a query constructed during the login transition.
+            return self.transcriptShows(self.historyReply(40, account: account, in: app), in: app)
+        }, object: app)
+        let result = XCTWaiter.wait(for: [ready], timeout: 10)
+        if result != .completed {
+            readinessFailure("history-account-\(account)-answer-40-not-ready", app: app, queries: [
+                ("linkDesktop", app.buttons["linkDesktop"]), ("accountCancel", app.buttons["accountCancel"]),
+                ("exact account \(account) answer 40", historyReply(40, account: account, in: app)),
+                ("transcript viewport", app.scrollViews["conversationTimeline"])
+            ])
+        }
+        XCTAssertEqual(result, .completed, "Completed account adoption must show the exact saved reply inside the real transcript viewport.")
         XCTAssertFalse(app.buttons["accountCancel"].exists)
     }
     @MainActor private func readOlderHistory(_ app: XCUIApplication) {
@@ -699,8 +732,22 @@ final class StudioJourneyTests: XCTestCase {
         // prerequisite rather than treating a disabled restore as a timeout.
         draft.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         draft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Existing account draft".count))
-        let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '' OR value == %@", draft.placeholderValue ?? ""), object: draft)
-        XCTAssertEqual(XCTWaiter.wait(for: [empty], timeout: 5), .completed, "The account draft must actually be cleared before restoring the separate guest draft.")
+        let empty = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let textField = app.textFields["sharedInput"]
+            let current = textField.exists ? textField : app.textViews["sharedInput"]
+            guard current.exists, let value = current.value as? String else { return false }
+            if value.isEmpty { return true }
+            guard let placeholder = current.placeholderValue, !placeholder.isEmpty else { return false }
+            return value == placeholder
+        }, object: app)
+        let cleared = XCTWaiter.wait(for: [empty], timeout: 5)
+        if cleared != .completed {
+            readinessFailure("collision-composer-not-empty", app: app, queries: [
+                ("sharedInput textField", app.textFields["sharedInput"]),
+                ("sharedInput textView", app.textViews["sharedInput"]), ("restoreGuestDraft", app.buttons["restoreGuestDraft"])
+            ])
+        }
+        XCTAssertEqual(cleared, .completed, "The account draft must actually be cleared before restoring the separate guest draft.")
         enabled(restore); restore.tap()
         XCTAssertEqual(field(app).value as? String, "My thought before login")
         XCTAssertFalse(restore.exists)
