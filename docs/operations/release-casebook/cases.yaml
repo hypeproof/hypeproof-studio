@@ -663,16 +663,24 @@ cases:
       - 나의 질문 화면에서 말로 적기 를 시작해 글이 생긴 뒤 홈 화면으로 나간다. 돌아온 뒤 앱을 종료·다시 열어 초안을 확인한다
       - 별도 테스트 글을 준비하고 네트워크를 끊어 대화 보내기 를 누른다. 앱을 종료·다시 열고 네트워크를 복구한다
       - 실패한 글과 오류가 남아 있는지 확인하고 다시 보내기 를 한 번 누른다
+      - 별도 합성 실패 환경에서 서버에 글과 실패 상태가 기록된 요청을 준비한다. 앱을 다시 열고 입력란에 가져오기 를 누른 뒤 다시 종료·열어 가져온 글을 확인한다
+      - 가져오기와 앱 재시작만으로 요청이 생기지 않는지 확인한 뒤 보내기 를 한 번 누른다. 별도 실행에서는 실패 후 다른 초안을 쓰고 가져오기 가 비활성인지 확인한다
+      - 긴 대화를 저장한 계정으로 앱을 다시 연다. 같은 메시지 수의 다른 대화를 먼저 열어 위쪽 기록을 읽다가 원래 대화로 돌아온다. 별도 합성 계정으로 바꾼다
+      - 최근 80개가 표시된 대화의 끝에서 다른 기기의 새 답변을 확인한다. 위쪽 기록을 읽는 동안 다시 새 답변을 받되 읽던 위치가 유지되는지 확인한 뒤 최신 메시지 를 누른다. 작성·전송으로 다음 질문을 이어간다
     expect:
       - 배경 전환으로 녹음이 멈추며, 재시작 후 보내지 않은 초안이 남는다. 복귀만으로 자동 녹음·전송하지 않는다
       - 실패한 글과 다시 보내기 가 남는다. 이력 조회의 성공이나 앱 재시작만으로 실패가 사라지지 않는다. 명시적 재시도 뒤 원래 글에 답변이 한 번만 생긴다 (App/SharedConversationModel.swift)
+      - 기록된 실패는 같은 요청을 다시 실행하지 않는다. 명시적 가져오기는 원래 글·실패 이력을 보존하고 빈 입력란에만 글을 복사한다. 명시적 보내기 에서만 새 요청 ID 로 한 번 실행한다
+      - 다른 초안이 있으면 공백만 있어도 덮어쓰지 않는다. 완료 여부를 모르는 요청이나 진행 중 요청에는 새 요청 복구 동작을 제공하지 않는다
+      - 캐시 복원·계정 전환·같은 개수의 대화 전환에서는 해당 대화의 최신 답변이 보인다. 최근 80개 창의 끝 ID 가 바뀌어도 맨 아래를 보던 사람은 새 답변을 따라간다
+      - 이전 글을 읽는 동안 새 답변 때문에 화면을 강제로 옮기지 않는다. 최신 메시지 는 44pt 이상으로 누를 수 있고 입력란은 키보드 위에서 계속 사용할 수 있다. 기록 열기·동기화만으로 전송하지 않는다
     origin:
       kind: escaped-bug
       date: "2026-11-12"
-      ref: "#3771, #3784"
+      ref: "#3771, #3784, #3959, #3962"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch 와 testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch. 합성 실패·앱 재실행으로 초안과 같은 요청 ID 의 재시도를 검사한다. 실제 네트워크 단절·마이크 중단과 서버 중복 방지는 그 실행 환경의 별도 관측으로 기록한다.
+    notes: StudioJourneyTests.testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch 와 testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch. testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID 와 testRecordedFailureCannotReplaceExistingDraft 는 기록된 실패를 빈 초안으로 가져온 뒤 명시적으로 새 ID 를 보내는 흐름과 초안 충돌을 검사한다. 합성 전송 실패·앱 재실행의 같은 ID 재시도와 서버에 기록된 실패의 새 ID 재전송을 구분한다. testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch 와 testEightyMessageWindowFollowsNewTailWithoutInterruptingReading 은 실제 App 의 긴 기록·화면 위치·명시적 후속 질문을 합성 HTTP 로 검사한다. 실제 네트워크 단절·마이크 중단과 서버 중복 방지는 그 실행 환경의 별도 관측으로 기록한다.
 
   - id: BB-037
     journey: CUJ-8
@@ -683,9 +691,11 @@ cases:
     steps:
       - 정상 로그인할 수 있지만 AI 이용 권한이 없는 별도 테스트 계정으로 나의 질문 화면에서 글을 보낸다. 운영 계정의 권한을 테스트 목적으로 바꾸지 않는다
       - 오류를 확인한 뒤 대화 설정 → 새로 고침 을 누르고 앱을 종료·다시 연다
+      - 서버에 기록된 실패의 입력란에 가져오기 를 명시적으로 누르고 다시 앱을 열어 같은 초안을 확인한다
     expect:
       - 이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요. 가 보인다 (Sources/StudioCore/ConversationSync.swift)
       - 이력 조회 성공과 앱 재시작 뒤에도 권한 오류와 원래 글이 남는다. 로그인을 무료 AI 승인으로 바꾸거나 임의의 다른 제공자로 우회하지 않는다
+      - 실패한 사용자 글과 요청 ID 는 계정 기록에 남는다. 다시 보내기 로 같은 실패 ID 를 실행하지 않는다. 초안 가져오기·재시작만으로 새 AI 요청이나 브라우저 로그인을 만들지 않는다
     origin:
       kind: escaped-bug
       date: "2026-11-12"

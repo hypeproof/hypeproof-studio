@@ -362,6 +362,24 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 검증: [좌석별 Studio 버전](../testing/classroom-admin.md#adm-02-seat-version-run).
 
+<a id="adm-14-deletion-request"></a>
+
+### 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)
+
+출처: CGP-SHELL-R-027(REQ-SHELL-27) “학습자나 보호자가 계정과 데이터 삭제를 요청할 수 있고, 요청 상태가 보인다. 설정 창이나 Lab 페이지에서 한 요청이 Service 기록을 만든다. 상태는 접수 / 처리 중 / 완료 / 보류(사유). 공유 기록은 ADM-14를 따른다. 이 컴퓨터의 파일은 따로 확인하지 않고 지우지 않는다”, 디자인 CGP-SHELL-D-026(DES-SHELL-26) “상태 칩이 있는 한 줄. 상태마다 아이콘 + 글, 날짜, ‘보류’는 사유를 줄 안에 보인다”. DEC-23(보호자·삭제 결정)이 정해지지 않았으므로 **기본 꺼짐**이다(decisions.md DEC-23 interim for CGP-SHELL-R-027, Confirmed by Jay: no).
+
+| 항목 | 계약 |
+|---|---|
+| 켜기 | Service `HPS_DATA_DELETION_REQUESTS`가 정확히 `enabled`일 때만. 꺼져 있으면 경로가 모두 404이고 `/v1/profile`은 바이트 그대로라 Studio에 줄이 없다. 켜지면 `/v1/profile`이 학습자 좌석(수업·체험·무료·이용권·계정; 강사 토큰 아님)에 `data_deletion: {available: true}`를 준다 |
+| 요청 | Studio 대화 설정 창(개인 작업 공간과 수업 창 둘 다)의 `계정과 데이터 삭제 요청`. `삭제 요청하기` → 같은 자리의 확인 단계(`정말 삭제를 요청할까요?`, `취소`에 먼저 초점, `요청 보내기`) → 호스트가 좌석 자신의 자격으로 `POST /v1/data-deletion/requests` `{"scope":"account_and_data"}`. 열린 요청(접수·처리 중·보류)이 있으면 다시 눌러도 같은 요청이 돌아오고 버튼이 없다. `완료` 뒤에는 `다시 요청하기` |
+| 기록 | Service 표 `data_deletion_requests`(migration 0087, 두 번 적용해도 안전): 좌석(수업 id + 수업 안 사용자 id, 계정 좌석은 계정 id), 좌석 종류, 요청자 `learner`, 상태, 보류 사유, 시각, 마지막으로 바꾼 운영자. 이름·이메일·학습자가 쓴 글은 없다. 로그는 사건과 상태만 남긴다 |
+| 처리 | **자동 삭제는 없다.** 운영자가 `/admin/data-deletion/requests`(운영자 인증만, 강사 토큰 불가)에서 요청을 보고 `처리 중`으로 바꾼 뒤 기존 도구로 직접 지운다: 계정은 계정 삭제(`DELETE /v1/me`), 공유 기록은 ADM-14의 철회 경로(목록이 좌석의 유효한 `classroom_shares` 수를 함께 보인다), 수업·체험 좌석은 기존 보관·회수 도구. 막히면 `보류`와 학습자가 읽을 한 줄 사유, 끝나면 `완료`. 절차: hypeproof-service `docs/requirements/data-deletion-requests.md` |
+| 상태 줄 (D-026) | 칩 하나에 아이콘 + 글: `접수`(깃발) · `처리 중`(시계) · `완료`(체크) · `보류`(경고). 글자색은 테마 전경색, 1px 테두리, 색만으로 뜻을 나르지 않는다. 옆에 `요청한 날 YYYY년 M월 D일`(한국 날짜), 접수가 아니면 `바뀐 날 …`, 보류면 사유를 같은 줄 아래(글로만, 마크업 아님). 14px 이상, 버튼 44px, 320px에서 줄바꿈 |
+| 이 컴퓨터의 파일 | 요청 화면과 확인 단계가 `이 컴퓨터의 작업 폴더와 파일은 지우지 않아요.`를 말한다. 요청은 기기 안 파일을 하나도 건드리지 않는다 |
+| 하지 않는 것 | 보호자 요청(Lab 페이지): 보호자임을 확인하는 방법이 DEC-23의 결정이다. 권고는 보호자 계정(`guardian-child-profile.md` GRD-12)을 기다리는 것이고, 그 전에는 보호자가 연락하면 운영자·지원 담당이 제품 밖에서 관계를 확인하고 기존 운영 도구로 직접 처리한다. 운영자·강사가 학습자 대신 요청을 만드는 경로는 없으므로 그런 처리는 요청 기록을 남기지 않는다. 만료된 자격으로는 상태를 읽지 못한다. 알림 메일·처리 기한 타이머는 없다 |
+
+검증: [계정과 데이터 삭제 요청](../testing/classroom-admin.md#adm-14-deletion-request-run).
+
 <a id="adm-11-update-freeze"></a>
 
 ### 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)

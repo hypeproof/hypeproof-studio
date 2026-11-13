@@ -7,6 +7,7 @@ is recorded here before the slice that depends on it merges, so it can be revers
 |---|---|---|---|---|
 | DEC-14 | Minor cohorts: chat links open only in the integrated safe-session browser; adults: modal naming the host before the system browser. A blocked click does not notify the instructor | README section 3 #1: the system browser bypasses the safe-session allowlist; the confirm adds one click for adults | On (safety tightening, no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-003) | Who may set or end a cohort's update freeze: an instructor whose scope on that cohort has `can_start_session` (read-only scopes see it). How security fixes work: a release whose notes carry the line `<!-- hps-update: security-critical -->` is never held by a freeze; Studio shows it (still under the class hold and the learner's restart approval) and Chalk labels it. No Service minimum-version gate, no forced install | Agent choice for the open half of DEC-24 (2026-11-12). Whoever decides when the class runs decides when its seats update; a marker in the notes is the one place both Studio's update checker and Chalk's latest-release read already, and it needs no new release field or Service read | Off until an instructor sets a range | no |
+| DEC-23 (interim, for CGP-SHELL-R-027) | A learner asks for account and data deletion from the chat settings dialog; the Service records the request and an operator processes it by hand with the existing erasure tools (account deletion, ADM-14 share withdrawal, cohort retention). Nothing deletes automatically, nothing on the device is deleted, and the learner sees 접수 / 처리 중 / 완료 / 보류(사유). Guardian requests from a Lab page are not built: how a guardian proves the relationship is the open half of DEC-23 (recommended: the guardian account draft, guardian-child-profile.md GRD-12) | DEC-23 (PIPA guardian and deletion decisions) is Jay's and is not decided. Recording a request changes no data and stays reversible; executing deletion or accepting a guardian claim would not be | Off: Service `HPS_DATA_DELETION_REQUESTS` unset; Studio draws nothing without the profile advertisement | no |
 | DEC-25 (interim) | Until the Service sends the class window end time, the whole active class seat counts as the class window for the update hold | The client has no window end; a restart mid-lesson costs the lesson. A learner can still dismiss the banner and update outside a class seat | On (holds only; no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-034) | A seat's Studio version is behind when it is below the latest published formal (non-rc) Studio release; Chalk then shows `업데이트 필요`. No new Service minimum field. An unknown or expired heartbeat stays `확인 불가`; while the latest formal release is unknown nobody is flagged. Dev builds (package version `0.1.5`) are flagged like old `0.1.x` releases. The cohort version freeze (CGP-SHELL-R-003) and its security override remain a separate later slice | Jay's answer to the DEC-24 question for this slice (2026-11-12, AskUserQuestion via the loop lead). Source of the latest formal release (agent choice): the public GitHub release that Studio's own update checker reads anonymously, served by Chalk at `GET /studio/latest-release` | On | yes (2026-11-12) |
 | DEC-08 | Edit-and-resend keeps the original as version 1 and records an edit_resend event; both attempts stay in the observation record | The original prompt, its answer and its turn record are evidence of how the learner iterated (ADAPT); overwriting them would erase the first attempt. The event holds ids and lengths only, no text | On | no |
@@ -516,6 +517,27 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   separately (the counter above and the request/confirm times), never as a product miss and never
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
+
+## DEC-ART-R-013: 7-day counts per test version (2026-11-13, agent choice)
+
+- Source (agent choice): the existing evidence read (`GET /v1/curriculum/experiments/:id/evidence`), whose sessions
+  the Service recomputes from stored CR-23 events on every call. There is no new Service route and no stored
+  aggregate, so a count cannot drift from its events. The project read's all-time per-channel `sessions_opened` has
+  no time window and no completions, so it was not used.
+- Read budget (agent choice): the counts never block the panel. Missing reads start in the background, in parallel
+  (at most 6 per view, 4 s timeout each), and the panel redraws when they settle. Successful reads are kept for 60 s; a
+  failed read says `횟수를 확인하지 못했어요` and is retried after 30 s. While a read is in flight the version says
+  `횟수 확인 중`, quietly.
+- Copy (agent choice, deviates from DES-ART-13): the tiles say `열어 본 횟수` and `끝까지 한 횟수`, not `연 사람` and
+  `끝까지 한 사람`. CR-72 says counts are of sessions and device pseudonyms, never of people. A returning visitor opens
+  several sessions, so "people" would overstate. The required empty sentence `아직 연 사람이 없어요` is kept because it
+  states an absence, not a count.
+- "Finished" (agent choice): a session with at least one `task_complete`. An experiment with several declared tasks
+  therefore counts a session that finished any of them. The per-task breakdown stays in the evidence panel.
+- Attribution (agent choice): a session counts for the `product_version` it records, else its experiment's pinned
+  version, so a comparison experiment's variant sessions land on their own version.
+
+Confirmed by Jay: no.
 
 ## DEC-ART-R-005: instructor comment on an approved artifact version (2026-11-13, agent choice)
 
@@ -2167,3 +2189,46 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
   - a real screen reader;
   - staging or production.
+
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: block references pin type, version and params (2026-11-14)
+
+The Service contract is hypeproof-service#461; this entry covers the Chalk chip. Confirmed by Jay: no. All choices below are the agent's, made under DEC-19, which Jay ruled on 2026-10-28; none is waiting on Jay.
+
+- **Reference shape (agent choice; a technical compatibility choice, not a Jay decision, per the coordinator on 2026-11-14).** `ui` stays the type string, and two optional step keys carry the pin: `ui_version` and `ui_params`. The alternative was an object-valued `ui: {type, version, params}`. It would follow DEC-19's "reuse `ui`" more literally, but Studio apps already installed read `ui` as a string (`surfaceOf`, `stepMaterial`), so every block would turn off for them. There is no hps-session-design bump.
+- **Pin at confirm (agent choice).** The draft may omit the pin. At confirm the Service writes `ui_version` (the draft's value, or else the latest). It writes `ui_params` only when that version declares params: draft values over defaults. This is the same pattern as the model and feature bindings written at freeze.
+- **First catalog (agent choice).** The seven existing kinds, at v1, with no params and one preset, 기본. No type was given invented params to meet acceptance (a). That case (`prefix_length 31 > 30`) is proved with a test-only catalog injected through the Service's seam. The first real params come with the first parametric mechanic (R-005 onward).
+- **Append-only catalog (agent choice).** A published (type, version) is never removed or changed, and a snapshot fixture locks this. The Service re-validates a confirmed lesson every time it serves it, so removing a version would close running classes. Adding a version never does.
+- **Rehearsal (agent reading).** Readiness is keyed by version and sha256, and a different pin is different bytes, so (c) holds without a new rule. `impact` reports the change as `step_changes[].block`.
+- **Chalk chip (agent choice).**
+  - Shown under the step's 학생 작업 화면 select, read-only, 14px.
+  - A pinned step shows its pin. An unpinned step shows the latest version with "(확정할 때 고정)".
+  - A preset is named when the params equal it, otherwise "직접 설정".
+  - Changing the type drops the old type's pin from the saved content.
+  - The catalog comes from the existing features read (`step_ui_catalog`), so Chalk needs no new contracts release.
+- **Not covered:** a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu); the Studio learner side (a separate change).
+
+## CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+
+Service PR hypeproof/hypeproof-service#440 adds the contract (migration 0087, retry-safe; `docs/requirements/data-deletion-requests.md`); this slice draws it in Studio. Requirement: `docs/requirements/classroom-admin.md#adm-14-deletion-request`; Studio: `docs/studio-requirements.md` REQ-STUDIO-DATA-DELETION-REQUEST.
+
+- Default off (tick rule, DEC-23 undecided): one Service flag gates the routes and the `/v1/profile` advertisement, so Studio needs no flag of its own.
+- Record, never execute (agent choice): processing stays a human operator action (`/admin/data-deletion/requests`, operator guard only; instructor tokens cannot read or move requests). The operator runbook lives with the Service requirement.
+- Subject (agent choice): the seat from the verified token (cohort + cohort-local user id; an account seat by its account id). No name, email or learner-written text. One open request per seat; a second press returns it.
+- Hold reason (agent choice): one line of at most 200 characters, no control, bidi or `<>` characters, shown to the learner as text.
+- Confirm (agent choice): an in-place two-step group in the dialog with `취소` focused first, not a native modal; the action records a request and deletes nothing, so a second native confirm would add a step without protecting data.
+- Local files (agent choice): never touched. The request screen says so, which meets "local files are not deleted without a separate confirmation" without building a local deletion path.
+- Parked for Jay (DEC-23): guardian requests. Recommended: wait for the guardian account (GRD-12: the guardian deletes the child profile from their own account). Until then, when a guardian contacts HypeProof, an operator or support verifies the relationship outside the product and processes the deletion by hand with the existing operator tools. Not implemented: no operator or instructor route creates a request on a learner's behalf, so such a case leaves no request row; the learner can still file from their own seat. Alternatives: a Lab form verified by the instructor; no guardian path before the guardian account. Same wording as the Service requirement (hypeproof-service `docs/requirements/data-deletion-requests.md`).
+- Not covered: a live Studio run, a real screen reader, a deployed Service, status after the seat credential expired.
+
+## CGP-VOICE-R-028 / CGP-VOICE-D-021 (autoplay part): blocked read-aloud recovery (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Blocked read-aloud recovery"; VO-42 sentence in `docs/requirements/voice-conversation.md`.
+
+- **Scope (audit).** The only sound Studio plays today is read-aloud through the OS voice (`src/voiceReadAloud.ts`, `speechSynthesis`; MET for "OS voice", MISSING for a blocked state: a `not-allowed` error fell into the generic `error` status with nothing shown). The voice conversation's `speaking` state (`src/voiceSessionHelpers.ts`) has no audio transport yet, so it has nothing to block (NOT APPLICABLE until a transport lands; the same notice and `resume` path should be reused then). `VoicePanel.tsx` and `voiceAgentStatus.ts` are not touched.
+- **Detection.** The synthesizer reports an autoplay refusal as the utterance error `not-allowed` (it never throws `NotAllowedError` from `speak`). Only that code shows the notice; `synthesis-failed`, `audio-busy` and the others keep today's behaviour, because a press cannot fix them.
+- **Copy.** The register's `소리가 막혔어요. 눌러서 다시 듣기` is split into one sentence and one action, as DES-CGPV-39/41 asks ("1 sentence + action"). The action is labelled `소리 켜기`, as the coordinator specified, and the sentence is `소리가 막혔어요.`.
+- **Resume point.** Read-aloud speaks sentence-sized chunks. It reads on from the first chunk without an `end` event. The engine reports no position inside a chunk, so a chunk cut off midway is read again from its start; nothing is skipped.
+- **Placement.** The notice sits inline in the answer's action row, next to the button that started the reading, because that is where read-aloud lives. It is not in the voice panel's status area, since the panel is not open during a read-aloud.
+- **Gate.** The press runs through `voice.gate` like every read-aloud press. There is no new flag, policy or seat rule. Nothing is stored or logged.
+- **Not covered.** A real browser autoplay refusal (the scripted engine stands in), a screen reader, the packaged app, and the VAD half of D-021.
+- Confirmed by Jay: no.

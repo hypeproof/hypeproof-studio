@@ -1,5 +1,16 @@
 # Studio behavioral requirements
 
+## Personal reflection admission messages (#3958)
+
+MPER-03/04 retain the person's account, words and history when existing AI access
+is refused. iPhone and the existing desktop distinguish an authoritative monthly
+invite limit from missing access or temporarily unavailable admission. Only the
+typed monthly refusal states the next-month reset. Legacy generic budget refusals
+remain period-neutral; they must not promise a daily reset, reopen login or send
+again automatically. The existing allowance, consent and accounting policy is
+unchanged. Service #462 supplies the typed monthly/unavailable codes; older
+server errors remain supported. Android adoption follows baseline #3735.
+
 ## iPhone conversation from first use (#3937)
 
 MPER-01/03/04 require a usable question and composer on the first screen, including
@@ -8,6 +19,13 @@ failed login and relaunch. Explicit successful login moves them only into an emp
 personal local draft; sending remains a separate action. Existing account drafts
 and outstanding turns are never replaced. Cached personal history opens without
 waiting for the network, and refresh does not change an explicit selection.
+
+MPER-02/03 continuation opens cached history at its latest exchange, including an
+equal-length conversation switch or a capped history window (#3962). New replies
+follow only while the person is at the bottom; reading older words must not force
+a jump. An explicit send or the accessible “최신 메시지” action resumes following.
+Account changes reset the view's following state. Native test diagnostics must not
+change transcript layout or substitute accessibility existence for visible bounds.
 
 The iPhone follows the existing desktop's conversation hierarchy: quiet assistant
 prose, user bubbles, one rounded composer and secondary history navigation. It
@@ -21,6 +39,19 @@ native screenshots, real account login and installed-device acceptance remain
 separate; this slice does not claim full desktop or Android parity.
 
 ## Personal question entry (#3798)
+
+MPER-02/03 also require the existing desktop to receive same-account phone replies
+while its personal conversation has an unsent draft (#3968). Reading history
+preserves that draft and advances the bound revision without sending a turn.
+Account/task changes and unsafe active work still fence the read; creating a
+making task or executing a mobile request retains its stricter readiness checks.
+The next explicit send uses the refreshed revision. If Send overlaps that GET
+(#3975), one explicit request retains its durable ID and words while waiting for
+the same read. It posts once only after refreshed revision and account/activity/task
+checks. Failed reads, failed persistence, cancellation or changed scope preserve
+recoverable input without later automatic replay. An uncertain earlier POST keeps
+its original idempotent payload. Host/store regression evidence does not replace
+installed two-device acceptance.
 
 MPER-02 and MPER-04 require a discoverable “나의 질문” action on the first
 screen and existing personal task navigation, including shipped layouts with the
@@ -5766,6 +5797,17 @@ separate.
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
 
+## Test version 7-day counts (CGP-ART-R-013)
+
+CGP-ART-R-013 / CGP-ART-D-013 (REQ-ART-13, CGP-ART-14) add two counts under each test version in the publish panel.
+They show what participants did with the learner's product: a usage observation, never a demand or learning-outcome
+claim (SX-58). The counts may expose ADAPT (does the learner change the next version after seeing them). Choices are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-013).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-PUBLISH-STATS | Each version row of the publish panel (beside REQ-STUDIO-PUBLISH-SHARING) shows two tiles, `열어 본 횟수 · 지난 7일` and `끝까지 한 횟수 · 지난 7일`, from the Service's participant sessions only (CR-23). The source is `GET /v1/curriculum/experiments/:id/evidence` for that version's experiments, recomputed from stored events on every read. A session counts for the version it records, else its experiment's pinned version, and is counted once. "Finished" means at least one completed task. The windows are the last 7 days and the 7 before, by the session's open time. The change is `▲ 지난주보다 +n`, `▼ 지난주보다 -n` or `지난주와 같아요`, with tabular figures and never colour alone. Each tile is a button that expands exactly the sessions it counted (CR-27): `참가 세션 {6} · {time} · 화면 n · 누름 n · 끝까지 함`, and `실험 기록에서 보기` opens that experiment's evidence panel. No pseudonym or other participant identity is kept or shown (CR-65, CR-72). With no session in the 14 days, `아직 연 사람이 없어요` replaces the tiles. A version whose evidence could not be read says `횟수를 확인하지 못했어요`, never 0. While the sharing state is stale, no tiles are drawn. There are no charts. The counts never hold back the panel: the view is drawn from what is in hand, and a version still being read says `횟수 확인 중` quietly (no live region). Missing evidence reads start in the background, in parallel (at most 6 per view), each cut off after 4 s, and the panel redraws when they settle while it is open. A successful read is kept for 60 s; a failed read shows the unknown sentence and is retried after 30 s. | `extensions/hypeproof-chat/test/version-stats.test.mjs`, `extensions/hypeproof-chat/test/version-stats-tiles.test.tsx`, `extensions/hypeproof-chat/test/version-stats-layout.smoke.mjs` |
+
 ## Instructor comments on an approved artifact version (CGP-ART-R-005)
 
 CGP-ART-R-005 / CGP-ART-D-005 (REQ-ART-05) add instructor comments to the learner inbox. A comment is anchored to
@@ -6213,6 +6255,13 @@ separate from installed Studio and native OS IME acceptance.
 |---|---|---|
 | REQ-CGPV-02 | PI#2 (the learner keeps visible control of what the AI hears and says) / CGP-VOICE-002 / VO-06 / VO-40: microphone mute and speaker (output) mute are two separate switches. `마이크 끄기` is the session's mute: it closes capture (the `mute` session event, so the OS microphone indicator goes off) and never changes the speaker switch. `소리 끄기` is the window's output switch (`src/voiceOutputMute.ts`, memory only, never stored, logged or sent): it stops audible output in the same press (read-aloud cancels the synthesizer synchronously, well inside 200ms), holds every output while on (a read-aloud press speaks nothing; its button is disabled with `읽어 주기, 소리 꺼짐` and the tooltip `소리를 꺼 두었어요. 음성 대화에서 소리를 켜면 들을 수 있어요`), and sends no session event, so capture stays as it was. A reading keeps going when the microphone is muted. Each change is announced in its own words (`마이크 꺼짐`/`마이크 켜짐`, `소리 꺼짐`/`소리 켜짐`). Both survive collapsing and expanding the panel; ending the conversation (종료, X, Escape, 텍스트로 전환) or the chat leaving the window turns sound back on, so read-aloud is never left held with no `소리 끄기` on screen. Unchanged: the realtime session's existing VO rule that a microphone mute also stops the AI's reply in progress (voice-conversation.md state table), which is a session fact, not the speaker switch. Not claimed: voice works or the panel is mounted. VoicePanel is still unmounted (REQ-R1/REQ-R6) and read-aloud draws nothing unless the Service serves it, so every seat renders as before | `voice-mute.test.tsx` (real VoicePanel through the real popup and session reducers next to a real read-aloud button under a served-voice profile: two named toggles in both presentations, speaker mute stops and holds a reading with no mute event, microphone mute closes capture and leaves the reading and the switch alone, both kept across collapse and expand, reset on end), `voice-read-aloud.smoke.mjs` (the hub obeys the switch synchronously; a disposed hub stops listening), `voice-popup.smoke.mjs` (`COMPACT_CONTROLS` carries `output_mute`) |
 | DES-CGPV-02 | The two switches are two square icon buttons in the big panel's action row and in the compact control: microphone and speaker glyphs at 20px, struck through when off (`mic-off`, `speaker-off`). The accessible names stay `마이크 끄기` and `소리 끄기` while pressed; `aria-pressed` carries the state. Off states are also written beside them at the 14px caption step (`마이크 꺼짐`, `소리 꺼짐`; the compact control adds only `소리 꺼짐` when its status name already says `마이크 꺼짐`). Pressed = the struck glyph, the pressed fill, primary ink and the selected edge (`--hp-border-control-selected`), never colour alone; forced colours use the global `[aria-pressed="true"]` Highlight pair. Learner floors win over the row's 32px: 44px targets. Visible at 320px with no sideways scroll | `voice-mute-controls.smoke.mjs` (headless Chromium, dark/light at 1420 and 320 and forced colours, real mouse presses: exactly two named toggles per presentation, 44px, 20px glyphs, inside the viewport, pressed differs by glyph, fill and edge, off words at 14px or more, switches independent and kept across collapse and expand; negative controls: the base panel and a pressed rule without the edge both fail it) |
+
+## Blocked read-aloud recovery (CGP-VOICE-R-028 / CGP-VOICE-D-021)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-41 | PI#2 (the learner keeps visible control of what the AI says) / CGP-VOICE-041 / VO-38 / VO-42: when the engine refuses to start sound without a press (autoplay policy: the speech synthesizer's `not-allowed` error, its form of the media `NotAllowedError`), read-aloud does not pretend to be reading. The answer's button returns to `읽어 주기` (`aria-pressed="false"`), the row's status says `소리가 막혔어요.` and never `읽는 중이에요`, and one action `소리 켜기` appears. One press of it reads on from the first chunk that did not finish: nothing already heard is repeated and nothing is lost. The press goes through the served-voice gate like any read-aloud press. `소리 끄기` (REQ-CGPV-02) clears the notice, and nothing speaks while it is on. Any other engine error keeps today's silent failure, because a press cannot fix it. Voice stays inert until served: an unserved seat has no read-aloud and no notice. Today the only audio Studio plays is read-aloud through the OS voice; the voice conversation has no audio transport yet, so it has no blocked state to recover (see decisions.md). Nothing is stored or logged. | `test/voice-autoplay-blocked.test.tsx` |
+| DES-CGPV-41 | Fallback notice, autoplay part (CGP-VOICE-D-021): one sentence and one action inline in the answer's action row, not a modal. It does not move focus. The action is a real button with the answer-action target and focus ring, the speaker glyph and the words `소리 켜기`. The text uses the theme's primary ink at the caption step (14px or more) and wraps at 320px. There is no animation or transition, so reduced motion has nothing to stop. It is shown once per refusal and disappears after the press, a stop, a normal end or 소리 끄기. The VAD-failure half of D-021 (REQ-CGPV-39) is not in this slice. | `test/voice-autoplay-blocked.test.tsx` (style case); CSS `.hps-voice-blocked` in `webview-ui/src/voice.css` |
 
 ## Class window notice (CGP-SHELL-R-025)
 
@@ -8386,6 +8435,30 @@ with stubbed dialogs, and the real provider in personal, trial, classroom and in
 320/800/1420 and forced colours; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). The native
 folder dialog and notification are owner-run checks.
 
+
+## Account and data deletion request (CGP-SHELL-R-027)
+
+`REQ-STUDIO-DATA-DELETION-REQUEST` implements REQ-SHELL-27 / CGP-SHELL-061 and DES-SHELL-26 /
+CGP-SHELL-D-026; contract in [classroom-admin.md](requirements/classroom-admin.md#adm-14-deletion-request).
+Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; DEC-23 is not decided): the row exists only when the seat's `/v1/profile`
+carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`).
+
+1. Both chat settings dialogs (personal workspace and classroom) show `계정과 데이터 삭제 요청` with what
+   happens and `이 컴퓨터의 작업 폴더와 파일은 지우지 않아요.`. It reads the seat's latest request each
+   time the dialog opens (`dataDeletion` `load`).
+2. `삭제 요청하기` opens an in-place confirm group (`정말 삭제를 요청할까요?`, `취소` focused first,
+   `요청 보내기`). Only `요청 보내기` sends (`dataDeletion` `submit`); the host re-checks the profile
+   advertisement and calls `POST /v1/data-deletion/requests` with the seat's own credential. While a
+   request is open there is nothing to press; after `완료` the button reads `다시 요청하기`.
+3. Status row: one chip with an icon and a word (`접수` flag, `처리 중` clock, `완료` check, `보류` alert),
+   `요청한 날 <Korea date>`, `바뀐 날 <date>` after the first change, and the hold reason inline as text.
+   A failed refresh keeps the last known status and shows the Service's Korean sentence (`role="alert"`).
+4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
+   The host logs nothing about it and touches no file.
+
+Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
+`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
+credential expired, a live-app run.
 
 ## Desktop-first mobile companion (DMC-01–15)
 

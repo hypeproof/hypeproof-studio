@@ -72,7 +72,13 @@ export function pickKoreanVoice(voices: readonly VoiceLike[]): VoiceLike | null 
   return voices.find((v) => v.localService && /^ko([-_]|$)/i.test(v.lang)) ?? null;
 }
 
-export type ReadAloudStatus = { kind: "idle" } | { kind: "playing"; id: string } | { kind: "error"; id: string };
+/**
+ * `blocked` (CGP-VOICE-R-028): the engine refused to start sound without a user gesture (`not-allowed`,
+ * the speech-synthesis form of the media `NotAllowedError`). Nothing is playing, so it is never shown
+ * as speaking; `resume` (a press, which is a gesture) reads on from the first chunk that did not finish.
+ */
+export type ReadAloudStatus =
+  | { kind: "idle" } | { kind: "playing"; id: string } | { kind: "error"; id: string } | { kind: "blocked"; id: string };
 export interface ReadAloudStartResult { started: boolean; skippedCode: boolean; note: string | null }
 
 /**
@@ -85,6 +91,8 @@ export interface ReadAloudStartResult { started: boolean; skippedCode: boolean; 
 export class ReadAloud {
   private status: ReadAloudStatus = { kind: "idle" };
   private generation = 0;
+  /** What a blocked reading still has to say: the unfinished chunks, in order. Cleared by stop/play/resume. */
+  private pending: { id: string; chunks: string[] } | null = null;
   private listeners = new Set<() => void>();
 
   private readonly env: SpeechEnv;
@@ -114,8 +122,30 @@ export class ReadAloud {
     this.stop();
     const chunks = chunkForSpeech(text);
     if (chunks.length === 0) return { started: false, skippedCode, note };
+    this.speakChunks(id, chunks);
+    return { started: true, skippedCode, note };
+  }
+
+  /**
+   * CGP-VOICE-R-028: after `blocked`, read on from the first chunk that did not finish. Called from a
+   * press, so the engine has its user gesture. False (and nothing spoken) when this answer is not
+   * blocked, the synthesizer is gone or the speaker switch is off.
+   */
+  resume(id: string): boolean {
+    const synth = this.env.synth;
+    const pending = this.pending;
+    if (!synth || this.status.kind !== "blocked" || this.status.id !== id || !pending || pending.id !== id) return false;
+    if (this.output?.getMuted()) return false;
+    this.pending = null;
+    this.speakChunks(id, pending.chunks);
+    return true;
+  }
+
+  private speakChunks(id: string, chunks: string[]): void {
+    const synth = this.env.synth!;
     const generation = ++this.generation;
     const voice = pickKoreanVoice(synth.getVoices());
+    const done = new Set<number>();
     this.set({ kind: "playing", id });
     chunks.forEach((chunk, index) => {
       const utterance = this.env.makeUtterance(chunk);
@@ -123,22 +153,32 @@ export class ReadAloud {
       utterance.rate = 1;
       utterance.voice = voice;
       const last = index === chunks.length - 1;
-      utterance.onend = () => { if (generation === this.generation && last) this.set({ kind: "idle" }); };
+      utterance.onend = () => {
+        if (generation !== this.generation) return;
+        done.add(index);
+        if (last) this.set({ kind: "idle" });
+      };
       utterance.onerror = (event) => {
         if (generation !== this.generation) return;
         // stop() and a newer play() end the old queue with these; they are not failures.
         if (event?.error === "canceled" || event?.error === "interrupted") return;
         this.generation++;
         try { synth.cancel(); } catch { /* ignore */ }
+        if (event?.error === "not-allowed") {
+          // Autoplay policy: keep what was not heard, so one press can read on from there.
+          this.pending = { id, chunks: chunks.filter((_, i) => !done.has(i)) };
+          this.set({ kind: "blocked", id });
+          return;
+        }
         this.set({ kind: "error", id });
       };
       synth.speak(utterance);
     });
-    return { started: true, skippedCode, note };
   }
 
   stop(): void {
     this.generation++;
+    this.pending = null;
     // Nothing playing means nothing to cancel: an idle hub never touches the synthesizer.
     if (this.status.kind === "idle") return;
     try { this.env.synth?.cancel(); } catch { /* ignore */ }

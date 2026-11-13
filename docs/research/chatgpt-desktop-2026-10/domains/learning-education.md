@@ -267,6 +267,14 @@ REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/au
 | DES-CGP-LEARN-16 | Run state. | One 20 px icon + text label in the chat header, ≥ 14 px; state change announced via `aria-live`; no animated character; color only as reinforcement. |
 | DES-CGP-LEARN-17 | Keyboard triage. | Selected row has a 2 px focus outline at 3:1; shortcut sheet opens inline; all actions also reachable by mouse/touch at 44×44 px. |
 
+REQ-CGP-LEARN-04 / DES-CGP-LEARN-04 status (2026-11-14, CGP-LEARN-R-004 / D-004). The Service contract is hypeproof-service#461 (versioned catalog `@hypeproof/service-contracts/step-ui-catalog`), and the Chalk chip is CH-12 in `docs/requirements/chalk-authoring.md`.
+- `ui` stays the type. `ui_version` and `ui_params` are pinned at confirm.
+- Draft save and confirm return field-path errors.
+- A v1 lesson keeps serving after v2 is published, because the catalog is append-only and the frozen bytes never change.
+- A different pin is a different sha256, so no rehearsal pass carries over.
+
+Not yet done: Studio drawing only the pinned versions it knows, with no ids shown to learners (a separate Studio change). No real type has params yet, so (a) is proved with a test-only catalog.
+
 DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
 
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside

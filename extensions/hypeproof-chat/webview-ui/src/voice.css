@@ -65,6 +65,10 @@
 .hps-msg-role .hps-voice-listen[aria-pressed="true"] { color: var(--hp-text-primary-default); background-color: var(--hp-bg-control-pressed); }
 .hps-voice-listen[aria-pressed="true"] .hps-icon { animation: none; transition: none; }
 .hps-voice-skipped { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+/* CGP-VOICE-R-028 / DES-CGPV-41: the autoplay-blocked notice. One sentence + one action inline in the
+   answer row, wrapping at 320px; the caption step (>=14px); the action keeps the 44px answer-action
+   target and its focus ring; no animation or transition at all, so reduced motion has nothing to stop. */
+.hps-voice-blocked { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-1); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; animation: none; transition: none; }
 
 /* ---- the disclosure sheet (inside the shared modal surface) ---- */
 .hps-voice-disclosure-body { display: flex; flex-direction: column; gap: var(--hp-space-3); font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }

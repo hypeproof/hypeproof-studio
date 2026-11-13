@@ -15,12 +15,14 @@ export function readReflection(value:unknown):ReflectionSnapshot {
   }
   return v;
 }
-export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;pending?:{id:string;text:string;revision:number} }
+export interface ReflectionBinding { session:string;activity:string;workspace:string;task:string;revision:number;pending?:{id:string;text:string;revision:number;awaitingRefresh?:boolean} }
 export const REFLECTION_BINDING_KEY='hps.personalReflection.v1';
 export function reflectionFailure(error:unknown):string {
   const code=(error as {code?:string})?.code;
   if(code==='reflection_access_required')return '이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기는 남아 있어요.';
-  if(code==='reflection_budget_limit')return '오늘의 AI 사용 한도에 도달했어요. 기록은 그대로 남아 있어요.';
+  if(code==='reflection_monthly_limit')return '이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.';
+  if(code==='reflection_budget_limit')return 'AI 이용 한도에 도달했어요. 기록은 그대로 남아 있어요.';
+  if(code==='reflection_admission_unavailable')return 'AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.';
   if(code==='reflection_changed')return '다른 기기에서 대화가 바뀌었어요. 최신 내용을 확인한 뒤 다시 보내 주세요.';
   if(code==='reflection_busy')return '다른 기기에서 답변을 받고 있어요. 잠시 뒤 같은 대화를 확인해 주세요.';
   return '질문 대화를 확인하지 못했어요. 연결 상태를 확인해 주세요. 자동으로 다시 보내지 않아요.';
