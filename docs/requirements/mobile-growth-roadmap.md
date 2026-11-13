@@ -263,6 +263,20 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+#### Android Send during history refresh — Studio #4010
+
+MADR-02/03 and MPER-03 keep one explicit text or dictated Send available while an
+existing personal-history GET is waiting. Save the original request ID and words
+before dispatch, and retain subsequent draft edits separately. Only this never-sent
+request may adopt the successful read's revision and continue once in the same
+foreground account/session. An earlier uncertain POST keeps its original bytes.
+
+Stop, background/navigation, account/session changes, a failed or stale read,
+remote work in progress, and failed persistence prevent delayed dispatch. The
+local outbox survives interruption and restart without automatic replay. The UI
+must explain that the words are retained and leave the next choice to the person.
+This adds no timer, poll, endpoint, hosted speech call or extra AI turn.
+
 #### Android in-flight response Stop — Studio #3997
 
 MADR-02/03/04 and MPER-04 keep `응답 수신 멈추기` available while the original

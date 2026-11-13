@@ -349,3 +349,25 @@ and identity; its former pre-persistence local-retry shortcut is not evidence.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
+
+
+### Android Send during history refresh — Studio #4010
+
+Hold the actual history GET after a valid account opens. Type a thought and press
+the real Send button before releasing that read. The local outbox must already
+contain one ID and the exact words; a second draft stays separate. After a valid
+newer snapshot, observe exactly one POST with that ID, text and reconciled revision.
+Restart must retain the response and later draft without sending again. The old
+Activity must fail this same enabled-Send control, and the old model must reject
+the corresponding explicit send.
+
+Use the real model/cache with controlled callback order for Stop, account/session
+change, close, failed save/read, stale snapshot, remote in-flight work and uncertain
+POST. The latter must preserve its original ID/revision rather than rebase or
+replay. An actual Activity background boundary must leave the queued request on
+disk but prevent dispatch when its held read completes. Synthetic network and
+speech callbacks do not establish physical speech or live account acceptance.
+
+Record focused source, APK, emulator, command and exit identities separately.
+Preserve any failing surrounding voice-Stop control and investigate whether actual
+capture began; passing the new cases cannot erase that failure.

@@ -19513,6 +19513,9 @@
         },
         {
           "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java"
         }
       ]
     }
