@@ -396,7 +396,7 @@
         "ADM-CMT-06"
       ],
       "inline_prefixes": [],
-      "sha256": "bf7e51907078f7860a34ea6e567c33e832cd447261987d4204ffb77471d33199",
+      "sha256": "55e8096e4c5d111fcf745a402d2ca0beaa2e2833b639a9c496fd6588407b24aa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",

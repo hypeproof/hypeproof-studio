@@ -24,6 +24,7 @@ import { runShowWhatIMade } from "./showWhatIMadeHost";
 import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
+import { DATA_DELETION_COPY, dataDeletionOffered, readDeletionRequest, sendDeletionRequest } from "./dataDeletionRequest";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
 import { CREDENTIAL_KEY as CLASSROOM_OPS_CREDENTIAL_KEY } from "./classroomOpsHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
@@ -9051,6 +9052,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "trialEndCardClaude":
         await this.openPersonalClaude(msg.draft);
         return;
+      case "dataDeletion":
+        // CGP-SHELL-R-027 — read or send the seat's deletion request. Recorded by the Service, never executed here.
+        void this.handleDataDeletion(msg.action);
+        return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":
         // TUX-COND-08 — the optional email on the end card. Never stored; only a submitted flag is.
@@ -11133,6 +11138,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private dataDeletionSending = false;
+
+  /**
+   * CGP-SHELL-R-027 — `load` reads the seat's latest deletion request, `submit` sends one (the
+   * webview has already shown its confirm step). Re-checks that the profile still advertises the
+   * request, then calls the Service with the seat's own credential. Nothing is deleted here: the
+   * Service records the request and an operator processes it. Local files are never touched.
+   * No seat id, request id or Service text reaches a log.
+   */
+  private async handleDataDeletion(action: "load" | "submit"): Promise<void> {
+    const reply = (state: import("./dataDeletionRequest").DataDeletionState) => void this.post({ type: "dataDeletionState", ...state });
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxy = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    if (!token || !proxy || !dataDeletionOffered(this.cachedProfile)) return reply({ state: "error", message: DATA_DELETION_COPY.failed });
+    if (action === "load") {
+      const r = await readDeletionRequest(proxy, token);
+      return reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    }
+    if (this.dataDeletionSending) return;
+    this.dataDeletionSending = true;
+    try {
+      const r = await sendDeletionRequest(proxy, token);
+      reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    } finally {
+      this.dataDeletionSending = false;
+    }
+  }
+
   /**
    * TUX-COND-08 — submit (`email` given) or withdraw (`null`) the optional notify opt-in of this
    * free seat. Re-checks that the seat's profile still advertises it, then calls the Service with
@@ -11908,6 +11941,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
         update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
+        // CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it (default off).
+        ...(!local && !isInstructor && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
