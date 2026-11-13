@@ -391,7 +391,11 @@ jobs:
           if jq -e 'index("win32-x64")' <<<"$platforms" >/dev/null; then
             exes=(dist/HypeProof.StudioUserSetup-x64-*.exe)
             [[ ${#exes[@]} -eq 1 && -f "${exes[0]}" ]] || { echo "::error::expected one Windows per-user installer in $TAG"; exit 1; }
-            node scripts/release/install-kit.mjs render-windows --tag "$TAG" --user-setup "${exes[0]}" --out "$out"
+            win_seeds=("$RUNNER_TEMP"/sdk-seed/claude-agent-sdk-win32-x64-*.tgz)
+            [[ ${#win_seeds[@]} -eq 1 && -f "${win_seeds[0]}" ]] || { echo "Windows SDK tarball missing or ambiguous"; exit 1; }
+            mkdir -p "$out"
+            git show "$SOURCE_SHA:scripts/seed-sdk-binary.ps1" > "$out/seed-sdk-binary.ps1"
+            node scripts/release/install-kit.mjs render-windows --tag "$TAG" --user-setup "${exes[0]}" --seed-tarball "${win_seeds[0]}" --seeder "$out/seed-sdk-binary.ps1" --out "$out"
             sections+=(--windows)
             printf 'Windows: irm https://github.com/%s/releases/download/%s/update-windows.cmd -OutFile "$env:TEMP\\hps-update.cmd"; & "$env:TEMP\\hps-update.cmd"\n' "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -521,7 +521,13 @@ test('renderer follows the existing build contract for marked and legacy RCs', (
 
 // ── Windows update command (update-windows.cmd, 2026-11-02) ─────────────────
 const EXE = 'HypeProof.StudioUserSetup-x64-1.116.07355.exe';
-const winBase = {tag: 'v2026.1102.3', exeName: EXE, exeSha256: H('d')};
+const WIN_SEED = 'claude-agent-sdk-win32-x64-0.3.299.tgz';
+const winBase = {tag: 'v2026.1102.3', exeName: EXE, exeSha256: H('d'), seedName: WIN_SEED, seedSha256: H('a'), seederSha256: H('b')};
+function winDeps(dir) {
+  const seedTarball = path.join(dir, WIN_SEED), seeder = path.join(dir, 'seed-sdk-binary.ps1');
+  fs.writeFileSync(seedTarball, 'fixture SDK bytes'); fs.writeFileSync(seeder, 'exit 0');
+  return {seedTarball, seeder};
+}
 const PS_TAIL = /\r?\n#PS#\r?\n/;
 
 test('update-windows.cmd is CRLF, pinned to the tag and exe SHA-256, and splits once at the marker', () => {
@@ -541,6 +547,12 @@ test('update-windows.cmd is CRLF, pinned to the tag and exe SHA-256, and splits 
   assert.throws(() => renderWindowsUpdater({...winBase, exeName: 'HypeProof.StudioSetup-x64-1.116.07355.exe'}), /per-user installer/);
   assert.throws(() => renderWindowsUpdater({...winBase, exeSha256: 'abc'}), /sha256/);
   assert.throws(() => renderWindowsUpdater({...winBase, tag: 'latest'}), /release tag/);
+  assert.throws(() => renderWindowsUpdater({...winBase, seedName: 'claude-agent-sdk-darwin-arm64-0.3.299.tgz'}), /win32-x64/);
+  assert.throws(() => renderWindowsUpdater({...winBase, seedSha256: undefined}), /pins/);
+  assert.throws(() => renderWindowsUpdater({...winBase, seederSha256: undefined}), /pins/);
+  assert.doesNotMatch(cmd, /Stop-Process/);
+  assert.ok(cmd.indexOf('$seed = Get-VerifiedAsset') < cmd.indexOf('$p = Start-Process'));
+  assert.ok(cmd.indexOf('$LASTEXITCODE -ne 0') < cmd.indexOf('설치 완료:'));
 });
 
 test('render-windows hashes the accepted installer it is given', () => {
@@ -548,7 +560,7 @@ test('render-windows hashes the accepted installer it is given', () => {
   try {
     const exe = path.join(dir, EXE);
     fs.writeFileSync(exe, 'accepted installer bytes');
-    assert.deepEqual(writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, path.join(dir, 'out')), [WINDOWS_UPDATER_NAME]);
+    assert.deepEqual(writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe, ...winDeps(dir)}, path.join(dir, 'out')), [WINDOWS_UPDATER_NAME]);
     const cmd = fs.readFileSync(path.join(dir, 'out', WINDOWS_UPDATER_NAME), 'utf8');
     assert.ok(cmd.includes(`$Sha = '${sha256(exe)}'`));
     assert.equal(isAppPackage(WINDOWS_UPDATER_NAME), false, 'the acceptance receipts never count the updater');
@@ -582,9 +594,11 @@ test('release notes carry the Mac and Windows commands once, Mac first', () => {
 test('a release whose platform lacks its installer or notes command cannot publish', () => {
   const tag = 'v2026.1102.3';
   const body = withInstallSection('## What changed\n', tag, {mac: true, windows: true});
-  const assets = [{name: 'install-mac.sh'}, {name: WINDOWS_UPDATER_NAME}];
+  const assets = [{name: 'install-mac.sh'}, {name: WINDOWS_UPDATER_NAME}, {name: WIN_SEED}, {name: 'seed-sdk-binary.ps1'}];
   const both = ['darwin-arm64', 'win32-x64'];
   assert.deepEqual(installProblems({tag, platforms: both, body, assets}), []);
+  assert.match(installProblems({tag, platforms: both, body, assets: assets.slice(0, 2)}).join(' '), /SDK/);
+  assert.match(installProblems({tag, platforms: both, body, assets: [...assets, WIN_SEED]}).join(' '), /exactly one/);
   assert.match(installProblems({tag, platforms: both, body, assets: assets.slice(0, 1)}).join('\n'), /Windows: release asset update-windows\.cmd is missing/);
   assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag), assets}).join('\n'), /Windows: the release notes lack/);
   assert.match(installProblems({tag, platforms: both, body: withInstallSection(body, tag, {mac: false, windows: true}), assets}).join('\n'), /macOS: the release notes lack/);
@@ -615,14 +629,14 @@ test('update-windows.cmd verifies the pinned installer before running it', {skip
     fs.mkdirSync(assets);
     const exe = path.join(assets, EXE);
     fs.writeFileSync(exe, 'accepted installer bytes');
-    writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe}, dir);
+    writeWindowsUpdater({tag: 'v2026.1102.3', userSetup: exe, ...winDeps(assets)}, dir);
     const run = () => spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command',
       "$s = [IO.File]::ReadAllText($env:HPS_SELF, [Text.Encoding]::UTF8); iex ($s -split '\\r?\\n#PS#\\r?\\n', 2)[1]"], {
       encoding: 'utf8', env: {...process.env, HPS_SELF: path.join(dir, WINDOWS_UPDATER_NAME), HPS_INSTALL_ASSET_DIR: assets, HPS_INSTALL_DRY_RUN: '1', TMPDIR: dir, TEMP: dir},
     });
     const good = run();
     assert.equal(good.status, 0, good.stdout + good.stderr);
-    assert.match(good.stdout, /DRY RUN: .*HypeProof\.StudioUserSetup-x64-1\.116\.07355\.exe \/VERYSILENT \/SUPPRESSMSGBOXES \/NORESTART \/MERGETASKS=!runcode/);
+    assert.match(good.stdout, /DRY RUN: verified App, SDK 0\.3\.299 and seeder; nothing installed/);
     fs.writeFileSync(exe, 'tampered bytes');
     const bad = run();
     assert.equal(bad.status, 1, bad.stdout + bad.stderr);

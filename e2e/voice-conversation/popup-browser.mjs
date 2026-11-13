@@ -76,10 +76,17 @@ try {
       return {name:e.getAttribute('aria-label')||e.textContent,visible:r.top>=box.top&&r.bottom<=box.bottom&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth};
     });
   });
-  checks.essentialControlsVisibleAfterScroll = observations.narrow.filter(c=>['음성 대화 종료','음소거','텍스트로 전환'].includes(c.name)).every(c=>c.visible);
+  // CGP-VOICE-R-002: the microphone and speaker switches are two controls. Each name must be found, so a
+  // renamed control fails here instead of passing an empty filter.
+  const essential=['음성 대화 종료','마이크 끄기','소리 끄기','텍스트로 전환'];
+  checks.essentialControlsVisibleAfterScroll = essential.every(n=>observations.narrow.some(c=>c.name===n&&c.visible));
   checks.statusVisibleAfterScroll = observations.narrow.find(c=>c.name.includes('듣고'))?.visible===true;
   await page.screenshot({path:`${output}/narrow-bottom.png`});
-  await page.getByRole('button',{name:'음소거',exact:true}).click();
+  await page.getByRole('button',{name:'마이크 끄기',exact:true}).click();
+  // The speaker switch is the panel's own: it flips aria-pressed and never calls onToggleMute.
+  const speaker=page.getByRole('button',{name:'소리 끄기',exact:true});
+  await speaker.click();
+  checks.speakerSwitchSeparate = await speaker.getAttribute('aria-pressed')==='true' && await page.evaluate(()=>window.actions.filter(x=>x==='mute').length===1);
   await page.getByRole('button',{name:'텍스트로 전환',exact:true}).click();
   await page.getByRole('button',{name:'음성 대화 종료',exact:true}).click();
   checks.controlCallbacks = await page.evaluate(()=>['mute','switch_to_text','panel_close'].every(x=>window.actions.includes(x)));

@@ -92,6 +92,20 @@ and receipt emission. An older successful gate retained by a failed-job-only
 rerun is refused; rerun all jobs to create a fresh gate. A mismatch stops before
 signing. Existing no-input
 manual/push runs and the `apple-native-preview` environment remain intact.
+
+Studio #3866 separates the immutable app candidate from a pinned trusted-main
+workflow source when the fourth `expected_workflow_sha` request input is present.
+All four fields bind a v2 request; original three-field and no-input calls retain
+v1 equal-source behavior. App source remains the exact native-CI candidate; no
+native-tree equivalence can substitute another full source SHA. Control helpers
+run from the clean workflow checkout, while Xcode inputs come from the clean
+candidate checkout. Trusted same-repository GET ancestry proofs require candidate
+→ workflow → current main at admission and before signing. Ordinary main advances
+preserve both pinned identities; rewritten ancestry or moved workflow identity
+refuses signing. Gate/upload receipts distinguish app and workflow source while
+retaining exact run/attempt, artifact, request and native-CI provenance. This is a
+transport contract, not Apple availability or installed-device acceptance.
+
 After archive/export/validation/upload succeed, preserve a credential-free
 receipt with the actual app/build identity and IPA digest. Uploaded, Apple
 processing, tester availability and physical acceptance remain separate facts.

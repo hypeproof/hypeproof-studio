@@ -1978,6 +1978,18 @@ html, body, #root {
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
 }
 .hps-voice-actions button:disabled { opacity: .5; cursor: default; }
+/* CGP-VOICE-R-002 / CGP-VOICE-D-001 (DES-CGPV-02): microphone and speaker mute, two square icon buttons
+   (44px from the shared rule above, the learner floor over the row's 32px). Pressed = off: the struck
+   glyph, a pressed fill, primary ink and the selected edge (focusBorder, a high-contrast boundary in
+   every theme), never colour alone; the off state is also written out (.hps-voice-mute-state).
+   Forced colours: the global [aria-pressed="true"] rule in tokens.css draws the Highlight pair. */
+.hps-voice-actions .hps-voice-mute, .hps-voice-compact .hps-voice-mute { display: inline-flex; align-items: center; justify-content: center; padding-inline: var(--ds-c-studio-styles-space-15); }
+.hps-voice-mute[aria-pressed="true"] {
+  color: var(--hp-text-primary-default);
+  background: var(--hp-bg-control-pressed);
+  border-color: var(--hp-border-control-selected);
+}
+.hps-voice-mute-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); font-size: var(--hp-font-caption); font-weight: var(--ds-c-studio-styles-typography-7); }
 /* CGP-VOICE-R-009 — "보여주기": two Studio-owned targets only. The reason for a disabled item is
    always written next to it (DES-CGPV-14), at the learner text floor, never only in a tooltip. */
 .hps-voice-show { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--hp-font-caption); }

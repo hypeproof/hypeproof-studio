@@ -20,7 +20,7 @@ export type IconKind =
   | 'back' | 'forward' | 'message' | 'chevron-down' | 'chevron-up' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
-  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban' | 'bookmark' | 'mic' | 'speaker' | 'level';
+  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban' | 'bookmark' | 'mic' | 'speaker' | 'level' | 'mic-off' | 'speaker-off';
 export type IconSize = 16 | 20 | 24;
 
 export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: IconSize; label?: string }) {
@@ -87,6 +87,9 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'ban' && <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>}
     {kind === 'mic' && <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" /></>}
     {kind === 'speaker' && <><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>}
+    {/* CGP-VOICE-D-001: the off states. The microphone is struck through; the speaker loses its waves for a cross. */}
+    {kind === 'mic-off' && <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6M4 4l16 16" /></>}
+    {kind === 'speaker-off' && <><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z" /><path d="m15.5 9.5 5 5M20.5 9.5l-5 5" /></>}
     {/* CGP-CHAT-D-009: three level bars, the read-aloud "now reading" mark. Drawn still; nothing animates it. */}
     {kind === 'level' && <path d="M6 10v4M10 7v10M14 5v14M18 9v6" />}
     {kind === 'bookmark' && <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.5L12 16l-6.5 4.5V5A1.5 1.5 0 0 1 7 3.5Z" />}

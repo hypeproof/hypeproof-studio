@@ -65,6 +65,9 @@ jobs:
         run: |
           node --experimental-strip-types test/update-installer.smoke.mjs
           node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
+      - name: Verify generated Windows App and SDK delivery
+        if: runner.os == 'Windows'
+        run: node scripts/release/test/windows-delivery.smoke.mjs
       - name: Verify private email installer in Windows PowerShell 5.1
         if: runner.os == 'Windows'
         shell: powershell

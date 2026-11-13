@@ -87,5 +87,30 @@ const env = (synth) => ({ synth, makeUtterance: (text) => ({ text, lang: "", rat
   assert.equal(hub.play("x", "글").started, false);
   hub.stop();
 }
+// CGP-VOICE-R-002: the speaker switch silences read-aloud in the same call, and a muted hub starts nothing.
+{
+  const { OutputMute } = await import("../src/voiceOutputMute.ts");
+  const output = new OutputMute();
+  const synth = fakeSynth([{ lang: "ko-KR", localService: true }]);
+  const hub = new ReadAloud(env(synth), output);
+  hub.play("m1", "첫 문장이에요. 두 번째 문장이에요.");
+  assert.equal(hub.getStatus().kind, "playing");
+  output.set(true);
+  assert.equal(synth.cancelled, 1, "muting cancels the synthesizer synchronously (well inside 200 ms)");
+  assert.deepEqual(hub.getStatus(), { kind: "idle" }, "muting ends the reading");
+  const spoken = synth.spoken.length;
+  assert.equal(hub.play("m2", "꺼진 동안이에요.").started, false, "a muted hub starts nothing");
+  assert.equal(synth.spoken.length, spoken, "nothing reached the synthesizer while muted");
+  output.set(false);
+  assert.equal(hub.play("m3", "다시 켰어요.").started, true, "unmuted, it reads again");
+  // Negative control: without the switch a hub behaves exactly as before.
+  const plain = new ReadAloud(env(fakeSynth()));
+  assert.equal(plain.play("p1", "그냥 읽어요.").started, true);
+  // Disposed hubs stop listening: a stale hub never cancels a newer reading.
+  hub.dispose();
+  const cancelled = synth.cancelled;
+  output.set(true);
+  assert.equal(synth.cancelled, cancelled, "a disposed hub no longer reacts to the switch");
+}
 assert.deepEqual(trips, [], `read-aloud touched the network: ${trips.join(", ")}`);
 console.log("voice-read-aloud smoke OK");

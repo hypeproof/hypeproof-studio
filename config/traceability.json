@@ -5209,6 +5209,12 @@
           "path": "scripts/install-win.ps1"
         },
         {
+          "path": "scripts/release/install-kit.mjs"
+        },
+        {
+          "path": "scripts/release/templates/update-windows.cmd"
+        },
+        {
           "path": ".github/workflows/requirement-work.yml"
         },
         {
@@ -5256,6 +5262,12 @@
         },
         {
           "path": "scripts/tests/install-win-fixture.ps1"
+        },
+        {
+          "path": "scripts/release/test/install-kit.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/windows-delivery.smoke.mjs"
         },
         {
           "path": ".github/workflows/private-installers.yml"
@@ -18865,6 +18877,9 @@
         {
           "path": "docs/testing/native-mobile-growth.md",
           "section": "## TestFlight request and receipt — MTF-T01"
+        },
+        {
+          "path": "apps/studio-native/tests/test_native_workflow_source.py"
         }
       ]
     },
@@ -19056,6 +19071,78 @@
         {
           "path": "docs/requirements/invite-seat.md",
           "section": "## 검증"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-VOICE-MUTE-SWITCHES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
+        },
+        {
+          "path": "docs/requirements/voice-conversation.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-MUTE-SWITCHES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-MUTE-SWITCHES",
+        "ST-TEST-VOICE-MUTE-SWITCHES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceOutputMute.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voiceReadAloud.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReadAloudButton.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-MUTE-SWITCHES",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-MUTE-SWITCHES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-mute.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-mute-controls.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-read-aloud.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-popup.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/task-workspace.md",
+          "section": "## Microphone and speaker mute (CGP-VOICE-R-002 / CGP-VOICE-D-001)"
         }
       ]
     }

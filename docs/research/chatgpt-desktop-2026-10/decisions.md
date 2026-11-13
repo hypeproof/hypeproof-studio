@@ -1893,6 +1893,21 @@ Audit of main (f9754fdf7) against the design row; only the gaps changed. Already
 - Not covered: a real Korean voice, a screen reader announcing the pressed state, and the packaged app: NOT RUN.
 - Confirmed by Jay: no (agent-selected choices above).
 
+## CGP-VOICE-R-002 / CGP-VOICE-D-001: microphone and speaker mute (2026-11-13, agent-selected)
+
+Audit of main (0ae2a1485) against both rows; only the gaps changed. Found: one text button `음소거` / `음소거 해제` (`VoicePanel.tsx` big panel and compact control) that sent the session's `mute`, i.e. the microphone; no speaker or output mute anywhere; read-aloud (`ReadAloudButton.tsx`, `src/voiceReadAloud.ts`) obeyed no mute. R-002: MISSING. D-001: MISSING (one control, text only, no glyph).
+- Two switches, two owners (agent choice). The microphone stays the session's mute (`popupTransition` `user_mute` -> `mute`, capture closed). The speaker is a new window-level switch, `src/voiceOutputMute.ts`: memory only, one per webview, never stored, logged or sent to the host. It is outside the panel, so collapse and expand keep it; neither switch writes the other.
+- What speaker mute silences: read-aloud today (the only output that ships). Muting stops a reading in the same press (the hub subscribes to the switch and cancels the synthesizer synchronously); while muted a press speaks nothing and the read-aloud button is disabled, named `읽어 주기, 소리 꺼짐`, tooltip `소리를 꺼 두었어요. 음성 대화에서 소리를 켜면 들을 수 있어요` (agent-written). The realtime reply will obey the same switch when the transport ships; there is no playback code to wire today.
+- Kept, not changed: the VO state-table rule that a microphone mute also stops the AI's reply in progress (`voiceSessionHelpers` `mute` empties the playback queue). That is a session fact; it does not touch the speaker switch, which is what REQ-CGPV-02 asks ("mic mute ... without changing output mute"). A read-aloud reading is not the session's reply and keeps going on a microphone mute. The state table in `voice-conversation.md` now says both.
+- Reset (agent choice): ending the conversation (종료, X, Escape, 텍스트로 전환) and the panel leaving the window turn sound back on. Without it read-aloud could stay held after the panel that shows `소리 끄기` is gone.
+- Names and words (agent choice): accessible names `마이크 끄기` / `소리 끄기`, constant while pressed (`aria-pressed` carries the state, the ARIA toggle-button pattern); the off words `마이크 꺼짐` / `소리 꺼짐` (DES-CGPV-02's) are written beside the buttons and announced on a change with `마이크 켜짐` / `소리 켜짐`. In the compact control the line adds only `소리 꺼짐` when the status name already says `마이크 꺼짐`. The read-aloud control (CGP-CHAT-D-009) keeps its own changing label; it is a different control.
+- Glyphs (agent choice): new `mic-off` (the microphone struck through) and `speaker-off` (the speaker with a cross instead of waves), stroked like the set, 20px. Pressed also takes the pressed fill, primary ink and `--hp-border-control-selected` as the edge; forced colours use the global pressed rule.
+- Sizes: 44px targets and 14px text win over DES-CGPV-02's 32px (as for CGP-VOICE-R-008). Contrast of the label and glyph pairs is not measured by this row beyond the existing theme suites.
+- `COMPACT_CONTROLS` is now `mute`, `output_mute`, `stop`, `expand`.
+- Default state: n/a. VoicePanel is still unmounted and read-aloud draws nothing unless the Service serves it, so every seat renders as before; no flag, policy or minor-seat change; minors follow the served block.
+- Not covered: a real Korean voice, a screen reader announcing the pressed state and the change line, the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
+
 ## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
 
 - R-021 asks for four `hypeproof.voice.*` Command Palette commands for realtime voice; this change binds one webview-local key for dictation instead and leaves the commands to the row that owns them. R-001 is the realtime session state set; `VoicePanel` stays unmounted. Both stay open.

@@ -16,6 +16,7 @@ import zipfile
 
 REPOSITORY = 'hypeproof/hypeproof-studio'
 WORKFLOW = '.github/workflows/studio-native-mobile.yml'
+RELEASE_WORKFLOW = '.github/workflows/studio-apple-testflight.yml'
 ARTIFACT_PREFIX = 'studio-native-candidate'
 SCHEMA = 'hps-native-candidate/1'
 
@@ -39,7 +40,8 @@ def repository_root():
 
 def deployment_request(environ, checkout):
     values = [environ.get(key, '') for key in ('NATIVE_EXPECTED_SHA', 'NATIVE_OPERATION_ID', 'NATIVE_REQUEST_DIGEST')]
-    if not any(values):
+    workflow = environ.get('NATIVE_EXPECTED_WORKFLOW_SHA', '')
+    if not any(values) and not workflow:
         return None  # Existing push and manual dispatch remain supported.
     if not all(values):
         raise Refused('Deployment request fields must be supplied together')
@@ -47,19 +49,34 @@ def deployment_request(environ, checkout):
     sha(expected)
     if not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', operation) or not re.fullmatch(r'[a-f0-9]{64}', fingerprint):
         raise Refused('Malformed deployment operation or request digest')
+    if workflow:
+        sha(workflow)
+        if (expected != checkout or workflow != sha(environ.get('GITHUB_SHA'))
+                or workflow != sha(environ.get('GITHUB_WORKFLOW_SHA'))
+                or environ.get('GITHUB_REF') != 'refs/heads/main'
+                or environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+                or environ.get('GITHUB_WORKFLOW_REF') != REPOSITORY + '/' + RELEASE_WORKFLOW + '@refs/heads/main'):
+            raise Refused('Deployment workflow or candidate differs from the pinned main request')
+        return {'schema': 'hps-native-deployment-request/2', 'expected_sha': expected,
+                'workflow_sha': workflow, 'operation_id': operation, 'request_digest': fingerprint}
     if expected != checkout or expected != sha(environ.get('GITHUB_SHA')):
         raise Refused('Deployment request source differs from trigger or checkout')
     return {'schema': 'hps-native-deployment-request/1', 'expected_sha': expected,
             'operation_id': operation, 'request_digest': fingerprint}
 
-def release_identity(source, environ):
+def release_identity(source, environ, read=None):
     head = sha(environ.get('GITHUB_SHA'))
-    if source['checkout_sha'] != head:
+    request = deployment_request(environ, source['checkout_sha'])
+    workflow = request.get('workflow_sha') if request else None
+    if not workflow and source['checkout_sha'] != head:
         raise Refused('Release checkout differs from triggering source')
-    return {'source_sha': head,
+    if workflow:
+        verify_workflow_ancestry(source['checkout_sha'], workflow, read=read)
+    return {'source_sha': source['checkout_sha'],
             'run_id': integer(int(environ['GITHUB_RUN_ID'])),
             'run_attempt': integer(int(environ['GITHUB_RUN_ATTEMPT'])),
-            'deployment_request': deployment_request(environ, source['checkout_sha'])}
+            'deployment_request': request,
+            **({'workflow_source_sha': workflow} if workflow else {})}
 
 def verify_release_gate(path, source, identity):
     # Failed-job-only reruns can retain a successful dependency from an older
@@ -68,8 +85,11 @@ def verify_release_gate(path, source, identity):
     if path is None or path.is_symlink() or not path.is_file() or path.stat().st_size > 16384:
         raise Refused('A regular current-attempt native release gate is required; rerun all jobs')
     document = json.loads(path.read_text())
-    if not isinstance(document, dict) or document.get('schema') != 'hps-native-release-gate/1' or document.get('verdict') != 'PASS':
+    version = '2' if identity.get('workflow_source_sha') else '1'
+    if not isinstance(document, dict) or document.get('schema') != 'hps-native-release-gate/' + version or document.get('verdict') != 'PASS':
         raise Refused('Native release gate must be a successful gate document')
+    if document.get('workflow_source_sha') != identity.get('workflow_source_sha'):
+        raise Refused('Native release gate belongs to another workflow source')
     for field in ('release_checkout_sha', 'source_head_sha'):
         if sha(document.get(field)) != identity['source_sha']:
             raise Refused('Native release gate source differs from upload source')
@@ -107,7 +127,8 @@ def upload_receipt(identity, package, archive_info, command_results, environ):
     with package.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
-    return {'schema': 'hps-native-upload-receipt/1', 'repository': REPOSITORY, **identity,
+    schema_version = '2' if identity.get('workflow_source_sha') else '1'
+    return {'schema': 'hps-native-upload-receipt/' + schema_version, 'repository': REPOSITORY, **identity,
             'platform': 'ios', 'bundle_id': bundle, 'version': version, 'build': build,
             'package_sha256': digest.hexdigest(), 'package_size': package.stat().st_size,
             'commands': {name: {'exit_code': commands[name]} for name in expected_commands},
@@ -204,6 +225,31 @@ def api(path, binary=False):
         raise Refused('GitHub read failed; no permission or rate-limit fallback')
     raise Refused('GitHub read failed')
 
+def verify_workflow_ancestry(app_sha, workflow_sha, read=None):
+    """Trusted GET proofs: candidate -> pinned workflow -> current main.
+
+    Main may advance normally; it cannot replace either prepared identity.
+    This does not certify source review or authorize a workflow dispatch.
+    """
+    app_sha, workflow_sha = sha(app_sha), sha(workflow_sha)
+    read = api if read is None else read
+    base = 'repos/' + REPOSITORY
+    ref = read(base + '/git/ref/heads/main')
+    if (not isinstance(ref, dict) or ref.get('ref') != 'refs/heads/main'
+            or not isinstance(ref.get('object'), dict) or ref['object'].get('type') != 'commit'):
+        raise Refused('Trusted main ref is not a commit')
+    main = sha(ref['object'].get('sha'))
+    for ancestor, descendant in ((app_sha, workflow_sha), (workflow_sha, main)):
+        proof = read(base + '/compare/' + ancestor + '...' + descendant)
+        expected_status = 'identical' if ancestor == descendant else 'ahead'
+        if (not isinstance(proof, dict) or proof.get('status') != expected_status
+                or not isinstance(proof.get('base_commit'), dict)
+                or not isinstance(proof.get('merge_base_commit'), dict)
+                or proof['base_commit'].get('sha') != ancestor
+                or proof['merge_base_commit'].get('sha') != ancestor):
+            raise Refused('Candidate/workflow is not in trusted main ancestry')
+    return {'workflow_source_sha': workflow_sha, 'trusted_main_sha': main}
+
 def wait_for_candidate(expected, head, timeout, interval, read=api, clock=time.monotonic, sleep=time.sleep):
     deadline = clock() + timeout
     base = 'repos/' + REPOSITORY + '/actions'
@@ -242,18 +288,34 @@ def main():
     parser.add_argument('--archive-info', type=Path)
     parser.add_argument('--command-results', type=Path)
     parser.add_argument('--release-gate', type=Path)
+    parser.add_argument('--candidate-root', type=Path)
     args = parser.parse_args()
     if os.environ.get('GITHUB_REPOSITORY') != REPOSITORY:
         raise Refused('Unexpected repository')
     if not 1 <= args.timeout <= 1800 or not 10 <= args.interval <= 60:
         raise Refused('Polling bounds exceeded')
-    source = source_identity(repository_root())
+    control_root = repository_root()
+    if os.environ.get('NATIVE_EXPECTED_WORKFLOW_SHA'):
+        # Execute the reviewed control checkout, even when the app candidate
+        # contains an older gate. Never alter GitHub's trigger variables.
+        control = source_identity(control_root)
+        if control['checkout_sha'] != sha(os.environ['NATIVE_EXPECTED_WORKFLOW_SHA']):
+            raise Refused('Control checkout differs from pinned workflow source')
+        if args.candidate_root is None:
+            raise Refused('Separate explicit candidate root is required')
+    source = source_identity(args.candidate_root.resolve() if args.candidate_root else control_root)
     if args.mode == 'identity':
         result = identity_document(source, os.environ['NATIVE_SOURCE_HEAD'], int(os.environ['GITHUB_RUN_ID']), int(os.environ['GITHUB_RUN_ATTEMPT']))
     else:
         identity = release_identity(source, os.environ)
         if args.mode == 'gate':
             result = wait_for_candidate(source, identity['source_sha'], args.timeout, args.interval)
+            if identity.get('workflow_source_sha'):
+                # Native CI polling can outlive a main rewrite. Recheck before
+                # admitting the environment-protected signing job.
+                verify_workflow_ancestry(identity['source_sha'], identity['workflow_source_sha'])
+                result.update(schema='hps-native-release-gate/2',
+                              workflow_source_sha=identity['workflow_source_sha'])
             result.update(deployment_request=identity['deployment_request'],
                           release_run_id=identity['run_id'], release_run_attempt=identity['run_attempt'])
         else:
