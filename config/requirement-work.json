@@ -4430,8 +4430,7 @@
         "extensions/hypeproof-chat/src/personalContinuation",
         "extensions/hypeproof-chat/src/personalContinuationHost.ts",
         "extensions/hypeproof-chat/src/personalContinuationView.ts",
-        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
-        "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/personal-continuation-core.smoke.mjs",
