@@ -61,7 +61,11 @@
     "badge.foreground": "#18231C",
     "progressBar.background": "#3C6E2F",
     "quickInput.background": "#FFFFFF",
-    "terminal.background": "#F4F6F0"
+    "terminal.background": "#F4F6F0",
+    "charts.green": "#2E6B2A",
+    "editorInfo.foreground": "#1F4F8A",
+    "editorInfo.background": "#E3ECF7",
+    "errorForeground": "#9E2410"
   },
   "tokenColors": [
     {

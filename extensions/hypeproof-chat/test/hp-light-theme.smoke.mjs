@@ -16,7 +16,9 @@ assert.equal(defaults['workbench.colorTheme'], 'HypeProof Studio', 'HP Dark stay
 assert.equal(defaults['workbench.preferredDarkColorTheme'], 'HypeProof Studio');
 assert.equal(defaults['workbench.preferredLightColorTheme'], 'HypeProof Studio Light');
 assert.equal(light.name, 'HypeProof Studio Light'); assert.equal(light.type, 'light');
-assert.deepEqual(Object.keys(light.colors).sort(), Object.keys(dark.colors).sort(), 'HP Light colours exactly the keys HP Dark does');
+assert.deepEqual(Object.keys(dark.colors).filter((k) => !(k in light.colors)), [], 'HP Light colours every key HP Dark does');
+// Keys HP Dark leaves to the registry whose light defaults fail on Paper (found by text-contrast-computed.smoke.mjs).
+for (const k of ['charts.green', 'editorInfo.foreground', 'editorInfo.background', 'errorForeground']) assert.ok(light.colors[k], k);
 console.log('PASS theme contributions: HP Dark default, HP Light contributed, system pair named');
 
 const lum = (hex) => { const n = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); };
@@ -27,6 +29,7 @@ const RULES = [
   ['button.foreground', 'button.background', 4.5], ['badge.foreground', 'badge.background', 4.5], ['button.secondaryForeground', 'button.secondaryBackground', 4.5],
   ['descriptionForeground', 'editor.background', 4.5], ['tab.inactiveForeground', 'tab.inactiveBackground', 4.5], ['input.placeholderForeground', 'input.background', 4.5],
   ['textLink.foreground', 'editor.background', 4.5], ['statusBar.foreground', 'statusBar.background', 4.5], ['titleBar.activeForeground', 'titleBar.activeBackground', 4.5],
+  ['charts.green', 'editor.background', 4.5], ['charts.green', 'input.background', 4.5], ['editorInfo.foreground', 'editorInfo.background', 4.5], ['errorForeground', 'editor.background', 4.5],
   ['focusBorder', 'editor.background', 3], ['input.border', 'input.background', 3], ['widget.border', 'editor.background', 3],
 ];
 const failures = (colors) => RULES.filter(([fg, bg, min]) => !(ratio(colors[fg], colors[bg]) >= min)).map(([fg, bg, min]) => `${fg} on ${bg} ${ratio(colors[fg], colors[bg]).toFixed(2)} < ${min}`);
