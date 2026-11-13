@@ -226,7 +226,7 @@ public final class MainActivity extends Activity {
             }
         } catch(JSONException e) { error="생각 정리 기록을 읽지 못했어요. 원본을 보존했어요.";render();return; }
         ScrollView scroller=new ScrollView(this);scroller.addView(box);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("생각 정리").setView(scroller).setNegativeButton("대화로 돌아가기",null).setNeutralButton("다시 저장",null).setPositiveButton("내보내기",null).create();
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("생각 정리").setView(scroller).setNegativeButton("닫기",null).setNeutralButton("다시 저장",null).setPositiveButton("내보내기",null).create();
         dialog.setOnShowListener(v->{
             dialog.getButton(-3).setOnClickListener(b->{
                 if(change(()->state=state.includingEdits(editing))) {

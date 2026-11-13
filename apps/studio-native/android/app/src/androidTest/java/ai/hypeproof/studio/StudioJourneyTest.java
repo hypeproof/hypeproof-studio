@@ -149,11 +149,11 @@ public class StudioJourneyTest {
         assertEquals(0,notebook().find(first).getJSONArray("revisions").length());
         assertFalse(notebook().conversation(first).toString().contains("문 앞"));
         screenshot("android-reflection");
-        onView(withText("대화로 돌아가기")).perform(click());app.recreate();
+        onView(withText("닫기")).perform(click());app.recreate();
         onView(withText("생각 정리")).perform(scrollTo(),click());
         onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("손님이 문 앞에서 기다렸다")));
         onView(withContentDescription("해보니 무엇이 달랐나요?")).perform(scrollTo()).check(matches(withText("먼저 적은 배움")));
-        onView(withText("대화로 돌아가기")).perform(click());
+        onView(withText("닫기")).perform(click());
         draft("동네 가게 관찰");record();
         onView(withText("지금의 의도 정리하기")).perform(scrollTo(),click());
         onView(withContentDescription("의도 입력")).perform(replaceText("대기 시간을 줄인다"),closeSoftKeyboard());
@@ -190,7 +190,7 @@ public class StudioJourneyTest {
                 StudioState exported=new StudioState(new String((byte[])method.invoke(activity),StandardCharsets.UTF_8));
                 assertEquals("저장 실패 후에도 지킬 관찰",exported.projects().getJSONObject(0).getJSONObject("reflection").getString("observation"));
             }catch(Exception e){throw new AssertionError(e);}});
-            onView(withText("대화로 돌아가기")).perform(click());
+            onView(withText("닫기")).perform(click());
             onView(withText("생각 정리")).perform(scrollTo(),click());
             onView(withContentDescription("직접 본 것은 무엇인가요?")).check(matches(withText("저장 실패 후에도 지킬 관찰")));
         } finally {
@@ -381,7 +381,7 @@ public class StudioJourneyTest {
             draft("편집한 기기 초안");
             onView(withText("생각 정리")).perform(scrollTo(),click());
             onView(withContentDescription("직접 본 것은 무엇인가요?")).perform(scrollTo(),replaceText("오래된 기록에 덧붙인 관찰"),closeSoftKeyboard());
-            onView(withText("대화로 돌아가기")).perform(click());
+            onView(withText("닫기")).perform(click());
             onView(allOf(withText("기록"),not(withContentDescription("생각 기록")))).perform(click());
             onView(withContentDescription("기록 검색")).perform(replaceText("대기 시간"),closeSoftKeyboard());
             onView(withText("확인한 의도 · 대기 시간을 줄인다")).check(matches(isDisplayed()));
