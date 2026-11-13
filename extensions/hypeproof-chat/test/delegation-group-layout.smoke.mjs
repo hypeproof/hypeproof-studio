@@ -18,8 +18,11 @@ try{
   const helper=long?'W'.repeat(30):'코드리뷰어',task=long?'긴작업이름'.repeat(12):'코드 확인';
   const messages=[{id:'u1',role:'user',content:'검토해 줘',createdAt:1},{id:'delegate-one@s1',role:'tool',content:'',createdAt:2,tool:{icon:'🤝',label:helper+' · '+task+'\n\n검토 결과입니다.',state:'done'}},{id:'delegate-two@s1',role:'tool',content:'',createdAt:3,tool:{icon:'🤝',label:'리서처 · 근거 확인',state:'running'}},{id:'delegate-one~child',role:'tool',content:'',createdAt:4,tool:{icon:'🔧',label:'Read(index.html)',state:'done'}}];
   for(const msg of [{type:'history',messages},{type:'streamStart',streamId:'s1',messageId:'a1'}])await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(msg)}}))`);
-  await new Promise(r=>setTimeout(r,80));
-  assert.equal(await browser.evaluate("document.querySelector('.hps-delegation-toggle')?.textContent"),'도우미 2명 · 1명 끝남','actual App roll-up');
+  // Wait for the roll-up to render instead of a fixed sleep; on timeout, name the case and show what did render.
+  const label=`${seat}/${themeName}/${width}/${long?'long':'short'}`;
+  let rollUp;for(const end=Date.now()+5000;;){rollUp=await browser.evaluate("document.querySelector('.hps-delegation-toggle')?.textContent");if(rollUp!=null||Date.now()>end)break;await new Promise(r=>setTimeout(r,20));}
+  if(rollUp==null)console.log(`${label}: no roll-up; errors=${JSON.stringify(await browser.evaluate('window.errors'))}; root=${JSON.stringify(await browser.evaluate("document.getElementById('root')?.innerHTML.slice(0,3000)"))}`);
+  assert.equal(rollUp,'도우미 2명 · 1명 끝남',`${label}: actual App roll-up`);
   assert.equal(await browser.evaluate("document.querySelectorAll('.hps-delegation-panel').length"),0);
   await browser.evaluate("document.querySelector('.hps-delegation-toggle').focus();document.querySelector('.hps-delegation-toggle').click()");
   await new Promise(r=>setTimeout(r,200));

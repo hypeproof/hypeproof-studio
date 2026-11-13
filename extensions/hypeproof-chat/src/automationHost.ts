@@ -26,6 +26,7 @@ import { emailQuestPackage, questDraft } from './questSkill';
 import { runStoreMail, storeMailHostDeps, type StoreMailMessage, type StoreMailRow } from './storeMail';
 import { SKILL_STORE_PUBLISH_QUEST_COMMAND } from './skillStorePanel';
 import type { StoreLocalConnections } from './skillStoreProtocol';
+import { refuseOnChildSeat } from "./childProfileHost";
 
 interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; appsScript: boolean; signature: string }
 export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider, preview?: PreviewProvider) {
@@ -328,6 +329,8 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     } catch { /* Missing or malformed local state never invents completion. */ }
   }
   async function startConversation() {
+    // GRD-09 — no mail connection on a child seat (the profile's automations block is also closed).
+    if (refuseOnChildSeat('connections')) return;
     try { await prepare(); await ensureQuest(); await provider.beginAutomationConversation(); }
     catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
   }

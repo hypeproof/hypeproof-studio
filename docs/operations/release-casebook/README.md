@@ -122,6 +122,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
 | BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch` |
 | BB-036 | `testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch` |
 | BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
 | BB-036 | `testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID` |
@@ -129,6 +130,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-036 | `testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch` |
 | BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
+| BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
 상태·저장 경로를 사용하지만 인증 서버·HTTP·음성 이벤트는 합성이다. 실기기, 실제 브라우저 로그인,

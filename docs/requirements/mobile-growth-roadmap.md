@@ -263,6 +263,18 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+#### Android in-flight response Stop — Studio #3997
+
+MADR-02/03/04 and MPER-04 keep `응답 수신 멈추기` available while the original
+turn POST is waiting. Stop ends local voice continuation and observes the exact
+request ID and words before calling the existing Service cancel route. Only a
+matching terminal acknowledgement changes the durable outbox; an unconfirmed stop
+preserves its original identity and words without replay. Same-account/session
+fences reject late responses; a confirmed failed turn retains its later typed
+monthly/admission error. Cancellation does not promise zero provider cost.
+Real JVM HTTP and Activity/Keystore tests cover separate boundaries; native live
+HTTP, physical speech and billing remain separate acceptance.
+
 #### Confirmed failed-question recovery — Studio #3974
 
 MPER-03/04 and MREF-05 preserve the person's decision after a server-confirmed
@@ -306,6 +318,12 @@ removed; account conversation keeps the existing voice and admission contract.
 Optional on-device dictation only edits the notebook draft. Returning is an
 explicit navigation action that preserves both destinations' drafts and stops
 capture. Existing server compatibility for older versions remains unchanged.
+
+The notebook owns one native navigation bar. Its title, return action, record
+history and menu must remain visible without overlapping each other or a parent
+disclosure strip. The local-storage notice belongs below that bar in the record
+content. Studio #3998 follows the actual simulator overlap found after #3985;
+source integration does not establish visual or installed-device acceptance.
 
 ### Desktop visible question entry (Studio #3798)
 
@@ -367,3 +385,12 @@ human time remain costs. Endpoint thresholds require physical Korean/noisy-room
 validation; synthetic silence controls are not speech-quality evidence. Speech
 recognition and microphone OS permissions may both be required by iOS; app-level
 repeat approvals are removed, OS consent is not bypassed.
+
+Studio #3995 adds an explicit iPhone personal-response Stop action (at least
+44pt) while a submission is in flight or a saved request is pending/running.
+It uses the existing Service cancel route and preserves submitted words, request
+identity and separate drafts. Stop immediately ends local voice continuation;
+only a matching terminal server snapshot confirms the outcome. A completed reply
+winning the race remains completed, and an uncertain cancel leaves the outbox
+recoverable without replay. Already dispatched AI work may still incur cost.
+Source, synthetic native acceptance and installed/live acceptance remain distinct.

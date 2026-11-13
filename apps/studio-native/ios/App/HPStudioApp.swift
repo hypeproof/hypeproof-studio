@@ -5,6 +5,7 @@ import AVFoundation
     var body: some Scene { WindowGroup { StudioRoot() } }
 }
 struct StudioHome: View {
+    let onReturnToConversation: () -> Void
     @StateObject private var model = StudioModel()
     @StateObject private var voice = VoiceController()
     @Environment(\.scenePhase) private var scenePhase
@@ -26,6 +27,8 @@ struct StudioHome: View {
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
+                        Text("이 기기에 저장된 기록").font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("localNotebookScope")
                         if let project = model.project {
                             Text(project.messages.isEmpty ? "새 생각을 적어 보세요" : project.title).font(.title2.bold()).accessibilityIdentifier("projectTitle")
                             if let revision = project.revisions.last {
@@ -72,14 +75,24 @@ struct StudioHome: View {
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("기기 기록").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button { leaveComposer(); showHistory = true } label: { Image(systemName: "square.stack") }.accessibilityLabel("나의 기록") }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { leaveComposer(); onReturnToConversation() } label: {
+                        Label("대화", systemImage: "chevron.backward")
+                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("대화로 돌아가기").accessibilityIdentifier("returnToAccountConversation")
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { leaveComposer(); showHistory = true } label: {
+                        Image(systemName: "square.stack").frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.accessibilityLabel("나의 기록").accessibilityIdentifier("localNotebookHistory")
                     Menu {
                         Button("새 생각") { leaveComposer(); model.newProject() }
                         Button(model.readOnly ? "읽지 못한 원본 내보내기" : "전체 기록 내보내기") { leaveComposer(); exportURL = model.export() }
                         if model.readOnly { Button("원본 보존 후 새로 시작") { leaveComposer(); showRecovery = true } }
                         if model.project != nil { Button("현재 기록 삭제", role: .destructive) { leaveComposer(); showDelete = true } }
-                    } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("기록 메뉴")
+                    } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
+                        .accessibilityLabel("기록 메뉴").accessibilityIdentifier("localNotebookMenu")
                 }
             }
             .safeAreaInset(edge: .bottom) {

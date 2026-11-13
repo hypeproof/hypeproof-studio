@@ -403,6 +403,7 @@ import {
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
 import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import { childGuardianNotice, isChildSeat } from "./childProfile";
 import type { PublishEndpoints } from "./publish/publishConfig";
 import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
 import { nextFreeFolder } from "./publish/githubContinue";
@@ -1698,6 +1699,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.publishEndpoints = endpoints;
     this.sitePublisherInstance = null; // rebuilt with these endpoints on first use
     this.refreshSitePublishContext();
+  }
+
+  /** GRD-09/10/19 — the served profile the child-seat refusals read (childProfile.ts configureChildSeat). */
+  get childGateProfile(): ResolvedProfile | null {
+    return this.cachedProfile;
   }
 
   /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
@@ -7551,6 +7557,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this._instructorMode?.isInstructor === false && this.activityMemoryBinding ? { folder: MEMORY_FOLDER_LABEL } : undefined;
   }
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
+    // GRD-19 / Q10 — no on-device memory on a child seat (no view, no recall into a turn).
+    if (isChildSeat(this.cachedProfile)) return undefined;
     if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
     return this.activityTrashBinding;
   }
@@ -11951,6 +11959,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         model:local?.model??model,
         hasToken: !!token,
         workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
+        // GRD-24 — the always-visible guardian notice on a child seat.
+        ...(childGuardianNotice(profile) ? { guardianNotice: childGuardianNotice(profile) } : {}),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
         ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),

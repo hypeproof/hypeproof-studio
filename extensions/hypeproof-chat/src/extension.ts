@@ -9,6 +9,8 @@ import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
+import { configureGuardianSwitch, configureChildSeat, GUARDIAN_SETTING } from './childProfile';
+import { refuseOnChildSeat } from './childProfileHost';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
@@ -103,6 +105,8 @@ export async function activate(context: vscode.ExtensionContext) {
     () => vscode.workspace.getConfiguration('chat').get<boolean>('disableAIFeatures') === true,
     command => vscode.commands.executeCommand(command));
   await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
+  // GRD-23 — app-side mirror of Service HPS_GUARDIAN, read on every check. Default off: no change.
+  configureGuardianSwitch(() => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>(GUARDIAN_SETTING, false));
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -237,6 +241,8 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearTimeout(pendingTimer) });
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
+  // GRD-09/10/19 — child-seat refusals read the profile the chat panel holds now.
+  configureChildSeat(() => provider.childGateProfile);
   const chalkContract = new ChalkContractHost(
     {
       registerCommand: (id, handler) => vscode.commands.registerCommand(id, handler),
@@ -925,13 +931,13 @@ export async function activate(context: vscode.ExtensionContext) {
     // cr-verify — "Test my product" (CR-12). Gated in the manifest, re-checked in the handler.
     vscode.commands.registerCommand("hypeproof-chat.testMyProduct", () => provider.testMyProduct()),
     // cr-publish — "Publish for user test" (CR-17). Gated in the manifest, re-checked in the handler.
-    vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => provider.publishTestVersion()),
+    vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => refuseOnChildSeat("publish") ? undefined : provider.publishTestVersion()),
     // One-click publish to GitHub Pages. Gated in the manifest (sitePublishEnabled), re-checked in the handler.
-    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => provider.publishSite()),
+    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => refuseOnChildSeat("publish") ? undefined : provider.publishSite()),
     // Forget the persisted "publish without asking" registration (publishRegistry.ts).
     vscode.commands.registerCommand("hypeproof-chat.publishSiteUnregister", () => provider.unregisterSitePublish()),
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
-    vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
+    vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => refuseOnChildSeat("memory") ? undefined : provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
     vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
     vscode.commands.registerCommand("hypeproof-chat.deckSlideSuggest", () => provider.deckSlideSuggest()),
