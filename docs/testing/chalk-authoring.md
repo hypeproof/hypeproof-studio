@@ -199,6 +199,15 @@ B, 기본 수업 복귀 뒤 다시 미션 없음. 완료 조건은 모두 ☐. A
 | T-54b | CH-11 | `chalk/test/plan-section-forward.test.mjs` | 연결된 강사 issuer로 `POST …/plan/section-revision`만 본문 바이트 그대로 전달한다. 위조 헤더는 떨어진다. 같은 경로의 GET·PUT과 비슷한 경로는 404다. 전달 시간은 45초이고 다른 경로는 기존 값(8초, 배포 60초)이다 | `PASS plan-section forward` 줄 |
 | T-54c | CGP-ART-R-004 | hypeproof-service `worker/test/chalk-plan-section.test.mjs`, `worker/test/chalk-section-revision.test.mjs`(hypeproof-service#433) | 실제 fixture 네 개(r5·evidence-1306·ops-333·ops-366)의 고를 수 있는 부분 119개마다 바깥 바이트가 같다. 허용 목록 밖의 요소·속성(스타일 요소·속성 포함), 그 부분에 없던 링크·도구, 하지 않을 개입·위험·동의 항목을 빼거나 바꾸거나 다른 요소로 옮기는 것, 금지 도구 제거, 안전 수준 낮춤, 새 형식 위반은 거절되고 아무것도 저장되지 않는다. 저장이 revision 경쟁에서 지면 FB-05 기록도 남지 않는다. 브라우저와 서버 토크나이저가 다르게 읽을 수 있는 표기(짧은 주석 `<!-->`·`<!--->`·`--!>`, 따옴표 안의 `<`·`>`, 따옴표·백틱이 든 따옴표 없는 값, 잘못된 `<`, CDATA, 중복 속성, NUL, 태그 안의 폼 피드, 원시 텍스트 요소 안 주석으로 빠져나가기, SVG·MathML 안의 `style`·`title`, `<template>`)는 부분 고치기와 PUT /plan 모두에서 거절된다. Service가 만드는 지도안·운영 계획안 뼈대(가족 수업 포함)도 그대로 저장된다(SK-01). head `<style>`과 `style` 속성 안에서 `url()` 말고 자원을 불러오는 CSS(`image-set()`·`-webkit-image-set()`·`image()`·`cross-fade()`·`element()`·`src()`·`@import`·`@font-face`, CSS 이스케이프·HTML 엔터티·주석으로 쪼갠 표기 포함)도 거절된다. `data:image` `url()`만 쓴 평범한 CSS는 저장된다. 실제 fixture와 올바른 주석이 든 계획서는 그대로 저장된다. 플래그 꺼짐 404, 오래된 revision 409(모델 호출 없음), 0085가 없으면 503(비용 없음), 상한 429(호출 없음). FB-05 기록이 남고, 비교에는 그 부분만 나온다. 모델에는 요청과 그 부분만 간다. 기록에는 메타데이터만 남는다 | Service PR의 Evidence 절 |
 
+<a id="t-55-block-chip"></a>
+
+### T-55 블록 꼬리표 (CH-12, CGP-LEARN-R-004, CGP-LEARN-D-004) · 2026-11-14
+
+| 번호 | 요구 | 절차 | 기대 결과 | 증거 |
+|---|---|---|---|---|
+| T-55a | CH-12, CGP-LEARN-D-004 | 실제 `/authoring` 페이지를 헤드리스 Chromium으로 1280·768px에서 연다(`chalk/test/step-ui-chip.browser.mjs`). Service는 페이지 안 `fetch` 대역이다. 단계는 고정된 블록, 고정 안 된 블록, 설정값이 묶음과 다른 블록, 묶음과 같은 블록, 블록 없는 단계 다섯 개다. 절차: 저장된 초안 열기 → 기능 목록 읽기 → 한 단계의 종류 바꾸기 → 원래 종류로 되돌리기 | 카탈로그를 읽기 전에도 고정된 단계는 `criterion_form · v1 · 기본`이고, 고정 안 된 단계는 `decision_form · 버전은 확정할 때 고정`이다. 읽은 뒤에는 `decision_form · v2 · 기본 (확정할 때 고정)`, `metric_board · v1 · 직접 설정`, `metric_board · v1 · 도전`이 보이고, 블록 없는 단계에는 꼬리표가 없다. 종류를 바꾸면 저장 내용에서 이전 `ui_version`·`ui_params`가 빠지고, 되돌리면 원래 값이 돌아온다. 14px 이상이고 가로 스크롤이 없다. 기반(main)에서는 꼬리표가 없어 실패한다 | `npm test`(chalk) 안의 `PASS step-ui-chip.browser` 줄 |
+| T-55b | CGP-LEARN-R-004 | hypeproof-service `worker/test/step-ui-catalog.test.mjs`(hypeproof-service#461) | 카탈로그가 `STEP_UI_KINDS`와 같다. 게시된 버전을 지우거나 바꾸지 않는다. 종류·버전·설정 오류마다 field 경로가 붙는다. `prefix_length` 31(최대 30)은 저장과 확정에서 field를 붙인 400이다. 확정하면 `ui_version` 1이 고정된다. v2를 게시한 뒤에도 v1 수업은 같은 sha256으로 제공되고, 새 확정은 v2를 고정한다. 고정만 다른 버전은 리허설 `not_run`이고 v1의 통과로 확정할 수 없다 | Service PR의 Evidence 절 |
+
 ## 검증 환경과 증거
 
 - 합성 병원 자료와 가상 학생 두 명, 강사 두 명 사용. 운영 데이터·운영 토큰 사용 금지.
