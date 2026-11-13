@@ -6,7 +6,7 @@
 // Nothing here identifies a participant: a source row shows when it opened, how many screens and presses, and whether a
 // task was finished, never a pseudonym (CR-65). The numbers are counts of sessions, not people (CR-72).
 import { useId, useState } from "react";
-import { STAT_LABELS, STATS_EMPTY, STATS_UNKNOWN, changeWords, type StatCount, type VersionStats } from "../../src/versionStats";
+import { STAT_LABELS, STATS_EMPTY, STATS_LOADING, STATS_UNKNOWN, changeWords, type StatCount, type VersionStats } from "../../src/versionStats";
 
 const when = (ms: number) => new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -29,6 +29,8 @@ export function VersionStatsTiles(props: { stats: VersionStats | undefined; onOp
   if (!s) return null;
   if (s.state === "empty") return <p className="hps-stat-empty" data-testid="stat-empty">{STATS_EMPTY}</p>;
   if (s.state === "unknown") return <p className="hps-stat-empty" data-testid="stat-unknown">{STATS_UNKNOWN}</p>;
+  // Quiet on purpose: no live region, so the count arriving a moment later is not announced as a change.
+  if (s.state === "loading") return <p className="hps-stat-empty" data-testid="stat-loading">{STATS_LOADING}</p>;
   const shown = open ? s[open] : null;
   return (
     <div className="hps-stats" data-testid="version-stats">

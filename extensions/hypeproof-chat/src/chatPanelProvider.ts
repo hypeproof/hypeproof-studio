@@ -2556,6 +2556,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     },
     defaultTitle: () => vscode.workspace.workspaceFolders?.[0]?.name ?? "내 제품",
     qr: qrDataUrl,
+    // CGP-ART-R-013: background counts arrived; redraw only while the panel is open (the read gate decides).
+    statsChanged: () => { if (this.isCurriculumRuntimeEnabled() && this.publishReadGate.canRefresh) void this.postPublishState(); },
   });
 
   private readonly publishReadGate = new PublishReadGate();

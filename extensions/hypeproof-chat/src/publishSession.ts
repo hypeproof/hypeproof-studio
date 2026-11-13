@@ -54,6 +54,8 @@ export interface PublishPorts {
   /** The project's test origin as last read from the Service, kept with the project id (CR-11 after a restart). */
   rememberedOrigin?(): string | null;
   rememberOrigin?(origin: string | null): Promise<void>;
+  /** CGP-ART-R-013: counts arrived in the background; the host draws a new view if the panel is still open. */
+  statsChanged?(): void;
   /** The lesson's curriculum week, when the profile names one. */
   week(): number | null;
   defaultTitle(): string;
@@ -75,7 +77,7 @@ export function publishTiming(startedAt: number, endedAt: number, phases: Record
 
 type Client = { base: string; token: string; fetchImpl?: typeof fetch };
 /** CGP-ART-R-013: how long an experiment's evidence read is reused, and how many new reads one panel view may make. */
-export const STATS_TTL_MS = 60_000, STATS_MAX_READS = 6;
+export const STATS_TTL_MS = 60_000, STATS_MAX_READS = 6, STATS_TIMEOUT_MS = 4_000, STATS_RETRY_MS = 30_000;
 
 type ProjectState = {
   project: { id: string; title: string; members?: string[] };
@@ -295,7 +297,7 @@ export class PublishSession {
         sessions: counts ? (counts[e.id] ?? { channels: {}, unlabelled: 0, unknown: 0 }) : null,
       });
     }
-    const stats = await this.statsFor(client, [...new Set([version.id, ...experiments.map((e) => e.product_version_id)])].filter((v): v is string => !!v), experiments);
+    const stats = this.statsFor(client, [...new Set([version.id, ...experiments.map((e) => e.product_version_id)])].filter((v): v is string => !!v), experiments);
     return {
       ...empty,
       available: true,
@@ -309,40 +311,57 @@ export class PublishSession {
     };
   }
 
-  /** CGP-ART-R-013: experiment id → its sessions as last read, for one token, at most STATS_TTL_MS old. */
+  /** CGP-ART-R-013: experiment id → its sessions as last read, for one token, at most STATS_TTL_MS old. Never a pseudonym. */
   private readonly sessionsRead = new Map<string, { at: number; token: string; sessions: StatSession[] }>();
+  /** Experiment ids whose read is in flight, and those whose last read failed (remembered STATS_RETRY_MS, then retried). */
+  private readonly statsLoading = new Set<string>();
+  private readonly statsFailed = new Map<string, number>();
+  /** Test seam: what the stats cache holds, as JSON. */
+  statsCacheJson(): string { return JSON.stringify([...this.sessionsRead]); }
   /**
-   * The counts of each shown version, from the experiments' evidence reads (CR-23 sessions, recomputed by the Service on
-   * every read). At most STATS_MAX_READS new reads per view and a cache of STATS_TTL_MS, so the panel's own refresh does
-   * not turn into one evidence read per experiment every time. A version whose reads are not all in hand says unknown.
+   * The counts of each shown version, drawn from what is already in hand: it never waits for the Service, so a slow
+   * evidence read can never hold back the sharing state. Missing reads start in the background (in parallel, each with a
+   * STATS_TIMEOUT_MS limit, at most STATS_MAX_READS per view); when they settle, `statsChanged` asks for a new view.
+   * A version waiting for a read says loading; one whose read failed says unknown, never 0.
    */
-  private async statsFor(client: Client, versions: string[], experiments: PublishExperimentView[]): Promise<Record<string, VersionStats>> {
-    const now = this.now(), out: Record<string, VersionStats> = {};
-    let reads = 0;
-    const sessionsOf = async (id: string): Promise<StatSession[] | null> => {
-      const hit = this.sessionsRead.get(id);
-      if (hit && hit.token === client.token && now - hit.at < STATS_TTL_MS) return hit.sessions;
-      if (reads >= STATS_MAX_READS) return null;
-      reads++;
-      const r = await curriculumRequest<{ evidence?: { sessions?: unknown } }>(client, "GET", `/experiments/${encodeURIComponent(id)}/evidence`);
-      const raw = r.ok && Array.isArray(r.body.evidence?.sessions) ? r.body.evidence!.sessions as Array<Record<string, unknown>> : null;
-      // Only what the counts and the source list need: no pseudonym or any other participant field is kept (CR-65).
-      const sessions = raw ? raw.filter((x) => x && typeof x.session_id === "string" && typeof x.at === "number").map((x) => ({
-        session_id: x.session_id as string, at: x.at as number, product_version: typeof x.product_version === "string" ? x.product_version : null,
-        tasks: x.tasks && typeof x.tasks === "object" ? x.tasks as StatSession["tasks"] : {}, pages: Number(x.pages) || 0, clicks: Number(x.clicks) || 0,
-      })) : null;
-      // A failed read is not kept: the next view asks again (and says unknown until then).
-      if (sessions) this.sessionsRead.set(id, { at: now, token: client.token, sessions });
-      return sessions;
-    };
+  private statsFor(client: Client, versions: string[], experiments: PublishExperimentView[]): Record<string, VersionStats> {
+    const now = this.now(), out: Record<string, VersionStats> = {}, wanted: string[] = [];
+    const fresh = (id: string) => { const hit = this.sessionsRead.get(id); return hit && hit.token === client.token && now - hit.at < STATS_TTL_MS ? hit.sessions : null; };
+    const failed = (id: string) => { const at = this.statsFailed.get(id); return at !== undefined && now - at < STATS_RETRY_MS; };
     for (const v of versions) {
       const mine = experiments.filter((e) => e.product_version_id === v);
       if (!mine.length) continue;
-      const withSessions = [];
-      for (const e of mine) withSessions.push({ id: e.id, product_version_id: e.product_version_id, sessions: await sessionsOf(e.id) });
-      out[v] = versionStats(v, withSessions, now);
+      const got = mine.map((e) => ({ id: e.id, product_version_id: e.product_version_id, sessions: fresh(e.id) }));
+      if (got.every((g) => g.sessions)) { out[v] = versionStats(v, got, now); continue; }
+      if (mine.some((e) => !fresh(e.id) && failed(e.id))) { out[v] = { state: "unknown" }; continue; }
+      out[v] = { state: "loading" };
+      for (const g of got) if (!g.sessions && !this.statsLoading.has(g.id) && !wanted.includes(g.id)) wanted.push(g.id);
     }
+    if (wanted.length) void this.loadStats(client, wanted.slice(0, STATS_MAX_READS));
     return out;
+  }
+  private async loadStats(client: Client, ids: string[]): Promise<void> {
+    for (const id of ids) this.statsLoading.add(id);
+    const base = client.fetchImpl ?? fetch;
+    const timed: Client = { ...client, fetchImpl: (url, init) => base(url, { ...init, signal: AbortSignal.timeout(STATS_TIMEOUT_MS) }) };
+    await Promise.all(ids.map(async (id) => {
+      let sessions: StatSession[] | null = null;
+      try {
+        const r = await curriculumRequest<{ evidence?: { sessions?: unknown } }>(timed, "GET", `/experiments/${encodeURIComponent(id)}/evidence`);
+        const raw = r.ok && Array.isArray(r.body.evidence?.sessions) ? r.body.evidence!.sessions as Array<Record<string, unknown>> : null;
+        // Only what the counts and the source list need: no pseudonym or any other participant field is kept (CR-65).
+        sessions = raw ? raw.filter((x) => x && typeof x.session_id === "string" && typeof x.at === "number").map((x) => ({
+          session_id: x.session_id as string, at: x.at as number, product_version: typeof x.product_version === "string" ? x.product_version : null,
+          tasks: x.tasks && typeof x.tasks === "object" ? x.tasks as StatSession["tasks"] : {}, pages: Number(x.pages) || 0, clicks: Number(x.clicks) || 0,
+        })) : null;
+      } catch { sessions = null; }
+      this.statsLoading.delete(id);
+      // A read for a learner who has since signed out or changed is dropped, never shown to the next one.
+      if ((await this.ports.token()) !== client.token) return;
+      if (sessions) { this.sessionsRead.set(id, { at: this.now(), token: client.token, sessions }); this.statsFailed.delete(id); }
+      else this.statsFailed.set(id, this.now());
+    }));
+    this.ports.statsChanged?.();
   }
 
   private linkView(l: ProjectState["links"][number]): PublishLinkView {

@@ -17,7 +17,9 @@ export type VersionStats =
   | { state: "ok"; opened: StatCount; completed: StatCount }
   | { state: "empty" }
   /** The evidence of at least one experiment of this version could not be read: no number is shown. */
-  | { state: "unknown" };
+  | { state: "unknown" }
+  /** The counts are still being read; the sharing state is drawn without waiting for them. */
+  | { state: "loading" };
 
 const finished = (s: Pick<StatSession, "tasks">) => Object.values(s.tasks ?? {}).some((t) => t?.completed === true);
 
@@ -54,4 +56,5 @@ export function changeWords(c: Pick<StatCount, "last" | "prev">): { arrow: "▲"
 
 export const STATS_EMPTY = "아직 연 사람이 없어요";
 export const STATS_UNKNOWN = "횟수를 확인하지 못했어요";
+export const STATS_LOADING = "횟수 확인 중";
 export const STAT_LABELS = { opened: "열어 본 횟수", completed: "끝까지 한 횟수" } as const;

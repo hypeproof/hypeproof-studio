@@ -11715,6 +11715,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
         }
       ]
     },
@@ -11732,6 +11735,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/version-stats-tiles.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/version-stats-layout.smoke.mjs"
         }
       ]
     },
