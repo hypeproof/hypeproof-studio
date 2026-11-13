@@ -105,8 +105,7 @@ retain maintainer review/merge and workflow-authorized credentials.
 
 ## Native producer CLI (#3632)
 
-Default stays shadow without keys/pins. Live effect revalidation requires the child
-slice. No model calls, dispatch or publication. `machine-evidence.mjs prepare-current
+Default stays shadow without keys/pins. Live effect revalidation is supplied by #3638. No model calls, dispatch or publication. `machine-evidence.mjs prepare-current
 --pr N --packages DIR --sequence N --out FILE` reads product/accepted Service facts;
 sequence comes from Harness product CAS.
 
@@ -131,3 +130,27 @@ Assembly preserves actual capacity IDs/times and blocked overruns in persistent
 transact/applyEvent; @candidate resolves to its engine ID. All captures travel signed;
 packages stay cached. Controls use generated keys/files and known exporter output.
 Mac #516 and real all-PASS installed-App acceptance remain NOT RUN.
+
+## Live publisher CAS revalidation (#3638)
+
+Before effects, currentMachineAuthority fetches the fixed Studio candidate and
+product registry refs and exact-SHA state.json. typed-double-v1 covers both complete
+semantic states: checks, attributable resolutions, policy/roster, capacity,
+accounting, supersession and global failure history. Exclude only top-level
+revision and this reserved operation status/result/finishedAt. Its immutable
+publish-pass request/quote/reserved budget and prepared bundleDigest/evidenceCommit/
+dispatchKey must still match separately. A provider receipt never changes a verdict.
+Thus UNKNOWN to DONE settles normally, while a new same-candidate FAIL invalidates
+an unexpired old PASS bundle immediately.
+
+The parent and final child workflows carry machine_dispatch_key and set
+HPS_MACHINE_DISPATCH_KEY alongside HPS_MACHINE_EVIDENCE_COMMIT. Active authority
+requires the exact 64-hex key. Parent run-name is release-promote-<pr>-<key> for
+read-only UNKNOWN reconciliation; never blindly repeat dispatch. The parent
+checkout is pinned to the dispatch GITHUB_SHA, and both must equal the
+reserved workflowHead before effects. The validated parent passes its head as
+machine_parent_workflow_head to both child gates; the later squash merge GITHUB_SHA
+does not replace that original parent identity.
+Controls cover complete-view drift, excluded bookkeeping, fixed immutable reads,
+receipt/dispatch mismatch, independent Python vectors and native manual proof.
+Real publication remains NOT RUN; default enrollment remains shadow.

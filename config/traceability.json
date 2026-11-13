@@ -6204,6 +6204,9 @@
         },
         {
           "path": "scripts/release/test/native-producer.controls.mjs"
+        },
+        {
+          "path": "scripts/release/test/live-anchor.controls.mjs"
         }
       ]
     },

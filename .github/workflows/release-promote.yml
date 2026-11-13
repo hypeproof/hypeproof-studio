@@ -14,6 +14,7 @@
 # Every step is idempotent. If the rc was still being accepted, or a step failed, rerun with
 # `gh workflow run release-promote.yml -f pr=<number>`.
 name: release-promote
+run-name: release-promote-${{ inputs.pr || github.event.pull_request.number }}-${{ inputs.machine_dispatch_key || 'human' }}
 
 on:
   pull_request_review:
@@ -25,6 +26,11 @@ on:
         required: true
       machine_evidence_commit:
         description: "Immutable private evidence commit for an enrolled complete machine PASS"
+        required: false
+        default: ""
+
+      machine_dispatch_key:
+        description: "Exact reserved machine publication dispatch key"
         required: false
         default: ""
 
@@ -51,7 +57,7 @@ jobs:
       # The default branch's code decides, not the release branch's.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.repository.default_branch }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -94,6 +100,7 @@ jobs:
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           PR: ${{ inputs.pr || github.event.pull_request.number }}
           HPS_MACHINE_EVIDENCE_COMMIT: ${{ inputs.machine_evidence_commit }}
+          HPS_MACHINE_DISPATCH_KEY: ${{ inputs.machine_dispatch_key }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

@@ -206,7 +206,8 @@ test('release-promote runs main\'s code on an approval and never on another revi
   assert.deepEqual(doc[true].pull_request_review.types, ['submitted']);
   assert.match(job.if, /github\.event\.review\.state == 'approved'/);
   assert.match(job.if, /contains\(github\.event\.pull_request\.labels\.\*\.name, 'release'\)/);
-  assert.equal(job.steps[0].with.ref, '${{ github.event.repository.default_branch }}');
+  assert.equal(job.steps[0].with.ref, "${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.repository.default_branch }}",
+    'dispatch source is immutable; approvals keep the default-branch policy');
   for (const step of job.steps) assert.doesNotMatch(step.run ?? '', /\$\{\{/, 'values enter the shell through env');
   const promote = job.steps.find(s => s.name === 'Promote the approved rc');
   assert.equal(promote.env.GH_TOKEN, '${{ github.token }}', 'the workflow token: its tag push starts no build');
