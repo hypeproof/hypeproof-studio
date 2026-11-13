@@ -2075,7 +2075,8 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
   - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
   - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
-  - any parser finding (warn or fail) that the stored plan did not already have.
+  - any parser finding (warn or fail) that the stored plan did not already have;
+  - markup that a browser could read differently from the plan tokenizer (round 2 of the verification). This also applies to every PUT /plan. It covers abrupt or `--!>` comments, CDATA, a quoted value containing `<` or `>`, an unquoted value with quotes or a backtick, a `<` that does not start a well-formed tag, duplicate attributes and NUL. A leading `<!DOCTYPE html>` and spec-valid comments still pass. The Service's own skeleton is full of guide comments, so refusing every comment would break real plans. A revision may keep a comment the section already has but may add none, and it may not add a second element carrying the selected marker.
 
   The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
 

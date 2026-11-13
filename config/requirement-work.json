@@ -295,7 +295,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "8f0949ad39b0000fb02f6088c9aae150517281554ff9abfe8ad48f9b827ec511",
+      "sha256": "e116144c6f3d15715b3fc291308ac7e56b931d2863f3cffc00cad2568a233ad3",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
