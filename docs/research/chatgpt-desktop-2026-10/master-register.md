@@ -377,6 +377,42 @@ ALREADY vs ADAPT/ADOPT pairs usually mean partial coverage (the ADAPT side adds 
 
 Some of these are fact checks rather than product calls: CGP-CHAT-066 vs CGP-AGENT-016 (is UX22 recovery-fork "fork chat"?), CGP-VOICE-023 vs CGP-SHELL-038 (does a mic picker exist?), CGP-KNOW-068 vs CGP-SHELL-083 (is a learner-facing "AI unavailable" status screen shipped?).
 
+## 7. Requirement rows already shipped (marked 2026-11-14)
+
+These requirement rows were still counted as open, although they had shipped. Most landed under their design-row id or
+in a verified batch PR, so a search for the requirement id in commit subjects missed them. Each row below was
+spot-checked against the code on `origin/main` (2026-11-14): the implementing file exists and carries the behaviour.
+"Batch" means the requirement id is named in that batch PR's verified rows.
+
+| Row | What | PR / commit | Implementing file |
+|---|---|---|---|
+| CGP-CHAT-R-014 | Sources labelled by kind | #2730 (c737b9752) | `extensions/hypeproof-chat/src/sdkWebCitations.ts` |
+| CGP-CHAT-R-015 | Real elapsed work time per turn | #2732 (76809a97d) | `extensions/hypeproof-chat/src/turnElapsed.ts` |
+| CGP-CHAT-R-016 | A failed turn render does not break the transcript | #2734 (e543907d1) | `extensions/hypeproof-chat/webview-ui/src/TurnBoundary.tsx` |
+| CGP-CHAT-R-017 | Long paste becomes a chip | #2737 (8f1e34512) | `extensions/hypeproof-chat/webview-ui/src/PasteChip.tsx` |
+| CGP-CHAT-R-018 | `@` workspace file mentions | #2762 (86f0c33a2) | `extensions/hypeproof-chat/src/workspaceFileMentions.ts` |
+| CGP-CHAT-R-020 | Draw and attach a sketch | #2764 (6fae6e1a8) | `extensions/hypeproof-chat/webview-ui/src/SketchDialog.tsx` |
+| CGP-CHAT-R-026 | Search own tasks | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/taskSearch.ts` |
+| CGP-CHAT-R-030 | Shortcuts help sheet | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/webview-ui/src/ShortcutSheet.tsx` |
+| CGP-AGENT-R-027 | Checkpoint with a reviewed message | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/checkpoint.ts` |
+| CGP-AGENT-R-030 | Local performance trace | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/perfTrace.ts` |
+| CGP-ART-R-006 | Style tweak for a picked element | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/webview-ui/src/StyleTweakPanel.tsx` |
+| CGP-ART-R-016 | Slide suggestion chips | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/slideSuggestion.ts` |
+| CGP-ART-R-017 | 따라 보기 while the coach edits | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/liveFollow.ts` |
+| CGP-ART-R-020 | "AI가 한 일" summary per task | batch #2846 (bd782e4cc) | `extensions/hypeproof-chat/src/taskActivity.ts` |
+| CGP-ART-R-021 | Overwrite change summary in the approval | batch #2846 (bd782e4cc); D-021 #3062 | `extensions/hypeproof-chat/src/diffGuard.ts` |
+| CGP-ART-R-023 | Deck PDF and open folder | batch #2846 (bd782e4cc); D-023 #3066 | `extensions/hypeproof-chat/src/deckPdf.ts` |
+| CGP-SHELL-R-014 | Learner settings sheet | batch #2970 (f05d6382e) | `extensions/hypeproof-chat/src/startSettings.ts` |
+| CGP-SHELL-R-020 | Project ideas only after "몰라요" | batch #2970 (f05d6382e) | `extensions/hypeproof-chat/webview-ui/src/ProjectIdeas.tsx` |
+| CGP-SHELL-R-028 | Export my work | batch #2972 (84e9f9a7d) | `extensions/hypeproof-chat/src/workExport.ts` |
+| CGP-SHELL-R-035 | What's new after an update | #3102 (D-034), #3217 | extensions/hypeproof-chat/src/learnerReleaseNotes.ts, extensions/hypeproof-chat/webview-ui/src/WhatsNew.tsx |
+| CGP-DS-R-030 | Tabular figures in Chalk | batch #2972 (84e9f9a7d) | chalk/src/ui/manage.html, chalk/src/ui/budgets.html, chalk/src/ui/console.html (`font-variant-numeric:tabular-nums`) |
+| CGP-DS-R-032 | Startup and empty states use only HP marks | batch #2972 (84e9f9a7d) | extensions/hypeproof-chat/test/brand-marks.smoke.mjs, extensions/hypeproof-chat/test/startup-brand-computed.smoke.mjs |
+| CGP-SHELL-R-017 | Chat text size | #1902, #1954, #2716 (DS-D-006) | `extensions/hypeproof-chat/src/textSize.ts` |
+| CGP-SHELL-R-018 | Reduced motion from the OS and a setting | #1896, #2433 (DS-D-012) | `extensions/hypeproof-chat/src/motionPreference.ts` |
+| CGP-SHELL-R-026 | Minor external links (stricter: blocked outside the allowlist) | #1862, #3484, #3489 (ART-D-008) | `extensions/hypeproof-chat/src/browserSafetyHelpers.ts` |
+| CGP-SHELL-R-030 | Ask the instructor for more allowance | #2710 (SHELL-D-029) | `extensions/hypeproof-chat/webview-ui/src/AccessControl.tsx` |
+
 ## 6. Technical unknowns (not human decisions, but they can flip a row)
 
 - Steer (CGP-CHAT-R-012): whether the Agent SDK / proxy paths accept mid-turn user input; if not, the row degrades to DEFER.
