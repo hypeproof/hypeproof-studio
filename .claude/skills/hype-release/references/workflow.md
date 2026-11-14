@@ -49,10 +49,46 @@ remain blocked for inspection. Missing is not proof that
 an in-flight action cannot still finish. No generic unlock/force-publish bypass exists.
 
 A DONE operation with identical input is reusable without repeating side effects.
-A new operation ID consumes a new cost reservation and a bounded attempt. Quotes
+A new operation ID consumes a new cost reservation and a bounded attempt, except
+that a candidate may have only one initial `build` operation. Quotes
 bind the whole request, expiry and candidate, not merely an adapter's name. Quote
 correctness is a release-manager attestation; this tool cannot enforce provider-side
 billing or claim a final invoice. Use provider limits and actual observations too.
+
+### Desktop build recovery
+
+`build --plan` binds the exact candidate's committed platform/workflow bytes,
+managed tag marker and trigger modes. The supported mixed producer creates one
+tag for Mac and sends one Windows dispatch with that tag as the workflow ref,
+the full source SHA as both source inputs, `managed_draft=true`, and the final
+release version. The Windows write uses a separate repository-scoped Actions
+broker grant. No extra Mac dispatch, signing override or publication is allowed.
+The dispatcher requests a run ID using GitHub's documented
+[`return_run_details`](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+option; a lost/empty response still requires exact run observation, never replay.
+
+Each tag/dispatch intent is committed with the existing state CAS before its
+effect. A successful tag is retained when Windows has not started. `reconcile`
+only reads provider records; missing, truncated, multiple or mismatched run
+evidence remains UNKNOWN. If Windows has no saved intent, the current owner may
+resume that unattempted step with the original checkout and a new whole-build
+quote, using the same operation ID:
+
+```bash
+"${release[@]}" resume-build --operation build-1 --checkout /path/to/exact/studio-candidate --quote /tmp/build-resume-quote.json --plan
+# Confirm the original request digest and fresh whole-build upper bound, then:
+"${release[@]}" resume-build --operation build-1 --checkout /path/to/exact/studio-candidate --quote /tmp/build-resume-quote.json
+```
+
+The reservation stays at least as large as either whole-build quote; it is not
+reset by partial success. Resume count and total budget remain bounded. An
+already-attempted dispatch cannot be resent even if no run is visible yet.
+`BUILD_RUNS_OBSERVED` means both exact runs exist; it does not mean successful
+builds, package acceptance or deployment. Collection still requires both complete
+platform receipts and original bytes, including Mac signing. S1/S3/S4/S5, no
+automatic managed-draft acceptance and all existing publication gates remain.
+Legacy tag-only UNKNOWN operations are observed under their original request;
+never reinterpret them as permission for a new dispatch.
 
 Shared state lives on one `ops/release-state/<identity>` orphan branch containing
 only `state.json`. Each non-forced ref update compares the exact prior commit; a stale
