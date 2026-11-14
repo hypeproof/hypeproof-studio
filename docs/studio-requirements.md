@@ -7135,13 +7135,17 @@ twelve-line hint at 320/800/1420px with base and xlarge text, and forced colours
 
 REQ-SHELL-19 / CGP-SHELL-035 / PI#4 (the learner decides how much help the screen offers; it may
 expose OWNERSHIP): the tip row has a third, quiet action, `팁 그만 보기`, after `입력창에 넣기`.
-Pressing it turns every lesson tip off: in every step, task and window on this computer, until the
-learner turns tips on again. It hides only this row. The lesson's steps, instructions, mission
+Pressing it turns every lesson tip off for this learner: in every step, task and window, until the
+learner on this seat turns tips on again. It hides only this row. The lesson's steps, instructions, mission
 header, the rail's 힌트 보기 and anything an instructor marked as required stay as they are.
-The choice is one device preference, `hypeproofChat.lessonTips` (`src/lessonTips.ts`), kept in the
-host's globalState like the chat text size. Only a stored `false` is off (absent means on), it is
-written only from a boolean `setLessonTips` message, never synced, logged or sent to the Service,
-and reaches the chat as `config.lessonTips`. Right after the press the row is replaced by a
+The choice belongs to one learner, not the computer (classroom PCs are shared): the host's
+globalState key `hypeproofChat.lessonTips` (`src/lessonTips.ts`) holds the seats that turned tips
+off on this computer, keyed by the same seat id as the collapsed learning blocks (`collapseSeat`:
+the Service seat id, else the lesson capability receipt, else the local activity). A seat not on
+the list sees tips, so another learner on the same window starts with tips on; an empty seat keeps
+its choice in memory only and loses it on any seat switch. It is written only from a boolean
+`setLessonTips` message, bounded to 200 seats, never synced, logged or sent to the Service, and
+reaches the chat as `config.lessonTips`. The off note never carries over to another seat. Right after the press the row is replaced by a
 `role="status"` line, `팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.`, whose `다시 켜기` (focused)
 turns tips back on; the line ends with the next send. The start page's 팁 보기 row (CGP-SHELL-R-014)
 binds to the same key and is added by that row's follow-up. Per-step 닫기 is unchanged. Seats
@@ -7152,7 +7156,9 @@ from the start.
 Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium: one off write and the way
 back, off hides every tip but never the lesson, 다시 켜기, 닫기 unchanged, the note ends with the next
 send, negative controls, 44px/14px/focus ring in both themes at 320-1420px; red on main) and
-`lesson-tips-host.smoke.mjs` (only `false` is off; boolean-only globalState write; never synced).
+`lesson-tips-host.smoke.mjs` (the provider's own `LessonTipsPreference` over a fake globalState:
+learner A off, learner B on the same window still on, A again off; empty seat memory-only and
+reset on a switch; junk is on; bounded; never synced; a seat-blind control fails it).
 
 ## Find in chat (CGP-CHAT-R-027)
 

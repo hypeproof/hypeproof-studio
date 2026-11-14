@@ -83,6 +83,14 @@ try{
  assert.equal(await note(),null,'note gone');
  t=await tips();assert.equal(t.length,1,'the tip is back');assert.equal(t[0].text,first.hint.trim());
  cases++;
+ // 5b. Shared PC: learner A turns tips off, then learner B signs in on the same window. The host sends B's own
+ // choice (tips on, lessonTips:true); B sees the tip and never A's note.
+ await open();await click('.hps-lesson-tip-stop');assert.ok(await note(),'A sees the off note');
+ const seatB=configFor('classroom',lesson,true);seatB.profile={...seatB.profile,activity_id:'b'.repeat(64)};seatB.activity={...seatB.activity,id:'a2'};
+ await send({type:'config',config:seatB});
+ assert.equal(await note(),null,'B never sees A\'s note');
+ assert.equal((await tips()).length,1,'B sees the tip');
+ cases++;
  // 6. Per-step 닫기 is unchanged and never writes the switch.
  await open();
  await click('.hps-lesson-tip-dismiss');

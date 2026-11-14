@@ -992,6 +992,9 @@ export function ChatPanel(props: Props) {
   const lessonTip = props.instructor ? null : lessonTipFor(config?.profile?.lesson, currentStepId);
   // CGP-SHELL-R-019 — the "tips are off" note is said once: the next send (or turning tips back on) ends it.
   useEffect(() => { if (streaming || props.sendPending) setTipsOffNote(false); }, [streaming, props.sendPending]);
+  // A different learner on this window (shared classroom PCs) never sees the previous learner's note.
+  const tipsSeat = collapseSeat({ activityId: config?.profile?.activity_id, entryId: config?.lessonCapabilityEntry?.id, localActivityId: config?.activity?.id });
+  useEffect(() => { setTipsOffNote(false); }, [tipsSeat]);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
