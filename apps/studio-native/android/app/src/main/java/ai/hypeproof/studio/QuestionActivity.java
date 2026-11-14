@@ -169,7 +169,7 @@ public final class QuestionActivity extends Activity {
         questionsEntry.setEnabled(!model.busy&&!model.readOnly);approvalsEntry.setEnabled(!model.busy&&!model.readOnly);
         timeline.beforeContentChange();
         ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
-        body.setGravity(s!=null&&s.messages.length()>0?Gravity.TOP:Gravity.BOTTOM);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
+        body.setGravity(Gravity.TOP);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
         String key=s==null?"signed-out":s.messages.toString()+String.valueOf(s.request)+s.earlier;
         if(!key.equals(transcriptKey)){
             transcriptKey=key;messages.removeAllViews();
