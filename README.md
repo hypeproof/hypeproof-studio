@@ -84,9 +84,10 @@ injects the cohort's system prompt and enforces the session window.
 
 > This repository is private, so the installer is fetched with the GitHub CLI.
 > First accept the `hypeproof` organization invitation, install `gh`, and run
-> `gh auth login --hostname github.com` with the invited account. A class
-> participant or pass buyer without an invitation installs with their
-> participation code at https://hypeproof-ai.xyz/studio/install instead. Full guide: [docs/INSTALL.md](./docs/INSTALL.md).
+> `gh auth login --hostname github.com` with the invited account. Class
+> participants and invited Studio users without a GitHub invitation install at
+> https://hypeproof-ai.xyz/studio/install instead, with their participation code
+> or the install code from their Studio invite page. Full guide: [docs/INSTALL.md](./docs/INSTALL.md).
 
 <details>
 <summary>macOS</summary>

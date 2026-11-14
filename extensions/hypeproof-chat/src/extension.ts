@@ -9,9 +9,11 @@ import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
+import { configureGuardianSwitch, configureChildSeat, GUARDIAN_SETTING } from './childProfile';
+import { refuseOnChildSeat } from './childProfileHost';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
-import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
+import { ActivityConnectionError, ActivityConnections, activityConnections, canonicalRoot } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
 import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
@@ -47,6 +49,12 @@ import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
+import {
+  RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
+  enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
+  leaveWithoutReport, leaveAfterReport, storeDevSeed, seatFacts, seatLogLine, returnAfterUnsettled, type LeaveAsk,
+  type SeatHost,
+} from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
 import {
@@ -86,6 +94,75 @@ import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/p
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
 
+/** #4048 — the diagnostic channel for the seat outcome (facts only; no path, token or cohort). */
+let seatChannel: vscode.OutputChannel | undefined;
+function rehearsalSeatChannel(): vscode.OutputChannel {
+  seatChannel ??= vscode.window.createOutputChannel("HypeProof 리허설 기록");
+  return seatChannel;
+}
+
+/** #4048 — the same-window rehearsal host for this window (set by activate after the activity wrap). */
+let seatHost: SeatHost | undefined;
+
+/** #4048 — the host functions chalk#17 calls: enter a rehearsal in this window, end it, or ask whether a return is held. */
+export async function enterRehearsalSeat(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void> {
+  if (!seatHost) throw new Error("작업 창이 준비되지 않았어요. 다시 시도해 주세요.");
+  await enterRehearsal(seatHost, input);
+}
+export async function endRehearsalSeat(): Promise<void> {
+  if (!seatHost) return;
+  await endRehearsal(seatHost);
+}
+export async function hasRehearsalReturn(): Promise<boolean> {
+  return seatHost ? hasReturnIssuer(seatHost) : false;
+}
+
+/** #4048 — the approved leave questions. Each asks only inside the rehearsal seat (see leaveWithoutReport). */
+const askLeave: LeaveAsk = async (message, buttons) => vscode.window.showInformationMessage(message, ...buttons);
+/** The palette item and the band button: leave without a report, after the question. */
+export async function leaveRehearsalWithoutReport(): Promise<void> {
+  if (seatHost) await leaveWithoutReport(seatHost, askLeave).catch(() => undefined);
+}
+/** After a successful report: ask whether to return. A failed report never calls this. */
+export async function leaveRehearsalAfterReport(): Promise<void> {
+  if (seatHost) await leaveAfterReport(seatHost, askLeave).catch(() => undefined);
+}
+
+/** The rehearsal folder is named by the rehearsal id, under global storage. The learner never picks it. */
+function rehearsalSeatHostFor(context: vscode.ExtensionContext, connections: ActivityConnections): SeatHost {
+  const canonicalFolder = (p: string) => { try { return canonicalRoot(p); } catch { return p; } };
+  return {
+    secrets: context.secrets,
+    currentRoot: () => {
+      const r = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      return r ? canonicalFolder(r) : undefined;
+    },
+    rehearsalFolderFor: (rehearsalId) => {
+      const safe = rehearsalId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
+      const p = path.join(context.globalStorageUri.fsPath, "rehearsal-seat", safe);
+      fs.mkdirSync(p, { recursive: true });
+      return canonicalFolder(p);
+    },
+    makeFolder: () => undefined,
+    openFolder: async (folder) => {
+      await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(folder), { forceReuseWindow: true });
+    },
+    bindStudentToken: async (token) => {
+      // Through the activity wrap: this stores the token as the rehearsal folder's activity.
+      await context.secrets.store(TOKEN_KEY, token);
+    },
+    releaseStudentBinding: (folder) => connections.dropBindingFor(folder),
+    askResume: async () => {
+      const choice = await vscode.window.showInformationMessage(RESUME_QUESTION, RESUME_CONTINUE, RESUME_RETURN);
+      return choice === RESUME_RETURN ? "return" : choice === RESUME_CONTINUE ? "resume" : undefined;
+    },
+    notify: (message) => { void vscode.window.showWarningMessage(message); },
+    now: () => Date.now(),
+    // #4048 Dev 3차 — label lines (cleared by …) go to the same channel as the seat outcome.
+    log: (line) => rehearsalSeatChannel().appendLine(line),
+  };
+}
+
 let providerRef: ChatPanelProvider | null = null;
 let spoolRef: SessionSpool | null = null;
 /** #596 — re-entry lock on the upload command (banner + palette clicked at once → no double upload). */
@@ -103,6 +180,8 @@ export async function activate(context: vscode.ExtensionContext) {
     () => vscode.workspace.getConfiguration('chat').get<boolean>('disableAIFeatures') === true,
     command => vscode.commands.executeCommand(command));
   await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
+  // GRD-23 — app-side mirror of Service HPS_GUARDIAN, read on every check. Default off: no change.
+  configureGuardianSwitch(() => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>(GUARDIAN_SETTING, false));
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -114,6 +193,16 @@ export async function activate(context: vscode.ExtensionContext) {
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
+  // #4048 — a same-window rehearsal: enter, bind, or return, decided from the secrets before the resume marker runs.
+  seatHost = rehearsalSeatHostFor(context, connections);
+  // #4048 Dev 2차 — one facts-only line per activation, and the safety net for a window that ends without a learner connection.
+  rehearsalSeatChannel().appendLine('[seat] activation reached the seat step');
+  let seatOutcome: string;
+  try { seatOutcome = await resumeOnActivation(seatHost); } catch { seatOutcome = 'threw'; }
+  const seatFactsNow = await seatFacts(seatHost).catch(() => undefined);
+  if (seatFactsNow) rehearsalSeatChannel().appendLine(seatLogLine(seatOutcome, seatFactsNow));
+  await returnAfterUnsettled(seatHost, seatOutcome).catch(() => 'failed' as const);
+  if (seatOutcome === 'ask') void offerResume(seatHost).catch(() => undefined);
   registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -237,13 +326,16 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearTimeout(pendingTimer) });
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
+  // GRD-09/10/19 — child-seat refusals read the profile the chat panel holds now.
+  configureChildSeat(() => provider.childGateProfile);
   const chalkContract = new ChalkContractHost(
     {
       registerCommand: (id, handler) => vscode.commands.registerCommand(id, handler),
       executeCommand: (id, ...args) => vscode.commands.executeCommand(id, ...args),
     },
     provider.chalkRunner(),
-    provider.chalkOps(),
+    // #4048 — the rehearsal seat entry is a host function of this window, reached through the contract bus.
+    { ...provider.chalkOps(), enterRehearsalSeat: (input) => enterRehearsalSeat(input), notify: (m) => { void vscode.window.showWarningMessage(m); } },
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
@@ -456,7 +548,7 @@ export async function activate(context: vscode.ExtensionContext) {
   provider.classWindowSource = () => classroomOps.helpConnection();
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
   provider.onIssuerAutoRejected = () => {
-    void context.secrets.delete(ISSUER_TOKEN_KEY).then(() => startPage.show());
+    void forgetIssuer(seatHost!).then(() => startPage.show());
   };
   // #751 native help: the learner's help requests to the instructor of their live class connection (ADM-03/05, AT-47).
   // Drafts and requests live one file family per record under globalStorageUri (shared by every window; globalState is one
@@ -704,8 +796,11 @@ export async function activate(context: vscode.ExtensionContext) {
       });
     }),
 
+    // #4048 — palette item; hidden outside a rehearsal seat by the when clause, and a no-op there too.
+    vscode.commands.registerCommand("hypeproof-chat.endRehearsalSeat", () => leaveRehearsalWithoutReport()),
+
     vscode.commands.registerCommand("hypeproof-chat.forgetIssuerToken", async () => {
-      await context.secrets.delete(ISSUER_TOKEN_KEY);
+      await forgetIssuer(seatHost!);
       await provider.refreshConfig();
       vscode.window.showInformationMessage("issuer 토큰이 지워졌어요. 다음 발급 시 다시 물어봅니다.");
     }),
@@ -723,7 +818,8 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage("issuer 토큰 형식이 아닙니다. 발급받은 강사 토큰을 확인하세요.");
         return;
       }
-      await context.secrets.store(ISSUER_TOKEN_KEY, trimmed);
+      // #4048 — during a rehearsal the held credential is the instructor's; a new one must not be stored over it.
+      if (!(await storeIssuerUnlessHeld(context.secrets, trimmed, (m) => { void vscode.window.showErrorMessage(m); }))) return;
       await provider.refreshConfig();
       const whoamiStatus = provider.lastWhoamiStatus;
       if (whoamiStatus === "rejected") {
@@ -925,13 +1021,13 @@ export async function activate(context: vscode.ExtensionContext) {
     // cr-verify — "Test my product" (CR-12). Gated in the manifest, re-checked in the handler.
     vscode.commands.registerCommand("hypeproof-chat.testMyProduct", () => provider.testMyProduct()),
     // cr-publish — "Publish for user test" (CR-17). Gated in the manifest, re-checked in the handler.
-    vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => provider.publishTestVersion()),
+    vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => refuseOnChildSeat("publish") ? undefined : provider.publishTestVersion()),
     // One-click publish to GitHub Pages. Gated in the manifest (sitePublishEnabled), re-checked in the handler.
-    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => provider.publishSite()),
+    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => refuseOnChildSeat("publish") ? undefined : provider.publishSite()),
     // Forget the persisted "publish without asking" registration (publishRegistry.ts).
     vscode.commands.registerCommand("hypeproof-chat.publishSiteUnregister", () => provider.unregisterSitePublish()),
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
-    vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
+    vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => refuseOnChildSeat("memory") ? undefined : provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
     vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
     vscode.commands.registerCommand("hypeproof-chat.deckSlideSuggest", () => provider.deckSlideSuggest()),
@@ -1424,7 +1520,8 @@ async function applyTestBackdoors(
 
   if (token && token.length > 0) {
     try {
-      await context.secrets.store(TOKEN_KEY, token);
+      // #4052 — a Dev seed never overwrites a held rehearsal seat.
+      await storeDevSeed(context.secrets, TOKEN_KEY, token);
     } catch {
       // A stale development seed must not prevent command registration or
       // the normal participation screen from opening. Never log the token.
@@ -1480,7 +1577,7 @@ async function applyTestBackdoors(
         if (fs.existsSync(devIssuerTokenFile)) {
           const t = fs.readFileSync(devIssuerTokenFile, "utf8").trim();
           if (t.length > 20) {
-            await context.secrets.store(ISSUER_TOKEN_KEY, t);
+            await storeDevSeed(context.secrets, ISSUER_TOKEN_KEY, t);
           }
         }
       } catch { /* ignore — best effort */ }

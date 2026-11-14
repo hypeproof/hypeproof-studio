@@ -13,7 +13,10 @@
   background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default);
   border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-12);
 }
-.hp-material.hp-block-card[data-block-open] { grid-template-areas: "thumb name toggle" "body body body" "state state state"; row-gap: var(--hp-space-2); }
+.hp-material.hp-block-card[data-block-open] { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "thumb name toggle more" "body body body body" "state state state state"; row-gap: var(--hp-space-2); }
+/* CGP-LEARN-D-011: the open card's 자료 메뉴 button sits after 닫기, and its menu opens in flow as a row under the head (nothing
+   is positioned, so it never covers the rail). */
+.hp-material.hp-block-card[data-block-open][data-block-menu] { grid-template-areas: "thumb name toggle more" "menu menu menu menu" "body body body body" "state state state state"; }
 .hp-block-card-head { display: contents; }
 /* The 자료 label sits inside the 48px tile under the icon, so the title and the live state line get the row's width. */
 .hp-block-card-thumb {
@@ -31,11 +34,38 @@
 /* One line: two classes beat koreanProse.css's `:lang(ko) h3 { text-wrap: balance }`, which would turn wrapping back on. */
 .hp-block-card .hp-block-card-name { grid-area: name; align-self: end; margin: 0; min-width: 0; line-height: var(--hp-leading-label); font-weight: var(--hp-weight-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hp-block-card[data-block-open] .hp-block-card-name { align-self: center; }
-.hp-block-card-head > button { grid-area: toggle; min-width: var(--hp-control-min); min-height: var(--hp-control-min); font-size: var(--hp-font-caption); white-space: nowrap; }
+.hp-block-card-head > button.hp-block-menu-toggle { grid-area: more; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.hp-block-card-head > button:not(.hp-block-menu-toggle) { grid-area: toggle; min-width: var(--hp-control-min); min-height: var(--hp-control-min); font-size: var(--hp-font-caption); white-space: nowrap; }
 .hp-block-card-body { grid-area: body; min-width: 0; }
 /* Learner floor (14px) over the rail's 12px note style: the saved-work line and the undrawable notice inside a block. */
 .hp-block-card .hp-rail-lesson-note { font-size: var(--hp-font-caption); }
 .hp-block-card-body[hidden] { display: none; }
 @media (forced-colors: active) {
   .hp-block-card, .hp-block-card-thumb { border-color: CanvasText; }
+}
+
+/* CGP-LEARN-D-010 (DES-CGP-LEARN-10): "처음으로" and "되돌리기" are quiet buttons (not Primary, SX-04), side by side under the
+   save button, 44px targets at the learner's 14px floor. Disabled reads differently from enabled in words and colour, not only
+   by opacity: the muted text token and a dashed boundary. */
+.hp-block-history { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hp-block-history > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-block-history > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+
+/* CGP-LEARN-D-011 (DES-CGP-LEARN-11, collapse half): the 자료 메뉴 is the card's overflow menu, in flow under the head; its item is
+   a 44px row at the learner's 14px floor. Collapsed, the card is one row: "접은 자료: <title>" and 다시 보기 (a 44px quiet button). */
+.hp-block-menu { grid-area: menu; display: flex; flex-direction: column; min-width: 0; padding: var(--hp-space-1) 0; border-top: var(--ds-c-focus-width) solid var(--hp-border-divider-default); }
+.hp-block-menu > [role="menuitem"] {
+  min-height: var(--hp-control-min); padding: 0 var(--hp-space-2); text-align: start; font: inherit; font-size: var(--hp-font-caption);
+  background: transparent; color: var(--hp-text-primary-default); border: 0; border-radius: var(--hp-radius-8); cursor: pointer;
+}
+/* Hover and pressed fills are the shared control state layers, as in the rail's task menu (taskWorkspace.css); the focus ring is
+   the tokens.css :focus-visible baseline. */
+.hp-block-menu > [role="menuitem"]:hover { background-color: var(--hp-bg-control-hover); }
+.hp-block-menu > [role="menuitem"]:active { background-color: var(--hp-bg-control-pressed); }
+.hp-material.hp-block-card.hp-block-collapsed { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name restore"; }
+.hp-block-collapsed .hp-block-collapsed-name { grid-area: name; margin: 0; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-block-collapsed > button { grid-area: restore; min-width: var(--hp-control-min); min-height: var(--hp-control-min); font-size: var(--hp-font-caption); white-space: nowrap; }
+@media (forced-colors: active) {
+  .hp-block-menu { border-color: CanvasText; }
+  .hp-block-menu > [role="menuitem"] { color: ButtonText; }
 }

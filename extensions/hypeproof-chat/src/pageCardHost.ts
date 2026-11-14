@@ -28,13 +28,47 @@ export type PageResolve =
  * Test seam: runs between the path check and the use (open or reveal), so a test can swap the file
  * for a link at exactly that moment. Production never sets it.
  */
-export const pageCardSeam: { afterCheck: ((abs: string) => void) | null } = { afterCheck: null };
+export const pageCardSeam: { afterCheck: ((abs: string) => void) | null; realpath: ((p: string) => string) | null } = { afterCheck: null, realpath: null };
+
+/**
+ * `exactRoot`: the caller recorded `root` as a canonical folder earlier (a page card's turn root, a saved deck PDF's served
+ * root) and the walk must stay in THAT folder. Without it the root is re-canonicalized now, so a root path swapped for a
+ * link after it was recorded would silently move the whole walk somewhere else (verify-r004 on #4066). With it, a root
+ * that no longer canonicalizes to itself is refused as outside.
+ */
+export interface WalkOptions { exactRoot?: boolean }
+
+/**
+ * The form a root must be recorded in for an `exactRoot` walk: canonicalFolder's, the same function the walk re-resolves
+ * with. JS realpath is not that form: on Windows it keeps the drive letter as given (`c:\…`, workspaceRouting.ts) where
+ * canonicalFolder uppercases it, and on a case-insensitive volume it keeps the opened path's case where the native
+ * realpath reports the on-disk case. A root recorded any other way would refuse every legitimate walk. Throws when the
+ * folder cannot be resolved.
+ */
+export function recordedRoot(root: string): string {
+  return canonicalFolder(root, pageCardSeam.realpath ?? undefined);
+}
 
 /** Resolve a card row to the real file inside `root`, refusing links, climbs and non-files. */
-export function resolvePageInFolder(root: string, rel: string): PageResolve {
+export function resolvePageInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
   if (!isPagePath(rel)) return { ok: false, cause: path.isAbsolute(rel) || rel.split(/[\\/]/).includes("..") ? "outside" : "not-page" };
+  return walkInFolder(root, rel, opts);
+}
+
+/**
+ * The same walk for any file (CGP-ART-R-023: the exported deck.pdf): every segment lstat-checked under the canonical
+ * root, no link, a regular file, inside the root. A rooted or climbing path is refused before any filesystem call.
+ */
+export function resolveFileInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
+  if (typeof rel !== "string" || !rel || path.isAbsolute(rel) || rel.split(/[\\/]/).some((part) => part === ".." || part === "")) return { ok: false, cause: "outside" };
+  return walkInFolder(root, rel, opts);
+}
+
+/** The walk both share (unchanged from the page card's): canonical root, every segment lstat-checked, a file inside it. */
+function walkInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
   let base: string;
-  try { base = canonicalFolder(root); } catch { return { ok: false, cause: "outside" }; }
+  try { base = canonicalFolder(root, pageCardSeam.realpath ?? undefined); } catch { return { ok: false, cause: "outside" }; }
+  if (opts.exactRoot && base !== root) return { ok: false, cause: "outside" };
   let cur = base;
   try {
     for (const part of rel.split("/")) {
@@ -44,7 +78,7 @@ export function resolvePageInFolder(root: string, rel: string): PageResolve {
     const st = fs.lstatSync(cur);
     if (!st.isFile()) return { ok: false, cause: "not-file" };
     // Defense in depth: with every segment lstat-checked under the canonical base this cannot fail today.
-    if (!isInsideFolder(canonicalFolder(cur), base)) return { ok: false, cause: "outside" };
+    if (!isInsideFolder(canonicalFolder(cur, pageCardSeam.realpath ?? undefined), base)) return { ok: false, cause: "outside" };
     return { ok: true, abs: cur, dev: st.dev, ino: st.ino };
   } catch (e) {
     return { ok: false, cause: (e as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "outside" };
@@ -56,8 +90,8 @@ export function resolvePageInFolder(root: string, rel: string): PageResolve {
  * swapped-in link fails with ELOOP), then the handle's dev+ino must equal the checked file's (a
  * directory on the path swapped for a link lands on another inode).
  */
-export function readPageInFolder(root: string, rel: string): { ok: true; abs: string; text: string } | { ok: false; cause: PageRefusal } {
-  const checked = resolvePageInFolder(root, rel);
+export function readPageInFolder(root: string, rel: string, opts: WalkOptions = {}): { ok: true; abs: string; text: string } | { ok: false; cause: PageRefusal } {
+  const checked = resolvePageInFolder(root, rel, opts);
   if (!checked.ok) return checked;
   pageCardSeam.afterCheck?.(checked.abs);
   let fd: number | undefined;
@@ -75,11 +109,18 @@ export function readPageInFolder(root: string, rel: string): { ok: true; abs: st
 }
 
 /** For 폴더에서 보기: the path is walked again right before the OS call and must still be the checked inode. */
-export function recheckPageInFolder(root: string, rel: string): PageResolve {
-  const first = resolvePageInFolder(root, rel);
+export function recheckPageInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
+  return recheckIn(resolvePageInFolder, root, rel, opts);
+}
+/** recheckPageInFolder for any file (the exported deck.pdf). */
+export function recheckFileInFolder(root: string, rel: string, opts: WalkOptions = {}): PageResolve {
+  return recheckIn(resolveFileInFolder, root, rel, opts);
+}
+function recheckIn(resolve: (root: string, rel: string, opts: WalkOptions) => PageResolve, root: string, rel: string, opts: WalkOptions): PageResolve {
+  const first = resolve(root, rel, opts);
   if (!first.ok) return first;
   pageCardSeam.afterCheck?.(first.abs);
-  const again = resolvePageInFolder(root, rel);
+  const again = resolve(root, rel, opts);
   if (!again.ok) return again;
   return again.dev === first.dev && again.ino === first.ino ? again : { ok: false, cause: "changed" };
 }
@@ -156,14 +197,15 @@ export async function handlePageCardAction(
   const rel = msg.path;
   let abs: string;
   if (msg.type === "pageCardOpen") {
-    const read = readPageInFolder(root, rel);
+    // The card's root was recorded canonical at turn time: the walk must stay in that folder (exactRoot).
+    const read = readPageInFolder(root, rel, { exactRoot: true });
     if (!read.ok) return refuse();
     abs = read.abs;
     registry.setNotice(taskKey, msg.turnId, undefined);
-    const reload = () => { const again = readPageInFolder(root, rel); return again.ok ? again.text : null; };
+    const reload = () => { const again = readPageInFolder(root, rel, { exactRoot: true }); return again.ok ? again.text : null; };
     try { await deps.open(abs, read.text, reload); } catch { /* the press passed the gate; a failed open adds no claim */ }
   } else {
-    const checked = recheckPageInFolder(root, rel);
+    const checked = recheckPageInFolder(root, rel, { exactRoot: true });
     if (!checked.ok) return refuse();
     abs = checked.abs;
     registry.setNotice(taskKey, msg.turnId, undefined);

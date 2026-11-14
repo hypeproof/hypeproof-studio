@@ -91,7 +91,7 @@ const UNDRAWN = (title: string): MaterialText => ({
 export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   criterion_form: {
     title: "확인 기준 적기",
-    controlsHelp: "아래 칸에 무엇이 되면 잘 된 것인지 한 줄로 적고 '기준 저장'을 누르세요. 저장한 기준은 다음 질문에 함께 보내요.",
+    controlsHelp: "아래 칸에 무엇이 되면 잘 된 것인지 한 줄로 적고 '기준 저장'을 누르세요. 저장한 기준은 다음 질문에 함께 보내요. '처음으로'는 칸을 비우고, '되돌리기'는 바로 전에 고친 것을 되돌려요.",
     state: ({ text, saved }) => {
       const t = text.trim();
       if (saved && t === saved.text) return { key: "saved", sentence: "기준을 저장했어요. 다음 질문에 함께 보내요." };
@@ -105,7 +105,7 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   },
   decision_form: {
     title: "결정과 이유 적기",
-    controlsHelp: "첫 칸에 무엇을 바꾸기로 했는지, 둘째 칸에 그 이유를 적고 '결정 저장'을 누르세요. 두 칸을 모두 적어야 저장할 수 있어요.",
+    controlsHelp: "첫 칸에 무엇을 바꾸기로 했는지, 둘째 칸에 그 이유를 적고 '결정 저장'을 누르세요. 두 칸을 모두 적어야 저장할 수 있어요. '처음으로'는 두 칸을 비우고, '되돌리기'는 바로 전에 고친 것을 되돌려요.",
     state: ({ text, reason, saved }) => {
       const t = text.trim(), r = reason.trim();
       if (saved && t === saved.text && r === (saved.reason ?? "")) return { key: "saved", sentence: "결정과 이유를 저장했어요. 다음 질문에 함께 보내요." };
@@ -122,6 +122,77 @@ export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
   coach_request: UNDRAWN("코치에게 부탁하기"),
   metric_board: UNDRAWN("수치 살펴보기"),
 };
+
+/**
+ * CGP-LEARN-R-010 — reset and undo for a block's fields. The preset of every block this App draws (catalog v1, no params)
+ * is empty fields, so "처음으로" empties them; the learner's saved work is the host's and stays until a new save. Undo
+ * steps back one change, where a change is one burst of typing (it ends on blur, after a pause, on reset or on undo) or
+ * one reset. Neither sends anything to the host: no save, no observation event.
+ */
+export interface BlockFields { text: string; reason: string }
+export interface BlockHistory { past: BlockFields[]; burst: boolean }
+export const BLOCK_PRESET: BlockFields = { text: "", reason: "" };
+export const BLOCK_HISTORY_MAX = 50;
+export const EMPTY_HISTORY: BlockHistory = { past: [], burst: false };
+const sameFields = (a: BlockFields, b: BlockFields) => a.text === b.text && a.reason === b.reason;
+/** Before a field edit: the first edit of a burst records the fields as they were. */
+export function historyEdit(h: BlockHistory, before: BlockFields): BlockHistory {
+  return h.burst ? h : { past: [...h.past, { ...before }].slice(-BLOCK_HISTORY_MAX), burst: true };
+}
+/** A burst ends (blur, pause): the next edit is a new change. */
+export const historyBoundary = (h: BlockHistory): BlockHistory => (h.burst ? { ...h, burst: false } : h);
+/** "처음으로": the preset, recorded as one change. Null when the fields already are the preset (the button is disabled). */
+export function historyReset(h: BlockHistory, current: BlockFields): { history: BlockHistory; fields: BlockFields } | null {
+  if (sameFields(current, BLOCK_PRESET)) return null;
+  return { history: { past: [...h.past, { ...current }].slice(-BLOCK_HISTORY_MAX), burst: false }, fields: { ...BLOCK_PRESET } };
+}
+/** "되돌리기": the fields before the last change. Null when there is nothing to undo (the button is disabled). */
+export function historyUndo(h: BlockHistory): { history: BlockHistory; fields: BlockFields } | null {
+  const last = h.past[h.past.length - 1];
+  return last ? { history: { past: h.past.slice(0, -1), burst: false }, fields: { ...last } } : null;
+}
+
+/**
+ * CGP-LEARN-R-011 (c) — "접기": a learner puts away a block they do not want. The collapsed set is the learner's own view state for
+ * this session, kept in the webview's state and never posted: it is not work, not a report and not an observation event. Keys
+ * are the block's lesson version and step (the open/closed key), so a new lesson version starts with every block shown.
+ */
+export const COLLAPSED_BLOCKS_MAX = 50;
+const COLLAPSED_KEY_MAX = 512;
+/** The collapsed keys read back from webview state; anything malformed is dropped. */
+export function collapsedBlocksFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys = value.filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= COLLAPSED_KEY_MAX);
+  return [...new Set(keys)].slice(-COLLAPSED_BLOCKS_MAX);
+}
+/**
+ * The seat the collapsed set belongs to. Classroom PCs are shared: a second learner signing in on the same window must not
+ * inherit the first learner's collapsed blocks. The order of preference:
+ * - the Service's seat id (`activity_id`, 64 hex);
+ * - the lesson capability receipt id, a hash of the service, the seat or credential, and the lesson;
+ * - the local activity id.
+ * Empty when none is known.
+ */
+export function collapseSeat(input: { activityId?: unknown; entryId?: unknown; localActivityId?: unknown }): string {
+  if (typeof input.activityId === "string" && /^[a-f0-9]{64}$/.test(input.activityId)) return "seat:" + input.activityId;
+  if (typeof input.entryId === "string" && input.entryId.length > 0 && input.entryId.length <= 128) return "entry:" + input.entryId;
+  if (typeof input.localActivityId === "string" && input.localActivityId.length > 0 && input.localActivityId.length <= 200) return "local:" + input.localActivityId;
+  return "";
+}
+export interface CollapsedState { seat: string; keys: string[] }
+/** The stored set, read back from webview state: `{ seat, keys }`. Anything else, including #4023's bare array, is null. */
+export function collapsedStateFrom(value: unknown): CollapsedState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as { seat?: unknown; keys?: unknown };
+  return typeof v.seat === "string" && v.seat.length <= 256 ? { seat: v.seat, keys: collapsedBlocksFrom(v.keys) } : null;
+}
+/** The collapsed keys this seat may see: only its own; another seat's set, or none, is empty. */
+export const collapsedFor = (state: CollapsedState | null, seat: string): string[] => (state && state.seat === seat ? state.keys : []);
+/** The set after 접기 (on) or 다시 보기 (off) for one block; newest last, bounded. */
+export function collapseBlock(keys: readonly string[], key: string, on: boolean): string[] {
+  const rest = keys.filter((k) => k !== key);
+  return on ? [...rest, key].slice(-COLLAPSED_BLOCKS_MAX) : rest;
+}
 
 /** Catalog check: every kind needs a title, a controls help sentence and a state sentence in Korean. Returns the gaps. */
 export function materialTextGaps(catalog: Record<string, MaterialText | undefined> = MATERIAL_TEXT): string[] {
