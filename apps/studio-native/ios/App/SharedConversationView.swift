@@ -45,7 +45,7 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case context, exportCache, clearCache, notebook, privacy
+        case approvals, context, exportCache, clearCache, notebook, privacy
 #if DEBUG
         case finishPlayback, advanceHistory, holdHistory, releaseHistory
 #endif
@@ -56,6 +56,7 @@ struct SharedConversationView: View {
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
     @State private var showContext = false
+    @State private var showApprovals = false
     @State private var voiceRequestID: String?
     @State private var voiceCompletionWaitStarted: Date?
     @State private var speakAnswers = true
@@ -130,6 +131,8 @@ struct SharedConversationView: View {
     }
     var body: some View {
         lifecycleContent
+        .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
+        .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
@@ -161,6 +164,10 @@ struct SharedConversationView: View {
             List {
                 if model.signedIn {
                     Section {
+                        if model.approvalEntryVisible {
+                            settingsButton("확인 요청") { leaveSettings(for: .approvals) }
+                                .disabled(model.loggingOut).accessibilityIdentifier("memberApprovalInbox")
+                        }
                         if model.selected != nil {
                             settingsButton("내 상황과 의도") { leaveSettings(for: .context) }.disabled(model.loggingOut)
                         }
@@ -219,7 +226,7 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+        case .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
 #if DEBUG
         case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory: break
 #endif
@@ -232,6 +239,8 @@ struct SharedConversationView: View {
         guard let destination = settingsDestination else { return }
         settingsDestination = nil
         switch destination {
+        case .approvals:
+            if model.signedIn && model.approvalEntryVisible && !model.loggingOut { showApprovals = true }
         case .context:
             if model.signedIn && model.selected != nil && !model.loggingOut { showContext = true }
         case .exportCache:

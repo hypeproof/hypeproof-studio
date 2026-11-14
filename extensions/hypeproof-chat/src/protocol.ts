@@ -155,6 +155,8 @@ export interface FileAttachmentPreview {
 export interface ChatConfig {
   // #3563 — true when the Chalk runtime verified this user as an instructor. The Studio chat then points to the Chalk tab. Absent otherwise.
   chalkInstructorTab?: true;
+  /** #4048 — true only in a rehearsal seat (a return is held and this window is the rehearsal folder). Absent otherwise. */
+  rehearsalSeat?: true;
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -864,6 +866,7 @@ export type WebviewMessage = (
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  | { type: "rehearsalSeatEnd" }
   // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
   // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the
   // lesson's own criteria are never part of it.

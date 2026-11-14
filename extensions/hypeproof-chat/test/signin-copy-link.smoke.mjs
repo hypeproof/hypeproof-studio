@@ -150,7 +150,7 @@ function session({ start = {}, opens = true } = {}) {
   const chat = { openInEditor: async () => {}, ensureProfile: async () => null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => "Coach", coachNameIsChosen: () => true, renderHtml: () => "<html></html>" };
   const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (_k, d) => d }) }, window: { createWebviewPanel: () => { throw Error("panel is attached by the test"); } }, commands: { executeCommand: async () => {} }, env: { openExternal: async () => {}, clipboard: { writeText: async (t) => { if (failClipboard) throw new Error("denied"); clipboard.push(t); } } }, Uri: { joinPath: () => ({}), parse: (u) => u }, ViewColumn: { One: 1 } };
   const mod = { exports: {} };
-  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, AbortSignal, URL, URLSearchParams, process, TextEncoder, setTimeout, clearTimeout, fetch: async () => { throw new Error("no network in this test"); } });
+  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, structuredClone, AbortSignal, URL, URLSearchParams, process, TextEncoder, setTimeout, clearTimeout, fetch: async () => { throw new Error("no network in this test"); } });
   const { client } = session({ opens: false });
   await client.start();
   const page = new mod.exports.StartPage(ctx, chat, async () => false, undefined, client);

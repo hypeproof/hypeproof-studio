@@ -2311,6 +2311,16 @@ Confirmed by Jay: no. builder-art-r005 handed it over, from verify-3956's #4053 
 - **Measure.** `attachment-remove-contrast-computed` runs the real ChatPanel with every bundled theme, for the classroom and personal seats. Where a dot is drawn, the button must anchor it, and the × must reach 4.5:1 against what is painted behind it. Pinning the "attachment × ::before" row in text-contrast-computed's default set waits for #4053's all-rows mode.
 - **Not covered:** HP Light. That theme exists only on #4053's branch. The smoke iterates THEMES, so it picks the theme up when #4053 lands.
 
+## CGP-VOICE-R-030: voice session marker in the task rail (2026-11-14, agent-selected)
+
+Confirmed by Jay: no. These are agent choices within REQ-CGPV-43. The coordinator set the constraints: the shipping VoiceConversationControl path, no marker when voice is not served, and #3976's minor path untouched.
+
+- **Source (coordinator).** The marker follows the shipping VoiceConversationControl's live VoiceConversation phase, not the unmounted VoicePanel. The control publishes the active task id to a window-local store (`src/voiceLiveTask.ts`) from its `changed` callback while the phase is active and voice is served, and null otherwise or on unmount. The conversation logic is unchanged.
+- **What "live" covers (agent reading).** The marker covers the whole session, starting through speaking, including the transcribing and answering gaps between capture and playback. Showing it only during capture and playback would make it blink on and off every turn. It is removed at `stopped`, which `stop()` sets only after `recorder.cancel()` has stopped the tracks: that is the release confirmation.
+- **Look (agent choice; revised after verify-3928).** A status, not a control: a static `level` icon (the read-aloud "now reading" mark) and the words "음성 대화 중" at 14px, under the row title, with no fill and no hover. The words keep the row's own text colour and only the icon carries the accent, because the accent link colour on the selected row is 3.85:1 in Dark+ and 4.36:1 in 2026 Light. In forced colours there is no rule: the UA forces the row's button to ButtonText on ButtonFace and the marker inherits it, which the per-theme smoke measures. The row's existing accessible name gains ", 음성 대화 중".
+- **Scope.** Only the active task can be marked, because the conversation stops on any task switch. Dictation alone and a manual read-aloud are not a voice session and do not mark the row.
+- **Not covered:** a real installed App, a real microphone and a real screen reader.
+
 ## CGP-SHELL-R-019 / CGP-SHELL-D-018: turning lesson tips off (2026-11-14, agent-selected; one clause parked)
 
 Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-021 / D-021, which are built (#2767, #2972). The only tip is the served step's Chalk-authored hint (owner decision above, "CGP-CHAT-R-021: lesson tip source and action"), so there is no Studio tip catalogue to write or review. Never while a turn streams and one tip at a time are MET; D-018's 13px and 24px give way to the 14px and 44px floors, as D-021 already does. Missing: "팁 그만 보기 stops all tips until re-enabled".

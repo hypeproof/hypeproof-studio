@@ -7,6 +7,7 @@ import { Brand } from "./Brand";
 import { ChatIcon } from "./ChatDetails";
 import "./start.css";
 
+import { MemberApprovalInbox } from "./MemberApprovalInbox";
 import { AccountEntry } from "./AccountEntry";
 import { InstructorInbox } from "./InstructorInbox";
 import { StartSettingsSheet } from "./StartSettingsSheet";
@@ -30,7 +31,9 @@ export function StartPage() {
   const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | "account" | null>(null);
   const input = useRef<HTMLInputElement>(null);
   // CGP-SHELL-R-014 — "설정" opens the learner sheet here; the VS Code editor only via its "고급 설정".
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { if(state.account?.status!=="signedIn" || !state.memberApprovals?.entryVisible) setApprovalsOpen(false); }, [state.account?.status,state.memberApprovals?.entryVisible]);
   const settingsOpener = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const off = onHostMessage(msg => {
@@ -127,7 +130,8 @@ export function StartPage() {
     const choice = (event.target as Element).closest('button, a');
     if (state.personalReflectionPending && choice && !choice.closest('[data-personal-question-flow]') && !choice.hasAttribute('data-personal-question-entry')) postToHost({ type: 'cancelPersonalReflection' });
   }}>
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.automationsEnabled && <button onClick={() => postToHost({ type: "openEmailAutomation" })}>메일 자동화 열기</button>}<button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button>{state.skillStore && state.profile?.kind !== "classroom" && <button onClick={() => postToHost({ type: "openSkillStore" })}>스킬 스토어</button>}<button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "reportProblem" })}>{FEEDBACK_ENTRY_LABEL}</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    {approvalsOpen && state.account?.status === "signedIn" && state.memberApprovals?.entryVisible && <MemberApprovalInbox view={state.memberApprovals} post={postToHost} close={() => setApprovalsOpen(false)} />}
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && state.memberApprovals?.entryVisible && <button onClick={() => { setApprovalsOpen(true); postToHost({type:"memberApprovalRefresh"}); }}>확인 요청</button>}{state.automationsEnabled && <button onClick={() => postToHost({ type: "openEmailAutomation" })}>메일 자동화 열기</button>}<button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button>{state.skillStore && state.profile?.kind !== "classroom" && <button onClick={() => postToHost({ type: "openSkillStore" })}>스킬 스토어</button>}<button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "reportProblem" })}>{FEEDBACK_ENTRY_LABEL}</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
     <StartUpdateNotice update={state.update} />
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
