@@ -2811,7 +2811,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async deckPdfReveal(): Promise<void> {
     const saved = this.deckPdfSaved;
     if (!saved || saved.taskKey !== this.turnRestoreTaskKey()) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
-    const checked = recheckFileInFolder(saved.root, saved.rel);
+    // saved.root was stored canonical: a root swapped for a link since then is refused (exactRoot), never followed.
+    const checked = recheckFileInFolder(saved.root, saved.rel, { exactRoot: true });
     if (!checked.ok) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
     try { await this.deckPdfRevealInOS(checked.abs); } catch { /* the press passed the gate; a failed OS call adds no claim */ }
   }

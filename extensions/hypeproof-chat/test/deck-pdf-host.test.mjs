@@ -251,6 +251,14 @@ test('폴더에서 보기 on the deck PDF: the saved file inside the served root
     for (const rel of ['../outside.pdf', 'venture/../../outside.pdf', path.join(s.root, 'outside.pdf'), '']) {
       record(rel); assert.deepEqual(await press(), [gone], rel); assert.deepEqual(revealed, [], rel);
     }
+    // #4066 (verify-r004): the served root itself swapped for a link to another folder holding venture/deck.pdf: refused,
+    // the other folder's file is never revealed.
+    record();
+    const elsewhere = path.join(s.root, 'elsewhere'), movedWork = path.join(s.root, 'work-moved');
+    fs.mkdirSync(path.join(elsewhere, 'venture'), { recursive: true }); fs.writeFileSync(path.join(elsewhere, 'venture', 'deck.pdf'), '%PDF-1.4 elsewhere');
+    fs.renameSync(s.work, movedWork); fs.symlinkSync(elsewhere, s.work);
+    try { assert.deepEqual(await press(), [gone], 'root swapped for a link'); assert.deepEqual(revealed, []); }
+    finally { fs.rmSync(s.work); fs.renameSync(movedWork, s.work); }
     // The swap between the check and the use (same inode twice) is checked on recheckFileInFolder itself in page-card.smoke:
     // the provider here is a bundle with its own copy of the seam.
     // And the positive control again after all that.

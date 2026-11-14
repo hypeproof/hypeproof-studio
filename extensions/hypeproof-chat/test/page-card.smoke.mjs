@@ -12,7 +12,8 @@ import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, re
 let fail = 0;
 const t = async (label, fn) => { try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${e.message}`); fail++; } };
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hps-page-card-"));
+// Canonical, like the roots the host records (a turn root is realpath()ed): the gate walks with exactRoot.
+const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hps-page-card-")));
 const root = path.join(tmp, "work");
 const outside = path.join(tmp, "outside");
 fs.mkdirSync(path.join(root, "game"), { recursive: true });
@@ -202,6 +203,31 @@ await t("F1: through the gate, a swap at the seam reaches neither open nor revea
   assert.equal(reload(), "INSIDE");
   swapFile(path.join(race, "page.html"));
   assert.equal(reload(), null, "a reload after a swap must not read the link target");
+});
+
+await t("#4066 (verify-r004): the recorded root swapped for a link after the card was made — open, reload, reveal refused", async () => {
+  // A copy of the folder elsewhere, then the recorded root path itself becomes a link to it.
+  const rootA = path.join(tmp, "swap-root"), elsewhere = path.join(tmp, "swap-elsewhere"), moved = path.join(tmp, "swap-moved");
+  for (const d of [rootA, elsewhere, moved]) fs.rmSync(d, { recursive: true, force: true });
+  fs.mkdirSync(rootA); fs.mkdirSync(elsewhere);
+  fs.writeFileSync(path.join(rootA, "index.html"), "INSIDE"); fs.writeFileSync(path.join(elsewhere, "index.html"), "ELSEWHERE");
+  const reg = new PageCardRegistry();
+  reg.add("k", rootA, { turnId: "r1", anchorId: "a", pages: [{ path: "index.html", kind: "changed" }] });
+  const got = [];
+  let reload;
+  const d = { open: (abs, text, again) => { got.push(["open", abs, text]); reload = again; }, reveal: (abs) => got.push(["reveal", abs]) };
+  // Positive control: before the swap both work, inside the root.
+  assert.equal((await handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "index.html" }, d)).ok, true);
+  assert.equal((await handlePageCardAction(reg, "k", { type: "pageCardReveal", turnId: "r1", path: "index.html" }, d)).ok, true);
+  assert.deepEqual(got.map((g) => g[0]), ["open", "reveal"]);
+  got.length = 0;
+  fs.renameSync(rootA, moved); fs.symlinkSync(elsewhere, rootA);
+  assert.equal(reload(), null, "a reload after the root swap must not read the other folder");
+  assert.equal((await handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "index.html" }, d)).ok, false);
+  assert.equal((await handlePageCardAction(reg, "k", { type: "pageCardReveal", turnId: "r1", path: "index.html" }, d)).ok, false);
+  assert.deepEqual(got, [], "nothing in the other folder is opened or revealed");
+  assert.equal(recheckFileInFolder(rootA, "index.html", { exactRoot: true }).cause, "outside");
+  assert.equal(recheckFileInFolder(rootA, "index.html").ok, true, "control: without exactRoot the walk follows the swapped root (why the gate needs it)");
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });
