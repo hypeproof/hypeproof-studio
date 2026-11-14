@@ -2266,3 +2266,25 @@ This is a Studio-only change with no Service contract. Confirmed by Jay: no (all
 - **Look (agent choice).** Both are the existing quiet button (not Primary, per SX-04), with 44px targets and 14px text. A disabled button uses the muted text token and a dashed boundary, so "visibly distinct" does not rest on opacity alone. The native `disabled` state carries the announcement.
 - **Copy.** Each block's controls help names both buttons, and the button labels are the design row's. Both are the agent's wording within the row.
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-LEARN-R-011 (c) / CGP-LEARN-D-011: collapse a learning block, partial (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the design row, and the coordinator set the scope.
+
+- **Scope (coordinator, 2026-11-14).** Only the collapse half ships, and the row stays partial. The report half needs a Service and Chalk route, because `/v1/report` goes to the operator and not to the lesson's instructor. It also needs a decision on the 0–300 learner field for minor cohorts.
+- **Menu (agent choice, following DES-CGP-LEARN-11).**
+  - The overflow menu is drawn now, with one item, so the report item lands in the same place later.
+  - The button is the existing quiet button with the dots icon, named "자료 메뉴: <title>".
+  - Keyboard handling is the same as the rail's task menu (TaskMenu.tsx).
+  - The button is on the open card only, in the head after 닫기. The card geometry tests ruled out two other placements:
+    - A fourth column in the closed head gave the title 0px in a 280px rail.
+    - A button in the caption row made the open card taller, which pushed the caption under the mission header at 480px / 200 %.
+  - The closed card stays DES-CGP-LEARN-01's one row.
+  - The menu opens in flow as a row under the head instead of floating, keeping DES-CGP-LEARN-01's "nothing is positioned".
+- **Collapsed row (agent choice).**
+  - "접은 자료: <title>" and "다시 보기", 44px.
+  - The body stays mounted and hidden, so the rehearsal read-back is unchanged.
+  - The polite state line is not drawn, so a block the learner put away is not announced.
+  - Restoring gives back the open card, which is the state it was collapsed from.
+- **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
+- **Not covered:** a real installed App and a real screen reader.
