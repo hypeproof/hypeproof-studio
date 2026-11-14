@@ -25,7 +25,7 @@ const calls = [];
 const ctx = vm.createContext({
   document: { getElementById: byId, createElement: doc.createElement.bind(doc), createElementNS: doc.createElementNS.bind(doc), createTextNode: doc.createTextNode.bind(doc), activeElement: null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, body: doc.createElement('body'), documentElement: doc.createElement('html') },
   window: { addEventListener() {}, matchMedia: media }, location: { hash: '', search: '', pathname: '/manage' }, history: { replaceState() {} },
-  sessionStorage: stub, localStorage: stub, URLSearchParams, URL, console, Intl, Date, Math, JSON, crypto: globalThis.crypto,
+  sessionStorage: stub, localStorage: stub, URLSearchParams, URL, console, Intl, Date, Math, JSON, crypto: globalThis.crypto, AbortController,
   setInterval() { return 1; }, clearInterval() {}, setTimeout() { return 1; }, clearTimeout() {}, addEventListener() {}, matchMedia: media, navigator: { clipboard: {} },
   fetch: async (url, init) => { calls.push({ url: String(url), init }); return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}), text: async () => '{}' }; },
   MutationObserver: class { observe() {} disconnect() {} },
@@ -38,6 +38,9 @@ const report = (over) => ({ ref: 'grant-0001.boot-0001.1', lesson_course: 'web-1
 const coach = '{actions:[{capability:"coach",held:true}]}';
 const draw = (s, actions = coach) => { run('opsData=' + actions); byId('ops-evidence').replaceChildren(); run('renderMaterialReports')(s); return byId('ops-evidence'); };
 
+await t('the seat drawer draws the reports after the evidence (openSeat calls renderMaterialReports)', () => {
+  assert.match(script, /renderEvidence\(s\);renderMaterialReports\(s\);/);
+});
 await t('no report: nothing is drawn (no empty "자료 신고" group)', () => {
   for (const s of [{}, { material_reports: { reported: 0, unreviewed: 0, latest: [] } }]) assert.equal(draw(s).children.length, 0);
 });
@@ -57,7 +60,7 @@ await t('확인함 goes through the existing review route with the report ref an
   const rows = all(box, 'material-report'), buttons = (r) => (r.children ?? []).filter((c) => c.tagName.toUpperCase() === 'BUTTON');
   assert.deepEqual(buttons(rows[0]).map((b) => b.textContent), ['확인함']); assert.equal(buttons(rows[1]).length, 0);
   assert.equal(texts(rows[1])[2], '강사가 자료를 확인함');
-  calls.length = 0; buttons(rows[0])[0].onclick(); await new Promise((r) => setImmediate(r));
+  calls.length = 0; buttons(rows[0])[0].onclick(); for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
   const put = calls.find((c) => c.init?.method === 'PUT');
   assert.ok(put, 'a PUT was sent'); assert.match(put.url, /\/classroom\/runs\/[^/]*\/evidence\/grant-0001\.boot-0001\.1$/);
   assert.deepEqual(JSON.parse(put.init.body), { state: 'confirmed', expected_revision: 0 });
