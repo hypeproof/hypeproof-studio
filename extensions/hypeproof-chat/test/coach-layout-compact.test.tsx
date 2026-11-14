@@ -35,6 +35,8 @@ const PROPS = { ...BASE_PROPS, onSettings: () => posted.push({ type: "openSettin
 const noop = () => {};
 const footerOf = (html: string) => html.slice(html.indexOf('<footer class="hps-input-area">'));
 const golden = (name: string) => readFileSync(`test/fixtures/coach-layout-head-${name}.html`, "utf8");
+// React's useId counter (":R4n5:") shifts whenever main adds a component above this one; the markup itself is what is pinned.
+const norm = (html: string) => html.replace(/:R[0-9a-z]+:/g, ":R:");
 // The host messages a mounted, non-compact panel sent at HEAD 7ea4479f (two of them materialsRequest: the rail card and its composer line).
 const HEAD_POSTED = "materialsRequest,materialsRequest,perfTraceStateRequest,memoryNoticeRequest,accuracyEducationRequest,whatsNewRequest,planFirstRequest,queueState,inboxRequest,turnReviewRequest,pageCardsRequest,missingTaskFolderRequest,lowDiskRequest,previewRecoveryRequest,helpRequest";
 
@@ -74,9 +76,9 @@ t("flag absent: the standard DOM, and an unrecognised value draws exactly the sa
   ok(absent.includes("hps-chips-rack") && absent.includes("정적인 이어가기"), "the static follow-up chips are still drawn");
   ok(absent.includes(H) && absent.includes("→ 색을 바꿔 보기"), "the block is not parsed: it stays prose in the bubble");
   // The same props rendered at HEAD 7ea4479f (test/fixtures/coach-layout-head-*.html, captured from a clean checkout of it).
-  eq(absent === golden("chatpanel-classroom"), true, "byte-identical to the markup main draws for the same props");
+  eq(norm(absent) === norm(golden("chatpanel-classroom")), true, "byte-identical to the markup main draws for the same props");
   const managedHtml = renderToStaticMarkup(<ChatPanel {...(PROPS as never)} messages={CONVERSATION as never} config={managed()} instructor={false} />);
-  eq(managedHtml === golden("chatpanel-managed"), true, "a cohort-managed model with a usage panel: byte-identical to main");
+  eq(norm(managedHtml) === norm(golden("chatpanel-managed")), true, "a cohort-managed model with a usage panel: byte-identical to main");
 });
 t("flag absent: the same host requests are sent as at HEAD (the rail card and its composer line each ask once)", async () => {
   await mount(config(), CONVERSATION, false);
@@ -99,7 +101,7 @@ t("flag absent: a running-process card has its heading, note and state text", ()
   const html = renderToStaticMarkup(<RunningProcessesPanel entries={entries} onStop={noop} />);
   ok(html.includes('<h2 id="hps-running-processes-title">실행 중인 것</h2>') && html.includes("보여 주는 곳: site") && html.includes("꺼도 돼요") && html.includes('<span role="status" class="hps-process-state">실행 중</span>'), html);
   ok(!html.includes("data-coach-layout") && !html.includes("hps-sr-only"), "no compact markup");
-  eq(renderToStaticMarkup(<RunningProcessesPanel entries={PROCESSES as never} onStop={noop} />) === golden("running-processes"), true, "byte-identical to main for a preview and a shell card");
+  eq(norm(renderToStaticMarkup(<RunningProcessesPanel entries={PROCESSES as never} onStop={noop} />)) === norm(golden("running-processes")), true, "byte-identical to main for a preview and a shell card");
 });
 
 // ── Compact ───────────────────────────────────────────────────────────────────────────────────

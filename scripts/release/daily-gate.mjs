@@ -4,7 +4,7 @@
 // release-cut.yml runs on a 17:00 KST schedule. This decides what that run does:
 //   - a manual dispatch keeps its own inputs (mode defaults to dry-run, as before);
 //   - a scheduled run is skipped when RELEASE_CUT_DAILY=off (the pause switch), when no app path
-//     changed since the last stable v tag, or when the live-class freeze blocks;
+//     changed since the latest published stable release, or when the live-class freeze blocks;
 //   - otherwise it cuts with mode=create, or mode=dry-run when RELEASE_CUT_DAILY=dry-run.
 // Missing inputs never turn into create: an unknown event or an unrecognised switch value is a dry run
 // or a skip.
@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {lastStableTag} from './select-cases.mjs';
+import {publishedBaseline} from './published-baseline.mjs';
 
 // Paths whose change reaches an installed Studio. Worker, Chalk, docs, e2e and workflow changes
 // ship through their own channels and do not need a new app.
@@ -54,7 +54,7 @@ export function decide({event, inputMode, dailySwitch, appFiles, live, liveReaso
   if (sw !== '' && sw !== 'create' && sw !== 'dry-run') {
     return {run: false, mode: 'dry-run', reason: `paused: RELEASE_CUT_DAILY="${dailySwitch}" is not off, dry-run or create`};
   }
-  if (!appFiles || appFiles.length === 0) return {run: false, mode: 'dry-run', reason: 'no app change since the last stable tag'};
+  if (!appFiles || appFiles.length === 0) return {run: false, mode: 'dry-run', reason: 'no app change since the latest published stable release'};
   if (live !== 'proceed') {
     const stale = Number.isFinite(rcAgeHours) && rcAgeHours > STALE_RC_HOURS
       ? `; ${appFiles.length} app file(s) changed and the last rc tag is ${Math.floor(rcAgeHours)} h old` : '';
@@ -85,8 +85,9 @@ function main() {
   let appFiles = [];
   let age = null;
   if (event === 'schedule') {
-    const base = lastStableTag(git);
-    appFiles = base ? appChanged(git('diff', '--name-only', `${base}..${arg('--candidate') ?? 'origin/main'}`).split('\n').filter(Boolean)) : [];
+    const candidate = arg('--candidate') ?? 'origin/main';
+    const base = publishedBaseline(git, candidate);
+    appFiles = appChanged(git('diff', '--name-only', `${base}..${candidate}`).split('\n').filter(Boolean));
     age = rcAgeHours(git);
     console.log(`app files changed since ${base}: ${appFiles.length}; last rc tag ${age === null ? 'none' : `${Math.floor(age)} h ago`}`);
   }

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -213,11 +214,122 @@ class SigningControls(unittest.TestCase):
         with patch.dict(os.environ, {"MOCK_WAIT_TIMEOUT": "1"}):
             with self.assertRaisesRegex(sign.SigningError, "timeout"): self.release()
         self.assertFalse(self.receipt().exists())
-        before = len([c for c in self.calls() if "--sign" in c and str(self.app) in c[-1]])
+        before = len([c for c in self.calls() if "--sign" in c])
         self.release()
-        self.assertEqual(len([c for c in self.calls() if "--sign" in c and str(self.app) in c[-1]]), before)
+        self.assertEqual(len([c for c in self.calls() if "--sign" in c]), before)
         self.assertEqual(len([c for c in self.calls() if c[:3] == ["xcrun", "notarytool", "submit"]]), 1)
         self.assertFalse(sign.read_json(self.receipt())["release_eligible"])
+
+    def submitted_checkpoint(self, ci=False):
+        self.args.stop_after_submit = True
+        environment = dict(GITHUB_ACTIONS="true", GITHUB_REPOSITORY="hypeproof/hypeproof-studio",
+                           GITHUB_RUN_ID="43471868999", GITHUB_RUN_ATTEMPT="2",
+                           GITHUB_WORKFLOW_REF="hypeproof/hypeproof-studio/.github/workflows/build-mac.yml@refs/tags/v2026.1112.1-rc.1") if ci else {}
+        with patch.dict(os.environ, environment):
+            self.release()
+        self.args.stop_after_submit = False
+        value = sign.read_json(Path(self.args.evidence)/"submission.json")
+        self.args.submission_id, self.args.submitted_sha256 = value["id"], value["sha256"]
+        return value
+
+    def local_resume(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            sign.release(self.args, local_resume=True)
+
+    def test_submit_checkpoint_is_complete_before_wait_and_same_run_can_finish(self):
+        submission = self.submitted_checkpoint()
+        self.assertFalse(any(c[:3] == ["xcrun", "notarytool", "wait"] for c in self.calls()),
+                         "The checkpoint phase must finish before any notary wait.")
+        self.assertGreater(submission["bytes"], 0)
+        archive = Path(self.args.evidence)/"submitted.zip"
+        self.assertEqual(sign.sha256(archive), submission["sha256"])
+        self.assertFalse(any(c[:3] == ["xcrun", "stapler", "staple"] for c in self.calls()))
+        self.assertFalse(self.receipt().exists())
+        signed_count = len([c for c in self.calls() if "--sign" in c])
+        self.release()
+        self.assertEqual(len([c for c in self.calls() if "--sign" in c]), signed_count)
+        self.assertEqual(len([c for c in self.calls() if c[:3] == ["xcrun", "notarytool", "submit"]]), 1)
+        self.assertEqual(sign.sha256(archive), submission["sha256"])
+
+    def test_retained_ci_zip_restores_exact_app_and_finishes_locally_without_sign_or_submit(self):
+        submission = self.submitted_checkpoint(ci=True)
+        evidence = Path(self.args.evidence)
+        original = (evidence/"signed.json").read_bytes()
+        # Simulate losing the runner app while retaining the actual submitted ZIP.
+        shutil.rmtree(self.app)
+        sign.run("ditto", "-x", "-k", evidence/"submitted.zip", self.root)
+        self.assertEqual(sign.tree_hash(self.app), sign.read_json(evidence/"signed.json")["app_tree_sha256"])
+        before = len(self.calls())
+        self.local_resume()
+        later = self.calls()[before:]
+        self.assertFalse(any("--sign" in c or c[0] == "security" for c in later))
+        self.assertFalse(any(c[:3] == ["xcrun", "notarytool", "submit"] for c in later))
+        waits = [c for c in later if c[:3] == ["xcrun", "notarytool", "wait"]]
+        self.assertEqual([c[3] for c in waits], [submission["id"]])
+        receipt = sign.read_json(self.receipt())
+        self.assertEqual(receipt["provenance"], {"kind":"local", "workflow":".github/workflows/build-mac.yml", "run_id":None, "run_attempt":None})
+        self.assertFalse(receipt["release_eligible"])
+        self.assertEqual(receipt["notarization"]["submitted_archive_sha256"], submission["sha256"])
+        self.assertEqual((evidence/"signed.json").read_bytes(), original)
+
+    def test_local_resume_rejects_submission_source_and_identity_mismatches_before_wait(self):
+        self.submitted_checkpoint(ci=True)
+        before = len(self.calls())
+        for key, wrong in [("submission_id", "87654321-1234-1234-1234-123456789abc"),
+                           ("submitted_sha256", "f"*64), ("source_sha", "2"*40),
+                           ("identity", "B"*40), ("team_id", "Z9Y8X7W6V5")]:
+            with self.subTest(key=key):
+                original = getattr(self.args, key)
+                setattr(self.args, key, wrong)
+                try:
+                    with self.assertRaises(sign.SigningError): self.local_resume()
+                finally: setattr(self.args, key, original)
+        self.assertFalse(any("--sign" in c or c[:2] == ["xcrun", "notarytool"] for c in self.calls()[before:]))
+        self.assertFalse(self.receipt().exists())
+
+    def test_local_resume_cannot_inherit_ci_authority_or_accept_malformed_origin(self):
+        self.submitted_checkpoint(ci=True)
+        before = len(self.calls())
+        with patch.dict(os.environ, {"GITHUB_ACTIONS":"true"}):
+            with self.assertRaisesRegex(sign.SigningError, "official Actions"): self.local_resume()
+        signed_path = Path(self.args.evidence)/"signed.json"
+        signed = sign.read_json(signed_path)
+        signed["identity"]["provenance"]["workflow"] = ".github/workflows/untrusted.yml"
+        signed_path.write_text(json.dumps(signed))
+        with self.assertRaisesRegex(sign.SigningError, "provenance"): self.local_resume()
+        self.assertFalse(any("--sign" in c or c[:2] == ["xcrun", "notarytool"] for c in self.calls()[before:]))
+        self.assertFalse(self.receipt().exists())
+
+    def test_local_resume_rejects_modified_archive_or_restored_app_before_wait(self):
+        self.submitted_checkpoint(ci=True)
+        archive = Path(self.args.evidence)/"submitted.zip"
+        original = archive.read_bytes()
+        before = len(self.calls())
+        archive.write_bytes(original+b"changed archive")
+        with self.assertRaisesRegex(sign.SigningError, "archive digest"): self.local_resume()
+        archive.write_bytes(original)
+        (self.app/"Contents/changed.txt").write_text("changed restored app")
+        with self.assertRaisesRegex(sign.SigningError, "changed since checkpoint"): self.local_resume()
+        self.assertFalse(any("--sign" in c or c[:2] == ["xcrun", "notarytool"] for c in self.calls()[before:]))
+        self.assertFalse(self.receipt().exists())
+
+    def test_missing_submitted_bytes_cannot_be_recreated_or_resubmitted(self):
+        self.submitted_checkpoint()
+        (Path(self.args.evidence)/"submitted.zip").unlink()
+        before = len(self.calls())
+        with self.assertRaisesRegex(sign.SigningError, "original signed checkpoint"): self.local_resume()
+        with self.assertRaisesRegex(sign.SigningError, "archive missing"): self.release()
+        later = self.calls()[before:]
+        self.assertFalse(any("--sign" in c or c[:2] == ["ditto", "-c"] or c[:2] == ["xcrun", "notarytool"] for c in later))
+        self.assertFalse(self.receipt().exists())
+
+    def test_local_resume_without_submission_id_refuses_instead_of_uploading(self):
+        with patch.dict(os.environ, {"MOCK_SUBMIT_AMBIGUOUS":"1"}):
+            with self.assertRaises(sign.SigningError): self.release()
+        before = len(self.calls())
+        with self.assertRaisesRegex(sign.SigningError, "submission ID"): self.local_resume()
+        self.assertEqual(len(self.calls()), before)
+        self.assertFalse(self.receipt().exists())
 
     def test_invalid_notary_never_staples_or_packages_and_tamper_prevents_resume(self):
         with patch.dict(os.environ, {"MOCK_NOTARY_STATUS": "Invalid"}):
@@ -319,6 +431,18 @@ class SigningControls(unittest.TestCase):
         self.assertLess(workflow.index("run: bash scripts/stamp-mac-app.sh"), workflow.index("python3 scripts/release/macos-sign.py release"))
         self.assertIn("dist/HypeProof-Studio-darwin-arm64.signing.json", workflow)
         self.assertIn('"${HPS_SIGNING_KEYCHAIN:-}" == "$RUNNER_TEMP/hps-developer-id.keychain-db"', workflow)
+        submit = workflow.index("--stop-after-submit")
+        preserve = workflow.index("- name: Preserve exact signed submission before waiting")
+        wait = workflow.index("- name: Wait for the existing submission, assess and package")
+        self.assertLess(submit, preserve)
+        self.assertLess(preserve, wait)
+        recovery = workflow[preserve:wait]
+        self.assertIn("/submitted.zip", recovery)
+        self.assertIn("/signed.json", recovery)
+        self.assertIn("/submission.json", recovery)
+        self.assertIn("compression-level: 0", recovery)
+        self.assertIn("retention-days: 14", recovery)
+        self.assertNotIn("continue-on-error", workflow)
 
     def test_import_rejects_missing_credentials_and_existing_keychain_without_mutating_it(self):
         script = sign.ROOT / "scripts/release/import-macos-signing.sh"

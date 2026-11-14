@@ -64,14 +64,14 @@
 | 이유 | 조건 |
 |---|---|
 | `p0` | 해당 대상에 속한 모든 여정의 P0 케이스 전부 |
-| `touched:<id>` | 마지막 안정 태그 이후 머지된 PR 이 건드린 요구사항 id 에 연결된 케이스. id 는 커밋 제목·본문(스쿼시 머지가 PR 제목과 본문을 담는다)과 요구사항 문서(`docs/studio-requirements.md`, `docs/requirements/`, `docs/dev/04-requirements.md`) diff 의 바뀐 줄에서 찾는다. 로컬 git 만 쓴다. 바뀐 id 가 케이스 id 의 하위(`REQ-L12-14` → `REQ-L12`)여도 걸린다 |
+| `touched:<id>` | 마지막 공개 안정 릴리스 이후 머지된 PR 이 건드린 요구사항 id 에 연결된 케이스. id 는 커밋 제목·본문(스쿼시 머지가 PR 제목과 본문을 담는다)과 요구사항 문서(`docs/studio-requirements.md`, `docs/requirements/`, `docs/dev/04-requirements.md`) diff 의 바뀐 줄에서 찾는다. 기준 릴리스는 GitHub에서 조회하고 변경 내용은 로컬 git에서 읽는다. 바뀐 id 가 케이스 id 의 하위(`REQ-L12-14` → `REQ-L12`)여도 걸린다 |
 | `escaped:<날짜>` | 최근 14일 안에 추가된 유출 버그 케이스 |
 
 `status: 자동화됨` 케이스는 고르지 않는다. 출력은 마크다운 체크리스트(PR 본문)와 JSON
 (`cases.json`, `hps-release-cases/1`)이다. 컷 아티팩트에 둘 다 남는다.
 
 ```bash
-node scripts/release/select-cases.mjs                      # 마지막 안정 태그..origin/main
+node scripts/release/select-cases.mjs                      # 마지막 공개 안정 릴리스..origin/main
 node scripts/release/select-cases.mjs --json --today 2026-10-21
 node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문의 범위·커밋 (gh 읽기 1회)
 node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA> --candidate <후보-소스-SHA> --json
@@ -106,7 +106,7 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 필수 목록에 섞이지 않는다. 선택기와 `publish-gate` 는 같은 대상 판정을 사용한다.
 `android` 는 허용된 대상 이름일 뿐, iPhone 케이스가 Android 수용 증거가 되는 것은 아니다.
 
-자동 검사는 기존 네이티브 경로에 연결한다. 아래 여덟 검사는
+자동 검사는 기존 네이티브 경로에 연결한다. 아래 필수 검사는
 [`StudioJourneyTests`](../../../apps/studio-native/ios/UITests/StudioShellTests.swift)에 있으며,
 [`collect-native-journeys.py`](../../../apps/studio-native/scripts/collect-native-journeys.py)가 실제
 실행 로그에서 이름별 실행·통과를 확인한다. 하나라도 누락·건너뜀·실패하면 시뮬레이터 여정 통과로
@@ -116,15 +116,37 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 |---|---|
 | BB-033 | `testFirstInstallSignInToFirstAnswerWithoutDesktop` |
 | BB-033 | `testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking` |
+| BB-033 | `testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin` |
+| BB-033 | `testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend` |
+| BB-033 | `testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice` |
+| BB-033 | `testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable` |
 | BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
 | BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
+| BB-034 | `testPersonalQuestionReadyAndSendWhileDesktopListIsHeld` |
+| BB-034 | `testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft` |
+| BB-034 | `testCancelledHistoryStillAllowsTheNextOrdinaryPoll` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry` |
+| BB-035 | `testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` |
+| BB-035 | `testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` |
+| BB-035 | `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary` |
+| BB-035 | `testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch` |
 | BB-036 | `testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch` |
 | BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
+| BB-036 | `testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID` |
+| BB-036 | `testRecordedFailureCannotReplaceExistingDraft` |
+| BB-036 | `testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch` |
+| BB-036 | `testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords` |
+| BB-036 | `testEightyMessageWindowFollowsNewTailWithoutInterruptingReading` |
 | BB-037 | `testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch` |
+| BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
-상태·저장 경로를 사용하지만 인증 서버·HTTP·음성 이벤트는 합성이다. 실기기, 실제 브라우저 로그인,
+상태·저장 경로를 사용하지만 인증 서버·HTTP·마이크 입력은 합성이다. 조건 주도 재생 검사는 실제
+delegate 진입을 사용하되 재생 완료 이벤트도 합성이다. `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary`만
+실제 OS 한국어 음성 합성의 시작·완료를 기다리고, 다음 마이크 입력은 여전히 합성이다. 한국어 음성이나
+완료 callback이 없으면 실패로 남기며 합성 완료로 대체하지 않는다. 실제 오디오 입력 재시작의 증거는 아니다.
+실기기, 실제 브라우저 로그인,
 한국어 음성 인식은 따로 실행하기 전까지 `NOT_RUN` 이다. 실제 iPhone 실행은 빌드 번호·소스 SHA·
 iOS 버전·계정 이용 자격과 케이스별 스크린샷/관측·실패 이유를 별도 기록한다. 한 케이스의 일부만
 관측했으면 전체 PASS 로 합치지 않는다. 시뮬레이터 통과는 `status: 자동화됨` 으로 은퇴시키는
@@ -213,3 +235,19 @@ one issue titled "Daily release cut skipped: needs attention", and posts to `#al
 
 From 2026-10-25 to 10-28 the admin password rotation left this secret stale and the gate skipped three
 days with green runs and no message; this section exists because of that.
+
+## Published release baseline (#3910)
+
+Default case selection, release cuts and the daily app-change gate use GitHub's latest
+published stable release (`GET /repos/hypeproof/hypeproof-studio/releases/latest`). A
+stable-shaped Git tag is not proof of publication: draft or failed promotions must not
+hide unshipped changes. The published tag must exist locally and be an ancestor of the
+candidate. Missing metadata, API failures or an invalid range stop the command without
+a tag fallback. This adds one bounded read (30-second timeout), no model calls or builds.
+Explicit `--baseline`, release-PR ranges and `--since` dry-run trials retain their recorded
+range; they do not silently reselect it. Existing release PRs need their range reviewed
+against the published baseline before acceptance; this does not rewrite active tags.
+
+Regression: `node --test scripts/release/test/select-cases.test.mjs` checks a newer
+unpublished stable tag, retained earlier requirement changes, offline explicit baselines,
+and rejected draft/prerelease/missing metadata. These are tooling checks, not installed-App acceptance.

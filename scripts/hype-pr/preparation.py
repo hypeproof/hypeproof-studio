@@ -169,6 +169,7 @@ def tool_version():
                    | set((ROOT / "scripts/hype-pr").glob("*.py"))
                    | set((ROOT / "scripts/hype-pr").glob("*.js"))
                    | {ROOT / "scripts/change-impact/impact.py",
+                      ROOT / "scripts/notify/ownership.py",
                       ROOT / "scripts/repo-governance/audit.py",
                       ROOT / "skills/hype-pr/SKILL.md",
                       ROOT / "skills/hype-pr/agents/openai.yaml"})
@@ -245,6 +246,32 @@ def ensure_base_tip(checkout, base, base_tip):
                          f"`git fetch origin {base}`; check that origin is the repository being inspected")
 
 
+def inspection_policy(policy, repo, checkout, merge_base, base_tip, head, paths):
+    """Onboard only an explicitly staged repository, never infer missing sources.
+
+    The initial PR may add exactly its manifest. A successful git tree listing
+    proves absence at the base; access/read failures must still propagate.
+    Other repositories never read a staged repository before activation.
+    """
+    if repo in policy["repositories"]:
+        return policy, False
+    config = policy.get("onboarding_repositories", {}).get(repo)
+    if not config:
+        raise ValueError("repository is outside change-impact onboarding scope")
+    manifest = config["manifest"]
+    present = git(checkout, "ls-tree", "--name-only", merge_base, "--", manifest)
+    initial = not present
+    if initial:
+        if git(checkout, "ls-tree", "--name-only", base_tip, "--", manifest):
+            raise ValueError("manifest already exists on the remote base; rebase before inspection")
+        added = git(checkout, "diff", "--name-only", "--diff-filter=A", merge_base, head).splitlines()
+        if paths != [manifest] or added != [manifest]:
+            raise ValueError("initial onboarding PR must add only " + manifest +
+                             "; register criteria before product changes (" + config["tracking_issue"] + ")")
+    effective = {**policy, "repositories": {**policy["repositories"], repo: config}}
+    return effective, initial
+
+
 def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=False):
     checkout = Path(git(checkout, "rev-parse", "--show-toplevel"))
     if repo_identity(checkout) != repo:
@@ -261,8 +288,7 @@ def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=Fals
     merge_base = git(checkout, "merge-base", base_tip, head)
     paths = git(checkout, "diff", "--name-only", "--no-renames", merge_base, head).splitlines()
     policy = json.loads((ROOT / "policy/change-impact.json").read_text())
-    if repo not in policy["repositories"]:
-        raise ValueError("repository is outside change-impact onboarding scope")
+    policy, initial_onboarding = inspection_policy(policy, repo, checkout, merge_base, base_tip, head, paths)
     policy["members"] = list(members)
     found, absent = source_checkouts(policy, checkout)
     reader = impact.Reader({**(roots or {}), repo: str(checkout)}, found)
@@ -272,7 +298,13 @@ def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=Fals
         # Said before the reads start: a run stopped for being slow has then already said why.
         print(f"hype-pr: {gap_notice(gap)}", file=sys.stderr)
     after = impact.snapshot(reader, policy, {repo: head})
-    before = impact.snapshot(reader, policy, {**after["commits"], repo: merge_base})
+    before_policy = policy
+    if initial_onboarding:
+        before_policy = {**policy, "repositories": {r: c for r, c in policy["repositories"].items() if r != repo}}
+        stages = {n["stage"] for n in after["nodes"].values() if n["repo"] == repo}
+        if not {"intent", "requirement", "design", "implementation", "test"} <= stages:
+            raise ValueError("initial onboarding needs intent, requirement, design, implementation and test nodes")
+    before = impact.snapshot(reader, before_policy, {**after["commits"], repo: merge_base})
     planned = impact.plan(before, after)
     blockers, debt = [], []
     new_gaps = set(planned["structural_gaps"]) - set(impact.structural_gaps(before["nodes"]))
@@ -323,7 +355,7 @@ def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=Fals
               "base_tip": base_tip, "merge_base": merge_base, "head": head,
               "source_commits": after["commits"],
               "external_sources": {r: sorted(c) for r, c in sorted(external.items())},
-              "tool_version": tool_version(),
+              "tool_version": tool_version(), "initial_onboarding": initial_onboarding,
               "paths": paths, "changed_nodes": planned["changed"], "tasks": planned["tasks"],
               "nodes": nodes, "unmapped": unmapped, "blockers": blockers, "existing_debt": debt}
     report["fingerprint"] = impact.digest(report)

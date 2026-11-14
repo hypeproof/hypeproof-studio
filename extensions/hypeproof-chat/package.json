@@ -128,6 +128,10 @@
         "title": "Chalk: 강사 토큰 입력"
       },
       {
+        "command": "hypeproof-chat.endRehearsalSeat",
+        "title": "리허설 끝내고 강사로 돌아가기"
+      },
+      {
         "command": "hypeproof-chat.chalk.checkPlan",
         "title": "Chalk: 초안 검사 (강사용)"
       },
@@ -437,6 +441,7 @@
         }
       ],
       "commandPalette": [
+        { "command": "hypeproof-chat.endRehearsalSeat", "when": "hypeproofChat.rehearsalSeat" },
         { "command": "hypeproof-chat.chalk.checkPlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         { "command": "hypeproof-chat.chalk.openCourse", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
         { "command": "hypeproof-chat.chalk.savePlan", "when": "config.hypeproofChat.instructorRuntime != 'chalk-extension'" },
@@ -564,6 +569,12 @@
           "type": "boolean", "default": false,
           "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."
         },
+        "hypeproofChat.instructorSubscription": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "강사 본인의 Claude·Codex 구독으로 강사 채팅을 실행합니다. 이 기기에 명령줄 도구를 설치하고 로그인해야 합니다. 학생 화면에는 나타나지 않습니다."
+        },
         "hypeproofChat.artifactHistoryEnabled": {
           "type": "boolean",
           "default": false,
@@ -589,6 +600,12 @@
         "hypeproofChat.safeLinkAllowlistEnabled": {
           "type": "boolean", "default": true, "scope": "machine",
           "description": "미성년 수업(안전 브라우저)에서 채팅 링크가 수업 허용 목록 밖이면 열지 않고 알림을 보여 줍니다. 수업 정보가 미성년 수업이고 허용 목록이 있을 때만 켜집니다. 지원을 위해 끄면 이 기기에서는 막지 않습니다."
+        },
+        "hypeproofChat.guardianEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "보호자 계정의 아이 프로필 보호 모드를 켭니다. 켜면 아이 프로필에서는 올리기·구매·연결·스토어·기억을 쓰지 않고, 보호자가 기록을 볼 수 있다는 안내를 늘 보여 줍니다. 기본은 꺼짐이며 꺼져 있으면 지금 동작이 바뀌지 않습니다."
         },
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
@@ -732,12 +749,19 @@
         "label": "HypeProof Studio",
         "uiTheme": "vs-dark",
         "path": "./media/hypeproof-theme.json"
+      },
+      {
+        "label": "HypeProof Studio Light",
+        "uiTheme": "vs",
+        "path": "./media/hypeproof-light-theme.json"
       }
     ],
     "configurationDefaults": {
       "update.showReleaseNotes": false,
       "chat.disableAIFeatures": true,
       "workbench.colorTheme": "HypeProof Studio",
+      "workbench.preferredDarkColorTheme": "HypeProof Studio",
+      "workbench.preferredLightColorTheme": "HypeProof Studio Light",
       "workbench.activityBar.location": "hidden",
       "window.commandCenter": false,
       "workbench.layoutControl.enabled": false,
@@ -771,7 +795,7 @@
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "cd webview-ui && npm run dev",
     "package": "vsce package --no-dependencies",
-    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/classroom-join-code.test.mjs",
+    "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs test/classroom-participation-consent.test.mjs test/classroom-question-card.test.mjs test/classroom-question-answer.test.mjs test/artifact-comment.test.mjs test/classroom-artifact-comment-host.test.mjs test/version-stats.test.mjs test/classroom-join-code.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
     "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",

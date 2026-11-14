@@ -24,6 +24,7 @@ import { runShowWhatIMade } from "./showWhatIMadeHost";
 import { captureShowPage } from "./showWhatIMade";
 import { runWorkExport } from "./workExportHost";
 import { heldSecretValues } from "./workExport";
+import { DATA_DELETION_COPY, dataDeletionOffered, readDeletionRequest, sendDeletionRequest } from "./dataDeletionRequest";
 import { ACCOUNT_SECRET_KEY } from "./accountSession";
 import { CREDENTIAL_KEY as CLASSROOM_OPS_CREDENTIAL_KEY } from "./classroomOpsHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
@@ -34,7 +35,7 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, denialToolLine, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
 import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
@@ -44,10 +45,13 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
+import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
 import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
 import { withBrowserOpenApproval } from './localRuntime/browserOpenApproval';
+import { cliLoginOk, locateCli } from './localRuntime/cliLocate';
+import { instructorLocalRuntime, releaseGateNotice, releaseInstructorRuntime, shouldRecheckRelease, type ReleaseGateReason } from './localRuntime/releaseInstructorRuntime';
 import { decideBrowserOpen } from './browserOpenDecision';
 import { CHALK_EXTENSION_ID, ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, contractModels, endSessionForRuntime, needsChalkPrompt, resolveInstructorRuntime, syncInstructorSession, type ContractOps, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { CHALK_INSTRUCTOR_TAB_COMMAND, chalkInstructorTabField } from "./chalkInstructorTab";
@@ -62,6 +66,33 @@ import { chalkToolsEnabled } from './chalk/tools';
 import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
 import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
+
+/** #3597 — the release gate state a provider holds; a module function keeps plain-object test hosts working (#3580). */
+interface ReleaseGateHost {
+  cachedProfile?: { rehearsal?: boolean } | null;
+  releaseGateKey?: string;
+  releaseGateInputs: { isInstructor: boolean; panelMode: string };
+  releaseGateReason?: string;
+  releaseRuntime: LocalRuntimeConfig | null;
+  releaseRuntimeNotice: string;
+}
+
+/** #3597 — computes the release gate. Re-run when the key changes, or with `force` for a closed gate that may now open. */
+async function refreshReleaseGate(host: ReleaseGateHost, isInstructor: boolean, panelMode: string, force = false): Promise<void> {
+  const subscriptionSetting = vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('instructorSubscription', false) === true;
+  const rehearsal = !!host.cachedProfile?.rehearsal;
+  const key = JSON.stringify([isInstructor, panelMode, subscriptionSetting, rehearsal]);
+  if (!force && key === host.releaseGateKey) return;
+  host.releaseGateKey = key;
+  host.releaseGateInputs = { isInstructor, panelMode };
+  const gate = await releaseInstructorRuntime({ isInstructor, panelMode, rehearsal, setting: subscriptionSetting }, {
+    locate: (provider) => locateCli(provider),
+    loginOk: (executable, provider) => cliLoginOk(executable, provider),
+  });
+  host.releaseRuntime = gate.ok ? gate.config : null;
+  host.releaseRuntimeNotice = gate.ok ? '' : releaseGateNotice(gate.reason as ReleaseGateReason);
+  host.releaseGateReason = gate.ok ? undefined : gate.reason;
+}
 
 /** The first-turn note a project switch leaves for the folder it opens (takeProjectSwitchBrief). */
 const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
@@ -104,8 +135,10 @@ import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapability
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
 import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
-import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
+import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalWithoutReport } from "./extension";
+import { rehearsalSeatActiveFor } from "./rehearsalSeat";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
+import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { helpLinesEnabled, moderationBlockOf, ModerationBlockError, safetyNoticeView } from "./safetyNotice.ts";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
@@ -261,7 +294,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, recordedRoot, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -373,6 +406,7 @@ import {
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
 import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import { childGuardianNotice, isChildSeat } from "./childProfile";
 import type { PublishEndpoints } from "./publish/publishConfig";
 import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
 import { nextFreeFolder } from "./publish/githubContinue";
@@ -642,6 +676,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private mobileTurn?: { id: string; failed: boolean };
   private reflectionAccounts?: AccountSession;
   private reflectionRefreshing = false;
+  private reflectionRefresh?: Promise<void>;
+  private reflectionWrites: Promise<void> = Promise.resolve();
   private reflectionMaking = false;
   isPersonalReflection(): boolean { return !!this.reflectionBinding(); }
   setReflectionAccount(accounts: AccountSession | undefined): void { this.reflectionAccounts = accounts; }
@@ -649,11 +685,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private reflectionBindings(): ReflectionBinding[] {
     return this.context.globalState.keys().filter(k=>k.startsWith(REFLECTION_BINDING_KEY+':')).map(k=>this.context.globalState.get<ReflectionBinding>(k)).filter((b):b is ReflectionBinding=>!!b);
   }
-  private async saveReflectionBinding(b:ReflectionBinding):Promise<void> {
+  private async saveReflectionBinding(b:ReflectionBinding, update?: (held: ReflectionBinding) => ReflectionBinding):Promise<void> {
     const key=REFLECTION_BINDING_KEY+':'+JSON.stringify([b.activity,b.workspace,b.task]);
-    const held=this.context.globalState.get<ReflectionBinding>(key);
-    if(held&&held.revision>b.revision)return;
-    await this.context.globalState.update(key,b);
+    const write=(this.reflectionWrites??Promise.resolve()).then(async()=>{
+      const held=this.context.globalState.get<ReflectionBinding>(key);
+      const next=update?update(held??b):b;
+      if(held&&held.revision>next.revision)return;
+      await this.context.globalState.update(key,next);
+    });
+    this.reflectionWrites=write.catch(()=>{});
+    await write;
   }
   private reflectionBinding(): ReflectionBinding | undefined {
     const store=this.currentTaskStore(),activity=activityConnections(this.context)?.current;
@@ -673,8 +714,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!existing.size && !incoming.length) incoming.push({id:'reflection-opening',role:'assistant',content:value.opening,createdAt:Date.now()});
     // Write to the captured task. Navigation while disk IO runs cannot redirect these words.
     if (incoming.length) await store.append(b.task,incoming);
-    const acknowledged=held.pending&&(value.acknowledged_id===held.pending.id||value.state.messages.some(m=>m.id===held.pending!.id&&m.role==='user'&&m.content===held.pending!.text));
-    await this.saveReflectionBinding({...held,revision:value.state.revision,...(acknowledged?{pending:undefined}:{})});
+    await this.saveReflectionBinding({...held,revision:value.state.revision},current=>{
+      if(current.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+      const pending=current.pending;
+      const acknowledged=pending&&(value.acknowledged_id===pending.id||value.state.messages.some(m=>m.id===pending.id&&m.role==='user'&&m.content===pending.text));
+      return {...current,revision:value.state.revision,pending:acknowledged?undefined:pending};
+    });
     // An app exit between saving the outbox and dispatch must leave recoverable input.
     const pending=this.reflectionBinding()?.pending;
     if(stillHere()&&pending&&!this.hasActiveStream()){
@@ -717,13 +762,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.handleTaskMessage({type:'taskSelect',taskId:scope.task,id:b.task});
     }
     await this.applyReflectionSnapshot(b,value);
+    // A new reflection binding is saved after task creation; publish it to the visible action now.
+    await this.postConfig();
   }
   async refreshPersonalReflection(): Promise<void> {
     const b=this.reflectionBinding();
-    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)?.ready)return;
+    // Reading the bound conversation preserves its draft; execution/making still
+    // requires the stricter empty-draft readiness in mobileConversationScope.
+    if(!b||!this.reflectionAccounts||this.reflectionRefreshing||!this.mobileConversationScope(true)
+      ||this.hasActiveStream()||this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory
+      ||this.verifySession?.running||this.opsHold||this.interruptedHistory)return;
     this.reflectionRefreshing=true;
-    try { await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts.reflectionRequest(b.session))); }
-    finally { this.reflectionRefreshing=false; }
+    const refresh=(async()=>{await this.applyReflectionSnapshot(b,readReflection(await this.reflectionAccounts!.reflectionRequest(b.session)));})();
+    this.reflectionRefresh=refresh;
+    try { await refresh; }
+    finally { if(this.reflectionRefresh===refresh)this.reflectionRefresh=undefined;this.reflectionRefreshing=false; }
   }
   /** Copy only the person's reviewed words into an ordinary, unsent desktop task. */
   async beginPersonalMaking(): Promise<void> {
@@ -767,22 +820,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async sendPersonalReflection(msg: Extract<WebviewMessage,{type:'sendMessage'}>): Promise<boolean> {
     const b=this.reflectionBinding();if(!b)return false;
     const accounts=this.reflectionAccounts;
-    if(!accounts||this.hasActiveStream()||this.reflectionRefreshing||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
-      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:this.reflectionRefreshing?'대화를 확인 중이에요. 잠시 뒤 다시 보내 주세요.':'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
+    if(!accounts||this.hasActiveStream()||msg.images?.length||msg.attachments?.length||msg.imports?.length||msg.editOf){
+      await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이 질문 대화는 글과 음성으로 이어가요. 파일을 만들거나 수정하려면 새 작업에서 시작해 주세요.'});return true;
     }
     if(b.pending&&b.pending.text!==msg.text){
       await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:'이전 전송 결과를 확인 중이에요. 같은 내용을 다시 보내면 중복 답변 없이 확인할 수 있어요.'});return true;
     }
     const store=this.currentTaskStore();
     const stillHere=()=>{const active=this.reflectionBinding();return this.reflectionAccounts===accounts&&this.currentTaskStore()===store&&active?.session===b.session&&active.activity===b.activity&&active.workspace===b.workspace&&active.task===b.task;};
-    const pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision};
+    const refresh=this.reflectionRefresh;
+    let pending=b.pending??{id:msg.userMessageId??randomId(),text:msg.text,revision:b.revision,...(refresh?{awaitingRefresh:true}:{})};
     const id=pending.id,streamId=randomId(),controller=new AbortController();
     let streamStarted=false,terminal=false;
     // Hold task navigation before the first asynchronous outbox write.
     this.activeStreams.set(streamId,controller);this.reflectionStreams.set(streamId,{binding:b,id});
     try {
-      await this.saveReflectionBinding({...b,pending});
-      if(!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      await this.saveReflectionBinding({...b,pending},held=>{
+        if(held.session!==b.session)throw Error('계정이나 열린 대화가 바뀌었어요.');
+        return {...held,pending};
+      });
+      if(refresh)await refresh;
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
+      if(this.taskChanging||this.connectionChanging||this.turnRestoreBusy||this.clearingHistory||this.verifySession?.running||this.opsHold||this.interruptedHistory)throw Error('현재 작업 상태를 확인한 뒤 다시 보내 주세요.');
+      // Only a never-dispatched request can take the refreshed revision. An
+      // uncertain previous POST keeps its original idempotency payload.
+      if(pending.awaitingRefresh){
+        const current=this.reflectionBinding()!;
+        if(!current.pending&&store?.getHistory(b.task).some(m=>m.id===id))return true;
+        pending={id:pending.id,text:pending.text,revision:current.revision};
+        await this.saveReflectionBinding({...current,pending});
+      }
+      if(controller.signal.aborted||!stillHere()||await accounts.conversationSession()!==b.session||!stillHere())return true;
       await this.post({type:'streamStart',streamId,messageId:id+'-answer',userMessageId:id});streamStarted=true;
       const value=readReflection(await accounts.reflectionRequest(b.session,'/turns',pending,controller.signal));
       if(!controller.signal.aborted&&stillHere()){await this.post({type:'streamEnd',streamId});terminal=true;}
@@ -795,8 +863,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         } else {
           void vscode.window.showWarningMessage('답변은 계정에 저장됐지만 이 기기에 기록하지 못했어요. 입력은 보관하고 대화를 다시 확인할게요.');
         }
-        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding({...b,pending:undefined});
-        try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
+        if(['reflection_changed','reflection_busy','invalid_reflection_turn'].includes((error as {code?:string})?.code??''))await this.saveReflectionBinding(b,current=>
+          current.session===b.session&&current.pending?.id===id?{...current,pending:undefined}:current);
+        if(streamStarted)try { await this.applyReflectionSnapshot(b,readReflection(await accounts.reflectionRequest(b.session))); } catch { /* Preserve pending input and local history. */ }
         if(stillHere()&&!store?.getHistory(b.task).some(m=>m.id===id))await this.post({type:'inputRejected',text:msg.text,images:msg.images,notice:reflectionFailure(error)});
       }
     } finally {this.activeStreams.delete(streamId);this.reflectionStreams.delete(streamId);if(streamStarted&&!terminal&&!controller.signal.aborted)await this.post({type:'streamStopped',streamId});}
@@ -1141,6 +1210,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _instructorMode = new InstructorModeManager();
   private chalkContract: ChalkContractHost | null = null;
   private contractView: ContractView = {};
+  /** #3597 — the instructor's own CLI on the release app (null unless the gate is open). */
+  private releaseRuntime: LocalRuntimeConfig | null = null;
+  private releaseRuntimeNotice = '';
+  private releaseGateReason: string | undefined;
+  private releaseGateInputs: { isInstructor: boolean; panelMode: string } = { isInstructor: false, panelMode: '' };
+  private releaseGateKey = '';
+
   // Verdict syncs run one at a time, so an activation never races the deactivation before it.
   private contractSync: Promise<void> = Promise.resolve();
   private nativeObservationError: string | null = null;
@@ -1628,6 +1704,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.refreshSitePublishContext();
   }
 
+  /** GRD-09/10/19 — the served profile the child-seat refusals read (childProfile.ts configureChildSeat). */
+  get childGateProfile(): ResolvedProfile | null {
+    return this.cachedProfile;
+  }
+
   /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
   private refreshSitePublishContext(): void {
     void vscode.commands.executeCommand("setContext", SITE_PUBLISH_CONTEXT_KEY, this.sitePublisher().available());
@@ -1701,7 +1782,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       find: () => this.sitePublisher().findClassRepos(),
       signIn: () => this.sitePublisher().signInForContinue(),
       prepare: (args) => this.sitePublisher().prepareContinue(args),
-      newFolder: (root) => nextFreeFolder(root),
+      // A name is also taken when it has an activity binding record, even if the folder is gone from disk.
+      newFolder: (root) => {
+        const connections = activityConnections(this.context);
+        return nextFreeFolder(root, (p) => fs.existsSync(p) || !!connections?.hasBinding(p));
+      },
       classRoot,
     };
   }
@@ -2520,6 +2605,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     },
     defaultTitle: () => vscode.workspace.workspaceFolders?.[0]?.name ?? "내 제품",
     qr: qrDataUrl,
+    // CGP-ART-R-013: background counts arrived; redraw only while the panel is open (the read gate decides).
+    statsChanged: () => { if (this.isCurriculumRuntimeEnabled() && this.publishReadGate.canRefresh) void this.postPublishState(); },
   });
 
   private readonly publishReadGate = new PublishReadGate();
@@ -2718,6 +2805,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * unless every slide was captured and deck.html is byte-identical before and after.
    */
   private deckPdfBusy = false;
+  /** CGP-ART-R-023 — the last saved deck PDF (memory only): the served root it was written in and its path there. */
+  private deckPdfSaved: { taskKey: string; root: string; rel: string } | null = null;
+  /** Test seam: the OS reveal. */
+  deckPdfRevealInOS: (abs: string) => Promise<unknown> = async (abs) => vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs));
+  /**
+   * 폴더에서 보기 on the saved notice. The file is walked again under the served root with the page card's checks (every
+   * segment lstat-checked, no link, a regular file, inside the root, the same inode twice) right before the OS call; any
+   * other task, a missing record or a failed walk is a refusal line and no OS call.
+   */
+  async deckPdfReveal(): Promise<void> {
+    const saved = this.deckPdfSaved;
+    if (!saved || saved.taskKey !== this.turnRestoreTaskKey()) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    // saved.root was stored canonical: a root swapped for a link since then is refused (exactRoot), never followed.
+    const checked = recheckFileInFolder(saved.root, saved.rel, { exactRoot: true });
+    if (!checked.ok) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    try { await this.deckPdfRevealInOS(checked.abs); } catch { /* the press passed the gate; a failed OS call adds no claim */ }
+  }
   /** Test seam: the CDP channel to a tab. Production attaches a CdpSession. */
   deckPdfAttach: (tab: vscode.BrowserTab) => Promise<{ send: CdpSend; close(): Promise<void> }> = async (tab) => {
     const session = await CdpSession.attach(tab);
@@ -2785,7 +2889,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
-      this.postPageNotice(DECK_PDF_COPY.saved(path.relative(workRoot, target).split(path.sep).join("/"), result.pages));
+      // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
+      const shown = path.relative(workRoot, target).split(path.sep).join("/");
+      // The reveal walks with exactRoot, so the root is recorded in canonicalFolder's form, and the file's path is taken
+      // relative to that same form (the deck was resolved under it). A root that cannot be resolved now still keeps the
+      // saved file and its notice, without the action; the log says so, without paths.
+      let saved: { taskKey: string; root: string; rel: string } | null = null;
+      try { const rec = recordedRoot(root); saved = { taskKey: this.turnRestoreTaskKey(), root: rec, rel: path.relative(rec, target).split(path.sep).join("/") }; }
+      catch { this.logChannel?.appendLine("[deck-pdf] served root could not be resolved; 폴더에서 보기 not offered"); }
+      this.deckPdfSaved = saved;
+      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, saved ? { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown } : undefined);
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
     } finally {
@@ -4440,7 +4553,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pendingPageAttachment) return;
     this.pendingPageContext = null;
     this.pendingPageImage = null;
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     void this.post({ type: "pageAttached", label: "" });
     this.dropPageAttachment();
   }
@@ -4503,11 +4616,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * be recreated later (WebviewView has no retainContextWhenHidden). Posting
    * is idempotent: the webview reducer replaces pageNotice, never appends.
    */
-  postPageNotice(label: string, source?: import("./denialSource").DenialSource): void {
+  postPageNotice(label: string, source?: import("./denialSource").DenialSource, action?: import("./protocol").PageNoticeAction): void {
     if (source) { void this.postDenialNotice(source); return; }
     this.pendingPageNotice = label;
-    void this.post({ type: "pageAttached", label });
+    this.pendingPageNoticeAction = action;
+    void this.post(action ? { type: "pageAttached", label, action } : { type: "pageAttached", label });
   }
+  private pendingPageNoticeAction: import("./protocol").PageNoticeAction | undefined;
 
   private denialWrites?: Promise<void>;
 
@@ -7477,6 +7592,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this._instructorMode?.isInstructor === false && this.activityMemoryBinding ? { folder: MEMORY_FOLDER_LABEL } : undefined;
   }
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
+    // GRD-19 / Q10 — no on-device memory on a child seat (no view, no recall into a turn).
+    if (isChildSeat(this.cachedProfile)) return undefined;
     if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
     return this.activityTrashBinding;
   }
@@ -7961,7 +8078,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
         const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
         const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
-        if (card && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
+        // The gate walks with exactRoot, so the card's root is recorded in canonicalFolder's form (#4066 round 2: the turn
+        // root is JS realpath, which keeps a Windows `c:` and the opened case). A root that cannot be resolved makes no card.
+        let cardRoot: string | null = null;
+        try { cardRoot = recordedRoot(handle.root); } catch { this.logChannel?.appendLine("[page-card] turn root could not be resolved; no card"); }
+        if (card && cardRoot && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, cardRoot, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,
@@ -8174,10 +8295,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const host = this.chalkContract;
     if (!host) return;
     let local: LocalRuntimeConfig | null = null;
-    try { local = localRuntimeConfig(vscode.env.appName, s.proxyUrl); } catch { local = null; }
+    try { local = (localRuntimeConfig(vscode.env.appName, s.proxyUrl) ?? instructorLocalRuntime(s.isInstructor, this.releaseRuntime)); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
-    // Same choices as the legacy panel (instructorModelChoices); only with a local runner (#3564).
-    const models = contractModels(local ? localModelSelection(local) : null);
+    // chalk#25: the contract list is the allowlist (instructorModelChoices). The legacy panel keeps localModelSelection.
+    const models = local ? contractModels(instructorModelChoices(local)) : undefined;
     const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection, models };
     this.contractSync = this.contractSync
       .then(async () => { this.contractView = await syncInstructorSession(host, this.contractView, want); })
@@ -8198,12 +8319,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   chalkRunner(): LocalRunner {
     const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
     const local = (): LocalRuntimeConfig | null => {
-      try { return localRuntimeConfig(vscode.env.appName, proxyUrl()); } catch { return null; }
+      try { return (localRuntimeConfig(vscode.env.appName, proxyUrl()) ?? instructorLocalRuntime(!!this.contractView.token, this.releaseRuntime)); } catch { return null; }
     };
     return {
       available: () => local() !== null,
-      executorModel: () => local()?.model,
-      run: (input) => this.runContractTurn(input, local()),
+      executorModel: (requested) => {
+        const l = local();
+        return l ? executorModelFor(l, requested) : undefined;
+      },
+      run: async (input) => {
+        // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
+        if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
+        // chalk#25: the turn runs on the requested model only when it is in the allowlist (withTurnModel).
+        const l = local();
+        return this.runContractTurn(input, l ? withTurnModel(l, input.model) : null);
+      },
       previewOpen: (webPath) => this.contractPreviewOpen(webPath),
     };
   }
@@ -8413,6 +8543,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
     if (msg.type === 'openPersonalReflection') { await vscode.commands.executeCommand('hypeproof-chat.personalReflection'); return; }
+    if (msg.type === 'beginPersonalMaking') {
+      try { await this.beginPersonalMaking(); }
+      catch (error) { await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '제작 초안을 열지 못했어요.' }); }
+      return;
+    }
     if (['taskCreate', 'taskCreateTemporary', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
@@ -8627,6 +8762,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
+      case "deckPdfReveal": await this.deckPdfReveal(); return;
       case "pageCardOpen":
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
@@ -8707,7 +8843,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // for WebviewView → React state reset). Re-posting is idempotent: the
         // reducer replaces pageNotice rather than appending.
         if (this.pendingPageNotice) {
-          void this.post({ type: "pageAttached", label: this.pendingPageNotice });
+          const action = this.pendingPageNoticeAction;
+          void this.post(action ? { type: "pageAttached", label: this.pendingPageNotice, action } : { type: "pageAttached", label: this.pendingPageNotice });
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
         this.postAnnotations();
@@ -9004,6 +9141,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "trialEndCardClaude":
         await this.openPersonalClaude(msg.draft);
         return;
+      case "dataDeletion":
+        // CGP-SHELL-R-027 — read or send the seat's deletion request. Recorded by the Service, never executed here.
+        void this.handleDataDeletion(msg.action);
+        return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":
         // TUX-COND-08 — the optional email on the end card. Never stored; only a submitted flag is.
@@ -9277,6 +9418,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #751 G2 — rehearsal only: send what the panel drew, with this App's identity, under the rehearsal code.
       case "rehearsalSend": {
         await this.sendRehearsalReport(msg.steps, msg.mission);
+        return;
+      }
+
+      // #4048 — the band's button asks first (the host confirms and leaves only on the chosen button).
+      case "rehearsalSeatEnd": {
+        await leaveRehearsalWithoutReport();
         return;
       }
 
@@ -9574,7 +9721,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const runtime: 'proxy' | 'agent-sdk' = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: profile?.coach_runtime, minorCohort: profile?.minor_cohort,
     });
-    const toolSeat = { profile, runtime, local: !!localRuntimeConfig(vscode.env.appName, proxyUrl), instructor: this._instructorMode.isInstructor === true };
+    const toolSeat = { profile, runtime, local: !!(localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime)), instructor: this._instructorMode.isInstructor === true };
     const toolDenial = mode === 'web-search' ? turnToolsDenialSource(toolSeat) : undefined;
     if (toolDenial) await this.postDenialNotice(toolDenial);
     requireTurnTools(mode, turnToolsAvailability(toolSeat));
@@ -9599,7 +9746,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     this.finishAnnotationSend(annotations);
     // CGP-ART-R-006 — the preview was only for choosing; it leaves the page as the request goes.
@@ -9976,7 +10123,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
         deniedCalls.set(a.id, denial);
         tracker.settle(a.id);
-        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
+        this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
       };
       // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
       const fileToolCalls = new Set<string>();
@@ -10057,9 +10204,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             }catch {if(observation){observation.batch.incomplete=true;this.persistObservation(observation);}this.nativeObservationError='산출물 사본을 확인하지 못했습니다.';}
           })());
         }
-        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error") =>
+        const log = (id: string, icon: string, label: string, state: "running" | "done" | "error", kind?: "tool") =>
           // #503 — a.at: the SDK's own timestamp as it sent it. It becomes the persisted line's createdAt.
-          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}) });
+          // `kind: "tool"` only from the tool_use / tool_result cases below, never thinking (the status line reads it).
+          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}), ...(kind ? { kind } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
             if (work) {
@@ -10126,13 +10274,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (line.kind === "row") {
               const header = delegationHeader(a.input, this.resolveCoachCwd());
               tracker.setHeader(a.id, header);
-              log(line.lineId, DELEGATION_ICON, header, "running");
+              log(line.lineId, DELEGATION_ICON, header, "running", "tool");
               // REQ-STUDIO-LONG-STEP-HINT — no clock yet; it starts at the approval (case "approval").
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: DELEGATION_ICON, label: header, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             } else if (work && shell) {
               // REQ-CGP-AGENT-60 — a summary seat still shows each shell row (collapsed), with its purpose.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, shell });
             } else if (work) {
@@ -10140,9 +10288,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               work.show(workPhrase(a.name, a.input));
             } else if (line.kind === "child") {
               // A helper's own call sits inside its row; the row is the step the hint times.
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
             } else {
-              log(line.lineId, shown.icon, label, "running");
+              log(line.lineId, shown.icon, label, "running", "tool");
               // The words come from the tool name (workPhrase), never from `label`.
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
@@ -10180,7 +10328,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 : denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom'));
               deniedCalls.set(a.id, denial);
               tracker.settle(a.id);
-              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial });
+              this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial, kind: 'tool' });
               break;
             }
             // A backgrounded helper's result is the SDK's placeholder, never its answer: the row
@@ -10193,6 +10341,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   DELEGATION_ICON,
                   delegationResultLabel(tracker.header(a.id), a.content, { isError: a.isError, reason: a.reason, workspaceRoot: this.resolveCoachCwd() }),
                   a.isError ? "error" : "done",
+                  "tool",
                 );
               }
             }
@@ -10208,9 +10357,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 ? `${shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label} — 실패${a.reason ? `: ${a.reason}` : ""}`
                 : (shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label),
               a.isError ? "error" : "done",
+              "tool",
             );
             // REQ-CGP-AGENT-60 — a summary seat's shell row still settles (errors were settled above).
-            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done");
+            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done", "tool");
             // Only a **successful** write tool establishes the evidence for "it was
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
@@ -10349,7 +10499,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // best-effort.
       await lowDiskCheck;
       await withCoachSeatLock(coachSeatKeyFor({ token: token ?? undefined, profile: profile ?? undefined }), async () => {
-      const local = localRuntimeConfig(vscode.env.appName, proxyUrl);
+      // #3608 — a learner turn never reads the release runner; an instructor turn re-checks a gate closed for no CLI or a failed login.
+      if (this._instructorMode.isInstructor === true && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
+      const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime);
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
@@ -10425,7 +10577,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
         }
       } else if (this._instructorMode.isInstructor === true) {
-        throw new Error('강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
+        throw new Error(this.releaseRuntimeNotice || '강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.');
       } else if (runtime === "agent-sdk") {
         if (!profile) {
           throw new Error(profileNotReadyNotice(this.coachDisplayName()));
@@ -11055,7 +11207,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             : await this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
           if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: "running", kind: "tool" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
           const tr = p.planGate
             ? (planFirstToolResult(p.planGate, call.name) as Awaited<ReturnType<typeof browser.execute>>)
@@ -11065,7 +11217,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)
             : await browser.execute(fixed.call);
           this.noteTaskActivity(p.streamId, { kind: 'result', id: call.id, isError: !!tr.isError });
-          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done",
+          this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done", kind: "tool",
             ...(tr.isError ? { denial: denialNotice(taggedDenialSource(tr.content.find(c => c.type === 'text')?.text), this.getSeatAudience() === 'classroom') } : {}) });
           // If it was corrected, tell the model too — fix it silently and it guesses
           // again next turn. One mapping shared with the CR-T03 adapter parity check.
@@ -11081,6 +11233,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
     } finally {
       await turnBrowser.release();
+    }
+  }
+
+  private dataDeletionSending = false;
+
+  /**
+   * CGP-SHELL-R-027 — `load` reads the seat's latest deletion request, `submit` sends one (the
+   * webview has already shown its confirm step). Re-checks that the profile still advertises the
+   * request, then calls the Service with the seat's own credential. Nothing is deleted here: the
+   * Service records the request and an operator processes it. Local files are never touched.
+   * No seat id, request id or Service text reaches a log.
+   */
+  private async handleDataDeletion(action: "load" | "submit"): Promise<void> {
+    const reply = (state: import("./dataDeletionRequest").DataDeletionState) => void this.post({ type: "dataDeletionState", ...state });
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxy = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    if (!token || !proxy || !dataDeletionOffered(this.cachedProfile)) return reply({ state: "error", message: DATA_DELETION_COPY.failed });
+    if (action === "load") {
+      const r = await readDeletionRequest(proxy, token);
+      return reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    }
+    if (this.dataDeletionSending) return;
+    this.dataDeletionSending = true;
+    try {
+      const r = await sendDeletionRequest(proxy, token);
+      reply(r.ok ? { state: "ready", request: r.request } : { state: "error", message: r.message });
+    } finally {
+      this.dataDeletionSending = false;
     }
   }
 
@@ -11616,6 +11796,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * #751 G2 — the rehearsal report. The panel's own read-back of what it drew goes out unchanged (only steps of this lesson);
    * the Service compares it with the candidate AND with its own records of the requests made under this code.
    */
+  /** #4048 — true only in a rehearsal seat: a return is held and this window is the rehearsal folder. */
+  private async rehearsalSeatBand(): Promise<boolean> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let folder = root;
+    try { if (root) folder = canonicalRoot(root); } catch { folder = root; }
+    try { return await rehearsalSeatActiveFor(this.context.secrets, folder); } catch { return false; }
+  }
+
   private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
@@ -11633,6 +11821,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const j = await r.json().catch(() => ({})) as { verdict?: string; reasons?: string[]; reason?: string; error?: string };
       if (!r.ok) { await this.post({ type: "rehearsalState", state: "error", message: j.reason === "no_request_yet" ? "아직 AI에게 한 번도 묻지 않았습니다. 단계마다 한 번 이상 물어본 뒤 보내세요." : (j.error ?? "보내지 못했습니다 (" + r.status + ")") }); return; }
       await this.post({ type: "rehearsalState", state: "sent", verdict: j.verdict, reasons: j.reasons ?? [] });
+      // #4048 — only a report that was sent reaches the question whether to return.
+      await leaveRehearsalAfterReport();
     } catch (err) { await this.post({ type: "rehearsalState", state: "error", message: "Service에 연결하지 못했습니다: " + (err as Error).message }); }
   }
 
@@ -11725,7 +11915,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.effortTurn = undefined; this.effortResult = undefined; this.effortNotice = undefined;
     }
     if (scope!==activityConnections(this.context)?.scope) return;
-    const local=localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'));
+    const local=(localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime));
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     // #1298 A-01 — student slot takes priority. If the student token is active
     // (present, not expired, not hard-rejected), skip the instructor check entirely
@@ -11752,6 +11942,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._instructorMode.reset();
       isInstructor = false;
     }
+    // #3597 — the release app's instructor CLI gate (re-checked only when its inputs change).
+    await refreshReleaseGate(this as unknown as ReleaseGateHost, isInstructor, panelMode);
     // #3563 — decide the Chalk tab flag before the chalk branch clears isInstructor below.
     const chalkInstructorTab = chalkInstructorTabField(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime'), isInstructor);
     if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
@@ -11810,6 +12002,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
+    // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
+    const seatBand = await this.rehearsalSeatBand();
+    void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
     await this.post({
       type: "config",
       config: {
@@ -11825,10 +12020,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
         ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
+        ...(seatBand ? { rehearsalSeat: true } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
         workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
+        // GRD-24 — the always-visible guardian notice on a child seat.
+        ...(childGuardianNotice(profile) ? { guardianNotice: childGuardianNotice(profile) } : {}),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         // CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (fail closed: adult personal seats only).
         ...(!isInstructor ? { temporaryTask: { allowed: this.temporaryTaskAllowed(profile) } } : {}),
@@ -11857,6 +12055,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-SHELL-R-003 — inside the cohort's freeze the banner is hidden unless the release is security-critical.
         update: local ? undefined : chatUpdateOffer(this.availableUpdate, profile, activity),
         ...(!local && updateFreeze(profile) ? { updateFreeze: updateFreeze(profile)! } : {}),
+        // CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it (default off).
+        ...(!local && !isInstructor && dataDeletionOffered(profile) ? { dataDeletion: true as const } : {}),
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -12218,7 +12418,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // personal account session, classroom-ops credentials, pending orders and any other SecretStorage value.
       const connections = activityConnections(this.context), activity = connections?.current;
       const held = await heldSecretValues([this.context.secrets, ...(connections ? [connections.heldSecrets()] : [])],
-        [TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
+        [TOKEN_KEY, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
       const secrets = [activity?.token, ...held, await resolveInstructorTokenFromSecrets(this.context.secrets)]
         .filter((value): value is string => typeof value === 'string' && !!value);
       const store = this.currentTaskStore();
@@ -12285,16 +12485,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the window is reopened — the very symptom this issue is meant to catch.
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
-    if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
-      entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
-    }
+    // The denial line keeps the call's `kind` marker: a refused or failed call still ends its running line.
+    if (entry.denial) entry = denialToolLine(entry);
     const t = this.turnTimelines.get(streamId);
-    if (t) this.turnTimelines.set(streamId, timelineTool(t, entry, Date.now()));
+    // `kind` is a live-channel marker only; the persisted line keeps its old shape.
+    const { kind: _kind, ...persisted } = entry;
+    if (t) this.turnTimelines.set(streamId, timelineTool(t, persisted, Date.now()));
     void this.post({ type: "toolLog", streamId, ...entry });
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'config') {
+      const binding = this.reflectionBinding();
+      const view = msg.config.taskWorkspace;
+      msg = { ...msg, config: { ...msg.config, personalMaking: binding && this.reflectionAccounts && !msg.config.isInstructor
+        && view && binding.workspace === view.scope && binding.task === view.activeTaskId
+        ? { scope: binding.workspace, taskId: binding.task } : undefined } };
+    }
     if(this.mobileTurn && (['inputRejected','streamError','streamStopped'].includes(msg.type)||(msg.type==='streamEnd'&&msg.failed)))this.mobileTurn.failed=true;
     try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();

@@ -40,6 +40,7 @@ export interface DictationController {
   copyRecovered(): void;
   openSettings(): void;
   busy: boolean;
+  disabled: boolean;
 }
 
 /** Browser objects for the recorder. Tests replace this through `DictationEnvContext`. */
@@ -125,6 +126,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
   const [recorder] = useState(() => new DictationRecorder(makeEnv(), {
     onState: (state: DictationState) => {
       stopTick();
+      apiRef.current.onDictationBusy?.(state !== "idle");
       if (state === "starting") handlers.current.set({ kind: "starting" });
       if (state === "recording") {
         handlers.current.set({ kind: "recording", seconds: 0 });
@@ -201,7 +203,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
   }, [set]);
 
   const busy = view.kind === "starting" || view.kind === "recording" || view.kind === "working";
-  return { view, toggle, cancel, retry, dismiss, insertRecovered, copyRecovered, openSettings, busy };
+  return { view, toggle, cancel, retry, dismiss, insertRecovered, copyRecovered, openSettings, busy, disabled: api.disabled };
 }
 
 const ControllerContext = createContext<DictationController | null>(null);
@@ -209,6 +211,7 @@ const ControllerContext = createContext<DictationController | null>(null);
 /** Holds the one dictation controller so the button and the status area share it. Mounted by the composer addon. */
 export function DictationScope({ api, children }: { api: ComposerAddonApi; children: ReactNode }) {
   const controller = useDictation(api);
+  useEffect(() => { api.onDictationBusy?.(controller.busy); return () => api.onDictationBusy?.(false); }, [controller.busy, api.onDictationBusy]);
   return <ControllerContext.Provider value={controller}>{children}</ControllerContext.Provider>;
 }
 
@@ -256,7 +259,7 @@ export function DictationButton() {
       aria-pressed={recording}
       aria-keyshortcuts="Alt+Shift+M"
       data-hp-tooltip={recording ? `${DICTATE_STOP_LABEL} · ${DICTATION_SHORTCUT_LABEL()}` : `${DICTATE_START_TIP} · ${DICTATION_SHORTCUT_LABEL()}`}
-      disabled={view.kind === "starting" || view.kind === "working"}
+      disabled={controller.disabled || view.kind === "starting" || view.kind === "working"}
       onClick={() => controller.toggle()}
     >
       <ChatIcon kind={recording ? "stop" : "mic"} />

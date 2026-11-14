@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import { realpathSync } from 'node:fs';
 import { ExternalInstructionSkillStore, PublicSkillTransport, downloadExternalSkill, externalSkillDiff, externalSkillSource, ExternalSkillError, type ExternalSkillSnapshot, type ExternalSkillManifest, type ExternalSkillListing } from './externalInstructionSkills';
+import { refuseOnChildSeat } from "./childProfileHost";
 
 export const EXTERNAL_SKILLS_COMMAND = 'hypeproof-chat.externalSkills';
 function workspaceRoot(): string {
@@ -86,7 +87,7 @@ async function manageEntry(context: vscode.ExtensionContext, store: ExternalInst
 export function registerExternalSkillCommands(context: vscode.ExtensionContext): void {
   let busy = false;
   context.subscriptions.push(vscode.commands.registerCommand(EXTERNAL_SKILLS_COMMAND, async () => {
-    if (busy) return;
+    if (busy || refuseOnChildSeat('connections')) return;
     busy = true;
     try {
       const root = workspaceRoot(), store = storeFor(context, root), list = await store.list();

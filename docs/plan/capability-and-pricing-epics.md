@@ -3,6 +3,12 @@
 2026-09-08 · 상태: 단계별 구현·인수, 운영 활성화 미완료 · Lab #777 / Studio #746 / #800.
 철학 개념 채택·제품 설계·코드 구현·운영 활성화·사람 연구의 완료를 구분한다.
 
+> **Status, 2026-11-12.** The personal subscription/pass arm of #800 is superseded: Studio pass
+> sales stopped on 2026-11-11, and personal use is now an invite grant that HypeProof pays for up
+> to a monthly cap, with AI at cost (Lab decision records `2026-11-11-stop-studio-pass-sales.md`,
+> `2026-11-12-studio-invite-only.md`). The class and institution budget rows below still apply.
+> The body is kept as written.
+
 ## 의존성
 
 ```text

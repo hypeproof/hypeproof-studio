@@ -61,7 +61,7 @@ try {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';')
       // The fixture leaves errorForeground out; VS Code's registry defaults stand in for the "no red" probe.
       + `;--vscode-errorForeground:${dark ? '#f85149' : '#e51400'}`;
-    await b.load(page(vars, dark), { width, height: 900, dark });
+    await b.load(page(vars, dark), { width, height: 900, dark, appReady: true });
     await send({ type: 'config', config: configFor(seat) });
     await send({ type: 'history', messages: history });
     assert.equal(await b.evaluate(`!!document.querySelector('.hps-shell[data-chat-detail=personal]')`), seat === 'personal', `${name}: requested seat branch is mounted`);
@@ -90,7 +90,7 @@ try {
     cases++;
   }
   // Forced colours: still a 44px target, and the same system colours as its neutral neighbour.
-  await b.load(page('', true), { width: 800, height: 900, forcedColors: true });
+  await b.load(page('', true), { width: 800, height: 900, forcedColors: true, appReady: true });
   await send({ type: 'config', config: configFor('personal') });
   await send({ type: 'history', messages: history });
   await measureMenu('forced/800');

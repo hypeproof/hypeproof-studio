@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import type { AccountSession } from './accountSession';
 import { accountLock } from './accountLock';
 import { MobileConversation, type MobileBinding, type MobileScope } from './mobileConversation';
+import { refuseOnChildSeat } from "./childProfileHost";
 
 const KEY='hps.mobileConversation.v1';
 export const MOBILE_CONVERSATION_COMMAND='hypeproof-chat.shareConversationWithPhone';
@@ -23,6 +24,7 @@ export function registerMobileConversation(context:vscode.ExtensionContext,provi
     changed:message=>{status.text='$(device-mobile) iPhone 연결';status.tooltip=message;},
   });
   const command=vscode.commands.registerCommand(MOBILE_CONVERSATION_COMMAND,async()=>{
+    if(refuseOnChildSeat('connections'))return;
     try {
       const binding=context.globalState.get<MobileBinding>(KEY);
       if(binding){

@@ -1,13 +1,13 @@
 # Release cut (#1608).
 #
-# cut (read-only): computes the range since the last stable v tag, runs smoke on the candidate and
+# cut (read-only): computes the range since the latest published stable release, runs smoke on the candidate and
 # writes the release PR body (or the smoke-failure issue body) and plan.json as an artifact.
 # create (mode=create only, write permissions): scripts/release/create.mjs creates what the plan says —
 # the rc tag, the rc builds, branch release/<version> and the release PR, or the smoke-failure issue.
 # The v tag and publication come after a member approves the release PR (approval workflow, follow-up).
 #
 # Daily schedule (docs/operations/release-casebook/README.md): 17:00 KST every day. The gate job
-# (scripts/release/daily-gate.mjs) skips the run when no app path changed since the last stable tag
+# (scripts/release/daily-gate.mjs) skips the run when no app path changed since the latest published stable release
 # or a class is live (the same check-live-sessions.mjs freeze the app builds use, fail closed), and
 # otherwise cuts with mode=create. A manual dispatch keeps its inputs and defaults to dry-run.
 # Pause the schedule: set the repository variable RELEASE_CUT_DAILY=off
@@ -83,6 +83,7 @@ jobs:
       - name: Decide
         id: decide
         env:
+          GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           MODE: ${{ inputs.mode }}
           DAILY: ${{ vars.RELEASE_CUT_DAILY }}

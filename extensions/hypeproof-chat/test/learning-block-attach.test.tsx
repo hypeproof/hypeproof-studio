@@ -82,7 +82,7 @@ const inside = (el: El, cls: string) => { for (let n: El | null = el; n; n = n.p
 const messagesOf = (host: El) => host.findAll((e) => (e.getAttribute("class") ?? "").split(/\s+/).includes("hps-msg"));
 
 t("rule: only the served lesson's own step `ui`, one of the seven kinds, is a block (positive and negative controls)", () => {
-  eq(stepMaterial(WITH as never, "s1"), { kind: "criterion_form", stepId: "s1", version: WITH.version, sha256: WITH.sha256 });
+  eq(stepMaterial(WITH as never, "s1"), { kind: "criterion_form", stepId: "s1", version: WITH.version, sha256: WITH.sha256, uiVersion: 1 });
   eq(stepMaterial(WITH as never, "s4")?.kind, "metric_board", "an attached kind this Studio cannot draw is still the step's block");
   eq(stepMaterial(WITH as never, "s2"), null, "a step without ui");
   eq(stepMaterial(WITH as never, "nope"), null, "a step the lesson does not have");
@@ -124,6 +124,28 @@ t("(b) \"그림으로 보여줘\": the coach's reply stays text; no block, form 
   }
   const withLesson = await harness(seat(WITH), HOSTILE);
   eq(withLesson.shown(), [["criterion_form", "s1", WITH.version]], "with materials, the only block is the rail's own");
+});
+
+/** CGP-LEARN-R-004 — a lesson confirmed after pinning: s1 pins v1 (drawn), s2 pins a v2 this App does not know (never faked). */
+const pinned = (id: string, title: string, ui: string, v: number) => ({ ...step(id, title, ui), ui_version: v });
+const PINNED = lessonOf("m2026.11.14-1", [pinned("s1", "기준 정하기", "criterion_form", 1), pinned("s2", "결정하기", "decision_form", 2), step("s3", "살펴보기")]);
+const IDS = [...MATERIAL_KINDS, "ui_version", "ui_params"];
+
+t("CGP-LEARN-R-004: only a pinned version this Studio draws is a block; another version is the notice, and no id or version is shown", async () => {
+  eq(stepMaterial(PINNED as never, "s1"), { kind: "criterion_form", stepId: "s1", version: PINNED.version, sha256: PINNED.sha256, uiVersion: 1 });
+  eq(stepMaterial(PINNED as never, "s2"), null, "v2 is not drawn as v1");
+  const h = await harness(seat(PINNED));
+  eq(h.shown(), [["criterion_form", "s1", PINNED.version]], "the v1 pin draws the block");
+  const visible = (el: El) => el.textContent;
+  for (const id of IDS) ok(!visible(h.host).includes(id), `s1: learner text shows ${id}`);
+  ok(!/\bv\d+\b|버전 \d/.test(visible(h.host)), "s1: learner text shows a version");
+  await h.pick("s2");
+  eq(h.shown(), [], "the v2 pin draws no block");
+  const notice = h.host.findAll((e) => e.getAttribute("data-surface") === "unsupported:decision_form");
+  eq(notice.length, 1, "the unknown version gets the unsupported notice");
+  ok(/열 수 없습니다/.test(notice[0].textContent), "the notice says it cannot be opened");
+  for (const id of IDS) ok(!visible(h.host).includes(id), `s2: learner text shows ${id}`);
+  ok(!/\bv\d+\b|버전 \d/.test(visible(h.host)), "s2: learner text shows a version");
 });
 
 (async () => {

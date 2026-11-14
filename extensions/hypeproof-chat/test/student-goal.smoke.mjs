@@ -359,6 +359,8 @@ function makeHost(context, profile, provider = proto) {
     preview: { setAskAboutFileEnabled() {} },
     // CGP-KNOW-R-029 — postConfig says whether this seat may open a "기록 없이 묻기" task.
     temporaryTaskAllowed: () => false,
+    // #4052 — postConfig asks whether this seat is a rehearsal seat (the band signal); the real provider always has it.
+    rehearsalSeatBand: async () => false,
     post: async (msg) => { posts.push(msg); return true; },
     handleSend: (...args) => effects.push(["runtime-send", ...args]),
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.

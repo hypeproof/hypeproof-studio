@@ -36,6 +36,9 @@ try {
  await browser.evaluate(`show('ready','verified')`);assert.equal(await until(`!!document.querySelector('.hps-page-result-icon')`,v=>v===true),true);assert.match(await browser.evaluate(`document.querySelector('.hps-page-result-badge').textContent`),/^ 확인됨$/);assert.equal(await browser.evaluate(`!!document.querySelector('.hps-page-result-badge svg[data-icon="check"]')`),true);
  await browser.evaluate(`(()=>{const canvas=document.createElement('canvas');canvas.width=390;canvas.height=244;canvas.getContext('2d').fillRect(0,0,390,244);show('ready','unchecked',canvas.toDataURL())})()`);await delay(100);
  assert.deepEqual(await browser.evaluate(`(()=>{const i=document.querySelector('.hps-page-result-thumbnail img');return {lazy:i.loading,width:i.naturalWidth,height:i.naturalHeight}})()`),{lazy:'lazy',width:390,height:244});
+ // Set the positive control explicitly; Windows runners may prefer reduced motion.
+ await browser.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+ assert.equal(await browser.evaluate(`matchMedia('(prefers-reduced-motion: reduce)').matches`),false);
  await browser.evaluate(`show('loading','unchecked')`);await delay(50);
  const anim=()=>browser.evaluate(`getComputedStyle(document.querySelector('.hps-page-result-shimmer')).animationName`);
  assert.notEqual(await anim(),'none');

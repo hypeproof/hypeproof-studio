@@ -49,7 +49,7 @@ let states = 0;
 try {
   for (const dark of [true, false]) for (const width of [1420, 800]) for (const minor of [false, true]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:(m)=>window.__posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 900, dark });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:(m)=>window.__posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 900, dark, appReady: true });
     await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     await send({ type: 'config', config: personal(minor) });
     await send({ type: 'history', messages: [] });
@@ -136,7 +136,7 @@ try {
   assert.equal(states, 8, 'two themes x two widths x adult/minor');
 
   // A classroom config carries no learnerNickname: no field anywhere.
-  await b.load(`<html><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:(m)=>window.__posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width: 1420, height: 900, dark: true });
+  await b.load(`<html><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:(m)=>window.__posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width: 1420, height: 900, dark: true, appReady: true });
   await send({ type: 'config', config: chatConfig(3) });
   await send({ type: 'history', messages: [] });
   // The classroom gear is the only settings entry: it asks the host for app settings, no dialog field.

@@ -89,6 +89,7 @@ class IosCleanupTest(unittest.TestCase):
             directory.mkdir()
         shutil.copyfile(SCRIPT, scripts / "ios-verify.sh")
         (scripts / "collect-native-journeys.py").write_text("raise SystemExit(0)\n")
+        (scripts / "collect-signin-journey.py").write_text("raise SystemExit(0)\n")
         for command in ("xcrun", "xcodebuild", "swift", "codesign", "sleep"):
             path = bin_dir / command
             path.write_text(COMMAND_STUB.replace("__PYTHON__", sys.executable))

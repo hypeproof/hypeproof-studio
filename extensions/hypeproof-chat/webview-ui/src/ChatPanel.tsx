@@ -49,6 +49,7 @@ import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
+import { VoiceConversationControl } from './VoiceConversationControl';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
@@ -94,6 +95,7 @@ import { LessonStepPanel } from './LessonStepPanel';
 import { GoalStatusBar } from './GoalStatusBar';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { collapseSeat } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel, MaterialsScope, MaterialsTags } from './MaterialsPanel';
@@ -126,6 +128,7 @@ import type {
 } from "../../src/protocol";
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
+import { DataDeletionRequest } from "./DataDeletionRequest";
 import { LessonTip } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
@@ -171,6 +174,7 @@ interface Props {
    * — that was what split the screen into two blocks.
    */
   messages: ChatMessage[];
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — e.g. the deck PDF's 폴더에서 보기
   pageNotice: string | null;           // #308 — inline notice for "페이지를 코치에게"
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
   annotationsEnabled?: boolean;
@@ -241,7 +245,7 @@ interface Props {
   safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView | null;
   canRetryLast: boolean;
   sendPending?: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean | string;
   onSelectAttempt?: (rootId: string, attemptId: string, choose: boolean) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
@@ -272,6 +276,8 @@ interface Props {
   onCancel: () => void;
   onClear: () => void;
   onSetToken: () => void;
+  /** #4048 — the rehearsal band's button: ask the host to leave the rehearsal seat (the host confirms). */
+  onEndRehearsalSeat?: () => void;
   onSettings: () => void;
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
@@ -1078,7 +1084,20 @@ export function ChatPanel(props: Props) {
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
   const addon = !props.instructor ? props.composerAddon ?? null : null;
   const AddonScope = addon?.Scope ?? PassThrough;
-  const addonApi = { insert: insertFromAddon, disabled: unavailable || folderMissing || !!props.questionPanel };
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceActiveRef = useRef(false);
+  const reportVoiceActive = useCallback((active: boolean) => { voiceActiveRef.current = active; setVoiceActive(active); }, []);
+  const [dictationBusy, setDictationBusy] = useState(false);
+  const dictationBusyRef = useRef(false);
+  const reportDictationBusy = useCallback((busy: boolean) => { dictationBusyRef.current = busy; setDictationBusy(busy); }, []);
+  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy };
+  // Unrelated work belongs to the person. Automatic speech never sends their text/attachments.
+  const voiceInterrupted = unavailable || folderMissing || !!props.questionPanel || !!props.sendLocked ||
+    !!draft || pendingImages.length > 0 || stagedPhotos.length > 0 || imports.length > 0 || queued !== null ||
+    recovered.length > 0 || !!inlineEdit || editingId !== null || composing || dictationBusy ||
+    !!props.fileAttachment || !!props.pageAttachment || !connectivity.online || planAwaiting || attachmentFailures.items.length > 0;
+  const voiceReady = !voiceInterrupted && !streaming && !props.sendPending && !attachmentSend.busy && preparingImages === 0;
+  const voiceSentId = useRef<string | null>(null);
   const quotePart = draftParts.find(part => part.quote);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || !!quotePart || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
@@ -1208,7 +1227,11 @@ export function ChatPanel(props: Props) {
     const parked = text !== undefined;
     setSubmissionNotice(null);
     const sendPrepared = () => {
-    if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
+    if (!sendWhenOnline(() => {
+      const result = props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode);
+      voiceSentId.current = typeof result === 'string' ? result : null;
+      return result;
+    }, parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
     // The host now owns these files (it moves them into images/), so no discard here.
@@ -1232,6 +1255,14 @@ export function ChatPanel(props: Props) {
       return false;
     }
     return sendPrepared();
+  };
+
+  const submitVoice = (text: string): string | null => {
+    if (!voiceReady || dictationBusyRef.current) return null;
+    voiceSentId.current = null;
+    // The text form uses the same reserveRecovery / offline / permission gates above.
+    if (!submit(text)) { if (!fullDraft(draftPartsRef.current)) setDraft(text); return null; }
+    return voiceSentId.current;
   };
 
   const retryRecovered = (request: RecoveredRequest) => {
@@ -1454,9 +1485,14 @@ export function ChatPanel(props: Props) {
   //
   // If you need a new hook, add it **above** this block.
   // ─────────────────────────────────────────────────────────────────────────
-  const updateBanner = config?.update ? (
+  const updateBannerCore = config?.update ? (
     <UpdateBanner offer={config.update} onInstall={props.onInstallUpdate} onDismiss={props.onDismissUpdate} />
   ) : null;
+  // #4052 — the rehearsal band rides in the same slot as the update banner. Without the signal that slot is exactly the
+  // one main renders, so no sibling's tree position (and no React useId) moves. A new sibling would shift them.
+  const updateBanner = config?.rehearsalSeat ? (
+    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} /></>
+  ) : updateBannerCore;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
   // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
@@ -1895,7 +1931,9 @@ export function ChatPanel(props: Props) {
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
       {personalWorkspace && !props.instructor && <ConversationCopyStatus state={conversationCopy.state} />}
-      {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
+      {/* GRD-24 — child seat: the guardian notice stays on screen (no close button). Host-computed. It shares the
+          class-window slot so the panel's other children keep their tree positions (and their useId values). */}
+      {!props.instructor && <><ClassWindowNotice window={config.classWindow} />{config.guardianNotice && <p className="hps-class-window" role="note" data-testid="guardian-notice"><span>{config.guardianNotice}</span></p>}</>}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
         <LessonCapabilitySheet key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} onAcknowledge={() => {
@@ -1981,6 +2019,7 @@ export function ChatPanel(props: Props) {
               <p className="hp-rail-lesson-note">안내를 읽은 것만으로 이 단계가 끝나지는 않습니다. 직접 만들고 확인한 기록이 남아야 합니다.</p>
             </details>
             <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
+              seat={collapseSeat({ activityId: config.profile?.activity_id, entryId: config.lessonCapabilityEntry?.id, localActivityId: config.activity?.id })}
               work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
@@ -2194,6 +2233,15 @@ export function ChatPanel(props: Props) {
             {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
           </div>
         )}
+        {/* CGP-ART-R-023 (REQ-ART-23 (2)) — the notice's one quiet action, outside its polite region so the region reads only the
+            sentence. The host decides which file it shows and checks it again before the OS call. */}
+        {props.pageNotice && props.pageNoticeAction?.kind === "deckPdfReveal" && (
+          <div className="hps-page-notice-actions">
+            <button type="button" className="hp-cta-quiet" data-page-notice-action="deckPdfReveal"
+              aria-label={`${props.pageNoticeAction.label}: ${props.pageNoticeAction.name}`}
+              onClick={() => postToHost({ type: "deckPdfReveal" })}>{props.pageNoticeAction.label}</button>
+          </div>
+        )}
 
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
         {!props.instructor && config?.materials && !compactLayout && <MaterialsChips />}
@@ -2334,6 +2382,8 @@ export function ChatPanel(props: Props) {
       <AddonScope api={addonApi}>
       <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
+      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice }} onActive={reportVoiceActive} />}
+
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
           questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
@@ -2709,6 +2759,8 @@ export function ChatPanel(props: Props) {
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        {/* CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it; read fresh on each opening. */}
+        {config.dataDeletion && preferencesOpen && <DataDeletionRequest />}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         {/* Compact layout: the header gear opens this dialog, so the app's own settings editor is one press away here. */}
@@ -2741,6 +2793,8 @@ export function ChatPanel(props: Props) {
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
         <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        {/* CGP-SHELL-R-027 — the deletion request row, only where the Service advertises it; read fresh on each opening. */}
+        {config.dataDeletion && preferencesOpen && <DataDeletionRequest />}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
@@ -3195,6 +3249,17 @@ function MemoryStateLine({ folder, place, temporary }: { folder: string; place: 
 
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
+}
+
+/** #4048 — the band in a rehearsal seat. Drawn only when the host sent the rehearsal signal; otherwise nothing. */
+export function RehearsalSeatBand({ visible, onEnd }: { visible: boolean; onEnd: () => void }) {
+  if (!visible) return null;
+  return (
+    <div className="hps-rehearsal-seat" role="status">
+      <span className="hps-rehearsal-seat-label">리허설 중</span>
+      <button type="button" className="hp-cta-quiet" onClick={onEnd}>끝내고 돌아가기</button>
+    </div>
+  );
 }
 
 export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {

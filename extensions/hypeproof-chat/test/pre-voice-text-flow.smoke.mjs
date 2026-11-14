@@ -15,7 +15,7 @@
 //   3. 채팅 패널 CSP 에 media-src / blob: / worker-src 가 없다 (오디오 구멍 없음)
 //   4. 음성 진단 명령은 존재하지만 **학생이 보는 메뉴에 0회** 등장한다
 //   5. 프로브는 명령으로만 돈다 — 활성화 경로에서 도달 불가
-//   6. 텍스트 경로 파일들이 음성 심볼을 **한 번도** 참조하지 않는다, 그리고 음성을
+//   6. 큐·타임라인·호스트 전송은 음성과 독립이고, 패널은 기기를 직접 열지 않는다. 음성을
 //      참조하는 파일의 **목록 자체**가 잠겨 있다 (exit plan 의 실제 범위)
 //
 // 계측기 주의 (verification.md §1, 한국어 단일어 함정):
@@ -415,18 +415,24 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
 // 프로젝트 전체가 아니다.
 //
 // 그래서 두 가지를 따로 잠근다:
-//   (a) 텍스트 흐름 파일 4개 — 음성 심볼 참조 0회. 음성을 떼어내도 **동작이 안 바뀐다.**
+//   (a) #3686: 패널은 자동 턴 adapter를 연결한다. 큐·타임라인·helper는 음성 참조 0회이고
+//       패널은 기기 API를 직접 호출하지 않는다. 실제 전송/복구는 브라우저 대조군이 검증한다.
 //   (b) 음성을 참조하는 파일 **목록** — 이게 exit plan 의 실제 범위다. 목록이
 //       늘어나면 "떼어내기" 의 비용이 조용히 커진 것이므로 이 단언이 터져야 한다.
 {
   for (const [name, text] of [
-    ["webview-ui/src/ChatPanel.tsx", panel],
     ["webview-ui/src/sendQueue.ts", queue],
     ["src/chatTimeline.ts", timelineSrc],
     ["src/chatPanelHelpers.ts", panelHelpers],
   ]) {
     assert.equal(voiceHits(text), 0, `${name} 가 음성 심볼을 참조한다`);
   }
+
+  const deviceApi = /getUserMedia|mediaDevices|MediaRecorder|AudioContext|speechSynthesis|SpeechSynthesisUtterance/;
+  assert.match('navigator.mediaDevices.getUserMedia({audio:true})', deviceApi);
+  assert.match('new AudioContext()', deviceApi);
+  assert.match('speechSynthesis.speak(answer)', deviceApi);
+  assert.doesNotMatch(panel, deviceApi, 'composer must not own device capture/playback');
 
   // 추출이 엉뚱한 파일을 보고 있지 않다는 증거(앵커). 이게 없으면 빈 문자열을
   // 스캔해도 0 이 나와 통과한다.
@@ -478,7 +484,6 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   assert.ok(voiceHits("private micRecorder: unknown = null;") > 0, "micRecorder 를 못 잡는다");
   assert.ok(voiceHits("const mic = await openMic();") > 0, "단어 mic 을 못 잡는다");
   for (const [name, text] of [
-    ["webview-ui/src/ChatPanel.tsx", panel],
     ["webview-ui/src/sendQueue.ts", queue],
     ["src/chatTimeline.ts", timelineSrc],
     ["src/chatPanelHelpers.ts", panelHelpers],

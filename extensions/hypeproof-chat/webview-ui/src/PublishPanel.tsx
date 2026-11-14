@@ -12,6 +12,7 @@ import type { PublishForm, PublishView } from "../../src/publishView";
 import { EXPIRY_CHOICES, METHOD_CHOICES, SHARING_UNKNOWN } from "../../src/publishView";
 
 import { activePublishLink, publishSharing } from "../../src/publishSharing";
+import { VersionStatsTiles } from "./VersionStatsTiles";
 import { PUBLISH_NOTICE_ACK, PUBLISH_NOTICE_LINES, PUBLISH_NOTICE_TITLE } from "../../src/publishNotice";
 
 const VERIFIED_LINE: Record<PublishView["verification"]["state"], string> = {
@@ -72,6 +73,8 @@ export function PublishPanel(props: {
   onSubmit(form: PublishForm): void;
   onLink(experimentId: string, channel: string, expiresInDays: number, noticeVersion?: string): void;
   onRevoke(linkId: string): void;
+  /** CGP-ART-R-013: open one experiment's evidence (the sources of a count). */
+  onOpenEvidence?(experimentId: string): void;
   onCopy?(versionId: string): void;
   onRefresh?(): void;
   onClose(): void;
@@ -239,6 +242,7 @@ export function PublishPanel(props: {
                 <div role="status">{sharing.label} · 활성 링크 {sharing.count}개{stale ? ` · ${view.stale_at ? `${day(view.stale_at)}에 확인한 상태` : "마지막으로 확인한 상태"}` : ""}</div>
                 <button type="button" disabled={disabled || stale || !sharing.url} title={copyReason ?? '이 버전의 활성 링크 복사'} onClick={() => { if (!stale && sharing.url && !disabled) props.onCopy?.(id); }}>링크 복사</button>
                 {copyReason && <div>{copyReason}</div>}
+                {!stale && <VersionStatsTiles stats={view.stats?.[id]} {...(props.onOpenEvidence ? { onOpenEvidence: props.onOpenEvidence } : {})} />}
               </div>;
             })}
           </div>

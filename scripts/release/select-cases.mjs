@@ -2,7 +2,7 @@
 // Selects the black-box cases a release candidate must run (REQ-STUDIO-RELEASE-CASEBOOK).
 // Process: docs/operations/release-casebook/README.md.
 //
-//   node scripts/release/select-cases.mjs                                  # last stable v tag..origin/main
+//   node scripts/release/select-cases.mjs                                  # latest published stable release..origin/main
 //   node scripts/release/select-cases.mjs --baseline v2026.1020.1 --candidate origin/main
 //   node scripts/release/select-cases.mjs --out DIR                        # writes DIR/cases.md and DIR/cases.json
 //   node scripts/release/select-cases.mjs --today 2026-10-20               # fixes the escaped-bug window
@@ -15,7 +15,8 @@
 //             (squash merges carry the PR title and body), or on a changed line of a requirement doc
 //   escaped   its origin is escaped-bug dated within the last 14 days
 // A case marked 자동화됨 is never selected: CI runs it.
-// The range is read from local git. The only GitHub call is `gh pr view` under --pr.
+// The range is read from local git. Default baseline reads the latest published GitHub release;
+// --pr reads the recorded PR range, and --baseline stays offline.
 // --pr takes "Candidate commit" and "Range" from the release PR body (templates/release-pr.md, section 1).
 // It cannot be combined with --baseline or --candidate. Unknown options and bad values stop the run.
 import fs from 'node:fs';
@@ -23,6 +24,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
+import {publishedBaseline} from './published-baseline.mjs';
 import {REQ_ID, appliesToTarget, caseTargets, loadCasebook, validateTarget} from './casebook.mjs';
 
 export const ESCAPED_WINDOW_DAYS = 14;
@@ -115,16 +117,11 @@ export function touchedRequirements(git, baseline, candidate) {
   return [...new Set([...requirementIds(log), ...idsFromDiff(diff)])].sort();
 }
 
-export function lastStableTag(git) {
-  return git('tag', '-l', 'v*', '--sort=-v:refname').split('\n').find(t => t && !t.includes('-')) ?? null;
-}
-
-export function run({root, baseline, candidate = 'origin/main', today, out, dir, target = 'desktop'}) {
+export function run({root, baseline, candidate = 'origin/main', today, out, dir, target = 'desktop', releaseExec = execFileSync}) {
   validateTarget(target);
   const git = (...a) => execFileSync('git', ['-C', root, ...a], {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024}).trim();
-  const base = baseline ?? lastStableTag(git);
-  if (!base) throw new Error('no stable v tag to compare against; pass --baseline');
   const cand = git('rev-parse', `${candidate}^{commit}`);
+  const base = baseline ?? publishedBaseline(git, cand, releaseExec);
   const touched = touchedRequirements(git, base, cand);
   const book = loadCasebook(dir);
   const day = today ?? new Date().toLocaleDateString('sv-SE', {timeZone: 'Asia/Seoul'});

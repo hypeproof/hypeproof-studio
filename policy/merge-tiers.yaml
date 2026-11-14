@@ -33,6 +33,9 @@ version: 1
 human_approvers:
   - jayleekr
   - JeHyeong2
+  - JinyongShin
+  - TJ-kr
+  - J3llyBe4n
 
 # Never human, whatever they approve. Mirrors policy/control-plane.yaml.
 automation_actors:

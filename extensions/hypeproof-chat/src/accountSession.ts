@@ -152,6 +152,24 @@ export class AccountSession {
   async conversationSession(): Promise<string | undefined> {
     await this.accessToken(); return (await this.read())?.sessionId;
   }
+  /** Host-only adoption key; no request, refresh or credential projection. */
+  async approvalSessionKey(): Promise<string | undefined> { return (await this.read())?.sessionId; }
+  async approvalIdentity(): Promise<import('./memberApproval').ApprovalIdentity | undefined> {
+    const token = await this.accessToken(), bundle = await this.read();
+    if (!token || !bundle) return;
+    const me = (await this.call('/me', undefined, token)).body;
+    if (!identity(me.account) || me.account.status !== 'active' || me.session_id !== bundle.sessionId || (await this.read())?.sessionId !== bundle.sessionId) throw new AccountError('unauthorized', friendly('unauthorized'));
+    return {accountID:me.account.id,sessionID:bundle.sessionId};
+  }
+  async approvalRequest(binding: import('./memberApproval').ApprovalIdentity, id?: string, decision?: {id:string;request_digest:string;choice:import('./memberApproval').ApprovalChoice}): Promise<unknown> {
+    if (id !== undefined && (id==='.' || id==='..' || !/^[A-Za-z0-9._:-]{1,128}$(?![\s\S])/.test(id))) throw new Error('Invalid approval route');
+    if (decision && !id) throw new Error('Missing approval card');
+    const token = await this.accessToken();
+    if (!token || (await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized', friendly('unauthorized'));
+    const response = await this.call('/me/approval-inbox' + (id ? '/' + encodeURIComponent(id) : '') + (decision ? '/decisions' : ''), decision, token);
+    if ((await this.read())?.sessionId !== binding.sessionID) throw new AccountError('unauthorized', friendly('unauthorized'));
+    return response.body;
+  }
   async reflectionRequest(sessionId: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<unknown> {
     if (suffix !== '' && suffix !== '/turns' && !/^\/turns\/[A-Za-z0-9._:-]{1,128}\/(?:abandon|cancel)$/.test(suffix)) throw new Error('Invalid reflection route');
     const token = await this.accessToken();

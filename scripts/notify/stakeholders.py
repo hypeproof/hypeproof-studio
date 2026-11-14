@@ -48,6 +48,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
+_owner_spec = importlib.util.spec_from_file_location("notify_ownership", Path(__file__).with_name("ownership.py"))
+ownership = importlib.util.module_from_spec(_owner_spec)
+_owner_spec.loader.exec_module(ownership)
+
 KST = dt.timezone(dt.timedelta(hours=9))
 QUIET_FROM, QUIET_UNTIL = 22, 9
 STEPS = ((1, 0, ("discord", "github")), (2, 4 * 3600, ("discord_dm",)), (3, 24 * 3600, ("discord",)))
@@ -143,7 +147,7 @@ def touched_nodes(traceability: dict | None, paths: list[str]) -> list[dict]:
 
 
 def recipients(facts: dict, snapshot: dict, traceability: dict | None, issues: dict[int, dict],
-               approvers: list[str]) -> list[dict]:
+               approvers: list[str], *, owner_members=None, repo=None) -> list[dict]:
     """[{login, role, blocking, reasons: [why_ko, ...]}] ordered blocking first."""
     head, author = facts["headRefOid"], login(facts.get("author"))
     approved = {login(r.get("author")) for r in facts.get("reviews", [])
@@ -174,7 +178,10 @@ def recipients(facts: dict, snapshot: dict, traceability: dict | None, issues: d
             add(who, "approver", "정책·보안 파일을 바꾸는 PR이라 사람 승인 1건이 있어야 머지됩니다.", True)
     owned: dict[str, list[str]] = {}
     for node in touched_nodes(traceability, [f["path"] for f in facts.get("files", [])]):
-        owned.setdefault(node["owner"], []).append(node["id"])
+        owners = (ownership.resolve("core", repo, owner_members)
+                  if node["owner"] == "core" else [node["owner"]])
+        for who in owners:
+            owned.setdefault(who, []).append(node["id"])
     for who, ids in owned.items():
         more = f" 외 {len(ids) - 1}개" if len(ids) > 1 else ""
         add(who, "owner", f"이 PR이 맡으신 기준({ids[0]}{more})의 파일을 바꿉니다.", False)
@@ -251,11 +258,12 @@ def render_text(card: dict) -> list[str]:
             f"바뀌는 점: {card['change_ko']}", f"받는 이유: {card['why_ko']}", f"질문: {card['question_ko']}  {choices}", card["url"]]
 
 
-def render_github(card: dict, approvals_hint: str, step: int) -> str:
+def render_github(card: dict, approvals_hint: str, step: int, *, discord_sent: bool = False) -> str:
     """English durable record on the PR; GitHub records stay English."""
     ask = "your approval" if card["blocking"] else "a quick look (you are a stakeholder)"
+    delivery = "A short summary was posted on Discord. " if discord_sent else "Discord delivery is not confirmed. "
     return (f"@{card['to']['login']} this PR is waiting on {ask}{approvals_hint}. "
-            "A short summary was sent to you on Discord; review or reply here to stop the reminders.\n\n"
+            f"{delivery}Review or reply here to stop the reminders.\n\n"
             f"<!-- hype-notify:v1 card={card['id']} person={card['to']['login']} head={card['head']} step={step} -->")
 
 
@@ -357,7 +365,13 @@ def plan(repo: str, pr: int, card: dict | None, registry: dict, *, gh: Callable 
     for ref in facts.get("closingIssuesReferences", []):
         issues[ref["number"]] = gh(["issue", "view", str(ref["number"]), "--repo", repo, "--json", "author,assignees"])
     names = member_names(content(gh, *MEMBERS))
-    people = recipients(facts, snap, trace, issues, approvers())
+    roster = None
+    if any(n.get("owner") == "core" for n in (trace or {}).get("nodes", [])):
+        import yaml
+        data = gh(["api", "repos/hypeproof/hypeproof-harness/contents/policy/members.yaml?ref=main"])
+        membership = yaml.safe_load(base64.b64decode(data["content"]))
+        roster = sorted({m for group in membership["members"].values() for m in group})
+    people = recipients(facts, snap, trace, issues, approvers(), owner_members=roster, repo=repo)
     card = validate_card(card) if card else {"change_ko": "(작성된 카드 없음: --card로 한 줄 요약을 넣어야 보낼 수 있습니다)"}
     contacts = registry.get("contacts", {})
     approvals_hint = next((f" (approvals {m[1]}/{m[2]})" for b in snap.get("assessment", {}).get("blockers", [])
@@ -368,7 +382,7 @@ def plan(repo: str, pr: int, card: dict | None, registry: dict, *, gh: Callable 
         decision = decision_card(card, person, name, repo, pr, facts["url"], facts["headRefOid"])
         contact = contacts.get(person["login"], {})
         out.append({**person, "name": name, "member": person["login"] in names, "card": decision,
-                    "text": render_text(decision), "github_comment": render_github(decision, approvals_hint, 1),
+                    "text": render_text(decision), "approvals_hint": approvals_hint, "github_comment": render_github(decision, approvals_hint, 1),
                     "channels": {"discord": bool(contact.get("discord_id") and all(_discord(registry))),
                                  "discord_dm": bool(contact.get("discord_id") and _discord(registry)[0]),
                                  "github": True,
@@ -384,10 +398,19 @@ def deliver(db, registry: dict, row: dict, step: int, channels: tuple, now: floa
     results = []
     for channel in channels:
         key = (row["repo"], row["pr"], row["head"], row["person"], step, channel)
-        if db.execute("SELECT 1 FROM sends WHERE repo=? AND pr=? AND head=? AND person=? AND step=? AND channel=?", key).fetchone():
-            results.append({"channel": channel, "step": step, "status": "already_sent"})
+        previous = db.execute("SELECT status FROM sends WHERE repo=? AND pr=? AND head=? AND person=? AND step=? AND channel=?", key).fetchone()
+        if previous:
+            results.append({"channel": channel, "step": step,
+                            "status": "already_sent" if previous["status"] == "sent" else "already_attempted",
+                            "original_status": previous["status"]})
             continue
-        text = person["github_comment"].replace("step=1", f"step={step}") if channel == "github" else "\n".join(card_lines)
+        # Render from observed receipts, never a cached plan (including old ledger rows).
+        discord_sent = db.execute(
+            "SELECT 1 FROM sends WHERE repo=? AND pr=? AND head=? AND person=? "
+            "AND channel IN ('discord', 'discord_dm') AND status='sent' LIMIT 1",
+            key[:4]).fetchone() is not None
+        text = (render_github(person["card"], person.get("approvals_hint", ""), step,
+                              discord_sent=discord_sent) if channel == "github" else "\n".join(card_lines))
         if not apply:
             results.append({"channel": channel, "step": step, "status": "would_send"})
             continue
@@ -479,7 +502,7 @@ def tick(registry: dict, db, *, apply: bool = False, now: float | None = None, g
         for step, delay, channels in STEPS[1:]:
             if now - row["first_sent_at"] >= delay:
                 results = deliver(db, registry, dict(row), step, step_channels(channels, registry, step), now, apply)
-                if any(r["status"] not in ("already_sent",) for r in results):
+                if any(r["status"] not in ("already_sent", "already_attempted") for r in results):
                     report.append({"person": row["person"], "pr": f"{row['repo']}#{row['pr']}", "step": step, "results": results})
                     break
     return report

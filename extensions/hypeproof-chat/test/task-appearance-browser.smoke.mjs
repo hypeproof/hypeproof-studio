@@ -50,7 +50,7 @@ let states = 0;
 try {
   for (const dark of [true, false]) for (const width of [800, 1420]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(page(vars, dark), { width, height: 900, dark });
+    await b.load(page(vars, dark), { width, height: 900, dark, appReady: true });
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace(tasks) });
     await send({ type: 'config', config: base });
     await send({ type: 'history', messages: [] });
@@ -148,12 +148,12 @@ return [...document.querySelectorAll('.tw-appearance-colour[data-colour]')].map(
     states++;
   }
   // Classroom seat: no task workspace, no menu item.
-  await b.load(page('', true), { width: 1420, height: 900 });
+  await b.load(page('', true), { width: 1420, height: 900, appReady: true });
   await send({ type: 'config', config: chatConfig(3, { activity: { ...chatConfig().activity, kind: 'classroom' } }) });
   await send({ type: 'history', messages: [] });
   assert.equal(await b.evaluate(`!!(${item})`), false, 'classroom seats have no appearance item');
   // Forced colours: the swatch keeps an outline when author colours are replaced.
-  await b.load(page('', true), { width: 1420, height: 900, forcedColors: true });
+  await b.load(page('', true), { width: 1420, height: 900, forcedColors: true, appReady: true });
   await send({ type: 'config', config: chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace(tasks) }) });
   await send({ type: 'history', messages: [] });
   const fc = await b.evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.tw-task .tw-task-swatch'));return {style:s.borderTopStyle,width:parseFloat(s.borderTopWidth)}})()`);

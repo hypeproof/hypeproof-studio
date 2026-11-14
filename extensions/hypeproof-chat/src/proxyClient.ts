@@ -17,6 +17,7 @@ import {
   type ProxyStreamUsage,
 } from "./proxyClientHelpers.ts";
 import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
+import { applyChildPosture } from "./childProfile.ts";
 import { SdkRequiredError, trialRequiresSdkMessage } from "./sdkRequiredHelpers.ts";
 import { parseModerationBlock, ModerationBlockError } from "./safetyNotice.ts";
 import { transportFailureText, type SeatAudience } from "./seatVocabulary.ts";
@@ -473,7 +474,9 @@ export async function fetchProfileResult(args: FetchProfileArgs): Promise<Profil
     return { ok: false, failure: classifyProfileFailure(res.status, body) };
   }
   try {
-    return { ok: true, profile: (await res.json()) as ResolvedProfile };
+    // GRD-08 — every reader of the profile sees a child seat's fail-closed posture (no change while the
+    // guardian switch is off).
+    return { ok: true, profile: applyChildPosture((await res.json()) as ResolvedProfile) };
   } catch {
     // 200 with an unparseable body — a captive portal / proxy page, not a token
     // problem. Classified as server-side so the copy doesn't blame the paste.

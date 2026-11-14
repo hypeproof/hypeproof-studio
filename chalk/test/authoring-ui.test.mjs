@@ -54,7 +54,7 @@ assert.doesNotMatch(authoring, /feature-allowed'\)\.innerHTML/, 'the feature lis
 // are carried inside learning exactly as loaded (carriedLearning), the same preservation rule one level down.
 assert.match(
   authoring,
-  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','starters','model','features','approval_preset','learning'\];/,
+  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','starters','skill_cards','model','features','approval_preset','learning'\];/,
   'the form declares which top-level keys it owns, so everything else is an unknown key to preserve',
 );
 assert.match(authoring, /carriedLearning=l\?Object\.fromEntries\(Object\.entries\(l\)\.filter\(\(\[k\]\)=>!\['week','mission','completion'\]\.includes\(k\)\)\):\{\};/,
@@ -106,8 +106,8 @@ assert.match(
 );
 assert.match(
   authoring,
-  /return \{\.\.\.carriedStep\.get\(own\.id\),\.\.\.own,\.\.\.stepTeachingValue\(f\)\};/,
-  'a step’s preserved keys are restored under the values the form produced (text fields, then help/ui controls)',
+  /const s=\{\.\.\.carriedStep\.get\(own\.id\),\.\.\.own,\.\.\.stepTeachingValue\(f\)\};if\(\(s\.ui\?\?''\)!==\(f\.dataset\.uiOrig\?\?''\)\)\{delete s\.ui_version;delete s\.ui_params;\}return s;/,
+  'a step’s preserved keys are restored under the values the form produced (text fields, then help/ui controls); a changed block type drops the old pin (CGP-LEARN-R-004)',
 );
 
 const learn = await page('/learn');

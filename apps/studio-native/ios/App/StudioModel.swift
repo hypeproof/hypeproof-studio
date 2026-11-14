@@ -4,8 +4,6 @@ import SwiftUI
     @Published private(set) var notebook = Notebook()
     @Published var active: String?
     @Published var error: String?
-    @Published var busy = false
-    @Published var connected = false
     @Published private(set) var readOnly = false
     @Published private var editing: [String: String] = [:]
     var draftText: String { editing[(active ?? "") + ":draft"] ?? project?.draft ?? "" }
@@ -32,19 +30,10 @@ import SwiftUI
             $0.updatedAt = Date()
         }
     }
-    private var grant: Grant?
-    var canUseAI: Bool { connected && grant?.isValid == true }
-    private var task: Task<Void, Never>?
-    private var generation = UUID()
-    private let service = StudioService()
     private let file: URL
-    let installID: String
     var visibleNotebook: Notebook { notebook.includingEdits(editing) }
     var project: Project? { visibleNotebook.projects.first { $0.id == active } }
     init() {
-        let defaults = UserDefaults.standard
-        if let id = defaults.string(forKey: "studio.installation") { installID = id.lowercased() }
-        else { installID = UUID().uuidString.lowercased(); defaults.set(installID, forKey: "studio.installation") }
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         file = directory.appendingPathComponent("studio-notebook-v1.json")
         do {
@@ -68,53 +57,24 @@ import SwiftUI
         catch { self.error = error.localizedDescription; return false }
     }
     func newProject() {
-        cancel()
         guard notebook.projects.count < 100 else { error = "기록이 100개예요. 내보낸 뒤 필요 없는 기록을 정리해 주세요."; return }
         var value = notebook.includingEdits(editing); let project = Project(); value.projects.insert(project, at: 0)
         do { try persist(value); active = project.id } catch { self.error = error.localizedDescription }
     }
-    func select(_ id: String) { cancel(); active = id }
+    func select(_ id: String) { active = id }
     func deleteProject() {
-        cancel(); var value = notebook.includingEdits(editing); value.projects.removeAll { $0.id == active }
+        var value = notebook.includingEdits(editing); value.projects.removeAll { $0.id == active }
         do { try persist(value); active = value.projects.first?.id } catch { self.error = error.localizedDescription }
     }
-    func cancel() { generation = UUID(); task?.cancel(); task = nil; busy = false }
-    func disconnect() { cancel(); grant = nil; connected = false }
-    func connect() {
-        guard !busy else { return }; busy = true; error = nil
-        let attempt = generation
-        task = Task {
-            do {
-                let result = try await service.claim(installID: installID)
-                guard !Task.isCancelled, generation == attempt else { return }
-                grant = result; connected = true
-            } catch { if !Task.isCancelled, generation == attempt { self.error = error.localizedDescription; if let failure = error as? ServiceFailure, [401, 403].contains(failure.status) { self.grant = nil; connected = false } } }
-            if generation == attempt { busy = false }
-        }
-    }
-    @discardableResult func send() -> Bool {
-        guard !busy, let project else { return false }
+    // Device records never dispatch AI; account questions use SharedConversationModel.
+    @discardableResult func saveThought() -> Bool {
+        guard let project else { return false }
         do {
             let text = draftText
             try persist(notebook.updating(project.id, visibleEdits: editing) { try $0.append(text) })
             editing[project.id + ":draft"] = nil
-            if connected { ask() }
             return true
         } catch { self.error = error.localizedDescription; return false }
-    }
-    func ask() {
-        guard !busy, let project, let grant, grant.isValid else {
-            if grant?.isValid != true { connected = false; error = "무료 AI를 다시 연결해 주세요. 기록은 그대로 남아 있어요." }; return
-        }
-        busy = true; error = nil; let attempt = generation
-        task = Task {
-            do {
-                let text = try await service.reply(project: project, grant: grant)
-                guard !Task.isCancelled, generation == attempt, active == project.id else { return }
-                update { $0.messages.append(Message(role: "assistant", content: text)) }
-            } catch { if !Task.isCancelled, generation == attempt { self.error = error.localizedDescription; if let failure = error as? ServiceFailure, [401, 403].contains(failure.status) { self.grant = nil; connected = false } } }
-            if generation == attempt { busy = false }
-        }
     }
     func recover() {
         guard readOnly else { return }

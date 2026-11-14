@@ -11,6 +11,7 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {THEMES} from './lib/vscode-default-themes.mjs';
 import {chatPanelProps,chatConfig} from './sx-screen-fixtures.mjs';
 import {findChromium,launch} from './lib/headless-chromium.mjs';
+import {waitFor} from './lib/wait-for.mjs';
 
 const bin=findChromium();
 if(!bin){
@@ -170,7 +171,9 @@ for(const seat of ['personal','classroom'])for(const dark of [true,false])for(co
   await b.evaluate(`document.querySelector('.hps-find-input').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,isComposing:true}))`);await settle();
   assert.equal(await count(),c0,`${label}: Enter while composing does not move`);
   // Another task or activity closes the bar.
-  await b.evaluate(`paint({...__props,config:{...__props.config,activity:{...__props.config.activity,id:'other-activity'}}})`);await settle();
+  await b.evaluate(`paint({...__props,config:{...__props.config,activity:{...__props.config.activity,id:'other-activity'}}})`);
+  // The bar closes in an effect on the new scope, one or more renders after paint(): poll, do not guess a delay.
+  await waitFor(b,`!document.querySelector('.hps-find')&&!CSS.highlights.has('hp-find')`,`${label}: find bar closed and highlights cleared after the activity switch`);
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-find')`),false,`${label}: a conversation switch closes the bar`);
   assert.equal(await b.evaluate(`CSS.highlights.has('hp-find')`),false,`${label}: and clears its highlights`);
   await findKey();
@@ -181,7 +184,8 @@ for(const seat of ['personal','classroom'])for(const dark of [true,false])for(co
   await b.evaluate(`paint(__props)`);await settle();
   if(seat==='personal') {
     await findKey();await b.send('Input.insertText',{text:'사과'});await settle();
-    await b.evaluate(`paint({...__props,config:{...__props.config,taskWorkspace:{...__props.config.taskWorkspace,activeTaskId:'other-task'}}})`);await settle();
+    await b.evaluate(`paint({...__props,config:{...__props.config,taskWorkspace:{...__props.config.taskWorkspace,activeTaskId:'other-task'}}})`);
+    await waitFor(b,`!document.querySelector('.hps-find')`,`${label}: find bar closed after the task switch`);
     assert.equal(await b.evaluate(`!!document.querySelector('.hps-find')`),false,`${label}: task switch closes find`);
     await findKey();
     assert.equal(await b.evaluate(`document.querySelector('.hps-find-input').value`),'',`${label}: task switch clears query`);

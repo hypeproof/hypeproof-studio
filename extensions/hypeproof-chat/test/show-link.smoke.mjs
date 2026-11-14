@@ -15,6 +15,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { SHOW_COPY, showComposition } from "../src/showWhatIMade.ts";
 import {
@@ -24,7 +25,7 @@ import {
 import { SHOW_LINK_ROUTE } from "../src/accountSession.ts";
 
 const require = createRequire(import.meta.url);
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const extRoot = path.join(here, "..");
 const media = path.join(extRoot, "media", "show");
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -97,7 +98,8 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 // ---------------------------------------------------------------------------------------------------------------
 // 4. Host (vscode stubbed) with a recording Service
 {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-link-")));
+  // Match canonicalFolder: Windows temp paths can have short-name aliases.
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "hp-show-link-")));
   fs.mkdirSync(path.join(root, "art")); fs.writeFileSync(path.join(root, "art", "drawing.png"), PNG);
   let panel, picks = [];
   const Uri = { file: (p) => ({ scheme: "file", fsPath: p, toString: () => "file://" + p }), joinPath: (u, ...p) => Uri.file(path.join(u.fsPath, ...p)) };

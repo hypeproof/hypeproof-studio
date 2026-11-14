@@ -2,7 +2,6 @@
 // current seat), mounted with one, and the composer seam puts a transcript into the draft at the caret
 // without sending. Server-rendered markup for the first two, the minimal DOM for the third.
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { click, document, mountPoint } from "./fixtures/mini-dom.mjs";
 import { act as reactAct, createElement, type ComponentType, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -144,12 +143,8 @@ t("an instructor panel never draws voice, even with the addon passed", () => {
   ok(!html.includes("hps-voice-mic") && !html.includes("data-addon"), "no composer addon for an instructor");
 });
 
-t("the text-flow files stay free of voice symbols: the seam is the only coupling", () => {
-  const src = readFileSync("webview-ui/src/ChatPanel.tsx", "utf8");
-  ok(!/voice|audio|microphone|speech|transcri|MediaRecorder|getUserMedia/i.test(src), "ChatPanel names no voice symbol");
-  ok(/composerAddon/.test(src) && /AddonScope/.test(src), "the seam is there");
-});
-
+// #3686 adds an automatic-turn adapter. The behavioral insert-only control below
+// remains the standalone dictation contract; device isolation lives in pre-voice-text-flow.
 t("the composer takes a transcript at the caret, replaces a selection, never sends (real ChatPanel)", async () => {
   let api: ComposerAddonApi | null = null;
   const sent: unknown[] = [];

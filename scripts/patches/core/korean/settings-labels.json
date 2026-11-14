@@ -1,6 +1,7 @@
 {
   "hypeproofChat.artifactHistoryEnabled": "파일 이전 버전 보관",
   "hypeproofChat.activityTrashEnabled": "활동 휴지통",
+  "hypeproofChat.guardianEnabled": "아이 프로필 보호 모드",
   "hypeproofChat.safeLinkAllowlistEnabled": "수업 허용 사이트만 열기",
   "hypeproofChat.proxyUrl": "서비스 주소",
   "hypeproofChat.freeStart": "코드 없이 시작",
@@ -25,5 +26,6 @@
   "hypeproofChat.lowDiskWarningMB": "저장 공간 부족 안내 기준(MB)",
   "hypeproofChat.performanceTraceEnabled": "느려요 기록",
   "hypeproofChat.automationGoogleClientId": "업무 자동화 Google 클라이언트 ID",
-  "hypeproofChat.googleOperatorSetup": "Google 운영자 설정 명령"
+  "hypeproofChat.googleOperatorSetup": "Google 운영자 설정 명령",
+  "hypeproofChat.instructorSubscription": "강사 구독으로 강사 채팅 실행"
 }

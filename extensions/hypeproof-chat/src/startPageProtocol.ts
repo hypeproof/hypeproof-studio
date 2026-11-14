@@ -13,6 +13,7 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  memberApprovals?: import('./memberApproval').ApprovalView;
   automationsEnabled?: boolean;
   account?: import("./accountSession").AccountView;
   personalReflectionPending?: boolean;
@@ -104,6 +105,8 @@ export interface FreeStartView {
   refillsAt?: number;
 }
 export type StartRequest =
+  | { type: 'memberApprovalRefresh' }
+  | { type: 'memberApprovalDecision'; id: string; requestDigest: string; choice: import('./memberApproval').ApprovalChoice }
   | { type: "startReady" }
   /** MPER-02/04: explicit personal-question intent, never an AI turn. */
   | { type: "openPersonalReflection" }
@@ -125,7 +128,9 @@ export type StartRequest =
   /** Epic #3418 REQ-STORE-ENTRY — opens the skill store panel (`hypeproof-chat.skillStore`). Not offered on a classroom seat. */
   | { type: "openSkillStore" }
   | { type: "openAdvancedSettings" }
-  | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
+  /** CGP-SHELL-R-014 — the sheet's 내 작업 내보내기 row: runs the shipped export (CGP-SHELL-R-028). */
+  | { type: "startExportMyWork" }
+  | { type: "startSetting"; key: "textSize" | "theme" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
   | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }
@@ -147,5 +152,5 @@ export type StartRequest =
   | { type: "startNew" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
-  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer };
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").InboxAnswer };
 export type StartResponse = { type: "startState"; state: StartState };

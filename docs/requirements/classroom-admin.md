@@ -362,6 +362,24 @@ D1 fixture SHA-256: `4e20b7bc59d5d7356f5c5288b90e49cadd64f53266096b4a532b40fd838
 
 검증: [좌석별 Studio 버전](../testing/classroom-admin.md#adm-02-seat-version-run).
 
+<a id="adm-14-deletion-request"></a>
+
+### 계정과 데이터 삭제 요청 · 2026-11-13 (ADM-14 · CGP-SHELL-R-027 · CGP-SHELL-D-026)
+
+출처: CGP-SHELL-R-027(REQ-SHELL-27) “학습자나 보호자가 계정과 데이터 삭제를 요청할 수 있고, 요청 상태가 보인다. 설정 창이나 Lab 페이지에서 한 요청이 Service 기록을 만든다. 상태는 접수 / 처리 중 / 완료 / 보류(사유). 공유 기록은 ADM-14를 따른다. 이 컴퓨터의 파일은 따로 확인하지 않고 지우지 않는다”, 디자인 CGP-SHELL-D-026(DES-SHELL-26) “상태 칩이 있는 한 줄. 상태마다 아이콘 + 글, 날짜, ‘보류’는 사유를 줄 안에 보인다”. DEC-23(보호자·삭제 결정)이 정해지지 않았으므로 **기본 꺼짐**이다(decisions.md DEC-23 interim for CGP-SHELL-R-027, Confirmed by Jay: no).
+
+| 항목 | 계약 |
+|---|---|
+| 켜기 | Service `HPS_DATA_DELETION_REQUESTS`가 정확히 `enabled`일 때만. 꺼져 있으면 경로가 모두 404이고 `/v1/profile`은 바이트 그대로라 Studio에 줄이 없다. 켜지면 `/v1/profile`이 학습자 좌석(수업·체험·무료·이용권·계정; 강사 토큰 아님)에 `data_deletion: {available: true}`를 준다 |
+| 요청 | Studio 대화 설정 창(개인 작업 공간과 수업 창 둘 다)의 `계정과 데이터 삭제 요청`. `삭제 요청하기` → 같은 자리의 확인 단계(`정말 삭제를 요청할까요?`, `취소`에 먼저 초점, `요청 보내기`) → 호스트가 좌석 자신의 자격으로 `POST /v1/data-deletion/requests` `{"scope":"account_and_data"}`. 열린 요청(접수·처리 중·보류)이 있으면 다시 눌러도 같은 요청이 돌아오고 버튼이 없다. `완료` 뒤에는 `다시 요청하기` |
+| 기록 | Service 표 `data_deletion_requests`(migration 0087, 두 번 적용해도 안전): 좌석(수업 id + 수업 안 사용자 id, 계정 좌석은 계정 id), 좌석 종류, 요청자 `learner`, 상태, 보류 사유, 시각, 마지막으로 바꾼 운영자. 이름·이메일·학습자가 쓴 글은 없다. 로그는 사건과 상태만 남긴다 |
+| 처리 | **자동 삭제는 없다.** 운영자가 `/admin/data-deletion/requests`(운영자 인증만, 강사 토큰 불가)에서 요청을 보고 `처리 중`으로 바꾼 뒤 기존 도구로 직접 지운다: 계정은 계정 삭제(`DELETE /v1/me`), 공유 기록은 ADM-14의 철회 경로(목록이 좌석의 유효한 `classroom_shares` 수를 함께 보인다), 수업·체험 좌석은 기존 보관·회수 도구. 막히면 `보류`와 학습자가 읽을 한 줄 사유, 끝나면 `완료`. 절차: hypeproof-service `docs/requirements/data-deletion-requests.md` |
+| 상태 줄 (D-026) | 칩 하나에 아이콘 + 글: `접수`(깃발) · `처리 중`(시계) · `완료`(체크) · `보류`(경고). 글자색은 테마 전경색, 1px 테두리, 색만으로 뜻을 나르지 않는다. 옆에 `요청한 날 YYYY년 M월 D일`(한국 날짜), 접수가 아니면 `바뀐 날 …`, 보류면 사유를 같은 줄 아래(글로만, 마크업 아님). 14px 이상, 버튼 44px, 320px에서 줄바꿈 |
+| 이 컴퓨터의 파일 | 요청 화면과 확인 단계가 `이 컴퓨터의 작업 폴더와 파일은 지우지 않아요.`를 말한다. 요청은 기기 안 파일을 하나도 건드리지 않는다 |
+| 하지 않는 것 | 보호자 요청(Lab 페이지): 보호자임을 확인하는 방법이 DEC-23의 결정이다. 권고는 보호자 계정(`guardian-child-profile.md` GRD-12)을 기다리는 것이고, 그 전에는 보호자가 연락하면 운영자·지원 담당이 제품 밖에서 관계를 확인하고 기존 운영 도구로 직접 처리한다. 운영자·강사가 학습자 대신 요청을 만드는 경로는 없으므로 그런 처리는 요청 기록을 남기지 않는다. 만료된 자격으로는 상태를 읽지 못한다. 알림 메일·처리 기한 타이머는 없다 |
+
+검증: [계정과 데이터 삭제 요청](../testing/classroom-admin.md#adm-14-deletion-request-run).
+
 <a id="adm-11-update-freeze"></a>
 
 ### 수업별 Studio 업데이트 고정 · 2026-11-12 (ADM-11 · CGP-SHELL-R-003 · CGP-SHELL-D-002)
@@ -504,6 +522,30 @@ Service 계약(새로 만들지 않음): 기존 `POST /admin/cohorts/:id/roster/
 | 거절 응답 | `withdrawn`·`not_offered`·`content_mismatch`·`run_ended`·`ops_questions_disabled`·`answer_invalid`·연결 종료(401)·네트워크 오류마다 “…답을 보내지 않았습니다” 꼴의 짧은 문장을 카드 아래에 보인다 |
 
 검증: 앱 `test/classroom-question-card.test.mjs`(규칙·해시), `test/classroom-question-answer.test.mjs`(호스트), `test/inbox-question-card.test.tsx`(화면), `e2e/classroom/ops-question.mjs`(실제 호스트 + 로컬 Service). Service `worker/test/classroom-question-card.test.mjs`.
+
+<a id="artifact-comments-cgp-art-r-005"></a>
+### Artifact comments · CGP-ART-R-005 · 2026-11-13 (REQ-ART-05 · DES-ART-05)
+
+An instructor leaves a comment on one place of ONE learner's approved page version (#751 U1b). The learner sees it on
+that version in Studio and can reply or mark it handled. The coach is never assigned. Product Intent 2 (visible
+responsibility) and 5 (instructor feedback that the learner acts on). The behaviour may expose ADAPT (does the learner
+change the page after the comment) and OWNERSHIP (does the learner answer for their own result). It makes no
+learning-outcome claim, and no capability label appears. The research rows and the parked questions are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md` (DEC-ART-R-005).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| ADM-CMT-01 | Service contract (hypeproof/hypeproof-service): content kind `comment`, device capability `inbox_comment`. The anchor is `{artifact_sha256, rect:{x,y,w,h}}` in whole permille of the page or `{artifact_sha256, element}` (plain, one line, ≤ 120). It is never a line number. The body is plain text, ≤ 500 characters, without links. The anchor is the sixth element of the content hash for comments only. A comment is distributed to exactly one seat (`comment_single_target`) and never to a seat other than the first (`comment_other_seat`). It rides the question switch `ops_questions`. | Service `worker/test/classroom-artifact-comment.test.mjs` |
+| ADM-CMT-02 | The learner's answer is `{handled: boolean, reply?: text ≤ 500}`, sent through `POST /v1/classroom/ops/participation/answers` under the class-data consent (ADR 0012). Each answer replaces the last. Secrets are masked. The audit line `comment_answered` carries `actor_kind='student'` and the kind (`reply`/`handled`/`open`), never the text. The instructor is the actor on the comment's revision (`created_by`), so the actors stay apart (SX-45). A consent withdrawal erases the reply. | Service `classroom-artifact-comment.test.mjs` |
+| ADM-CMT-03 | Chalk `/manage`: a verified collection item lists each approved version whose page arrived (`extent.approved_versions`) as `지문 {8} 판에 의견 남기기`, only while comments are possible (question switch on and distribution held). The composer names the learner and version and offers nine 44 px regions (`페이지 위쪽 왼쪽` … `페이지 아래쪽 오른쪽`, stored as a permille third) plus a 500-character field. It says `이 의견은 이 학생 한 명의 Studio에만, 학생이 승인한 이 판 위에 보입니다. 다른 학생에게는 보이지 않고 AI 코치에게도 가지 않습니다. 글자는 그대로 보이며 주소를 써도 눌리는 링크가 되지 않습니다.` `이 학생에게만 보내기` saves one comment and distributes it to that seat. The idempotency keys are fixed until the text or region changes. | `chalk/test/artifact-comment.browser.mjs` |
+| ADM-CMT-04 | Chalk `보낸 질문 카드` lists comments as `의견 · {title}`. A comment shows `승인한 판 지문 {8} · {place}`, `강사(나)의 의견`, the text, and for its one seat `확인함`/`열림` plus `학생 답글: …` as text. The state line names one learner (`{seat} 학생 한 명 · {status}`), never the roster. | `chalk/test/artifact-comment.browser.mjs` |
+| ADM-CMT-05 | Studio accepts a `comment` only in that exact form and hashes it as the Service does. A comment is shown only on a version THIS learner approved on this device: the host reads the learner's own spool sessions (matched by identity, last word wins) and the current `index.html`. It is `current` while the page is that version and `previous` once the page changed, which shows `이전 판에 남긴 의견`. A comment on any other version, or one in a host that cannot read approvals, is not drawn, not counted as new, and cannot be answered. | `test/artifact-comment.test.mjs`, `test/classroom-artifact-comment-host.test.mjs` |
+| ADM-CMT-06 | The inbox draws comments apart from notices, as `결과물에 남긴 강사 의견 {n}개`, grouped `열린 의견` / `확인한 의견`. Each comment has a 16 px pin on a page outline at the anchor (instructor colour: a filled Paper disc with a control-boundary ring, distinct from the learner's outlined, numbered annotations) and the place in words. It shows the fingerprint, `강사` for the instructor's text, and `나 (내가 보낸 답글)` for the learner's own reply. The instructor's text is drawn as the characters typed: no markup and no live link. The unread state is a dot and the words `새 의견 {n}개` in a polite live region. Only `답글 보내기`, `확인했어요` and `다시 열기` send. `답글을 강사에게 보냈습니다.` / `확인했다고 강사에게 보냈습니다.` appear only after the Service's 2xx. No message other than `inboxAnswer`/`inboxOpen` leaves the component, so nothing reaches the coach. Controls are 44 px, text ≥ 14 px, logical CSS, tokens only, with a forced-colours edge. | `test/inbox-artifact-comment.test.tsx` |
+
+Not built (DEC-ART-R-005): a pin inside the live preview tab (no trusted in-tab surface, as for CGP-ART-D-006), and a
+click-to-place anchor in Chalk (it needs a viewer of the approved page, REQ-ART-22). A child profile cannot reply,
+because the class-data consent is adult-only. Whether minors may send a handled state or a reply is a question for Jay
+(DEC-ART-R-005). Verification: [Artifact comments](../testing/classroom-admin.md#artifact-comments-cgp-art-r-005).
 
 ### 신원과 수업 실행 계약
 

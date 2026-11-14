@@ -1,0 +1,45 @@
+/* Shared hp-modal owns the card, backdrop, scrolling and responsive sheet. */
+.member-approval {
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  border: var(--ds-c-studio-tokens-size-3) solid var(--hp-border-divider-default);
+  font: inherit;
+  font-size: var(--hp-font-caption);
+  line-height: var(--hp-leading-label);
+}
+.member-approval header { display: flex; align-items: center; justify-content: space-between; gap: var(--hp-space-6); }
+.member-approval h2 { margin: 0; font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); }
+.member-approval h3 { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+.member-approval h4 { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.member-approval p, .member-approval li { line-height: var(--hp-leading-prose); }
+.member-approval article { border-top: var(--ds-c-studio-tokens-size-3) solid var(--hp-border-divider-default); padding: var(--hp-space-4) 0; margin-top: var(--hp-space-4); }
+.member-approval article > p { margin: var(--hp-space-2) 0; }
+.member-approval code { overflow-wrap: anywhere; font-size: var(--hp-font-caption); }
+.member-approval button {
+  cursor: pointer;
+  padding: var(--hp-space-2) var(--hp-space-4);
+  min-height: var(--hp-control-min);
+  min-width: var(--hp-control-min);
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: var(--ds-c-studio-tokens-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--hp-radius-4);
+}
+.member-approval button:disabled { cursor: default; opacity: .5; }
+.approval-actions { display: flex; gap: var(--hp-space-2); flex-wrap: wrap; margin: var(--hp-space-3) 0; }
+.member-approval details { padding: 0; }
+.member-approval footer { border-top: var(--ds-c-studio-tokens-size-3) solid var(--hp-border-divider-default); padding-top: var(--hp-space-3); }
+.member-approval summary { cursor: pointer; min-height: var(--hp-control-min); align-content: center; }
+.member-approval li { white-space: pre-wrap; overflow-wrap: anywhere; }
+.member-approval a { display: inline-flex; align-items: center; min-height: var(--hp-control-min); color: var(--vscode-textLink-foreground); }
+
+/* A short, verbatim change preview; the original remains in collapsed details. */
+.member-approval .approval-change-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--hp-font-body);
+}

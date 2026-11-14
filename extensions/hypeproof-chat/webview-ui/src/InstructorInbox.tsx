@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { InboxCard, InboxView, QuestionAnswer } from "../../src/classroomInbox";
+import type { InboxAnswer, InboxCard, InboxView, QuestionAnswer } from "../../src/classroomInbox";
+import { InstructorComments } from "./InstructorComments";
 import { canUndoImport, type LastImport } from "./draftImport";
 
 /**
@@ -15,18 +16,20 @@ import { canUndoImport, type LastImport } from "./draftImport";
  *     `초안에 가져오기` on a prompt card (#751 U3) appends that text to their own draft. It never sends and never replaces.
  *   - a QUESTION card (E5 #3776) sends the learner's answer only when they press 제출 or 건너뛰기 — never on selecting an
  *     option or typing, never automatically. It says 답변을 보냈습니다 only once the host saw the Service record it.
+ *   - an instructor COMMENT on the learner's approved page (CGP-ART-R-005) is drawn apart, in InstructorComments, grouped
+ *     by open and handled; it is never part of the notice list and never reaches the coach.
  *   - a lesson SETTING card is a notice that the next question runs under another lesson version. It claims no more than the
  *     device knows: "다음 질문부터" while pending, "바뀌었습니다" once this device switched. It never says the AI already used it.
  * Opening a card is remembered on this device only (to stop saying "new"). It is not reported to anyone.
  */
-const KIND_LABEL: Record<string, string> = { notice: "공지", material: "자료", prompt: "프롬프트", setting: "수업 설정", question: "질문" };
-type InboxPost = (msg: { type: "inboxOpen"; objectId: string; generation: number } | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" } | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: QuestionAnswer }) => void;
+const KIND_LABEL: Record<string, string> = { notice: "공지", material: "자료", prompt: "프롬프트", setting: "수업 설정", question: "질문", comment: "의견" };
+type InboxPost = (msg: { type: "inboxOpen"; objectId: string; generation: number } | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" } | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: InboxAnswer }) => void;
 const MAX_ANSWER_CHARS = 500;
 const answerLabel = (card: InboxCard, a: QuestionAnswer) => "skipped" in a ? "건너뜀" : "choice" in a ? (card.question?.type === "choice" ? card.question.options[a.choice] ?? "" : "") : a.text;
 
 /** The answer form of one revision of a question card. Selecting or typing stays on this screen until a button is pressed. */
 function QuestionForm(props: { card: InboxCard; generation: number; post: InboxPost }) {
-  const { card } = props, q = card.question!, sent = card.answer?.sent ?? null, sentKey = sent ? JSON.stringify(sent) : "";
+  const { card } = props, q = card.question!, sent = (card.answer?.sent ?? null) as QuestionAnswer | null, sentKey = sent ? JSON.stringify(sent) : "";
   const [editing, setEditing] = useState(false), [choice, setChoice] = useState<number | null>(null), [text, setText] = useState("");
   // A confirmed answer (first or changed) closes the form again.
   useEffect(() => { setEditing(false); }, [sentKey]);
@@ -58,14 +61,18 @@ export interface PromptImport { onImport: (card: InboxCard) => void; onUndo: () 
 export function InstructorInbox(props: { inbox: InboxView | null; post: InboxPost; quiet?: boolean; promptImport?: PromptImport }) {
   const inbox = props.inbox;
   if (!inbox || !inbox.cards.length) return null;
+  const others = inbox.cards.filter(c => c.kind !== "comment"), unread = others.filter(c => c.is_new).length;
+  const comments = <InstructorComments cards={inbox.cards} generation={inbox.generation} post={props.post} />;
+  if (!others.length) return comments;
   const time = (ms: number) => { try { return new Date(ms).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
-  return (
+  return (<>
+    {comments}
     <details className={props.quiet ? "hp-inbox hp-inbox-quiet" : "hp-inbox hp-rail-lesson"} data-inbox-generation={inbox.generation}>
-      <summary>강사가 보낸 공지·자료 {inbox.cards.filter(c => !c.withdrawn).length}개{inbox.unread ? ` · 새 자료 ${inbox.unread}개` : ""}{inbox.ended ? " · 끝난 수업의 자료" : inbox.offline ? " · 수업 연결 확인 전" : ""}</summary>
+      <summary>강사가 보낸 공지·자료 {others.filter(c => !c.withdrawn).length}개{unread ? ` · 새 자료 ${unread}개` : ""}{inbox.ended ? " · 끝난 수업의 자료" : inbox.offline ? " · 수업 연결 확인 전" : ""}</summary>
       <p className="hp-rail-lesson-note">강사가 보낸 글입니다. 내 과제·대화·파일은 바뀌지 않았고, 읽지 않아도 작업은 계속할 수 있습니다.</p>
       {inbox.offline && <p className="hp-rail-lesson-note" data-inbox-offline="">지금은 수업 연결이 확인되지 않았습니다. 이미 받은 자료는 그대로 볼 수 있고, 그 뒤에 강사가 고치거나 회수한 내용은 다시 연결되면 반영됩니다.</p>}
       <ul className="hp-inbox-list">
-        {inbox.cards.map(card => (
+        {others.map(card => (
           <li key={card.object_id} className="hp-inbox-card" data-inbox-object={card.object_id} data-inbox-revision={card.revision}>
             {card.withdrawn ? <p className="hp-inbox-meta">강사가 회수한 자료입니다. 내용은 더 볼 수 없습니다. 내가 따로 적어 둔 글과 파일은 그대로입니다.</p>
               : card.unreadable ? <p className="hp-inbox-meta">이 자료를 읽을 수 없습니다. 강사에게 다시 보내 달라고 요청하세요.</p>
@@ -93,5 +100,5 @@ export function InstructorInbox(props: { inbox: InboxView | null; post: InboxPos
         ))}
       </ul>
     </details>
-  );
+  </>);
 }

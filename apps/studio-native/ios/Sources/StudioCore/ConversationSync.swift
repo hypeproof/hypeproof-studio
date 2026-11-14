@@ -61,6 +61,7 @@ public struct SharedRequest: Codable, Identifiable, Equatable, Sendable {
         case "local": return "이 기기에 저장됨 · 전송 대기"
         case "running", "pending": return "질문을 이어가고 있어요"
         case "completed": return "같은 계정의 대화에 저장됨"
+        case "cancelled": return "답변 받기를 중지했어요. 보낸 이야기는 남아 있어요."
         case "unknown": return "완료 여부를 확인하지 못했어요. 자동으로 다시 실행하지 않아요."
         default: return "답변을 받지 못했어요. 보낸 이야기는 남아 있어요."
         }
@@ -133,6 +134,14 @@ public struct ConversationCache: Codable, Sendable {
         if request?.status != "local" || request?.id == state.turn?.id || acknowledged { request = state.turn }
         if request?.status == "completed" { requestFailure = nil }
     }
+    /// A cancel endpoint can return an older/unrelated snapshot when the POST
+    /// has not registered yet. Only an exact terminal turn confirms this action.
+    public mutating func applyReflectionStop(_ value: PersonalReflection, request original: SharedRequest) throws {
+        guard let turn = value.state.turn, turn.id == original.id, turn.text == original.text,
+              !turn.outstanding else { throw SyncFailure.invalidResponse }
+        try applyReflection(value)
+        if turn.status == "cancelled" || turn.status == "completed" { requestFailure = nil }
+    }
     public mutating func enqueue(reflection: Bool = false) throws {
         guard request?.outstanding != true else { throw SyncFailure.http(409, "request_outstanding") }
         request = try .pending(draft)
@@ -178,7 +187,9 @@ public enum SyncFailure: Error, LocalizedError {
             if ["native_signin_expired", "native_signin_not_pending", "invalid_native_signin"].contains(code) { return "로그인 요청이 만료됐거나 이미 사용됐어요. 로그인을 다시 시작해 주세요." }
             if ["invalid_code_verifier", "invalid_code_challenge", "invalid_return_uri"].contains(code) { return "이 앱의 로그인 요청을 확인하지 못했어요. 로그인을 다시 시작해 주세요." }
             if code == "reflection_access_required" { return "이 계정의 AI 이용 권한을 확인해 주세요. 보낸 이야기와 기록은 남아 있어요." }
-            if code == "reflection_budget_limit" { return "오늘의 AI 사용 한도에 도달했어요. 기록은 그대로 남아 있어요." }
+            if code == "reflection_monthly_limit" { return "이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다." }
+            if code == "reflection_budget_limit" { return "AI 이용 한도에 도달했어요. 기록은 그대로 남아 있어요." }
+            if code == "reflection_admission_unavailable" { return "AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요." }
             if code == "reflection_busy" { return "다른 기기에서 답변을 받고 있어요. 잠시 뒤 같은 대화를 확인해 주세요." }
             if code == "reflection_changed" { return "다른 기기에서 대화가 바뀌었어요. 새 내용을 확인한 뒤 보내 주세요." }
             if code == "reflection_not_ready" { return "새 질문 대화를 준비하고 있어요. 기존 기록은 그대로 남아 있어요." }
@@ -199,14 +210,27 @@ public final class ConversationService: @unchecked Sendable {
         guard !id.isEmpty, id.count <= 128, id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else { throw SyncFailure.invalidResponse }
         return "/v1/me/conversations/" + id
     }
-    private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil) async throws -> (Data, Int) {
+    private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil, timeout: TimeInterval? = nil) async throws -> (Data, Int) {
         guard let url = URL(string: path, relativeTo: base)?.absoluteURL, url.host == base.host else { throw SyncFailure.invalidResponse }
-        var req = URLRequest(url: url, timeoutInterval: path == "/v1/me/reflection/turns" ? 120 : 25)
+        var req = URLRequest(url: url, timeoutInterval: timeout ?? (path == "/v1/me/reflection/turns" ? 120 : 25))
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
-        let (data, response) = try await session.data(for: req)
+        guard req.timeoutInterval.isFinite, req.timeoutInterval > 0, req.timeoutInterval <= 86_400 else { throw SyncFailure.invalidResponse }
+        // URLRequest's timeout is an idle timeout: a response that keeps sending
+        // bytes can otherwise hold login/history indefinitely. Own one request
+        // and cancel it when the same elapsed deadline expires; never retry it.
+        let request = req
+        let (data, response) = try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+            group.addTask { [session] in try await session.data(for: request) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(request.timeoutInterval * 1_000_000_000))
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
         guard let http = response as? HTTPURLResponse, data.count <= 5_000_000 else { throw SyncFailure.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -231,6 +255,9 @@ public final class ConversationService: @unchecked Sendable {
         let value = try JSONDecoder().decode(AccountTokens.self, from: data)
         try value.validate(); return value
     }
+    public func exchangeNativeSignIn(callback: URL, proof: NativeAccountProof) async throws -> AccountTokens {
+        try await exchangeNativeSignIn(code: proof.authorizationCode(from: callback), proof: proof)
+    }
     public func pollSignIn(_ device: String) async throws -> AccountTokens? {
         let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])
         if status == 202 { return nil }
@@ -251,18 +278,34 @@ public final class ConversationService: @unchecked Sendable {
         return try JSONDecoder().decode(AccountTokens.self, from: data)
     }
     public func logout(_ token: String) async throws { _ = try await request("/v1/auth/logout", method: "POST", body: [:], token: token) }
+    public func approvalInbox(_ token: String) async throws -> MemberApprovalInbox {
+        let (data, _) = try await request("/v1/me/approval-inbox", token: token)
+        let value = try JSONDecoder().decode(MemberApprovalInbox.self, from: data); try value.validate(); return value
+    }
+    public func approvalCard(_ id: String, decision: MemberApprovalPending? = nil, token: String) async throws -> MemberApprovalCard {
+        guard MemberApprovalCard.validID(id), decision == nil || decision?.cardID == id else { throw SyncFailure.invalidResponse }
+        if let decision { try decision.validate(account: decision.accountID) }
+        let body: [String: Any]? = decision.map { ["id": $0.id, "request_digest": $0.request_digest, "choice": $0.choice.rawValue] }
+        let (data, _) = try await request("/v1/me/approval-inbox/" + id + (decision == nil ? "" : "/decisions"), method: decision == nil ? "GET" : "POST", body: body, token: token)
+        let value = try JSONDecoder().decode(MemberApprovalCard.self, from: data); try value.validate(); return value
+    }
     public func list(_ token: String) async throws -> [SharedConversation] {
         struct List: Decodable { let conversations: [SharedConversation] }
         let (data, _) = try await request("/v1/me/conversations", token: token)
         return try JSONDecoder().decode(List.self, from: data).conversations
     }
-    public func reflection(_ token: String) async throws -> PersonalReflection {
-        let (data, _) = try await request("/v1/me/reflection", token: token)
+    public func reflection(_ token: String, timeout: TimeInterval = 25) async throws -> PersonalReflection {
+        let (data, _) = try await request("/v1/me/reflection", token: token, timeout: timeout)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
     public func reflect(_ value: SharedRequest, token: String) async throws -> PersonalReflection {
         guard let revision = value.expectedRevision, revision >= 0 else { throw SyncFailure.http(409, "reflection_changed") }
         let (data, _) = try await request("/v1/me/reflection/turns", method: "POST", body: ["id": value.id, "text": value.text, "revision": revision], token: token)
+        return try JSONDecoder().decode(PersonalReflection.self, from: data)
+    }
+    public func cancelReflection(_ id: String, token: String, timeout: TimeInterval = 25) async throws -> PersonalReflection {
+        _ = try path(id)
+        let (data, _) = try await request("/v1/me/reflection/turns/" + id + "/cancel", method: "POST", body: [:], token: token, timeout: timeout)
         return try JSONDecoder().decode(PersonalReflection.self, from: data)
     }
     public func abandonReflection(_ id: String, token: String) async throws -> PersonalReflection {

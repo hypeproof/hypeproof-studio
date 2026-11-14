@@ -11,11 +11,29 @@ REQUIRED = {
     'MFR-T01': 'testFirstInstallSignInToFirstAnswerWithoutDesktop',
     'MFR-T02': 'testDictationEditsDraftThenSendGetsReplyWithoutDesktop',
     'MFR-T03': 'testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend',
+    'MFR-T03-playback': 'testRealKoreanPlaybackCompletionReachesNextCaptureBoundary',
+    'MFR-T03-delegate': 'testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop',
+    'MFR-T03-draft': 'testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped',
+    'MFR-T03-stop-denial': 'testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch',
+    'MFR-T03-response-stop': 'testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch',
     'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
+    'MFR-T03-empty': 'testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry',
     'MFR-T04': 'testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch',
     'MFR-T05': 'testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch',
+    'MFR-T05-recorded': 'testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID',
+    'MFR-T05-collision': 'testRecordedFailureCannotReplaceExistingDraft',
+    'MPER-T03-history': 'testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch',
+    'MPER-T03-logout': 'testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords',
+    'MPER-T03-following': 'testEightyMessageWindowFollowsNewTailWithoutInterruptingReading',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
+    'MFR-T01-network': 'testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin',
+    'MFR-T02-readiness': 'testPersonalQuestionReadyAndSendWhileDesktopListIsHeld',
+    'MFR-T02-timeout': 'testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft',
+    'MFR-T02-cancel': 'testCancelledHistoryStillAllowsTheNextOrdinaryPoll',
+    'MPER-T01-cancel': 'testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend',
+    'MPER-T03-collision': 'testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice',
+    'MPER-T01-layout': 'testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable',
 }
 # This is Xcode 26's XCTest output, not app stdout or a test-name substring.
 CASE = re.compile(r"^Test Case '-\[[A-Za-z0-9_.]*StudioJourneyTests (test[A-Za-z0-9_]+)\]' (started\.|(passed|failed|skipped)(?: \([0-9.]+ seconds\))?\.)$")
@@ -53,6 +71,8 @@ def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, 
                                    'external_transports': 'SYNTHETIC', 'app_state_and_persistence': 'REAL'},
             'physical_device': {'status': 'NOT_RUN', 'blocks_test_candidate': False},
             'live_authentication': 'NOT_RUN', 'live_asr': 'NOT_RUN', 'apple_upload': 'NOT_RUN_BY_THIS_CHECK',
+            'os_speech_playback': {'status': next(case['status'] for case in cases if case['requirement'] == 'MFR-T03-playback'),
+                                   'scope': 'Korean AVSpeechSynthesizer through didFinish; Service and next microphone capture remain synthetic'},
             'test_candidate_eligibility': 'PASS' if build_status == journey_status == 'PASS' else 'BLOCKED'}
 
 def main():

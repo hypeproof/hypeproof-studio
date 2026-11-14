@@ -382,8 +382,36 @@ jobs:
           REQUIRE_SDK_VENDOR: "1"
         run: bash scripts/verify-branding.sh
 
-      - name: Developer ID sign, notarize, assess and package existing app
+      - name: Developer ID sign and submit the existing app
+        id: submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release/macos-sign.py release \
+            --app "vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app" \
+            --source-sha "$(git rev-parse HEAD)" --output dist \
+            --evidence "$RUNNER_TEMP/hps-macos-signing-evidence" --stop-after-submit
+
+      # Keep the exact submitted bytes before Apple's bounded wait. A failed or
+      # cancelled wait cannot recover those bytes from its JSON digest alone.
+      - name: Preserve exact signed submission before waiting
+        id: recovery
+        if: ${{ always() && steps.submit.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypeproof-studio-macos-signing-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/hps-macos-signing-evidence/submitted.zip
+            ${{ runner.temp }}/hps-macos-signing-evidence/signed.json
+            ${{ runner.temp }}/hps-macos-signing-evidence/submission.json
+            ${{ runner.temp }}/hps-macos-signing-evidence/submission-started.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Wait for the existing submission, assess and package
         id: package
+        if: steps.submit.outcome == 'success' && steps.recovery.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail

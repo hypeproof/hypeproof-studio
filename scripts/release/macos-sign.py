@@ -123,7 +123,7 @@ def sign_code(path, args, policy=None):
     run(*command, path)
 
 
-def preflight(args):
+def validate_signing_inputs(args):
     if sys.platform != "darwin":
         raise SigningError("Developer ID signing requires macOS")
     if not re.fullmatch(r"[A-Fa-f0-9]{40}", args.identity or ""):
@@ -132,6 +132,19 @@ def preflight(args):
         raise SigningError("explicit ten-character Apple Team ID required")
     if not args.keychain or not Path(args.keychain).is_file() or not args.notary_profile:
         raise SigningError("an existing isolated keychain and notary profile are required")
+
+
+def notary_preflight(args):
+    # Resume needs only the existing signatures and notary credentials. It must
+    # not exercise a private signing key or change the keychain search list.
+    validate_signing_inputs(args)
+    for tool in ("notarytool", "stapler"):
+        run("xcrun", "--find", tool)
+    run("xcrun", "notarytool", "history", *notary_auth(args), "--output-format", "json")
+
+
+def preflight(args):
+    validate_signing_inputs(args)
     with signing_keychain(args):
         identities = run("security", "find-identity", "-v", "-p", "codesigning", args.keychain)
         pattern = (r'\b' + re.escape(args.identity.upper())
@@ -147,10 +160,8 @@ def preflight(args):
             run("xcrun", "clang", source, "-o", probe)
             sign_code(probe, args)
             verify_code(probe, [probe], args)
-    for tool in ("notarytool", "stapler"):
-        run("xcrun", "--find", tool)
     # Validates credentials before an expensive build without submitting code.
-    run("xcrun", "notarytool", "history", *notary_auth(args), "--output-format", "json")
+    notary_preflight(args)
 
 
 def notary_auth(args):
@@ -239,8 +250,24 @@ def provenance():
             "run_attempt": int(attempt) if ci else None, "kind": "github-actions" if ci else "local"}
 
 
-def release(args):
-    preflight(args)
+def checkpoint_origin(value):
+    if not isinstance(value, dict) or value.get("workflow") != ".github/workflows/build-mac.yml":
+        raise SigningError("invalid signed checkpoint provenance")
+    if value.get("kind") == "github-actions":
+        valid = all(type(value.get(k)) is int and value[k] > 0 for k in ("run_id", "run_attempt"))
+    else:
+        valid = value.get("kind") == "local" and value.get("run_id") is None and value.get("run_attempt") is None
+    if not valid or set(value) != {"workflow", "kind", "run_id", "run_attempt"}:
+        raise SigningError("invalid signed checkpoint provenance")
+    return value
+
+
+def release(args, local_resume=False):
+    validate_signing_inputs(args)
+    if local_resume and os.environ.get("GITHUB_ACTIONS") == "true":
+        raise SigningError("resume-local cannot manufacture an official Actions receipt")
+    if local_resume and getattr(args, "stop_after_submit", False):
+        raise SigningError("resume-local requires an existing submission, not a submit checkpoint")
     app, output, evidence = Path(args.app).resolve(), Path(args.output).resolve(), Path(args.evidence).resolve()
     if app.suffix != ".app" or not app.is_dir() or Path(args.app).is_symlink():
         raise SigningError("an explicit existing .app directory is required")
@@ -267,10 +294,29 @@ def release(args):
                 "certificate_sha1": args.identity.upper(), "bundle_id": info["CFBundleIdentifier"],
                 "bundle_version": version, "provenance": origin}
     signed_file = evidence / "signed.json"
+    submission_zip = evidence / "submitted.zip"
+    submission_file = evidence / "submission.json"
+    if local_resume:
+        if not all(p.is_file() for p in (signed_file, submission_zip, submission_file)):
+            raise SigningError("resume-local requires the original signed checkpoint, submitted.zip and submission ID")
+        submission = read_json(submission_file)
+        expected_id = getattr(args, "submission_id", None)
+        expected_hash = getattr(args, "submitted_sha256", None)
+        if (not re.fullmatch(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}", expected_id or "")
+                or not re.fullmatch(r"[a-f0-9]{64}", expected_hash or "")
+                or submission.get("id") != expected_id
+                or submission.get("sha256") != expected_hash or sha256(submission_zip) != expected_hash):
+            raise SigningError("resume-local submission ID/archive digest does not match the retained checkpoint")
     objects = code_objects(app)
+    resuming = signed_file.exists()
     if signed_file.exists():
         signed = read_json(signed_file)
-        if signed["identity"] != identity:
+        previous = signed["identity"]
+        checkpoint_origin(previous.get("provenance"))
+        # The original checkpoint is immutable. A local finish has local
+        # provenance and remains ineligible; it does not inherit CI authority.
+        compared = {**previous, "provenance": origin} if local_resume else previous
+        if compared != identity:
             raise SigningError("resume identity/source/run differs from signed checkpoint")
         checkpoint = evidence / "stapled.json"
         expected = read_json(checkpoint)["app_tree_sha256"] if checkpoint.exists() else signed["app_tree_sha256"]
@@ -280,16 +326,17 @@ def release(args):
     else:
         if any(evidence.iterdir()):
             raise SigningError("nonempty evidence without signed checkpoint; use a new evidence directory")
+        preflight(args)
         sign_app(app, objects, args)
         signed = {"identity": identity, "app_tree_sha256": tree_hash(app),
                   "objects": [str(p.relative_to(app)) or "." for p in objects],
                   "entitlements_sha256": {p.name: sha256(p) for p in sorted(ENTITLEMENTS.glob("*.plist"))}}
         write_once(signed_file, signed)
-    submission_zip = evidence / "submitted.zip"
     if not submission_zip.exists():
+        if submission_file.exists() or (evidence / "submission-started.json").exists():
+            raise SigningError("submitted archive missing; do not recreate or resubmit it")
         archive(app, submission_zip)
     submitted_hash = sha256(submission_zip)
-    submission_file = evidence / "submission.json"
     if submission_file.exists():
         submission = read_json(submission_file)
         if submission["sha256"] != submitted_hash:
@@ -300,7 +347,7 @@ def release(args):
         started = evidence / "submission-started.json"
         if started.exists():
             raise SigningError("ambiguous prior submission; preserve evidence and reconcile Apple history before retrying")
-        write_once(started, {"sha256": submitted_hash})
+        write_once(started, {"sha256": submitted_hash, "bytes": submission_zip.stat().st_size})
         try:
             response = json.loads(run("xcrun", "notarytool", "submit", submission_zip,
                                       *notary_auth(args), "--output-format", "json", timeout=900))
@@ -309,8 +356,17 @@ def release(args):
             raise
         if not re.fullmatch(r"[a-fA-F0-9-]{36}", response.get("id", "")):
             raise SigningError("notarytool did not return a submission UUID")
-        submission = {"id": response["id"], "sha256": submitted_hash, "response": response}
+        submission = {"id": response["id"], "sha256": submitted_hash,
+                      "bytes": submission_zip.stat().st_size, "response": response}
         write_once(submission_file, submission)
+    if getattr(args, "stop_after_submit", False):
+        print(json.dumps({"phase": "submitted", "submission_id": submission["id"],
+                          "submitted_archive_sha256": submitted_hash,
+                          "submitted_archive_bytes": submission_zip.stat().st_size,
+                          "release_eligible": False}))
+        return
+    if resuming:
+        notary_preflight(args)
     accepted = evidence / "accepted.json"
     if not accepted.exists():
         # Persisted submission ID makes a wait timeout resumable without upload.
@@ -364,7 +420,7 @@ def release(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["preflight", "release"])
+    parser.add_argument("command", choices=["preflight", "release", "resume-local"])
     parser.add_argument("--identity", default=os.environ.get("HPS_DEVELOPER_ID_SHA1"))
     parser.add_argument("--team-id", default=os.environ.get("HPS_APPLE_TEAM_ID"))
     parser.add_argument("--keychain", default=os.environ.get("HPS_SIGNING_KEYCHAIN"))
@@ -374,12 +430,18 @@ def main():
     parser.add_argument("--evidence")
     parser.add_argument("--source-sha", default=os.environ.get("BUILD_SOURCEVERSION"))
     parser.add_argument("--notary-timeout", default="20m")
+    parser.add_argument("--stop-after-submit", action="store_true",
+                        help="persist a submission checkpoint for durable upload before waiting")
+    parser.add_argument("--submission-id", help="resume-local: exact retained Apple submission ID")
+    parser.add_argument("--submitted-sha256", help="resume-local: exact retained submitted.zip digest")
     args = parser.parse_args()
     try:
-        if args.command == "release":
+        if args.command in {"release", "resume-local"}:
             if not args.app or not args.evidence:
                 raise SigningError("release requires --app and --evidence")
-            release(args)
+            if args.command == "release" and (args.submission_id or args.submitted_sha256):
+                raise SigningError("submission anchors are only accepted by resume-local")
+            release(args, local_resume=args.command == "resume-local")
         else:
             preflight(args)
             print("Developer ID probe signing and notary credential preflight passed; no app signed or submitted")

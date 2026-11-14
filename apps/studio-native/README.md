@@ -2,11 +2,11 @@
 
 Native SwiftUI iPhone and Android clients for HP Studio. The desktop product is the existing HypeProof Studio application and its RC pipeline. A separate mobile-derived Mac Catalyst application is no longer built or distributed.
 
-The current iPhone candidate starts an account-owned personal reflection conversation, including when the desktop is closed. The existing desktop opens the same personal conversation in its task UI. Host-owned build tasks retain their desktop execution boundary. Existing local notebooks remain in **기기 메모**. Service owns questioning and model admission; no separate mobile prompt or provider bypass is introduced. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
+The current iPhone and Android candidate starts with an everyday question in an account-owned personal reflection conversation, including when the desktop is closed. The existing desktop opens the same personal conversation in its task UI. Host-owned build tasks retain their desktop execution boundary; making requests lead to the existing desktop's reviewed task flow. Existing local notebooks remain in **기기 메모** on iPhone and **기기 기록** on Android. Service owns questioning and model admission; no separate mobile prompt or provider bypass is introduced. This source is a candidate, not evidence of a deployed sync service or physical-device acceptance.
 
 ## Requirement: ST-REQ-NATIVE-MOBILE
 
-A person records an observation, optionally connects free AI after age and transmission consent, and confirms/revises their intention in their own words. Project-local drafts and revision history survive restart. Export and explicit deletion are available. AI may suggest a next question; it cannot create confirmed human intent. Recent 20 messages plus the latest confirmed intent are sent for only the selected project.
+In the separate local notebook, a person records an observation, optionally connects free AI after age and transmission consent, and confirms/revises their intention in their own words. Project-local drafts and revision history survive restart. Export and explicit deletion are available. AI may suggest a next question; it cannot create confirmed human intent. Recent 20 messages plus the latest confirmed intent are sent for only the selected project.
 
 Philosophy → Product Intent → behavior: introspection, multiple perspectives and practice inform the prompt and the observation/reflection flow (ST-INT-NATIVE). These are design hypotheses, not established growth outcomes, diagnoses or personality/fate scores. Foundry execution and economic dashboards are future work.
 
@@ -21,7 +21,7 @@ Records stay in app-private storage; iOS uses file protection and excludes noteb
 ## Native voice and acceptance
 
 **말로 적기** appends recognized Korean to an editable draft without sending;
-explicit Send requests an answer. The iPhone account-conversation candidate starts
+explicit Send requests an answer. The iPhone and Android account-conversation candidates start
 voice through one deliberate microphone action after required OS permissions and
 existing AI/storage consent. Stable speech and silence finalize once; its own
 reply is read before listening resumes in the active foreground conversation.
@@ -30,9 +30,12 @@ Stop, background, account/conversation change and audio interruption end the
 interaction and fence stale callbacks. Returning to the app does not restart
 capture. Recognition failures preserve partial draft text.
 
-Android voice still contains the older manual controls; alignment remains open
-under #3687. The iPhone legacy notebook uses the shared automatic voice controls
-but still requires its own revised journey and physical verification. Existing
+Android personal questions and local notebooks use the same automatic controller.
+Android waits for the recognizer's final result; end-of-speech starts a bounded
+8-second final wait. Listening has up to 60 seconds to reach that endpoint,
+followed by at most eight seconds for the final result. Optional
+RMS callbacks are not a prerequisite, and a timeout never sends aged partial text.
+The iPhone legacy notebook still requires its own revised journey and physical verification. Existing
 source and tests do not establish acceptance of continuous conversation. The
 revised shared requirements and first iPhone journeys are in the mobile roadmap and
 `docs/testing/native-mobile-growth.md` (MVOICE-02/03 and MFR-03/04).
@@ -150,3 +153,29 @@ Acceptance requires actual desktop -> iPhone -> desktop round-trip, preserved
 message identities, voice/skip behavior, offline recovery without duplicate model
 execution, account revoke and local draft preservation. Source tests, simulator
 checks and upload success must be reported separately from this observation.
+
+
+## Android account questions (#3733)
+
+The launcher remains in the existing Android package. Browser approval includes
+the exact existing device code in the trusted URL; the person does not copy a
+code between devices. Authentication is checked against `/v1/me`, then account
+credentials are encrypted by Android Keystore and stored in no-backup storage.
+A refresh token is marked spent before dispatch; uncertain rotation requires
+fresh sign-in instead of replaying a one-use token.
+
+The account-scoped cache saves words and a stable outbox ID/revision before
+sending. Reconnection checks the shared conversation. Failed saves, stale replies
+and account changes preserve the committed state; malformed files stay read-only
+and can be exported verbatim. Dictation and explicit voice conversation reuse
+the native on-device implementation. Only the initiating request's answer may
+be read aloud. Polling pauses in the background; voice stops on navigation or
+background. A matching completed reply resumes capture only in the same deliberate
+foreground session with an unchanged credential and empty draft. Credential
+rotation or approaching expiry stops this voice session; the existing account
+refresh protocol remains available through normal explicit account actions.
+
+These questions use existing account AI entitlements and Service cost limits.
+The free local notebook connection is separate; it does not grant a signed-in AI
+allowance. No Android desktop task list, new Mac application, handwriting, push,
+automatic Foundry execution or philosophical growth outcome is claimed here.

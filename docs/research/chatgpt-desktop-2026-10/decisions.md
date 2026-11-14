@@ -7,8 +7,14 @@ is recorded here before the slice that depends on it merges, so it can be revers
 |---|---|---|---|---|
 | DEC-14 | Minor cohorts: chat links open only in the integrated safe-session browser; adults: modal naming the host before the system browser. A blocked click does not notify the instructor | README section 3 #1: the system browser bypasses the safe-session allowlist; the confirm adds one click for adults | On (safety tightening, no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-003) | Who may set or end a cohort's update freeze: an instructor whose scope on that cohort has `can_start_session` (read-only scopes see it). How security fixes work: a release whose notes carry the line `<!-- hps-update: security-critical -->` is never held by a freeze; Studio shows it (still under the class hold and the learner's restart approval) and Chalk labels it. No Service minimum-version gate, no forced install | Agent choice for the open half of DEC-24 (2026-11-12). Whoever decides when the class runs decides when its seats update; a marker in the notes is the one place both Studio's update checker and Chalk's latest-release read already, and it needs no new release field or Service read | Off until an instructor sets a range | no |
+| DEC-23 (interim, for CGP-SHELL-R-027) | A learner asks for account and data deletion from the chat settings dialog; the Service records the request and an operator processes it by hand with the existing erasure tools (account deletion, ADM-14 share withdrawal, cohort retention). Nothing deletes automatically, nothing on the device is deleted, and the learner sees 접수 / 처리 중 / 완료 / 보류(사유). Guardian half (Jay 2026-11-14): until the guardian account (guardian-child-profile.md GRD-12) exists, an operator or support handles a guardian's deletion request by hand outside the product; no guardian path is built in the product | DEC-23 (PIPA guardian and deletion decisions) is Jay's. Its interim guardian half was decided on 2026-11-14; the learner request flow in this row is the agent's interim and is not confirmed. Recording a request changes no data and stays reversible; executing deletion or accepting a guardian claim would not be | Off: Service `HPS_DATA_DELETION_REQUESTS` unset; Studio draws nothing without the profile advertisement | Learner request flow: no. Interim guardian handling: yes (2026-11-14) |
 | DEC-25 (interim) | Until the Service sends the class window end time, the whole active class seat counts as the class window for the update hold | The client has no window end; a restart mid-lesson costs the lesson. A learner can still dismiss the banner and update outside a class seat | On (holds only; no new data flow) | no |
 | DEC-24 (for CGP-SHELL-R-034) | A seat's Studio version is behind when it is below the latest published formal (non-rc) Studio release; Chalk then shows `업데이트 필요`. No new Service minimum field. An unknown or expired heartbeat stays `확인 불가`; while the latest formal release is unknown nobody is flagged. Dev builds (package version `0.1.5`) are flagged like old `0.1.x` releases. The cohort version freeze (CGP-SHELL-R-003) and its security override remain a separate later slice | Jay's answer to the DEC-24 question for this slice (2026-11-12, AskUserQuestion via the loop lead). Source of the latest formal release (agent choice): the public GitHub release that Studio's own update checker reads anonymously, served by Chalk at `GET /studio/latest-release` | On | yes (2026-11-12) |
+| CGP-VOICE-R-026 (minor voice default, #3976) | Minor seats keep automatic voice send as #3976 built it: after one explicit start, each finished utterance goes through the normal composer send, with #3976's start-control copy and no re-acknowledgement for a user who already acknowledged the voice notice. Push-to-talk is not the minor default. CGP-VOICE-R-026 (optional push-to-talk mode) stays an open row, without a minor-default part | Jay 2026-11-14, AskUserQuestion: "자동전송하자" | Follows #3976 (served voice profile only, no new flag). #3976 merged into the stacked branch `feat/cgp-voice-r007`, which reached `main` through #3928 (squash 1fe3261d6, 2026-11-13) | yes (2026-11-14) |
+| CGP-LEARN-R-005 (`text_list` param kind) | The learning-block catalog gets a `text_list` param kind, used by `stage_stepper` v1: 2–8 items, each a title of at most 40 characters and a sentence of at most 60; the Service validates every item with its safe-text check; the list is pinned at confirm with the lesson version; the learner has no field to edit it. The catalog contract change is approved for this scope only | Jay 2026-11-14 | Not built | yes (2026-11-14) |
+| CGP-LEARN-R-006 (first parametric type) | `box_spacing` v1 is the first parametric block type for the bounded-controls row | Agent choice; the loop coordinator accepted it. Jay did not choose it | Not built on `main` | no (agent choice) |
+| CGP-SHELL-R-026 (minor external links) | Build the row as written. Minor cohorts: opening an external link shows a confirm with the full URL and `열기` / `취소`; this replaces the allowlist block of CGP-ART-D-008 and its 2026-11-04 follow-up, which are superseded for this scope. Adults: the confirm is off by default, with a setting to turn it on | Jay 2026-11-14. Today on `main` minors are blocked outside the allowlist and adults always confirm (DEC-14, CGP-ART-D-008) | Implementation pending (another builder) | yes (2026-11-14) |
+| CGP-AGENT-R-020 (learner skill cards) | Learner skill cards are authored in Chalk: a name, a one-line summary and a starter prompt, frozen with the lesson version. Studio shows only those cards, never a coach `SKILL.md` or `Profile.skills`. The lesson contract change is approved for this scope. This replaces the row's "view a skill's SKILL.md source" part (agents-codex-automation.md REQ-CGP-AGENT-36) | Jay 2026-11-14 | Implementation pending | yes (2026-11-14) |
 | DEC-08 | Edit-and-resend keeps the original as version 1 and records an edit_resend event; both attempts stay in the observation record | The original prompt, its answer and its turn record are evidence of how the learner iterated (ADAPT); overwriting them would erase the first attempt. The event holds ids and lengths only, no text | On | no |
 | DEC-09 | Learner answer verdicts are stored only on this device in the task's verdict file; not in the session log, not uploaded, not collected, not shown to instructors or Chalk (AE-20) | A verdict is the learner judging AI output (JUDGMENT): evidence for the learner, not a grade. The session spool is uploaded and collected for class records, so a verdict written there would reach the Service and instructors; showing raw learner reactions to instructors is what AE-20 rules out. The verdict file keeps the history (time, ids, verdict, reason code, note) and no upload or collection path reads it | On | no |
 | DEC-27 | The SX palette in `tokens.css` (`--hp-panel #202C24`) is canonical for HP lesson surfaces; the personal workspace intentionally follows the host VS Code theme through `--tw-*` (named dark fallbacks only); `#18231C` is `--hp-ink-on-accent`, not a panel | Audit (verification.md REQ-CGP-DS-01a): the conflict was doc text, not source. Two token families, not three palettes. Documented in studio-learning-experience.md "팔레트 계열" and task-workspace.md | On (docs only; no visual change, no CSS change) | no |
@@ -516,6 +522,91 @@ Not built (minor path, REQ-ART-12 parts 2 and 3, DES-ART-12 waiting state, Chalk
   separately (the counter above and the request/confirm times), never as a product miss and never
   as a reason to shorten or skip confirmation. DEC-15 stays Jay's decision.
 - Confirmed by Jay: no (all choices above are agent choices).
+
+## DEC-SHELL-R-016: HP Dark, HP Light, 기기 설정 따르기 (2026-11-14, agent choice)
+
+- Mechanism (agent choice): VS Code's own theme settings, with no extension-side theme engine. HP Light is a second
+  contributed theme. The device option is `window.autoDetectColorScheme` with the HP pair as preferred themes. VS Code
+  switches the workbench and every webview in one step, so there is no reload and no second source of truth.
+- #725 (agent reading): the row never overwrites a theme the learner chose themselves. An explicit non-HP
+  `workbench.colorTheme` in user or workspace settings shows as `직접 고른 테마`, disabled, and the host refuses writes.
+  An HP theme written by this row counts as an HP choice, so the row can change it again.
+- Palette (agent choice): Paper `#F4F6F0`, forest ink `#151D19` and a darker green `#3C6E2F` for the focus ring and
+  links, because lime on Paper is 1.2:1. Lime stays the CTA fill with forest text. Each pair is measured in
+  `hp-light-theme.smoke.mjs`.
+- Default: unchanged (HP Dark), so nobody's screen changes until they choose.
+- Only the extension (agent choice, Jay's constraint): `contributes.themes`, `configurationDefaults` and webview CSS.
+  There is no product.json and no vscodium-base change. The default theme was already an extension `configurationDefaults` key.
+- Live follow and no startup flash: these come from VS Code itself (`window.autoDetectColorScheme` switches on the OS
+  change; the window paints the last theme's colours before the workbench loads). They are not measurable headless and
+  are NOT RUN here. They need the installed app on macOS and Windows.
+- Contrast found by the existing instrument: under HP Light, `text-contrast-computed` flagged `charts.green` (4.33:1),
+  `editorInfo` (2.87:1) and the fixed light-red error ink (1.82:1 on every light host theme). HP Light now sets those
+  keys, and the error banner takes the host error colour on light themes. Measuring every row also flags the attachment
+  ×. Its dark circle is a `::before` that the instrument does not read as a backdrop (white on a dark disc), so it is an
+  instrument limit, not a defect. HP Light is therefore measured like the default light themes.
+
+Confirmed by Jay: no.
+
+## DEC-ART-R-013: 7-day counts per test version (2026-11-13, agent choice)
+
+- Source (agent choice): the existing evidence read (`GET /v1/curriculum/experiments/:id/evidence`), whose sessions
+  the Service recomputes from stored CR-23 events on every call. There is no new Service route and no stored
+  aggregate, so a count cannot drift from its events. The project read's all-time per-channel `sessions_opened` has
+  no time window and no completions, so it was not used.
+- Read budget (agent choice): the counts never block the panel. Missing reads start in the background, in parallel
+  (at most 6 per view, 4 s timeout each), and the panel redraws when they settle. Successful reads are kept for 60 s; a
+  failed read says `횟수를 확인하지 못했어요` and is retried after 30 s. While a read is in flight the version says
+  `횟수 확인 중`, quietly.
+- Copy (agent choice, deviates from DES-ART-13): the tiles say `열어 본 횟수` and `끝까지 한 횟수`, not `연 사람` and
+  `끝까지 한 사람`. CR-72 says counts are of sessions and device pseudonyms, never of people. A returning visitor opens
+  several sessions, so "people" would overstate. The required empty sentence `아직 연 사람이 없어요` is kept because it
+  states an absence, not a count.
+- "Finished" (agent choice): a session with at least one `task_complete`. An experiment with several declared tasks
+  therefore counts a session that finished any of them. The per-task breakdown stays in the evidence panel.
+- Attribution (agent choice): a session counts for the `product_version` it records, else its experiment's pinned
+  version, so a comparison experiment's variant sessions land on their own version.
+
+Confirmed by Jay: no.
+
+## DEC-ART-R-005: instructor comment on an approved artifact version (2026-11-13, agent choice)
+
+Built (Service hypeproof/hypeproof-service#437, Studio + Chalk in this PR):
+
+- Channel (agent choice): a new distribution content kind `comment` on the existing U2 ledger, not a new message channel.
+  Targets, re-offer, withdrawal and device receipts are the ones notices and question cards already use. The learner's
+  answer is a row in `classroom_question_answers`, so it inherits the class-data consent (ADR 0012), secret masking,
+  instructor-only reads and erasure on consent withdrawal. No new table, no migration.
+- Anchor (agent choice): `artifact_sha256` (the sha256 of index.html that the learner approved, U1b) plus a permille
+  rectangle or a plain element reference. Chalk offers nine regions because it has no viewer of the approved page
+  (REQ-ART-22, P2). The rectangle contract already admits a precise click-to-place anchor later. Line numbers are never
+  used.
+- Which versions (agent choice): a verified collection's extent now names `approved_versions`, the approved pages whose
+  bytes arrived. Chalk offers a comment only for those versions. Studio shows a comment only on a version that this
+  learner approved on this device, read from their own spool sessions by identity. That makes "never on another
+  learner's artifact" a device-side check and not only a Service promise. The Service also sends a comment to one seat
+  only and never to a different seat later.
+- Thread (agent choice): one current state per learner per comment revision, `{handled, reply?}`. Each answer
+  replaces the last. There is no message history, and an instructor follow-up is a new revision. This keeps the
+  stored data the same shape as a question-card text answer.
+- Switch (agent choice): comments ride `ops_questions` ("learners in this run may write back") instead of a new run flag.
+- Pin (agent choice): a 16 px pin on a page outline in the inbox's side list, not on the live preview tab. The native
+  BrowserTab has no trusted in-tab surface (the same gap as CGP-ART-D-002, D-006 and D-008). The place is also said in
+  words. The instructor colour is a filled Paper disc with a control-boundary ring. The learner's own annotations are
+  outlined and numbered, never filled.
+- Coach (agent choice): there is no forward-to-coach action. The REQ allows an explicit forward, but nothing requires
+  one, and leaving it out keeps the negative condition trivially true. A learner can still quote the comment by typing it.
+
+Parked for Jay (not built, Confirmed by Jay: no):
+
+- Minor learners. The class-data consent is `adult_only: true`, so a child profile cannot send a reply or a handled
+  state. The Service refuses with `guardian_consent_required`, and Studio says `이 수업은 보호자 동의가 필요해 앱에서
+  답글을 보낼 수 없습니다. 의견은 계속 볼 수 있습니다.` A minor can still read comments. Question: may a minor send the
+  handled state (no text), and may a minor send a reply? Recommended: allow the handled state only, stored under the run
+  and deleted with it, and keep text replies adult-only until a guardian-consent path exists. Either way this is a new
+  data category about minors, so it needs Jay.
+
+Confirmed by Jay: no (all choices above are agent choices).
 
 ## CGP-ART-R-001 annotation batch implementation choice (2026-10-22)
 
@@ -1760,6 +1851,8 @@ Builds DES-ART-08 on REQ-N11 (CGP-ART-R-008, merged in #1862); CGP-SHELL-D-025 i
 ## CGP-ART-D-008 follow-up: the minor safe-link block is on for minor cohorts (2026-11-04, Jay)
 
 Jay, 2026-11-04: turn the blocked notice on for minor cohorts after verifying their allowlists. Supersedes the "default off" bullet of the CGP-ART-D-008 section above.
+
+Superseded on 2026-11-14 (Jay): for minor cohorts the allowlist block is replaced by CGP-SHELL-R-026's confirm with the full URL and `열기` / `취소`, and the adult confirm becomes off by default with a setting. See the CGP-SHELL-R-026 row in the table at the top. This section describes `main` until that change ships.
 - Verified: the Service serves `browser_session` from its profile registry (`resolveProfile` overlays only the system prompt). Two profiles are minor (`minor_cohort: true`, kids-quest, `mode: "safe"`), and both served an empty allowlist, which would have blocked every link. hypeproof-service#321 gives each its own gallery path prefix and makes the `/v1/profile` snapshot test fail on any minor seat with an empty or malformed list. Every other profile is adult (`browse`).
 - Enablement is profile-driven (`safeLinkEnforced`): minor seat + safe session + an allowlist with at least one usable entry. An empty (or all-malformed) served list keeps today's integrated route (no block-all). Without a loaded profile, the persisted safe session and allowlist decide; they are registered only by the core patch, so on current builds the block waits for the profile (the link still stays in the integrated browser). Persisting the list in an extension-owned setting is left for the core-patch batch.
 - `hypeproofChat.safeLinkAllowlistEnabled` stays machine-scoped and its default becomes true; only an explicit `false` turns the block off, as a support override.
@@ -1906,6 +1999,21 @@ Audit of main (0ae2a1485) against both rows; only the gaps changed. Found: one t
 - `COMPACT_CONTROLS` is now `mute`, `output_mute`, `stop`, `expand`.
 - Default state: n/a. VoicePanel is still unmounted and read-aloud draws nothing unless the Service serves it, so every seat renders as before; no flag, policy or minor-seat change; minors follow the served block.
 - Not covered: a real Korean voice, a screen reader announcing the pressed state and the change line, the packaged app: NOT RUN.
+- Confirmed by Jay: no (agent-selected choices above).
+
+## CGP-VOICE-R-007 / CGP-VOICE-D-006: agent-status line in the voice panel (2026-11-13, agent-selected)
+
+Audit of main (11c66fb38) against both rows; only the gaps changed. Found: VoicePanel (`VoicePanel.tsx`) draws the voice session's state label (`meter.statusText`) and a `잠시만 기다려 주세요` progress line, and reads no agent or tool event at all; `dismissPlan` already promises `toolRunClaim: 'unchanged'` (VO-39/41). The chat header's run state (`src/coachRunState.ts` `COACH_RUN_STATES`, `toolLineRunState`) and the host's tool labels (`toolLineLabel.ts`, posted as `toolLog` by `chatPanelProvider.postToolLog`) exist and are reused. Read-aloud (`ReadAloudButton.tsx`, `src/voiceReadAloud.ts`) obeys `소리 끄기` (#3833). R-007: MISSING. D-006: MISSING.
+- Source of truth (agent choice): a pure reducer, `src/voiceAgentStatus.ts`, over the host messages already on the chat channel: `toolLog` marked `kind: "tool"` (tool_use id, running/done/error), `approvalWait`, `streamStart`, `streamStopped`, `streamEnd` (incl. `failed`), `streamError`. `streamChunk` and every other message leave the state as it is. The panel subscribes with `onHostMessage`, the channel ChatPanel draws its timeline from.
+- Host marker (agent choice, after verification of #3928 found model prose announced as `… 끝났어요`): the host posts other `toolLog` lines that are not tool calls (the adult thinking text `💭 think-N`, `⏳` busy and orchestrator notices, the compaction note, the pending placeholder and its `생각했어요` / `고쳤어요` close). `ToolEntry` gains an optional `kind: "tool"`, set only on SDK tool_use / tool_result lines (including denials and delegation rows) and browser-loop calls; `postToolLog` strips it before the persisted timeline. The reducer ignores every `toolLog` without it, and calls a result finished only when it saw that call start. Round 2 of the verification found that `postToolLog`'s denial rewrite dropped the marker, so refusals, SDK denials and browser-loop errors left `만드는 중` / `찾는 중` on screen; the rewrite is now `denialToolLine` (`denialNotice.ts`), which keeps it, and a result that arrives during an open approval is held and said when the approval closes. Consequence: a summary-mode seat (one work line) gets no per-call status, only shell rows and failures; step-hint updates and other tagged-free lines (preview, memory) do not move the line.
+- Words (agent choice): no new state vocabulary. A running call reads `<run state> · <host label>` (`만드는 중 · 파일 고치기 index.html`; a command or an unknown tool reads `생각 중`, as in the header). A result reads `<host label> 끝났어요` (the register's word), a failure `문제가 생겼어요 · <host label>`; approval `확인이 필요해요`; stop `멈춤`; turn error `문제가 생겼어요`; an open stream with no tool `생각 중`; a finished turn keeps the last result line, else `준비됨`. The register's examples (`파일 2개 수정 중`, `명령 실행 중`) are not used: a count would need a second source and `명령 실행 중` would claim more than the header's run state does for a command.
+- Not claimed: a call with no result event when the turn ends or stops is dropped, never called finished (VO-18). An open approval keeps its line over later events until it is answered.
+- Announce and read (agent choice): only starts and finishes (tool start, result, failure, approval, stop, turn error), once each, in one polite `role="status"` region; a step update of the same call changes the words only. The reading goes through the window's read-aloud hub, which the panel's owner passes (`statusSpeech`, from `useServedReadAloud()`) only where the Service serves read-aloud; with none, nothing touches the synthesizer. Never while `소리 끄기` is on (the hub already refuses and stops in the same press), and never over an answer reading the learner started. The disclosure was read when the conversation started, so no second gate.
+- Failed reading (VO-20, agent-written copy): `작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.` on its own status line, never mixed with a tool failure. Follow-up after #3928 (round-5 audit): an autoplay refusal (`blocked`, CGP-VOICE-R-028) of a status reading counts as failed, and no status is read while another answer is blocked, since `play()` would drop that answer's unheard chunks.
+- Pacing: the visible line changes at most once per second; the newest event wins (an intermediate start inside the second is not shown or announced).
+- Design: 14px caption, static 16px icon (never animated, so reduced motion needs no second path), two-line clamp with the whole text in the DOM and the tooltip, logical properties and tokens only. The compact control carries the announcer, not the line. DES-CGPV-08's "icon per tool kind" is the run-state icon per kind, not a new per-tool set.
+- Default state: n/a. VoicePanel is still unmounted and read-aloud draws nothing unless served, so every seat renders as before; no flag, policy or minor-seat change; no audio is stored or logged and the line is memory only.
+- Not covered: a real Korean voice reading the line, a screen reader announcing it, the packaged app: NOT RUN.
 - Confirmed by Jay: no (agent-selected choices above).
 
 ## CGP-VOICE-R-021, CGP-VOICE-R-001: not built here (2026-11-09)
@@ -2107,12 +2215,13 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - an element or attribute outside a fixed allowlist that the stored section does not already have with the same value. Style and script elements, and loading or form elements, are never allowed; a style or event attribute is allowed only when it is unchanged;
   - a link or resource, or a `data-chalk-requires` tool, that the selected section does not already carry (the rest of the plan does not count);
   - a dropped, unlinked or changed prohibited move, risk or consent item (`data-chalk-move`, `-risk`, `-consent`), a removed `data-chalk-forbids` word, or a lowered `data-chalk-safety`. These are matched by element identity (the element's own markers when unique, else its position), so moving one to another element counts as a removal;
-  - any parser finding (warn or fail) that the stored plan did not already have.
+  - any parser finding (warn or fail) that the stored plan did not already have;
+  - markup that a browser could read differently from the plan tokenizer (round 2 of the verification). This also applies to every PUT /plan. It covers abrupt or `--!>` comments, CDATA, a quoted value containing `<` or `>`, an unquoted value with quotes or a backtick, a `<` that does not start a well-formed tag, duplicate attributes and NUL. Round 3 adds three more. Inside a tag, only space, tab, LF and CR count as whitespace, so a form feed is refused. `textarea`, `template`, `svg` and `math` are refused anywhere, because foreign content and raw text are read differently. `style` and `title` are allowed only in the document head, with no `<` in their text. Five of the six plan fixtures and the derived handout and runbook use a head `<style>` or `<title>`, so refusing those outright would refuse real plans. The Service's own lesson and ops skeletons still save. Round 4 adds CSS. In a head `<style>` and in `style` attributes, the Service refuses every way CSS can load a resource other than `url(data:image…)`: `image-set()` (with or without a vendor prefix), `image()`, `cross-fade()`, `element()`, `src()`, `@import` and `@font-face`. Matching is case-insensitive and happens after CSS escapes and HTML entities are decoded and comments are dropped. A leading `<!DOCTYPE html>` and spec-valid comments still pass. The Service's own skeleton is full of guide comments, so refusing every comment would break real plans. A revision may keep a comment the section already has but may add none, and it may not add a second element carrying the selected marker.
 
   The FB-05 feedback, anchor and revision link are written in the save's own batch, so a save that loses the revision race leaves none of them. This was tightened after an independent verification found that the first version accepted dropped moves, styles, tools named elsewhere in the plan and moved prohibitions.
 
   Parser findings are all `warn` today (FB-03), so "no new failure" alone would have refused nothing.
-- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0084) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
+- **History (agent choice).** The new table `chalk_feedback_anchors` (migration 0085) holds the anchor next to the existing `chalk_feedback` row. No column was added to an applied table.
 - **Hover (agent adaptation of DES-ART-04).** The design row says hovering shows the outline and the button. Chalk's shipped lock REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021, `chalk/test/row-actions.test.mjs`) forbids hover-revealed actions and mouse or pointer hover handlers on every Chalk page. So:
   - the pointer outline is CSS `:hover` on the innermost mark;
   - 이 부분 고치기 follows focus, which a click, a tap or Tab all give;
@@ -2127,3 +2236,140 @@ The Service half is hypeproof-service#433 (not merged, not deployed). Confirmed 
   - a real instructor browser on macOS or Windows: only headless Chromium on Ubuntu was used;
   - a real screen reader;
   - staging or production.
+
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: block references pin type, version and params (2026-11-14)
+
+The Service contract is hypeproof-service#461; this entry covers the Chalk chip. Confirmed by Jay: no. All choices below are the agent's, made under DEC-19, which Jay ruled on 2026-10-28; none is waiting on Jay.
+
+- **Reference shape (agent choice; a technical compatibility choice, not a Jay decision, per the coordinator on 2026-11-14).** `ui` stays the type string, and two optional step keys carry the pin: `ui_version` and `ui_params`. The alternative was an object-valued `ui: {type, version, params}`. It would follow DEC-19's "reuse `ui`" more literally, but Studio apps already installed read `ui` as a string (`surfaceOf`, `stepMaterial`), so every block would turn off for them. There is no hps-session-design bump.
+- **Pin at confirm (agent choice).** The draft may omit the pin. At confirm the Service writes `ui_version` (the draft's value, or else the latest). It writes `ui_params` only when that version declares params: draft values over defaults. This is the same pattern as the model and feature bindings written at freeze.
+- **First catalog (agent choice).** The seven existing kinds, at v1, with no params and one preset, 기본. No type was given invented params to meet acceptance (a). That case (`prefix_length 31 > 30`) is proved with a test-only catalog injected through the Service's seam. The first real params come with the first parametric mechanic (R-005 onward).
+- **Append-only catalog (agent choice).** A published (type, version) is never removed or changed, and a snapshot fixture locks this. The Service re-validates a confirmed lesson every time it serves it, so removing a version would close running classes. Adding a version never does.
+- **Rehearsal (agent reading).** Readiness is keyed by version and sha256, and a different pin is different bytes, so (c) holds without a new rule. `impact` reports the change as `step_changes[].block`.
+- **Chalk chip (agent choice).**
+  - Shown under the step's 학생 작업 화면 select, read-only, 14px.
+  - A pinned step shows its pin. An unpinned step shows the latest version with "(확정할 때 고정)".
+  - A preset is named when the params equal it, otherwise "직접 설정".
+  - Changing the type drops the old type's pin from the saved content.
+  - The catalog comes from the existing features read (`step_ui_catalog`), so Chalk needs no new contracts release.
+- **Not covered:** a real instructor browser on macOS or Windows (only headless Chromium on Ubuntu); the Studio learner side (a separate change).
+
+## CGP-SHELL-R-027 / CGP-SHELL-D-026: account and data deletion request (2026-11-13, agent-selected)
+
+Service PR hypeproof/hypeproof-service#440 adds the contract (migration 0087, retry-safe; `docs/requirements/data-deletion-requests.md`); this slice draws it in Studio. Requirement: `docs/requirements/classroom-admin.md#adm-14-deletion-request`; Studio: `docs/studio-requirements.md` REQ-STUDIO-DATA-DELETION-REQUEST.
+
+- Default off (tick rule; DEC-23 is decided only for its interim guardian half, 2026-11-14, and the learner request flow is not confirmed): one Service flag gates the routes and the `/v1/profile` advertisement, so Studio needs no flag of its own.
+- Record, never execute (agent choice): processing stays a human operator action (`/admin/data-deletion/requests`, operator guard only; instructor tokens cannot read or move requests). The operator runbook lives with the Service requirement.
+- Subject (agent choice): the seat from the verified token (cohort + cohort-local user id; an account seat by its account id). No name, email or learner-written text. One open request per seat; a second press returns it.
+- Hold reason (agent choice): one line of at most 200 characters, no control, bidi or `<>` characters, shown to the learner as text.
+- Confirm (agent choice): an in-place two-step group in the dialog with `취소` focused first, not a native modal; the action records a request and deletes nothing, so a second native confirm would add a step without protecting data.
+- Local files (agent choice): never touched. The request screen says so, which meets "local files are not deleted without a separate confirmation" without building a local deletion path.
+- Guardian requests (DEC-23 guardian half, decided by Jay 2026-11-14, confirmed: yes): the long-term path is the guardian account (GRD-12: the guardian deletes the child profile from their own account). Until it exists, when a guardian contacts HypeProof, an operator or support verifies the relationship outside the product and processes the deletion by hand with the existing operator tools. Not implemented, by design: no operator or instructor route creates a request on a learner's behalf, so such a case leaves no request row; the learner can still file from their own seat. The alternatives not chosen were a Lab form verified by the instructor, and no guardian path at all before the guardian account. The Service requirement (hypeproof-service `docs/requirements/data-deletion-requests.md`) used the same wording while this was parked.
+- Not covered: a live Studio run, a real screen reader, a deployed Service, status after the seat credential expired.
+
+## CGP-VOICE-R-028 / CGP-VOICE-D-021 (autoplay part): blocked read-aloud recovery (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Blocked read-aloud recovery"; VO-42 sentence in `docs/requirements/voice-conversation.md`.
+
+- **Scope (audit).** The only sound Studio plays today is read-aloud through the OS voice (`src/voiceReadAloud.ts`, `speechSynthesis`; MET for "OS voice", MISSING for a blocked state: a `not-allowed` error fell into the generic `error` status with nothing shown). The voice conversation's `speaking` state (`src/voiceSessionHelpers.ts`) has no audio transport yet, so it has nothing to block (NOT APPLICABLE until a transport lands; the same notice and `resume` path should be reused then). `VoicePanel.tsx` and `voiceAgentStatus.ts` are not touched.
+- **Detection.** The synthesizer reports an autoplay refusal as the utterance error `not-allowed` (it never throws `NotAllowedError` from `speak`). Only that code shows the notice; `synthesis-failed`, `audio-busy` and the others keep today's behaviour, because a press cannot fix them.
+- **Copy.** The register's `소리가 막혔어요. 눌러서 다시 듣기` is split into one sentence and one action, as DES-CGPV-39/41 asks ("1 sentence + action"). The action is labelled `소리 켜기`, as the coordinator specified, and the sentence is `소리가 막혔어요.`.
+- **Resume point.** Read-aloud speaks sentence-sized chunks. It reads on from the first chunk without an `end` event. The engine reports no position inside a chunk, so a chunk cut off midway is read again from its start; nothing is skipped.
+- **Placement.** The notice sits inline in the answer's action row, next to the button that started the reading, because that is where read-aloud lives. It is not in the voice panel's status area, since the panel is not open during a read-aloud.
+- **Gate.** The press runs through `voice.gate` like every read-aloud press. There is no new flag, policy or seat rule. Nothing is stored or logged.
+- **Not covered.** A real browser autoplay refusal (the scripted engine stands in), a screen reader, the packaged app, and the VAD half of D-021.
+- Confirmed by Jay: no.
+
+## CGP-LEARN-R-004 / CGP-LEARN-D-004: Studio draws only the pinned versions it renders (2026-11-14)
+
+This is the Studio half of the block reference contract. The Service contract is hypeproof-service#461 and the Chalk chip is CH-12. Confirmed by Jay: no.
+
+- **Version set (agent choice).** `RENDERED_UI_VERSIONS` lists the catalog versions each kind is drawn at, which is v1 for all seven today. A step with no `ui_version` (frozen before pinning) means v1. A version outside the list, or a pin that is not an integer, is drawn as the existing unsupported notice: no block and no guessing. The rehearsal report then says `unsupported:<kind>`, so an App that cannot draw a pinned version cannot pass a rehearsal for it.
+- **Learner copy (agent choice).** The unsupported notice no longer shows the type id between brackets, to meet "the learner UI never shows type ids or versions". It reads "이 단계의 작업 화면은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요." The id stays in the `data-surface` attribute for tests and rehearsal, and is not shown.
+- **Not covered:** a real installed App (only the component on the minimal DOM and the pure helpers ran); a real v2 block (none exists yet).
+
+## CGP-LEARN-R-010 / CGP-LEARN-D-010: reset and undo for a learning block (2026-11-14)
+
+This is a Studio-only change with no Service contract. Confirmed by Jay: no (all agent choices).
+
+- **Preset (agent reading).** The blocks this App draws (`criterion_form`, `decision_form`) are catalog v1 with no params, so their preset is empty fields. "처음으로" empties the fields on screen. It does not delete the learner's saved work, which stays until the next 저장. Deleting saved work would be a host write, and REQ-CGP-LEARN-10 (c) rules that out.
+- **What one change is (agent choice).** A burst of typing in one field ends on blur, after a 1 s pause, or with a reset or undo. One reset also counts as a change. Undoing keystroke by keystroke would turn a sentence into dozens of steps. The history is held per lesson version and step, and capped at 50.
+- **No events (requirement).** Reset and undo post nothing to the host, so they cause no save and no observation event. The browser test counts host messages to check this.
+- **Look (agent choice).** Both are the existing quiet button (not Primary, per SX-04), with 44px targets and 14px text. A disabled button uses the muted text token and a dashed boundary, so "visibly distinct" does not rest on opacity alone. The native `disabled` state carries the announcement.
+- **Copy.** Each block's controls help names both buttons, and the button labels are the design row's. Both are the agent's wording within the row.
+- **Not covered:** a real installed App and a real screen reader.
+
+## CGP-LEARN-R-011 (c) / CGP-LEARN-D-011: collapse a learning block, partial (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the design row, and the coordinator set the scope.
+
+- **Scope (coordinator, 2026-11-14).** Only the collapse half ships, and the row stays partial. The report half needs a Service and Chalk route, because `/v1/report` goes to the operator and not to the lesson's instructor. It also needs a decision on the 0–300 learner field for minor cohorts.
+- **Menu (agent choice, following DES-CGP-LEARN-11).**
+  - The overflow menu is drawn now, with one item, so the report item lands in the same place later.
+  - The button is the existing quiet button with the dots icon, named "자료 메뉴: <title>".
+  - Keyboard handling is the same as the rail's task menu (TaskMenu.tsx).
+  - The button is on the open card only, in the head after 닫기. The card geometry tests ruled out two other placements:
+    - A fourth column in the closed head gave the title 0px in a 280px rail.
+    - A button in the caption row made the open card taller, which pushed the caption under the mission header at 480px / 200 %.
+  - The closed card stays DES-CGP-LEARN-01's one row.
+  - The menu opens in flow as a row under the head instead of floating, keeping DES-CGP-LEARN-01's "nothing is positioned".
+- **Collapsed row (agent choice).**
+  - "접은 자료: <title>" and "다시 보기", 44px.
+  - The body stays mounted and hidden, so the rehearsal read-back is unchanged.
+  - The polite state line is not drawn, so a block the learner put away is not announced.
+  - Restoring gives back the open card, which is the state it was collapsed from.
+- **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
+- **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
+- **Not covered:** a real installed App and a real screen reader.
+
+## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
+
+Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.
+
+- **Where (agent choice).** One quiet button under the saved notice, outside its polite region, so the region still reads only the sentence. It is the page notice's single optional action. There is no new card, and the other notices are unchanged.
+- **What is revealed.** `deck.pdf` itself, selected in its folder by `revealFileInOS`. The record is the served root the export used (canonical) and the file's path under it, so the file reveal always stays inside that root.
+- **Path safety (reuse).** The page card's walk is now `resolveFileInFolder` and `recheckFileInFolder`. The page variants keep their page-type check and their behaviour. The webview sends no path.
+- **Root identity (verify-r004 on #4066).** The walk re-canonicalized the root at use time, so a root path swapped for a link after it was recorded moved the whole walk. `WalkOptions.exactRoot` refuses a recorded canonical root that no longer canonicalizes to itself. The deck PDF reveal and the page card gate (open, reload, reveal) use it. The page card case predates this PR and is fixed here, because the walk is shared. The roots an `exactRoot` walk checks are recorded through `recordedRoot`, which is canonicalFolder's form: the page card's turn root and the deck PDF's served root (round 2). JS realpath keeps a Windows `c:` and the opened case, and would make every legitimate walk fail.
+- **Refusal copy (agent wording).** "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요." is used for every refusal, because the fix is the same each time.
+- **Not changed.** The page card's own 폴더에서 보기: a nested page still reveals its own folder.
+- **Not covered:** the installed App's OS file manager. `revealFileInOS` is a fixture in the host test.
+
+## Refused-photo chip remove × contrast (2026-11-14, a #4053 follow-up, agent-selected)
+
+Confirmed by Jay: no. builder-art-r005 handed it over, from verify-3956's #4053 check.
+
+- **Defect (real, not an instrument limit).** On the refused-photo chip, #2365 made the remove button `position: static`. Its `::before` dot (`position: absolute`) then anchored to the chip, not the button, so the white × sat on the light panel at 1.19:1 (Light+, HP Light). #4053's branch notes this as an instrument limit of text-contrast-computed. The note lives only on that branch and should be corrected when #4053 merges.
+- **Fix (agent choice).** The refused chip's button is `position: relative`: it stays in the flex row and anchors its dot again. In the personal seat the × is a transparent 44px square with a foreground ×, by design, so its dot is not drawn (`::before { content: none }`). Left on, that dot anchored to the chip and painted a dark circle across it.
+- **Measure.** `attachment-remove-contrast-computed` runs the real ChatPanel with every bundled theme, for the classroom and personal seats. Where a dot is drawn, the button must anchor it, and the × must reach 4.5:1 against what is painted behind it. Pinning the "attachment × ::before" row in text-contrast-computed's default set waits for #4053's all-rows mode.
+- **Not covered:** HP Light. That theme exists only on #4053's branch. The smoke iterates THEMES, so it picks the theme up when #4053 lands.
+
+## CGP-VOICE-R-030: voice session marker in the task rail (2026-11-14, agent-selected)
+
+Confirmed by Jay: no. These are agent choices within REQ-CGPV-43. The coordinator set the constraints: the shipping VoiceConversationControl path, no marker when voice is not served, and #3976's minor path untouched.
+
+- **Source (coordinator).** The marker follows the shipping VoiceConversationControl's live VoiceConversation phase, not the unmounted VoicePanel. The control publishes the active task id to a window-local store (`src/voiceLiveTask.ts`) from its `changed` callback while the phase is active and voice is served, and null otherwise or on unmount. The conversation logic is unchanged.
+- **What "live" covers (agent reading).** The marker covers the whole session, starting through speaking, including the transcribing and answering gaps between capture and playback. Showing it only during capture and playback would make it blink on and off every turn. It is removed at `stopped`, which `stop()` sets only after `recorder.cancel()` has stopped the tracks: that is the release confirmation.
+- **Look (agent choice; revised after verify-3928).** A status, not a control: a static `level` icon (the read-aloud "now reading" mark) and the words "음성 대화 중" at 14px, under the row title, with no fill and no hover. The words keep the row's own text colour and only the icon carries the accent, because the accent link colour on the selected row is 3.85:1 in Dark+ and 4.36:1 in 2026 Light. In forced colours there is no rule: the UA forces the row's button to ButtonText on ButtonFace and the marker inherits it, which the per-theme smoke measures. The row's existing accessible name gains ", 음성 대화 중".
+- **Scope.** Only the active task can be marked, because the conversation stops on any task switch. Dictation alone and a manual read-aloud are not a voice session and do not mark the row.
+- **Not covered:** a real installed App, a real microphone and a real screen reader.
+
+## CGP-SHELL-R-014 follow-up: the 내 작업 내보내기 row (2026-11-14)
+
+Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend on #4053. The drawing is an agent choice.
+
+- **Rows.** 내 작업 내보내기 joins because its behaviour shipped (CGP-SHELL-R-028).
+  - 화면 밝기 stays with #4053 (CGP-SHELL-R-016).
+  - 팁 보기 is not drawn. Tips (REQ-SHELL-19 / CGP-SHELL-R-019) are not built: no trigger and no "팁 그만 보기" exist, so the row would be a switch with nothing behind it (DEC-SHELL-R014).
+  - The sheet now draws 4 of the 6 rows, and 5 once #4053 lands.
+- **Shape (agent choice).**
+  - An action row drawn like "고급 설정" (a 48px button, with the row-name weight), not a toggle, because export is an action.
+  - A one-line note under it says what is saved and that the learner picks the folder.
+  - The sheet closes first, so the native folder picker is not under a modal.
+- **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
+
+## CGP-DS-R-022: the task menu joins the shared menu token set (2026-11-14, agent-selected)
+
+Audit of main (7205ff64b): the tools menu and the personal header menu already share the learner-menu tokens (#2575, typeahead #2724) and `test/menu-tokens-computed.smoke.mjs` guards them. The rail's task menu (`TaskMenu.tsx`, CGP-KNOW-R-009, built later) did not: 6px gutter, 10px block padding, 6px item radius, `text-align: left`. Its 44px items, 12px panel radius and 14px text already met the floor. R-022: PARTIAL (one of three Studio menus); D-019 Studio part: PARTIAL for the same menu.
+- Change: `taskWorkspace.css` task-menu rules now read `--ds-c-menu-gutter`, `--ds-c-menu-item-height`, `--ds-c-menu-item-pad-block` / `-inline` and `--hp-radius-menu-item`, and align to `start`. No new token, no token value, colour or theme change; no component or copy change.
+- Not covered: the `보여주기` attach list in the unmounted VoicePanel is a `role="group"` of buttons, not a menu, and keeps its own rules. Chalk's dense 32px menu (DES-CGP-DS-24) stays separate.
+- Confirmed by Jay: no.

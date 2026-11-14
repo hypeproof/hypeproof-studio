@@ -22,4 +22,16 @@ final class VoiceEndpointTests: XCTestCase {
         XCTAssertEqual(endpoint.decision(now: 30), .finish)
         XCTAssertEqual(VoiceEndpoint(now: 0).decision(now: 30), .noSpeech)
     }
+    func testEmptyRecognitionCannotEraseWordsOrSendAnEmptyTurn() {
+        var endpoint = VoiceEndpoint(now: 0)
+        endpoint.recognized("들리니", now: 1)
+        endpoint.recognized("", now: 1.2)
+        endpoint.recognized("  \n", now: 1.5)
+        XCTAssertEqual(endpoint.decision(now: 2.7), .finish,
+                       "An empty final callback cannot retract an already recognized phrase.")
+        var silence = VoiceEndpoint(now: 0)
+        silence.recognized("  \n", now: 1)
+        XCTAssertEqual(silence.decision(now: 2.7), .listen)
+        XCTAssertEqual(silence.decision(now: 30), .noSpeech)
+    }
 }

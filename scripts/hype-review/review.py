@@ -19,8 +19,8 @@ MONITOR = Path("scripts") / "hype-merge" / "monitor.py"
 # The organization first. Some repositories (hypeproof-agon, hypeproof-game-*,
 # hypeproof-research) were not transferred, so the former owner still counts.
 DEFAULT_OWNERS = ("hypeproof", "jayleekr")
-DEFAULT_ADMINS = {"jayleekr", "JeHyeong2"}
-DEFAULT_WRITERS = {"ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr", "rabqatab", "J3llyBe4n"}
+DEFAULT_ADMINS = {"jayleekr", "JeHyeong2", "JinyongShin", "TJ-kr", "J3llyBe4n"}
+DEFAULT_WRITERS = {"ico1036", "xoqhdgh1002", "rabqatab"}
 DEFAULT_REVIEW_LENSES: dict[str, list[str]] = {
     "jayleekr": ["maintainer", "product", "security", "deploy", "docs"],
     "JeHyeong2": ["maintainer", "backend", "security"],

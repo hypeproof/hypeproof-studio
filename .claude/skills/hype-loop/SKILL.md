@@ -50,8 +50,11 @@ fire with every other :00/:30 job.
 ### Each tick
 
 The cron prompt ([assets/tick-prompt.md](assets/tick-prompt.md), rendered per loop)
-does: `tick-begin` → run the instruction under the fixed rules R1–R15 → `tick-end` →
-republish the dashboard → 3–5 Korean lines. `tick-begin` returns `stop` once `done`
+does: `tick-begin` → run the instruction under the fixed rules R1–R16 → `tick-end` →
+republish the dashboard → 3–5 Korean lines. A tick never waits on a question (R10): an open
+`AskUserQuestion` blocks every later cron tick and every agent message, so a decision parks
+only its own lane and goes to the dashboard and the summary's `QUESTIONS:` line; it is asked
+live only when Jay wrote in the last ~15 minutes. `tick-begin` returns `stop` once `done`
 reaches N or a STOP file exists; the tick then deletes its own cron, runs `finalize`
 (writes `final-report.md`) and posts the final report. A tick that finds the previous
 one still running (under 25 min) skips instead of overlapping.

@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 let bundle;
 const state = (beforeUpdate = () => {}) => { const map = new Map(); return { map, keys: () => [...map.keys()], get: (key, fallback) => map.has(key) ? map.get(key) : fallback, update: async (key, value) => { beforeUpdate(key, value); if (value === undefined) map.delete(key); else map.set(key, value); } }; };
 export const deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return { promise, resolve }; };
-export async function personalEntryFixture({ reload = false, passes, publish = () => {}, realPanel = false } = {}) {
+export async function personalEntryFixture({ reload = false, passes, publish = () => {}, realPanel = false, responseFor } = {}) {
   bundle ??= await build({ stdin: { contents: "export {StartPage} from './src/startPage';export {AccountSession} from './src/accountSession';export {ActivityConnections} from './src/activityConnections';export {ChatPanelProvider} from './src/chatPanelProvider';export {TaskWorkspaceStore} from './src/taskWorkspaceStore';export {ensureWorkspace} from './src/extension';export {consumeActivityResume,resumeKey} from './src/studioNavigation';export {fetchProfileResult} from './src/proxyClient';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hps-personal-entry-'))), work = path.join(root, 'my-work'); fs.mkdirSync(work);
   const service = 'http://127.0.0.1:31999/v1', site = 'http://127.0.0.1:31999';
@@ -27,6 +27,7 @@ export async function personalEntryFixture({ reload = false, passes, publish = (
   const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
   const fetch = async (url, options = {}) => {
     const route = new URL(url).pathname; requests.push({ route, method: options.method ?? 'GET' });
+    const custom = await responseFor?.(route, options); if (custom) return custom;
     if (route.endsWith('/auth/device/start')) return response({ device_code: 'synthetic-device-secret', user_code: 'ABCD1234', verification_uri_complete: site + '/studio/connect?code=ABCD1234', expires_in: 600, interval: 600 });
     if (route.endsWith('/auth/device/poll')) return response({ access_token: 'synthetic-account-token', refresh_token: 'synthetic-refresh', session_id: control.sessionId, expires_in: 7200 });
     if (route.endsWith('/auth/logout')) return response({ ok: true });

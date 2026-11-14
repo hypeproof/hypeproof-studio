@@ -36,6 +36,31 @@ REQUIREMENT_DIR = 'docs/requirements'
 PLAN_DIR = 'docs/plan'
 LAB_CATALOG = 'web/scripts/lib/studio_catalog.mjs'
 LAB_DATA = 'web/src/content/private/studio-prd'
+# Catalog formats are product contracts, never inferred from issue numbers or paths.
+LAB_ADAPTERS = {'hypeproof/hypeproof-studio': {'data': LAB_DATA, 'catalog': LAB_CATALOG}}
+
+
+class UnsupportedLab(ValueError):
+    pass
+
+
+def canonical_catalog_repo(repository):
+    # Read-only compatibility for already-published Studio catalog provenance.
+    return 'hypeproof/hypeproof-studio' if repository == 'jayleekr/hypeproof-studio' else repository  # former-name-ok: read-only normalization of published pre-transfer catalog provenance
+
+
+def lab_adapter(repository):
+    repository = canonical_catalog_repo(repository)
+    if repository not in LAB_ADAPTERS:
+        raise UnsupportedLab(f'Lab catalog adapter unsupported for {repository}; Lab alignment is unverified. '
+                             'Run consumer-only check without --lab; define a product catalog contract before integration.')
+    return repository, LAB_ADAPTERS[repository]
+
+
+def require_catalog_repo(data, repository, path):
+    if canonical_catalog_repo(data.get('sourceRepo')) != repository:
+        raise ValueError(f'{path}: sourceRepo must identify {repository}; missing or cross-product provenance is unverified')
+
 UNRANKED = 99  # sorts an item without a priority or week tag after every tagged one
 
 
@@ -60,7 +85,8 @@ def harness_candidates():
 
 
 # What this align.py needs from discover.py, and the Harness change that added it.
-DISCOVERY_API = {'load_snapshot': 'hype-align, harness#258', 'row_digest': 'row pins, harness#270'}
+DISCOVERY_API = {'load_snapshot': 'hype-align, harness#258', 'row_digest': 'row pins, harness#270',
+                 'symbolic_pattern': 'scoped symbolic requirements, harness#640'}
 
 
 @functools.lru_cache(maxsize=None)
@@ -114,9 +140,13 @@ def expand(match):
     return [f'{prefix}-{test}{str(n).zfill(len(first))}' for n in numbers]
 
 
-def tokens(text, tests_only=False):
-    return {token for match in TOKEN.finditer(text or '') if not tests_only or match.group(2) == 'T'
+def tokens(text, tests_only=False, symbolic_ids=()):
+    found = {token for match in TOKEN.finditer(text or '') if not tests_only or match.group(2) == 'T'
             for token in expand(match)}
+    if not tests_only:
+        found.update(rid for rid in symbolic_ids if re.search(
+            r'(?<![A-Za-z0-9-])' + re.escape(rid) + r'(?![A-Za-z0-9-])', text or ''))
+    return found
 
 
 def cells(line):
@@ -145,9 +175,9 @@ def week_number(name, value):
                      '"W<n>", "Week <n>" or "<n>주차", or a list of them')
 
 
-def table_rows(text):
+def table_rows(text, pattern=ROW):
     rows = {}
-    for rid, rest in ROW.findall(text):
+    for rid, rest in pattern.findall(text):
         cells = [cell.strip() for cell in rest.split('|')]
         if cells and not cells[-1]:
             cells.pop()
@@ -188,9 +218,28 @@ class Ledger:
         path = self.root / rel
         return path.read_text(encoding='utf-8') if path.is_file() else None
 
+    @functools.cached_property
+    def symbolic_ids(self):
+        ids = set()
+        for doc in self.docs.values():
+            pattern = self.d.symbolic_pattern(doc.get('symbolic_prefixes', []))
+            if pattern:
+                ids.update(rid for rid in doc['ids'] if re.fullmatch(pattern, rid))
+        return ids
+
+    @functools.cached_property
+    def row_pattern(self):
+        if not self.symbolic_ids:
+            return ROW
+        alternatives = ID + '|' + '|'.join(re.escape(rid) for rid in sorted(self.symbolic_ids))
+        return re.compile(r'^\|\s*`?(' + alternatives + r')`?\s*\|(.*)$', re.M)
+
+    def named_ids(self, text):
+        return tokens(text, symbolic_ids=self.symbolic_ids)
+
     @functools.lru_cache(maxsize=None)
     def rows(self, rel):
-        return table_rows(self.text(rel) or '')
+        return table_rows(self.text(rel) or '', self.row_pattern)
 
     @functools.cached_property
     def issue_counts(self):
@@ -232,7 +281,7 @@ class Ledger:
                 elif n + 1 < len(lines) and SEPARATOR.match(lines[n + 1]):
                     targets = [i for i, cell in enumerate(cells(line)) if TARGET_HEADER.search(cell)]
                 tests = tokens(line, tests_only=True)
-                row = ROW.match(line)
+                row = self.row_pattern.match(line)
                 if row and not hosted and (keyed_by_requirement or row.group(1) not in requirement_ids):
                     tests.add(row.group(1))
                 defined |= tests
@@ -241,11 +290,11 @@ class Ledger:
                 if targets and line.lstrip().startswith('|'):
                     # The table declares what each row tests; an ID named in passing elsewhere is not a target.
                     row_cells = cells(line)
-                    named = set().union(*(tokens(row_cells[i]) for i in targets if i < len(row_cells)))
+                    named = set().union(*(self.named_ids(row_cells[i]) for i in targets if i < len(row_cells)))
                 elif ranges_both(line):
                     named = set()  # `US-01~18 → US-T01~21` pairs every test with every requirement
                 else:
-                    named = tokens(line)
+                    named = self.named_ids(line)
                 for test in tests:
                     beside.setdefault(test, set()).update(named)
         return defined, beside, where
@@ -262,7 +311,7 @@ class Ledger:
     @functools.lru_cache(maxsize=None)
     def _mentions(self, reports):
         paths = {str(p.relative_to(self.root)) for p in self.root.glob(TESTING_GLOB) if p.is_file()}
-        return set().union(set(), *(tokens(self.text(rel)) for rel in sorted(paths - reports - set(self.docs))))
+        return set().union(set(), *(self.named_ids(self.text(rel)) for rel in sorted(paths - reports - set(self.docs))))
 
     def tied(self, item, test):
         """The test belongs to a requirement the item cites: the requirement's row cites it, the test
@@ -340,14 +389,14 @@ class Ledger:
         Tests hosted in the requirement document count on a line that also names a test ID.
         """
         test = self.docs[path].get('test')
-        if test and test != path and rid in tokens(self.text(test)):
+        if test and test != path and rid in self.named_ids(self.text(test)):
             return True
         if rid.rsplit('-', 1)[0] in self.unambiguous_prefixes and rid in self.testing_mentions:
             return True
         if test == path:
             for line in (self.text(path) or '').splitlines():
-                own = ROW.match(line)
-                if (not own or own.group(1) != rid) and rid in tokens(line) and tokens(line, tests_only=True):
+                own = self.row_pattern.match(line)
+                if (not own or own.group(1) != rid) and rid in self.named_ids(line) and tokens(line, tests_only=True):
                     return True
         return False
 
@@ -576,13 +625,16 @@ def cmd_next(args):
 class Lab:
     """The Lab member feature catalog: features.ts (hand-written) and work.json (synced)."""
 
-    def __init__(self, root):
+    def __init__(self, root, repository):
+        self.repository, self.adapter = lab_adapter(repository)
         self.root = Path(root).expanduser().resolve()
-        data = self.root / LAB_DATA
+        data = self.root / self.adapter['data']
         self.features = parse_features((data / 'features.ts').read_text(encoding='utf-8'))
         if not self.features:
             raise ValueError(f'no feature definitions found in {data / "features.ts"}')
-        self.work = json.loads((data / 'work.json').read_text(encoding='utf-8')).get('features', {})
+        work = json.loads((data / 'work.json').read_text(encoding='utf-8'))
+        require_catalog_repo(work, self.repository, data / 'work.json')
+        self.work = work.get('features', {})
 
     def link(self, item, issue_counts):
         # The item id links it. An issue number links it only when no other ledger item shares it.
@@ -591,7 +643,9 @@ class Lab:
         for match in ((lambda entry: entry.get('id') == item['id']),
                       (lambda entry: by_issue and entry.get('issue') == issue)):
             for feature, entries in sorted(self.work.items()):
-                if any(match(entry) for entry in entries):
+                if any(all(canonical_catalog_repo(entry[key]) == self.repository
+                           for key in ('repository', 'sourceRepo', 'repo') if key in entry)
+                       and match(entry) for entry in entries):
                     return f'work.json {feature}'
         cited = {}
         for ref in item.get('requirements', []):
@@ -625,7 +679,7 @@ def item_links(ledger, item, lab=None):
         for key, kind in (('intent', 'intent'), ('design', 'design'), ('test', 'test-doc')):
             if not ledger.is_file(doc.get(key)):
                 add(broken, kind, f"{path}: {key} document {doc.get(key) or '(unset)'} does not exist")
-        defined = set(ledger.d.requirement_ids(text, doc.get('inline_prefixes', [])))
+        defined = set(ledger.d.requirement_ids(text, doc.get('inline_prefixes', []), doc.get('symbolic_prefixes', [])))
         for rid in ref['ids']:
             if rid not in defined:
                 add(broken, 'requirement', f'{rid} is not defined in {path}')
@@ -675,7 +729,7 @@ def item_links(ledger, item, lab=None):
 
 def cmd_check(args):
     ledger = Ledger(studio_root(args))
-    lab = Lab(args.lab) if args.lab else None
+    lab = Lab(args.lab, ledger.manifest['repository']) if args.lab else None
     items = ledger.select(ledger.items, args)
     # A chain is only as good as the ledger under it: discover.audit gaps fail the check for any scope,
     # as they fail the product's own `next-work.py --check` gate.
@@ -1110,8 +1164,9 @@ def parse_catalog(mjs):
 
 def cmd_drift(args):
     ledger = Ledger(studio_root(args))
+    repository, adapter = lab_adapter(ledger.manifest['repository'])
     lab = Path(args.lab).expanduser().resolve()
-    catalog, lab_excluded = parse_catalog((lab / LAB_CATALOG).read_text(encoding='utf-8'))
+    catalog, lab_excluded = parse_catalog((lab / adapter['catalog']).read_text(encoding='utf-8'))
     studio = sorted(str(p.relative_to(ledger.root)) for p in (ledger.root / REQUIREMENT_DIR).rglob('*.md') if p.is_file())
     ledger_excluded = ledger.manifest.get('excluded', {})
     findings = []
@@ -1145,10 +1200,12 @@ def cmd_drift(args):
 
     pins = {}
     for name in ('catalog.json', 'work.json', 'requirements.json'):
-        data_path = lab / LAB_DATA / name
+        data_path = lab / adapter['data'] / name
         if data_path.is_file():
-            pins[name] = json.loads(data_path.read_text(encoding='utf-8')).get('sourceCommit')
-    catalog_json = lab / LAB_DATA / 'catalog.json'
+            data = json.loads(data_path.read_text(encoding='utf-8'))
+            require_catalog_repo(data, repository, data_path)
+            pins[name] = data.get('sourceCommit')
+    catalog_json = lab / adapter['data'] / 'catalog.json'
     if catalog_json.is_file():
         pinned = json.loads(catalog_json.read_text(encoding='utf-8'))
         for doc in pinned.get('documents', []):
@@ -1178,7 +1235,7 @@ def cmd_drift(args):
     counts = dict(sorted(Counter(f['kind'] for f in findings).items()))
     verdict = ('in sync: every Studio requirement document is classified and pinned sources are unchanged'
                if not findings else 'drift: ' + ', '.join(f'{v} {k}' for k, v in counts.items()))
-    payload = {'studio': str(ledger.root), 'studio_head': head, 'lab': str(lab), 'catalog_documents': catalog,
+    payload = {'repository': repository, 'studio': str(ledger.root), 'studio_head': head, 'lab': str(lab), 'catalog_documents': catalog,
                'lab_excluded': lab_excluded, 'studio_documents': studio, 'ledger_excluded': sorted(ledger_excluded),
                'pins': pins, 'commits_behind': behind, 'findings': findings, 'counts': counts, 'verdict': verdict}
     lines = [f"hype-align drift · Studio {head[:7] if head else '(not a git checkout)'} · Lab {lab}",
@@ -1247,6 +1304,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
+    except UnsupportedLab as exc:
+        return fail(args, 'unsupported', exc, 2)
     except Refusal as exc:
         return fail(args, 'refused', exc, 1)
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:

@@ -26,6 +26,13 @@ never pushes, and reads GitHub only with `next --live`.
   cut from current `origin/main`. A stale checkout gives a correct verdict about the
   wrong files.
 - Lab checkout: `--lab <path>` (a hypeprooflab worktree) for `check` and `drift`.
+  The adapter is selected by the ledger repository, not the `--studio` option name.
+  Only `hypeproof/hypeproof-studio` has a catalog adapter today. Sediment and other
+  repositories return `unsupported` (exit 2, Lab alignment unverified) before any
+  Studio catalog read. Consumer-only `check` without `--lab` remains available.
+  Catalog JSON must identify the matching `sourceRepo`; existing pre-transfer
+  Studio provenance is accepted on reads. A missing or different source repo
+  cannot supply item IDs, issue numbers or source pins.
 
 ## Commands
 

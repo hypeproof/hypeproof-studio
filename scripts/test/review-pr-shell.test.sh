@@ -884,10 +884,38 @@ fi
 # 85. review-pr.sh runs the Dev app with --inmemory-secrets (no macOS keychain prompt).
 # Check the studio-dev.py run call itself: the flag must sit between "run" and the closing "2>&1".
 RUN_BLOCK="$(awk '/studio-dev\.py" run \\/{f=1} f{print} f&&/2>&1\)"/{exit}' "$SCRIPT")"
-if [[ -n "$RUN_BLOCK" ]] && grep -q -- '--inmemory-secrets' <<<"$RUN_BLOCK"; then
-  ok "85: review-pr.sh studio-dev.py run call passes --inmemory-secrets"
+if [[ -n "$RUN_BLOCK" ]] && grep -q -- 'SECRET_FLAGS\[@\]' <<<"$RUN_BLOCK"; then
+  ok "85: review-pr.sh studio-dev.py run call takes its secret flags from SECRET_FLAGS"
 else
-  fail "85: studio-dev.py run call in review-pr.sh lacks --inmemory-secrets"
+  fail "85: studio-dev.py run call in review-pr.sh does not use SECRET_FLAGS"
+fi
+
+# 85a-85c. Evaluate the flag choice itself (#3569 default is in memory). Only the value 1 drops the flag.
+FLAG_BLOCK="$(awk '/HPS_REVIEW_PERSIST_SECRETS:-/{f=1} f{print} f&&/^  fi$/{exit}' "$SCRIPT")"
+persist_flags() { # $1 = the value, or __unset__
+  local cmd='set -euo pipefail; '"$FLAG_BLOCK"'; printf "%s\n" "${SECRET_FLAGS[@]+${SECRET_FLAGS[@]}}"'
+  if [[ "$1" == "__unset__" ]]; then env -u HPS_REVIEW_PERSIST_SECRETS /bin/bash -c "$cmd" 2>&1
+  else env HPS_REVIEW_PERSIST_SECRETS="$1" /bin/bash -c "$cmd" 2>&1; fi
+}
+if [[ "$(persist_flags __unset__)" == *"--inmemory-secrets"* ]]; then
+  ok "85a: unset HPS_REVIEW_PERSIST_SECRETS keeps --inmemory-secrets"
+else
+  fail "85a: unset HPS_REVIEW_PERSIST_SECRETS does not keep --inmemory-secrets"
+fi
+ALL_KEEP=1
+for v in 0 "" yes true; do
+  [[ "$(persist_flags "$v")" == *"--inmemory-secrets"* ]] || ALL_KEEP=0
+done
+if [[ "$ALL_KEEP" == 1 ]]; then
+  ok "85b: values other than 1 keep --inmemory-secrets"
+else
+  fail "85b: a value other than 1 dropped --inmemory-secrets"
+fi
+OPT_OUT="$(persist_flags 1)"
+if [[ "$OPT_OUT" != *"--inmemory-secrets"* ]] && [[ "$OPT_OUT" == *"NOTE: HPS_REVIEW_PERSIST_SECRETS=1 keeps the Dev app secrets on disk"* ]] && [[ "$OPT_OUT" == *"login keychain password"* ]] && [[ "$OPT_OUT" == *"Allow once; do not delete the HypeProof Studio Safe Storage item."* ]]; then
+  ok "85c: HPS_REVIEW_PERSIST_SECRETS=1 drops --inmemory-secrets and prints one English keychain line"
+else
+  fail "85c: opt-in does not drop the flag or the keychain NOTE is missing"
 fi
 
 # 86. review-pr.sh passes --no-workspace-trust to the Dev app run (the review Dev copy only).

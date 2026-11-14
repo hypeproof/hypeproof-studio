@@ -2,6 +2,37 @@ import XCTest
 @testable import StudioCore
 
 final class ConversationSyncTests: XCTestCase {
+    func testAcknowledgedStopSurvivesRestartWithoutReplacingHumanWordsOrAnotherDraft() throws {
+        var cache = ConversationCache(); cache.draft = "Keep my submitted words"
+        try cache.enqueue(reflection: true)
+        let original = try XCTUnwrap(cache.request)
+        cache.draft = "A separate unsent thought"
+        func snapshot(id: String, text: String, status: String, revision: Int = 1) throws -> PersonalReflection {
+            let state: [String: Any] = ["id": "personal-reflection", "revision": revision, "has_earlier": false,
+                "messages": [["id": original.id, "role": "user", "content": original.text, "created_at": 1]],
+                "turn": ["id": id, "text": text, "status": status, "created_at": 1, "updated_at": 2]]
+            return try JSONDecoder().decode(PersonalReflection.self, from: JSONSerialization.data(withJSONObject: ["state": state, "opening": "Question?", "hint": "Optional"]))
+        }
+        for value in [try snapshot(id: "another-turn", text: original.text, status: "cancelled"),
+                      try snapshot(id: original.id, text: "Different words", status: "cancelled"),
+                      try snapshot(id: original.id, text: original.text, status: "running")] {
+            XCTAssertThrowsError(try cache.applyReflectionStop(value, request: original))
+            XCTAssertEqual(cache.request, original); XCTAssertEqual(cache.cursor, 0)
+        }
+        cache.requestFailure = "이 계정의 AI 이용 권한을 확인해 주세요."
+        try cache.applyReflectionStop(snapshot(id: original.id, text: original.text, status: "failed"), request: original)
+        XCTAssertEqual(cache.requestFailure, "이 계정의 AI 이용 권한을 확인해 주세요.")
+        try cache.applyReflectionStop(snapshot(id: original.id, text: original.text, status: "unknown"), request: original)
+        XCTAssertEqual(cache.request?.status, "unknown"); XCTAssertNotNil(cache.requestFailure)
+        try cache.applyReflectionStop(snapshot(id: original.id, text: original.text, status: "cancelled"), request: original)
+        cache = try JSONDecoder().decode(ConversationCache.self, from: JSONEncoder().encode(cache))
+        XCTAssertEqual(cache.request?.id, original.id); XCTAssertEqual(cache.request?.status, "cancelled")
+        XCTAssertEqual(cache.messages.map(\.content), [original.text]); XCTAssertEqual(cache.draft, "A separate unsent thought")
+        XCTAssertEqual(ConversationVoiceReply.resolve(id: original.id, request: cache.request, messages: cache.messages, sending: false, readAloud: true), .needsAttention)
+        // Completion winning the race is truthful completion, never fake cancel.
+        try cache.applyReflectionStop(snapshot(id: original.id, text: original.text, status: "completed", revision: 2), request: original)
+        XCTAssertEqual(cache.request?.status, "completed")
+    }
     func testReflectionOutboxKeepsOriginalRevisionAcrossRestartAndOtherDeviceUpdates() throws {
         var cache = ConversationCache(); cache.cursor = 4; cache.draft = "내가 처음 보낸 생각"
         try cache.enqueue(reflection: true)

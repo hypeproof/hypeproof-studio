@@ -36,8 +36,16 @@ try {
     const config = chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: seat === 'personal' ? { tasks: [], sources: [] } : undefined });
     const messages = [{ id: 'u1', role: 'user', content: '예약 버튼 넣어 줘', createdAt: 1 }, { id: 'a1', role: 'assistant', content: '메인 페이지에 예약 버튼과 진료 시간 안내를 추가했어요.', createdAt: 2 }];
     await b.load(`<!doctype html><html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div class="${seat === 'personal' ? 'tw-workspace' : ''}" style="display:block;height:1400px"><div id="root"></div></div><script>window.fixture=${JSON.stringify(chatPanelProps({ config, messages }))};</script><script>${js.outputFiles[0].text}</script></body></html>`, { width, height: 1400, dark, forcedColors });
-    await pause();
-    await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'turnReviewState',view:${JSON.stringify(VIEW)}}}))`);
+    // ChatPanel registers its turnReviewState listener in an effect, and nothing tells the page when that has run (this mounts
+    // ChatPanel directly, so there is no App `ready` to wait for). A message sent before it is lost (CI on #4064, and the
+    // 300 ms delayed-start control). The state message is idempotent (setTurnReview replaces), so send it until the review
+    // section shows the checkpoint form, for up to 10 s.
+    for (const end = Date.now() + 10000; ;) {
+      await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'turnReviewState',view:${JSON.stringify(VIEW)}}}))`);
+      await pause(60);
+      if (await b.evaluate(`!!document.querySelector('.hps-checkpoint')`)) break;
+      if (Date.now() > end) throw Error('the turn review never drew (turnReviewState not received)');
+    }
     await pause();
     const opened = await b.evaluate(`(()=>{const btn=[...document.querySelectorAll('.hps-checkpoint button')].find(x=>x.textContent==='저장 지점 남기기');if(!btn)return false;btn.click();return true})()`);
     assert.equal(opened, true, 'checkpoint button missing');

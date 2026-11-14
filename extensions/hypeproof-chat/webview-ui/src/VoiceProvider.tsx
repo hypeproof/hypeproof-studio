@@ -15,13 +15,13 @@ import { ReadAloudButton } from "./ReadAloudButton";
 export interface VoiceContextValue {
   availability: VoiceAvailability;
   /** Run `go` now when this policy version's disclosure was read, else show the sheet and run it on 시작하기. */
-  gate(go: () => void): void;
+  gate(go: () => void, automatic?: boolean): void;
   /** A Service refusal said this class has voice off: show the D-018 state from now on. */
   markClassOff(): void;
 }
 export interface VoiceController {
   value: VoiceContextValue;
-  sheet: { go: () => void } | null;
+  sheet: { go: () => void; automatic: boolean; scope: string } | null;
   closeSheet(): void;
   accept(): void;
   minor: boolean;
@@ -40,7 +40,7 @@ const servedBefore = new Set<string>();
 export function useVoiceController(profile: ResolvedProfile | null | undefined, scopeKey: string, enabled: boolean): VoiceController {
   const [refused, setRefused] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState<string[] | null>(null);
-  const [sheet, setSheet] = useState<{ go: () => void } | null>(null);
+  const [sheet, setSheet] = useState<{ go: () => void; automatic: boolean; scope: string } | null>(null);
   const raw = voiceAvailability(enabled ? profile : null, servedBefore.has(scopeKey), refused === scopeKey);
   // A stable object while nothing about it changed: consumers re-render on a real change only.
   const key = raw.kind === "on" ? `on:${raw.served.dictation}:${raw.served.readAloud}:${raw.served.policyVersion}` : raw.kind;
@@ -59,23 +59,24 @@ export function useVoiceController(profile: ResolvedProfile | null | undefined, 
     return off;
   }, [version, scopeKey]);
 
-  const gate = useCallback((go: () => void) => {
+  const gate = useCallback((go: () => void, automatic = false) => {
     if (!version) return;
     if (acknowledged?.includes(version)) { go(); return; }
-    setSheet({ go });
-  }, [version, acknowledged]);
+    setSheet({ go, automatic, scope: scopeKey });
+  }, [version, acknowledged, scopeKey]);
   const markClassOff = useCallback(() => setRefused(scopeKey), [scopeKey]);
   const value = useMemo<VoiceContextValue>(() => ({ availability, gate, markClassOff }), [availability, gate, markClassOff]);
 
   const accept = useCallback(() => {
     if (!sheet || !version) return;
+    if (sheet.scope !== scopeKey) { setSheet(null); return; }
     const next = sheet.go;
     setSheet(null);
     postToHost({ type: "voiceDisclosureAck", policyVersion: version });
     // Remember it for this window too; the host's answer follows.
     setAcknowledged((list) => (list?.includes(version) ? list : [...(list ?? []), version]));
     next();
-  }, [sheet, version]);
+  }, [sheet, version, scopeKey]);
   const closeSheet = useCallback(() => setSheet(null), []);
   return { value, sheet, closeSheet, accept, minor: readsMinorDisclosure(profile) };
 }
@@ -86,7 +87,7 @@ export function VoiceProvider({ controller, children }: { controller: VoiceContr
     <VoiceContext.Provider value={value}>
       {children}
       {controller.sheet && value.availability.kind === "on" && (
-        <VoiceDisclosureSheet served={value.availability.served} minor={controller.minor} onStart={controller.accept} onCancel={controller.closeSheet} />
+        <VoiceDisclosureSheet served={value.availability.served} minor={controller.minor} automatic={controller.sheet.automatic} onStart={controller.accept} onCancel={controller.closeSheet} />
       )}
     </VoiceContext.Provider>
   );

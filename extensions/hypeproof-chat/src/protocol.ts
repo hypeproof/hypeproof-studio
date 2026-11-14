@@ -155,6 +155,8 @@ export interface FileAttachmentPreview {
 export interface ChatConfig {
   // #3563 — true when the Chalk runtime verified this user as an instructor. The Studio chat then points to the Chalk tab. Absent otherwise.
   chalkInstructorTab?: true;
+  /** #4048 — true only in a rehearsal seat (a return is held and this window is the rehearsal folder). Absent otherwise. */
+  rehearsalSeat?: true;
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -187,6 +189,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** MPER-05: display-only identity of the active account reflection; the host rechecks every making request. */
+  personalMaking?: { scope: string; taskId: string };
   /** CGP-KNOW-R-029 — whether this seat may open a "기록 없이 묻기" task (adult personal seats only; fail closed). */
   temporaryTask?: { allowed: boolean };
   /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
@@ -212,11 +216,15 @@ export interface ChatConfig {
   model: string;
   hasToken: boolean;
   workTakeawayEnabled?: boolean;
+  /** GRD-24 — host-computed (childProfile.ts): the always-visible guardian notice on a child seat. */
+  guardianNotice?: string;
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
   /** CGP-SHELL-R-003 — the cohort's update freeze is active on this classroom seat (last frozen day, YYYY-MM-DD). */
   updateFreeze?: { until: string };
+  /** CGP-SHELL-R-027 — host-checked: the settings dialog shows the deletion request row. */
+  dataDeletion?: true;
   /**
    * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
    * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
@@ -321,6 +329,8 @@ export interface ResolvedProfile {
   trial?: TrialStatus;
   /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
   notify_optin?: { available: boolean; consent_version: string };
+  /** CGP-SHELL-R-027 — the seat may request account and data deletion (Service HPS_DATA_DELETION_REQUESTS, default off). Only `available: true` counts. */
+  data_deletion?: { available: boolean };
   /** REQ-CGP-LEARN-13 (DEC-LEARN-13a) — the Service turns the 109/1388 help lines on for this seat. Only `true` counts; absent → off. */
   safety_help_lines?: boolean;
   /**
@@ -482,6 +492,11 @@ export interface ResolvedProfile {
   // upper bound < 18). Drives minor-specific UX and force-pins the coach to the
   // proxy runtime (#371).
   minor_cohort?: boolean;
+  /**
+   * Guardian child profile (proposed Service contract, GRD-08). Read only through childProfile.ts, and only
+   * while `hypeproofChat.guardianEnabled` is on; then the seat fails closed as a minor child seat.
+   */
+  child_profile?: boolean;
   // Drives chat-panel tone (game vs search-webapp UI copy) (#159).
   game?: { template_tier: string };
   /** kids-quest — the list of pre-built worlds (GET /v1/worlds/:id returns the HTML). */
@@ -609,6 +624,7 @@ export type WebviewMessage = (
   | { type: 'taskCreate' }
   /** MPER-02/04: use the same account/admission entry as the start page. */
   | { type: 'openPersonalReflection' }
+  | { type: 'beginPersonalMaking' }
   /** CGP-KNOW-R-029 — open a "기록 없이 묻기" task (adult personal seats only; the host checks again). */
   | { type: 'taskCreateTemporary' }
   | { type: 'taskRecoverDraft' }
@@ -642,6 +658,8 @@ export type WebviewMessage = (
   | {type:'workTakeaway'}
   /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
   | {type:'exportMyWork'}
+  /** CGP-SHELL-R-027 — read the seat's deletion request (`load`) or send one after the in-dialog confirm (`submit`). */
+  | {type:'dataDeletion'; action:'load'|'submit'}
   | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
@@ -850,6 +868,7 @@ export type WebviewMessage = (
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  | { type: "rehearsalSeatEnd" }
   // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
   // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the
   // lesson's own criteria are never part of it.
@@ -897,12 +916,14 @@ export type WebviewMessage = (
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
   | { type: "pageCardReveal"; turnId: string; path: string }
+  // CGP-ART-R-023 — 폴더에서 보기 on the deck PDF's saved notice; the host knows which file, the webview sends no path.
+  | { type: "deckPdfReveal" }
   // CGP-KNOW-D-021 — 열기 / 폴더에서 보기 on a stored "다운로드 완료" line of the open task; the host re-checks the file.
   | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // E5 (#3776) — the learner pressed 제출 or 건너뛰기 on a question card. Nothing else ever sends an answer.
-  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").QuestionAnswer }
+  | { type: "inboxAnswer"; objectId: string; revision: number; generation: number; answer: import("./classroomInbox").InboxAnswer }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
   | { type: "helpRequest" }
   // #751 U1b — the learner opens the approval question for the current index.html (the host asks; nothing is approved or sent by this message).
@@ -1076,7 +1097,7 @@ export type HostMessage = (
   // the host clock when absent) — the createdAt of the persisted line.
   // CGP-ART-R-020 — one successful tool call of a running turn, bound to the task it started in.
   | { type: "taskActivityFact"; streamId: string; fact: import("./taskActivity").TaskActivityFact; activityId?: string; taskId?: string }
-  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
+  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number; /** Present only on a real tool call or its result (ToolEntry.kind). */ kind?: "tool" }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead
@@ -1087,7 +1108,7 @@ export type HostMessage = (
   // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
   | { type: "downloadLineNotice"; id: string; notice: string | null }
   | { type: "memoryWriteResult"; id: string; state: "undone" | "restored" | "refused"; notice: string | null }
-  | { type: "pageAttached"; label: string }
+  | { type: "pageAttached"; label: string; action?: PageNoticeAction }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
@@ -1164,6 +1185,8 @@ export type HostMessage = (
   | { type: "actionResult"; requestId: string; approved: boolean }
   /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
   | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }
+  /** CGP-SHELL-R-027 — the settings row state: the Service's request view, never seat ids. */
+  | ({ type: "dataDeletionState" } & import("./dataDeletionRequest").DataDeletionState)
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the
@@ -1230,3 +1253,6 @@ export interface LearningWikiPlan {
   /** Per session: the slides the deck skill drafts that session and the session's question. */
   sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
+
+/** CGP-ART-R-023 — one action on the inline page notice (the deck PDF's 폴더에서 보기). The host decides what it does. */
+export interface PageNoticeAction { kind: "deckPdfReveal"; label: string; name: string }

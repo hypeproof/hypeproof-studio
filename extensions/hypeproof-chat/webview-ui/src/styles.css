@@ -515,6 +515,9 @@ html, body, #root {
   border-radius: var(--ds-c-studio-styles-radius-13);
   font-size: var(--ds-c-studio-styles-type-1);
 }
+/* CGP-SHELL-R-016: on light host themes the fixed light-red ink measured 1.82:1 on its pink panel; the host's error colour
+   (HP Light #9E2410, the light registry #A1260D) reads at 5.9:1 or more there. */
+body.vscode-light .hps-error { color: var(--vscode-errorForeground, var(--ds-c-studio-styles-ink-19)); }
 
 /* ---------- Friends (worlds) strip — #649 ----------
    A horizontal row that always sits right above the composer. Switching worlds happens
@@ -1160,6 +1163,17 @@ html, body, #root {
 }
 .hps-update-banner-icon { font-size: var(--ds-c-studio-styles-type-10); flex: 0 0 auto; line-height: var(--ds-c-studio-styles-typography-19); padding-top: var(--ds-c-studio-styles-space-14); }
 .hps-update-banner-body { flex: 1; min-width: 0; }
+/* #4092 — the rehearsal band shares the update banner's slot, so it takes that banner's inset and margin (the same
+   tokens, no new colour). Its button is the quiet secondary, hp-cta-quiet. */
+.hps-rehearsal-seat {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-1);
+  padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-1);
+  margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1) 0;
+  color: var(--hp-text-primary-default);
+  background: var(--ds-c-studio-styles-surface-50); border: var(--ds-c-studio-styles-size-3) solid var(--ds-c-studio-styles-boundary-33);
+  border-radius: var(--ds-c-studio-styles-radius-3);
+}
+.hps-rehearsal-seat-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .hps-update-banner-title { font-size: var(--ds-c-studio-styles-type-9); font-weight: var(--ds-c-studio-styles-typography-7); color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-22)); }
 .hps-update-banner-sub   { font-size: var(--ds-c-studio-styles-type-3); color: var(--hp-text-primary-default); margin-top: var(--ds-c-studio-styles-space-14); }
 .hps-update-banner-notes {
@@ -1262,6 +1276,10 @@ html, body, #root {
 }
 .hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
 
+/* CGP-ART-R-023: the page notice's one action (the deck PDF's 폴더에서 보기), a quiet 44px button at the 14px floor under the
+   notice line. Its fills are the quiet button's own. */
+.hps-page-notice-actions { display: flex; margin: 0 0 var(--ds-c-studio-styles-space-7); }
+.hps-page-notice-actions > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hps-page-notice {
   margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-7);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
@@ -2165,6 +2183,42 @@ html, body, #root {
 .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); align-items: center; min-width: 0; }
 .hp-inbox-link-url { font-family: var(--ds-c-studio-styles-font-8); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+/* CGP-ART-D-005 (DES-ART-05): instructor comments on the learner's approved page versions.
+   Text is text (pre-wrap, never markup). State is said in words; colour only repeats it. Logical properties only,
+   no fixed heights and `overflow-wrap:anywhere`, so 200% zoom and a 320px rail never scroll sideways.
+   The instructor pin is a filled Paper disc with a control-boundary ring: the learner's own annotations (annotationTray.css)
+   are outlined and numbered and never filled, so the two never read as the same author. */
+.hp-comments { min-width: 0; margin-block: var(--hp-space-2); padding-block: var(--hp-space-2); padding-inline: var(--hp-space-3); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); font-size: var(--hp-font-caption); color: var(--hp-text-primary-default); }
+.hp-comments > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2); min-block-size: var(--hp-control-min); cursor: pointer; overflow-wrap: anywhere; }
+.hp-comment-title { margin: 0; font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+.hp-comment-live { display: inline-flex; align-items: center; gap: var(--hp-space-1); color: var(--hp-text-primary-default); }
+.hp-comment-dot { display: inline-block; inline-size: var(--hp-space-2); block-size: var(--hp-space-2); border-radius: 50%; background: var(--hp-text-accent-default); }
+.hp-comment-group { margin-block-start: var(--hp-space-3); min-width: 0; }
+.hp-comment-group-title { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hp-comment-list { list-style: none; margin: 0; margin-block-start: var(--hp-space-2); padding: 0; display: grid; gap: var(--hp-space-3); min-width: 0; }
+.hp-comment { min-width: 0; display: grid; gap: var(--hp-space-2); padding-block-start: var(--hp-space-2); border-block-start: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); }
+.hp-comment-head { display: flex; gap: var(--hp-space-3); align-items: flex-start; min-width: 0; }
+.hp-comment-where { min-width: 0; display: grid; gap: var(--hp-space-1); }
+/* A page outline, not a picture of the page: font-independent and never the learner's content. */
+.hp-comment-page { position: relative; flex: 0 0 auto; inline-size: calc(var(--hp-space) * 16); block-size: calc(var(--hp-space) * 12); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-muted-default); border-radius: var(--hp-space-1); background: var(--hp-bg-panel-default); }
+.hp-comment-pin { position: absolute; inline-size: var(--hp-space-4); block-size: var(--hp-space-4); transform: translate(-50%, -50%); border-radius: 50%; background: var(--hp-bg-paper-default); border: var(--ds-c-studio-styles-size-7) solid var(--hp-border-control-default); box-sizing: border-box; }
+.hp-comment-meta { margin: 0; display: flex; flex-wrap: wrap; gap: var(--hp-space-2); color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.hp-comment-badge { padding-inline: var(--hp-space-2); border: var(--ds-c-studio-styles-size-3) dashed var(--hp-border-warn-default); border-radius: var(--hp-space-1); color: var(--hp-text-warn-default); }
+.hp-comment-unread { margin-inline-end: var(--hp-space-2); padding-inline: var(--hp-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-accent-default); border-radius: var(--hp-space-1); color: var(--hp-text-accent-default); }
+.hp-comment-author { margin: 0; font-weight: var(--hp-weight-strong); font-size: var(--hp-font-caption); }
+.hp-comment-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--hp-font-body); }
+.hp-comment-reply { padding-inline-start: var(--hp-space-3); border-inline-start: var(--ds-c-studio-styles-size-7) solid var(--hp-border-muted-default); }
+.hp-comment-field { display: grid; gap: var(--hp-space-1); min-width: 0; font-size: var(--hp-font-caption); }
+.hp-comment-field textarea { inline-size: 100%; min-width: 0; min-block-size: var(--hp-control-min); box-sizing: border-box; padding: var(--hp-space-2); font: inherit; font-size: var(--hp-font-body); color: var(--hp-text-primary-default); background: var(--vscode-input-background, transparent); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-1); }
+.hp-comment-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hp-comment-actions button { min-block-size: var(--hp-control-min); min-inline-size: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-comments :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+@media (forced-colors: active) {
+  .hp-comments, .hp-comment-page, .hp-comment-field textarea { border-color: CanvasText; }
+  .hp-comment-pin { background: Canvas; border-color: CanvasText; }
+  .hp-comment-dot { background: Canvas; border: var(--ds-c-studio-styles-size-7) solid CanvasText; box-sizing: border-box; }
+  .hp-comment-badge, .hp-comment-unread { border-color: CanvasText; color: CanvasText; }
+}
 
 /* CGP-KNOW-R-003 — the activity's 자료 list and the "함께 보낼 자료" line above the composer. Learner text at the
    caption step or larger (14px floor), every control a 44px target, titles ellipsize with full accessible names, and who
@@ -2725,7 +2779,10 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-attachment:has(.hps-photo-failure) { box-sizing: border-box; width: min(100%, var(--ds-c-studio-styles-size-106)); height: auto; min-height: var(--ds-c-studio-styles-size-46); display: flex; flex-wrap: wrap; align-items: center; align-self: flex-start; gap: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); overflow: visible; }
 .hps-attachment:has(.hps-photo-failure) > img { width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); flex: 0 0 var(--ds-c-studio-styles-size-8); border-radius: var(--ds-c-studio-styles-radius-13); }
 .hps-attachment:has(.hps-photo-failure) > .hps-attachment-name { flex: 1 1 0; min-width: 0; height: auto; padding: 0; justify-content: flex-start; text-align: start; }
-.hps-attachment:has(.hps-photo-failure) > .hps-attachment-remove { position: static; flex: 0 0 var(--ds-c-studio-styles-size-8); width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); margin-inline-start: auto; }
+/* position: relative, not static: the button stays in the flex row, and its ::before dot (position: absolute) keeps the button
+   as its containing block, so the white × stays on the dark dot. Static moved the dot to the chip's centre and left the ×
+   on the light panel at 1.19:1 (found on #4053). */
+.hps-attachment:has(.hps-photo-failure) > .hps-attachment-remove { position: relative; flex: 0 0 var(--ds-c-studio-styles-size-8); width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); margin-inline-start: auto; }
 .hps-attachment:has(.hps-photo-failure) > .hps-photo-failure { box-sizing: border-box; order: 1; flex: 1 0 100%; min-width: 0; margin: 0; }
 /* The rows live in the footer, so the reason is on screen with the composer. Compact: the name and reason on the left, the actions on the right. */
 .hps-attachment-failures { max-height: 45vh; overflow-y: auto; }
@@ -2796,6 +2853,18 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-publish-sharing { font-size: var(--ds-c-studio-styles-type-17); overflow-wrap: anywhere; }
 .hps-publish-sharing button { font: inherit; min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); }
 .hps-publish-sharing button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+/* CGP-ART-D-013: two stat tiles per test version. Tabular figures; the change is an arrow plus words, never colour alone. */
+.hps-stats { margin-block-start: var(--hp-space-2); display: grid; gap: var(--hp-space-2); min-width: 0; }
+.hps-stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--hp-space) * 36)), 1fr)); gap: var(--hp-space-2); }
+.hps-publish-sharing .hps-stat-tile { display: grid; gap: var(--hp-space-1); justify-items: start; text-align: start; padding: var(--hp-space-2) var(--hp-space-3); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: transparent; color: var(--hp-text-primary-default); cursor: pointer; }
+.hps-publish-sharing .hps-stat-tile:hover { background: var(--hp-bg-control-hover); }
+.hps-publish-sharing .hps-stat-tile:active { background: var(--hp-bg-control-pressed); }
+.hps-stat-label, .hps-stat-change { font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hps-stat-value { font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); font-variant-numeric: tabular-nums; }
+.hps-stat-sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--hp-space-2); }
+.hps-stat-sources li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.hps-stat-empty { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
+@media (forced-colors: active) { .hps-publish-sharing .hps-stat-tile { border-color: ButtonText; color: ButtonText; } }
 
 @media (forced-colors: active) {
   .hps-model-selection select:disabled[aria-disabled="true"], .hps-effort select:disabled[aria-disabled="true"] { color:GrayText; border-color:GrayText; border-style:dashed !important; }

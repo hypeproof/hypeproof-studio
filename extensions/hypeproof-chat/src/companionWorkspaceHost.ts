@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import { canonicalRoot, type ActivityConnections } from './activityConnections.ts';
 import { companionHostId, companionKey, companionState, type CompanionScope, type CompanionState } from './companionWorkspace.ts';
 import { CompanionWorkspaceController } from './companionWorkspaceController.ts';
+import { refuseOnChildSeat } from "./childProfileHost";
 
 export const COMPANION_WORKSPACE_COMMAND = 'hypeproof-chat.prepareCompanionWorkspace';
 
@@ -66,5 +67,5 @@ export function registerCompanionWorkspace(context: vscode.ExtensionContext, con
     },
     now: () => Date.now(),
   });
-  context.subscriptions.push(vscode.commands.registerCommand(COMPANION_WORKSPACE_COMMAND, () => controller.run()));
+  context.subscriptions.push(vscode.commands.registerCommand(COMPANION_WORKSPACE_COMMAND, () => refuseOnChildSeat('connections') ? undefined : controller.run()));
 }

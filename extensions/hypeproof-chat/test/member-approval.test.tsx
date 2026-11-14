@@ -1,0 +1,50 @@
+import React, {act} from 'react';
+import assert from 'node:assert/strict';
+import {createRoot} from 'react-dom/client';
+import {createRequire} from 'node:module';
+import {MemberApprovalInbox} from '../webview-ui/src/MemberApprovalInbox';
+const {JSDOM}=createRequire(process.cwd()+'/package.json')('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://studio.invalid'});
+Object.assign(globalThis,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,IS_REACT_ACT_ENVIRONMENT:true});
+Object.defineProperty(globalThis,"navigator",{value:dom.window.navigator,configurable:true});
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};
+const posted:any[]=[],root=createRoot(document.getElementById('root')!);
+const now=Date.now()/1000;
+const card:any={id:'card-1',request_digest:'d'.repeat(64),source:{repo:'hypeproof/hypeproof-studio',pr:3788,head:'a'.repeat(40),base:'b'.repeat(40)},reviewer:'member',brief:{authored:['summary: 저장하지 못한 글도 다시 열면 그대로 이어 쓸 수 있어요.','<script>never execute</script>'],verified:['Actual evidence']},state:'pending',expires_at:now+600,lease_expires_at:now+50,can_decide:true,decision:null,review:null};
+const render=async(view:any)=>act(async()=>root.render(<MemberApprovalInbox view={view} post={m=>posted.push(m)} close={()=>{}}/>));
+const button=(name:string)=>[...document.querySelectorAll('button')].find(x=>x.textContent===name)!;
+async function main(){ try{
+ await render({status:'ready',cards:[card],pending:[],busy:false});assert.equal(document.querySelector('dialog')?.open,true);assert.equal(document.querySelector('details')?.open,false);assert.equal(document.querySelector('script'),null);assert(document.body.textContent?.includes(card.source.head));
+ const change='저장하지 못한 글도 다시 열면 그대로 이어 쓸 수 있어요.';
+ const summary=[...document.querySelectorAll('article p')].find(p=>p.textContent===change);
+ assert(summary,'what changes must be readable before expanding evidence');assert.equal(summary.closest('details'),null);assert.equal(document.querySelector('details')?.open,false);assert.equal(posted.length,0);
+ assert(summary.compareDocumentPosition(button('승인')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,'change must precede choices');
+ assert(button('승인').compareDocumentPosition(document.querySelector('details')!) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,'choices must precede optional technical evidence');
+ assert([...document.querySelectorAll('details code')].some(code=>code.textContent===card.source.head),'complete exact version remains inspectable');
+ assert(document.querySelector('details summary')?.getAttribute('aria-label')?.includes(card.source.head),'collapsed version is accessible without shortening its identity');
+ assert(document.querySelector('details')?.textContent?.includes('summary: '+change),'full authored source remains available');
+ await render({status:'ready',cards:[{...card,brief:{authored:['<img src=x onerror=alert(1)>'],verified:['Actual evidence']}}],pending:[],busy:false});
+ assert.equal(document.querySelector('article img'),null);assert([...document.querySelectorAll('article p')].some(p=>p.textContent==='<img src=x onerror=alert(1)>'));
+ await render({status:'ready',cards:[card],pending:[],busy:false});
+ await act(async()=>button('승인').click());assert.deepEqual(posted.at(-1),{type:'memberApprovalDecision',id:'card-1',requestDigest:card.request_digest,choice:'approve'});
+ for(const c of [{...card,can_decide:false},{...card,lease_expires_at:now-1},{...card,state:'unknown'}]){await render({status:'ready',cards:[c],pending:[],busy:false});for(const label of ['승인','보류','설명 요청'])assert.equal(button(label).disabled,true)}
+ await render({status:'ready',cards:[card],pending:[{cardID:'card-1'}],busy:false});assert.equal(button('승인').disabled,true);
+ await render({status:'ready',cards:[{...card,state:'submitting',decision:{status:'awaiting_processing'}}],pending:[],busy:false});assert(document.body.textContent?.includes('처리 대기'));assert(!document.body.textContent?.includes('GitHub 승인 반영됨'));
+ await render({status:'signedOut',cards:[],pending:[],busy:false});assert.equal(document.querySelector('article'),null);assert(document.body.textContent?.includes('로그인하면'));
+ // The real customer start screen hides internal approval entry until current-account confirmation.
+ (window as any).acquireVsCodeApi=()=>({postMessage:(m:any)=>posted.push(m),getState:()=>undefined,setState:()=>{}});
+ const {StartPage}=await import('../webview-ui/src/StartPage');
+ await act(async()=>root.render(<StartPage/>));
+ const base={checking:false,version:'test',account:{status:'signedIn',account:{id:'ordinary',display_name:'Customer',email:'safe@example.test'},passes:[]}};
+ const update=async(state:any)=>act(async()=>window.dispatchEvent(new dom.window.MessageEvent('message',{data:{type:'startState',state}})));
+ const entry=()=>[...document.querySelectorAll('.studio-nav button')].find(x=>x.textContent==='확인 요청');
+ await update(base);assert.equal(entry(),undefined);
+ await update({...base,memberApprovals:{entryVisible:false,status:'not_enrolled',cards:[],pending:[],busy:false}});assert.equal(entry(),undefined);
+ await update({...base,memberApprovals:{entryVisible:true,status:'ready',cards:[],pending:[],busy:false}});assert(entry());
+ await act(async()=>entry()!.click());assert.equal(posted.at(-1).type,'memberApprovalRefresh');assert(document.querySelector('dialog.member-approval'));
+ await update({...base,memberApprovals:{entryVisible:false,status:'unavailable',cards:[],pending:[],busy:false}});assert.equal(entry(),undefined);assert.equal(document.querySelector('dialog.member-approval'),null);
+ await update({...base,account:{status:'signedOut'},memberApprovals:{entryVisible:true,status:'ready',cards:[],pending:[],busy:false}});assert.equal(entry(),undefined);
+ assert.equal(posted.filter(p=>p.type==='memberApprovalDecision').length,1,'only the earlier explicit card gesture may decide');
+ console.log('PASS existing webview card: explicit gesture, safe collapsed evidence, expiry/non-member/uncertain disabled, no false approval');
+}finally{await act(async()=>root.unmount());dom.window.close()} }
+main().then(()=>process.exit(0),error=>{console.error(error);process.exit(1)});

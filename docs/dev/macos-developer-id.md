@@ -198,13 +198,70 @@ Apple history before a new attempt. A crash during stapling before its checkpoin
 or after final ZIP creation but before receipt also blocks automatic overwrite;
 retain the failed bytes for diagnosis. A receipt never overwrites an earlier one.
 
+### Durable submission and local-only recovery (#3972)
+
+The workflow first runs `release --stop-after-submit`. That phase signs and
+submits once, records the actual submission ID, ZIP SHA-256 and nonzero byte size,
+then stops before waiting, stapling or writing a final signing receipt. It uploads
+`submitted.zip`, `signed.json`, `submission.json` and `submission-started.json` as
+`hypeproof-studio-macos-signing-recovery-<run-id>-<attempt>` **before** the existing
+20-minute notary wait. The wait/package step runs only after this upload succeeds.
+The existing final JSON evidence upload and isolated-keychain cleanup still run
+on failure. A failed/ambiguous submit remains a failed job; no automatic resubmit
+is added. A checkpoint is not an accepted or release-eligible package.
+
+Cost is nonzero: retain one additional full signed ZIP plus small JSON files for
+14 days, and account for its upload/download and Actions time in the next release
+quote. `submission.json.bytes` and the submitted-phase output record actual ZIP
+size; the artifact metadata gives the stored archive size. Compression level zero
+avoids recompressing the already-compressed ZIP. This change does not authorize a
+new build, extend the wait, reset an attempt/cost ceiling or make a timeout free.
+
+If the runner disappears, an authorized operator may recover only from retained
+exact bytes. First verify the repository, workflow, run/attempt, immutable artifact
+ID and digest through the existing GitHub evidence path. Preserve the original
+checkpoint files; compare `submitted.zip` against the recorded digest before
+extracting into a new isolated directory. For a timeout before stapling:
+
+```bash
+ditto -x -k /isolated/recovery/submitted.zip /isolated/restored
+python3 scripts/release/macos-sign.py resume-local \
+  --app '/isolated/restored/HypeProof Studio.app' --source-sha <original-full-sha> \
+  --evidence /isolated/recovery --output /isolated/local-result \
+  --submission-id <original-submission-uuid> --submitted-sha256 <original-zip-sha256>
+```
+
+The command uses the already-provisioned keychain/notary profile and explicit
+certificate/team environment variables described above. It verifies the original
+bundle/source/team/tree, exact archive and submission ID, then waits on that same
+submission and performs the existing staple, signature, Gatekeeper and final ZIP
+round-trip checks. It never signs a probe or the app, changes the keychain search
+list, recreates a missing submitted archive or submits again. Missing ID, ambiguous
+upload, altered bytes, identity mismatch or invalid provenance refuse recovery.
+The original signed checkpoint is not rewritten. Existing post-staple checkpoint
+and final-artifact immutability guards remain; this is not a general repair tool
+for partially modified apps.
+
+This finish is **local only**: its unchanged receipt schema records
+`provenance.kind: local`, null run IDs and `release_eligible: false`. The command
+refuses execution as an Actions job and cannot inherit the old run's authority.
+It does not satisfy Harness official collect/promotion or two-platform acceptance.
+Official cross-run continuation requires a separate reviewed provenance contract;
+no `GITHUB_*` override or receipt rewrite is a substitute.
+
+The failed run `43471868999`, attempt 2, retained only JSON. Its submitted ZIP
+digest is not the ZIP itself; this repair cannot recover those lost runner bytes,
+even if Apple later reports the submission Accepted. Do not rerun that build as
+an implied recovery.
+
 ## Acceptance and current evidence boundary
 
 Portable controls: `python3 scripts/release/test/test_macos_sign.py` (also in
 `pr-ci.yml`) executes mocked Apple tool processes and validates ordering,
 identity/team/runtime/chain rejection, notarization failures, interrupted wait,
 ambiguous upload, tamper detection, final ZIP round-trip and receipt immutability.
-The release workflow retains checkpoint JSON; the final receipt accompanies
+The release workflow retains the exact submitted ZIP before waiting and checkpoint
+JSON after completion/failure; the final receipt accompanies
 the published candidate. Neither makes acceptance human-approved.
 
 Before the first official release, require actual Developer ID signing and

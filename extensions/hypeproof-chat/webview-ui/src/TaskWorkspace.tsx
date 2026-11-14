@@ -1,9 +1,10 @@
 import { citationKindLabel } from './citationKind';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type CSSProperties } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { TaskSearchPart, TaskSearchResult } from '../../src/taskSearch';
 import { taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
+import { VOICE_LIVE_TASK_TEXT, voiceTaskAccessibleName, windowVoiceLiveTask } from '../../src/voiceLiveTask';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
 import { HeadingSlotContext } from './headingSlot';
@@ -48,6 +49,7 @@ interface Props {
   /** CGP-KNOW-D-002 — the activity's name, drawn as the title above the 작업/자료 tabs (only where the tabs are). */
   activityTitle?: string;
   personalReflection?: boolean;
+  personalMaking?: { scope: string; taskId: string };
   /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
   taskMove?: TaskMoveView;
   children: ReactNode;
@@ -104,7 +106,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, personalReflection = false, taskMove, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, personalReflection = false, personalMaking, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
@@ -148,6 +150,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     savePanelSizes(view.scope, next);
   };
   const [railOpen, setRailOpen] = useState(false);
+  const voiceLiveTaskId = useSyncExternalStore(windowVoiceLiveTask.subscribe, windowVoiceLiveTask.get, windowVoiceLiveTask.get);
   // CGP-KNOW-D-011 — the 내 작품 drawer, opened from the rail; a task or activity change closes it.
   const [worksOpen, setWorksOpen] = useState(false);
   const worksButton = useRef<HTMLButtonElement>(null);
@@ -670,9 +673,12 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           // Only the active task has a run state: tasks never run concurrently, and a stored transcript cannot tell how it ended.
           const state = task.id === view.activeTaskId ? runState : null;
           const metaId = `tw-task-meta-${task.id}`;
+          // CGP-VOICE-R-030 — the conversation with a live voice session (only ever the active task).
+          const voiceLive = voiceLiveTaskId !== null && voiceLiveTaskId === task.id && task.id === view.activeTaskId;
           return <li key={task.id} className={taskMove ? 'tw-task-row' : undefined}>
-          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
+          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={voiceTaskAccessibleName(taskRunAccessibleName(task.title, state), task.title, voiceLive)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title"><TaskMark appearance={task.appearance} />{searching ? <SearchParts parts={markTitleMatches(task.title, railSearch.applied)} /> : task.title}</span>
+            {voiceLive && <span className="tw-task-voice" data-voice-live=""><ChatIcon kind="level" size={16} />{VOICE_LIVE_TASK_TEXT}</span>}
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
@@ -745,6 +751,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
+      {personalMaking?.scope === view.scope && personalMaking.taskId === view.activeTaskId && <div className="tw-making-entry">
+        <button type="button" className="tw-quiet" disabled={blocked} data-testid="personal-making-entry" onClick={() => postToHost({ type: 'beginPersonalMaking' })}>만들기로 이어가기</button>
+      </div>}
       {renaming && renameError && <div id="task-rename-error" className="tw-error" role="alert">{renameError}</div>}
       {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && (unsavedHistory
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskSelect', id: view.activeTaskId! })}>대화 저장 다시 시도</button>

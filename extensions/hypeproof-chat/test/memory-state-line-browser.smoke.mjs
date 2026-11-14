@@ -48,7 +48,7 @@ try {
   ]) {
     const tag = `${seat}${temp ? '-temporary' : ''}-${width}-${dark ? 'dark' : 'light'}${forcedColors ? '-forced' : ''}${minor ? '-minor' : ''}`;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 760, dark, forcedColors });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 760, dark, forcedColors, appReady: true });
     const workspace = { scope: 'ms-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null, ...(temp ? { temporaryTaskId: 'task' } : {}) };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: seat }, profile: { ...chatConfig().profile, lesson: null, ...(minor ? { minor_cohort: true } : {}) }, taskWorkspace: seat === 'personal' ? workspace : undefined });
     const config = seat === 'personal' ? { ...base, memoryState: { folder: MEMORY_FOLDER_LABEL } } : base;
@@ -134,7 +134,7 @@ try {
     const workspace = { scope: 'ms-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace });
     const measure = async (config) => {
-      await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 600, dark, forcedColors });
+      await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 600, dark, forcedColors, appReady: true });
       await send({ type: 'config', config });
       await send({ type: 'history', messages: [] });
       return b.evaluate(sweep);
@@ -156,7 +156,7 @@ try {
   const longName = '여름방학 개인 프로젝트 · 나만의 날씨 알림 웹사이트 만들기 3주차 발표 준비';
   for (const width of [1101, 1200, 1300, 1420]) {
     const vars = Object.entries(THEMES['Dark+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<html style="${vars}"><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 600, dark: true });
+    await b.load(`<html style="${vars}"><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>undefined,setState:()=>{}});</script><script>${script}</script></body></html>`, { width, height: 600, dark: true, appReady: true });
     const workspace = { scope: 'ms-test', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '발표', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
     const base = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal', name: longName }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace });
     await send({ type: 'config', config: { ...base, memoryState: { folder: MEMORY_FOLDER_LABEL } } });
