@@ -18,7 +18,7 @@ export const SKILL_CARD_PROMPT_MAX_LINES = 6;
 export interface SkillCard { name: string; summary: string; prompt: string }
 
 // Control characters, bidi controls, line/paragraph separators and zero-width characters are not a single plain line.
-const UNSAFE_LINE = /[\p{Cc}\p{Cf}  ]/u;
+const UNSAFE_LINE = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
 
 /** Schemes refused even without `//` (the Service's LINK_SCHEMES), plus the `vscode…` and `hypeproof…` prefixes. */
 const LINK_SCHEMES = ["http", "https", "ftp", "ftps", "javascript", "vbscript", "data", "file", "blob", "mailto", "tel", "sms", "intent"];
