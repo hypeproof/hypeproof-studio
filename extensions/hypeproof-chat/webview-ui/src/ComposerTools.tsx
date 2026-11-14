@@ -5,10 +5,11 @@ import { ChatIcon } from './ChatDetails';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
 import { useMenuTypeahead } from './menuTypeahead';
+import { materialsMenuActions, useMaterialsScope } from './MaterialsPanel';
 import { postToHost } from './vscode';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
-export function ComposerTools({ mode, onMode, webSearch, locked, planFirst, onAttach, onAttachFile, onSketch, webSearchItem = true }: {
+export function ComposerTools({ mode, onMode, webSearch, locked, planFirst, onAttach, onAttachFile, onSketch, webSearchItem = true, materials = false }: {
   mode: TurnToolMode;
   onMode: (mode: TurnToolMode) => void;
   webSearch?: { available: boolean; reason?: string };
@@ -21,7 +22,12 @@ export function ComposerTools({ mode, onMode, webSearch, locked, planFirst, onAt
   onSketch?: () => void;
   /** False on a classroom seat, whose menu carries only the file item. */
   webSearchItem?: boolean;
+  /** Compact coach layout: 파일 넣기 and 주소 넣기 (https), acting on the surrounding MaterialsScope. */
+  materials?: boolean;
 }) {
+  const scope = useMaterialsScope();
+  // Without the host's list (not answered yet, or the snapshot failed) the two entries are not offered: a press could show nothing.
+  const materialsActions = materials && scope?.view ? materialsMenuActions(scope) : null;
   const [open, setOpen] = useState(false);
   const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
@@ -47,6 +53,8 @@ export function ComposerTools({ mode, onMode, webSearch, locked, planFirst, onAt
       {onAttach && <button type="button" role="menuitem" onClick={() => { close(); onAttach(); }}><ChatIcon kind="image" /><span>이미지 첨부<small>이 메시지에 사진이나 화면 추가</small></span></button>}
       {onSketch && <button type="button" role="menuitem" onClick={() => { close(); onSketch(); }}><ChatIcon kind="image" /><span>그려서 보여주기<small>그림을 그려 이 메시지에 붙여요</small></span></button>}
       {onAttachFile && <button type="button" role="menuitem" onClick={() => { close(); onAttachFile(); }}><ChatIcon kind="file" /><span>작업 폴더 파일 붙이기<small>글로 된 파일 내용을 다음 메시지에 함께 보내요</small></span></button>}
+      {materialsActions && <button type="button" role="menuitem" data-material-add-file="" aria-disabled={scope?.busy || undefined} onClick={() => { if (scope?.busy) return; close(); materialsActions.addFile(); }}><ChatIcon kind="file" /><span>파일 넣기<small>이 활동의 자료로 넣어요. 고른 것만 AI에게 보내요</small></span></button>}
+      {materialsActions && <button type="button" role="menuitem" onClick={() => { close(); materialsActions.openUrl(); }}><ChatIcon kind="link" /><span>주소 넣기 (https)<small>웹 주소를 자료로 넣어요</small></span></button>}
       {planFirst && <button type="button" role="menuitemcheckbox" aria-checked={planFirst.on} aria-disabled={planFirst.locked} onClick={() => {
         if (planFirst.locked) return;
         postToHost({ type: 'planFirstSet', on: !planFirst.on }); close(); root.current?.closest('.hps-input')?.querySelector('textarea')?.focus({ preventScroll: true });

@@ -94,6 +94,11 @@ sim_app=DerivedData/Build/Products/Debug-iphonesimulator/HPStudio.app
 codesign -d --entitlements :- "$sim_app" > ../evidence/simulator-entitlements.plist 2> ../evidence/simulator-signature.log || true
 journey_status=0
 python3 ../scripts/collect-native-journeys.py --source-sha "${GITHUB_SHA:-$(git rev-parse HEAD)}" --build-log ../evidence/device-build.log --build-exit "$build_status" --simulator-log ../evidence/simulator-test.log --test-exit "$test_status" --output ../evidence/native-journeys.json || journey_status=$?
+# Hop-by-hop signed-in journey record for this exact source. Always written, never fatal here:
+# a failing case already fails the suite above, and PARTIAL/NOT_RUN only restricts external distribution.
+signin_status=0
+python3 ../scripts/collect-signin-journey.py --source-sha "${NATIVE_SOURCE_HEAD:-${GITHUB_SHA:-$(git rev-parse HEAD)}}" --run-id "${GITHUB_RUN_ID:-1}" --run-attempt "${GITHUB_RUN_ATTEMPT:-1}" --simulator-log ../evidence/simulator-test.log --test-exit "$test_status" --output ../evidence/signin-journey.json || signin_status=$?
+printf 'signin_journey_collect_exit=%s\n' "$signin_status" >> ../evidence/attachment-export.log
 if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
 if [ "$journey_status" -ne 0 ]; then exit "$journey_status"; fi
 if [ "$attachment_status" -ne 0 ]; then exit "$attachment_status"; fi
