@@ -288,10 +288,10 @@ const OLD_SCREENS = {
 const BASE = {
   // Re-recorded for CGP-CHAT-R-004 (TZ=UTC): a non-personal ChatPanel draws the 계획 먼저 chip in the composer's button row;
   // that button is the only markup change, so the composer height is unchanged (the personal seat uses the tools menu).
-  "ChatPanel/adult-plain": "6a8621fc7b6b454332e60be1e4a7f2177f5ecde7f72b7b02cc6acf1d17540f7b",
-  "ChatPanel/adult-effort-observed": "c96c21159941626b367e6a6f34982f795ebc2cd31ad7186a83fd92e313b8f8ea",
-  "ChatPanel/adult-timeline": "c3dee67fe98dd768e720e1b9719503f56ca5960cdfa5ec2daf9a739b280e58ad",
-  "ChatPanel/kids": "30789eb22060cf8c229396d82b8aa28c0e32ade1fed6487d11df39d76f29ac89",
+  "ChatPanel/adult-plain": "6181515e66b64733b81c94a8ec91ff20bba9636d15f366e2fe896ad39fb3ca86",
+  "ChatPanel/adult-effort-observed": "6fbeb5cefefc320fa509140c52dc2e15c71a4a79fc6c97ffc3d8a6fd3b7710e7",
+  "ChatPanel/adult-timeline": "900a83a1fce22a5b7123bca3e994b9716df6517510951f9fa5f001ae2c037e05",
+  "ChatPanel/kids": "52e0d3fb7b71ff65129afc5cf4802f8cf94994bb7404f63de9ec173892bfc2d2",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -311,8 +311,11 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "0a8d2e6516e1134d4865b87385e1add40a545a9e22c51c3d73b25b9a50d6674e",
-  "ChatPanel/classroom-access-unknown": "e2dfd4b3ab0e7ee2d7dc5f95aadd695a74aa4268c4c28334da1751d7e3ad1748",
+  // Re-recorded for CGP-SHELL-R-019 (#4086, TZ=UTC): the six ChatPanel screens' lesson tip row now also draws the
+  // 팁 그만 보기 button. Diffed against origin/main 7e8e1fafb with HPS_A5_DUMP_DIR: that one added element is the
+  // only change on each screen; the five EffortControl digests are unchanged.
+  "ChatPanel/classroom-class-funded": "21843491c17c4a9fde63d2ad9bf473ae704e9678d5e67ab9bee7c9fdf9258e40",
+  "ChatPanel/classroom-access-unknown": "e5e512778ba3c32429332d2473ea3a6dfd13d0adffa41bc1d5ffa400d0b208ce",
 };
 
 const status = rendererStatus();
