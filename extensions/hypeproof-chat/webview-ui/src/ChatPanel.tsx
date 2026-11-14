@@ -172,6 +172,7 @@ interface Props {
    * — that was what split the screen into two blocks.
    */
   messages: ChatMessage[];
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — e.g. the deck PDF's 폴더에서 보기
   pageNotice: string | null;           // #308 — inline notice for "페이지를 코치에게"
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
   annotationsEnabled?: boolean;
@@ -2203,6 +2204,15 @@ export function ChatPanel(props: Props) {
           <div className="hps-page-notice" role="status" aria-live="polite">
             {/* REQ-STUDIO-STROKE-ICONS: the host's leading glyph becomes a stroke icon. */}
             {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
+          </div>
+        )}
+        {/* CGP-ART-R-023 (REQ-ART-23 (2)) — the notice's one quiet action, outside its polite region so the region reads only the
+            sentence. The host decides which file it shows and checks it again before the OS call. */}
+        {props.pageNotice && props.pageNoticeAction?.kind === "deckPdfReveal" && (
+          <div className="hps-page-notice-actions">
+            <button type="button" className="hp-cta-quiet" data-page-notice-action="deckPdfReveal"
+              aria-label={`${props.pageNoticeAction.label}: ${props.pageNoticeAction.name}`}
+              onClick={() => postToHost({ type: "deckPdfReveal" })}>{props.pageNoticeAction.label}</button>
           </div>
         )}
 
