@@ -31,6 +31,13 @@ public final class QuestionActivity extends Activity {
     private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
     private ReflectionStorage storage;
     private ReflectionModel model;
+    private NativeTeamModel team;
+    private NativeDeviceSignIn.Credentials teamIdentity;
+    private LinearLayout teamEntry,teamContent;
+    private TextView greeting;
+    private Button questionsEntry,approvalsEntry;
+    private AlertDialog teamDialog;
+    private boolean approvalDialog;
     private NativeVoice voice;
     private LinearLayout root,messages,actions,voiceActions,body;
     private EditText composer;
@@ -71,6 +78,7 @@ public final class QuestionActivity extends Activity {
                 update();
             }
         });
+        team=new NativeTeamModel(()->model.credentials,http,worker,r->handler.post(r),storage,()->{update();renderTeamDialog();});
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
         if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
@@ -79,9 +87,9 @@ public final class QuestionActivity extends Activity {
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
     @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
     @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
-    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();super.onStop();}
+    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
-    @Override protected void onDestroy(){if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);}
     private LinearLayout column(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);return c;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(ink);t.setPadding(0,dp(6),0,dp(8));if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
@@ -106,6 +114,9 @@ public final class QuestionActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v,insets)->{int bottom=insets.getSystemWindowInsetBottom();if(Build.VERSION.SDK_INT>=30)bottom=Math.max(insets.getInsets(WindowInsets.Type.systemBars()).bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);v.setPadding(dp(16),insets.getSystemWindowInsetTop()+dp(4),dp(16),bottom+dp(8));return insets;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setBaselineAligned(false);
         TextView title=text("HP Studio",18,true);title.setPadding(dp(4),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));header.addView(iconButton("메뉴",R.drawable.ic_conversation_menu,this::menu));root.addView(header);
+        teamEntry=column();greeting=text("안녕하세요.",14,false);greeting.setContentDescription("계정 인사");teamEntry.addView(greeting);
+        LinearLayout entries=new LinearLayout(this);questionsEntry=button("도착한 질문",()->openTeam(false));approvalsEntry=button("확인 요청",()->openTeam(true));
+        entries.addView(questionsEntry,new LinearLayout.LayoutParams(0,-2,1));entries.addView(approvalsEntry,new LinearLayout.LayoutParams(0,-2,1));teamEntry.addView(entries);root.addView(teamEntry);
         messages=column();timeline=new ConversationScroll(this,messages);body=column();body.setPadding(dp(4),dp(24),dp(4),dp(20));
         heading=text(ReflectionState.OPENING,24,true);heading.setLineSpacing(dp(3),1);if(Build.VERSION.SDK_INT>=29)heading.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);
         hint=text(ReflectionState.HINT,14,false);hint.setTextColor(muted);body.addView(heading);body.addView(hint);body.addView(messages);timeline.addView(body);
@@ -140,7 +151,14 @@ public final class QuestionActivity extends Activity {
     }
     private void update(){
         if(isDestroyed()||model==null)return;
+        if(team!=null&&!NativeTeamModel.same(teamIdentity,model.credentials)){
+            team.invalidate();if(teamDialog!=null)teamDialog.dismiss();teamIdentity=model.credentials;
+            if(teamIdentity!=null)team.profile(teamIdentity);
+        }
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
+        teamEntry.setVisibility(model.account()!=null&&!composer.hasFocus()&&!voice.session.active()?View.VISIBLE:View.GONE);
+        greeting.setText(team==null||team.displayName.isEmpty()?"안녕하세요.":"안녕하세요, "+team.displayName+"님.");
+        questionsEntry.setEnabled(!model.busy&&!model.readOnly);approvalsEntry.setEnabled(!model.busy&&!model.readOnly);
         timeline.beforeContentChange();
         ReflectionState s=model.state;heading.setText(s==null?ReflectionState.OPENING:s.opening);hint.setText(s==null?"로그인 전에는 이 기기에만 저장돼요.":s.hint);
         body.setGravity(s!=null&&s.messages.length()>0?Gravity.TOP:Gravity.BOTTOM);heading.setVisibility(s!=null&&s.messages.length()>0?View.GONE:View.VISIBLE);hint.setVisibility(composer.hasFocus()||(s!=null&&s.messages.length()>0)?View.GONE:View.VISIBLE);
@@ -193,6 +211,54 @@ public final class QuestionActivity extends Activity {
             }
         }
         updateVoiceReply();
+    }
+    private void openTeam(boolean approvals){
+        if(team==null||model.credentials==null||model.busy)return;
+        stopVoice();composer.clearFocus();approvalDialog=approvals;
+        ScrollView scroll=new ScrollView(this);teamContent=column();teamContent.setPadding(dp(20),dp(8),dp(20),dp(12));scroll.addView(teamContent);
+        teamDialog=new AlertDialog.Builder(this).setTitle(approvals?"확인 요청":"도착한 질문").setView(scroll).setNegativeButton("닫기",null).create();
+        teamDialog.setOnDismissListener(d->{team.dismiss();teamDialog=null;teamContent=null;});teamDialog.show();
+        model.withCurrentAccount(c->{if(teamDialog==null)return;if(approvals)team.approvals(c);else team.questions(c);});
+        renderTeamDialog();
+    }
+    private void renderTeamDialog(){
+        if(teamDialog==null||teamContent==null||!teamDialog.isShowing())return;
+        teamContent.removeAllViews();if(!team.message.isEmpty())teamContent.addView(text(team.message,15,false));
+        if(approvalDialog){
+            for(NativeApprovalCard item:team.approvals){try{
+                JSONObject source=item.json.getJSONObject("source"),brief=item.json.getJSONObject("brief");
+                teamContent.addView(text(source.getString("repo")+" #"+source.getLong("pr"),14,true));
+                String summary=brief.getJSONArray("authored").getString(0);if(summary.startsWith("summary: "))summary=summary.substring(9);
+                TextView change=text(summary,16,false);change.setMaxLines(3);change.setEllipsize(android.text.TextUtils.TruncateAt.END);teamContent.addView(change);
+                teamContent.addView(text("검토 담당자로 지정됐어요. "+item.status(),13,false));
+                LinearLayout choices=new LinearLayout(this);
+                String[] labels={"승인","보류","설명 요청"},values={"approve","reject","question"};
+                for(int i=0;i<labels.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.decide(c,item,choice)));b.setEnabled(!model.busy&&!team.busy&&team.availability.equals("ready")&&!team.pending.contains(item.id)&&item.canDecide());choices.addView(b,new LinearLayout.LayoutParams(0,-2,1));}teamContent.addView(choices);
+                LinearLayout evidence=column();evidence.setVisibility(View.GONE);String head=source.getString("head");
+                teamContent.addView(button("설명과 근거 "+head.substring(0,7),()->evidence.setVisibility(evidence.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE)));
+                evidence.addView(text("정확한 버전\n"+head,13,false));
+                for(String family:new String[]{"authored","verified"}){evidence.addView(text(family.equals("authored")?"작성자가 설명한 변경":"검증된 근거",14,true));JSONArray facts=brief.getJSONArray(family);for(int i=0;i<facts.length();i++)evidence.addView(text(facts.getString(i),14,false));}
+                teamContent.addView(evidence);
+                JSONObject review=item.json.optJSONObject("review");if(review!=null)teamContent.addView(button("GitHub에 반영된 승인 보기",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(review.optString("html_url"))));}catch(ActivityNotFoundException ignored){}}));
+            }catch(JSONException e){teamContent.addView(text("요청 정보를 표시하지 못했어요. 새로고침해 주세요.",14,false));}}
+        }else if(team.question!=null){
+            NativeAccountCard card=team.question;JSONObject j=card.json;
+            try{
+                for(String key:new String[]{"title","preface","prompt"})if(!j.isNull(key))teamContent.addView(text(j.getString(key),key.equals("prompt")?20:15,key.equals("prompt")));
+                JSONArray segments=j.getJSONArray("segments");for(int i=0;i<segments.length();i++){JSONObject segment=segments.getJSONObject(i);if(!segment.isNull("label"))teamContent.addView(text(segment.getString("label"),13,true));teamContent.addView(text(segment.getString("text"),16,false));}
+                JSONArray choices=j.getJSONArray("choices");for(int i=0;i<choices.length();i++){JSONObject choice=choices.getJSONObject(i);String id=choice.getString("id");Button b=button(choice.getString("label")+(id.equals(team.choice)?" ✓":""),()->{if(j.optString("select").equals("tap"))model.withCurrentAccount(c->team.answer(c,null,id,false));else{team.choice=id;renderTeamDialog();}});b.setEnabled(!team.busy&&card.available());teamContent.addView(b);}
+                JSONObject input=j.optJSONObject("text");if(input!=null){teamContent.addView(text(input.getString("label"),14,true));EditText answer=new EditText(this);answer.setTextColor(ink);answer.setHintTextColor(muted);answer.setTextSize(17);answer.setMinHeight(dp(56));answer.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);answer.setHint(input.getString("placeholder"));answer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(input.getInt("max"))});answer.setText(team.words);answer.setEnabled(!team.busy);answer.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){team.words=s.toString();}public void afterTextChanged(Editable e){}});teamContent.addView(answer);}
+                JSONArray actions=j.getJSONArray("actions");for(int i=0;i<actions.length();i++){JSONObject action=actions.getJSONObject(i);String id=action.getString("id");Button b=button(action.getString("label"),()->model.withCurrentAccount(c->team.answer(c,id,null,false)));b.setEnabled(!team.busy&&card.available());teamContent.addView(b);}
+                if(!j.isNull("skip")){Button skip=button(j.getString("skip"),()->model.withCurrentAccount(c->team.answer(c,null,null,true)));skip.setEnabled(!team.busy);teamContent.addView(skip);}
+                if(!j.isNull("note"))teamContent.addView(text(j.getString("note"),13,false));
+                team.presented();
+            }catch(JSONException e){teamContent.addView(text("질문을 표시하지 못했어요. 새로고침해 주세요.",14,false));}
+        }
+        if(!approvalDialog&&team.canStart){
+            String[] labels={"목표를 정리하고 싶어요","방법이 막혔어요","결정을 앞두고 있어요"},values={"goal","method","decision"};
+            for(int i=0;i<values.length;i++){String choice=values[i];Button b=button(labels[i],()->model.withCurrentAccount(c->team.begin(c,choice)));b.setEnabled(!team.busy&&!model.busy);teamContent.addView(b);}
+        }
+        Button refresh=button("새로고침",()->model.withCurrentAccount(c->{if(approvalDialog)team.approvals(c);else team.questions(c);}));refresh.setEnabled(!team.busy&&!model.busy);teamContent.addView(refresh);
     }
     private void addMessage(String label,String value,String id){
         boolean user=label.equals("나의 생각")||label.equals("전송 확인이 필요한 내 생각");

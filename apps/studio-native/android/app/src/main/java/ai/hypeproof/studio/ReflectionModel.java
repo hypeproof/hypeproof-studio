@@ -134,6 +134,7 @@ final class ReflectionModel {
         });
     }
     void refresh(){authorized(()->request("/me/reflection",null,false));}
+    void withCurrentAccount(Consumer<NativeDeviceSignIn.Credentials> action){authorized(()->{if(credentials!=null)action.accept(credentials);});}
     boolean send(){
         if(busy||state==null||state.outstanding()||draft.trim().isEmpty()||readOnly)return false;
         if(!save(ReflectionState::enqueue)){changed.run();return false;}

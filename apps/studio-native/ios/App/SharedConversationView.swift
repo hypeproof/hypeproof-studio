@@ -52,6 +52,7 @@ struct SharedConversationView: View {
     }
     @StateObject private var model = SharedConversationModel()
     @StateObject private var voice = VoiceController()
+    @State private var showQuestions = false
     @Environment(\.scenePhase) private var phase
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
@@ -84,6 +85,25 @@ struct SharedConversationView: View {
                 else { timeline }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if model.signedIn && model.isReflection && !focused && !voice.isActive {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName.map { "안녕하세요, \($0)님." } ?? "안녕하세요.")
+                            .font(.subheadline).accessibilityIdentifier("accountGreeting")
+                        HStack {
+                            Button { voice.stop(); focused = false; showQuestions = true } label: {
+                                Label("도착한 질문", systemImage: "text.bubble").frame(minHeight: 44)
+                            }.accessibilityIdentifier("accountQuestionsEntry")
+                            if model.approvalEntryVisible {
+                                Button { voice.stop(); focused = false; showApprovals = true } label: {
+                                    Label("확인 요청", systemImage: "checkmark.bubble").frame(minHeight: 44)
+                                }.accessibilityIdentifier("accountApprovalsEntry")
+                            }
+                        }.buttonStyle(.bordered).disabled(model.loggingOut)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 4)
+                        .background(ConversationStyle.canvas)
+                }
+            }
             .background(ConversationStyle.canvas)
             .navigationTitle(!model.signedIn || model.isReflection ? "나의 질문" : model.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -118,7 +138,7 @@ struct SharedConversationView: View {
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop(reason: .routeChanged) }
         }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
-        .onChange(of: model.signedIn) { _, _ in voice.stop(reason: .scopeChanged) }
+        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -133,6 +153,7 @@ struct SharedConversationView: View {
         lifecycleContent
         .onChange(of: model.approvalEntryVisible) { _, visible in if !visible { showApprovals = false } }
         .sheet(isPresented: $showApprovals) { MemberApprovalView(model: model.approvals) }
+        .sheet(isPresented: $showQuestions) { AccountQuestionView(model: model.questions) }
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif

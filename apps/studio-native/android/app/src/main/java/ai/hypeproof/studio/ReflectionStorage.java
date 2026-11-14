@@ -11,7 +11,7 @@ import javax.crypto.*;
 import javax.crypto.spec.GCMParameterSpec;
 
 /** App-private, no-backup files; only Keystore-encrypted credentials survive process death. */
-final class ReflectionStorage implements ReflectionModel.Store {
+final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.Store {
     private final File directory;
     private final String alias;
     ReflectionStorage(Context context){directory=new File(context.getNoBackupFilesDir(),"reflection");alias=context.getPackageName()+".reflection-account-v1";}
@@ -38,6 +38,12 @@ final class ReflectionStorage implements ReflectionModel.Store {
     }
     public ReflectionState load(String account) throws Exception {byte[] b=read(name(account),4194304);return b==null?new ReflectionState(account):new ReflectionState(account,ReflectionState.decode(b));}
     public void save(ReflectionState state) throws Exception {byte[] bytes=ReflectionState.encode(state.json().toString());if(bytes.length>4194304)throw new IOException("storage_limit");write(name(state.account),bytes);}
+    public JSONArray loadApprovalPending(String account)throws Exception {
+        name(account);byte[] bytes=read("approval-"+account+".json",262144);return bytes==null?new JSONArray():new JSONArray(ReflectionState.decode(bytes));
+    }
+    public void saveApprovalPending(String account,JSONArray pending)throws Exception {
+        name(account);byte[] bytes=ReflectionState.encode(pending.toString());if(pending.length()>50||bytes.length>262144)throw new IOException("storage_limit");write("approval-"+account+".json",bytes);
+    }
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
     private javax.crypto.SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);

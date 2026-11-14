@@ -86,6 +86,7 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
     @Published private(set) var showsSyncProgress = false
+    @Published private(set) var displayName: String?
     @Published private(set) var loggingOut = false
     @Published private(set) var stoppingReflection = false
     private var reflectionCredential: Task<String, Error>?
@@ -102,6 +103,23 @@ private struct SharedCacheFile: Codable {
     @Published private var editing: [String: [String: [String: String]]] = [:]
     private var account: StoredAccount?
     private let tokenFlight = AccountTokenRefreshFlight()
+    lazy var questions: AccountQuestionPresentation = {
+        let presentation = AccountQuestionPresentation()
+        presentation.controller = AccountQuestionController(identity: { [weak self] in try await self?.approvalIdentity() }, load: { [weak self] binding in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.service.accountQuestion(token)
+        }, act: { [weak self] binding, key, action, body in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            return try await self.service.accountQuestionAction(key, action: action, body: body, token: token)
+        }, start: { [weak self] binding, id, choice in
+            guard let self else { throw CancellationError() }
+            let token = try await self.approvalToken(binding)
+            try await self.service.startAccountQuestion(id: id, choice: choice, token: token)
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
     lazy var approvals: MemberApprovalPresentation = {
         let presentation = MemberApprovalPresentation()
         presentation.controller = MemberApprovalController(identity: { [weak self] in try await self?.approvalIdentity() }, list: { [weak self] binding in
@@ -144,6 +162,17 @@ private struct SharedCacheFile: Codable {
             guard let self, self.epoch == attempt, self.signedIn else { return }
             await self.approvals.controller?.discover()
         }
+        Task { [weak self] in await self?.refreshDisplayName(attempt: attempt) }
+    }
+    private func refreshDisplayName(attempt: UUID) async {
+        guard let before = account else { return }
+        do {
+            let credential = try await token()
+            let profile = try await service.accountProfile(credential, sessionID: before.tokens.session_id)
+            guard epoch == attempt, signedIn, account?.accountID == before.accountID,
+                  account?.tokens.session_id == before.tokens.session_id, profile.id == before.accountID else { return }
+            displayName = profile.displayName
+        } catch { /* Greeting availability never blocks conversation or grants membership. */ }
     }
     private func approvalDirectory(_ account: String) throws -> URL {
         guard StoredAccount.validID(account) else { throw SyncFailure.invalidResponse }
@@ -151,15 +180,15 @@ private struct SharedCacheFile: Codable {
         return directory.appendingPathComponent("approval-decisions", isDirectory: true).appendingPathComponent(key, isDirectory: true)
     }
     private func approvalIdentity() async throws -> MemberApprovalIdentity? {
-        guard signedIn, let before = account else { return nil }
+        guard signedIn, !loggingOut, let before = account else { return nil }
         let attempt = epoch, credential = try await token()
         let returned = try await service.accountID(credential, sessionID: before.tokens.session_id)
-        guard epoch == attempt, signedIn, let current = account, current.accountID == returned, current.accountID == before.accountID, current.tokens.session_id == before.tokens.session_id else { throw CancellationError() }
+        guard epoch == attempt, signedIn, !loggingOut, let current = account, current.accountID == returned, current.accountID == before.accountID, current.tokens.session_id == before.tokens.session_id else { throw CancellationError() }
         return MemberApprovalIdentity(accountID: returned, sessionID: current.tokens.session_id)
     }
     private func approvalToken(_ binding: MemberApprovalIdentity) async throws -> String {
         let attempt = epoch, credential = try await token()
-        guard epoch == attempt, signedIn, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { throw CancellationError() }
+        guard epoch == attempt, signedIn, !loggingOut, account?.accountID == binding.accountID, account?.tokens.session_id == binding.sessionID else { throw CancellationError() }
         return credential
     }
     private var operation: Task<Void, Never>?
@@ -379,7 +408,8 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); account = value; signedIn = true; acquired = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); displayName = nil
+                account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
                 // guest writing. This changes a local draft, never the outbox.
@@ -429,6 +459,8 @@ private struct SharedCacheFile: Codable {
         }
     }
     private func clearAccount() {
+        displayName = nil
+        questions.controller?.invalidate()
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -706,7 +738,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate()
+        approvals.invalidate(); questions.controller?.invalidate()
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -739,6 +771,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
+                questions.controller?.invalidate(); displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

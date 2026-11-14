@@ -265,19 +265,46 @@ public final class ConversationService: @unchecked Sendable {
         try tokens.validate(); return tokens
     }
     public func accountID(_ token: String, sessionID: String? = nil) async throws -> String {
+        try await accountProfile(token, sessionID: sessionID).id
+    }
+    public func accountProfile(_ token: String, sessionID: String? = nil) async throws -> (id: String, displayName: String?) {
         let (data, _) = try await request("/v1/me", token: token)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let account = object["account"] as? [String: Any], let id = account["id"] as? String,
               StoredAccount.validID(id), account["status"] as? String == "active",
               let returnedSession = object["session_id"] as? String, StoredAccount.validID(returnedSession),
               sessionID == nil || sessionID == returnedSession else { throw SyncFailure.invalidResponse }
-        return id
+        let name = (account["display_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (id, name.flatMap { !$0.isEmpty && $0.count <= 100 && !$0.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) ? $0 : nil })
     }
     public func refresh(_ refreshToken: String) async throws -> AccountTokens {
         let (data, _) = try await request("/v1/auth/refresh", method: "POST", body: ["refresh_token": refreshToken])
         return try JSONDecoder().decode(AccountTokens.self, from: data)
     }
     public func logout(_ token: String) async throws { _ = try await request("/v1/auth/logout", method: "POST", body: [:], token: token) }
+    public func accountQuestion(_ token: String) async throws -> AccountQuestion? {
+        struct Envelope: Decodable { let card: AccountQuestion? }
+        let (data, _) = try await request("/v1/me/cards?surface=mobile", token: token)
+        let value = try JSONDecoder().decode(Envelope.self, from: data).card
+        try value?.validate(); return value
+    }
+    public func startAccountQuestion(id: String, choice: String, token: String) async throws {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id, ["goal", "method", "decision"].contains(choice) else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/question-triggers", method: "POST", body: ["schema": "hps-question-trigger/1", "id": id, "kind": "choice", "source_id": id, "source_revision": 1, "choice": choice], token: token)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              result["schema"] as? String == "hps-question-trigger/1", let key = result["key"] as? String, AccountQuestion.validKey(key),
+              let source = result["source"] as? [String: Any], source["kind"] as? String == "choice", source["id"] as? String == id, source["revision"] as? Int == 1,
+              let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
+              result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }
+    }
+    public func accountQuestionAction(_ key: String, action: String, body: [String: String], token: String) async throws -> String {
+        guard AccountQuestion.validKey(key), ["shown", "answer", "skip"].contains(action), body["surface"] == "mobile" else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/cards/" + key + "/" + action, method: "POST", body: body, token: token)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], object["ok"] as? Bool == true else { throw SyncFailure.invalidResponse }
+        if action == "shown" { return "" }
+        guard let message = object[action == "answer" ? "thanks" : "message"] as? String, !message.isEmpty, message.count <= 4000, !message.contains("\0") else { throw SyncFailure.invalidResponse }
+        return message
+    }
     public func approvalInbox(_ token: String) async throws -> MemberApprovalInbox {
         let (data, _) = try await request("/v1/me/approval-inbox", token: token)
         let value = try JSONDecoder().decode(MemberApprovalInbox.self, from: data); try value.validate(); return value

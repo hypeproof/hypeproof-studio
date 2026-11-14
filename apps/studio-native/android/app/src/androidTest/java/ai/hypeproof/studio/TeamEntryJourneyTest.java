@@ -1,0 +1,78 @@
+package ai.hypeproof.studio;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.os.Build;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import org.json.*;
+import org.junit.*;
+import org.junit.runner.RunWith;
+import java.io.*;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.concurrent.atomic.*;
+import java.util.function.BooleanSupplier;
+import static org.junit.Assert.*;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.*;
+import static androidx.test.espresso.assertion.ViewAssertions.*;
+import static androidx.test.espresso.matcher.ViewMatchers.*;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+
+/** Real Activity / Keystore / AtomicFile; controlled Service contract, no live approval. */
+@RunWith(AndroidJUnit4.class)
+public class TeamEntryJourneyTest {
+    private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
+    private final AtomicInteger triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
+    @Before public void setup()throws Exception {
+        Assume.assumeTrue(Build.FINGERPRINT.contains("generic")||Build.MODEL.contains("sdk_gphone"));
+        context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File dir=new File(context.getNoBackupFilesDir(),"reflection");if(dir.isDirectory())for(File f:Objects.requireNonNull(dir.listFiles()))Files.delete(f.toPath());
+        store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        ReflectionState state=new ReflectionState("team-account");state.draft="아직 보내지 않은 내 생각";store.save(state);
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            assertEquals("synthetic-access",bearer);
+            if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","team-account","account_status","active","session_id","team-session","display_name","지윤"));
+            if(path.equals("/me/reflection"))return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+            if(path.equals("/me/approval-inbox"))return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-member-approval-inbox/1","availability","ready","cards",new JSONArray().put(approval())));
+            if(path.equals("/me/cards?surface=mobile"))return new NativeDeviceSignIn.Reply(200,Map.of("card",triggers.get()==0?JSONObject.NULL:question()));
+            if(path.equals("/me/question-triggers")){
+                assertEquals("method",body.get("choice"));assertEquals(body.get("id"),body.get("source_id"));assertEquals("1",body.get("source_revision"));triggers.incrementAndGet();
+                return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-question-trigger/1","key","team:fixture","source",new JSONObject().put("kind","choice").put("id",body.get("id")).put("revision",1),"reentry",new JSONObject().put("method","GET").put("path","/v1/me/cards"),"model_calls",0));
+            }
+            if(path.endsWith("/shown")){shown.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true));}
+            if(path.endsWith("/answer")){assertEquals("next",body.get("choice"));assertEquals("mobile",body.get("surface"));answers.incrementAndGet();return new NativeDeviceSignIn.Reply(200,Map.of("ok",true,"thanks","다음 생각을 남겼어요"));}
+            if(path.endsWith("/decisions"))decisions.incrementAndGet();if(path.equals("/me/reflection/turns"))turns.incrementAndGet();
+            throw new IOException("No other Service effects in this fixture");
+        };
+    }
+    @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
+    private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
+    private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
+        AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
+    }
+    private void screenshot(String name)throws Exception{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}image.recycle();}
+    @Test public void signedInGreetingOpensRealCardsAndKeepsConversationDraft()throws Exception{
+        app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));
+        onView(withText("안녕하세요, 지윤님.")).check(matches(isCompletelyDisplayed()));
+        onView(withText("확인 요청")).check(matches(isCompletelyDisplayed())).perform(click());settled(t->!t.busy&&t.approvals.size()==1);
+        onView(withText("새 질문을 바로 볼 수 있어요")).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withText("승인")).inRoot(isDialog()).check(matches(isEnabled()));assertEquals(0,decisions.get());screenshot("android-team-direct-approval");
+        onView(withText("설명과 근거 aaaaaaa")).inRoot(isDialog()).perform(scrollTo(),click());
+        onView(withText("정확한 버전\n"+"a".repeat(40))).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);assertEquals(0,triggers.get());
+        onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
+        onView(withText("지금 바꿔 볼 작은 방법은 무엇인가요?")).inRoot(isDialog()).check(matches(isDisplayed()));assertEquals(1,triggers.get());assertEquals(0,answers.get());screenshot("android-team-question");
+        onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(1,answers.get());
+        onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));
+        assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));assertEquals(1,triggers.get());assertEquals(1,answers.get());assertEquals(0,turns.get());
+        onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));screenshot("android-team-greeting-restored");
+    }
+    private static JSONObject question()throws Exception{return new JSONObject().put("schema","hps-card/1").put("key","team:fixture").put("kind","team:choice").put("attempt",1).put("expires_at",System.currentTimeMillis()+60000).put("prompt","지금 바꿔 볼 작은 방법은 무엇인가요?").put("segments",new JSONArray()).put("choices",new JSONArray().put(new JSONObject().put("id","next").put("label","한 가지 바꿔 볼게요"))).put("select","tap").put("text",JSONObject.NULL).put("actions",new JSONArray()).put("skip","나중에");}
+    private static JSONObject approval()throws Exception{long now=System.currentTimeMillis()/1000;return new JSONObject().put("id","review-fixture").put("request_digest","d".repeat(64)).put("source",new JSONObject().put("repo","hypeproof/hypeproof-studio").put("pr",4111).put("head","a".repeat(40)).put("base","b".repeat(40)).put("policy_digest","c".repeat(64)).put("evidence_digest","e".repeat(64)).put("context_digest","f".repeat(64))).put("reviewer","synthetic-reviewer").put("brief",new JSONObject().put("authored",new JSONArray().put("summary: 새 질문을 바로 볼 수 있어요")).put("verified",new JSONArray().put("실제 기기 검증 전"))).put("state","pending").put("created_at",now-10).put("expires_at",now+600).put("lease_expires_at",now+50).put("can_decide",true).put("unavailable_reason",JSONObject.NULL).put("decision",JSONObject.NULL).put("review",JSONObject.NULL);}
+}
