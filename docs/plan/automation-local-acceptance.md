@@ -3,7 +3,8 @@
 Confirmed by TJ on 2026-10-14. Extends Epic #1603 / issue #1604 and
 `apps-script-quests.md`; implementation and observed acceptance are separate.
 
-The paid-product quality target is KRW 50,000/month, not a billing-price change.
+The quality bar is a product a working adult would rely on every week; it sets no Studio price
+(Studio is free since 2026-11-11).
 The learner explains their own work, answers one focused question at a time,
 and builds a reusable email skill while a dependency graph in the existing
 preview area advances from host-observed outcomes. Google connection is reused.

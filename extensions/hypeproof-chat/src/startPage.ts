@@ -24,6 +24,7 @@ import { parseStartSettingWrite, startSettingsView, type StartSettingsView } fro
 import { TEXT_SIZE_KEY } from "./textSize";
 import type { ActivityResume } from './studioNavigation';
 import { MemberApprovalController, parseApprovalPending } from './memberApproval';
+import { isChildSeat, childRefusalNow } from "./childProfile";
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -773,6 +774,14 @@ export class StartPage {
   }
   /** REQ-L12 ⑤ — the recovery intents for a legacy order. There is no way to start a new order here. */
   private async handlePurchase(msg: StartRequest): Promise<void> {
+    // GRD-10 — a child seat never continues a legacy purchase (reopen, retry). Cancel and hide still work; a saved order is kept.
+    const childRefusal = msg.type === "purchaseCancel" || msg.type === "purchaseHide" ? null : childRefusalNow("purchase");
+    if (childRefusal) {
+      this.stopPurchaseWait();
+      this.purchaseStage = undefined; this.purchaseMessage = undefined;
+      void vscode.window.showInformationMessage(childRefusal);
+      await this.refresh(); return;
+    }
     if (msg.type === "purchaseCancel") {
       // Cancelling stops the wait only. A saved paid order is never thrown away from here.
       this.stopPurchaseWait();
@@ -842,6 +851,8 @@ export class StartPage {
     const running = this.candidate ? null : p;
     this.freeSeatNow = isFreeSeat(running);
     const freeStart = this.freeStartView(running);
+    // GRD-10 — a child seat has no pass purchase and no skill store entry (no change with the guardian switch off).
+    const childSeat = isChildSeat(p);
     const state: StartState = {
       automationsEnabled: !this.candidate && p?.automations?.enabled === true,
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
@@ -858,8 +869,8 @@ export class StartPage {
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
-      purchase: this.purchaseView(),
-      ...(this.storeOn ? { skillStore: true } : {}),
+      ...(childSeat ? {} : { purchase: this.purchaseView() }),
+      ...(this.storeOn && !childSeat ? { skillStore: true } : {}),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.memberApprovals ? {memberApprovals:this.memberApprovals.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),

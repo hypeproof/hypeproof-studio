@@ -280,13 +280,18 @@ const OLD_SCREENS = {
 // CGP-LEARN-D-002: the six ChatPanel digests were re-taken (TZ=UTC) because the criterion card's thumbnail icon is now
 // `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
 // flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
+// CGP-LEARN-R-010: the six ChatPanel digests were re-taken (TZ=UTC) because the week-3 criterion block now draws its reset and
+// undo buttons (div.hp-block-history[role=group][aria-label="고친 것 되돌리기"] with two disabled button.hp-cta-quiet, 처음으로 and
+// 되돌리기, after 기준 저장) and its controls help sentence names them. Removing that div and the appended help sentence from the
+// HPS_A5_DUMP_DIR dumps gives main's (b9b869d5e) markup byte for byte; nothing outside the block changed; the five
+// EffortControl digests are unchanged.
 const BASE = {
   // Re-recorded for CGP-CHAT-R-004 (TZ=UTC): a non-personal ChatPanel draws the 계획 먼저 chip in the composer's button row;
   // that button is the only markup change, so the composer height is unchanged (the personal seat uses the tools menu).
-  "ChatPanel/adult-plain": "678b2d12ee36be5397348a9da9c52e11eed81a57d598d6388be6ee23114a5ad0",
-  "ChatPanel/adult-effort-observed": "9dc5952704e7281b99b990a6a617f4f24a002be149751d8a9b56a1ea374f5e03",
-  "ChatPanel/adult-timeline": "cbe4cb81ade432dedeeffbff1f57efc51d0a60862840a92f338dc5c190399821",
-  "ChatPanel/kids": "e61c491814778e4706135d07690af1386227324589b744c1ce1aeb6bed6edb0c",
+  "ChatPanel/adult-plain": "6a8621fc7b6b454332e60be1e4a7f2177f5ecde7f72b7b02cc6acf1d17540f7b",
+  "ChatPanel/adult-effort-observed": "c96c21159941626b367e6a6f34982f795ebc2cd31ad7186a83fd92e313b8f8ea",
+  "ChatPanel/adult-timeline": "c3dee67fe98dd768e720e1b9719503f56ca5960cdfa5ec2daf9a739b280e58ad",
+  "ChatPanel/kids": "30789eb22060cf8c229396d82b8aa28c0e32ade1fed6487d11df39d76f29ac89",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -306,8 +311,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "afbcd2b862d678b4498e59d3802e2d9c062730c5013002ae2411d16e8cd5c70c",
-  "ChatPanel/classroom-access-unknown": "2a1dbf781a0996c9fb64e87093982ba86373dd5ca0652e381078bc82f2be5aa4",
+  "ChatPanel/classroom-class-funded": "0a8d2e6516e1134d4865b87385e1add40a545a9e22c51c3d73b25b9a50d6674e",
+  "ChatPanel/classroom-access-unknown": "e2dfd4b3ab0e7ee2d7dc5f95aadd695a74aa4268c4c28334da1751d7e3ad1748",
 };
 
 const status = rendererStatus();
