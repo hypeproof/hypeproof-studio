@@ -2367,6 +2367,13 @@ Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend
   - The sheet closes first, so the native folder picker is not under a modal.
 - **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
 
+## CGP-DS-R-022: the task menu joins the shared menu token set (2026-11-14, agent-selected)
+
+Audit of main (7205ff64b): the tools menu and the personal header menu already share the learner-menu tokens (#2575, typeahead #2724) and `test/menu-tokens-computed.smoke.mjs` guards them. The rail's task menu (`TaskMenu.tsx`, CGP-KNOW-R-009, built later) did not: 6px gutter, 10px block padding, 6px item radius, `text-align: left`. Its 44px items, 12px panel radius and 14px text already met the floor. R-022: PARTIAL (one of three Studio menus); D-019 Studio part: PARTIAL for the same menu.
+- Change: `taskWorkspace.css` task-menu rules now read `--ds-c-menu-gutter`, `--ds-c-menu-item-height`, `--ds-c-menu-item-pad-block` / `-inline` and `--hp-radius-menu-item`, and align to `start`. No new token, no token value, colour or theme change; no component or copy change.
+- Not covered: the `보여주기` attach list in the unmounted VoicePanel is a `role="group"` of buttons, not a menu, and keeps its own rules. Chalk's dense 32px menu (DES-CGP-DS-24) stays separate.
+- Confirmed by Jay: no.
+
 ## CGP-SHELL-R-019 / CGP-SHELL-D-018: turning lesson tips off (2026-11-14, agent-selected; one clause parked)
 
 Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-021 / D-021, which are built (#2767, #2972). The only tip is the served step's Chalk-authored hint (owner decision above, "CGP-CHAT-R-021: lesson tip source and action"), so there is no Studio tip catalogue to write or review. Never while a turn streams and one tip at a time are MET; D-018's 13px and 24px give way to the 14px and 44px floors, as D-021 already does. Missing: "팁 그만 보기 stops all tips until re-enabled".

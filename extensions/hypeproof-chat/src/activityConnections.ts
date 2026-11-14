@@ -242,6 +242,15 @@ export class ActivityConnections {
     return [this.bindingPath(root), this.legacyBindingPath(root)].filter((f): f is string => !!f && fs.existsSync(f));
   }
   /**
+   * True when any activity (including the current one) has a binding record for `root`, whether or
+   * not the folder still exists on disk. "Start new" uses it to skip names whose record would make
+   * claim() refuse the folder. Never throws: if the records cannot be inspected we answer true so the
+   * caller moves on to the next name instead of landing on a possibly taken folder.
+   */
+  hasBinding(root: string): boolean {
+    try { return this.bindingFiles(root).length > 0; } catch { return true; }
+  }
+  /**
    * Resolve who holds `root` (see FolderOwner) before the synchronous `prepare()` and the claim
    * in `commit()`. Never throws: an unreadable record is `unknown`, a missing folder has no owner.
    */
