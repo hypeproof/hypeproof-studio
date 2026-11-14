@@ -649,18 +649,20 @@ cases:
       - 두 번째 말을 보내기 전에 음성 멈춤 을 누르고 기다린다. 앱을 다시 열어도 임의로 음성이 재시작하지 않는지 확인한다
       - 별도 실행에서 첫 응답이 전송 중일 때 답변 중지 를 누른다. 별도 초안을 적고 앱을 다시 연다
       - In the isolated speech fixture, deliver partial words followed by an empty final, then empty captures and recovered speech. Stop after a recapture delay is scheduled.
+      - 별도 합성 실행에서 첫 답변 뒤 주기적 이력 GET을 보류하고 두 번째 최종 인식 이벤트를 전달한다. 두 번째 전송 완료와 세 번째 듣기를 확인한 뒤 중지한다.
     expect:
       - 듣고 있어요 가 보이고, 매 차례 앱의 별도 동의·말 끝내기·다음 차례 버튼 없이 첫 말의 답변 뒤 다음 말을 듣는다. 필요한 최초 OS 권한은 생략하지 않는다
       - 음성 멈춤 뒤에는 녹음·재생이 멈추고 두 번째 말이나 빈 말을 뒤늦게 전송하지 않는다. 아직 보내지 않은 인식 글은 초안에 남는다 (App/SharedConversationView.swift)
       - 전송 중에도 44pt 이상의 중지 버튼을 사용할 수 있다. 같은 요청의 서버 확인 뒤에만 중지로 표시하며 원래 글과 별도 초안을 남긴다. 뒤늦은 응답이나 앱 재실행이 음성·전송을 재시작하지 않는다. 이미 실행된 AI 비용은 발생할 수 있다
       - Empty recognition preserves prior words and never sends an empty turn. At most two automatic recaptures occur; useful speech or deliberate restart resets the budget. Stop cancels pending continuation.
+      - 준비된 대화의 주기적 조회는 대화 확인 중을 반복해 표시하지 않는다. 두 번째 요청 ID는 첫 번째와 다르고 중지는 세 번째 초안을 보존한다. 실제 한국어 음성 수용은 별도이다.
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784, #4024"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop 와 testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped 는 조건 주도 delegate·Stop·입력 중 초안 경계를 검사한다. testRealKoreanPlaybackCompletionReachesNextCaptureBoundary 는 실제 OS 한국어 재생 완료를 확인하되 다음 마이크는 합성이다. 한국어 음성이나 실제 완료 callback 이 없으면 실패로 남기며 대체하지 않는다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 5–10차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다. StudioJourneyTests.testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry exercises the real controller with synthetic speech. Its deterministic controller Stop proves timer cancellation, not a user tap; existing UI Stop and physical Korean audio remain separate.
+    notes: StudioJourneyTests.testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft 는 주기 이력 조회 중 두 번째 발화의 전송과 세 번째 듣기 시작, 중지 후 초안 보존을 검사한다. StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop 와 testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped 는 조건 주도 delegate·Stop·입력 중 초안 경계를 검사한다. testRealKoreanPlaybackCompletionReachesNextCaptureBoundary 는 실제 OS 한국어 재생 완료를 확인하되 다음 마이크는 합성이다. 한국어 음성이나 실제 완료 callback 이 없으면 실패로 남기며 대체하지 않는다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 5–10차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다. StudioJourneyTests.testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry exercises the real controller with synthetic speech. Its deterministic controller Stop proves timer cancellation, not a user tap; existing UI Stop and physical Korean audio remain separate.
 
   - id: BB-036
     journey: CUJ-8
@@ -716,3 +718,25 @@ cases:
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
     notes: StudioJourneyTests.testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch 는 중지와 실패 응답의 경합 이후 구체적 오류의 보존을 검사한다. StudioJourneyTests.testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch 는 POST 403 뒤 GET 성공을 재현한다. 실제 계정의 이용 자격과 운영 정책은 합성 응답 검사와 별개다. 적합한 테스트 계정이 없으면 BLOCKED 로 남긴다.
+
+  - id: BB-039
+    journey: CUJ-8
+    targets: [desktop, ios, android]
+    priority: P0
+    title: 내 계정 인사와 질문을 보고 기존 대화와 승인 요청을 구분한다
+    requirements: [MENT-01, MENT-02, MENT-03, MENT-04, MENT-06]
+    steps:
+      - 해당 버전 앱에서 자신의 계정으로 로그인하고 서버에 저장된 이름 인사를 확인한다
+      - 도착한 질문 또는 시작 선택을 열고 한 가지 답을 선택한다. 기존 대화의 보내지 않은 초안은 별도로 남겨 둔다
+      - 질문 준비 응답이 유실된 통제된 실행에서 앱을 닫고 다시 열어 같은 선택을 확인한다
+      - 로그아웃하고 다른 계정으로 들어간다. 사용 경험 수집을 거절하거나 중지하고 질문을 계속 사용한다
+    expect:
+      - 현재 계정의 이름과 질문만 보이며 이전 계정의 늦은 응답이 나타나지 않는다
+      - 질문 선택으로 GitHub 승인이나 대화 전송이 발생하지 않고 기존 초안이 유지된다
+      - 유실된 요청은 같은 저장된 ID로 확인하며 잘못된 응답은 확인 완료로 처리하지 않는다
+      - 수집 거절은 대화와 승인함 이용을 막지 않고 대화 원문은 분석 이벤트에 포함되지 않는다
+    origin:
+      kind: design
+      ref: "#4111, #3767"
+    status: active
+    notes: TeamEntryUITests.testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft, testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent, testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry 를 실제 XCTest 기록으로 수집한다. 통제된 HTTP·화면·저장소 검증과 실제 로그인·설치 앱·운영 서버 수용은 구분한다. iOS 앱 또는 실제 푸시가 실행되지 않았다면 해당 항목은 NOT RUN으로 남긴다.

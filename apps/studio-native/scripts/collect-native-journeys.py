@@ -16,6 +16,7 @@ REQUIRED = {
     'MFR-T03-draft': 'testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped',
     'MFR-T03-stop-denial': 'testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch',
     'MFR-T03-response-stop': 'testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch',
+    'MFR-T03-periodic': 'testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft',
     'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
     'MFR-T03-empty': 'testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry',
     'MFR-T04': 'testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch',
@@ -34,9 +35,14 @@ REQUIRED = {
     'MPER-T01-cancel': 'testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend',
     'MPER-T03-collision': 'testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice',
     'MPER-T01-layout': 'testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable',
+    'MENT-T01-inbox': 'testSignedInHomeOpensVerifiedInboxWithoutSettingsOrSendingDraft',
+    'MENT-T02-question': 'testExplicitStartingChoiceRendersRealCardAndAnswerWithoutSharingConsent',
+    'MENT-T04-consent': 'testExperienceConsentUsesExplicitSettingsAndDecliningKeepsQuestionEntry',
 }
+CLASSES = {name: ('TeamEntryUITests' if requirement.startswith('MENT-') else 'StudioJourneyTests')
+           for requirement, name in REQUIRED.items()}
 # This is Xcode 26's XCTest output, not app stdout or a test-name substring.
-CASE = re.compile(r"^Test Case '-\[[A-Za-z0-9_.]*StudioJourneyTests (test[A-Za-z0-9_]+)\]' (started\.|(passed|failed|skipped)(?: \([0-9.]+ seconds\))?\.)$")
+CASE = re.compile(r"^Test Case '-\[(?:[A-Za-z0-9_]+\.)*(StudioJourneyTests|TeamEntryUITests) (test[A-Za-z0-9_]+)\]' (started\.|(passed|failed|skipped)(?: \([0-9.]+ seconds\))?\.)$")
 
 def evidence(path: Path):
     if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
@@ -54,15 +60,15 @@ def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, 
     events = {name: [] for name in REQUIRED.values()}
     for line in simulator.splitlines():
         match = CASE.fullmatch(line.strip())
-        if match and match[1] in events:
-            events[match[1]].append('started' if match[2] == 'started.' else match[3])
+        if match and match[2] in events and CLASSES[match[2]] == match[1]:
+            events[match[2]].append('started' if match[3] == 'started.' else match[4])
     cases = []
     for requirement, name in REQUIRED.items():
         seen = events[name]
         # Failed/skipped attempts are retained even if a later retry passes.
         status = ('FAIL' if 'failed' in seen else 'SKIPPED' if 'skipped' in seen else
                   'PASS' if seen == ['started', 'passed'] else 'NOT_RUN' if not seen else 'INCOMPLETE')
-        cases.append({'requirement': requirement, 'test': 'StudioJourneyTests.' + name, 'status': status, 'events': seen})
+        cases.append({'requirement': requirement, 'test': CLASSES[name] + '.' + name, 'status': status, 'events': seen})
     build_status = 'PASS' if build_evidence and build_exit == 0 and '** BUILD SUCCEEDED **' in build.splitlines() else 'FAIL' if build_exit else 'NOT_RUN'
     journey_status = 'PASS' if simulator_evidence and test_exit == 0 and all(case['status'] == 'PASS' for case in cases) else 'FAIL' if test_exit or any(case['status'] == 'FAIL' for case in cases) else 'NOT_RUN'
     return {'schema': 'hps-native-journey-evidence/1', 'source_sha': source,

@@ -417,3 +417,25 @@ and identity; its former pre-persistence local-retry shortcut is not evidence.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
+# Account question entry verification — #4111
+
+| Test ID | Targets | Required observation |
+|---|---|---|
+| MENT-T01 | MENT-01, MENT-02 | Existing desktop StartPage displays the own-account greeting, safe question text and enrolled approval entry. A question action is distinct from an approval; logout and late replies clear private state. |
+| MENT-T02 | MENT-01, MENT-02 | Existing iOS/Android account screens expose the same contracts; a controlled real Activity/HTTP/persistence journey preserves the conversation draft through question use and relaunch. Native iOS and actual account acceptance remain separate. |
+| MENT-T03 | MENT-03 | Unknown trigger response followed by restart reuses the durable ID and choice; storage failure blocks POST and a mismatched/incomplete receipt cannot clear pending intent. |
+| MENT-T04 | MENT-04 | No observations before opt-in; failed opt-out remains locally paused; immutable queued records retry safely and account switches fence pending sends. Raw-content/unknown fields fail at server admission. |
+| MENT-T05 | MENT-05 | Register, rotate, revoke and open a generic notice using a current account/device generation. Controlled provider calls do not count as a received device notification. |
+| MENT-T06 | MENT-06 | Pin app/source/platform evidence and check actual login, voice re-listening and approval authority before marking the affected release available/accepted. |
+
+Desktop controls: `account-cards.smoke.mjs`, `team-product-loop.smoke.mjs`,
+`account-question-entry.test.tsx`, and existing personal-reflection/member-approval host/UI controls.
+Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
+`NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`. A fixture name or compiled APK alone is not
+an executed native journey. Report the actual run and any missing physical/provider evidence.
+
+For MFR-03/04 and MVOICE-03/04, automatic personal-history reads keep a cached ready conversation
+visually quiet. `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft`
+holds an actual model history GET while a second final event produces a distinct accepted request,
+then verifies a third capture and Stop preserving its partial draft. Injected recognizer events and
+synthetic playback do not establish physical Korean ASR or acoustic turn-taking.

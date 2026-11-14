@@ -123,8 +123,9 @@ test('case targets default only when omitted and refuse invalid scopes instead o
 test('iPhone escaped cases stay active and link every required simulator journey without physical acceptance', () => {
   const real = loadCasebook();
   const native = real.cases.filter(c => c.journey === 'CUJ-8');
-  assert.equal(native.length, 5);
-  for (const c of native) {
+  const escaped = native.filter(c => c.origin.kind === 'escaped-bug');
+  assert.equal(escaped.length, 5);
+  for (const c of escaped) {
     assert.deepEqual(c.targets, ['ios']);
     assert.equal(c.status, 'active');
     assert.equal(c.origin.kind, 'escaped-bug');
@@ -146,16 +147,22 @@ test('iPhone escaped cases stay active and link every required simulator journey
     assert.ok(readme.includes('`' + name + '`'), `${name} has no process evidence mapping`);
   }
   assert.deepEqual(selectCases(real, {today: '2026-11-12', target: 'ios'}).map(c => c.id), native.map(c => c.id));
-  assert.ok(selectCases(real, {today: '2026-11-12', touched: native.flatMap(c => c.requirements)}).every(c => c.journey !== 'CUJ-8'));
+  assert.ok(selectCases(real, {today: '2026-11-12', touched: native.flatMap(c => c.requirements)}).every(c => !escaped.some(e => e.id === c.id)));
+  const entry = native.find(c => c.id === 'BB-039');
+  assert.deepEqual(entry.targets, ['desktop', 'ios', 'android']);
+  assert.equal(entry.origin.kind, 'design');
+  for (const target of ['desktop', 'ios', 'android']) {
+    assert.ok(selectCases(real, {today: '2026-11-14', target}).some(c => c.id === entry.id));
+  }
 });
 
 // --- requirement id extraction ----------------------------------------------------------------
 
 test('requirementIds finds each family once and ignores look-alikes', () => {
-  assert.deepEqual(requirementIds('fix (REQ-STUDIO-FREE-START) TUX-SP-14A US-04 PRA-01 CGP-CHAT-R-012 REQ-STUDIO-FREE-START MFR-02'),
-    ['REQ-STUDIO-FREE-START', 'TUX-SP-14A', 'US-04', 'PRA-01', 'CGP-CHAT-R-012', 'MFR-02']);
+  assert.deepEqual(requirementIds('fix (REQ-STUDIO-FREE-START) TUX-SP-14A US-04 PRA-01 CGP-CHAT-R-012 REQ-STUDIO-FREE-START MFR-02 MENT-04'),
+    ['REQ-STUDIO-FREE-START', 'TUX-SP-14A', 'US-04', 'PRA-01', 'CGP-CHAT-R-012', 'MFR-02', 'MENT-04']);
   // negative controls: lowercase, a bare prefix, an issue number
-  assert.deepEqual(requirementIds('req-studio-x, REQ- alone, #2094, US-4, MFR-2, MFR-002, mfr-02'), []);
+  assert.deepEqual(requirementIds('req-studio-x, REQ- alone, #2094, US-4, MFR-2, MFR-002, mfr-02, MENT-4, MENT-004, ment-04'), []);
 });
 
 test('idsFromDiff counts changed lines only, not context or file headers', () => {
