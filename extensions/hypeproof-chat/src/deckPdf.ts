@@ -34,6 +34,9 @@ export const DECK_PDF_COPY = {
   changed: "저장하는 동안 덱이 바뀌어서 PDF를 저장하지 않았어요. 다시 해 주세요.",
   notLoaded: "덱을 다 불러오지 못해 PDF를 만들지 못했어요. 잠시 뒤 다시 해 주세요.",
   writeFailed: "PDF 파일을 쓰지 못했어요. 폴더에 쓸 수 있는지 확인해 주세요.",
+  // CGP-ART-R-023 (REQ-ART-23 (2)) — the saved notice's action, and its refusal when the file is no longer the one saved.
+  reveal: "폴더에서 보기",
+  revealGone: "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요.",
 } as const;
 
 export type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<any>;

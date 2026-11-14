@@ -2289,3 +2289,24 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
+
+Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.
+
+- **Where (agent choice).** One quiet button under the saved notice, outside its polite region, so the region still reads only the sentence. It is the page notice's single optional action. There is no new card, and the other notices are unchanged.
+- **What is revealed.** `deck.pdf` itself, selected in its folder by `revealFileInOS`. The record is the served root the export used (canonical) and the file's path under it, so the file reveal always stays inside that root.
+- **Path safety (reuse).** The page card's walk is now `resolveFileInFolder` and `recheckFileInFolder`. The page variants keep their page-type check and their behaviour. The webview sends no path.
+- **Root identity (verify-r004 on #4066).** The walk re-canonicalized the root at use time, so a root path swapped for a link after it was recorded moved the whole walk. `WalkOptions.exactRoot` refuses a recorded canonical root that no longer canonicalizes to itself. The deck PDF reveal and the page card gate (open, reload, reveal) use it. The page card case predates this PR and is fixed here, because the walk is shared. The roots an `exactRoot` walk checks are recorded through `recordedRoot`, which is canonicalFolder's form: the page card's turn root and the deck PDF's served root (round 2). JS realpath keeps a Windows `c:` and the opened case, and would make every legitimate walk fail.
+- **Refusal copy (agent wording).** "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요." is used for every refusal, because the fix is the same each time.
+- **Not changed.** The page card's own 폴더에서 보기: a nested page still reveals its own folder.
+- **Not covered:** the installed App's OS file manager. `revealFileInOS` is a fixture in the host test.
+
+## Refused-photo chip remove × contrast (2026-11-14, a #4053 follow-up, agent-selected)
+
+Confirmed by Jay: no. builder-art-r005 handed it over, from verify-3956's #4053 check.
+
+- **Defect (real, not an instrument limit).** On the refused-photo chip, #2365 made the remove button `position: static`. Its `::before` dot (`position: absolute`) then anchored to the chip, not the button, so the white × sat on the light panel at 1.19:1 (Light+, HP Light). #4053's branch notes this as an instrument limit of text-contrast-computed. The note lives only on that branch and should be corrected when #4053 merges.
+- **Fix (agent choice).** The refused chip's button is `position: relative`: it stays in the flex row and anchors its dot again. In the personal seat the × is a transparent 44px square with a foreground ×, by design, so its dot is not drawn (`::before { content: none }`). Left on, that dot anchored to the chip and painted a dark circle across it.
+- **Measure.** `attachment-remove-contrast-computed` runs the real ChatPanel with every bundled theme, for the classroom and personal seats. Where a dot is drawn, the button must anchor it, and the × must reach 4.5:1 against what is painted behind it. Pinning the "attachment × ::before" row in text-contrast-computed's default set waits for #4053's all-rows mode.
+- **Not covered:** HP Light. That theme exists only on #4053's branch. The smoke iterates THEMES, so it picks the theme up when #4053 lands.
