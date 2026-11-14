@@ -8479,7 +8479,7 @@ folder dialog and notification are owner-run checks.
 
 `REQ-STUDIO-DATA-DELETION-REQUEST` implements REQ-SHELL-27 / CGP-SHELL-061 and DES-SHELL-26 /
 CGP-SHELL-D-026; contract in [classroom-admin.md](requirements/classroom-admin.md#adm-14-deletion-request).
-Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; DEC-23 is not decided): the row exists only when the seat's `/v1/profile`
+Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; the learner request flow is not confirmed by Jay, and only DEC-23's interim guardian half is decided): the row exists only when the seat's `/v1/profile`
 carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`).
 
 1. Both chat settings dialogs (personal workspace and classroom) show `계정과 데이터 삭제 요청` with what
@@ -8496,7 +8496,7 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
    The host logs nothing about it and touches no file.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
-`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
+`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (by DEC-23's interim guardian half, Jay 2026-11-14, an operator or support handles them by hand outside the product until the guardian account GRD-12 exists), status after the
 credential expired, a live-app run.
 
 ## Desktop-first mobile companion (DMC-01–15)
