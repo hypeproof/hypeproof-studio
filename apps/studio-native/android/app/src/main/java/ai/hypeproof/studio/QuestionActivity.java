@@ -33,6 +33,16 @@ public final class QuestionActivity extends Activity {
     private ReflectionModel model;
     private final ExecutorService experienceWorker=Executors.newSingleThreadExecutor();
     private NativeProductExperience experience;
+    private NativePush push;
+    private NativePush.Open pendingPush;
+    private Boolean pendingPushDestination;
+    private NativeDeviceSignIn.Credentials pendingPushAccount;
+    private final ExecutorService pushWorker=Executors.newSingleThreadExecutor();
+    private AlertDialog pushDialog;
+    private TextView pushStatus;
+    private NativePush.Permission pushPermission;
+    private final StudioMessagingService.Listener pushListener=token->resumePush();
+    private static final int PUSH_PERMISSION=41011;
     private AlertDialog experienceDialog;
     private LinearLayout experienceContent;
     private NativeTeamModel team;
@@ -64,6 +74,8 @@ public final class QuestionActivity extends Activity {
         model=new ReflectionModel(storage,new NativeDeviceSignIn(target,http,NativeDeviceSignIn.MONOTONIC),http,worker,r->handler.post(r),this::update);
         experience=new NativeProductExperience(()->model.credentials,http,experienceWorker,r->handler.post(r),storage,this::renderExperience);
         model.observed=experience::record;
+        DeviceSignInHttp pushHttp=new DeviceSignInHttp(target,deadlines);
+        push=new NativePush(()->model.credentials,pushHttp::push,storage,pushWorker,r->handler.post(r),()->{if(pushStatus!=null)pushStatus.setText(push.status);});
         voice=new NativeVoice(this,new NativeVoice.Host(){
             public String projectID(){return voiceScope();}
             public boolean foreground(){return foreground;}
@@ -93,12 +105,12 @@ public final class QuestionActivity extends Activity {
         update();
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
-    @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
+    @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();StudioMessagingService.attach(pushListener);resumePush();consumePush(getIntent());}
     @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
-    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
+    @Override protected void onStop(){visible=false;StudioMessagingService.detach(pushListener);handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
-    @Override protected void onDestroy(){if(experience!=null)experience.invalidate();experienceWorker.shutdown();if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);}
+    @Override protected void onDestroy(){if(push!=null)push.invalidate();pushWorker.shutdown();if(experience!=null)experience.invalidate();experienceWorker.shutdown();if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);if(request==PUSH_PERMISSION){if(push.accepts(pushPermission)){if(grants.length>0&&grants[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)resumePush();else disablePush();}pushPermission=null;}}
     private LinearLayout column(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);return c;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(ink);t.setPadding(0,dp(6),0,dp(8));if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
     private GradientDrawable rounded(int color,int radius){GradientDrawable shape=new GradientDrawable();shape.setColor(color);shape.setCornerRadius(dp(radius));return shape;}
@@ -160,6 +172,7 @@ public final class QuestionActivity extends Activity {
     private void update(){
         if(isDestroyed()||model==null)return;
         if(team!=null&&!NativeTeamModel.same(teamIdentity,model.credentials)){
+            if(push!=null)push.invalidate();
             experience.invalidate();if(experienceDialog!=null)experienceDialog.dismiss();team.invalidate();if(teamDialog!=null)teamDialog.dismiss();teamIdentity=model.credentials;
             if(teamIdentity!=null){team.profile(teamIdentity);experience.refresh(teamIdentity);}
         }
@@ -219,6 +232,61 @@ public final class QuestionActivity extends Activity {
             }
         }
         updateVoiceReply();
+        openPendingPush();
+    }
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);consumePush(intent);}
+    private void resumePush(){
+        if(push==null||!push.enabled()||!StudioMessagingService.configured(this)||!StudioMessagingService.permission(this))return;
+        NativePush.Permission ticket=push.permissionTicket();
+        if(StudioMessagingService.tokenDeletion!=null){
+            com.google.android.gms.tasks.Task<Void> pending=StudioMessagingService.tokenDeletion;
+            pending.addOnCompleteListener(this,result->{
+                if(!push.accepts(ticket)||StudioMessagingService.tokenDeletion!=pending)return;
+                if(!result.isSuccessful()){push.unavailable("이전 알림 해제를 확인하지 못했어요. 알림 끄기를 다시 눌러 주세요.");return;}
+                StudioMessagingService.tokenDeletion=null;resumePush();
+            });return;
+        }
+        NativeDeviceSignIn.Credentials expected=model.credentials;
+        // Service v1 accepts registration tokens; FID mode is explicitly disabled.
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnCompleteListener(this,task->{
+            if(!NativeTeamModel.same(expected,model.credentials)||!push.accepts(ticket)||StudioMessagingService.tokenDeletion!=null||!StudioMessagingService.permission(this))return;
+            if(task.isSuccessful())push.register(task.getResult());else push.unavailable("시스템 알림 등록을 확인하지 못했어요. 다시 시도해 주세요.");
+        });
+    }
+    private void disablePush(){
+        push.disable();
+        if(StudioMessagingService.configured(this)){
+            com.google.firebase.messaging.FirebaseMessaging messaging=com.google.firebase.messaging.FirebaseMessaging.getInstance();
+            messaging.setAutoInitEnabled(false);if(StudioMessagingService.tokenDeletion==null||StudioMessagingService.tokenDeletion.isComplete())StudioMessagingService.tokenDeletion=messaging.deleteToken();
+        }
+        getSystemService(NotificationManager.class).cancelAll();
+    }
+    private void openPushSettings(){
+        if(model.credentials==null)return;stopVoice();composer.clearFocus();boolean configured=StudioMessagingService.configured(this);
+        LinearLayout content=column();content.setPadding(dp(20),dp(12),dp(20),dp(12));
+        pushStatus=text(configured?push.status:"이 버전은 알림 연결이 아직 준비되지 않았어요. 질문과 확인 요청에서 직접 확인할 수 있어요.",15,false);content.addView(pushStatus);
+        Button enable=button("알림 켜기",()->model.withCurrentAccount(c->{if(!push.enable())return;pushPermission=push.permissionTicket();
+            if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},PUSH_PERMISSION);
+            else if(StudioMessagingService.permission(this))resumePush();else push.unavailable("시스템 설정에서 HP Studio 알림을 허용해 주세요.");
+        }));enable.setEnabled(configured);content.addView(enable);content.addView(button("알림 끄기",()->{disablePush();}));
+        pushDialog=new AlertDialog.Builder(this).setTitle("질문과 확인 요청 알림").setView(content).setNegativeButton("닫기",null).create();pushDialog.setOnDismissListener(d->{pushStatus=null;pushDialog=null;});pushDialog.show();
+    }
+    private void consumePush(Intent intent){
+        if(intent==null||push==null)return;String raw=intent.getStringExtra(StudioMessagingService.EXTRA);
+        try{
+            JSONObject payload;
+            if(raw!=null)payload=new JSONObject(raw);else{if(!"hps-push/1".equals(intent.getStringExtra("schema")))return;payload=new JSONObject();for(String key:new String[]{"schema","delivery_id","kind","id","revision"})payload.put(key,intent.getStringExtra(key));}
+            for(String key:new String[]{StudioMessagingService.EXTRA,"schema","delivery_id","kind","id","revision"})intent.removeExtra(key);
+            NativePush.Open reference=NativePush.Open.parse(payload);
+            pendingPush=reference;openPendingPush();
+        }catch(Exception ignored){/* Opaque payloads cannot act as account authority. */}
+    }
+    private void openPendingPush(){
+        if(!foreground||model.credentials==null||model.busy||push.busy)return;
+        if(pendingPushDestination!=null){Boolean destination=pendingPushDestination;pendingPushDestination=null;if(NativeTeamModel.same(pendingPushAccount,model.credentials))openTeam(destination);pendingPushAccount=null;return;}
+        if(pendingPush==null)return;
+        NativePush.Open reference=pendingPush;pendingPush=null;
+        model.withCurrentAccount(c->push.open(reference,approvals->{if(!isDestroyed()){pendingPushDestination=approvals;pendingPushAccount=model.credentials;handler.post(this::openPendingPush);}}));
     }
     private void openExperience(){
         if(model.credentials==null||model.busy)return;stopVoice();composer.clearFocus();ScrollView scroll=new ScrollView(this);experienceContent=column();experienceContent.setPadding(dp(20),dp(8),dp(20),dp(12));scroll.addView(experienceContent);
@@ -304,8 +372,8 @@ public final class QuestionActivity extends Activity {
             if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();if(model.error.isEmpty())model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
-    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정"},(d,w)->{
-        switch(w){case 8:openExperience();break;case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
+    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정","질문 알림 설정"},(d,w)->{
+        switch(w){case 9:openPushSettings();break;case 8:openExperience();break;case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->{disablePush();model.logout();}).show();break;}
     }).show();}
     private void export(){
         if(model.state==null)return;

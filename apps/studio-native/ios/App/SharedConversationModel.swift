@@ -134,6 +134,30 @@ private struct SharedCacheFile: Codable {
         }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
     }()
+    lazy var push: AccountPushPresentation = {
+        let presentation = AccountPushPresentation()
+        presentation.controller = AccountPushController(identity: { [weak self] in
+            guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
+            return .init(accountID: account.accountID, sessionID: account.tokens.session_id)
+        }, load: { [weak self] in guard let self else { throw CancellationError() }; return try self.loadPushPreference() }, save: { [weak self] in
+            guard let self else { throw CancellationError() }; try self.savePushPreference($0)
+        }, call: { [weak self] binding, method, id, body in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            try await self.service.accountPush(id, method: method, body: body, token: token)
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
+    private func loadPushPreference() throws -> AccountPushPreference {
+        let file = directory.appendingPathComponent("push-device-v1.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { let value = AccountPushPreference(); try savePushPreference(value); return value }
+        let data = try Data(contentsOf: file); guard data.count <= 4096 else { throw SyncFailure.invalidResponse }
+        let value = try JSONDecoder().decode(AccountPushPreference.self, from: data); try value.validate(); return value
+    }
+    private func savePushPreference(_ value: AccountPushPreference) throws {
+        try value.validate(); try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var folder = directory; var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+        try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("push-device-v1.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
     private var observedReflectionID: String?
     lazy var questions: AccountQuestionPresentation = {
         let presentation = AccountQuestionPresentation()
@@ -211,6 +235,7 @@ private struct SharedCacheFile: Codable {
         }
         Task { [weak self] in await self?.refreshDisplayName(attempt: attempt) }
         Task { [weak self] in await self?.experience.controller?.refresh() }
+        Task { [weak self] in if self?.push.controller?.enabled == true { await NativePushCenter.shared.register() } }
     }
     private func refreshDisplayName(attempt: UUID) async {
         guard let before = account else { return }
@@ -464,7 +489,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil; displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -516,7 +541,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil
+        questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -798,7 +823,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil
+        approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -828,10 +853,15 @@ private struct SharedCacheFile: Codable {
                 }
             }
             do {
+                if var pref = try? loadPushPreference(), pref.matches(.init(accountID: current.accountID, sessionID: current.tokens.session_id)) {
+                    pref.enabled = false; try savePushPreference(pref)
+                    try? await service.accountPush(pref.installation, method: "DELETE", body: nil, token: current.tokens.access_token)
+                    guard matches(execution) else { return }
+                }
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil; displayName = nil
+                questions.controller?.invalidate(); experience.controller?.invalidate(); push.controller?.invalidate(); NativePushCenter.shared.stop(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

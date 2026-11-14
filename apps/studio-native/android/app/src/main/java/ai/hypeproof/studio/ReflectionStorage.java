@@ -11,7 +11,7 @@ import javax.crypto.*;
 import javax.crypto.spec.GCMParameterSpec;
 
 /** App-private, no-backup files; only Keystore-encrypted credentials survive process death. */
-final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.Store, NativeProductExperience.Store {
+final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.Store, NativeProductExperience.Store, NativePush.Store {
     private final File directory;
     private final String alias;
     ReflectionStorage(Context context){directory=new File(context.getNoBackupFilesDir(),"reflection");alias=context.getPackageName()+".reflection-account-v1";}
@@ -57,6 +57,8 @@ final class ReflectionStorage implements ReflectionModel.Store, NativeTeamModel.
     public void saveProductExperience(String account,JSONObject state)throws Exception {
         name(account);NativeProductExperience.validate(state);byte[] bytes=ReflectionState.encode(state.toString());if(bytes.length>32768)throw new IOException("storage_limit");write("product-experience-"+account+".json",bytes);
     }
+    public JSONObject loadPush()throws Exception {byte[] bytes=read("push-device-v1.json",4096);return bytes==null?null:new JSONObject(ReflectionState.decode(bytes));}
+    public void savePush(JSONObject value)throws Exception {byte[] bytes=ReflectionState.encode(value.toString());if(bytes.length>4096)throw new IOException("storage_limit");write("push-device-v1.json",bytes);}
     void exportOriginal(String account,File destination) throws Exception {try(InputStream in=file(name(account)).openRead();OutputStream out=new FileOutputStream(destination)){byte[] chunk=new byte[8192];for(int n;(n=in.read(chunk))!=-1;)out.write(chunk,0,n);}}
     private javax.crypto.SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);

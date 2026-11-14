@@ -299,6 +299,23 @@ public final class ConversationService: @unchecked Sendable {
               let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
               result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }
     }
+    public func accountPush(_ id: String, method: String, body: [String: String]?, token: String) async throws {
+        let parts = id.split(separator: "/", omittingEmptySubsequences: false)
+        guard let first = parts.first, UUID(uuidString: String(first))?.uuidString.lowercased() == String(first),
+              ["PUT", "DELETE", "POST"].contains(method),
+              (method == "POST" ? parts.count == 2 && parts[1] == "opened" : parts.count == 1),
+              (method == "DELETE") == (body == nil) else { throw SyncFailure.invalidResponse }
+        let (data, _) = try await request("/v1/me/push-devices/" + id, method: method, body: body, token: token, timeout: 12)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SyncFailure.invalidResponse }
+        if method == "POST" {
+            guard let recorded = result["recorded"] as? NSNumber, CFGetTypeID(recorded) == CFBooleanGetTypeID(), recorded.boolValue,
+                  result["evidence_kind"] as? String == "client_observed" else { throw SyncFailure.invalidResponse }
+        } else {
+            guard result["schema"] as? String == "hps-push-device/1", result["id"] as? String == id,
+                  let active = result["active"] as? NSNumber, CFGetTypeID(active) == CFBooleanGetTypeID(), active.boolValue == (method == "PUT") else { throw SyncFailure.invalidResponse }
+            if method == "PUT" { guard let generation = result["generation"] as? NSNumber, CFGetTypeID(generation) != CFBooleanGetTypeID(), generation.doubleValue.isFinite, generation.doubleValue.rounded() == generation.doubleValue, generation.doubleValue >= 1 else { throw SyncFailure.invalidResponse } }
+        }
+    }
     public func productExperienceConsent(_ granted: Bool? = nil, token: String) async throws -> ProductExperienceConsent {
         if let granted {
             let (data, _) = try await request("/v1/me/product-events/consent", method: "POST", body: ["notice_version": "team-ux/1", "granted": granted], token: token)

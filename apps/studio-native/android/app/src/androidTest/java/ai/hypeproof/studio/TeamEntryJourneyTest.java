@@ -101,13 +101,29 @@ public class TeamEntryJourneyTest {
     }
     @Test public void explicitExperienceConsentObservesQuestionAndDeclineKeepsItUsable()throws Exception{
         app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->e.available&&!e.busy);assertTrue(metricTypes.isEmpty());
-        onView(withContentDescription("메뉴")).perform(click());onView(withText("사용 경험 공유 설정")).inRoot(isDialog()).perform(click());experienceSettled(e->e.available&&!e.busy);
+        selectMenu("사용 경험 공유 설정");experienceSettled(e->e.available&&!e.busy);
         onView(withText("동의하고 공유하기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->e.granted&&!e.busy);assertEquals(1,consentWrites.get());screenshot("android-team-experience-consent");onView(withText("닫기")).inRoot(isDialog()).perform(click());
         onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
         // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
-        onView(withContentDescription("메뉴")).perform(click());onView(withText("사용 경험 공유 설정")).inRoot(isDialog()).perform(click());experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
+        selectMenu("사용 경험 공유 설정");experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
         onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
         onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+    }
+    private void selectMenu(String title)throws Exception {
+        onView(withContentDescription("메뉴")).perform(click());
+        long deadline=System.currentTimeMillis()+5000;boolean visible=false;
+        while(System.currentTimeMillis()<deadline){android.view.accessibility.AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null){visible=!root.findAccessibilityNodeInfosByText(title).isEmpty();root.recycle();}if(visible)break;Thread.sleep(25);}
+        if(!visible){screenshot("android-team-menu-missing");throw new AssertionError("One menu tap did not expose its actual dialog within 5 seconds: "+title);}
+        onView(withText(title)).inRoot(isDialog()).perform(click());
+    }
+    @Test public void unconfiguredNotificationsStayDisabledWithoutBlockingQuestions()throws Exception {
+        app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));assertFalse(StudioMessagingService.configured(context));
+        selectMenu("질문 알림 설정");
+        onView(withText("알림 켜기")).inRoot(isDialog()).check(matches(isDisplayed())).check(matches(isNotEnabled()));
+        onView(withText("이 버전은 알림 연결이 아직 준비되지 않았어요. 질문과 확인 요청에서 직접 확인할 수 있어요.")).inRoot(isDialog()).check(matches(isDisplayed()));
+        assertFalse(store.loadPush().getBoolean("enabled"));screenshot("android-team-push-unconfigured");onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).check(matches(isEnabled()));
+        assertEquals(0,triggers.get());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertTrue(metricTypes.isEmpty());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private static android.view.View view(QuestionActivity a,String name){try{var f=QuestionActivity.class.getDeclaredField(name);f.setAccessible(true);return(android.view.View)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private static android.graphics.Rect rect(android.view.View v){int[] xy=new int[2];v.getLocationOnScreen(xy);return new android.graphics.Rect(xy[0],xy[1],xy[0]+v.getWidth(),xy[1]+v.getHeight());}

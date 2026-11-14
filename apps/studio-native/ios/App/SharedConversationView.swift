@@ -45,7 +45,7 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case experience, approvals, context, exportCache, clearCache, notebook, privacy
+        case push, experience, approvals, context, exportCache, clearCache, notebook, privacy
 #if DEBUG
         case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
@@ -54,6 +54,8 @@ struct SharedConversationView: View {
     @StateObject private var voice = VoiceController()
     @State private var showQuestions = false
     @State private var showExperience = false
+    @State private var showPush = false
+    @ObservedObject private var pushCenter = NativePushCenter.shared
     @State private var observedVoiceEvent = ""
     @State private var awaitingObservedVoiceResume = false
     @Environment(\.scenePhase) private var phase
@@ -153,9 +155,15 @@ struct SharedConversationView: View {
             default: break
             }
         }
+        .onReceive(pushCenter.$token) { token in if let token { Task { if await pushCenter.permits(token) { await model.push.controller?.register(token) } } } }
+        .onChange(of: pushCenter.registrationFailed) { _, failed in if failed { model.push.controller?.unavailable("시스템 알림 등록을 확인하지 못했어요. 다시 시도해 주세요.") } }
+        .onChange(of: pushCenter.reference) { _, _ in openPendingNotification() }
+        .onReceive(model.push.$state) { state in if !state.busy { openPendingNotification() } }
+        .task { openPendingNotification() }
+        .sheet(isPresented: $showPush) { AccountPushView(model: model.push) }
         .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
-        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false } }
+        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false; showPush = false } else { openPendingNotification() } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -242,6 +250,7 @@ struct SharedConversationView: View {
                     Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                     Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
                     if model.signedIn {
+                        Button { leaveSettings(for: .push) } label: { Label("질문 알림 설정", systemImage: "bell").frame(minHeight: 44) }.accessibilityIdentifier("openAccountPush")
                         Button { leaveSettings(for: .experience) } label: { Label("사용 경험 공유 설정", systemImage: "hand.raised").frame(minHeight: 44) }
                             .accessibilityIdentifier("productExperienceSettings")
                     }
@@ -271,12 +280,21 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+        case .push, .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
 #if DEBUG
         case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
         }
         settingsDestination = destination; showSettings = false
+    }
+    private func openPendingNotification() {
+        guard model.signedIn, !model.loggingOut, model.push.controller?.enabled == true,
+              !model.push.state.busy, let reference = pushCenter.reference else { return }
+        pushCenter.consume()
+        Task { if let destination = await model.push.controller?.open(reference), model.signedIn && !model.loggingOut {
+            voice.stop(); focused = false
+            if destination == "approval" { showApprovals = true } else { showQuestions = true }
+        } }
     }
     private func finishSettingsDismissal() {
         // Dismiss the first presentation before opening another one. Consume
@@ -284,6 +302,8 @@ struct SharedConversationView: View {
         guard let destination = settingsDestination else { return }
         settingsDestination = nil
         switch destination {
+        case .push:
+            if model.signedIn && !model.loggingOut { showPush = true }
         case .experience:
             if model.signedIn && !model.loggingOut { showExperience = true }
         case .approvals:
