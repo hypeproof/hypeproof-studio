@@ -15,6 +15,10 @@ cd "$candidate_root/apps/studio-native/ios"
 python3 "$control_scripts/verify-native-candidate.py" request --candidate-root "$candidate_root" \
   --release-gate "$RUNNER_TEMP/native-release-gate/native-release-gate.json" \
   --output "$RUNNER_TEMP/native-upload-preflight.json"
+# Internal-only unless the gate admitted this audience for this exact source's signed-in journey.
+internal_only=$(python3 -c 'import json,sys; print("true" if json.load(open(sys.argv[1]))["distribution"]["testflight_internal_only"] else "false")' "$RUNNER_TEMP/native-upload-preflight.json")
+case "$internal_only" in true|false) ;; *) echo 'Unreadable distribution decision' >&2; exit 2 ;; esac
+export NATIVE_TESTFLIGHT_INTERNAL_ONLY="$internal_only"
 evidence="$PWD/../evidence/apple-$platform"
 mkdir -p "$evidence"
 git rev-parse HEAD > "$evidence/source.txt"
@@ -98,7 +102,7 @@ import os,pathlib,plistlib
 options={'method':'app-store-connect','destination':'export','signingStyle':'manual',
  'teamID':os.environ['APPLE_DEVELOPER_TEAM_ID'],'signingCertificate':os.environ['APPLE_SIGNING_IDENTITY'],
  'provisioningProfiles':{'ai.hypeproof.studio.mobile':os.environ['APPLE_PROFILE_NAME']},
- 'manageAppVersionAndBuildNumber':False,'uploadSymbols':True,'testFlightInternalTestingOnly':True}
+ 'manageAppVersionAndBuildNumber':False,'uploadSymbols':True,'testFlightInternalTestingOnly':os.environ['NATIVE_TESTFLIGHT_INTERNAL_ONLY']=='true'}
 if os.environ['APPLE_UPLOAD_PLATFORM']=='macos': options['installerSigningCertificate']=os.environ['APPLE_INSTALLER_IDENTITY']
 with (pathlib.Path(os.environ['APPLE_SIGNING_TEMP'])/'ExportOptions.plist').open('wb') as f:plistlib.dump(options,f)
 PY

@@ -19,7 +19,7 @@ import {
   MIC_EXPLAIN_ALLOW, MIC_EXPLAIN_BODY, MIC_EXPLAIN_LATER, MIC_EXPLAIN_TITLE, MIC_SETTINGS_FAILED, NO_MIC, RECOVERED_COPIED, RECOVERED_COPY, RECOVERED_INSERT, RETRY, RETRY_TEXT_LABEL, SOFT_TOO_SHORT, TOO_LARGE, UNSUPPORTED,
 } from "../../src/voiceCopy";
 
-type View =
+export type DictationView =
   | { kind: "idle" }
   | { kind: "starting" }
   | { kind: "recording"; seconds: number }
@@ -30,6 +30,8 @@ type View =
   /** CGP-SHELL-R-010: Studio's own explainer, before the OS microphone prompt can appear. */
   | { kind: "explain" }
   | { kind: "recovered"; text: string; copied: boolean };
+
+type View = DictationView;
 
 export interface DictationController {
   view: View;
@@ -321,7 +323,11 @@ export function DictationNotice() {
     return <p className="hps-voice-note hps-voice-classoff" role="status">{CLASS_OFF}. {CLASS_OFF_HINT}</p>;
   }
   if (!controller || voice.availability.kind !== "on") return null;
-  const { view } = controller;
+  return <DictationNoticeView view={controller.view} controller={controller} />;
+}
+
+/** The notice for one dictation state (exported so tests read the real markup, e.g. chat-keys' microphone-card guard). */
+export function DictationNoticeView({ view, controller }: { view: View; controller: DictationController }) {
   switch (view.kind) {
     case "idle": case "starting": return null;
     case "recording":

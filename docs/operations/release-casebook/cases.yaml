@@ -609,7 +609,7 @@ cases:
       ref: "#3771, #3784, #3937, #3941"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop, testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking, testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend, testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice, testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable 가 실제 앱 저장·화면과 합성 인증·HTTP 경계를 검사한다. 실제 브라우저 로그인, 물리 기기의 첫 답변과 VoiceOver 수용은 별도 증거가 필요하다. StudioJourneyTests.testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin complements the actual state-validated expiry callback test. These synthetic boundaries do not prove physical OAuth.
+    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop, testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking, testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend, testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice, testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable 가 실제 앱 저장·화면과 합성 인증·HTTP 경계를 검사한다. 실제 브라우저 로그인, 물리 기기의 첫 답변과 VoiceOver 수용은 별도 증거가 필요하다. StudioJourneyTests.testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin complements the actual state-validated expiry callback test. These synthetic boundaries do not prove physical OAuth. 시뮬레이터 자동 테스트는 합성 Service 와 합성 브라우저 콜백이다. StudioSignInBoundaryTests 는 실제 시스템 브라우저가 실제 Lab 로그인 페이지를 여는 데까지만 보며, 계정이 필요한 Lab 폼 POST·콜백·교환은 NOT_RUN 이라 이 케이스의 automated_by 로 올리지 않는다. 로그인 여정 결과가 PASS 가 아니면 외부 테스터 배포는 막힌다.
 
   - id: BB-034
     journey: CUJ-8
