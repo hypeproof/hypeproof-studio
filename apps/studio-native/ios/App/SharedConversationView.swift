@@ -47,7 +47,7 @@ struct SharedConversationView: View {
     private enum SettingsDestination {
         case approvals, context, exportCache, clearCache, notebook, privacy
 #if DEBUG
-        case finishPlayback, advanceHistory, holdHistory, releaseHistory
+        case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
     }
     @StateObject private var model = SharedConversationModel()
@@ -189,6 +189,9 @@ struct SharedConversationView: View {
                 if NativeJourneyFixture.heldPlayback {
                     settingsButton("Deliver playback completion") { leaveSettings(for: .finishPlayback) }.accessibilityIdentifier("nativePlaybackFinish")
                 }
+                if NativeJourneyFixture.periodicVoice {
+                    settingsButton("Deliver second speech result") { leaveSettings(for: .finishSecondSpeech) }.accessibilityIdentifier("nativeSecondSpeechFinish")
+                }
                 if NativeJourneyFixture.longHistory {
                     settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
                 }
@@ -209,7 +212,7 @@ struct SharedConversationView: View {
             .navigationTitle("대화 설정").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if model.syncing {
+                    if model.showsSyncProgress {
                         ProgressView().accessibilityLabel("대화 확인 중").accessibilityIdentifier("settingsSyncing")
                     }
                 }
@@ -228,7 +231,7 @@ struct SharedConversationView: View {
         switch destination {
         case .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
 #if DEBUG
-        case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory: break
+        case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
         }
         settingsDestination = destination; showSettings = false
@@ -254,6 +257,7 @@ struct SharedConversationView: View {
         case .advanceHistory: NativeJourneyFixture.advanceHistory()
         case .holdHistory: NativeJourneyFixture.holdNextHistory(); model.refresh()
         case .releaseHistory: NativeJourneyFixture.releaseHistory()
+        case .finishSecondSpeech: NativeJourneyFixture.finishSecondSpeech()
 #endif
         }
     }
@@ -550,7 +554,7 @@ struct SharedConversationView: View {
             .accessibilityIdentifier("retryConversationSync")
         }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
-        if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
+        if model.showsSyncProgress { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
     }
 #if DEBUG
     // Overlay diagnostics never participate in transcript/composer measurement.
@@ -559,7 +563,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery || NativeJourneyFixture.periodicVoice {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

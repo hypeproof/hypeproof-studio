@@ -85,6 +85,7 @@ private struct SharedCacheFile: Codable {
     @Published private(set) var signIn: DeviceSignIn?
     @Published private(set) var busy = false
     @Published private(set) var syncing = false
+    @Published private(set) var showsSyncProgress = false
     @Published private(set) var loggingOut = false
     @Published private(set) var stoppingReflection = false
     private var reflectionCredential: Task<String, Error>?
@@ -437,9 +438,16 @@ private struct SharedCacheFile: Codable {
     private func synchronize(automatic: Bool = false) async {
         guard signedIn, cacheReadable, visible, !busy, !syncing, !stoppingReflection else { return }
         guard !automatic || !isReflection || !personalHistoryNeedsRetry else { return }
+        // Periodic reads keep reconciliation active without repeatedly moving
+        // an already usable personal transcript. Explicit recovery stays visible.
+        showsSyncProgress = !automatic || !isReflection || !conversations.contains(where: { $0.id == Self.personalID })
         syncing = true; let attempt = epoch; let current = selected
+#if DEBUG
+        NativeJourneyFixture.synchronizationStarted(automatic: automatic)
+#endif
         defer {
             syncing = false
+            showsSyncProgress = false
             // Preserve one-use credential rotation. Explicit logout wins over
             // queued Send after the existing refresh/read has fully unwound.
             if let intent = queuedLogout, intent.epoch == attempt {

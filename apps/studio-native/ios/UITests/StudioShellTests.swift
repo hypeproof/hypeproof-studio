@@ -679,6 +679,63 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["sharedError"].exists)
         try evidence("journey-queued-voice", app: app)
     }
+    @MainActor func testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft() throws {
+        let app = launch("voice-periodic-poll"); signIn(app)
+        let voice = app.buttons["sharedVoice"]; enabled(voice); voice.tap()
+        let held = try waitForTraceCount("periodic_history_holds", atLeast: 1, in: app)
+        XCTAssertEqual(held["history_sync_automatic"] as? Bool, true)
+        XCTAssertEqual(held["active_history_reads"] as? Int, 1)
+        XCTAssertEqual(held["speech_captures"] as? Int, 2)
+        XCTAssertEqual(held["accepted_turns"] as? Int, 1)
+        XCTAssertEqual(held["history_barrier_timeouts"] as? Int, 0)
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertFalse(syncing.exists, "A real periodic read must not insert progress into an already usable personal transcript.")
+        XCTAssertTrue(app.buttons["sharedVoiceStop"].exists, "The second capture remains active during that read.")
+
+        // Deliver only the external recognizer event after observing the held
+        // read. This control never calls model.send or starts another capture.
+        app.buttons["conversationSettings"].tap()
+        let finish = app.buttons["nativeSecondSpeechFinish"]; enabled(finish)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "settingsSyncing").firstMatch.exists)
+        finish.tap()
+        XCTAssertTrue(finish.waitForNonExistence(timeout: 5))
+        _ = try waitForTraceCount("accepted_turns", atLeast: 2, in: app)
+        waitForVoiceEvent("syntheticCaptureStarted", in: app, count: 3)
+        let result = try trace(app)
+        XCTAssertEqual(result["accepted_turns"] as? Int, 2)
+        XCTAssertEqual(result["submitted_texts"] as? [String], ["I want to understand my next step", "I can send a second spoken thought"])
+        let ids = result["submitted_ids"] as? [String] ?? []
+        XCTAssertEqual(ids.count, 2); XCTAssertEqual(Set(ids).count, 2)
+        XCTAssertEqual(result["periodic_history_holds"] as? Int, 1)
+        XCTAssertEqual(result["second_speech_release_requests"] as? Int, 1)
+        XCTAssertEqual(result["speech_ended_during_history"] as? Int, 1)
+        XCTAssertEqual(result["history_barrier_completions"] as? Int, 1)
+        XCTAssertEqual(result["history_barrier_timeouts"] as? Int, 0)
+        XCTAssertEqual(result["history_barrier_cancellations"] as? Int, 0)
+        XCTAssertFalse(app.staticTexts["sharedError"].exists)
+        let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
+        guard let firstStart = timeline.range(of: " start authorizing") else { XCTFail("Observe the actual voice start before judging continuity."); return }
+        let activeTimeline = String(timeline[firstStart.lowerBound...])
+        for event in [" stopped ", " background ", " scopeChanged ", " failed ", " interrupted ", " routeChanged "] {
+            XCTAssertFalse(activeTimeline.contains(event), "No unrelated lifecycle action may silently end the two spoken turns.")
+        }
+        valueContains(field(app), "Keep this spoken draft without sending")
+        app.buttons["sharedVoiceStop"].tap()
+        XCTAssertTrue(app.buttons["sharedVoiceStop"].waitForNonExistence(timeout: 5))
+        let traceNode = diagnostic("nativeJourneyTrace", in: app)
+        let unexpected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = traceNode.value as? String,
+                  let state = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
+            return (state["speech_captures"] as? Int ?? 0) > 3 || (state["accepted_turns"] as? Int ?? 0) > 2
+        }, object: traceNode)
+        unexpected.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [unexpected], timeout: 2), .completed)
+        let stopped = try trace(app)
+        XCTAssertEqual(stopped["speech_captures"] as? Int, 3)
+        XCTAssertEqual(stopped["accepted_turns"] as? Int, 2)
+        valueContains(field(app), "Keep this spoken draft without sending")
+        try evidence("journey-second-voice-quiet-poll", app: app)
+    }
     @MainActor func testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch() throws {
         let app = launch("voice-hold"); signIn(app)
         app.buttons["sharedDictate"].tap(); valueContains(field(app), "Keep this spoken draft without sending")

@@ -17,6 +17,7 @@ import CryptoKit
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
+    static var periodicVoice: Bool { enabled && JourneyConfiguration.scenario == "voice-periodic-poll" }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static var syncRecovery: Bool { enabled && ["desktop-list-held", "history-timeout", "history-cancelled"].contains(JourneyConfiguration.scenario) }
@@ -28,6 +29,10 @@ import CryptoKit
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
+    static func synchronizationStarted(automatic: Bool) {
+        if periodicVoice { JourneyTransport.store.synchronizationStarted(automatic: automatic) }
+    }
+    static func finishSecondSpeech() { if periodicVoice { JourneyTransport.store.finishSecondSpeech() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
@@ -65,6 +70,27 @@ import CryptoKit
                        stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        if periodicVoice && capture == 2 {
+            return Task { @MainActor in
+                let text = "I can send a second spoken thought"
+                do {
+                    // Keep recognition active until a genuine periodic GET is
+                    // held and the test delivers this external speech event.
+                    deliver(text, false)
+                    for revision in 1...50 {
+                        try await Task.sleep(nanoseconds: 400_000_000)
+                        try Task.checkCancellation()
+                        if JourneyTransport.store.secondSpeechMayFinish() {
+                            JourneyTransport.store.finishedSpeech()
+                            deliver(text, true)
+                            JourneyTransport.store.deliveredSpeech()
+                            return
+                        }
+                        deliver(text + String(repeating: ".", count: revision), false)
+                    }
+                } catch { /* Real Stop/background cancels this producer. */ }
+            }
+        }
         if JourneyConfiguration.scenario == "voice-empty-results" {
             return Task { @MainActor in
                 do {
@@ -116,7 +142,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -277,6 +303,10 @@ private final class JourneyStore: @unchecked Sendable {
     private var historyBarrierTimeouts = 0
     private var historyBarrierCompletions = 0
     private var historyBarrierCancellations = 0
+    private var automaticSynchronization = false
+    private var periodicHistoryHolds = 0
+    private var secondSpeechReleaseRequests = 0
+    private var secondSpeechDelivered = false
     init() {
         let key = "native-journey-server-" + JourneyConfiguration.namespace
         value = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(JourneySnapshot.self, from: $0) } ?? JourneySnapshot()
@@ -323,6 +353,10 @@ private final class JourneyStore: @unchecked Sendable {
             "history_barrier_timeouts": historyBarrierTimeouts,
             "history_barrier_completions": historyBarrierCompletions,
             "history_barrier_cancellations": historyBarrierCancellations,
+            "history_sync_automatic": automaticSynchronization,
+            "periodic_history_holds": periodicHistoryHolds,
+            "active_history_reads": activeHistoryReads.count,
+            "second_speech_release_requests": secondSpeechReleaseRequests,
             "logout_requests": value.paths.filter { $0 == "POST /v1/auth/logout" }.count,
             "logout_during_history": logoutDuringHistory,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
@@ -371,14 +405,31 @@ private final class JourneyStore: @unchecked Sendable {
         value.historyReads += 1
         let queuedVoice = JourneyConfiguration.scenario == "queued-voice" && value.historyReads == 2
         let logout = JourneyConfiguration.scenario == "logout-sync" && historyArmed
-        guard queuedVoice || logout else { return false }
+        let periodicVoice = JourneyConfiguration.scenario == "voice-periodic-poll"
+            && automaticSynchronization && value.accepted.count == 1
+            && value.speechCaptures == 2 && periodicHistoryHolds == 0
+        guard queuedVoice || logout || periodicVoice else { return false }
         if logout { historyArmed = false; historyReleased = false }
+        if periodicVoice { periodicHistoryHolds += 1 }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
     }
     func historyMayFinish() -> Bool {
         lock.lock(); defer { lock.unlock() }
+        if JourneyConfiguration.scenario == "voice-periodic-poll" { return secondSpeechDelivered }
         return JourneyConfiguration.scenario == "logout-sync" ? historyReleased : speechDelivered
+    }
+    func synchronizationStarted(automatic: Bool) {
+        lock.lock(); defer { lock.unlock() }; automaticSynchronization = automatic
+    }
+    func finishSecondSpeech() {
+        lock.lock(); defer { lock.unlock() }
+        guard JourneyConfiguration.scenario == "voice-periodic-poll", automaticSynchronization,
+              !activeHistoryReads.isEmpty, value.speechCaptures == 2, value.accepted.count == 1 else { return }
+        secondSpeechReleaseRequests += 1
+    }
+    func secondSpeechMayFinish() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return secondSpeechReleaseRequests == 1
     }
     func armHistory() {
         lock.lock(); defer { lock.unlock() }; historyArmed = true
@@ -406,6 +457,9 @@ private final class JourneyStore: @unchecked Sendable {
         // Release only after the real voice callback has synchronously queued
         // its durable send. UI automation latency cannot outrun a fixed delay.
         lock.lock(); defer { lock.unlock() }; speechDelivered = true
+        if JourneyConfiguration.scenario == "voice-periodic-poll", value.speechCaptures == 2 {
+            secondSpeechDelivered = true
+        }
     }
     func callback(_ url: URL) throws -> URL {
         lock.lock(); defer { save(); lock.unlock() }
