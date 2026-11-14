@@ -6275,7 +6275,7 @@ separate from installed Studio and native OS IME acceptance.
 
 | ID | Requirement and acceptance | Evidence |
 |---|---|---|
-| REQ-CGPV-08 | PI#2 (the learner sees what the AI actually did, not what it says it did) / PI#5 / CGP-VOICE-008 / VO-18 / VO-20: while the agent works, the voice panel's status line shows, announces and reads aloud only events the host actually sent on the chat channel: a real tool call (`toolLog` marked `kind: "tool"`, set by the host only on SDK tool_use / tool_result lines and browser-loop calls, keyed by the call id) starting, finishing or failing, the approval wait (`approvalWait`), and the turn's start, stop (`streamStopped`), end (`streamEnd`) and error (`streamError` or a failed end). The coach's prose (`streamChunk`) is never read, so a reply claiming `파일을 저장했어요` with no tool result makes no status. The other `toolLog` lines the host posts carry no `kind` and are ignored: the adult thinking text (`💭`, model prose), busy and orchestrator notices (`⏳`), the compaction note and the pending placeholder (`다음 단계를 준비하는 중…` and its `생각했어요` / `고쳤어요` close). The `kind` marker is live-channel only; persisted timeline lines keep their shape. Words are the chat header's coach run state (`COACH_RUN_STATES`: `생각 중`, `찾는 중`, `만드는 중`, `확인이 필요해요`, `멈춤`, `문제가 생겼어요`, `준비됨`) plus the host's own tool label, e.g. `만드는 중 · 파일 고치기 index.html`; `끝났어요` is written only after that call's own result event, for a call whose start was seen (`파일 고치기 index.html 끝났어요`). A summary-mode seat (one work line instead of per-call lines) gets no per-call status; only its shell rows and failures do. A call with no result when the turn ends or stops is dropped, never called finished. An open approval keeps its line until answered; a result or refusal that arrives meanwhile is held and said when it closes. Every failure ends the running line it belongs to: a tool error, a refused or timed-out approval (the denial card), an SDK policy or runtime denial and a browser-loop error all keep the call's `kind` through the host's denial rewrite (`denialToolLine`), and a failed end clears every running call. Lines of another stream are ignored. Nothing estimates time or predicts the next step. A start or finish is announced once (one polite `role="status"` region) and read aloud through the window's read-aloud hub only where the Service serves read-aloud, never while `소리 끄기` is on (muting stops a status reading in the same press), and never over an answer the learner is listening to. A step update of a running call changes the words but is neither announced nor read. A failed reading is said on its own line, `작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.`, apart from any tool failure. Memory only: nothing is stored, logged or sent to the host. Not claimed: voice works or the panel is mounted. VoicePanel is still unmounted and read-aloud draws nothing unless served, so every seat renders as before | `voice-agent-status.test.tsx` (real VoicePanel through the real popup and session reducers, served-voice profile, scripted synthesizer, real read-aloud button, host messages on the real window channel: start shown, announced and read once; step update not re-announced; `끝났어요` only after the result; negative control on prose; negative controls for each non-tool host line (thinking, `⏳` notices, compaction, pending placeholder and close) and for a result with no start; a source check that only tool_use / tool_result / browser-loop posts carry `kind: "tool"`; unanswered call never done; tool failure vs failed reading; `소리 끄기` holds and stops readings; an answer reading is not cut off; approval, other stream, stop and error; pacing; collapse and expand; not served touches no synthesizer; red on main: 15 of 15 behavioural cases fail) |
+| REQ-CGPV-08 | PI#2 (the learner sees what the AI actually did, not what it says it did) / PI#5 / CGP-VOICE-008 / VO-18 / VO-20: while the agent works, the voice panel's status line shows, announces and reads aloud only events the host actually sent on the chat channel: a real tool call (`toolLog` marked `kind: "tool"`, set by the host only on SDK tool_use / tool_result lines and browser-loop calls, keyed by the call id) starting, finishing or failing, the approval wait (`approvalWait`), and the turn's start, stop (`streamStopped`), end (`streamEnd`) and error (`streamError` or a failed end). The coach's prose (`streamChunk`) is never read, so a reply claiming `파일을 저장했어요` with no tool result makes no status. The other `toolLog` lines the host posts carry no `kind` and are ignored: the adult thinking text (`💭`, model prose), busy and orchestrator notices (`⏳`), the compaction note and the pending placeholder (`다음 단계를 준비하는 중…` and its `생각했어요` / `고쳤어요` close). The `kind` marker is live-channel only; persisted timeline lines keep their shape. Words are the chat header's coach run state (`COACH_RUN_STATES`: `생각 중`, `찾는 중`, `만드는 중`, `확인이 필요해요`, `멈춤`, `문제가 생겼어요`, `준비됨`) plus the host's own tool label, e.g. `만드는 중 · 파일 고치기 index.html`; `끝났어요` is written only after that call's own result event, for a call whose start was seen (`파일 고치기 index.html 끝났어요`). A summary-mode seat (one work line instead of per-call lines) gets no per-call status; only its shell rows and failures do. A call with no result when the turn ends or stops is dropped, never called finished. An open approval keeps its line until answered; a result or refusal that arrives meanwhile is held and said when it closes. Every failure ends the running line it belongs to: a tool error, a refused or timed-out approval (the denial card), an SDK policy or runtime denial and a browser-loop error all keep the call's `kind` through the host's denial rewrite (`denialToolLine`), and a failed end clears every running call. Lines of another stream are ignored. Nothing estimates time or predicts the next step. A start or finish is announced once (one polite `role="status"` region) and read aloud through the window's read-aloud hub only where the Service serves read-aloud, never while `소리 끄기` is on (muting stops a status reading in the same press), and never over an answer the learner is listening to, nor over an answer whose reading the engine refused (`blocked`, CGP-VOICE-R-028), so that answer's `소리 켜기` still reads its unheard part. A step update of a running call changes the words but is neither announced nor read. A failed reading, including one the engine refused to start (`blocked`), is said on its own line, `작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.`, apart from any tool failure. Memory only: nothing is stored, logged or sent to the host. Not claimed: voice works or the panel is mounted. VoicePanel is still unmounted and read-aloud draws nothing unless served, so every seat renders as before | `voice-agent-status.test.tsx` (real VoicePanel through the real popup and session reducers, served-voice profile, scripted synthesizer, real read-aloud button, host messages on the real window channel: start shown, announced and read once; step update not re-announced; `끝났어요` only after the result; negative control on prose; negative controls for each non-tool host line (thinking, `⏳` notices, compaction, pending placeholder and close) and for a result with no start; a source check that only tool_use / tool_result / browser-loop posts carry `kind: "tool"`; unanswered call never done; tool failure vs failed reading; `소리 끄기` holds and stops readings; an answer reading is not cut off; approval, other stream, stop and error; pacing; collapse and expand; not served touches no synthesizer; red on main: 15 of 15 behavioural cases fail) |
 | DES-CGPV-08 | One line under the voice panel's state label: a static 16px run-state icon and the words at the 14px caption step, clamped to two lines (`line-clamp: 2`) with the whole text in the DOM and in the tooltip (`data-hp-tooltip`). The visible line changes at most once per second; the newest event wins. The line has no live role; the one `role="status"` region is filled only for starts and finishes, so updates are not announced. The icon never animates or transitions in any motion mode (no spinner to turn off under reduced motion). Approval and error lines take primary ink and their icon colours as the header's run state does. Logical properties and tokens only. The compact control carries the announcer, not the line | `voice-agent-status.smoke.mjs` (headless Chromium, dark/light at 1420 and 320, with and without reduced motion, and forced colours: the line below the state label at 14px or more, 16px icon with no animation or transition, a long label held to two computed line heights with the whole text in the DOM and the tooltip, no live role on the line and one status announcer for starts and finishes only, inside the viewport with no sideways scroll; reads computed styles and line heights, not text widths) |
 
 ## Voice session marker in the task rail (CGP-VOICE-R-030)
@@ -8219,9 +8219,16 @@ behaviour exists in the build (DEC-SHELL-R014):
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
   native task notices while the window is unfocused; notices never carry answer text.
+- 내 작업 내보내기 (2026-11-14) — an action row drawn like "고급 설정", with the note "작업 폴더와 대화를
+  ZIP 파일 하나로 저장해요. 저장할 폴더는 직접 골라요." under it. It closes the sheet and the host runs the
+  shipped export (CGP-SHELL-R-028, `ChatPanelProvider.exportMyWork`: folder picker, progress, the
+  result line, its busy and active-turn guards). It is offered where the shipped entry is: the
+  chat settings dialog draws that entry with no seat condition, so the row has none either and
+  adds no gate of its own. Only the exact `startExportMyWork` message runs it.
 
-화면 밝기(테마), 팁 보기 and 내 작업 내보내기 join when REQ-SHELL-16, REQ-SHELL-19 and
-REQ-SHELL-28 ship; until then they are not drawn, so no row is a switch that does nothing.
+화면 밝기(테마) joins with REQ-SHELL-16 (CGP-SHELL-R-016, #4053). 팁 보기 joins when REQ-SHELL-19
+(CGP-SHELL-R-019) ships: the tips themselves are not built yet. Until then neither is drawn, so
+no row is a switch that does nothing.
 
 "고급 설정" at the end of the sheet is the only start-page path to the VS Code settings editor.
 It is hidden for a minor cohort: a connected or previewed profile that `isMinorProfile` calls
@@ -8229,7 +8236,7 @@ minor (it fails closed on an unknown tier) or a free start answered "under14". T
 the same rule when the request arrives, so a forged request from a minor seat opens nothing. With
 no seat and no under-14 answer it stays (adult or staff setup, as before this row).
 
-Every write is host-validated: only the three keys with their exact values are stored; any other
+Every write is host-validated: only the three setting keys with their exact values are stored; any other
 key or value stores nothing and sends nothing. A failed write says
 "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요." and keeps the shown value. The sheet reuses the
 chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
@@ -8528,7 +8535,7 @@ folder dialog and notification are owner-run checks.
 
 `REQ-STUDIO-DATA-DELETION-REQUEST` implements REQ-SHELL-27 / CGP-SHELL-061 and DES-SHELL-26 /
 CGP-SHELL-D-026; contract in [classroom-admin.md](requirements/classroom-admin.md#adm-14-deletion-request).
-Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; DEC-23 is not decided): the row exists only when the seat's `/v1/profile`
+Default off (decisions.md "DEC-23 (interim, for CGP-SHELL-R-027)"; the learner request flow is not confirmed by Jay, and only DEC-23's interim guardian half is decided): the row exists only when the seat's `/v1/profile`
 carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`).
 
 1. Both chat settings dialogs (personal workspace and classroom) show `계정과 데이터 삭제 요청` with what
@@ -8545,7 +8552,7 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
    The host logs nothing about it and touches no file.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
-`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
+`worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (by DEC-23's interim guardian half, Jay 2026-11-14, an operator or support handles them by hand outside the product until the guardian account GRD-12 exists), status after the
 credential expired, a live-app run.
 
 ## Desktop-first mobile companion (DMC-01–15)
@@ -9502,6 +9509,14 @@ automatic voice endpoints and foreground-only next-turn listening. See
 and [journey verification](testing/native-mobile-growth.md). This is source work;
 actual provider sign-in, physical audio and distributed-package acceptance must
 be reported separately. Existing desktop execution remains unchanged.
+
+Studio #4093 makes personal-question readiness independent of desktop-list
+latency, preserves drafts through bounded read failures, and keeps cancellation
+eligible for ordinary recovery. Empty speech results preserve earlier recognized
+words; bounded automatic recapture never sends an empty turn, and Stop cancels
+pending continuation. Verified callback expiry is tested separately from network
+failure. These additions refine MFR-01–05 and retain the same account, outbox and
+existing desktop contracts; native and physical evidence remain separate.
 
 Every escaped user failure follows the same delivery loop: retain the observed
 version and failure (or mark the installed version unknown), add its requirement

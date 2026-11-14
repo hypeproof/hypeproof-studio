@@ -151,6 +151,9 @@ class NativeGitHub(GitHub):
         for grant in grants.values():
             self._revoke(grant)
 
+    def actions_write_allowed(self, suffix):
+        return suffix == '/actions/workflows/studio-apple-testflight.yml/dispatches'
+
     def _environment(self, path, method, *, timeout):
         require(not self._closed, "native credential session is closed")
         match = re.fullmatch(r"repos/(hypeproof/[A-Za-z0-9_.-]+)(/[^#]*)?", path)
@@ -158,7 +161,7 @@ class NativeGitHub(GitHub):
         repo, suffix = match[1], (match[2] or "")
         if self.actions:
             allowed = (method == "GET" and suffix.startswith("/actions/")) or (
-                method == "POST" and suffix == "/actions/workflows/studio-apple-testflight.yml/dispatches")
+                method == "POST" and self.actions_write_allowed(suffix))
         else:
             ancestry_read = repo == 'hypeproof/hypeproof-studio' and re.fullmatch(
                 r'/compare/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1)?', suffix)
@@ -217,6 +220,15 @@ class NativeGitHub(GitHub):
 
     def download(self, *args):
         raise Blocked("native profile uses Actions artifacts only")
+
+
+class DesktopBuildActions(NativeGitHub):
+    """One repository, Actions-only broker grant, only the Windows dispatch POST."""
+    def __init__(self, repo):
+        super().__init__([repo], actions=True)
+
+    def actions_write_allowed(self, suffix):
+        return suffix == '/actions/workflows/build-windows.yml/dispatches'
 
 
 def file_hash(path):
