@@ -36,6 +36,12 @@ const config = (() => { const base = chatConfig(3); return { ...base, profile: {
 // Two learners on one shared classroom PC: the same lesson, two Service seats (CGP-LEARN-R-011 (c) follow-up).
 const asSeat = (c) => ({ ...config, profile: { ...config.profile, activity_id: c.repeat(64) } });
 const seatA = asSeat('a'), seatB = asSeat('b');
+// What a same-seat re-mount of the ChatPanel posts to the host, sorted, once each (measured on main abacd1bf5; #4064 pin
+// b). The lesson panel's own share is the one lessonFocus. A new ChatPanel mount request changes this list on purpose:
+// update it then, and only then. An extra post on mount (any type, a second lessonFocus included) fails here.
+const SAME_SEAT_REMOUNT_TYPES = ['accuracyEducationRequest', 'helpRequest', 'inboxRequest', 'lessonFocus', 'lowDiskRequest', 'memoryNoticeRequest',
+  'missingTaskFolderRequest', 'pageCardsRequest', 'perfTraceStateRequest', 'planFirstRequest', 'previewRecoveryRequest', 'queueState',
+  'turnReviewRequest', 'whatsNewRequest'];
 // No seat at all: no Service seat id, no capability receipt, no local activity id (a local/dev or instructor-like window).
 const noSeat = { ...config, activity: { ...config.activity, id: '' } };
 const nextVersion = { ...config, profile: { ...config.profile, lesson: { ...config.profile.lesson, version: config.profile.lesson.version + '-next', sha256: 'e'.repeat(64) } } };
@@ -169,20 +175,29 @@ try {
     assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: learner A collapsed the block`);
     // Host traffic across a seat switch equals a same-seat re-mount's (the control): a seat change posts nothing extra and
     // fetches nothing, so it is never a host event.
+    // It also records whether any frame of the re-mount drew a collapsed block: a MutationObserver installed before the
+    // re-mount sees every node and attribute the first render commits, before any effect could correct it (#4064 pin a).
     const traffic = async (next, what) => {
       const p0 = await ev('posted.length'), f0 = await ev('window.__fetches');
+      await ev(`(()=>{window.__sawCollapsed=false;const seen=()=>{if(document.querySelector('[data-block-collapsed]'))window.__sawCollapsed=true};window.__frameObs?.disconnect();window.__frameObs=new MutationObserver(seen);window.__frameObs.observe(document.getElementById('root'),{subtree:true,childList:true,attributes:true});})()`);
       await ev(`remount(${JSON.stringify(next)})`); await waitFor(`card('criterion_form')`, `${tag} ${what}`); await settle(); await settle();
-      return { types: await ev(`posted.slice(${p0}).map(m=>m.type).sort()`), fetches: (await ev('window.__fetches')) - f0 };
+      const sawCollapsed = await ev(`(window.__frameObs.takeRecords(),document.querySelector('[data-block-collapsed]')&&(window.__sawCollapsed=true),window.__frameObs.disconnect(),window.__sawCollapsed)`);
+      return { types: await ev(`posted.slice(${p0}).map(m=>m.type).sort()`), fetches: (await ev('window.__fetches')) - f0, sawCollapsed };
     };
     const same = await traffic(seatA, 'A again');
     assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: the same learner keeps it across a re-mount (control)`);
     const switched = await traffic(seatB, 'learner B');
-    assert.deepEqual(switched, same, `${tag}: a seat switch sends the host exactly what a same-seat re-mount sends, and fetches nothing`);
+    // #4064 pin b: the control's own list, as a literal, so "post on every mount" cannot hide in both sides of the comparison.
+    assert.deepEqual(same.types, SAME_SEAT_REMOUNT_TYPES, `${tag}: a same-seat re-mount posts exactly ${JSON.stringify(SAME_SEAT_REMOUNT_TYPES)}`);
+    assert.equal(same.sawCollapsed, true, `${tag}: control: the same learner's re-mount draws the collapsed block`);
+    // #4064 pin a: learner B's very first frame shows no collapsed block (not only after an effect corrects it).
+    assert.equal(switched.sawCollapsed, false, `${tag}: no frame of learner B's mount draws learner A's collapsed block`);
+    assert.deepEqual({ types: switched.types, fetches: switched.fetches }, { types: same.types, fetches: same.fetches }, `${tag}: a seat switch sends the host exactly what a same-seat re-mount sends, and fetches nothing`);
     assert.equal(switched.fetches, 0, `${tag}: no fetch across a seat switch`);
     assert.deepEqual(await ev(`[document.querySelectorAll('[data-block-collapsed]').length, JSON.stringify(window.__vs.lessonBlocksCollapsed)]`), [0, JSON.stringify({ seat: 'seat:' + 'b'.repeat(64), keys: [] })], `${tag}: learner B sees every block; A's set is cleared`);
     await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} A after B`);
     assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: A's set did not survive B's sign-in`);
-    checks += 7;
+    checks += 10;
 
     // An empty seat is not a learner: its collapsed set works in memory but is never stored, and switching to it clears the
     // previous seat's stored set. A re-mount without a seat starts with every block shown (no shared bucket).
