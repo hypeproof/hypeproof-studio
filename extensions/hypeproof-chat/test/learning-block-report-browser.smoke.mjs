@@ -113,7 +113,7 @@ try {
     checks += 5;
 
     // The host answers "not_sent": the report stays open and says so; another lesson's answer is ignored.
-    await ev(`host({type:'materialReportResult',sha256:'f'.repeat(64),stepId:${JSON.stringify(stepId)},state:'sent'})`); await settle();
+    await ev(`host({type:'materialReportResult',sha256:${JSON.stringify((lesson.sha256[0] === '0' ? '1' : '0') + lesson.sha256.slice(1))},stepId:${JSON.stringify(stepId)},state:'sent'})`); await settle();
     assert.equal(await ev(`!!card().querySelector('[data-block-report-panel]')`), true, `${tag}: another lesson's answer changes nothing`);
     await ev(`host({type:'materialReportResult',sha256:${JSON.stringify(lesson.sha256)},stepId:${JSON.stringify(stepId)},state:'not_sent'})`); await settle();
     assert.deepEqual(await ev(`[!!card().querySelector('[data-block-report-panel]'), card().querySelector('[data-report-result="not_sent"]')?.textContent, card().querySelector('[data-report-send]').disabled]`), [true, '수업 연결이 없어 보내지 못했어요. 선생님께 직접 말해 주세요.', false], `${tag}: not sent is said`);

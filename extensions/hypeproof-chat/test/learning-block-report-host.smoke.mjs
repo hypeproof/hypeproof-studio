@@ -77,8 +77,8 @@ await test("handler: a report goes to the class connection with ids only; webvie
   const queued = [];
   const { host, posts, effects } = makeHost({ materialReport: async (p) => { queued.push(p); return true; } });
   await proto.handleMessage.call(host, { type: "materialReport", stepId: "s1", reason: "broken", block_type: "metric_board", note: "선생님 이거 틀렸어요", text: "x", transcript: ["a"] });
-  assert.deepEqual(queued, [{ lesson_course: "web-1", lesson_version: "m2026.11.15-1", step_id: "s1", block_type: "criterion_form", block_version: 1, reason: "broken" }]);
-  assert.deepEqual(posts, [{ type: "materialReportResult", sha256: LESSON.sha256, stepId: "s1", state: "sent" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(queued)), [{ lesson_course: "web-1", lesson_version: "m2026.11.15-1", step_id: "s1", block_type: "criterion_form", block_version: 1, reason: "broken" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ type: "materialReportResult", sha256: LESSON.sha256, stepId: "s1", state: "sent" }]);
   assert.equal(effects.length, 0, "no spool line: a report is not work and not an observation");
   assert.ok(!JSON.stringify(queued).includes("틀렸어요"), "no learner words travel");
 });
@@ -101,12 +101,12 @@ await test("handler: no connection, a refused outbox, a throwing observer or no 
 // ─── the real ops host ──────────────────────────────────────────────────────
 await test("ops host: a material_report event with actor student is added to the outbox; no connection returns false", async () => {
   const Host = await load("classroomOpsHost", "ClassroomOpsHost");
-  assert.equal(await h.materialReport.call(Object.assign(Object.create(Host.prototype), { outbox: null, loop: null }), { reason: "wrong" }), false);
+  assert.equal(await Object.assign(Object.create(Host.prototype), { outbox: null, loop: null }).materialReport({ reason: "wrong" }), false);
   const added = []; let nudged = 0;
   const live = Object.assign(Object.create(Host.prototype), { outbox: { add: async (...a) => { added.push(a); return true; } }, loop: { nudge: () => { nudged++; } } });
   const payload = materialReportPayload(LESSON, { stepId: "s2", reason: "unclear" }, sha);
   assert.equal(await live.materialReport(payload), true);
-  assert.deepEqual(added, [["material_report", payload, "student"]]); assert.equal(nudged, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(added)), [["material_report", payload, "student"]]); assert.equal(nudged, 1);
   const full = Object.assign(Object.create(Host.prototype), { outbox: { add: async () => false }, loop: { nudge: () => { nudged++; } } });
   assert.equal(await full.materialReport(payload), false, "a full outbox is said, never pretended"); assert.equal(nudged, 1);
 });
