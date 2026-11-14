@@ -6436,6 +6436,12 @@ guard already used by HeaderActions and the shared dismissal hook. This does not
 capability availability, reservation locks, tool execution or OS dialog approvals.
 The computed guard mounts the real components with built application CSS, exercises both
 composer modes, themes,800/1420 windows, token overrides, keyboard focus and forced colors.
+The rail's task menu (CGP-KNOW-R-009, `TaskMenu.tsx`) uses the same set (2026-11-14): its panel takes the
+4px gutter, its items the 44px item height, the 8px/12px item padding, the nested item radius
+(`--hp-radius-menu-item`, 8px; it was 6px from a 6px gutter and 10px block padding) and
+start-aligned text (it was `left`). `test/task-menu-computed.smoke.mjs` now reads each of these
+against the token resolved in the panel's own scope, never a literal pixel; on main it failed
+on the gutter, item padding, item radius and alignment in all eight seat/theme/width cases.
 CGP-DS-D-019 adds label-prefix focus search to both menus: printable keys accumulate for 700ms,
 repeating the same first letter cycles matches, navigation and closing reset the prefix.
 Committed IME text searches only after composition ends; composition keys never navigate or

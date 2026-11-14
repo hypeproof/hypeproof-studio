@@ -371,7 +371,9 @@ implied by that headless result.
 
 REQ-CGP-DS-24 uses the shared learner-menu tokens and computed browser guard described in
 REQ-STUDIO-MENU-TOKENS. The tools and personal header menus retain their own placement
-and actions. DES-CGP-DS-24 type-ahead and Chalk dense-menu work remain separate; local
+and actions. Studio 2026-11-14: the rail's task menu (added later by CGP-KNOW-R-009) had its own
+6px gutter, 10px item padding, 6px item radius and left alignment; it now uses the shared set
+(`test/task-menu-computed.smoke.mjs`). DES-CGP-DS-24 type-ahead and Chalk dense-menu work remain separate; local
 computed evidence does not imply installed-app or owner acceptance.
 
 ## Confirmed copy feedback (CGP-DS-R-025)
