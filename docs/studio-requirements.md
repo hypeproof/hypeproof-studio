@@ -3137,6 +3137,8 @@ PR — 이 도메인은 "각 PC 에 빠짐없이, 깨지지 않게 쌓인다"까
 | REQ-STUDIO-LOCAL-TURN-BUDGET | A local turn's 180 s budget counts only active model time. Time spent waiting for a person (an approval, the overwrite confirmation, an email question) does not count, and a turn that ends while the person is answering denies that answer, so a late approval or confirmation never runs the write. | Fake-clock checks: a 200 s wait does not stop the turn; 180 s of active time after the answer does; a late approval or pick after the turn ended is denied and the file is unchanged. Email wait behaviour unchanged. The Chalk-side wait for a tool result is not counted here (see the PR). | Unit (`test/human-wait.smoke.mjs`, `test/local-email-runtime.smoke.mjs`); agent Dev run (👁) pending |
 | REQ-STUDIO-LOCAL-BROWSER-OPEN | On the instructor local runner (legacy turn and Chalk contract turn) `browser_open` follows the student rule (REQ-M20/M28): an outside address is asked once through the turn's approval gate and not opened if refused; loopback (127.0.0.1, localhost, [::1]) and an address already open are not asked; `live_preview_start` is not asked; a policy-denied address is not opened. The judgement is `evaluateSdkToolUse`; remembered origins are the host's. 0.0.0.0 stays asked (known, unchanged). | `test/local-browser-open-approval.smoke.mjs` (loopback allow, outside ask/refuse, already open, live preview, deny, origin memory, budget during the wait, late answer denied); agent Dev run (👁) pending | Unit (`test/local-browser-open-approval.smoke.mjs`); wiring by source (`src/chatPanelProvider.ts`) |
 | REQ-STUDIO-INSTRUCTOR-SUBSCRIPTION | On the release app, an instructor can run the instructor turn with their own Claude or Codex CLI subscription. The gate opens only when the server verifies instructor mode (whoami), the setting `hypeproofChat.instructorSubscription` is on (default off, machine scope), the seat is the instructor's own panel (not a student slot), the seat is not a rehearsal, and a CLI is found at an absolute path and its status command succeeds. A learner never gets it. Credentials are never read, stored or logged: only the status command's exit status is used, and the CLI child environment drops vendor keys, `HPS_*` values and token-shaped names. The Dev-only runner (`HPS_DEV_RUNTIME`) stays closed on the release app name. | `test/release-instructor-runner.smoke.mjs` (open on the release name with instructor and setting on; closed for learner, student slot, setting off, rehearsal, no CLI, relative path, login failure; Dev env ignored on the release name; no credential file read; env allowlist); release-build check by JY (NOT RUN here) | Unit (`test/release-instructor-runner.smoke.mjs`); agent Dev run (👁) pending |
+| REQ-STUDIO-CHALK-MODEL-ALLOWLIST | On the instructor local runner, the model an instructor picks in Chalk runs the Chalk contract turn only when it is in the provider allowlist (claude `sonnet`, `opus`; codex has no extra model, only the configured one; the configured model is always included). The list is sent only through `activateInstructor.models`. A requested model outside the list, or none, runs the default and is reported as `executorModel`; the turn is not refused, and Chalk shows a notice when the two differ. The legacy panel's single-choice model list is unchanged. The proxy path's model selection is unchanged. CLI `--model` receives the executed value (chalk#25). | `test/chalk-instructor-model.smoke.mjs` (allowlist shape; positive: `opus` reaches the CLI `--model` argument; negative: `fable`, `haiku`, arbitrary text keep the default in both the pure check and the CLI argument; legacy choice count and source guard) | Unit (`test/chalk-instructor-model.smoke.mjs`); Dev run with the claude CLI on `opus` pending (agent, Dev) |
+
 | REQ-STUDIO-CHALK-RUNTIME-SWITCH | Changing `hypeproofChat.instructorRuntime` takes effect without a reload. Leaving `chalk-extension` ends the active Chalk session once (`deactivateInstructor` with `reason: "runtimeChanged"`); with no session nothing is sent. Returning to `chalk-extension` activates again with a new nonce. | After the switch to legacy, a turn with the old nonce is refused `noSession`; the switch runs from the configuration event alone, and the session ends before the refresh, so a failing refresh (profile or whoami) cannot keep it alive and the chat view need not be resolved. Chalk-side screen text: hypeproof/hypeproof-chalk#38, checked in an agent Dev run (👁). | Unit (`test/chalk-contract.smoke.mjs`, runtime switch checks incl. a rejecting refresh, via `applyInstructorRuntimeSetting`); wiring by source (`src/extension.ts` listener); Dev run pending |
 
 REQ-A8 fixture isolation: both the environment flag and the existing user-data test-state file keep an explicitly opened practice folder. The activation verdict is shared with spool suppression and passed through onboarding and token changes (#713). Normal cohort switching remains unchanged.
@@ -8735,6 +8737,45 @@ Evidence: `extensions/hypeproof-chat/test/learning-block-reset-undo-browser.smok
 and 1420px, criterion and decision blocks: preset exactly, undo of a reset, then one burst at a time, both disabled states,
 no host message, saved work kept, quiet 44px/14px buttons, disabled colour and dashed boundary) and
 `test/lesson-focus.smoke.mjs` (the pure history: one change per burst or reset, empty history disables undo, bounded).
+
+REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
+REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
+it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,
+its optional field and the report reaching the lesson's instructor in Chalk. That half needs a Service and Chalk route.
+
+The open 자료 card has a 자료 메뉴 button in its head, after 닫기. It is a quiet 44×44 button, named "자료 메뉴: <block title>",
+with `aria-haspopup="menu"`. The closed card keeps DES-CGP-LEARN-01's one row and has no menu button, because a fourth head
+column would leave the title no width in a 280px rail. The open card gains no height. The button opens an in-flow menu as a row
+under the head, with one item, "접기" (`role="menuitem"`, named "접기: <title>", 44px, 14px). Closing the card
+closes its menu. ArrowDown or ArrowUp on
+the button, or Enter or a click, opens the menu with focus on its first item. Escape closes it and returns focus to the button,
+and Tab closes it.
+
+접기 replaces the card with one row: "접은 자료: <title>" and a quiet 44px "다시 보기" button named "다시 보기: <title>", and focus
+moves to that button. While collapsed, the card body stays mounted and hidden (the rehearsal read-back keeps its nodes), and the
+polite state line is not drawn. 다시 보기 restores the card open, the state it was collapsed from (also after a re-mount, which forgets open/closed), and focus moves to the menu button.
+
+The collapsed set belongs to the learner's own view. It is keyed by lesson version and step, like open/closed, and kept in the
+webview's own state, so it survives a hide/show re-mount in the session. It is stored with its seat. The seat is the Service seat
+id (`activity_id`); without one, the lesson capability receipt id; without that, the local activity id. A seat sees only its
+own set. Classroom PCs are shared, so when another learner's seat appears on the same window, the previous learner's set is
+cleared from the webview state, not only hidden. It is bounded to 50, and a new lesson version starts
+with every block shown. It is never sent to the host, so it is not work, not a report and not an observation event. Seats:
+every seat that draws the lesson rail. Default: on. Display only, with no new data flow and no new learner text field.
+
+Evidence:
+- `extensions/hypeproof-chat/test/learning-block-collapse-browser.smoke.mjs` runs in headless Chromium with real key events,
+  light and dark, at 800 and 1420px, on the criterion and decision blocks. It checks:
+  - the closed card has no menu button, and in the open card Tab from 닫기 reaches it;
+  - ArrowDown, Escape and Enter work as described;
+  - names, 44px, 14px, focus ring, and no sideways scroll;
+  - the collapsed row and where focus goes;
+  - no host message and no fetch;
+  - the state survives a re-mount for the same learner;
+  - a second learner on the same window sees every block, and the first learner's set is cleared;
+  - another step and a new lesson version are shown;
+  - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
+- `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
 
 ## Activity memory state line (CGP-KNOW-R-022)
 

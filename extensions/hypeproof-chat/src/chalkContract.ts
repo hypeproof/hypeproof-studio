@@ -71,8 +71,11 @@ export interface RunTurnInput {
 export interface LocalRunner {
   /** Non-null only where a local executor exists (the Dev app with HPS_DEV_RUNTIME=1). */
   available(): boolean;
-  /** The executor's own model (local.model). `model?` from Chalk is recorded, never used to run. */
-  executorModel(): string | undefined;
+  /**
+   * The model a turn with this requested value would run on (chalk#25). A value inside the allowlist is used;
+   * anything else, or none, runs on the default. Chalk compares this with requestedModel to show a notice.
+   */
+  executorModel(requested?: string): string | undefined;
   run(input: RunTurnInput): Promise<void>;
   previewOpen(webPath: string): Promise<{ ok: boolean; error?: string }>;
 }
@@ -278,7 +281,7 @@ export class ChalkContractHost {
     return {
       accepted: true,
       requestedModel: requested ?? null,
-      executorModel: this.runner.executorModel() ?? null,
+      executorModel: this.runner.executorModel(requested) ?? null,
     };
   }
 
