@@ -1047,7 +1047,7 @@ export type HostMessage = (
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   /** CGP-ART-D-008 — a safe-session link outside the cohort allowlist did not open (flag `safeLinkAllowlistEnabled`). */
   | { type: "externalLinkBlocked"; host: string; at: number }
-  | { type: "history"; messages: ChatMessage[] }
+  | { type: "history"; messages: ChatMessage[]; reflectionFailure?: import("./personalReflection").ReflectionAdmissionFailure & { persisted: boolean } }
   | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
   | { type: "contextTrim"; boundaryId: string | null }

@@ -96,6 +96,30 @@ dispatch, repeated clicks, cancellation and stale/classroom refusals. Existing
 HTTP and VS Code presentation remain fixtures; actual Electron layout/focus and
 release-pinned phone/desktop acceptance are separate observations.
 
+### Desktop admission explanation persistence (MPER-03/04, #4019)
+
+`personal-reflection-admission.test.tsx` mounts the existing App and sends through
+AccountSession and the production reflection host into the real task store.
+A typed refusal followed by the recorded failed GET must retain its explanation,
+one original question and a concurrent rich draft after refresh and a fresh host
+and App mount. The VS Code Memento seam is file-backed; no refresh or reopening
+may create another POST. The identical rendered control must fail on the original
+host/view at the missing visible explanation, rather than at fixture setup.
+
+The existing `mobile-conversation-host.test.mjs` checks monthly, budget, access
+and temporary admission codes separately; an unclassified 429 is never labelled
+monthly. Unknown/failed reads retain the allowlisted request-bound reason;
+matching completion/cancellation or a new deliberate request resolves it. Late
+refusal after Stop, account/session/task/request changes cannot relabel new work.
+A failed binding write retains the question and explicitly labels the visible
+explanation as unsaved; it does not claim persistence across a fresh host.
+
+Focused commands from `extensions/hypeproof-chat`: `node scripts/run-tsx-tests.mjs
+personal-reflection-admission` and `node --experimental-strip-types --test
+test/personal-reflection.test.mjs test/mobile-conversation-host.test.mjs`.
+These are mounted React, controlled HTTP, host and disk observations, not installed
+Electron, live entitlement, physical-device or multi-device acceptance.
+
 ### Android same-account question parity (MADR-01–05, #3733)
 
 Run `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug

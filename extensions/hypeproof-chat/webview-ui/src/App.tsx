@@ -1,3 +1,4 @@
+import { reflectionFailure as reflectionFailureMessage, readReflectionAdmission } from '../../src/personalReflection';
 import { FolderConsentDialog } from './FolderConsentDialog';
 import { DoctorNoticeLine, ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
 import type { DoctorNotice } from '../../src/studioDoctor';
@@ -137,7 +138,7 @@ interface State {
 type Action =
   | { type: "visibleProgress" }
   | { type: "config"; config: ChatConfig }
-  | { type: "history"; messages: ChatMessage[] }
+  | { type: "history"; messages: ChatMessage[]; reflectionFailure?: import("../../src/personalReflection").ReflectionAdmissionFailure & { persisted: boolean } }
   | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; delta: string }
   | { type: "streamCitations"; citations: Citation[] }
@@ -223,7 +224,8 @@ function reducer(state: State, action: Action): State {
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
       // 배열 하나를 갈아끼우면 끝이다.
-      return { ...state, timeline: timelineReset(retainElapsedReceipts(action.messages, state.timeline.items)), error: null };
+      return { ...state, timeline: timelineReset(retainElapsedReceipts(action.messages, state.timeline.items)), error: readReflectionAdmission(action.reflectionFailure)
+        ? reflectionFailureMessage(action.reflectionFailure) + (action.reflectionFailure!.persisted ? "" : " 이 안내를 이 기기에 저장하지 못했어요. 이 화면을 닫으면 안내가 사라질 수 있어요.") : null };
     case "streamStart":
       return {
         ...state,
@@ -546,7 +548,7 @@ export function App() {
         case "runningProcesses": setRunningProcesses(msg.entries); break;
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "answerAttemptSelected": dispatch({type: "answerAttemptSelected", root: msg.root}); break;
-        case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
+        case "history":     dispatch({ type: "history", messages: msg.messages, reflectionFailure: msg.reflectionFailure }); setTrimBoundaryId(null); break;
         case "contextTrim": setTrimBoundaryId(msg.boundaryId); break;
         case "answerVerdicts": {
           const latest = msg.messageId ? latestVerdictRequests.current.get(msg.messageId) : undefined;
