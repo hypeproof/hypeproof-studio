@@ -10,9 +10,6 @@
 // The ledger lives in workspaceState next to the memory-use ledger: per activity scope, per task id, two booleans.
 // No memory text, no task title, nothing outside this device.
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-
 export const TASK_MEMORY_KEY = "hps.taskMemory.v1";
 /** Ledger bounds: activity scopes kept, tasks per scope (oldest entries go first). */
 export const TASK_MEMORY_MAX = { scopes: 50, tasks: 200 } as const;
@@ -90,32 +87,3 @@ export function setSwitches(ledger: TaskMemoryLedger, scope: string, taskId: str
 
 /** What the settings dialog draws for the open task. */
 export interface TaskMemoryView { taskId: string; use: boolean; keep: boolean; useLocked: boolean }
-
-/**
- * A path as the file system will resolve it: the real path of its deepest existing ancestor (links followed), then the
- * rest of the segments. So `<root>/link/a.md` with `link -> .hypeproof/memory` lands inside the memory folder.
- */
-export function canonicalPath(p: string): string {
-  let cur = path.resolve(p);
-  const rest: string[] = [];
-  for (;;) {
-    try { return path.join(fs.realpathSync.native(cur), ...rest.reverse()); } catch {
-      const parent = path.dirname(cur);
-      if (parent === cur) return path.resolve(p);
-      rest.push(path.basename(cur));
-      cur = parent;
-    }
-  }
-}
-
-/** macOS (APFS default) and Windows compare names without case: `.HYPEPROOF/MEMORY` is the same folder there. */
-export function foldsCase(platform: string = process.platform): boolean {
-  return platform === "darwin" || platform === "win32";
-}
-
-/** True when `target` is the memory folder or inside it, after links are resolved and case is folded where the OS does. */
-export function insideFolder(folder: string, target: string, platform: string = process.platform): boolean {
-  const fold = (p: string) => (foldsCase(platform) ? p.toLowerCase() : p);
-  const rel = path.relative(fold(canonicalPath(folder)), fold(canonicalPath(target)));
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-}

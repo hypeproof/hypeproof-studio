@@ -19568,6 +19568,9 @@
           "path": "extensions/hypeproof-chat/src/taskMemorySwitches.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/memoryPathCheck.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/TaskMemorySwitches.tsx"
         },
         {

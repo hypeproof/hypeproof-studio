@@ -9348,9 +9348,12 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
   - shell quote or escape splitting (`.hype''proof`, `.hype"proof"`, `.hype\proof`);
   - interpreter one-liners (`python3 -c`, `node -e`);
   - names built at run time (a variable, a glob, `cd` steps);
-  - the local CLI runtime's shell.
+  - the local CLI runtime's shell;
+  - a `Write` through a dangling symlink (`dangling.md -> .hypeproof/memory/ghost.md`): the link's target does not
+    exist yet, so the path check resolves only the link's own folder.
 
-  #4014 (the turn-end check of the memory folder) covers all of these by putting the folder back after the turn.
+  These are covered once #4059 (#4014, the turn-end check of the memory folder) lands: it puts the folder back after
+  the turn.
 - **Read side, use off.** Not stopped; this stays partial after #4014:
   - shell reads written in any of the forms above;
   - a search from an ancestor folder whose pattern does not name `.hypeproof`;

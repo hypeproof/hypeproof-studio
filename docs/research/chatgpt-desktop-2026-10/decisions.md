@@ -2310,8 +2310,8 @@ Requirement: `docs/studio-requirements.md` "Task memory switches" (REQ-STUDIO-TA
 - **Read side (verifier should-fix).** With use off, the SDK's `Read`, `Grep`, `Glob` and `NotebookRead` are denied on
   the memory folder or on a pattern that names `.hypeproof`.
 - **Known gaps (agent choice: state them rather than claim more).**
-  - Write side: quote or escape splitting, interpreter one-liners, names built at run time, the local runtime's shell.
-    #4014's turn-end check covers these.
+  - Write side: quote or escape splitting, interpreter one-liners, names built at run time, the local runtime's shell,
+    and a `Write` through a dangling symlink. These are covered once #4059 (#4014's turn-end check) lands.
   - Read side: the same shell forms, ancestor searches whose pattern does not name the folder, the local runtime. These
     stay open, and the row stays partially met for reads.
 - **Storage.** `workspaceState`, booleans per scope and task. Nothing leaves the device.

@@ -19,7 +19,9 @@ import { build } from 'esbuild';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { runRemember, REMEMBER_REPLIES } from '../src/memoryRememberTool.ts';
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen } from '../src/memoryNotice.ts';
-import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, insideFolder, setSwitches, switchesFor, useLocked, TASK_MEMORY_MAX } from '../src/taskMemorySwitches.ts';
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, TASK_MEMORY_MAX } from '../src/taskMemorySwitches.ts';
+import { insideFolder } from '../src/memoryPathCheck.ts';
+import { readFileSync as readSource } from 'node:fs';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-memory-')));
 let passed = 0;
@@ -53,6 +55,11 @@ try {
     assert.equal(Object.keys(big.s).length, TASK_MEMORY_MAX.tasks, 'oldest tasks go first');
     assert.equal(useLocked(0), false);
     assert.equal(useLocked(1), true);
+  });
+
+  await t('the module the webview imports has no Node import (extension-dev rule)', () => {
+    const src = readSource(new URL('../src/taskMemorySwitches.ts', import.meta.url), 'utf8');
+    assert.equal(/from ["']node:|require\(["']node:|from ["'](fs|path)["']/.test(src), false, 'taskMemorySwitches.ts stays Node-free');
   });
 
   await t('path check: links are followed and case is folded where the OS folds it', () => {

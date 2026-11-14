@@ -416,7 +416,8 @@ import { MEMORY_REMEMBER_TURN_CAP, type MemoryRememberHost } from "./memoryRemem
 import { MEMORY_WRITE_COPY, isMemoryWriteId, memoryWriteLabel } from "./memoryWriteLine";
 import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
-import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, insideFolder, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
+import { TASK_MEMORY_COPY, TASK_MEMORY_KEY, acceptTaskMemory, setSwitches, switchesFor, useLocked, type TaskMemoryView } from "./taskMemorySwitches";
+import { insideFolder } from "./memoryPathCheck";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
