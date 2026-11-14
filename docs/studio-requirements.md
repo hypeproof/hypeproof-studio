@@ -8918,8 +8918,7 @@ no host message, saved work kept, quiet 44px/14px buttons, disabled colour and d
 
 REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
 REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
-it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,
-its optional field and the report reaching the lesson's instructor in Chalk. That half needs a Service and Chalk route.
+it back. This row covers (c) "접기". The report half, (a) and (b), is REQ-STUDIO-LEARNING-BLOCK-REPORT below.
 
 The open 자료 card has a 자료 메뉴 button in its head, after 닫기. It is a quiet 44×44 button, named "자료 메뉴: <block title>",
 with `aria-haspopup="menu"`. The closed card keeps DES-CGP-LEARN-01's one row and has no menu button, because a fourth head
@@ -8959,6 +8958,50 @@ Evidence:
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
+
+REQ-STUDIO-LEARNING-BLOCK-REPORT / REQ-CGP-LEARN-11 (a) and DES-CGP-LEARN-11, report half (traces to
+REQ-STUDIO-LEARNING-BLOCK-COLLAPSE, CGP-LEARN-R-011) / PI#2: a learner can tell the class instructor that a learning block looks
+wrong, and the instructor learns which block it was without reading anything the learner wrote.
+
+The open card's 자료 메뉴 gains "자료가 틀린 것 같아요", before 접기, only while this window has a live class connection (the
+inbox view has a run and is neither offline nor ended). Without one there is no instructor to reach, so the item is not drawn;
+instructor windows and rehearsals never draw it. The item opens the report inline, as a row under the card head, never as a
+modal. The row asks "어떤 점이 이상한가요?" and offers three reasons as native radios in 44px labels at a 14px floor: 내용이 틀려요,
+열리지 않아요, 이해하기 어려워요. Focus moves to the first reason. A note says "어떤 자료인지와 고른 이유만 선생님께 가요. 대화 내용은
+가지 않아요." "선생님께 보내기" stays disabled until a reason is picked, and "취소" or Escape closes the row with focus on the
+menu button.
+
+**There is no text field, for any seat.** DES-CGP-LEARN-11's optional 0–300 character field is deferred (decisions.md
+CGP-LEARN-R-011 (a)). The class board this goes to never carries a learner's words, and an optional field would break that.
+
+The webview posts `{ type: "materialReport", stepId, reason }` and nothing else. The host builds the payload from the served
+lesson only (`lessonFocus.ts` `materialReportPayload`):
+- the course, version and step;
+- the block type and pinned version of the block that step draws;
+- a key-order-free sha-256 of the step's `ui_params`, when it has any;
+- the reason.
+
+A step that draws no block, or an unknown reason, gives nothing. The host queues the payload as a classroom-ops
+`material_report` event with actor student (`ClassroomOpsHost.materialReport`). It answers `materialReportResult` "sent" or
+"not_sent". "sent" closes the row and shows the toast "선생님께 전달했어요" in the polite live region, and focus returns to the menu
+button. "not_sent" (no connection, or the outbox refused or failed) keeps the row and says "수업 연결이 없어 보내지 못했어요. 선생님께
+직접 말해 주세요." The report is not work, not evidence and not a spool line, and it carries no transcript. The Service lists it
+on the run's instructor board, and Chalk `/manage` shows it as "자료 신고" (hypeproof-service material_report; Chalk
+`chalk/test/material-report.test.mjs`). Seats: classroom seats with a live class connection. Default: on.
+
+Evidence:
+- `extensions/hypeproof-chat/test/learning-block-report-browser.smoke.mjs` runs in headless Chromium with real key events,
+  light and dark, at 800 and 1420px. It checks:
+  - with no connection, an offline one or an ended one, the menu holds only 접기 (the control);
+  - the inline row has no dialog, nothing positioned and no text field, three 44px/14px radios, focus on the first and a focus ring;
+  - opening it sends nothing, and the post is exactly a step and a reason;
+  - "not_sent" is said, and another lesson's answer is ignored;
+  - "sent" closes it with the polite announcement and focus on the menu button;
+  - Escape closes it, and a dropped connection removes the item and the open row.
+- `extensions/hypeproof-chat/test/learning-block-report-host.smoke.mjs` runs the pure payload with positive and negative controls
+  against the Service allowlist. It drives the real `ChatPanelProvider.handleMessage`, which drops webview-supplied block fields
+  and text, records no spool line and covers every "not_sent" path. It also runs the real `ClassroomOpsHost.materialReport`:
+  an outbox event with actor student, and false with no connection or a full outbox.
 
 ## Activity memory state line (CGP-KNOW-R-022)
 

@@ -874,6 +874,8 @@ export type WebviewMessage = (
   | { type: "lessonFocus"; stepId: string; helpMode: string | null }
   // #751 G2 — a work-surface save (criterion_form → criterion, decision_form → decision) for one step of the current lesson.
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
+  // CGP-LEARN-R-011 — "자료가 틀린 것 같아요": a step and a reason chip only. The host builds the block identity from the served lesson.
+  | { type: "materialReport"; stepId: string; reason: import("./lessonFocus").MaterialReportReason }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
   | { type: "rehearsalSeatEnd" }
@@ -1028,6 +1030,8 @@ export type HostMessage = (
   /** #751 G2 — the learner's saved work-surface entries for the lesson `sha256` (read from this device), and the rehearsal result. */
   | { type: "lessonWorkState"; sha256: string; work: Record<string, import("./lessonFocus").StepWork> }
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
+  /** CGP-LEARN-R-011 — what happened to a material report: queued for the class board, or not sent (no live class connection / no block). */
+  | { type: "materialReportResult"; sha256: string; stepId: string; state: "sent" | "not_sent" }
   /**
    * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
    * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the
