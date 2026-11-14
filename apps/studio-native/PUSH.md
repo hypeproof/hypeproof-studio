@@ -13,10 +13,20 @@ revocation; the Service also checks active sessions before delivery.
 
 - iOS: the default `HPSPushConfigured` Info.plist setting is `NO`. A release
   operator must enable the App ID capability, qualify the matching provisioning
-  profile and provider environment, then supply `CODE_SIGN_ENTITLEMENTS` pointing
-  to a qualified copy of `App/HPStudio-Push.entitlements.example`,
-  `HPS_APNS_ENVIRONMENT`, and `INFOPLIST_KEY_HPSPushConfigured=YES`. No entitlement
-  is enabled in the project by this change. The actual APNs callback must succeed;
+  profile and provider environment, then explicitly set `HPS_IOS_PUSH_ENABLED=true`
+  in the existing `apple-native-preview` release environment. Unset/empty or
+  `false` keeps the existing push-off archive settings; other values fail closed.
+  `apple-upload.sh` checks the supplied profile's exact app/team, expiry and
+  production APS entitlement before archiving. It copies only the tracked push
+  entitlement template into its private temporary directory and supplies fixed
+  `CODE_SIGN_ENTITLEMENTS`, `HPS_APNS_ENVIRONMENT=production` and
+  `INFOPLIST_KEY_HPSPushConfigured=YES` settings. Before validation/upload it
+  verifies the exported IPA signature, app/team/profile, production entitlement
+  and actual Info.plist setting (Boolean true or literal `YES`, as the app reads).
+  Unsafe/ambiguous/oversized IPA archives are refused before private extraction.
+  `push-configuration.json` records sanitized configuration/package digests and
+  the completed phase, separately from the unchanged release/upload receipt.
+  No App ID, provider credential or entitlement is enabled by default. The actual APNs callback must succeed;
   there is no sample token or permission fallback.
 - Android: `firebase-messaging:26.0.2` is pinned to the official current SDK. Supply
   the real Firebase Android project's standard generated resource XML for the
@@ -46,3 +56,11 @@ Actual APNs/FCM delivery, signed entitlement/profile, configured project and phy
 open are **NOT RUN**. No provider key, entitlement, live flag or enrollment is
 created by this adapter. Declining notifications leaves conversation/cards/inbox
 usable. A successful local HTTP transport control is not provider acceptance.
+
+Portable release-wiring regression: `python3 -m unittest discover -s
+apps/studio-native/tests -p 'test_apple_push_config.py' -v`. Its controlled
+Apple tools exercise the real upload script's archive-to-upload ordering and
+failure fences; they do not establish Apple signing or device delivery. The
+additional local validation makes no provider call or new CI dispatch. Existing
+release request identity, environment protection, package hashing and receipt
+authority remain unchanged.
