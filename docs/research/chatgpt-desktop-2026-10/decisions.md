@@ -2320,3 +2320,15 @@ Confirmed by Jay: no. These are agent choices within REQ-CGPV-43. The coordinato
 - **Look (agent choice; revised after verify-3928).** A status, not a control: a static `level` icon (the read-aloud "now reading" mark) and the words "음성 대화 중" at 14px, under the row title, with no fill and no hover. The words keep the row's own text colour and only the icon carries the accent, because the accent link colour on the selected row is 3.85:1 in Dark+ and 4.36:1 in 2026 Light. In forced colours there is no rule: the UA forces the row's button to ButtonText on ButtonFace and the marker inherits it, which the per-theme smoke measures. The row's existing accessible name gains ", 음성 대화 중".
 - **Scope.** Only the active task can be marked, because the conversation stops on any task switch. Dictation alone and a manual read-aloud are not a voice session and do not mark the row.
 - **Not covered:** a real installed App, a real microphone and a real screen reader.
+
+## CGP-AGENT-R-020 / CGP-AGENT-D-017: learner skill cards (2026-11-14)
+
+Confirmed by Jay: yes for the scope (2026-11-14): a learner-facing skill card authored in Chalk, frozen with the lesson version, and Studio showing only these cards and never the coach's SKILL.md or `Profile.skills`. The rest are agent choices, approved by the coordinator.
+
+- **Contract.** `skill_cards` is an optional key on `hps-session-design/1`, following the DEC-30 starters pattern: omitted when empty, never coach data (hypeproof-service#488). The caps are 6 cards, name 30, summary 80, and prompt 300 units over at most 6 lines.
+- **No links.** There is one `hasLink` rule in the Service, in Chalk and in the Studio reader. NFKC normalization comes first, then any scheme token (including confusable mixes), `www.` or `//` is refused. Starters get it on new writes only. A Latin word glued to a colon ("Q:답") is refused too; that is an accepted false positive.
+- **Minors.** Cards are served as authored on minor seats, under the starters' safe-text rules.
+- **Shelf.** It is collapsed by default and stays after the first message, because a skill is useful at any point, unlike a starter. It shows one "써 보기" button and nothing else: the dropped "보기" source view is the reason the design row was rewritten. Instructor surfaces draw no shelf.
+- **Rows rewritten.** REQ-CGP-AGENT-36, DES-CGP-AGENT-36 and their register rows now describe the Chalk-authored card instead of a SKILL.md source view.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
