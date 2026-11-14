@@ -72,6 +72,31 @@ conversation content. Local unsupported CLT checks and simulator evidence cannot
 replace this gate. This hardening adds no provider/model call or permission grant;
 existing inference and CI costs remain in their existing lanes.
 
+#### iPhone microphone routes — Studio #4107
+
+MVOICE-T02/T03/T04 and MFR-T03 use the real `AVAudioSession`/`AVAudioEngine`
+capture path for route acceptance. Verify `.record`/`.measurement` with
+`allowBluetoothHFP` on the existing iOS 17 deployment target and current SDK.
+No preferred-input override, A2DP input assumption or simultaneous recording
+during reply playback is introduced. Inspect preparation before engine start,
+then listening only after a current input, finite positive sample rate, nonzero
+channel count and successful engine start. A missing input or setup failure must
+clean up the engine tap and recognition request while retaining editable words.
+
+Use built-in, wired and HFP microphones separately on a physical iPhone; record
+OS/build and only the anonymized route category. Complete five Korean turns,
+including reply playback followed by capture, and repeat disconnect, Stop and
+background boundaries. No invalidated session may reopen capture or send again.
+Keep current useful-partial, empty-result retry limits and exactly-once request
+checks. Inspect the bounded manual timeline for `inputBuiltIn`, `inputWired`,
+`inputBluetoothHFP`, `inputOther` or `inputUnavailable`; never collect device names,
+identifiers, raw audio or conversation text for this diagnostic record.
+
+The existing synthetic capture fixtures bypass real audio-session setup. Their
+PASS cannot validate the HFP option, engine format or headphone switching. Native
+SDK compile/configuration and physical route acceptance must be reported
+separately; no pure option-equality assertion substitutes for those checks.
+
 For a device testing candidate, confirm the same source passed native CI, the
 signed artifact processed successfully, and the tester can install that exact
 version. Record actual microphone permission, Korean language asset availability,

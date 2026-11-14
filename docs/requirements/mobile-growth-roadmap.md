@@ -161,6 +161,15 @@ it contains no audio, conversation content, identity or credentials. Actual OS
 playback callbacks, synthetic next capture and physical Korean continuation are
 separate evidence; this hardening alone does not establish the incident's cause.
 
+For iPhone microphone routing (#4107), admit Bluetooth HFP inputs alongside the
+system-selected built-in or wired microphone without forcing a preferred port.
+Keep capture in its preparing phase until an active input has a valid format and
+the audio engine has started. Missing input is not empty recognition: stop safely,
+preserve words and offer text recovery. Playback still runs with capture off.
+The manual diagnostic record may include only a route category, never a device
+name or identifier. Built-in, wired and HFP capture/playback/capture, disconnect
+and Stop require separate physical acceptance; simulator speech is not that proof.
+
 Conversation settings use an explicitly presented native sheet. Opening it,
 closing it or swiping it away must not stop an active voice turn. Refresh and
 Logout explicitly dismiss settings even when a history read changes state;

@@ -144,10 +144,12 @@ private final class VoiceReviewCapture: @unchecked Sendable {
         guard UIApplication.shared.applicationState == .active,
               let token = authorizedToken, turn.token == token, turn.phase == .authorizing else { return }
         authorizedToken = nil
+        status = "마이크 연결을 확인하고 있어요."
         record(.captureStarting)
         listen(token)
     }
     private func listen(_ token: UUID) {
+        guard turn.token == token, turn.phase == .authorizing else { return }
 #if DEBUG
         if NativeJourneyFixture.enabled {
             guard turn.advance(token, from: [.authorizing], to: .listening) else { return }
@@ -170,14 +172,26 @@ private final class VoiceReviewCapture: @unchecked Sendable {
               recognizer.supportsOnDeviceRecognition, recognizer.isAvailable else {
             fail("이 기기에서 한국어 음성 인식을 사용할 수 없어요. 글로 계속할 수 있어요."); return
         }
-        guard turn.advance(token, from: [.authorizing], to: .listening) else { return }
         do {
             let audio = AVAudioSession.sharedInstance()
-            try audio.setCategory(.record, mode: .measurement)
+            // Keep system-selected built-in/wired input and admit HFP microphones.
+            // Playback remains a separate, capture-off phase.
+            try audio.setCategory(.record, mode: .measurement, options: [.allowBluetoothHFP])
             try audio.setActive(true)
+            guard let route = audio.currentRoute.inputs.first else {
+                record(.inputUnavailable)
+                fail("사용할 수 있는 마이크가 없어요. 연결을 확인하거나 글로 계속할 수 있어요."); return
+            }
+            switch route.portType {
+            case .builtInMic: record(.inputBuiltIn)
+            case .headsetMic: record(.inputWired)
+            case .bluetoothHFP: record(.inputBluetoothHFP)
+            default: record(.inputOther)
+            }
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
-            guard format.sampleRate > 0, format.channelCount > 0 else {
+            guard format.sampleRate.isFinite, format.sampleRate > 0, format.channelCount > 0 else {
+                record(.captureFailed)
                 fail("사용할 수 있는 마이크가 없어요. 글로 계속할 수 있어요."); return
             }
             let request = SFSpeechAudioBufferRecognitionRequest()
@@ -213,6 +227,13 @@ private final class VoiceReviewCapture: @unchecked Sendable {
                 }
             }
             engine.prepare(); try engine.start()
+            // This setup is synchronous on MainActor. Do not show listening
+            // before the selected input and engine have actually started.
+            guard engine.isRunning else {
+                record(.captureFailed)
+                fail("마이크를 시작하지 못했어요. 입력한 글은 그대로 남아 있어요."); return
+            }
+            guard turn.advance(token, from: [.authorizing], to: .listening) else { stop(); return }
             record(.captureStarted)
             watchEndpoint(token)
         } catch { record(.captureFailed); fail("마이크를 시작하지 못했어요. 입력한 글은 그대로 남아 있어요.") }
