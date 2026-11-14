@@ -13,7 +13,7 @@ import { configureGuardianSwitch, configureChildSeat, GUARDIAN_SETTING } from '.
 import { refuseOnChildSeat } from './childProfileHost';
 import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
-import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
+import { ActivityConnectionError, ActivityConnections, activityConnections, canonicalRoot } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
 import { fetchProfileResult } from './proxyClient';
 import { ClassroomHelpHost } from './classroomHelpHost';
@@ -49,6 +49,11 @@ import { runReportProblemCommand } from "./reportProblem";
 import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
+import {
+  RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
+  enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation,
+  type SeatHost,
+} from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
 import {
@@ -88,6 +93,55 @@ import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/p
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
 
+/** #4048 — the same-window rehearsal host for this window (set by activate after the activity wrap). */
+let seatHost: SeatHost | undefined;
+
+/** #4048 — the host functions chalk#17 calls: enter a rehearsal in this window, end it, or ask whether a return is held. */
+export async function enterRehearsalSeat(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void> {
+  if (!seatHost) throw new Error("작업 창이 준비되지 않았어요. 다시 시도해 주세요.");
+  await enterRehearsal(seatHost, input);
+}
+export async function endRehearsalSeat(): Promise<void> {
+  if (!seatHost) return;
+  await endRehearsal(seatHost);
+}
+export async function hasRehearsalReturn(): Promise<boolean> {
+  return seatHost ? hasReturnIssuer(seatHost) : false;
+}
+
+/** The rehearsal folder is named by the rehearsal id, under global storage. The learner never picks it. */
+function rehearsalSeatHostFor(context: vscode.ExtensionContext, connections: ActivityConnections): SeatHost {
+  const canonicalFolder = (p: string) => { try { return canonicalRoot(p); } catch { return p; } };
+  return {
+    secrets: context.secrets,
+    currentRoot: () => {
+      const r = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      return r ? canonicalFolder(r) : undefined;
+    },
+    rehearsalFolderFor: (rehearsalId) => {
+      const safe = rehearsalId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
+      const p = path.join(context.globalStorageUri.fsPath, "rehearsal-seat", safe);
+      fs.mkdirSync(p, { recursive: true });
+      return canonicalFolder(p);
+    },
+    makeFolder: () => undefined,
+    openFolder: async (folder) => {
+      await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(folder), { forceReuseWindow: true });
+    },
+    bindStudentToken: async (token) => {
+      // Through the activity wrap: this stores the token as the rehearsal folder's activity.
+      await context.secrets.store(TOKEN_KEY, token);
+    },
+    releaseStudentBinding: (folder) => connections.dropBindingFor(folder),
+    askResume: async () => {
+      const choice = await vscode.window.showInformationMessage(RESUME_QUESTION, RESUME_CONTINUE, RESUME_RETURN);
+      return choice === RESUME_RETURN ? "return" : choice === RESUME_CONTINUE ? "resume" : undefined;
+    },
+    notify: (message) => { void vscode.window.showWarningMessage(message); },
+    now: () => Date.now(),
+  };
+}
+
 let providerRef: ChatPanelProvider | null = null;
 let spoolRef: SessionSpool | null = null;
 /** #596 — re-entry lock on the upload command (banner + palette clicked at once → no double upload). */
@@ -118,6 +172,10 @@ export async function activate(context: vscode.ExtensionContext) {
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
+  // #4048 — a same-window rehearsal: enter, bind, or return, decided from the secrets before the resume marker runs.
+  seatHost = rehearsalSeatHostFor(context, connections);
+  const seatOutcome = await resumeOnActivation(seatHost).catch(() => { void vscode.window.showWarningMessage(RETURN_FAILED); return 'failed' as const; });
+  if (seatOutcome === 'ask') void offerResume(seatHost).catch(() => undefined);
   registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -462,7 +520,7 @@ export async function activate(context: vscode.ExtensionContext) {
   provider.classWindowSource = () => classroomOps.helpConnection();
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
   provider.onIssuerAutoRejected = () => {
-    void context.secrets.delete(ISSUER_TOKEN_KEY).then(() => startPage.show());
+    void forgetIssuer(seatHost!).then(() => startPage.show());
   };
   // #751 native help: the learner's help requests to the instructor of their live class connection (ADM-03/05, AT-47).
   // Drafts and requests live one file family per record under globalStorageUri (shared by every window; globalState is one
@@ -711,7 +769,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand("hypeproof-chat.forgetIssuerToken", async () => {
-      await context.secrets.delete(ISSUER_TOKEN_KEY);
+      await forgetIssuer(seatHost!);
       await provider.refreshConfig();
       vscode.window.showInformationMessage("issuer 토큰이 지워졌어요. 다음 발급 시 다시 물어봅니다.");
     }),
@@ -727,6 +785,11 @@ export async function activate(context: vscode.ExtensionContext) {
       const trimmed = input.trim();
       if (!looksLikeIssuerTokenUnverified(trimmed)) {
         vscode.window.showErrorMessage("issuer 토큰 형식이 아닙니다. 발급받은 강사 토큰을 확인하세요.");
+        return;
+      }
+      // #4048 — during a rehearsal the held credential is the instructor's; a new one must not be stored over it.
+      if (await hasRehearsalReturn()) {
+        vscode.window.showErrorMessage("리허설이 끝난 뒤에 강사 토큰을 바꿔 주세요.");
         return;
       }
       await context.secrets.store(ISSUER_TOKEN_KEY, trimmed);

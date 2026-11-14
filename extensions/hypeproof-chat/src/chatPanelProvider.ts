@@ -136,6 +136,7 @@ import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, 
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
+import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { helpLinesEnabled, moderationBlockOf, ModerationBlockError, safetyNoticeView } from "./safetyNotice.ts";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
@@ -12352,7 +12353,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // personal account session, classroom-ops credentials, pending orders and any other SecretStorage value.
       const connections = activityConnections(this.context), activity = connections?.current;
       const held = await heldSecretValues([this.context.secrets, ...(connections ? [connections.heldSecrets()] : [])],
-        [TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
+        [TOKEN_KEY, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
       const secrets = [activity?.token, ...held, await resolveInstructorTokenFromSecrets(this.context.secrets)]
         .filter((value): value is string => typeof value === 'string' && !!value);
       const store = this.currentTaskStore();
