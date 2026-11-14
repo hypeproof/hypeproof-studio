@@ -597,17 +597,19 @@ cases:
       - 이 iPhone 에서 로그인해 계정 초안을 적고 로그아웃한다. 다른 로그인 전 글을 적은 뒤 같은 계정으로 로그인한다. 기존 계정 글이 보이고 가져오기 가 비활성인지 확인한다. 재실행해도 두 글이 남아야 하며, 계정 글을 명시적으로 비운 뒤 가져오기 를 눌러도 자동 전송하지 않는다
       - 다크 모드와 접근성 최대 글자 크기에서 다섯 줄을 입력한다. 키보드 위 입력창과 로그인 동작이 가려지지 않는지 실제 화면을 확인한다
       - VoiceOver 로 내 메시지와 AI 답변을 차례로 읽어 작성자를 구분할 수 있는지 듣는다. 실행하지 못하면 이 항목은 NOT RUN 으로 남긴다
+      - Compare a verified expired callback with a separate browser network timeout; both retain the draft and end waiting without credential exchange or POST.
     expect:
       - 요즘 어떤 일에 시간을 많이 쓰세요? 와 입력창이 로그인 전에 보인다. 보내기 전에는 글이 기기에 남고, 보낸 대화의 계정 저장·AI 전달 안내가 있다. 다른 기기에 코드를 옮겨 적지 않고 앱으로 돌아온다 (App/SharedConversationView.swift)
       - 로그인 직후에는 전송하지 않는다. 직접 보낸 뒤 내 말풍선과 구별되는 AI 본문 답변이 생긴다. VoiceOver 는 작성자를 구분한다. 컴퓨터 실행은 요구하지 않는다. 로그인 성공만으로 AI 이용 권한이 있다고 간주하지 않는다
       - 취소하면 대기가 끝나 다시 시작할 수 있다. 만료하면 로그인 시간이 지났어요. 다시 시작해 주세요. 가 보이고 무한 대기하거나 자동 재인증하지 않는다 (Sources/StudioCore/NativeAccountAuth.swift)
+      - Only the verified expiry shows expired-login copy; a transport timeout cannot be mislabeled as expiry.
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784, #3937, #3941"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop, testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking, testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend, testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice, testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable 가 실제 앱 저장·화면과 합성 인증·HTTP 경계를 검사한다. 실제 브라우저 로그인, 물리 기기의 첫 답변과 VoiceOver 수용은 별도 증거가 필요하다.
+    notes: StudioJourneyTests.testFirstInstallSignInToFirstAnswerWithoutDesktop, testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking, testCancelLoginKeepsFirstThoughtWithoutExchangeOrSend, testLoginPreservesBothDraftsAndRestoresOnlyOnExplicitChoice, testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable 가 실제 앱 저장·화면과 합성 인증·HTTP 경계를 검사한다. 실제 브라우저 로그인, 물리 기기의 첫 답변과 VoiceOver 수용은 별도 증거가 필요하다. StudioJourneyTests.testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin complements the actual state-validated expiry callback test. These synthetic boundaries do not prove physical OAuth.
 
   - id: BB-034
     journey: CUJ-8
@@ -620,17 +622,19 @@ cases:
       - 인식이 끝나면 글을 확인·수정하고 대화 보내기 를 한 번 누른다
       - 초안이 없는 상태에서 대화 설정 → 새로 고침 을 누른다. 대화 확인 중 이 보일 때 음성 대화 를 눌러 말하고 기다린다. 동기화와 음성 종료의 겹침을 재현하지 못하면 이 확인은 BLOCKED 로 남긴다
       - 대화 설정 → 이 기기의 기록 으로 옮겨 저장 버튼과 안내를 확인한다
+      - Hold desktop discovery after personal history succeeds; explicitly Send once. Separately inject a personal-read timeout, wait beyond one poll interval and tap Retry; also exercise a cancelled read.
     expect:
       - 말로 적기 는 기존 초안을 보존하고 인식한 글을 더한다. 대화 보내기 전에는 AI 요청을 보내지 않고, 보낸 뒤에는 AI 본문에 답변이 한 번 생긴다 (App/SharedConversationView.swift)
       - 동기화 중 전송이 대기하면 보낸 말을 저장했어요. 대화 확인이 끝나면 전송해요. 가 보인다. 동기화 뒤 중복 없이 답변이 생기고 다음 말을 기다린다 (App/SharedConversationModel.swift)
       - 기기 기록 의 버튼은 기록만 저장 이며, 이 기록은 이 기기에 보관돼요. 계정 대화는 ‘대화로 돌아가기’에서 이어갈 수 있어요. 라고 안내한다. 보관만 하고 답변이 생성된 것처럼 표시하지 않는다 (App/HPStudioApp.swift)
+      - Personal readiness and Send do not await desktop discovery. A real read failure retains the account/draft and pauses polling until explicit recovery; cancellation still permits the next poll. No automatic POST occurs.
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testDictationEditsDraftThenSendGetsReplyWithoutDesktop 와 testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening. 후자는 지연된 합성 이력 응답 중 음성이 실제 종료됐는지와 요청 한 건을 검사한다. 단순 대기 뒤 화면이 보인 것만으로 겹침을 통과시키지 않는다. 실제 한국어 음성 인식은 별도 확인한다.
+    notes: StudioJourneyTests.testDictationEditsDraftThenSendGetsReplyWithoutDesktop 와 testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening. 후자는 지연된 합성 이력 응답 중 음성이 실제 종료됐는지와 요청 한 건을 검사한다. 단순 대기 뒤 화면이 보인 것만으로 겹침을 통과시키지 않는다. 실제 한국어 음성 인식은 별도 확인한다. StudioJourneyTests.testPersonalQuestionReadyAndSendWhileDesktopListIsHeld, testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft and testCancelledHistoryStillAllowsTheNextOrdinaryPoll observe actual model/URLProtocol counters. Cancellation coverage is transport-only, not physical scene timing.
 
   - id: BB-035
     journey: CUJ-8
@@ -644,17 +648,19 @@ cases:
       - 별도 실행에서 답변을 읽는 동안 다음 생각을 입력한다. 재생이 끝나도 이 글을 지우거나 새 녹음을 시작하지 않고 이유를 안내하는지 확인한다
       - 두 번째 말을 보내기 전에 음성 멈춤 을 누르고 기다린다. 앱을 다시 열어도 임의로 음성이 재시작하지 않는지 확인한다
       - 별도 실행에서 첫 응답이 전송 중일 때 답변 중지 를 누른다. 별도 초안을 적고 앱을 다시 연다
+      - In the isolated speech fixture, deliver partial words followed by an empty final, then empty captures and recovered speech. Stop after a recapture delay is scheduled.
     expect:
       - 듣고 있어요 가 보이고, 매 차례 앱의 별도 동의·말 끝내기·다음 차례 버튼 없이 첫 말의 답변 뒤 다음 말을 듣는다. 필요한 최초 OS 권한은 생략하지 않는다
       - 음성 멈춤 뒤에는 녹음·재생이 멈추고 두 번째 말이나 빈 말을 뒤늦게 전송하지 않는다. 아직 보내지 않은 인식 글은 초안에 남는다 (App/SharedConversationView.swift)
       - 전송 중에도 44pt 이상의 중지 버튼을 사용할 수 있다. 같은 요청의 서버 확인 뒤에만 중지로 표시하며 원래 글과 별도 초안을 남긴다. 뒤늦은 응답이나 앱 재실행이 음성·전송을 재시작하지 않는다. 이미 실행된 AI 비용은 발생할 수 있다
+      - Empty recognition preserves prior words and never sends an empty turn. At most two automatic recaptures occur; useful speech or deliberate restart resets the budget. Stop cancels pending continuation.
     origin:
       kind: escaped-bug
       date: "2026-11-12"
       ref: "#3771, #3784, #4024"
     status: active
     automated_by: apps/studio-native/ios/UITests/StudioShellTests.swift
-    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop 와 testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped 는 조건 주도 delegate·Stop·입력 중 초안 경계를 검사한다. testRealKoreanPlaybackCompletionReachesNextCaptureBoundary 는 실제 OS 한국어 재생 완료를 확인하되 다음 마이크는 합성이다. 한국어 음성이나 실제 완료 callback 이 없으면 실패로 남기며 대체하지 않는다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 5–10차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다.
+    notes: StudioJourneyTests.testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch 는 진행 중 전송과 중지 확인의 경합, 원래 글과 별도 초안의 재실행 보존을 검사한다. StudioJourneyTests.testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend 는 합성 음성 이벤트·재생 완료를 실제 VoiceTurn 경로에 전달한다. testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop 와 testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped 는 조건 주도 delegate·Stop·입력 중 초안 경계를 검사한다. testRealKoreanPlaybackCompletionReachesNextCaptureBoundary 는 실제 OS 한국어 재생 완료를 확인하되 다음 마이크는 합성이다. 한국어 음성이나 실제 완료 callback 이 없으면 실패로 남기며 대체하지 않는다. 물리 iPhone 의 마이크 표시, 한국어 인식, 오디오 중단과 5–10차례 대화 수용은 별도 증거이며 자동으로 PASS 가 되지 않는다. StudioJourneyTests.testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry exercises the real controller with synthetic speech. Its deterministic controller Stop proves timer cancellation, not a user tap; existing UI Stop and physical Korean audio remain separate.
 
   - id: BB-036
     journey: CUJ-8

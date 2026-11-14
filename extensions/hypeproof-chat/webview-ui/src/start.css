@@ -603,7 +603,11 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   padding:var(--hp-space-2) 0;
   border-bottom:var(--ds-c-studio-start-size-3) solid var(--tw-line);
   font-size:var(--hp-font-caption)}
-.studio-start .studio-settings .studio-settings-advanced {
+/* CGP-SHELL-R-014: 내 작업 내보내기 is an action row drawn like 고급 설정, with the row-name weight. */
+.studio-start .studio-settings .studio-settings-action {
+  font-weight:var(--hp-weight-strong)}
+.studio-start .studio-settings .studio-settings-advanced,
+.studio-start .studio-settings .studio-settings-action {
   background:transparent;
   color:inherit;
   text-align:start;

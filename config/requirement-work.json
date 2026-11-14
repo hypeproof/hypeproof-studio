@@ -255,6 +255,7 @@
         "CH-10",
         "CH-11",
         "CH-12",
+        "CH-13",
         "CLS-01",
         "CLS-02",
         "CLS-03",
@@ -296,7 +297,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "88ec11969dc83ff874d562d7dc764e467478d9b20177af0def6effb1ad3bcf18",
+      "sha256": "2ecbd44840932c97d82eab1a6effc5111c3abe3607c5f0b1aee60192a8adb28c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -980,7 +981,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "06e854fd01c429a89686f4197d6d1645ed5539a170489dabb3db8c4eb8305908",
+      "sha256": "bf82d5ca25b4f1a4bc8704aa1a1c65e4859378216d9e7c2f87dbf4bbfc32a67b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -1426,7 +1427,8 @@
             "CH-09",
             "CH-10",
             "CH-11",
-            "CH-12"
+            "CH-12",
+            "CH-13"
           ]
         }
       ],
