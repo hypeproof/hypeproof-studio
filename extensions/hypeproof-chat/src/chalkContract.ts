@@ -175,22 +175,23 @@ export class ChalkContractHost {
    * already expired on the next start (no question, return).
    */
   private async enterRehearsalSeat(args: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
-    // The approved sentence is shown once on each of the three failure paths below, and no other path shows it.
-    const refuse = (reason: "inactive" | "stale" | "failed"): { ok: false; reason: string } => {
+    // #4052 — every result that is not ok shows the approved sentence exactly once (Chalk shows no sentence of its own).
+    const refuse = (reason: string): { ok: false; reason: string } => {
       this.ops.notify?.(ENTER_OPEN_FAILED);
       return { ok: false, reason };
     };
-    if (!args || typeof args !== "object") return { ok: false, reason: "invalidArgs" };
+    if (!args || typeof args !== "object") return refuse("invalidArgs");
     const a = args as Record<string, unknown>;
-    if (a.contractVersion !== CONTRACT_VERSION) return { ok: false, reason: "contractVersion" };
+    if (a.contractVersion !== CONTRACT_VERSION) return refuse("contractVersion");
     if (this.nonce === null) return refuse("inactive");
     if (a.sessionNonce !== this.nonce) return refuse("stale");
     const enter = this.ops.enterRehearsalSeat;
-    if (!enter) return { ok: false, reason: "unavailable" };
+    if (!enter) return refuse("unavailable");
     const token = a.token, rehearsalId = a.rehearsalId;
-    if (typeof token !== "string" || token.length === 0 || typeof rehearsalId !== "string" || rehearsalId.length === 0) return { ok: false, reason: "invalidArgs" };
+    if (typeof token !== "string" || token.length === 0 || typeof rehearsalId !== "string" || rehearsalId.length === 0) return refuse("invalidArgs");
+    // A null expiry is passed as 0: the seat treats it as already expired on the next start (approved, #4052).
     const expiresAt = a.expiresAt === null ? 0 : a.expiresAt;
-    if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return { ok: false, reason: "invalidArgs" };
+    if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return refuse("invalidArgs");
     try {
       await enter.call(this.ops, { token, expiresAt, rehearsalId });
       return { ok: true };

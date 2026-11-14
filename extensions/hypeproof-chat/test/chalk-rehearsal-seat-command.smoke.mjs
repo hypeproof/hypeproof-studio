@@ -120,14 +120,14 @@ await t("a host without the seat entry answers unavailable, not a crash", async 
 
 // The approved sentence is shown once on every failure path the command has (nonce, inactive, entry failure).
 const ENTER_FAILED_TEXT = "리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다.";
-async function withNotify({ enter } = {}) {
+async function withNotify({ enter, noEnter } = {}) {
   const shown = [];
   const bus = makeBus();
   const ops = {
     openExternal: async () => ({ ok: true }), openReport: async () => ({ ok: true }),
     inboxView: async () => null, inboxOpened: async () => {}, inboxLink: async () => ({ ok: true }),
     reviewPrepare: async () => ({ ok: true }),
-    enterRehearsalSeat: enter ?? (async () => {}),
+    enterRehearsalSeat: noEnter ? undefined : (enter ?? (async () => {})),
     notify: (m) => shown.push(m),
   };
   let n = 0;
@@ -156,13 +156,36 @@ await t("an entry failure shows the approved sentence once, not twice, and retur
   assert.deepEqual(shown, [ENTER_FAILED_TEXT], "one sentence, from the command path only");
 });
 
-await t("a good call shows nothing and invalid arguments show nothing", async () => {
+await t("a good call shows nothing", async () => {
   const { bus, shown, activate } = await withNotify();
   await activate();
   assert.deepEqual(await enterCall(bus, REHEARSAL), { ok: true });
-  assert.deepEqual(await enterCall(bus, { ...REHEARSAL, token: "" }), { ok: false, reason: "invalidArgs" });
   assert.deepEqual(shown, []);
 });
+
+// #4052 — every result that is not ok shows the approved sentence exactly once, and the reason is a code.
+const failureCases = [
+  ["inactive", async () => withNotify(), (bus) => enterCall(bus, REHEARSAL), "inactive"],
+  ["stale", async () => withNotify(), (bus) => enterCall(bus, { sessionNonce: "old", ...REHEARSAL }), "stale"],
+  ["invalidArgs (no object)", async () => withNotify(), (bus) => bus.call("hypeproof.runtime.enterRehearsalSeat", null), "invalidArgs"],
+  ["invalidArgs (empty token)", async () => withNotify(), (bus) => enterCall(bus, { ...REHEARSAL, token: "" }), "invalidArgs"],
+  ["invalidArgs (no rehearsal id)", async () => withNotify(), (bus) => enterCall(bus, { ...REHEARSAL, rehearsalId: "" }), "invalidArgs"],
+  ["invalidArgs (bad expiry)", async () => withNotify(), (bus) => enterCall(bus, { ...REHEARSAL, expiresAt: "soon" }), "invalidArgs"],
+  ["contractVersion", async () => withNotify(), (bus) => bus.call("hypeproof.runtime.enterRehearsalSeat", { contractVersion: 999, sessionNonce: "nonce-1", ...REHEARSAL }), "contractVersion"],
+  ["unavailable (no seat entry)", async () => withNotify({ noEnter: true }), (bus) => enterCall(bus, REHEARSAL), "unavailable"],
+  ["failed (entry throws)", async () => withNotify({ enter: async () => { throw new Error("internal"); } }), (bus) => enterCall(bus, REHEARSAL), "failed"],
+];
+for (const [label, make, call, reason] of failureCases) {
+  await t(`a non-ok result (${label}) returns ${reason} and shows the approved sentence exactly once`, async () => {
+    const { bus, shown, activate } = await make();
+    // Every case except inactive runs with an active contract, so the refusal comes from the reason under test.
+    if (reason !== "inactive") await activate();
+    const r = await call(bus);
+    assert.deepEqual(r, { ok: false, reason });
+    assert.deepEqual(shown, [ENTER_FAILED_TEXT], "one sentence");
+    assert.ok(!JSON.stringify(r).includes(TOKEN), "no token in the result");
+  });
+}
 
 await t("hasRehearsalReturn and endRehearsalSeat are not on the bus", async () => {
   const { bus } = await activated();
