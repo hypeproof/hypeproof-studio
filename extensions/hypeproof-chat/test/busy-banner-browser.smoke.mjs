@@ -4,7 +4,7 @@
 // - one line of text at least 14px, an icon, and one 44px close with a focus ring (also in forced colours);
 // - role=status, no animation or transition, and no provider or cause named;
 // - nothing held: the draft stays editable and Enter still sends;
-// - the host's `busy:false` removes it, and once closed it stays closed for the session even if busy returns.
+// - the host's `busy:false` removes it; closing tells the host, and the host's `dismissed:true` keeps it closed after a remount.
 // Negative control: with no `serviceStatus` message, or with `busy:false`, there is no banner.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -87,12 +87,18 @@ try{
   assert.ok(await until(`!document.querySelector('${BANNER}')`),`${label}: busy:false removes it`);
   await host({type:'serviceStatus',busy:true});
   assert.ok(await until(`document.querySelector('${BANNER}')`),`${label}: busy again shows it again`);
-  // Closing holds for the session, even when busy flips back and forth; focus returns to the composer.
+  // Closing posts serviceStatusDismiss; the host keeps it for the busy episode and answers with dismissed:true.
   await browser.evaluate(`document.querySelector('.hps-busy-banner-close').click()`);
   assert.ok(await until(`!document.querySelector('${BANNER}')`),`${label}: close hides it`);
   assert.equal(await browser.evaluate(`document.activeElement===document.querySelector('.hps-input textarea')`),true,`${label}: focus returns to the composer`);
-  await host({type:'serviceStatus',busy:false});await host({type:'serviceStatus',busy:true});await delay();await delay();
-  assert.equal(await browser.evaluate(`!!document.querySelector('${BANNER}')`),false,`${label}: closed stays closed for the session`);
+  assert.ok(await browser.evaluate(`posted.some(m=>m.type==='serviceStatusDismiss')`),`${label}: closing tells the host`);
+  // A remount (task switch): the host re-posts busy with dismissed:true, so the banner stays closed.
+  await open(config,width,dark);
+  await host({type:'serviceStatus',busy:true,dismissed:true});await delay();await delay();
+  assert.equal(await browser.evaluate(`!!document.querySelector('${BANNER}')`),false,`${label}: after a remount the host's dismissed state keeps it closed`);
+  // Control: the same remount told busy without dismissed shows it (so the check above measures dismissed).
+  await host({type:'serviceStatus',busy:true});
+  assert.ok(await until(`document.querySelector('${BANNER}')`),`${label}: control, busy without dismissed shows it`);
   cases++;
  }
  console.log(`PASS busy-banner: actual ChatPanel, ${cases} seat/theme/width cases`);

@@ -892,6 +892,8 @@ export type WebviewMessage = (
   | { type: "lowDiskRequest"; mount?: boolean }
   /** CGP-AGENT-R-031: ask whether the Service reads as busy (mount, back in view, focus, once a minute). */
   | { type: "serviceStatusRequest"; mount?: boolean }
+  /** CGP-AGENT-R-031: the learner closed the busy banner; the host keeps it closed for this busy episode, across remounts. */
+  | { type: "serviceStatusDismiss" }
   /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — ask whether a 느려요 기록 is running; stop the one recording `id` names (the pill's own id). */
   | { type: "perfTraceStateRequest" }
   | { type: "perfTraceStop"; id: string }
@@ -1047,7 +1049,7 @@ export type HostMessage = (
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
   | { type: "lowDisk"; notice: import("./lowDisk").LowDiskNotice | null }
   /** CGP-AGENT-R-031: the Service's busy signal; only a confirmed `true` shows the banner. */
-  | { type: "serviceStatus"; busy: boolean }
+  | { type: "serviceStatus"; busy: boolean; /** Closed by the learner for this busy episode (kept by the host). */ dismissed?: boolean }
   /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — a 느려요 기록 is running (red 기록 중 · 멈추기 pill above the composer) or not; `id` names the recording. */
   | { type: "perfTraceState"; recording: boolean; id: string | null }
   /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */

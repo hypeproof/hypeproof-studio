@@ -7742,8 +7742,8 @@ never stops them from sending.
   or count, and the public `/health` carries no such flag.
 - When Studio asks: the panel asks on mount, when it comes back into view, on window
   focus, and once a minute while the view is visible and the window is focused. The host
-  asks only for a signed-in seat on the Service (no token, or a local coach, asks
-  nothing), and never more than once a minute: a remount inside that minute (a task switch, the panel
+  asks only for a signed-in participant seat on the Service (no token, a local coach, or an
+  instructor or issuer seat asks nothing, because the route answers 401 to an issuer token), and never more than once a minute: a remount inside that minute (a task switch, the panel
   coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
   the wait doubles up to 15 minutes and a good answer returns it to a minute. When the Service
   has no such route (404), that seat stops asking until its token or the Service address changes.
@@ -7756,9 +7756,10 @@ never stops them from sending.
   reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
 - What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요", and one
   close button ("붐빔 알림 닫기"). It is `role="status"`. It
-  leaves on its own when the Service reads healthy and comes back if busy returns. Once
-  the learner closes it, it stays closed for the rest of that panel session; focus
-  returns to the composer.
+  leaves on its own when the Service reads healthy and comes back if busy returns. Closing it
+  hides it for that busy episode: the host keeps the closed state with the last answer, so a
+  remount (a task switch) re-posts it closed. The episode ends when the Service reads not busy,
+  and the next busy episode shows the banner again. Focus returns to the composer.
 - Not: it never holds a send, disables the composer, names a provider or a cause, or
   replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
 - Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
@@ -7770,10 +7771,13 @@ never stops them from sending.
 Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
 fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
 `ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
-the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests and a seat without a token) and
+the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests, a seat without a token,
+instructor and issuer seats that never ask (control: a participant seat with the same token does), and a dismissal that
+survives remounts for the busy episode and ends when the Service reads not busy) and
 `busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
 classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
-44px close, focus ring, Enter still sends, healthy removes it, closed stays closed; fails
+44px close, focus ring, Enter still sends, healthy removes it, closing tells the host, and after a remount the host's
+`dismissed` keeps it closed (control: busy without `dismissed` shows it); fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
 deployed Service is NOT RUN.
 

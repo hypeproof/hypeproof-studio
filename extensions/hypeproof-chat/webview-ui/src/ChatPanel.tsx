@@ -851,11 +851,12 @@ export function ChatPanel(props: Props) {
     return stop;
   }, []);
   // CGP-AGENT-R-031 — the Service's busy signal. The panel asks on mount, when it comes back into view, on focus and
-  // once a minute while visible and focused; only the host's confirmed `true` shows the banner. Closing it holds for this session.
+  // once a minute while visible and focused; only the host's confirmed `true` shows the banner. Closing it is kept by the
+  // host for this busy episode, so a remount (task switch) re-posts it closed; the next busy episode shows it again.
   const [serviceBusy, setServiceBusy] = useState(false);
   const [busyDismissed, setBusyDismissed] = useState(false);
   useEffect(() => {
-    const off = onHostMessage((msg) => { if (msg.type === "serviceStatus") setServiceBusy(msg.busy === true); });
+    const off = onHostMessage((msg) => { if (msg.type === "serviceStatus") { setServiceBusy(msg.busy === true); setBusyDismissed(msg.dismissed === true); } });
     // Only while the view is visible and the window is focused; the host adds backoff and stops for a seat it is not served to.
     const ask = () => { if (document.visibilityState !== "hidden" && document.hasFocus()) postToHost({ type: "serviceStatusRequest" }); };
     postToHost({ type: "serviceStatusRequest", mount: true });
@@ -2429,7 +2430,7 @@ export function ChatPanel(props: Props) {
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
         {/* CGP-AGENT-R-031: renders nothing unless the Service reads busy; never holds a send. */}
-        {busyBannerShown(serviceBusy, busyDismissed) && <BusyBanner onDismiss={() => { setBusyDismissed(true); textareaRef.current?.focus({ preventScroll: true }); }} />}
+        {busyBannerShown(serviceBusy, busyDismissed) && <BusyBanner onDismiss={() => { setBusyDismissed(true); postToHost({ type: "serviceStatusDismiss" }); textareaRef.current?.focus({ preventScroll: true }); }} />}
         {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
         {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {

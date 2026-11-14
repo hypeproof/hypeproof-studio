@@ -396,6 +396,7 @@ import {
   pendingCloseLabel,
   WRITE_TOOL_NAMES,
   resolveInstructorTokenFromSecrets,
+  looksLikeIssuerTokenUnverified,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
 import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
@@ -1913,10 +1914,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /**
    * CGP-AGENT-R-031 — the Service's busy signal for the banner above the composer. Asked only for a
-   * signed-in seat on the Service (a local coach has no Service to ask). An unchanged answer is not
-   * re-posted; concurrent asks share one request.
+   * signed-in participant seat on the Service: a local coach has no Service to ask, and an instructor or issuer
+   * seat would only get the route's 401. An unchanged state is not re-posted; concurrent asks share one request.
    */
-  private serviceBusyPosted: boolean | undefined;
+  private serviceStatusPosted: string | undefined;
   private serviceStatusRun: Promise<void> | undefined;
   /** Not before this time (normal minute, or backoff after errors). */
   private serviceStatusNextAt = 0;
@@ -1929,35 +1930,53 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** The last answer, re-posted to a remounted panel without asking the Service again. */
   private serviceStatusLast: boolean | undefined;
   /**
-   * A remount (a task switch, the panel coming back) re-posts the last answer and never adds a Service request of its
+   * The learner closed the banner for THIS busy episode. Kept here, not in the panel, so a remount (a task switch) does
+   * not bring it back. It ends when the Service reads not busy, so the next busy episode shows the banner again.
+   */
+  private serviceStatusDismissed = false;
+  /**
+   * A remount (a task switch, the panel coming back) re-posts the last state and never adds a Service request of its
    * own: it asks only once the interval has passed. A seat the route does not serve is asked again only after its token
    * or the Service address changes.
    */
-  resetServiceStatus(): void { this.serviceBusyPosted = undefined; }
+  resetServiceStatus(): void { this.serviceStatusPosted = undefined; }
+  private async postServiceStatus(busy: boolean): Promise<void> {
+    const dismissed = busy && this.serviceStatusDismissed === true;
+    const key = JSON.stringify([busy, dismissed]);
+    if (key === this.serviceStatusPosted) return;
+    if (await this.post({ type: "serviceStatus", busy, dismissed }) !== false) this.serviceStatusPosted = key;
+  }
+  /** The banner's close button: hidden for this busy episode, across remounts, until the Service reads not busy. */
+  async dismissServiceStatus(): Promise<void> {
+    if (this.serviceStatusLast !== true) return;
+    this.serviceStatusDismissed = true;
+    await this.postServiceStatus(true);
+  }
   refreshServiceStatus(): Promise<void> {
     if (this.serviceStatusRun) return this.serviceStatusRun;
     const run = (async () => {
       try {
-        const repost = async () => {
-          if (this.serviceBusyPosted === undefined && this.serviceStatusLast !== undefined && await this.post({ type: "serviceStatus", busy: this.serviceStatusLast }) !== false) this.serviceBusyPosted = this.serviceStatusLast;
-        };
+        const repost = async () => { if (this.serviceStatusLast !== undefined) await this.postServiceStatus(this.serviceStatusLast); };
         const now = (this.serviceStatusNow ?? Date.now)();
         const proxyUrl = this.proxyUrl();
         const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
         const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
+        // An instructor or issuer seat: the route answers 401 to an issuer token every time, so asking would only back
+        // off forever. Not a gate (the Service decides what a token may do); it only saves a request that cannot succeed.
+        const staff = this._instructorMode?.isInstructor === true || looksLikeIssuerTokenUnverified(token);
         const seat = `${proxyUrl}\n${token ?? ""}`;
         if (this.serviceStatusUnserved === seat) { await repost(); return; }
         if (this.serviceStatusUnserved !== undefined) { this.serviceStatusUnserved = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
-        if (now < (this.serviceStatusNextAt ?? 0)) { await repost(); return; }
-        const answer = await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
+        if (!staff && now < (this.serviceStatusNextAt ?? 0)) { await repost(); return; }
+        const answer = staff ? { busy: false, outcome: 'skipped' as const } : await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
         // `?? 0`: a test harness built with Object.create skips the field initialisers.
         this.serviceStatusErrors = answer.outcome === 'error' ? (this.serviceStatusErrors ?? 0) + 1 : 0;
         if (answer.outcome === 'unserved') this.serviceStatusUnserved = seat;
-        // No token yet is not a verdict on the seat: ask again on the next request.
+        // No token yet, or a staff seat, is not a verdict on the seat: ask again on the next request.
         this.serviceStatusNextAt = answer.outcome === 'skipped' || answer.outcome === 'unserved' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
         this.serviceStatusLast = answer.busy;
-        if (answer.busy === this.serviceBusyPosted) return;
-        if (await this.post({ type: "serviceStatus", busy: answer.busy }) !== false) this.serviceBusyPosted = answer.busy;
+        if (!answer.busy) this.serviceStatusDismissed = false;
+        await this.postServiceStatus(answer.busy);
       } catch (error) {
         console.warn('[serviceStatus] check failed', error);
       }
@@ -8966,6 +8985,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
       case "serviceStatusRequest": if (msg.mount === true) this.resetServiceStatus(); await this.refreshServiceStatus(); return;
+      case "serviceStatusDismiss": await this.dismissServiceStatus(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;

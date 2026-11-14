@@ -87,6 +87,7 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
   const mod = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console: { ...console, log() {}, warn() {}, error() {} }, fetch: () => Promise.reject(new Error("no network in tests")), process, Buffer, URL, URLSearchParams, TextEncoder, TextDecoder, AbortSignal, AbortController, setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, crypto: webcrypto, structuredClone });
   const { ChatPanelProvider } = mod.exports;
+  const posts = (h) => h.__posts;
   const make = (token) => {
     const h = Object.create(ChatPanelProvider.prototype);
     const posts = [], asked = [];
@@ -95,6 +96,7 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
       context: { globalState: { get: () => undefined, update: async () => {} }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => token } },
       post: async (m) => { posts.push(J(m)); return true; },
     });
+    h.__posts = posts;
     h.serviceStatusNow = () => state.now;
     h.serviceStatusFetch = async (url, init) => { asked.push({ url, auth: init.headers.authorization, at: state.now }); if (state.status === 0) throw new TypeError("fetch failed"); return { ok: state.status === 200, status: state.status, json: async () => ({ busy: state.busy }) }; };
     const statuses = () => posts.filter((m) => m.type === "serviceStatus").map((m) => m.busy);
@@ -177,6 +179,53 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
     assert.ok(asked.every((a) => a.auth === "Bearer seat-tok"), `${code}: the same token throughout`);
   }
   ok("host: 404 stops asking for that seat until its token changes; 401/403 back off and are asked again");
+  {
+    // Instructor and issuer seats: the route answers 401 to an issuer token every time, so they are never asked.
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    for (const token of [b64({ role: "issuer", u: "t1" }) + ".sig", b64({ u: "t1", c: "__issuer__", p: "__issuer__" }) + ".sig"]) {
+      const x = make(token); x.state.busy = true;
+      await x.h.handleMessage({ type: "serviceStatusRequest", mount: true });
+      for (let i = 0; i < 5; i++) await x.tick();
+      assert.equal(x.asked.length, 0, "issuer token: the Service is not asked");
+      assert.deepEqual(x.statuses(), [false], "issuer token: no banner, posted once");
+    }
+    const inst = make("seat-tok"); inst.state.busy = true; inst.h._instructorMode = { isInstructor: true };
+    await inst.h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    for (let i = 0; i < 5; i++) await inst.tick();
+    assert.equal(inst.asked.length, 0, "instructor mode: the Service is not asked");
+    // Control: the same token on a participant seat is asked.
+    inst.h._instructorMode = { isInstructor: false };
+    await inst.tick();
+    assert.equal(inst.asked.length, 1, "control: a participant seat with the same token is asked");
+    ok("host: instructor and issuer seats never ask the route (control: a participant seat does)");
+  }
+  {
+    // Dismissal is kept by the host for the busy episode: a remount re-posts it closed; the next episode shows it again.
+    const { h, state, asked, tick } = make("seat-tok");
+    const shown = () => posts(h).filter((m) => m.type === "serviceStatus").map((m) => [m.busy, m.dismissed === true]);
+    state.busy = true;
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.deepEqual(shown().at(-1), [true, false], "busy shows the banner");
+    await h.handleMessage({ type: "serviceStatusDismiss" });
+    assert.deepEqual(shown().at(-1), [true, true], "closing it is posted back as dismissed");
+    const n = asked.length;
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.deepEqual(shown().at(-1), [true, true], "a remount (task switch) re-posts it closed");
+    assert.equal(asked.length, n, "the remount adds no Service request");
+    const p = shown().length; await tick(); await tick();
+    assert.equal(shown().length, p, "still busy: it stays closed and nothing is re-posted");
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.deepEqual(shown().at(-1), [true, true], "a second remount: still closed");
+    state.busy = false; await tick();
+    assert.deepEqual(shown().at(-1), [false, false], "the episode ends when the Service reads not busy");
+    state.busy = true; await tick();
+    assert.deepEqual(shown().at(-1), [true, false], "the next busy episode shows the banner again");
+    const before = shown().length;
+    state.busy = false; await tick();
+    await h.handleMessage({ type: "serviceStatusDismiss" });
+    assert.equal(shown().length, before + 1, "closing while not busy changes nothing");
+    ok("host: dismissal survives remounts for the busy episode and ends when the Service reads not busy");
+  }
   {
     const anon = make(undefined);
     anon.state.busy = true;
