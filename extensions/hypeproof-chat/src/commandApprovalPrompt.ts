@@ -19,6 +19,28 @@ export const commandApprovalPurposeText = (purpose: unknown): string =>
 export const commandApprovalPurposeFor = (payload: unknown, destructive: boolean): CommandApprovalPurpose =>
   typeof (payload as { command?: unknown } | null | undefined)?.command !== 'string' ? 'unrecognized' : destructive ? 'destructive' : 'shell';
 /**
+ * Compact coach layout only (`ux.coach_layout: 'compact'`): the destructive prompt reads as a calm question plus one
+ * small line on when the command can be risky. Wording only: the classification, the buttons and the approval
+ * logic are untouched. The prompt carries no reason code (the classifier answers yes or no), so the line is chosen
+ * from the command's own shape; when the shape says nothing specific the general sentence is used.
+ */
+export const COMPACT_DESTRUCTIVE_TITLE = '이 명령을 실행할까요?';
+export const COMPACT_DESTRUCTIVE_NOTE = {
+  run: '내려받은 것을 바로 실행하는 경우 내용을 확인할 수 없어 위험할 수 있습니다.',
+  remove: '파일을 지우거나 옮기거나 덮어쓰는 경우 되돌리기 어려워 위험할 수 있습니다.',
+  chain: '여러 명령을 이어 붙인 경우 그중에 파일을 지우거나 덮어쓰는 명령이 섞여 있으면 위험할 수 있습니다.',
+  general: '파일을 지우거나 덮어쓰는 명령이면 되돌리기 어려울 수 있습니다.',
+} as const;
+export function compactDestructiveNote(command: unknown): string {
+  const text = typeof command === 'string' ? command.replace(/'[^']*'/g, ' ').replace(/"[^"]*"/g, ' ') : '';
+  if (/\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?(ba|z|da)?sh\b|\|\s*(iex|Invoke-Expression)\b/i.test(text)) return COMPACT_DESTRUCTIVE_NOTE.run;
+  if (/(^|[;&|(\s])(sudo\s+)?(rm|rmdir|unlink|shred|mv|truncate)\s/.test(text)
+    || /\bgit\s+(reset\s+--hard|clean\b|push\b[^\n]*(--force|\s-f\b))/.test(text)
+    || /(?<![2-9&>])>(?!>)\s*(?!\/dev\/null|\/tmp\/|&)[^\s|&;]/.test(text)) return COMPACT_DESTRUCTIVE_NOTE.remove;
+  if (/&&|\|\||;|\||\n/.test(text.trim())) return COMPACT_DESTRUCTIVE_NOTE.chain;
+  return COMPACT_DESTRUCTIVE_NOTE.general;
+}
+/**
  * DEC-11e — set on an outward command under auto: where it sends (destination keys, never credentials) and
  * whether allowing it remembers them. An empty list means the destination could not be read (asked every time).
  */

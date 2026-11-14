@@ -62,6 +62,11 @@ export const MIC_DENIED_BODY = "이 컴퓨터에서 마이크 사용이 허용�
 export const MIC_SETTINGS_BUTTON = "마이크 설정 열기";
 export const MIC_SETTINGS_FAILED = "설정을 열지 못했어요. 시스템 설정에서 마이크 권한을 확인해 주세요.";
 export const MIC_DENIED_DISMISS = "글로 계속하기";
+// ---- Microphone explainer before the OS prompt (CGP-SHELL-R-010 / DES-SHELL-09) ----
+export const MIC_EXPLAIN_TITLE = "목소리로 말하려면 마이크가 필요해요";
+export const MIC_EXPLAIN_BODY = "허용하기를 누르면 이 컴퓨터가 마이크를 써도 되는지 물어요. 허용하지 않아도 글로는 계속 이야기할 수 있어요.";
+export const MIC_EXPLAIN_ALLOW = "허용하기";
+export const MIC_EXPLAIN_LATER = "나중에";
 
 // ---- A failed clip kept in memory for one retry (R-016, REQ-CGPV-19) ----
 export const RETRY = "다시 시도";
