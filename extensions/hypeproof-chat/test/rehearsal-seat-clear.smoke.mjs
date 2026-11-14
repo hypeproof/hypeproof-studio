@@ -95,6 +95,16 @@ await t("every clear of the return key or seat logs a label line, and the line n
   }
 });
 
+await t("enter: a return key that reads back empty after the write (in-memory store reset) keeps the issuer, does not open the folder, and throws the approved sentence", async () => {
+  const s = store({ drop: [REHEARSAL_RETURN_KEY] });
+  s.m.set(ISSUER_TOKEN_KEY, ISSUER);
+  const x = fresh();
+  await assert.rejects(() => enterRehearsal(host(s, x), enterInput), (e) => e.message === ENTER_OPEN_FAILED);
+  assert.equal(s.m.get(ISSUER_TOKEN_KEY), ISSUER, "the issuer is still there");
+  assert.equal(x.opened.length, 0, "the window is not reopened");
+  assert.equal(x.logged.filter((l) => l === "[seat] cleared by enter-readback").length, 1, "the readback failure is labelled once");
+});
+
 await t("forgetIssuer logs its clear by label", async () => {
   const s = store();
   s.m.set(ISSUER_TOKEN_KEY, ISSUER);
