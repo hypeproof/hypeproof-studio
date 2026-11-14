@@ -45,6 +45,7 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
+import { mustStayLocal } from './rehearsalRoute';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -10498,6 +10499,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #3608 — a learner turn never reads the release runner; an instructor turn re-checks a gate closed for no CLI or a failed login.
       if (this._instructorMode.isInstructor === true && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
       const local = localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime);
+      // #4099 — a subscription rehearsal turn runs only on the local runtime. Without one it stops here, before any server route.
+      if (mustStayLocal(profile?.rehearsal) && !local) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
       // D2/D8: a store skill is composed by the Service on /v1/messages only, never on a local, instructor or proxy runtime.
       if (this.storeRunFor(this.currentTaskStore?.()?.getView().activeTaskId) && (local || this._instructorMode.isInstructor === true || runtime !== "agent-sdk")) throw new Error(STORE_RUN_NEEDS_SERVICE);
       if (local) {
