@@ -87,17 +87,57 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 
 ## 판정 규칙
 
-- **P0 가 하나라도 FAIL 이면 승인하지 않는다.** 예외 없음. 고친 뒤 다음 rc 에서 다시 한다.
-- P0 가 BLOCKED 면 승인하지 않는다 — 사람이 직접 실행해서 PASS 로 바꾸거나, 막힌 이유가 제품 밖(예: 결제 대행사 장애)임을 PR 에 적고 Jay 가 결정한다.
+- **P0 가 하나라도 FAIL 이면 승인하지 않는다.** 예외 없음(override 로도 열리지 않는다. 게이트가 기계로 막는다). 고친 뒤 다음 rc 에서 다시 한다.
+- P0 가 BLOCKED 면 승인하지 않는다 — 사람이 직접 실행해서 PASS 로 바꾸거나, 막힌 이유가 제품 밖(예: 결제 대행사 장애)임을 PR 에 적고 Jay 가 결정한다. 결정은 [override](#release-manager-override) 댓글로 남기며 BLOCKED 케이스 id 를 적는다.
 - P1 FAIL 은 이슈 번호를 적고 관리자가 판단한다. 승인하면 PR 에 이유를 남긴다.
 - P2 FAIL 은 이슈만 남긴다.
 - PASS 는 스크린샷이 있어야 PASS 다. 사전 테스트의 FAIL 은 깨끗한 프로필에서 한 번 다시 해 본 뒤의 FAIL 이다.
 - 체크박스를 비워 둔 채 승인하지 않는다. 할 수 없었던 케이스는 `BLOCKED — 이유` 로 적는다.
 - **발행 게이트가 이것을 확인한다**(#3429, `scripts/release/publish-gate.mjs`). 승인 경로의 안정 태그는 릴리스 PR 에
   현재 head 를 테스트한 `hps-blackbox-run/1` 결과 댓글이 태그 시점 `cases.yaml` 의 데스크톱 P0 케이스(자동화됨 제외) 전부에
-  PASS 를 줄 때만 공개된다. 결과 댓글은 멤버·협업자나 조직 봇이 단 것만 센다. 대신 Jay 나 그 PR 을 승인한 writer 가 head
-  커밋 뒤에 `Release manager override` 로 시작하고 이유를 적은 댓글을 남기면 공개된다. 어느 길로 나갔는지 한 줄이 릴리스
+  PASS 를 줄 때만 공개된다. 결과 댓글은 멤버·협업자나 조직 봇이 단 것만 센다. 어느 길로 나갔는지 한 줄이 릴리스
   노트의 `hps-process:v1` 블록에 남는다. 공개 Service 가 rc 수락 뒤에 바뀌어 수락을 다시 돌렸으면 그 사실도 한 줄 남는다.
+- **예외는 override 하나이고, 막힌 케이스와 돌리지 못한 케이스만 면제한다**(#3462). 아래 [Release manager override](#release-manager-override)를 따른다.
+  **P0 FAIL 은 override 로 면제할 수 없다.** 게이트는 FAIL 케이스 id 를 이름으로 대고 거부한다.
+
+## Release manager override
+
+Jay 나 그 PR 을 승인한 writer 가 head 커밋 뒤에 `Release manager override` 로 시작하는 댓글을 남기면
+P0 가 PASS 가 아니어도 공개할 수 있다. 단 다음을 모두 지켜야 한다. 하나라도 어기면 그 댓글은 무시되고 게이트는 이유를 적는다.
+
+| 규칙 | 내용 |
+|---|---|
+| 이유 | 첫 줄 뒤에 이유 한 줄 이상(공백 제외 10자 이상) |
+| 면제 목록 | `hps-release-override/1` JSON 블록. 면제하는 P0 케이스 id 를 **전부** 상태별로 적는다 |
+| 대상 | head 에서 PASS 가 아닌 P0 케이스 전부. 하나라도 빠지면 거부 |
+| 정확성 | 목록은 면제한 기록이다. 그 상태가 아닌 케이스(이미 PASS, BLOCKED 를 `not_run` 에 적음, 케이스북에 없는 id)를 적어도 거부 |
+| P0 FAIL | 면제 불가. 같은 head 의 다음 결과 댓글이 그 케이스를 PASS 로 바꾸면 그때부터 FAIL 이 아니다. 고친 뒤 다음 rc 에서 다시 돌린다 |
+
+````
+Release manager override: 이유 한 줄 (왜 이 케이스들을 못 돌렸고, 왜 그래도 내보내도 되는가)
+
+```json
+{"schema": "hps-release-override/1", "waives": {"blocked": ["BB-007"], "not_run": ["BB-010", "BB-011"]}}
+```
+````
+
+- `blocked`: head 의 최신 결과에서 그 케이스 행이 `BLOCKED` 인 케이스.
+- `not_run`: head 를 테스트한 유효한 결과 어디에도 행이 없는 케이스. **결과 댓글이 하나도 없으면 데스크톱 P0 전부를 `not_run` 에 적는다.**
+- 나중에 같은 head 에 결과 댓글이 더 달려 케이스 상태가 바뀌면 목록이 틀어져 게이트가 거부한다. 새 override 를 단다(가장 최근의 유효한 댓글이 이긴다).
+- 형식은 `scripts/release/validate-blackbox-run.mjs` 의 `OVERRIDE_SCHEMA` 옆에 정의돼 있고, 결과 형식은 [results-schema.md](results-schema.md) 다.
+
+### 게이트 기록 (override 비율 측정)
+
+`publish-gate.mjs --summary <파일>` 은 게이트 결과를 JSON 한 개(`hps-publish-gate/1`)로 쓴다.
+`verify-unified-release` 의 publish 잡이 이것을 잡 아티팩트 `publish-gate`(거부된 실행도 남는다)로 올리고 잡 요약에도 찍는다.
+릴리스 자산으로는 **붙이지 않는다**: `mirror-release.yml` 이 모든 자산을 공개 미러로 복사하는데 이 기록에는 내부 override·면제 정보가 있다.
+필드: `tag`, `route`(`approval`/`hotfix`/`prerelease`/`none`), `casebook`(`blackbox-run`/`override`/`hotfix`),
+`counts`(P0 의 `pass`/`fail`/`blocked`/`not_run`), `fail_ids`, `override`(`used`, `by`, `url`, `waived_blocked`, `waived_not_run`).
+릴리스 노트의 `hps-process:v1` 줄에도 면제한 케이스 수와 id 가 들어간다.
+
+핫픽스 경로(`route: hotfix`)에도 같은 규칙이 있다: 같은 태그의 릴리스 PR 에서 현재 head 의 최신 유효 결과가 P0 FAIL 이면
+(승인 여부와 무관하게) 핫픽스 경로로도 공개되지 않는다. 게이트는 `hotfix: refused, #N has a P0 FAIL at its head: BB-…` 로 거부한다.
+결과 댓글이 없는 핫픽스(보통의 핫픽스)는 전과 같다.
 
 ## iPhone 여정과 증거 연결 (CUJ-8, #3771 / #3784)
 

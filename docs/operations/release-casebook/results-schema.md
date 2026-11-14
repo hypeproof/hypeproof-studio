@@ -60,3 +60,9 @@ BLOCKED 는 규칙상 멈춘 경우(예: 구매 케이스는 Google 로그인 �
   "suggested_cases": []
 }
 ```
+
+## 관련 형식: `hps-release-override/1`
+
+결과가 아니라 **면제 기록**이다. `Release manager override` 댓글에 넣는 JSON 블록이며, 규칙과 예는
+[README](README.md#release-manager-override)에 있다. 검사는 `scripts/release/publish-gate.mjs` 가 하고
+형식 상수(`OVERRIDE_SCHEMA`)·파서는 `scripts/release/validate-blackbox-run.mjs` 에 있다.

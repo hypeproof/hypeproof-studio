@@ -227,6 +227,22 @@ jobs:
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
           node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "$VERSION"
+      # Release acceptance of the shipped updater (read-only). The candidate App, untouched, runs its
+      # own "check for updates" command against the public release API and, if it offers a newer
+      # version, shows and dismisses the banner. Blocking. macOS only: the script drives the .app
+      # bundle; Windows is NOT RUN here. It does NOT install anything, so previous stable -> rc and
+      # BB-028 stay manual: the updater only reads the latest published stable release, never a draft
+      # or an -rc, so the rc cannot be offered before it is published.
+      - name: Shipped updater check against the public release API (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HPS_UPDATE_CHECK_SHIPPED: '1'
+          HPS_UPDATE_REPORT_DIR: ${{ runner.temp }}/unified-evidence/update-check
+        run: |
+          set -euo pipefail
+          HPS_UPDATE_APP_PATH="$RUNNER_TEMP/candidate-app/HypeProof Studio.app" node e2e/update-check/run.mjs
+          cat "$HPS_UPDATE_REPORT_DIR/update-check-result.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -298,13 +314,24 @@ jobs:
       # the release stays a draft. Rerun this workflow after the approval to publish it.
       # The approval route also needs the release casebook (#3429): an hps-blackbox-run/1 result
       # with PASS for every P0 case at the PR head, or a "Release manager override" comment with
-      # a reason from Jay or the approving writer. notes_line records which path was used.
+      # a reason from Jay or the approving writer that lists the BLOCKED / not-run P0 cases it waives
+      # (hps-release-override/1). A P0 FAIL is never waived (#3462). notes_line records which path
+      # was used; dist/publish-gate.json (hps-publish-gate/1) records override use, waived ids and
+      # P0 counts. It is a job artifact (kept even when refused) and is printed in the job summary. It is
+      # never a release asset: mirror-release.yml copies every asset to the public mirror.
       - name: Publish gate — approved release PR or hotfix
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-        run: node scripts/release/publish-gate.mjs --tag "$TAG"
+        run: node scripts/release/publish-gate.mjs --tag "$TAG" --summary dist/publish-gate.json
+      - name: Keep the publish gate record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-gate
+          path: dist/publish-gate.json
+          if-no-files-found: ignore
       # studio-public-sdk-seed (US-01). The zips vendor the Agent SDK JS but never
       # the native `claude` binary, and verify-branding.sh keeps it that way. A
       # public-zip user has no installer to seed it, so the release carries the

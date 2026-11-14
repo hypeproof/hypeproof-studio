@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Publish gate: may this tag's draft release become public?
 //
-//   node scripts/release/publish-gate.mjs --tag v2026.1013.0 [--repo owner/name]
+//   node scripts/release/publish-gate.mjs --tag v2026.1013.0 [--repo owner/name] [--summary gate.json]
 //
 // Exit 0 allows publication, exit 1 keeps the release a draft. A stable tag passes when
 //   (approval) a `release` PR from `release/<tag>` has an Approve from a repository writer, as that
@@ -10,7 +10,9 @@
 //              the same commit as the tag, and the release casebook was run (#3429): an
 //              `hps-blackbox-run/1` result comment at the PR head gives PASS for every P0 case of the
 //              tag's casebook, or Jay or an approving writer posted a comment starting
-//              "Release manager override" with a reason after the head commit; or
+//              "Release manager override" with a reason after the head commit and an
+//              `hps-release-override/1` block listing every non-PASS P0 case it waives (BLOCKED or not
+//              run). A P0 FAIL at the head is never waived: the gate refuses and names the cases; or
 //   (hotfix)   every first-parent commit since the last published stable release is the merge
 //              commit of a `hotfix`-labelled PR whose base is a `hotfix/*` branch.
 // A prerelease tag (-rc.N) is not gated: the in-app updater ignores prereleases. It still gets a
@@ -19,9 +21,10 @@
 // Pushing a tag cannot be prevented on this plan (GitHub Free, private), so the check sits here.
 // Any lookup error refuses: a draft is the safe state.
 import fs from 'node:fs';
+import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {appliesToTarget, parseYaml, validateTarget} from './casebook.mjs';
-import {SCHEMA, extractRun, validateRun} from './validate-blackbox-run.mjs';
+import {OVERRIDE_SCHEMA, SCHEMA, extractOverride, extractRun, validateOverride, validateRun} from './validate-blackbox-run.mjs';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
 
@@ -50,8 +53,13 @@ export function p0CaseIds(cases = [], {target = 'desktop'} = {}) {
   return cases.filter(c => appliesToTarget(c, target) && c.priority === 'P0' && c.status !== '자동화됨').map(c => c.id);
 }
 
+export const GATE_SCHEMA = 'hps-publish-gate/1';
+
 // Pure. Has the release PR's casebook been run on its current head, or overridden?
 //   comments: [{user, association, created_at, body, url}]; approvers: writers approving the head
+// Policy (owner-approved): an override may waive a P0 case that is BLOCKED or was not run, never a
+// P0 FAIL. It must list every non-PASS P0 case it waives (hps-release-override/1, see
+// validate-blackbox-run.mjs). The result carries `summary`, the counts and ids the release record keeps.
 export function casebookEvidence({number, head, headDate, p0 = [], comments = [], approvers = []}) {
   const notes = [];
   const latest = new Map();
@@ -69,9 +77,23 @@ export function casebookEvidence({number, head, headDate, p0 = [], comments = []
     rcs.add(run.rc_tag);
     for (const row of run.cases) latest.set(row.id, row.result);
   }
-  const missing = p0.filter(id => latest.get(id) !== 'PASS');
-  if (!missing.length && (rcs.size || !p0.length)) {
-    return {ok: true, path: 'blackbox-run', reasons: [`casebook: ${p0.length} P0 case(s) PASS at ${String(head).slice(0, 8)}`],
+  // Status of every P0 case at the head: PASS, FAIL, BLOCKED, or NOT_RUN (no row in any valid run).
+  const status = id => latest.get(id) ?? 'NOT_RUN';
+  const ids = result => p0.filter(id => status(id) === result);
+  const [fail, blocked, notRun] = [ids('FAIL'), ids('BLOCKED'), ids('NOT_RUN')];
+  const nonPass = [...fail, ...blocked, ...notRun];
+  const summary = {schema: GATE_SCHEMA, pr: number, head, p0_total: p0.length,
+    counts: {pass: ids('PASS').length, fail: fail.length, blocked: blocked.length, not_run: notRun.length},
+    fail_ids: fail, override: {used: false, by: null, url: null, waived_blocked: [], waived_not_run: []}};
+  const list = xs => xs.slice(0, 8).join(', ') + (xs.length > 8 ? ` (+${xs.length - 8})` : '');
+  const tail = () => (notes.length ? ` [${notes.slice(-3).join('; ')}]` : '');
+
+  // A P0 FAIL is never waived: no override comment is read.
+  if (fail.length) {
+    return {ok: false, summary, reasons: [`#${number}: P0 FAIL at the head: ${list(fail)}; a release manager override cannot waive a P0 FAIL, fix it and run the casebook on the next rc${tail()}`]};
+  }
+  if (!nonPass.length && (rcs.size || !p0.length)) {
+    return {ok: true, path: 'blackbox-run', summary, reasons: [`casebook: ${p0.length} P0 case(s) PASS at ${String(head).slice(0, 8)}`],
       line: p0.length
         ? `Release casebook: ${SCHEMA} result on #${number} (${[...rcs].join(', ')}) passed all ${p0.length} P0 cases.`
         : `Release casebook: the casebook has no P0 case to run.`};
@@ -80,16 +102,32 @@ export function casebookEvidence({number, head, headDate, p0 = [], comments = []
   for (const c of ordered.reverse()) {
     const m = String(c.body ?? '').match(OVERRIDE);
     if (!m || !allowed.has(c.user)) continue;
-    const reason = m[1].trim();
+    let block;
+    try { block = extractOverride(c.body); } catch (error) { notes.push(`override by ${c.user}: ${error.message}`); continue; }
+    const reason = (block ? m[1].replace(block.raw, '') : m[1]).trim();
     if (reason.replace(/\s/g, '').length < MIN_REASON) { notes.push(`override by ${c.user} has no reason`); continue; }
     if (headDate && String(c.created_at) < String(headDate)) { notes.push(`override by ${c.user} predates the head commit`); continue; }
+    if (!block) { notes.push(`override by ${c.user} lists no waived P0 cases: add a \`\`\`json block with ${OVERRIDE_SCHEMA}`); continue; }
+    const bad = validateOverride(block.value);
+    if (bad.length) { notes.push(`override by ${c.user} has an invalid ${OVERRIDE_SCHEMA} block: ${bad[0]}`); continue; }
+    const {blocked: wb, not_run: wn} = block.value.waives;
+    const unknown = [...wb, ...wn].filter(id => !p0.includes(id));
+    if (unknown.length) { notes.push(`override by ${c.user} waives ${list([...new Set(unknown)])}, not a desktop P0 case of this casebook`); continue; }
+    const uncovered = [...blocked.filter(id => !wb.includes(id)).map(id => `${id} (BLOCKED)`), ...notRun.filter(id => !wn.includes(id)).map(id => `${id} (not run)`)];
+    if (uncovered.length) { notes.push(`override by ${c.user} does not waive ${list(uncovered)}; list every non-PASS P0 case under its status`); continue; }
+    // The list is the record of what was waived, so it must be exact: a case listed under a status it
+    // does not have at the head (already PASS, or BLOCKED listed as not run) is refused too.
+    const inexact = [...wb.filter(id => !blocked.includes(id)).map(id => `${id} is ${status(id)}, not BLOCKED`), ...wn.filter(id => !notRun.includes(id)).map(id => `${id} is ${status(id)}, not not-run`)];
+    if (inexact.length) { notes.push(`override by ${c.user} lists a status the head does not have: ${list(inexact)}`); continue; }
+    const used = {waived_blocked: blocked, waived_not_run: notRun};
     const first = reason.split('\n')[0].trim();
-    return {ok: true, path: 'override', reasons: [`casebook: release manager override by ${c.user}`],
-      line: `Release casebook: not run; release manager override by ${c.user} on #${number}: ${first.length > 200 ? `${first.slice(0, 197)}...` : first}`};
+    return {ok: true, path: 'override', summary: {...summary, override: {used: true, by: c.user, url: c.url ?? null, ...used}},
+      reasons: [`casebook: release manager override by ${c.user}`],
+      line: `Release casebook: release manager override by ${c.user} on #${number} waived ${nonPass.length} P0 case(s)`
+        + ` (${blocked.length} BLOCKED${blocked.length ? `: ${blocked.join(', ')}` : ''}; ${notRun.length} not run${notRun.length ? `: ${notRun.join(', ')}` : ''}); ${summary.counts.pass} PASS: ${first.length > 200 ? `${first.slice(0, 197)}...` : first}`};
   }
-  const shown = missing.slice(0, 8).join(', ') + (missing.length > 8 ? ` (+${missing.length - 8})` : '');
-  return {ok: false, reasons: [`#${number}: casebook not run at the head: no ${SCHEMA} PASS for P0 ${shown}, and no "Release manager override" comment with a reason from ${[...allowed].join(' or ')}`
-    + (notes.length ? ` [${notes.slice(-3).join('; ')}]` : '')]};
+  return {ok: false, summary, reasons: [`#${number}: casebook not run at the head: no ${SCHEMA} PASS for P0 ${list(nonPass)}, and no "Release manager override" comment with a reason and an ${OVERRIDE_SCHEMA} block waiving every one of them from ${[...allowed].join(' or ')}`
+    + tail()]};
 }
 
 // Pure decision. Every input is already fetched.
@@ -102,6 +140,7 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
     notesLine: 'Release casebook: rc prerelease; the casebook gate (P0 run or release manager override) applies when the stable tag is published.',
     reasons: ['prerelease tag; the in-app updater ignores it']};
   const reasons = [];
+  let summary; // the casebook counts of the last release PR read, kept for a refusal too
 
   const rcAtTag = rcTags.filter(t => t.sha === tagSha).map(t => t.name);
   for (const pr of releasePrs) {
@@ -118,11 +157,21 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
     if (!rcAtTag.length) { reasons.push(`#${pr.number}: approved, but no ${tag}-rc.N tag points at ${tagSha.slice(0, 8)}`); continue; }
     if (!Array.isArray(p0)) { reasons.push(`#${pr.number}: approved, but the casebook P0 list was not read`); continue; }
     const evidence = casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0, comments: pr.comments ?? [], approvers: writerApprovers});
+    summary = evidence.summary;
     if (!evidence.ok) { reasons.push(...evidence.reasons); continue; }
-    return {allow: true, route: 'approval', casebook: evidence.path, notesLine: evidence.line,
+    return {allow: true, route: 'approval', casebook: evidence.path, notesLine: evidence.line, summary,
       reasons: [`#${pr.number} approved by ${writerApprovers.join(', ')}; ${rcAtTag.join(', ')} at the same commit`, ...evidence.reasons]};
   }
   if (!releasePrs.length) reasons.push(`approval: no PR from release/${tag}`);
+
+  // A P0 FAIL at a release PR's head blocks the hotfix route too (#3462): the override rule is not
+  // sidestepped by falling through to it. A hotfix with no run at the head is unaffected.
+  const failed = Array.isArray(p0) ? releasePrs.map(pr => ({pr, ids: casebookEvidence({number: pr.number, head: pr.head, headDate: pr.headDate, p0, comments: pr.comments ?? []}).summary.fail_ids})).filter(f => f.ids.length) : [];
+  if (failed.length) {
+    summary ??= casebookEvidence({number: failed[0].pr.number, head: failed[0].pr.head, p0, comments: failed[0].pr.comments ?? []}).summary;
+    reasons.push(...failed.map(f => `hotfix: refused, #${f.pr.number} has a P0 FAIL at its head: ${f.ids.join(', ')}`));
+    return {allow: false, route: 'none', summary, reasons};
+  }
 
   if (!previous) {
     reasons.push('hotfix: no published stable release to compare against');
@@ -136,10 +185,10 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
       const ok = prs.some(p => p.mergeCommit === sha && p.labels.includes('hotfix') && p.base.startsWith('hotfix/'));
       if (!ok) bad.push(`${sha.slice(0, 8)}${prs.length ? ` (#${prs.map(p => p.number).join(', #')})` : ' (no PR)'}`);
     }
-    if (!bad.length) return {allow: true, route: 'hotfix', casebook: 'hotfix', notesLine: `Release casebook: hotfix route (${rangePrs.length} hotfix PR commit(s) since ${previous}); no release PR to run it on.`, reasons: [`${rangePrs.length} commit(s) since ${previous}, all hotfix PRs into hotfix/*`]};
+    if (!bad.length) return {allow: true, route: 'hotfix', casebook: 'hotfix', summary, notesLine: `Release casebook: hotfix route (${rangePrs.length} hotfix PR commit(s) since ${previous}); no release PR to run it on.`, reasons: [`${rangePrs.length} commit(s) since ${previous}, all hotfix PRs into hotfix/*`]};
     reasons.push(`hotfix: ${bad.length} of ${rangePrs.length} commit(s) since ${previous} are not hotfix PRs into hotfix/*: ${bad.join(', ')}`);
   }
-  return {allow: false, route: 'none', reasons};
+  return {allow: false, route: 'none', summary, reasons};
 }
 
 function gh(path) {
@@ -205,8 +254,16 @@ if (process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(pro
   } catch (error) {
     verdict = {allow: false, route: 'error', reasons: [`lookup failed: ${error.message.split('\n')[0]}`]};
   }
+  // The release record of the gate (#3462): path, override use, waived case ids and P0 counts, one JSON
+  // object, so the override rate can be measured across releases. --summary FILE writes it; the workflow
+  // attaches it to the release and to the run.
+  const record = {schema: GATE_SCHEMA, tag, repo, at: new Date().toISOString(), allow: verdict.allow, route: verdict.route,
+    casebook: verdict.casebook ?? null, ...(verdict.summary ? {pr: verdict.summary.pr, head: verdict.summary.head, p0_total: verdict.summary.p0_total, counts: verdict.summary.counts,
+      fail_ids: verdict.summary.fail_ids, override: verdict.summary.override} : {})};
+  const summaryFile = arg('--summary', process.env.PUBLISH_GATE_SUMMARY);
+  if (summaryFile) { fs.mkdirSync(path.dirname(path.resolve(summaryFile)), {recursive: true}); fs.writeFileSync(summaryFile, `${JSON.stringify(record, null, 2)}\n`); }
   const text = [`## Publish gate — ${tag}`, '', `**${verdict.allow ? 'ALLOW' : 'REFUSE — release stays a draft'}** (${verdict.route})`, '',
-    ...verdict.reasons.map(r => `- ${r}`), ''].join('\n');
+    ...verdict.reasons.map(r => `- ${r}`), '', '```json', JSON.stringify(record), '```', ''].join('\n');
   console.log(text);
   if (verdict.notesLine) console.log(`notes: ${verdict.notesLine}`);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
