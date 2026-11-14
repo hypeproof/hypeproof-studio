@@ -515,6 +515,9 @@ html, body, #root {
   border-radius: var(--ds-c-studio-styles-radius-13);
   font-size: var(--ds-c-studio-styles-type-1);
 }
+/* CGP-SHELL-R-016: on light host themes the fixed light-red ink measured 1.82:1 on its pink panel; the host's error colour
+   (HP Light #9E2410, the light registry #A1260D) reads at 5.9:1 or more there. */
+body.vscode-light .hps-error { color: var(--vscode-errorForeground, var(--ds-c-studio-styles-ink-19)); }
 
 /* ---------- Friends (worlds) strip — #649 ----------
    A horizontal row that always sits right above the composer. Switching worlds happens
