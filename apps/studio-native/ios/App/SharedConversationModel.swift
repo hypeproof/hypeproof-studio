@@ -131,7 +131,7 @@ private struct SharedCacheFile: Codable {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
             var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
             try JSONEncoder().encode(queue).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, changed: { [weak self, weak presentation] in presentation?.state = $0; self?.questions.controller?.startAvailabilityChanged() })
         return presentation
     }()
     lazy var push: AccountPushPresentation = {
@@ -188,7 +188,7 @@ private struct SharedCacheFile: Codable {
                 var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
                 try JSONEncoder().encode(intent).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             } else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
-        }, observed: { [weak self] event in self?.experience.controller?.record(event) }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, observed: { [weak self] event in self?.experience.controller?.record(event) }, startingAvailable: { [weak self] account in self?.experience.controller?.available(for: account) == true }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
     }()
     lazy var approvals: MemberApprovalPresentation = {

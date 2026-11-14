@@ -59,7 +59,7 @@ final class AccountQuestionTests: XCTestCase {
             return me.id == identity.accountID ? identity : nil
         }, load: { _ in try await service.accountQuestion("fixture-access") }, act: { _, key, action, body in
             try await service.accountQuestionAction(key, action: action, body: body, token: "fixture-access")
-        }, changed: { _ in })
+        }, startingAvailable: { _ in true }, changed: { _ in })
         await controller.refresh(); XCTAssertEqual(controller.view.card?.prompt, "어디에서 막혔나요?"); XCTAssertTrue(posts.isEmpty())
         await controller.presented("growth:choice-a"); await controller.presented("growth:choice-a")
         XCTAssertEqual(posts.count, 1); XCTAssertTrue(posts[0].0.hasSuffix("/shown"))
@@ -72,7 +72,7 @@ final class AccountQuestionTests: XCTestCase {
     @MainActor func testUncertainAnswerPreservesWordsAndNeverAutomaticallyReplays() async throws {
         let card = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: Self.card))
         var identity: MemberApprovalIdentity? = .init(accountID: "A", sessionID: "session-A"), posts = 0
-        let controller = AccountQuestionController(identity: { identity }, load: { _ in card }, act: { _, _, action, _ in if action == "answer" { posts += 1 }; throw URLError(.networkConnectionLost) }, changed: { _ in })
+        let controller = AccountQuestionController(identity: { identity }, load: { _ in card }, act: { _, _, action, _ in if action == "answer" { posts += 1 }; throw URLError(.networkConnectionLost) }, startingAvailable: { _ in true }, changed: { _ in })
         await controller.refresh(); controller.edit("사라지면 안 되는 답"); controller.pick("method"); await controller.submit(action: "continue")
         XCTAssertEqual(posts, 1); XCTAssertEqual(controller.view.words, "사라지면 안 되는 답"); XCTAssertNil(controller.view.card)
         await controller.refresh(); XCTAssertEqual(posts, 1); XCTAssertEqual(controller.view.words, "사라지면 안 되는 답")
@@ -94,7 +94,7 @@ final class AccountQuestionTests: XCTestCase {
             return (200, ["schema": "hps-question-trigger/1", "key": "growth:choice-a", "source": ["kind": "choice", "id": id, "revision": 1], "reentry": ["method": "GET", "path": "/v1/me/cards"], "model_calls": 0, "policy": "team-question/1", "created": true])
         }
         let identity = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
-        let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("fixture-access") }, act: { _, _, _, _ in XCTFail("No answer or exposure from loading"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "fixture-access") }, changed: { _ in })
+        let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("fixture-access") }, act: { _, _, _, _ in XCTFail("No answer or exposure from loading"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "fixture-access") }, startingAvailable: { _ in true }, changed: { _ in })
         await controller.refresh(); XCTAssertTrue(controller.view.canStart); XCTAssertEqual(posts, 0)
         await controller.begin("method"); XCTAssertEqual(posts, 1); XCTAssertNotNil(controller.view.card)
         await controller.refresh(); XCTAssertEqual(posts, 1); XCTAssertFalse(controller.view.canStart)
@@ -107,7 +107,7 @@ final class AccountQuestionTests: XCTestCase {
                 XCTAssertEqual(choice, "method"); attempts.append(id); if loseReceipt { throw URLError(.networkConnectionLost) }
             }, loadIntent: { _ in disk }, saveIntent: { _, intent in
                 if failSave { throw CocoaError(.fileWriteOutOfSpace) }; disk = intent
-            }, changed: { _ in })
+            }, startingAvailable: { _ in true }, changed: { _ in })
         }
         let first = reopened(); await first.refresh(); await first.begin("method")
         let id = try XCTUnwrap(disk?.id); XCTAssertEqual(attempts, [id])
@@ -118,9 +118,31 @@ final class AccountQuestionTests: XCTestCase {
     }
     @MainActor func testSameQuestionSecondServerAttemptRecordsAnotherRealExposure() async throws {
         var object = Self.card, shown = 0
-        let controller = AccountQuestionController(identity: { .init(accountID: "A", sessionID: "session-A") }, load: { _ in try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)) }, act: { _, _, action, _ in XCTAssertEqual(action, "shown"); shown += 1; return "" }, changed: { _ in })
+        let controller = AccountQuestionController(identity: { .init(accountID: "A", sessionID: "session-A") }, load: { _ in try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)) }, act: { _, _, action, _ in XCTAssertEqual(action, "shown"); shown += 1; return "" }, startingAvailable: { _ in true }, changed: { _ in })
         await controller.refresh(); await controller.presented("growth:choice-a"); await controller.presented("growth:choice-a"); XCTAssertEqual(shown, 1)
         object["attempt"] = 2; await controller.refresh(); await controller.presented("growth:choice-a"); XCTAssertEqual(shown, 2)
+    }
+    @MainActor func testUnavailableCapabilityPreservesIntentButDeclinedMetadataAllowsExplicitStart() async throws {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [QuestionProtocol.self]
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel(); QuestionProtocol.respond = nil }
+        let service = ConversationService(session: session, base: URL(string: "https://fixture.invalid")!)
+        var account = MemberApprovalIdentity(accountID: "A", sessionID: "session-A"), status = 200, malformed = false, starts = 0
+        var saved: AccountQuestionIntent?
+        QuestionProtocol.respond = { request in
+            XCTAssertEqual(request.httpMethod, "GET"); XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access")
+            return (status, ["schema": malformed ? "bad" : "hps-product-consent/1", "notice_version": "team-ux/1", "title": "사용 경험 공유", "notice": "거절해도 질문은 그대로예요", "preference": ["notice_version": "team-ux/1", "granted": 0]])
+        }
+        let experience = ProductExperienceController(identity: { account }, version: "0.2.0", consent: { _, _ in try await service.productExperienceConsent(nil, token: "access") }, send: { _, _ in XCTFail("No telemetry"); return [] }, load: { _ in .init() }, save: { _, _ in }, changed: { _ in })
+        let questions = AccountQuestionController(identity: { account }, load: { _ in nil }, act: { _, _, _, _ in XCTFail("No answer"); return "" }, start: { _, _, _ in starts += 1; throw URLError(.networkConnectionLost) }, loadIntent: { _ in saved }, saveIntent: { _, intent in saved = intent }, startingAvailable: { experience.available(for: $0) }, changed: { _ in })
+        await questions.refresh(); await questions.begin("method"); XCTAssertFalse(questions.view.canStart); XCTAssertEqual(starts, 0)
+        await experience.refresh(); questions.startAvailabilityChanged(); XCTAssertTrue(questions.view.canStart); XCTAssertFalse(experience.view.granted)
+        await questions.begin("method"); let id = try XCTUnwrap(saved?.id); XCTAssertEqual(starts, 1)
+        for refusal in [403, 404, 503, 200] {
+            status = refusal; malformed = refusal == 200; await experience.refresh(); await questions.refresh()
+            XCTAssertFalse(questions.view.canStart); await questions.begin("method"); XCTAssertEqual(starts, 1); XCTAssertEqual(saved?.id, id)
+        }
+        status = 200; malformed = false; await experience.refresh(); XCTAssertTrue(experience.available(for: account))
+        account = .init(accountID: "B", sessionID: "session-B"); XCTAssertFalse(experience.available(for: account))
     }
     func testUnknownSchemaExpiredCardAndUnknownChoiceCannotAct() throws {
         var object = Self.card; object["expires_at"] = 1
@@ -142,7 +164,7 @@ final class AccountQuestionTests: XCTestCase {
                 if invalid == "created" { result[invalid] = 1 } else { result[invalid] = invalid == "policy" ? "unreviewed/2" : "pmf:other" }
                 return (200, result)
             }
-            let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("access") }, act: { _, _, _, _ in XCTFail("No card action"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "access") }, loadIntent: { _ in saved }, saveIntent: { _, value in saved = value }, changed: { _ in })
+            let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("access") }, act: { _, _, _, _ in XCTFail("No card action"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "access") }, loadIntent: { _ in saved }, saveIntent: { _, value in saved = value }, startingAvailable: { _ in true }, changed: { _ in })
             await controller.refresh(); await controller.begin("method"); XCTAssertNotNil(saved, invalid); XCTAssertEqual(saved?.id, submitted); XCTAssertNil(controller.view.card)
         }
     }

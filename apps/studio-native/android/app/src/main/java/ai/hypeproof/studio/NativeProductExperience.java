@@ -31,6 +31,7 @@ final class NativeProductExperience {
         }
     }
     void invalidate(){generation++;if(operation!=null)operation.cancel();binding=null;available=busy=granted=sending=false;title="사용 경험 공유";notice=status="";saved=empty();journeys.clear();}
+    boolean availableFor(NativeDeviceSignIn.Credentials c){return available&&NativeTeamModel.same(c,binding)&&NativeTeamModel.same(c,current.get());}
     private boolean live(long g,NativeDeviceSignIn.Credentials c){return generation==g&&NativeTeamModel.same(binding,c)&&NativeTeamModel.same(c,current.get());}
     private JSONObject call(String path,Map<String,String> body,NativeDeviceSignIn.Credentials c,NativeDeviceSignIn.Cancel cancel)throws Exception{
         if(cancel.isCancelled())throw new Exception("cancelled");var reply=http.call(path,body,c.bearer(),cancel);if(cancel.isCancelled()||reply.status()<200||reply.status()>=300||reply.body().containsKey("error"))throw new Exception("unavailable");return new JSONObject(reply.body());

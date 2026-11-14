@@ -72,7 +72,7 @@ public final class QuestionActivity extends Activity {
         NativeDeviceSignIn.Target target=NativeDeviceSignIn.Target.production();
         NativeDeviceSignIn.Transport http=BuildConfig.DEBUG&&testTransport!=null?testTransport:new DeviceSignInHttp(target,deadlines);
         model=new ReflectionModel(storage,new NativeDeviceSignIn(target,http,NativeDeviceSignIn.MONOTONIC),http,worker,r->handler.post(r),this::update);
-        experience=new NativeProductExperience(()->model.credentials,http,experienceWorker,r->handler.post(r),storage,this::renderExperience);
+        experience=new NativeProductExperience(()->model.credentials,http,experienceWorker,r->handler.post(r),storage,()->{renderExperience();if(team!=null)team.startAvailabilityChanged();});
         model.observed=experience::record;
         DeviceSignInHttp pushHttp=new DeviceSignInHttp(target,deadlines);
         push=new NativePush(()->model.credentials,pushHttp::push,storage,pushWorker,r->handler.post(r),()->{if(pushStatus!=null)pushStatus.setText(push.status);});
@@ -98,7 +98,7 @@ public final class QuestionActivity extends Activity {
             }
         });
         team=new NativeTeamModel(()->model.credentials,http,worker,r->handler.post(r),storage,()->{update();renderTeamDialog();});
-        team.observed=experience::record;
+        team.observed=experience::record;team.startingAvailable=experience::availableFor;
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
         if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
@@ -372,9 +372,14 @@ public final class QuestionActivity extends Activity {
             if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();if(model.error.isEmpty())model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
-    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정","질문 알림 설정"},(d,w)->{
+    static java.util.function.Consumer<JSONObject> testMenuObservation;
+    private void menuObservation(String phase,View view){
+        if(!BuildConfig.DEBUG||testMenuObservation==null)return;
+        try{android.graphics.Rect bounds=new android.graphics.Rect();view.getGlobalVisibleRect(bounds);testMenuObservation.accept(new JSONObject().put("phase",phase).put("elapsed_ms",SystemClock.elapsedRealtime()).put("attached",view.isAttachedToWindow()).put("focused",view.hasWindowFocus()).put("bounds",bounds.toShortString()));}catch(Exception ignored){}
+    }
+    private void menu(){menuObservation("listener",getWindow().getDecorView());stopVoice();update();AlertDialog dialog=new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정","질문 알림 설정"},(d,w)->{
         switch(w){case 9:openPushSettings();break;case 8:openExperience();break;case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->{disablePush();model.logout();}).show();break;}
-    }).show();}
+    }).create();dialog.show();menuObservation("shown",dialog.getWindow().getDecorView());}
     private void export(){
         if(model.state==null)return;
         try{File directory=new File(getCacheDir(),"exports");if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException();File out=new File(directory,"studio-questions.json");byte[] bytes;if(model.readOnly){storage.exportOriginal(model.account(),out);bytes=null;}else{ReflectionState copy=model.state.copy();copy.draft=model.draft;bytes=copy.json().toString(2).getBytes(StandardCharsets.UTF_8);}if(bytes!=null)try(FileOutputStream stream=new FileOutputStream(out)){stream.write(bytes);}Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",out);Intent intent=new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.setClipData(ClipData.newRawUri("HP Studio questions",uri));startActivity(Intent.createChooser(intent,"기록 내보내기"));}

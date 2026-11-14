@@ -51,6 +51,7 @@ public struct ProductExperienceQueue: Codable, Sendable {
         self.identity = identity; self.version = version; self.consent = consent; self.send = send; self.load = load; self.save = save; self.changed = changed
     }
     public func invalidate() { generation = UUID(); flushTask?.cancel(); flushTask = nil; binding = nil; queue = .init(); view = .init(); sending = false; journeys = [:]; changed(view) }
+    public func available(for account: MemberApprovalIdentity) -> Bool { view.available && binding == account && identity() == account }
     private func current(_ g: UUID, _ account: MemberApprovalIdentity) -> Bool { generation == g && identity() == account && binding == account }
     public func refresh() async {
         guard !view.busy, !sending, let account = identity() else { return }

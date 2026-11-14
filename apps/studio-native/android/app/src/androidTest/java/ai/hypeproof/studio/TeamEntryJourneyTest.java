@@ -28,6 +28,8 @@ public class TeamEntryJourneyTest {
     private final AtomicInteger triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
     private final AtomicInteger consentWrites=new AtomicInteger();
     private final AtomicBoolean metricsGranted=new AtomicBoolean();
+    private final AtomicBoolean capabilityUnavailable=new AtomicBoolean();
+    private final JSONArray menuObservations=new JSONArray();
     private final java.util.List<String> metricTypes=new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
     private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -40,6 +42,7 @@ public class TeamEntryJourneyTest {
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
             assertEquals("synthetic-access",bearer);
             if(path.equals("/me/product-events/consent")){
+                if(capabilityUnavailable.get())return new NativeDeviceSignIn.Reply(404,Map.of("error","not_found"));
                 if(body!=null){consentWrites.incrementAndGet();metricsGranted.set(Boolean.parseBoolean(body.get("granted")));return new NativeDeviceSignIn.Reply(200,Map.of("ok",true));}
                 return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-product-consent/1","notice_version","team-ux/1","title","사용 경험 공유","notice","대화 원문 없이 사용 단계만 기록해요. 거절해도 질문과 승인은 그대로 사용할 수 있어요.","preference",new JSONObject().put("notice_version","team-ux/1").put("granted",metricsGranted.get()?1:0)));
             }
@@ -58,7 +61,7 @@ public class TeamEntryJourneyTest {
             throw new IOException("No other Service effects in this fixture");
         };
     }
-    @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;}
+    @After public void cleanup(){if(app!=null)app.close();QuestionActivity.testTransport=null;QuestionActivity.testMenuObservation=null;}
     private static NativeTeamModel team(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("team");f.setAccessible(true);return(NativeTeamModel)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
     private void settled(java.util.function.Predicate<NativeTeamModel> predicate)throws Exception{
         AtomicBoolean ready=new AtomicBoolean();for(int i=0;i<120&&!ready.get();i++){app.onActivity(a->ready.set(predicate.test(team(a))));if(!ready.get())Thread.sleep(50);}assertTrue("actual team model completion",ready.get());
@@ -110,11 +113,31 @@ public class TeamEntryJourneyTest {
         onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private void selectMenu(String title)throws Exception {
-        onView(withContentDescription("메뉴")).perform(click());
+        QuestionActivity.testMenuObservation=value->{if(menuObservations.length()<40)menuObservations.put(value);};
+        onView(withContentDescription("메뉴")).perform(new androidx.test.espresso.ViewAction(){
+            public org.hamcrest.Matcher<android.view.View> getConstraints(){return isDisplayed();}
+            public String getDescription(){return "observe the one actual menu touch without changing its listener";}
+            public void perform(androidx.test.espresso.UiController ui,android.view.View view){
+                observeMenu("before",view);view.setOnTouchListener((v,event)->{if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN||event.getActionMasked()==android.view.MotionEvent.ACTION_UP)observeMenu(event.getActionMasked()==0?"down":"up",v);return false;});
+                click().perform(ui,view);view.setOnTouchListener(null);
+            }
+        });
         long deadline=System.currentTimeMillis()+5000;boolean visible=false;
         while(System.currentTimeMillis()<deadline){android.view.accessibility.AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null){visible=!root.findAccessibilityNodeInfosByText(title).isEmpty();root.recycle();}if(visible)break;Thread.sleep(25);}
+        writeMenuObservations();
         if(!visible){screenshot("android-team-menu-missing");throw new AssertionError("One menu tap did not expose its actual dialog within 5 seconds: "+title);}
         onView(withText(title)).inRoot(isDialog()).perform(click());
+    }
+    private void observeMenu(String phase,android.view.View view){
+        try{android.graphics.Rect bounds=new android.graphics.Rect();view.getGlobalVisibleRect(bounds);if(menuObservations.length()<40)menuObservations.put(new JSONObject().put("phase",phase).put("elapsed_ms",android.os.SystemClock.elapsedRealtime()).put("attached",view.isAttachedToWindow()).put("focused",view.hasWindowFocus()).put("bounds",bounds.toShortString()));}catch(Exception e){throw new AssertionError(e);}
+    }
+    private void writeMenuObservations()throws Exception{File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());Files.write(new File(dir,"android-team-menu-observations.json").toPath(),menuObservations.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+    @Test public void missingTeamCapabilityHidesOnlyStartingChoicesAndPreservesDraft()throws Exception{
+        capabilityUnavailable.set(true);app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->!e.busy&&!e.available);
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question==null&&!t.canStart);
+        onView(withText("방법이 막혔어요")).check(doesNotExist());onView(withText("지금 도착한 질문이 없어요.")).inRoot(isDialog()).check(matches(isDisplayed()));
+        app.onActivity(a->team(a).begin(new NativeDeviceSignIn.Credentials("team-account","team-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000),"method"));
+        assertEquals(0,triggers.get());onView(withText("닫기")).inRoot(isDialog()).perform(click());onView(withContentDescription("질문 대화 입력")).check(matches(withText("아직 보내지 않은 내 생각")));assertEquals(0,turns.get());assertEquals(0,consentWrites.get());
     }
     @Test public void unconfiguredNotificationsStayDisabledWithoutBlockingQuestions()throws Exception {
         app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));assertFalse(StudioMessagingService.configured(context));

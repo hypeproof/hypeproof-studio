@@ -62,6 +62,8 @@ public struct AccountQuestion: Decodable, Sendable {
     }
     public private(set) var view = View()
     private var generation = UUID(), binding: MemberApprovalIdentity?
+    private var emptyLoaded = false
+    private let startingAvailable: (MemberApprovalIdentity) -> Bool
     private var draftKey: String?, shownKey: String?
     private let identity: () async throws -> MemberApprovalIdentity?
     private let load: (MemberApprovalIdentity) async throws -> AccountQuestion?
@@ -71,17 +73,17 @@ public struct AccountQuestion: Decodable, Sendable {
     private let saveIntent: (String, AccountQuestionIntent?) throws -> Void
     private let changed: (View) -> Void
     private let observed: (ProductExperienceEvent.Kind) -> Void
-    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, loadIntent: @escaping (String) throws -> AccountQuestionIntent? = { _ in nil }, saveIntent: @escaping (String, AccountQuestionIntent?) throws -> Void = { _, _ in }, observed: @escaping (ProductExperienceEvent.Kind) -> Void = { _ in }, changed: @escaping (View) -> Void) {
-        self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.observed = observed; self.changed = changed
+    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, loadIntent: @escaping (String) throws -> AccountQuestionIntent? = { _ in nil }, saveIntent: @escaping (String, AccountQuestionIntent?) throws -> Void = { _, _ in }, observed: @escaping (ProductExperienceEvent.Kind) -> Void = { _ in }, startingAvailable: @escaping (MemberApprovalIdentity) -> Bool = { _ in false }, changed: @escaping (View) -> Void) {
+        self.startingAvailable = startingAvailable; self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.observed = observed; self.changed = changed
     }
-    public func invalidate() { generation = UUID(); binding = nil; draftKey = nil; shownKey = nil; view = View(); changed(view) }
-    public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; changed(view) }
+    public func invalidate() { generation = UUID(); binding = nil; emptyLoaded = false; draftKey = nil; shownKey = nil; view = View(); changed(view) }
+    public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; emptyLoaded = false; view.canStart = false; changed(view) }
     public func edit(_ words: String) { guard !view.busy, let card = view.card, let input = card.text, words.count <= input.max else { return }; view.words = words; changed(view) }
     public func pick(_ id: String) { guard !view.busy, view.card?.choices.contains(where: { $0.id == id }) == true else { return }; view.choice = id; changed(view) }
     private func current(_ g: UUID, _ expected: MemberApprovalIdentity) async throws -> Bool { guard g == generation else { return false }; let now = try await identity(); return g == generation && now == expected }
     public func refresh() async {
         guard !view.busy else { return }; generation = UUID(); let g = generation
-        view.busy = true; view.card = nil; view.canStart = false; view.message = "질문을 불러오고 있어요."; changed(view)
+        view.busy = true; view.card = nil; view.canStart = false; emptyLoaded = false; view.message = "질문을 불러오고 있어요."; changed(view)
         do {
             guard let account = try await identity() else { invalidate(); return }
             guard g == generation else { return }
@@ -94,15 +96,23 @@ public struct AccountQuestion: Decodable, Sendable {
             if let card, card.available() {
                 if draftKey != card.key { view.words = card.text?.value ?? ""; view.choice = nil; draftKey = card.key }
                 view.card = card; view.message = ""
-            } else { view.canStart = view.words.isEmpty; view.message = pending == nil ? "지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?" : "아직 결과를 확인하지 못한 선택이 있어요. 같은 선택을 누르면 같은 요청으로 확인해요." }
+            } else { emptyLoaded = true; startAvailability() }
         } catch { if g == generation { view.message = "질문을 불러오지 못했어요. 작성한 답은 남겨 두었어요." } }
         if g == generation { view.busy = false; changed(view) }
     }
+    private func startAvailability() {
+        view.canStart = emptyLoaded && view.words.isEmpty && binding.map(startingAvailable) == true
+        if emptyLoaded {
+            view.message = view.pendingChoice != nil ? (view.canStart ? "아직 결과를 확인하지 못한 선택이 있어요. 같은 선택을 누르면 같은 요청으로 확인해요." : "아직 결과를 확인하지 못한 선택이 남아 있어요. 이용할 수 있을 때 다시 확인해 주세요.") : (view.canStart ? "지금 도착한 질문이 없어요. 어떤 생각부터 정리할까요?" : "지금 도착한 질문이 없어요.")
+        }
+    }
+    public func startAvailabilityChanged() { guard !view.busy, emptyLoaded else { return }; startAvailability(); changed(view) }
     public func begin(_ choice: String) async {
-        guard !view.busy, view.canStart, view.words.isEmpty, ["goal", "method", "decision"].contains(choice), view.pendingChoice == nil || view.pendingChoice == choice, let binding else { return }
+        guard !view.busy, view.canStart, view.words.isEmpty, ["goal", "method", "decision"].contains(choice), view.pendingChoice == nil || view.pendingChoice == choice, let binding, startingAvailable(binding) else { return }
         let g = generation; view.busy = true; view.canStart = false; changed(view)
         do {
             guard try await current(g, binding) else { if g == generation { invalidate() }; return }
+            guard startingAvailable(binding) else { view.busy = false; startAvailabilityChanged(); return }
             let intent = try loadIntent(binding.accountID) ?? AccountQuestionIntent(accountID: binding.accountID, choice: choice)
             try intent.validate(account: binding.accountID)
             guard intent.choice == choice else { throw SyncFailure.invalidResponse }
