@@ -7,12 +7,23 @@ import CryptoKit
 @MainActor enum NativeJourneyFixture {
     nonisolated static var enabled: Bool { JourneyConfiguration.enabled }
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
-    static var trace: String { JourneyTransport.store.trace() }
+    static var trace: String {
+        let value = JourneyTransport.store.trace()
+        guard !emptyStopBoundary.isEmpty,
+              var fields = (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any] else { return value }
+        fields["empty_stop_boundary"] = emptyStopBoundary
+        return String(data: (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? value
+    }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
     static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
     static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
     static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
+    private(set) static var emptyStopBoundary: [String: Any] = [:]
+    static func recordEmptyStopBoundary(active: Bool, phase: String) {
+        guard enabled, JourneyConfiguration.scenario == "voice-empty-results" else { return }
+        emptyStopBoundary = ["active": active, "phase": phase]
+    }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
     static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
     static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
@@ -49,9 +60,33 @@ import CryptoKit
                                        "entries": ["personal-reflection": entry]]
         try JSONSerialization.data(withJSONObject: snapshot).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
-    static func speech(deliver: @escaping @MainActor (String, Bool) -> Void) -> Task<Void, Never>? {
+    static func speech(deliver: @escaping @MainActor (String, Bool) -> Void,
+                       stopAfterEmpty: @escaping @MainActor () -> Void = {}) -> Task<Void, Never>? {
         guard enabled else { return nil }
         let capture = JourneyTransport.store.nextSpeech()
+        if JourneyConfiguration.scenario == "voice-empty-results" {
+            return Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 200_000_000)
+                    try Task.checkCancellation()
+                    // Real controller sees partial -> empty final, an empty
+                    // post-playback capture, then useful speech and exhaustion.
+                    if capture == 1 || capture == 3 {
+                        deliver(capture == 1 ? "들리니" : "다음 생각도 이어갈게요", false)
+                        try await Task.sleep(nanoseconds: 300_000_000)
+                        try Task.checkCancellation()
+                    }
+                    JourneyTransport.store.finishedSpeech(); deliver("", true)
+                    JourneyTransport.store.deliveredSpeech()
+                    if capture == 7 {
+                        // After the real empty-result handler schedules its350ms
+                        // retry, invoke the actual controller Stop synchronously.
+                        // This is timer cancellation evidence, not a user tap.
+                        stopAfterEmpty()
+                    }
+                } catch { /* Stop/background cancels the recognizer producer. */ }
+            }
+        }
         let hold = JourneyConfiguration.scenario == "voice-hold" || capture > 1
         let text = hold ? "Keep this spoken draft without sending" : "I want to understand my next step"
         return Task { @MainActor in
@@ -80,7 +115,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }

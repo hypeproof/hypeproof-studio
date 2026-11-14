@@ -320,6 +320,49 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertTrue((field(app).value as? String)?.contains("Keep this spoken draft without sending") == true)
         try evidence("journey-voice-stop", app: app)
     }
+    @MainActor func testEmptyRecognitionPreservesWordsRecoversWithinBudgetAndStopCancelsRetry() throws {
+        let app = launch("voice-empty-results"); signIn(app)
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        answer(app) // Old code clears the useful partial and never submits this first turn.
+        waitForVoiceEvent("noSpeechPaused", in: app)
+        let result = try trace(app)
+        XCTAssertEqual(result["submitted_texts"] as? [String], ["들리니", "다음 생각도 이어갈게요"],
+                       "Empty final callbacks must retain each useful partial and send it once; empty captures never send.")
+        XCTAssertEqual(result["accepted_turns"] as? Int, 2)
+        let ids = try XCTUnwrap(result["submitted_ids"] as? [String])
+        XCTAssertEqual(ids.count, 2); XCTAssertEqual(Set(ids).count, 2)
+        XCTAssertEqual(result["speech_captures"] as? Int, 6,
+                       "The successful recovered turn resets the budget, then three empty captures pause without looping.")
+        let timeline = diagnostic("nativeVoiceTimeline", in: app).value as? String ?? ""
+        XCTAssertTrue(timeline.contains("partialRetained"))
+        XCTAssertFalse(timeline.contains("speechPermissionRequested"))
+        XCTAssertFalse(timeline.contains("microphonePermissionRequested"))
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        try evidence("journey-empty-voice-recovered-and-paused", app: app)
+
+        // A deliberate new start resets the exhausted budget. The fixture then
+        // calls the real controller Stop after an empty result schedules its
+        //350ms retry; this is timer cancellation, not a simulated UI Stop tap.
+        enabled(app.buttons["sharedVoice"]); app.buttons["sharedVoice"].tap()
+        waitForVoiceEvent("noSpeechRetryScheduled", in: app, count: 4)
+        let stopped = try trace(app)
+        let boundary = try XCTUnwrap(stopped["empty_stop_boundary"] as? [String: Any])
+        XCTAssertEqual(boundary["active"] as? Bool, true, "Stop must stay available while recovery is pending.")
+        XCTAssertEqual(boundary["phase"] as? String, "authorizing")
+        XCTAssertEqual(stopped["speech_captures"] as? Int, 7)
+        XCTAssertFalse(app.buttons["sharedVoiceStop"].exists)
+        let traceNode = diagnostic("nativeJourneyTrace", in: app)
+        let reopened = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = traceNode.value as? String,
+                  let state = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
+            return (state["speech_captures"] as? Int ?? 0) > 7 || (state["accepted_turns"] as? Int ?? 0) > 2
+        }, object: traceNode)
+        reopened.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 1.2), .completed,
+                       "Real elapsed time exceeds350ms; a cancelled retry must not capture or POST.")
+        XCTAssertEqual(try trace(app)["submitted_texts"] as? [String], ["들리니", "다음 생각도 이어갈게요"])
+        try evidence("journey-empty-voice-stopped-before-retry", app: app)
+    }
     @MainActor private func waitForVoiceEvent(_ event: String, in app: XCUIApplication, count: Int = 1, timeout: TimeInterval = 10) {
         let trace = diagnostic("nativeVoiceTimeline", in: app)
         let observed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
