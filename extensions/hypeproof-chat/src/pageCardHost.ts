@@ -78,7 +78,7 @@ function walkInFolder(root: string, rel: string, opts: WalkOptions = {}): PageRe
     const st = fs.lstatSync(cur);
     if (!st.isFile()) return { ok: false, cause: "not-file" };
     // Defense in depth: with every segment lstat-checked under the canonical base this cannot fail today.
-    if (!isInsideFolder(canonicalFolder(cur), base)) return { ok: false, cause: "outside" };
+    if (!isInsideFolder(canonicalFolder(cur, pageCardSeam.realpath ?? undefined), base)) return { ok: false, cause: "outside" };
     return { ok: true, abs: cur, dev: st.dev, ino: st.ino };
   } catch (e) {
     return { ok: false, cause: (e as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "outside" };

@@ -266,3 +266,28 @@ test('폴더에서 보기 on the deck PDF: the saved file inside the served root
     assert.deepEqual(await press(), []); assert.deepEqual(revealed, [fs.realpathSync(pdf)]);
   } finally { await s.done(); }
 });
+
+// #4066 round 3 (verify-r004): the deck's record site. The bundled pageCardSeam.realpath plays a case-folding volume where
+// the work folder `work` is `WORK` on disk (a link, so both spellings reach the files). The saved root and the file's path
+// must be recorded in that canonical form: recording the raw served root, or canonicalFolder without the same realpath,
+// refuses the press below.
+test('record site: a case-folding volume still reveals the exported deck.pdf (root recorded canonically)', { skip: !bin && 'NOT RUN: no headless Chromium' }, async () => {
+  const s = await setup();
+  const seam = s.f.internals.pageCardSeam;
+  const browser = await launch(bin);
+  try {
+    const WORK = path.join(s.root, 'WORK');
+    fs.symlinkSync(s.work, WORK);
+    seam.realpath = (p) => { const r = fs.realpathSync.native(p); return r === s.work || r.startsWith(s.work + '/') ? WORK + r.slice(s.work.length) : r; };
+    s.f.h.deckPdfAttach = async (tab) => { await browser.send('Page.navigate', { url: tab.url }); return { send: browser.send, close: async () => {} }; };
+    await s.f.h.deckPdf();
+    assert.match(s.notices().at(-1), /덱을 PDF로 저장했어요/);
+    const revealed = [];
+    s.f.h.deckPdfRevealInOS = async (abs) => { revealed.push(abs); };
+    const before = s.notices().length;
+    await s.f.handle(s.f.scoped({ type: 'deckPdfReveal' })); await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(s.notices().slice(before), [], 'no refusal');
+    assert.deepEqual(revealed, [path.join(WORK, 'venture', 'deck.pdf')], 'the saved file, under the canonical spelling');
+  } finally { seam.realpath = null; await browser.close(); await s.done(); }
+});
+

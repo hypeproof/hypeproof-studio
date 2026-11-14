@@ -2884,10 +2884,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
       // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
-      const pdfRel = path.relative(canonicalFolder(root), target).split(path.sep).join("/");
       const shown = path.relative(workRoot, target).split(path.sep).join("/");
-      this.deckPdfSaved = { taskKey: this.turnRestoreTaskKey(), root: recordedRoot(root), rel: pdfRel };
-      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown });
+      // The reveal walks with exactRoot, so the root is recorded in canonicalFolder's form, and the file's path is taken
+      // relative to that same form (the deck was resolved under it). A root that cannot be resolved now still keeps the
+      // saved file and its notice, without the action; the log says so, without paths.
+      let saved: { taskKey: string; root: string; rel: string } | null = null;
+      try { const rec = recordedRoot(root); saved = { taskKey: this.turnRestoreTaskKey(), root: rec, rel: path.relative(rec, target).split(path.sep).join("/") }; }
+      catch { this.logChannel?.appendLine("[deck-pdf] served root could not be resolved; 폴더에서 보기 not offered"); }
+      this.deckPdfSaved = saved;
+      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, saved ? { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown } : undefined);
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
     } finally {
@@ -8070,7 +8075,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // The gate walks with exactRoot, so the card's root is recorded in canonicalFolder's form (#4066 round 2: the turn
         // root is JS realpath, which keeps a Windows `c:` and the opened case). A root that cannot be resolved makes no card.
         let cardRoot: string | null = null;
-        try { cardRoot = recordedRoot(handle.root); } catch { /* the folder is gone: no card */ }
+        try { cardRoot = recordedRoot(handle.root); } catch { this.logChannel?.appendLine("[page-card] turn root could not be resolved; no card"); }
         if (card && cardRoot && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, cardRoot, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
