@@ -5552,11 +5552,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { on: this.lessonTips.on(this.context.globalState?.get(LESSON_TIPS_KEY)), seat: this.lessonTips.currentSeat };
   }
 
-  /** CGP-SHELL-R-019 — turn this seat's tips on or off (memory only for an empty seat) and refresh the chat. */
-  async setLessonTips(on: boolean): Promise<void> {
-    const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on === true);
+  /**
+   * CGP-SHELL-R-019 — turn this seat's tips on or off and refresh the chat. The result says what happened, so a
+   * caller can tell the learner: `stored` (kept for this seat), `memory-only` (no seat is known yet, e.g. before
+   * the first config, or an empty seat: it lasts only for this window) or `refused` (not a boolean: nothing changes).
+   */
+  async setLessonTips(on: unknown): Promise<"stored" | "memory-only" | "refused"> {
+    if (typeof on !== "boolean") return "refused";
+    const next = this.lessonTips.write(this.context.globalState.get(LESSON_TIPS_KEY), on);
     if (next) await this.context.globalState.update(LESSON_TIPS_KEY, next);
     await this.postConfig();
+    return next ? "stored" : "memory-only";
   }
 
   refreshConfig(): Promise<void> {
@@ -12006,8 +12012,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-SHELL-R-019 — the seat the 팁 보기 choice belongs to (the same id as the collapsed learning blocks).
     // A different seat starts with tips on; an in-memory choice does not carry over to it.
     const tipsSeat = collapseSeat({ activityId: profile?.activity_id, entryId, localActivityId: activity?.id });
-    this.lessonTips.forSeat(tipsSeat);
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
+    // After the staleness check: a build that lost a race to a seat switch must not point the 팁 보기 choice at the old seat.
+    this.lessonTips.forSeat(tipsSeat);
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     await this.post({
       type: "config",

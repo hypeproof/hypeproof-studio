@@ -7146,19 +7146,31 @@ the list sees tips, so another learner on the same window starts with tips on; a
 its choice in memory only and loses it on any seat switch. It is written only from a boolean
 `setLessonTips` message, bounded to 200 seats, never synced, logged or sent to the Service, and
 reaches the chat as `config.lessonTips`. The off note never carries over to another seat. Right after the press the row is replaced by a
-`role="status"` line, `팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.`, whose `다시 켜기` (focused)
-turns tips back on; the line ends with the next send. The start page's 팁 보기 row (CGP-SHELL-R-014)
-binds to the same key and is added by that row's follow-up. Per-step 닫기 is unchanged. Seats
+`role="status"` line, `팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.`, whose `다시 켜기`
+(focused) turns tips back on. The choice is never one-way: after the next send, and after a reload,
+every hinted step shows one quiet line in the tip's place, `팁을 꺼 두었어요.` with `다시 켜기` (no live
+region, so it is not re-read). The chat's settings dialog of a lesson seat (opened from the access
+chip) has a lasting `팁 보기` checkbox with the hint `수업 단계의 도움말을 입력창 위에 보여 줘요.`, bound
+to the host's `lessonTipsState()` / `setLessonTips()`; a seat without a lesson has no such switch.
+The start page's 팁 보기 row (CGP-SHELL-R-014) uses the same host methods and is added by that row's
+follow-up. `setLessonTips` refuses a non-boolean (`refused`, nothing changes) and says whether
+the choice was `stored` for the seat or kept `memory-only` (no seat known yet, or an empty seat), so a
+caller can tell the learner it was not saved. The host takes the seat only in a config build that passed its staleness check, so a
+press never lands on a previous seat. Per-step 닫기 is unchanged. Seats
 without a served lesson, hintless steps and the instructor console draw no tip and no action.
 Not built (needs Jay, decisions.md): REQ-SHELL-19's "at most once per session and only after an
 observed trigger (e.g. 3 failed runs)". It contradicts the owner decision that a step's hint shows
 from the start.
-Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium: one off write and the way
-back, off hides every tip but never the lesson, 다시 켜기, 닫기 unchanged, the note ends with the next
-send, negative controls, 44px/14px/focus ring in both themes at 320-1420px; red on main) and
+Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium, 18 cases: one off write and
+the way back; off hides every tip but never the lesson or the rail's 힌트 보기; the quiet 다시 켜기
+line after a send and after a reload; a seat switch drops the note; the settings switch reads and
+writes the seat; 닫기 unchanged; negative controls; 44px/14px/focus ring in Dark+/Light+ at
+320-1420px and 4.5:1 ink with visible edges in HC Dark, HC Light and forced colours; red on main;
+mutants for a one-way off, a hidden 힌트 보기 and a note that survives a seat switch are caught) and
 `lesson-tips-host.smoke.mjs` (the provider's own `LessonTipsPreference` over a fake globalState:
 learner A off, learner B on the same window still on, A again off; empty seat memory-only and
-reset on a switch; junk is on; bounded; never synced; a seat-blind control fails it).
+reset on a switch; junk is on; bounded; never synced; the seat is taken after the staleness
+check; a seat-blind control fails it).
 
 ## Find in chat (CGP-CHAT-R-027)
 

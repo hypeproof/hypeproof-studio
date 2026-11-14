@@ -58,3 +58,10 @@
   .hps-lesson-tip button { color: ButtonText; }
   .hps-lesson-tip button:disabled { color: GrayText; }
 }
+/* CGP-SHELL-R-019 — the 팁 보기 switch in the settings dialog: the text-size fieldset's look, its hint on a line of its own. */
+.hps-lesson-tips-setting { flex-wrap: wrap; }
+.hps-lesson-tips-setting-hint { flex-basis: 100%; margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+@media (forced-colors: active) {
+  .hps-lesson-tip .hps-lesson-tip-stop { color: ButtonText; }
+  .hps-lesson-tips-setting-hint { color: CanvasText; }
+}

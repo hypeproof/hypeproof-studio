@@ -61,5 +61,11 @@ export class LessonTipsPreference {
 
 // Learner-facing copy (agent-written, decisions.md CGP-SHELL-R-019).
 export const LESSON_TIPS_STOP = "팁 그만 보기";
-export const LESSON_TIPS_OFF = "팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.";
+/** Said once, right after the press. */
+export const LESSON_TIPS_OFF = "팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.";
+/** The quiet line that stays where a step's tip would be, while tips are off, so the way back never disappears. */
+export const LESSON_TIPS_OFF_SHORT = "팁을 꺼 두었어요.";
 export const LESSON_TIPS_RESUME = "다시 켜기";
+/** The lasting switch in the chat's settings dialog (a lesson seat's 설정). */
+export const LESSON_TIPS_SETTING = "팁 보기";
+export const LESSON_TIPS_SETTING_HINT = "수업 단계의 도움말을 입력창 위에 보여 줘요.";

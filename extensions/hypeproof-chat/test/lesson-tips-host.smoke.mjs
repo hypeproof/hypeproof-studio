@@ -55,13 +55,22 @@ const at = src.indexOf('case "setLessonTips":');
 const body = src.slice(at, src.indexOf('return;', src.indexOf('postConfig', at)) + 7);
 assert.match(body, /if \(typeof msg\.on !== "boolean"\) return;/, 'a non-boolean write is refused');
 assert.match(body, /await this\.setLessonTips\(msg\.on\);/, 'the press goes through setLessonTips');
-const setAt = src.indexOf('async setLessonTips(on: boolean)');
+const setAt = src.indexOf('async setLessonTips(on: unknown)');
 const setBody = src.slice(setAt, src.indexOf('\n  }', setAt));
-assert.match(setBody, /this\.lessonTips\.write\(this\.context\.globalState\.get\(LESSON_TIPS_KEY\), on === true\)/, 'through the class');
+assert.match(setBody, /if \(typeof on !== "boolean"\) return "refused";/, 'a non-boolean from a host caller is refused, never read as off');
+assert.ok(!/on === true/.test(setBody), 'no boolean coercion');
+assert.match(setBody, /this\.lessonTips\.write\(this\.context\.globalState\.get\(LESSON_TIPS_KEY\), on\)/, 'through the class');
+assert.match(setBody, /return next \? "stored" : "memory-only";/, 'the caller learns when nothing was stored (no seat known yet)');
+// Before the first config the seat is "": a write is memory-only, and the class says so (write returns undefined).
+{ const p = new LessonTipsPreference(); assert.equal(p.write({ off: [] }, false), undefined, 'no seat yet: nothing to store'); assert.equal(p.on({ off: [] }), false, 'but the window honours it'); }
 assert.match(setBody, /if \(next\) await this\.context\.globalState\.update\(LESSON_TIPS_KEY, next\)/, 'only a seat stores anything');
 assert.match(src, /lessonTipsState\(\): \{ on: boolean; seat: string \} \{\s*return \{ on: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\), seat: this\.lessonTips\.currentSeat \};/, 'the start page reads the same seat and state');
 { const p = new LessonTipsPreference(); p.forSeat(A); assert.equal(p.currentSeat, A, 'currentSeat is the seat of the last config'); }
-assert.match(src, /const tipsSeat = collapseSeat\(\{ activityId: profile\?\.activity_id, entryId, localActivityId: activity\?\.id \}\);\s*this\.lessonTips\.forSeat\(tipsSeat\);/, 'the seat is the collapsed-blocks seat, set on every config build');
+assert.match(src, /const tipsSeat = collapseSeat\(\{ activityId: profile\?\.activity_id, entryId, localActivityId: activity\?\.id \}\);/, 'the seat is the collapsed-blocks seat');
+// The seat is taken only by a build that survived the staleness check (a stale build must not point a press at the old seat).
+{ const stale = src.indexOf('if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;', src.indexOf('const tipsSeat = collapseSeat('));
+  const set = src.indexOf('this.lessonTips.forSeat(tipsSeat);');
+  assert.ok(stale > 0 && set > stale && set - stale < 400, `forSeat runs after the staleness return (${stale}, ${set})`); }
 assert.match(src, /lessonTips: this\.lessonTips\.on\(this\.context\.globalState\?\.get\(LESSON_TIPS_KEY\)\)/, 'config reads the seat\'s choice');
 assert.ok(!/setKeysForSync\([^)]*LESSON_TIPS_KEY/.test(src), 'never synced');
 // Negative control: a preference that ignores the seat (the device-wide design this replaced) fails the A/B check.

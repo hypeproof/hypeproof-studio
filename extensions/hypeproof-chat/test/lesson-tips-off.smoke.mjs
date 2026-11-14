@@ -34,6 +34,8 @@ const send=async(msg)=>{await browser.evaluate(`window.dispatchEvent(new Message
 const open=async({theme=THEMES['Dark+'],width=800,seat='classroom',state=null,tipsOn}={})=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,state),{width,height:900,dark:theme.kind==='dark',appReady:true});await send({type:'config',config:configFor(seat,lesson,tipsOn)});};
 const tips=()=>browser.evaluate(`[...document.querySelectorAll('.hps-lesson-tip:not(.hps-lesson-tips-off)')].map(e=>({step:e.dataset.lessonTip,text:e.querySelector('.hps-lesson-tip-text').textContent}))`);
 const note=()=>browser.evaluate(`(()=>{const n=document.querySelector('.hps-lesson-tips-off');return n?{role:n.getAttribute('role'),text:n.querySelector('.hps-lesson-tip-text').textContent,button:n.querySelector('button')?.textContent,focused:document.activeElement===n.querySelector('button')}:null;})()`);
+const railHints=()=>browser.evaluate(`[...document.querySelectorAll('details > summary')].filter(s=>s.textContent.trim()==='힌트 보기').length`);
+const LONG_NOTE='팁을 껐어요. 여기 다시 켜기로 언제든 다시 켤 수 있어요.', SHORT_NOTE='팁을 꺼 두었어요.';
 const posted=()=>browser.evaluate('JSON.stringify(messages)').then(JSON.parse);
 const tipsWrites=async()=>(await posted()).filter(m=>m.type==='setLessonTips');
 // postToHost adds the activity/task scope; the write itself is only its `on`.
@@ -54,7 +56,8 @@ try{
  assert.ok(after.every(m=>!JSON.stringify(m).includes(first.hint.trim())),'no lesson text leaves with it');
  assert.equal((await tips()).length,0,'the tip is gone at once');
  let n=await note();assert.ok(n,'the off note is shown');
- assert.deepEqual([n.role,n.text,n.button,n.focused],['status','팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.','다시 켜기',true],'the note: status, the way back, focus on it');
+ assert.deepEqual([n.role,n.text,n.button,n.focused],['status',LONG_NOTE,'다시 켜기',true],'the note: status, the way back, focus on it');
+ assert.ok(await railHints()>0,'the rail\'s 힌트 보기 stays while tips are off');
  // The lesson itself stays: steps, the rail hint disclosure, the composer.
  assert.ok(await browser.evaluate(`document.querySelectorAll('button[data-step-id]').length>0 && !!document.querySelector('.hps-input textarea')`),'lesson steps and composer stay');
  cases++;
@@ -66,12 +69,15 @@ try{
  await browser.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'질문');t.dispatchEvent(new Event('input',{bubbles:true}));})()`);await wait(80);
  await click('.hps-btn-send');
  await send({type:'inputRejected',reason:'synthetic'});
- assert.equal(await note(),null,'the note ended with the next send');
+ // After the next send the announcement ends, but a quiet way back stays where the tip was (never one-way).
+ n=await note();assert.deepEqual([n?.role,n?.text,n?.button],['group',SHORT_NOTE,'다시 켜기'],'a quiet line with 다시 켜기 stays, no live region');
  assert.equal((await tips()).length,0,'and tips stay off');
+ assert.ok(await railHints()>0,'the rail\'s 힌트 보기 still stays');
  cases++;
  // 4. A reload or another window with the stored preference off: no tip anywhere, no note.
  await open({tipsOn:false});
- assert.equal((await tips()).length,0,'off after a reload');assert.equal(await note(),null,'no note on a fresh view');
+ assert.equal((await tips()).length,0,'off after a reload');
+ n=await note();assert.deepEqual([n?.role,n?.text],['group',SHORT_NOTE],'after a reload: the quiet way back, not the announcement');
  assert.ok(await browser.evaluate(`document.querySelectorAll('button[data-step-id]').length>0`),'the lesson is still drawn');
  cases++;
  // 5. 다시 켜기 from the note brings tips back.
@@ -86,7 +92,8 @@ try{
  // 5b. Shared PC: learner A turns tips off, then learner B signs in on the same window. The host sends B's own
  // choice (tips on, lessonTips:true); B sees the tip and never A's note.
  await open();await click('.hps-lesson-tip-stop');assert.ok(await note(),'A sees the off note');
- const seatB=configFor('classroom',lesson,true);seatB.profile={...seatB.profile,activity_id:'b'.repeat(64)};seatB.activity={...seatB.activity,id:'a2'};
+ // Only the Service seat id changes (same window, same local activity), so the panel is not remounted.
+ const seatB=configFor('classroom',lesson,true);seatB.profile={...seatB.profile,activity_id:'b'.repeat(64)};
  await send({type:'config',config:seatB});
  assert.equal(await note(),null,'B never sees A\'s note');
  assert.equal((await tips()).length,1,'B sees the tip');
@@ -104,6 +111,42 @@ try{
  await open();await click('.hps-lesson-tip-dismiss');await pick(hintless.id);
  assert.equal(await browser.evaluate(`document.querySelectorAll('.hps-lesson-tip-stop').length`),0,'hintless step: no 팁 그만 보기');
  cases++;
+ // 7b. The lasting switch in the settings dialog (reached from the access chip on a lesson seat): it shows this seat's
+ // state and writes it; a seat without a lesson has no such switch.
+ const resource={meter:'requests:count',remaining:37,held:3,unresolved:2,spent:10,limit:50,overrun:0,shared:false};
+ const access={status:'ready',selected:'c1',view:{schema:'hps-access-view/1',configured:true,as_of:'2026-11-14T06:42:00Z',choices:[{id:'c1',label:'수업',source_kind:'cohort',mode:'included',active:true,available:true,state:'ready',ends_at:1,can_request:false,allowed:{models:[],efforts:[],features:[],runtimes:[]},resources:[resource]}]}};
+ const openSettings=async(tipsOn)=>{await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(THEMES['Dark+'],null),{width:800,height:900,dark:true,appReady:true});await send({type:'config',config:{...configFor('classroom',lesson,tipsOn),access}});await click('.hps-access-chip');};
+ const setting=()=>browser.evaluate(`(()=>{const f=document.querySelector('.hps-lesson-tips-setting');if(!f)return null;const i=f.querySelector('input[type=checkbox]'),l=f.querySelector('label').getBoundingClientRect();return {checked:i.checked,legend:f.querySelector('legend').textContent,h:l.height,fs:parseFloat(getComputedStyle(f.querySelector('label')).fontSize),hint:document.getElementById(i.getAttribute('aria-describedby'))?.textContent};})()`);
+ await openSettings(false);
+ let st=await setting();assert.ok(st,'the 팁 보기 switch is in the settings dialog');
+ assert.deepEqual([st.checked,st.legend,st.hint],[false,'팁 보기','수업 단계의 도움말을 입력창 위에 보여 줘요.'],'shows this seat\'s off state, named and described');
+ assert.ok(st.h>=44&&st.fs>=14,`44px/14px ${JSON.stringify(st)}`);
+ const b3=(await posted()).length;await click('.hps-lesson-tips-setting input');
+ assert.deepEqual(writes((await posted()).slice(b3)),[true],'checking it writes tips on');
+ await openSettings(true);st=await setting();assert.equal(st.checked,true,'on state');
+ const b4=(await posted()).length;await click('.hps-lesson-tips-setting input');assert.deepEqual(writes((await posted()).slice(b4)),[false],'unchecking writes off');
+ await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(THEMES['Dark+'],null),{width:800,height:900,dark:true,appReady:true});
+ const noLesson={...configFor('classroom',lesson,true),access};noLesson.profile={...noLesson.profile,lesson:null};
+ await send({type:'config',config:noLesson});
+ await click('.hps-access-chip');assert.equal(await setting(),null,'no lesson: no 팁 보기 switch');
+ cases++;
+ // 7c. High contrast and forced colours: the new button, the note and the switch keep readable ink and a visible edge.
+ const lum=`const rgb=c=>{const m=c.match(/[\\d.]+/g).map(Number);return m.slice(0,3)};const L=c=>{const v=rgb(c).map(x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4)});return .2126*v[0]+.7152*v[1]+.0722*v[2]};const ratio=(a,b)=>{const x=L(a),y=L(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};const bg=e=>{for(let n=e;n;n=n.parentElement){const c=getComputedStyle(n).backgroundColor;if(!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c))return c;}return 'rgb(255,255,255)'};`;
+ for(const [themeName,forced] of [['HC Dark',false],['HC Light',false],['Dark+',true],['Light+',true]]){
+  const theme=THEMES[themeName];
+  await browser.send('Page.navigate',{url:'about:blank'});await browser.load(page(theme,null),{width:800,height:900,dark:theme.kind!=='light'&&theme.kind!=='hcLight',forcedColors:forced,appReady:true});
+  await send({type:'config',config:{...configFor('classroom',lesson,true),access}});
+  const tag=`${themeName}${forced?' forced':''}`;
+  const btn=await browser.evaluate(`(()=>{${lum}const b=document.querySelector('.hps-lesson-tip-stop'),s=getComputedStyle(b);return {ratio:ratio(s.color,bg(b)),fs:parseFloat(s.fontSize)};})()`);
+  assert.ok(btn.ratio>=4.5&&btn.fs>=14,`${tag}: 팁 그만 보기 ink ${JSON.stringify(btn)}`);
+  await click('.hps-lesson-tip-stop');
+  const nt=await browser.evaluate(`(()=>{${lum}const n=document.querySelector('.hps-lesson-tips-off'),p=n.querySelector('p'),s=getComputedStyle(n),ps=getComputedStyle(p);return {ratio:ratio(ps.color,bg(p)),edge:parseFloat(s.borderTopWidth)>=1&&s.borderTopStyle!=='none'};})()`);
+  assert.ok(nt.ratio>=4.5&&nt.edge,`${tag}: the off note ${JSON.stringify(nt)}`);
+  await click('.hps-access-chip');
+  const sw=await browser.evaluate(`(()=>{${lum}const f=document.querySelector('.hps-lesson-tips-setting'),l=f.querySelector('label span'),h=f.querySelector('.hps-lesson-tips-setting-hint');return {label:ratio(getComputedStyle(l).color,bg(l)),hint:ratio(getComputedStyle(h).color,bg(h))};})()`);
+  assert.ok(sw.label>=4.5&&sw.hint>=4.5,`${tag}: the 팁 보기 switch ${JSON.stringify(sw)}`);
+  cases++;
+ }
  // 8. Geometry: the new action and the note keep 44px targets and 14px text, in both themes and three widths.
  for(const themeName of ['Dark+','Light+'])for(const width of [320,800,1420]){
   await open({theme:THEMES[themeName],width});
@@ -115,5 +158,5 @@ try{
   assert.ok(h.w>=44&&h.h>=44&&h.fs>=14&&h.above,`${themeName} ${width}: the off note ${JSON.stringify(h)}`);
   cases++;
  }
- console.log(`PASS lesson tips off: ${cases} cases; 팁 그만 보기 posts one off write and shows the way back (다시 켜기, focused, role=status), off hides every tip (other steps, reload, new window) but never the lesson, 다시 켜기 brings tips back, 닫기 unchanged, the note ends with the next send, no lesson or a hintless step draws nothing, 44px/14px/ring in both themes at 320-1420px`);
+ console.log(`PASS lesson tips off: ${cases} cases; 팁 그만 보기 posts one off write and shows the way back (다시 켜기, focused, role=status), off hides every tip (other steps, reload, new window) but never the lesson, 다시 켜기 brings tips back, 닫기 unchanged, the announcement ends with the next send but a quiet 다시 켜기 stays (also after a reload), the rail's 힌트 보기 stays, a seat switch drops the note, the settings dialog's 팁 보기 switch reads and writes this seat, HC Dark/HC Light and forced colours keep 4.5:1 ink and edges, no lesson or a hintless step draws nothing, 44px/14px/ring in both themes at 320-1420px`);
 }finally{await browser.close();}

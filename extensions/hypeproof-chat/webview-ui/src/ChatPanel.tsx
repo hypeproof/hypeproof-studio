@@ -127,7 +127,7 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { DataDeletionRequest } from "./DataDeletionRequest";
-import { LessonTip, LessonTipsOffNote } from "./LessonTip";
+import { LessonTip, LessonTipsOffNote, LessonTipsSetting } from "./LessonTip";
 import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { PLAN_WAITING_LABEL, PlanCard, PlanFirstChip, PlanSwitchedOffNotice, SelectedPlanFirst, usePlanFirst } from "./PlanFirst";
@@ -2481,7 +2481,7 @@ export function ChatPanel(props: Props) {
         }} />}
         {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
         {/* CGP-SHELL-R-019 — 팁 그만 보기 hides only this row (never the lesson's steps, instructions or mission header). */}
-        {tipsOffNote && !streaming && !props.sendPending && <div ref={tipsResumeRef}><LessonTipsOffNote onResume={() => {
+        {(tipsOffNote || (lessonTip && config?.lessonTips === false && !dismissedTips.includes(lessonTip.key))) && !streaming && !props.sendPending && <div ref={tipsResumeRef}><LessonTipsOffNote announce={tipsOffNote} onResume={() => {
           setTipsOffNote(false);
           postToHost({ type: "setLessonTips", on: true });
           requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
@@ -2743,6 +2743,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-019 — the lasting way back after 팁 그만 보기: only where a lesson can show tips, never the instructor console. */}
+        {!props.instructor && !!config.profile?.lesson && <LessonTipsSetting on={config.lessonTips !== false} onChange={(on) => { setTipsOffNote(false); postToHost({ type: "setLessonTips", on }); }} />}
         {/* CGP-SHELL-R-003 — the update state of a frozen cohort: who decided and until when. Read-only, nothing to press. */}
         {config.updateFreeze && <UpdateFreezeLine until={config.updateFreeze.until} />}
         {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
