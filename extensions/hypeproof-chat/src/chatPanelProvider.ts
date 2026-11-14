@@ -135,8 +135,10 @@ import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapability
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
 import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
-import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
+import { TOKEN_KEY, resolveWorkspaceRoot, leaveRehearsalAfterReport, leaveRehearsalWithoutReport } from "./extension";
+import { rehearsalSeatActiveFor } from "./rehearsalSeat";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
+import { REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY } from "./rehearsalSeat";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { helpLinesEnabled, moderationBlockOf, ModerationBlockError, safetyNoticeView } from "./safetyNotice.ts";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
@@ -292,7 +294,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, recordedRoot, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -2801,6 +2803,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * unless every slide was captured and deck.html is byte-identical before and after.
    */
   private deckPdfBusy = false;
+  /** CGP-ART-R-023 — the last saved deck PDF (memory only): the served root it was written in and its path there. */
+  private deckPdfSaved: { taskKey: string; root: string; rel: string } | null = null;
+  /** Test seam: the OS reveal. */
+  deckPdfRevealInOS: (abs: string) => Promise<unknown> = async (abs) => vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs));
+  /**
+   * 폴더에서 보기 on the saved notice. The file is walked again under the served root with the page card's checks (every
+   * segment lstat-checked, no link, a regular file, inside the root, the same inode twice) right before the OS call; any
+   * other task, a missing record or a failed walk is a refusal line and no OS call.
+   */
+  async deckPdfReveal(): Promise<void> {
+    const saved = this.deckPdfSaved;
+    if (!saved || saved.taskKey !== this.turnRestoreTaskKey()) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    // saved.root was stored canonical: a root swapped for a link since then is refused (exactRoot), never followed.
+    const checked = recheckFileInFolder(saved.root, saved.rel, { exactRoot: true });
+    if (!checked.ok) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    try { await this.deckPdfRevealInOS(checked.abs); } catch { /* the press passed the gate; a failed OS call adds no claim */ }
+  }
   /** Test seam: the CDP channel to a tab. Production attaches a CdpSession. */
   deckPdfAttach: (tab: vscode.BrowserTab) => Promise<{ send: CdpSend; close(): Promise<void> }> = async (tab) => {
     const session = await CdpSession.attach(tab);
@@ -2868,7 +2887,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
-      this.postPageNotice(DECK_PDF_COPY.saved(path.relative(workRoot, target).split(path.sep).join("/"), result.pages));
+      // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
+      const shown = path.relative(workRoot, target).split(path.sep).join("/");
+      // The reveal walks with exactRoot, so the root is recorded in canonicalFolder's form, and the file's path is taken
+      // relative to that same form (the deck was resolved under it). A root that cannot be resolved now still keeps the
+      // saved file and its notice, without the action; the log says so, without paths.
+      let saved: { taskKey: string; root: string; rel: string } | null = null;
+      try { const rec = recordedRoot(root); saved = { taskKey: this.turnRestoreTaskKey(), root: rec, rel: path.relative(rec, target).split(path.sep).join("/") }; }
+      catch { this.logChannel?.appendLine("[deck-pdf] served root could not be resolved; 폴더에서 보기 not offered"); }
+      this.deckPdfSaved = saved;
+      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, saved ? { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown } : undefined);
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
     } finally {
@@ -4523,7 +4551,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pendingPageAttachment) return;
     this.pendingPageContext = null;
     this.pendingPageImage = null;
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     void this.post({ type: "pageAttached", label: "" });
     this.dropPageAttachment();
   }
@@ -4586,11 +4614,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * be recreated later (WebviewView has no retainContextWhenHidden). Posting
    * is idempotent: the webview reducer replaces pageNotice, never appends.
    */
-  postPageNotice(label: string, source?: import("./denialSource").DenialSource): void {
+  postPageNotice(label: string, source?: import("./denialSource").DenialSource, action?: import("./protocol").PageNoticeAction): void {
     if (source) { void this.postDenialNotice(source); return; }
     this.pendingPageNotice = label;
-    void this.post({ type: "pageAttached", label });
+    this.pendingPageNoticeAction = action;
+    void this.post(action ? { type: "pageAttached", label, action } : { type: "pageAttached", label });
   }
+  private pendingPageNoticeAction: import("./protocol").PageNoticeAction | undefined;
 
   private denialWrites?: Promise<void>;
 
@@ -8123,7 +8153,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
         const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
         const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
-        if (card && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
+        // The gate walks with exactRoot, so the card's root is recorded in canonicalFolder's form (#4066 round 2: the turn
+        // root is JS realpath, which keeps a Windows `c:` and the opened case). A root that cannot be resolved makes no card.
+        let cardRoot: string | null = null;
+        try { cardRoot = recordedRoot(handle.root); } catch { this.logChannel?.appendLine("[page-card] turn root could not be resolved; no card"); }
+        if (card && cardRoot && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, cardRoot, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,
@@ -8804,6 +8838,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
+      case "deckPdfReveal": await this.deckPdfReveal(); return;
       case "pageCardOpen":
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
@@ -8884,7 +8919,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // for WebviewView → React state reset). Re-posting is idempotent: the
         // reducer replaces pageNotice rather than appending.
         if (this.pendingPageNotice) {
-          void this.post({ type: "pageAttached", label: this.pendingPageNotice });
+          const action = this.pendingPageNoticeAction;
+          void this.post(action ? { type: "pageAttached", label: this.pendingPageNotice, action } : { type: "pageAttached", label: this.pendingPageNotice });
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
         this.postAnnotations();
@@ -9461,6 +9497,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
 
+      // #4048 — the band's button asks first (the host confirms and leaves only on the chosen button).
+      case "rehearsalSeatEnd": {
+        await leaveRehearsalWithoutReport();
+        return;
+      }
+
       case "traceTrialStart":
       case "traceTrialEnd":
       case "traceValidationRun":
@@ -9780,7 +9822,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     this.finishAnnotationSend(annotations);
     // CGP-ART-R-006 — the preview was only for choosing; it leaves the page as the request goes.
@@ -11836,6 +11878,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * #751 G2 — the rehearsal report. The panel's own read-back of what it drew goes out unchanged (only steps of this lesson);
    * the Service compares it with the candidate AND with its own records of the requests made under this code.
    */
+  /** #4048 — true only in a rehearsal seat: a return is held and this window is the rehearsal folder. */
+  private async rehearsalSeatBand(): Promise<boolean> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let folder = root;
+    try { if (root) folder = canonicalRoot(root); } catch { folder = root; }
+    try { return await rehearsalSeatActiveFor(this.context.secrets, folder); } catch { return false; }
+  }
+
   private async sendRehearsalReport(steps: import("./lessonFocus").RenderedStep[], mission?: unknown): Promise<void> {
     const profile = this.cachedProfile, lesson = profile?.lesson, token = await this.context.secrets.get(TOKEN_KEY);
     if (!profile?.rehearsal || !lesson || !token) { await this.post({ type: "rehearsalState", state: "error", message: "리허설 코드로 연 수업이 아닙니다." }); return; }
@@ -11853,6 +11903,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const j = await r.json().catch(() => ({})) as { verdict?: string; reasons?: string[]; reason?: string; error?: string };
       if (!r.ok) { await this.post({ type: "rehearsalState", state: "error", message: j.reason === "no_request_yet" ? "아직 AI에게 한 번도 묻지 않았습니다. 단계마다 한 번 이상 물어본 뒤 보내세요." : (j.error ?? "보내지 못했습니다 (" + r.status + ")") }); return; }
       await this.post({ type: "rehearsalState", state: "sent", verdict: j.verdict, reasons: j.reasons ?? [] });
+      // #4048 — only a report that was sent reaches the question whether to return.
+      await leaveRehearsalAfterReport();
     } catch (err) { await this.post({ type: "rehearsalState", state: "error", message: "Service에 연결하지 못했습니다: " + (err as Error).message }); }
   }
 
@@ -12032,6 +12084,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
+    // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
+    const seatBand = await this.rehearsalSeatBand();
+    void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
     await this.post({
       type: "config",
       config: {
@@ -12047,6 +12102,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
         ...(lessonSettingsChanges.length && !isInstructor ? { lessonSettingsChanges } : {}),
+        ...(seatBand ? { rehearsalSeat: true } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
@@ -12446,7 +12502,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // personal account session, classroom-ops credentials, pending orders and any other SecretStorage value.
       const connections = activityConnections(this.context), activity = connections?.current;
       const held = await heldSecretValues([this.context.secrets, ...(connections ? [connections.heldSecrets()] : [])],
-        [TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
+        [TOKEN_KEY, ISSUER_TOKEN_KEY, REHEARSAL_RETURN_KEY, REHEARSAL_SEAT_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
       const secrets = [activity?.token, ...held, await resolveInstructorTokenFromSecrets(this.context.secrets)]
         .filter((value): value is string => typeof value === 'string' && !!value);
       const store = this.currentTaskStore();

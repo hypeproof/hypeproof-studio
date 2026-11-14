@@ -36,6 +36,8 @@ const config = (() => { const base = chatConfig(3); return { ...base, profile: {
 // Two learners on one shared classroom PC: the same lesson, two Service seats (CGP-LEARN-R-011 (c) follow-up).
 const asSeat = (c) => ({ ...config, profile: { ...config.profile, activity_id: c.repeat(64) } });
 const seatA = asSeat('a'), seatB = asSeat('b');
+// No seat at all: no Service seat id, no capability receipt, no local activity id (a local/dev or instructor-like window).
+const noSeat = { ...config, activity: { ...config.activity, id: '' } };
 const nextVersion = { ...config, profile: { ...config.profile, lesson: { ...config.profile.lesson, version: config.profile.lesson.version + '-next', sha256: 'e'.repeat(64) } } };
 
 const bin = findChromium();
@@ -165,13 +167,46 @@ try {
     assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: learner A does not inherit the previous seat's collapsed blocks`);
     await collapseCriterion();
     assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: learner A collapsed the block`);
-    await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} A again`);
+    // Host traffic across a seat switch equals a same-seat re-mount's (the control): a seat change posts nothing extra and
+    // fetches nothing, so it is never a host event.
+    // It also records whether any frame of the re-mount drew a collapsed block: a MutationObserver installed before the
+    // re-mount sees every node and attribute the first render commits, before any effect could correct it (#4064 pin a).
+    const traffic = async (next, what) => {
+      const p0 = await ev('posted.length'), f0 = await ev('window.__fetches');
+      await ev(`(()=>{window.__sawCollapsed=false;const seen=()=>{if(document.querySelector('[data-block-collapsed]'))window.__sawCollapsed=true};window.__frameObs?.disconnect();window.__frameObs=new MutationObserver(seen);window.__frameObs.observe(document.getElementById('root'),{subtree:true,childList:true,attributes:true});})()`);
+      await ev(`remount(${JSON.stringify(next)})`); await waitFor(`card('criterion_form')`, `${tag} ${what}`); await settle(); await settle();
+      const sawCollapsed = await ev(`(window.__frameObs.takeRecords(),document.querySelector('[data-block-collapsed]')&&(window.__sawCollapsed=true),window.__frameObs.disconnect(),window.__sawCollapsed)`);
+      return { types: await ev(`posted.slice(${p0}).map(m=>m.type).sort()`), fetches: (await ev('window.__fetches')) - f0, sawCollapsed };
+    };
+    const same = await traffic(seatA, 'A again');
     assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: the same learner keeps it across a re-mount (control)`);
-    await ev(`remount(${JSON.stringify(seatB)})`); await waitFor(`card('criterion_form')`, `${tag} learner B`); await settle();
+    const switched = await traffic(seatB, 'learner B');
+    // #4064 pin b: "post on every mount" grows both sides of the comparison together, so the control is pinned on its own
+    // terms. Not the whole mount inventory (it changes with every new ChatPanel feature, verify-r004 on #4083), only what
+    // this panel owns: exactly one lessonFocus, and no type posted twice by one re-mount.
+    assert.equal(same.types.filter((t) => t === 'lessonFocus').length, 1, `${tag}: a same-seat re-mount posts exactly one lessonFocus`);
+    assert.equal(new Set(same.types).size, same.types.length, `${tag}: a re-mount posts each type once (${JSON.stringify(same.types)})`);
+    assert.equal(same.sawCollapsed, true, `${tag}: control: the same learner's re-mount draws the collapsed block`);
+    // #4064 pin a: learner B's very first frame shows no collapsed block (not only after an effect corrects it).
+    assert.equal(switched.sawCollapsed, false, `${tag}: no frame of learner B's mount draws learner A's collapsed block`);
+    assert.deepEqual({ types: switched.types, fetches: switched.fetches }, { types: same.types, fetches: same.fetches }, `${tag}: a seat switch sends the host exactly what a same-seat re-mount sends, and fetches nothing`);
+    assert.equal(switched.fetches, 0, `${tag}: no fetch across a seat switch`);
     assert.deepEqual(await ev(`[document.querySelectorAll('[data-block-collapsed]').length, JSON.stringify(window.__vs.lessonBlocksCollapsed)]`), [0, JSON.stringify({ seat: 'seat:' + 'b'.repeat(64), keys: [] })], `${tag}: learner B sees every block; A's set is cleared`);
     await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} A after B`);
     assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: A's set did not survive B's sign-in`);
-    checks += 5;
+    checks += 10;
+
+    // An empty seat is not a learner: its collapsed set works in memory but is never stored, and switching to it clears the
+    // previous seat's stored set. A re-mount without a seat starts with every block shown (no shared bucket).
+    await collapseCriterion();
+    assert.equal(JSON.parse(await ev('JSON.stringify(window.__vs.lessonBlocksCollapsed)')).keys.length, 1, `${tag}: A stored one collapsed key`);
+    await ev(`remount(${JSON.stringify(noSeat)})`); await waitFor(`card('criterion_form')`, `${tag} no seat`); await settle();
+    assert.deepEqual(await ev(`[document.querySelectorAll('[data-block-collapsed]').length, window.__vs.lessonBlocksCollapsed]`), [0, null], `${tag}: no seat: nothing shown collapsed and A's stored set cleared`);
+    await collapseCriterion();
+    assert.deepEqual(await ev(`[card('criterion_form').dataset.blockCollapsed!==undefined, window.__vs.lessonBlocksCollapsed]`), [true, null], `${tag}: no seat: collapsed in this view, nothing stored`);
+    await ev(`remount(${JSON.stringify(noSeat)})`); await waitFor(`card('criterion_form')`, `${tag} no seat again`); await settle();
+    assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: no seat: a re-mount does not bring it back`);
+    checks += 4;
   }
   console.log(`PASS learning-block-collapse-browser: ${checks} checks (light/dark, 800/1420 px)`);
 } finally { await browser.close(); }

@@ -90,6 +90,7 @@ interface State {
   safetyNotice: import("../../src/safetyNotice").SafetyNoticeView | null;
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
   errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — the notice's one action
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
@@ -144,7 +145,7 @@ type Action =
   | { type: "toolLog"; entry: ToolEntry }
   // CGP-KNOW-D-021 — a download line lands like a tool row but is not turn progress (no long-step reset).
   | { type: "downloadLine"; entry: ToolEntry }
-  | { type: "pageAttached"; label: string }
+  | { type: "pageAttached"; label: string; action?: import("../../src/protocol").PageNoticeAction }
   | { type: "annotations"; enabled: boolean; annotations: import("../../src/annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
   | { type: "pageAttachment"; attachment: import('../../src/pageContext').PageAttachmentPreview | null }
@@ -251,7 +252,7 @@ function reducer(state: State, action: Action): State {
       return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
-      return { ...state, pageNotice: action.label };
+      return { ...state, pageNotice: action.label, pageNoticeAction: action.action };
     case "annotations": return { ...state, annotations: action.annotations, annotationsEnabled: action.enabled };
     case "elementAttached":
       return { ...state, elementPreview: action.element };
@@ -360,7 +361,7 @@ function reducer(state: State, action: Action): State {
     case "userSent":
       return {
         ...state,
-        pageNotice: null,   // #308 — clear the "붙였어요" notice once the user sends
+        pageNotice: null, pageNoticeAction: undefined,   // #308 — clear the "붙였어요" notice once the user sends
         elementPreview: null, // CR-09 — the picked element went with this turn
         // CGP-ART-R-007 / CGP-CHAT-R-011 — the page and file chips are host-owned: the host clears them
         // when a model turn actually takes them, so a send turned away earlier leaves them visible.
@@ -577,7 +578,7 @@ export function App() {
         case "downloadNotice":
           if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "downloadLine", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
           break;
-        case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
+        case "pageAttached": dispatch({ type: "pageAttached", label: msg.label, action: msg.action }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
@@ -903,7 +904,7 @@ export function App() {
         incomingImage={incomingImage}
         config={state.config}
         messages={messages}
-        pageNotice={state.pageNotice}
+        pageNotice={state.pageNotice} pageNoticeAction={state.pageNoticeAction}
         elementPreview={state.elementPreview}
         pageAttachment={state.pageAttachment}
         onRemovePageAttachment={(undoId) => {
@@ -986,6 +987,7 @@ export function App() {
           postToHost({ type: "saveCoach", name, personality })
         }
         onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
+        onEndRehearsalSeat={() => postToHost({ type: "rehearsalSeatEnd" })}
         onDiagnose={() => postToHost({ type: "runDoctor" })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
