@@ -160,7 +160,9 @@ const minimal = (extra) => ({ ux: { coach: {} }, ...extra });
   settings = { hardenedSessionEnabled: false, safeSession: false, safeAllowlist: [] };
   h.cachedProfile = null;
   const route = await h.learnerLinkRoute("https://news.example.com/story");
-  assert.equal(route.kind, "blocked", "outside the served list: blocked, not the adult dialog");
+  // CGP-SHELL-R-026: the minor rule (asks, then Studio's browser), not the adult route.
+  assert.equal(route.kind, "confirm", "outside the served list: the minor confirm, not the adult route");
+  assert.equal(route.where, "integrated");
   assert.equal((await h.learnerLinkRoute("https://hypeproof-ai.xyz/x")).kind, "integrated");
   token = signedIn;
 }

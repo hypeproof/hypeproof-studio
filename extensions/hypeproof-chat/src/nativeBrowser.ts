@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { openStudioTab } from "./studioTabs";
 import { CdpSession } from "./cdpSession";
 import type { PageTextSource } from "./pageContext";
 
@@ -45,7 +46,7 @@ export async function openBrowser(urlInput?: string): Promise<void> {
     });
   }
   if (!url) return;
-  await vscode.window.openBrowserTab(normalizeUrl(url), { viewColumn: vscode.ViewColumn.Beside });
+  await openStudioTab(normalizeUrl(url), { viewColumn: vscode.ViewColumn.Beside });
 }
 
 function normalizeUrl(input: string): string {
@@ -188,7 +189,7 @@ export function registerPreviewViewport(context: vscode.ExtensionContext, liveSe
         : current.pathname + current.search + current.hash;
       const url = new URL("__hp_viewport", base);
       url.searchParams.set("path", target);
-      await vscode.window.openBrowserTab(url.href, { viewColumn: vscode.ViewColumn.Beside });
+      await openStudioTab(url.href, { viewColumn: vscode.ViewColumn.Beside });
     } catch (err) {
       void vscode.window.showErrorMessage(`화면 검수 열기 실패: ${err instanceof Error ? err.message : String(err)}`);
     }

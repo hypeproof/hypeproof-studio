@@ -599,7 +599,11 @@
         },
         "hypeproofChat.safeLinkAllowlistEnabled": {
           "type": "boolean", "default": true, "scope": "machine",
-          "description": "미성년 수업(안전 브라우저)에서 채팅 링크가 수업 허용 목록 밖이면 열지 않고 알림을 보여 줍니다. 수업 정보가 미성년 수업이고 허용 목록이 있을 때만 켜집니다. 지원을 위해 끄면 이 기기에서는 막지 않습니다."
+          "description": "미성년 수업(안전 브라우저)에서 수업 허용 목록에 있는 링크는 확인 없이 열고, 목록 밖의 링크는 먼저 확인 창을 보여 줍니다. 수업 정보가 미성년 수업이고 허용 목록이 있을 때만 목록을 믿습니다. 지원을 위해 끄면 이 기기에서는 목록을 믿지 않고 모든 바깥 링크에 확인 창을 보여 줍니다."
+        },
+        "hypeproofChat.confirmExternalLinks": {
+          "type": "boolean", "default": false, "scope": "application",
+          "description": "바깥 사이트 링크를 열기 전에 전체 주소를 보여 주고 열지 물어봅니다. 미성년 수업에서는 이 설정과 상관없이 항상 물어보고, 미리 보기 화면에서 누른 링크도 항상 물어봅니다."
         },
         "hypeproofChat.guardianEnabled": {
           "type": "boolean",

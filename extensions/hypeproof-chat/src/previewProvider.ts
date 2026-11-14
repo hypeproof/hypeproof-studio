@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import { buildPreviewShellCsp, PREVIEW_IFRAME_ALLOW, PREVIEW_IFRAME_SANDBOX } from "./cspBuilder";
 import { sanitizeArtifactEntry, ARTIFACT_FILES, applyPlaceholderDefaults } from "./previewArtifacts";
-import { injectBaseHref, injectInnerCsp } from "./previewHtml";
+import { injectBaseHref, injectInnerCsp, injectLinkRelay } from "./previewHtml";
 import { noteHostWrite } from "./artifactProvenance";
 import type { PreviewReviewBar } from "./turnReviewView";
 
@@ -90,6 +90,10 @@ export class PreviewProvider {
   private reviewSeq = 0;
   private readonly reviewActionEmitter = new vscode.EventEmitter<PreviewReviewAction>();
   readonly onReviewAction = this.reviewActionEmitter.event;
+  // CGP-SHELL-R-026 — a link clicked in the preview page, relayed by the shell. The chat host decides (confirm dialog,
+  // rate limit); this panel only forwards a bounded http(s) string.
+  private readonly openLinkEmitter = new vscode.EventEmitter<string>();
+  readonly onOpenLink = this.openLinkEmitter.event;
 
   /** Mirror the chat's turn review (null hides the bar). A revert result is shown once, as a toast. */
   setReviewBar(bar: PreviewReviewBar | null): void {
@@ -250,6 +254,8 @@ export class PreviewProvider {
           if (!bar || msg.turnId !== bar.turnId || (action !== "revert" && action !== "keep" && action !== "show")) return;
           if (action !== "show" && bar.state !== "open") return;
           this.reviewActionEmitter.fire({ action, turnId: bar.turnId });
+        } else if (msg?.type === "preview_open_link") {
+          if (typeof msg.href === "string" && msg.href.length <= 4096 && /^https?:\/\//i.test(msg.href)) this.openLinkEmitter.fire(msg.href);
         } else if (msg?.type === "preview_result") {
           this.resultEmitter.fire(sanitizeQuestResult(msg.result));
         }
@@ -285,7 +291,8 @@ export class PreviewProvider {
     const baseAware = effectiveBase
       ? injectBaseHref(html, String(this.panel.webview.asWebviewUri(effectiveBase)))
       : html;
-    const renderedHtml = injectInnerCsp(baseAware, this.panel.webview.cspSource);
+    // CGP-SHELL-R-026 — the link relay goes in first, so the CSP meta (inserted at the head's start) precedes it.
+    const renderedHtml = injectInnerCsp(injectLinkRelay(baseAware), this.panel.webview.cspSource);
 
     this.postAskState();
     if (this.ready) {
@@ -596,6 +603,9 @@ export class PreviewProvider {
             action: m.action,
             payload: m.payload ?? null,
           });
+        } else if (m.type === "hp:open-link" && typeof m.href === "string") {
+          // CGP-SHELL-R-026: the host shows the confirm dialog and rate-limits; nothing opens from here.
+          vscode.postMessage({ type: "preview_open_link", href: m.href.slice(0, 4096) });
         } else if (m.type === "hp:result") {
           // kids-quest skeleton finished a round → let the coach/guest know.
           vscode.postMessage({ type: "preview_result", result: m });

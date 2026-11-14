@@ -617,6 +617,8 @@ export type WebviewMessage = (
   | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
   | { type: 'automationClose' }
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
+  /** CGP-SHELL-R-026 — the learner's answer to the link confirm dialog. */
+  | {type:'linkConfirmAnswer';id:string;choice:import('./linkConfirm').LinkConfirmChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | { type: "stopRunningProcess"; id: string }
@@ -1064,8 +1066,8 @@ export type HostMessage = (
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
-  /** CGP-ART-D-008 — a safe-session link outside the cohort allowlist did not open (flag `safeLinkAllowlistEnabled`). */
-  | { type: "externalLinkBlocked"; host: string; at: number }
+  /** CGP-SHELL-R-026 — confirm an external link before it opens (null closes the dialog). */
+  | { type: "linkConfirmPrompt"; prompt: import("./linkConfirm").LinkConfirmPrompt | null }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
