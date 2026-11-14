@@ -26,6 +26,9 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 public class TeamEntryJourneyTest {
     private Context context;private ActivityScenario<QuestionActivity> app;private ReflectionStorage store;
     private final AtomicInteger triggers=new AtomicInteger(),answers=new AtomicInteger(),decisions=new AtomicInteger(),turns=new AtomicInteger(),shown=new AtomicInteger();
+    private final AtomicInteger consentWrites=new AtomicInteger();
+    private final AtomicBoolean metricsGranted=new AtomicBoolean();
+    private final java.util.List<String> metricTypes=new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AtomicBoolean loseTrigger=new AtomicBoolean(),triggerCommitted=new AtomicBoolean();
     private final java.util.List<String> triggerIDs=new java.util.concurrent.CopyOnWriteArrayList<>();
     @Before public void setup()throws Exception {
@@ -36,6 +39,11 @@ public class TeamEntryJourneyTest {
         ReflectionState state=new ReflectionState("team-account");state.draft="아직 보내지 않은 내 생각";store.save(state);
         QuestionActivity.testTransport=(path,body,bearer,cancel)->{
             assertEquals("synthetic-access",bearer);
+            if(path.equals("/me/product-events/consent")){
+                if(body!=null){consentWrites.incrementAndGet();metricsGranted.set(Boolean.parseBoolean(body.get("granted")));return new NativeDeviceSignIn.Reply(200,Map.of("ok",true));}
+                return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-product-consent/1","notice_version","team-ux/1","title","사용 경험 공유","notice","대화 원문 없이 사용 단계만 기록해요. 거절해도 질문과 승인은 그대로 사용할 수 있어요.","preference",new JSONObject().put("notice_version","team-ux/1").put("granted",metricsGranted.get()?1:0)));
+            }
+            if(path.equals("/me/product-events")){assertTrue(metricsGranted.get());JSONArray events=new JSONArray(body.get("events")),accepted=new JSONArray();for(int i=0;i<events.length();i++){JSONObject e=events.getJSONObject(i);metricTypes.add(e.getString("type"));assertFalse(e.has("text"));assertFalse(e.has("token"));accepted.put(e.getString("id"));}return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-product-events/1","accepted",accepted,"deferred",new JSONArray(),"evidence_kind","client_observed"));}
             if(path.equals("/me"))return new NativeDeviceSignIn.Reply(200,Map.of("account_id","team-account","account_status","active","session_id","team-session","display_name","지윤"));
             if(path.equals("/me/reflection"))return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",0).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
             if(path.equals("/me/approval-inbox"))return new NativeDeviceSignIn.Reply(200,Map.of("schema","hps-member-approval-inbox/1","availability","ready","cards",new JSONArray().put(approval())));
@@ -86,6 +94,20 @@ public class TeamEntryJourneyTest {
         loseTrigger.set(false);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);
         assertEquals(2,triggers.get());assertEquals(id,triggerIDs.get(1));assertNull(store.loadQuestionIntent("team-account"));assertEquals(0,answers.get());assertEquals(0,turns.get());assertEquals(0,decisions.get());
         assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
+    }
+    private static NativeProductExperience experience(QuestionActivity a){try{var f=QuestionActivity.class.getDeclaredField("experience");f.setAccessible(true);return(NativeProductExperience)f.get(a);}catch(Exception e){throw new AssertionError(e);}}
+    private void experienceSettled(java.util.function.Predicate<NativeProductExperience> predicate)throws Exception{
+        long end=System.currentTimeMillis()+5000;AtomicBoolean ready=new AtomicBoolean();while(System.currentTimeMillis()<end){app.onActivity(a->ready.set(predicate.test(experience(a))));if(ready.get())return;Thread.sleep(25);}AtomicReference<String> state=new AtomicReference<>();app.onActivity(a->{NativeProductExperience e=experience(a);state.set("available="+e.available+",busy="+e.busy+",granted="+e.granted+",status="+e.status+",writes="+consentWrites.get());});throw new AssertionError("Experience state did not settle: "+state.get());
+    }
+    @Test public void explicitExperienceConsentObservesQuestionAndDeclineKeepsItUsable()throws Exception{
+        app=ActivityScenario.launch(QuestionActivity.class);settled(t->t.displayName.equals("지윤"));experienceSettled(e->e.available&&!e.busy);assertTrue(metricTypes.isEmpty());
+        onView(withContentDescription("메뉴")).perform(click());onView(withText("사용 경험 공유 설정")).inRoot(isDialog()).perform(click());experienceSettled(e->e.available&&!e.busy);
+        onView(withText("동의하고 공유하기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->e.granted&&!e.busy);assertEquals(1,consentWrites.get());screenshot("android-team-experience-consent");onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.canStart);onView(withText("방법이 막혔어요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        // Explicitly reopening settings flushes the already-persisted answer, without a product replay.
+        onView(withContentDescription("메뉴")).perform(click());onView(withText("사용 경험 공유 설정")).inRoot(isDialog()).perform(click());experienceSettled(e->!e.busy&&metricTypes.contains("question.answered"));assertTrue(metricTypes.contains("question.presented"));assertEquals(1,answers.get());
+        onView(withText("공유하지 않기")).inRoot(isDialog()).perform(scrollTo(),click());experienceSettled(e->!e.busy&&!e.granted);int before=metricTypes.size();onView(withText("닫기")).inRoot(isDialog()).perform(click());
+        onView(withText("도착한 질문")).perform(click());settled(t->!t.busy&&t.question!=null);onView(withText("한 가지 바꿔 볼게요")).inRoot(isDialog()).perform(scrollTo(),click());settled(t->!t.busy&&t.message.equals("다음 생각을 남겼어요"));assertEquals(2,answers.get());assertEquals(before,metricTypes.size());assertEquals(0,turns.get());assertEquals(0,decisions.get());assertEquals("아직 보내지 않은 내 생각",store.load("team-account").draft);
     }
     private static JSONObject question()throws Exception{return new JSONObject().put("schema","hps-card/1").put("key","growth:fixture").put("kind","team:choice").put("attempt",1).put("expires_at",System.currentTimeMillis()+60000).put("prompt","지금 바꿔 볼 작은 방법은 무엇인가요?").put("segments",new JSONArray()).put("choices",new JSONArray().put(new JSONObject().put("id","next").put("label","한 가지 바꿔 볼게요"))).put("select","tap").put("text",JSONObject.NULL).put("actions",new JSONArray()).put("skip","나중에");}
     private static JSONObject approval()throws Exception{long now=System.currentTimeMillis()/1000;return new JSONObject().put("id","review-fixture").put("request_digest","d".repeat(64)).put("source",new JSONObject().put("repo","hypeproof/hypeproof-studio").put("pr",4111).put("head","a".repeat(40)).put("base","b".repeat(40)).put("policy_digest","c".repeat(64)).put("evidence_digest","e".repeat(64)).put("context_digest","f".repeat(64))).put("reviewer","synthetic-reviewer").put("brief",new JSONObject().put("authored",new JSONArray().put("summary: 새 질문을 바로 볼 수 있어요")).put("verified",new JSONArray().put("실제 기기 검증 전"))).put("state","pending").put("created_at",now-10).put("expires_at",now+600).put("lease_expires_at",now+50).put("can_decide",true).put("unavailable_reason",JSONObject.NULL).put("decision",JSONObject.NULL).put("review",JSONObject.NULL);}

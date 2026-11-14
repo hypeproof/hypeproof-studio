@@ -17,6 +17,8 @@ final class ReflectionModel {
         void markRefreshSpent() throws Exception;
         void forgetCredentials() throws Exception;
     }
+    Consumer<NativeProductExperience.Kind> observed=kind->{};
+    private String observedRequest;
     private final Store store;
     private final NativeDeviceSignIn auth;
     private final NativeDeviceSignIn.Transport http;
@@ -49,6 +51,7 @@ final class ReflectionModel {
         changed.run();
     }
     private void load(){
+        observedRequest=null;
         readOnly=false;draft="";
         try{state=store.load(credentials.account());draft=unsavedDrafts.getOrDefault(credentials.account(),state.draft);}
         catch(Exception e){readOnly=true;try{state=new ReflectionState(credentials.account());}catch(Exception ignored){}error="대화 파일을 읽지 못했어요. 원본을 보존하고 전송을 멈췄어요. 내보내기로 보관할 수 있어요.";}
@@ -227,7 +230,7 @@ final class ReflectionModel {
         final ResponseFlight flight=sending?new ResponseFlight(current,operation,state.request):null;
         responseFlight=flight;changed.run();
         worker.execute(()->{
-            NativeDeviceSignIn.Reply received=null;try{if(flight==null||flight.claimDispatch())received=http.call(path,body,current.bearer(),operation);}catch(Exception ignored){}
+            NativeDeviceSignIn.Reply received=null;try{if(flight==null||flight.claimDispatch()){if(flight!=null)ui.accept(()->{if(live(ticket,current.account())&&current.equals(credentials)){observedRequest=flight.id;observed.accept(NativeProductExperience.Kind.REFLECTION_STARTED);}});received=http.call(path,body,current.bearer(),operation);}}catch(Exception ignored){}
             NativeDeviceSignIn.Reply result=received;
             ui.accept(()->{
                 if(!live(ticket,current.account())||!current.equals(credentials))return;
@@ -252,7 +255,7 @@ final class ReflectionModel {
                     error=responseError(result);
                     changed.run();return;
                 }
-                try{JSONObject snapshot=new JSONObject(result.body());ReflectionState candidate=state.copy();candidate.apply(snapshot);if(save(next->next.apply(snapshot)))notice="같은 계정의 대화를 확인했어요.";}
+                try{JSONObject snapshot=new JSONObject(result.body());ReflectionState candidate=state.copy();candidate.apply(snapshot);if(save(next->next.apply(snapshot))){notice="같은 계정의 대화를 확인했어요.";if(state.request!=null&&state.status().equals("completed")&&Objects.equals(observedRequest,state.request.optString("id"))){observedRequest=null;observed.accept(NativeProductExperience.Kind.REFLECTION_ANSWERED);}}}
                 catch(Exception e){error="이전 상태이거나 올바르지 않은 응답이라 반영하지 않았어요. 기존 글은 남아 있어요.";}
                 changed.run();
             });

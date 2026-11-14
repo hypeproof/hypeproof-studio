@@ -45,7 +45,7 @@ private struct ConversationTimelinePreference: PreferenceKey {
 
 struct SharedConversationView: View {
     private enum SettingsDestination {
-        case approvals, context, exportCache, clearCache, notebook, privacy
+        case experience, approvals, context, exportCache, clearCache, notebook, privacy
 #if DEBUG
         case finishPlayback, advanceHistory, holdHistory, releaseHistory, finishSecondSpeech
 #endif
@@ -53,6 +53,9 @@ struct SharedConversationView: View {
     @StateObject private var model = SharedConversationModel()
     @StateObject private var voice = VoiceController()
     @State private var showQuestions = false
+    @State private var showExperience = false
+    @State private var observedVoiceEvent = ""
+    @State private var awaitingObservedVoiceResume = false
     @Environment(\.scenePhase) private var phase
     @Environment(\.openURL) private var openURL
     @FocusState private var focused: Bool
@@ -137,8 +140,22 @@ struct SharedConversationView: View {
             if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop(reason: .routeChanged) }
         }
+        .onReceive(voice.$timeline) { timeline in
+            guard let entry = timeline.entries.last else { return }
+            let key = "\(entry.milliseconds):\(entry.event.rawValue):\(entry.phase.rawValue)"
+            guard key != observedVoiceEvent else { return }; observedVoiceEvent = key
+            switch entry.event {
+            case .playbackFinished: awaitingObservedVoiceResume = true; model.experience.controller?.record(.voiceFinished)
+            case .captureStarted:
+                if awaitingObservedVoiceResume { model.experience.controller?.record(.voiceResumed) }; awaitingObservedVoiceResume = false
+            case .captureFailed, .failed, .noSpeechPaused: awaitingObservedVoiceResume = false; model.experience.controller?.record(.voiceFailed)
+            case .stopped, .background, .interrupted, .scopeChanged, .routeChanged: awaitingObservedVoiceResume = false
+            default: break
+            }
+        }
+        .sheet(isPresented: $showExperience) { ProductExperienceView(model: model.experience) }
         .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
-        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false } }
+        .onChange(of: model.signedIn) { _, signedIn in voice.stop(reason: .scopeChanged); if !signedIn { showQuestions = false; showExperience = false } }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -224,6 +241,10 @@ struct SharedConversationView: View {
                 Section("음성") {
                     Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
                     Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
+                    if model.signedIn {
+                        Button { leaveSettings(for: .experience) } label: { Label("사용 경험 공유 설정", systemImage: "hand.raised").frame(minHeight: 44) }
+                            .accessibilityIdentifier("productExperienceSettings")
+                    }
                     if !voice.timeline.entries.isEmpty {
                         ShareLink(item: voice.timeline.export) { Label("음성 문제 확인 기록 공유", systemImage: "square.and.arrow.up") }
                     }
@@ -250,7 +271,7 @@ struct SharedConversationView: View {
     }
     private func leaveSettings(for destination: SettingsDestination) {
         switch destination {
-        case .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+        case .experience, .approvals, .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
 #if DEBUG
         case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory, .finishSecondSpeech: break
 #endif
@@ -263,6 +284,8 @@ struct SharedConversationView: View {
         guard let destination = settingsDestination else { return }
         settingsDestination = nil
         switch destination {
+        case .experience:
+            if model.signedIn && !model.loggingOut { showExperience = true }
         case .approvals:
             if model.signedIn && model.approvalEntryVisible && !model.loggingOut { showApprovals = true }
         case .context:
@@ -639,6 +662,7 @@ struct SharedConversationView: View {
         }, final: { _, mode in
             guard model.selected == selection, model.signedIn == signedIn else { return false }
             if mode == .dictation { return true }
+            model.experience.controller?.record(.voiceFinal)
             guard model.canSend else { return false }
             model.send(); voiceRequestID = model.cache.request?.id; return model.cache.request?.outstanding == true
         })

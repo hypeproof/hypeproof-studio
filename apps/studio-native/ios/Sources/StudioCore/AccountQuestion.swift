@@ -70,8 +70,9 @@ public struct AccountQuestion: Decodable, Sendable {
     private let loadIntent: (String) throws -> AccountQuestionIntent?
     private let saveIntent: (String, AccountQuestionIntent?) throws -> Void
     private let changed: (View) -> Void
-    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, loadIntent: @escaping (String) throws -> AccountQuestionIntent? = { _ in nil }, saveIntent: @escaping (String, AccountQuestionIntent?) throws -> Void = { _, _ in }, changed: @escaping (View) -> Void) {
-        self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.changed = changed
+    private let observed: (ProductExperienceEvent.Kind) -> Void
+    public init(identity: @escaping () async throws -> MemberApprovalIdentity?, load: @escaping (MemberApprovalIdentity) async throws -> AccountQuestion?, act: @escaping (MemberApprovalIdentity, String, String, [String: String]) async throws -> String, start: @escaping (MemberApprovalIdentity, String, String) async throws -> Void = { _, _, _ in throw SyncFailure.invalidResponse }, loadIntent: @escaping (String) throws -> AccountQuestionIntent? = { _ in nil }, saveIntent: @escaping (String, AccountQuestionIntent?) throws -> Void = { _, _ in }, observed: @escaping (ProductExperienceEvent.Kind) -> Void = { _ in }, changed: @escaping (View) -> Void) {
+        self.identity = identity; self.load = load; self.act = act; self.start = start; self.loadIntent = loadIntent; self.saveIntent = saveIntent; self.observed = observed; self.changed = changed
     }
     public func invalidate() { generation = UUID(); binding = nil; draftKey = nil; shownKey = nil; view = View(); changed(view) }
     public func dismiss() { generation = UUID(); view.card = nil; view.busy = false; changed(view) }
@@ -121,7 +122,7 @@ public struct AccountQuestion: Decodable, Sendable {
         let marker = key + ":" + String(card.attempt)
         guard shownKey != marker else { return }
         shownKey = marker; let g = generation
-        do { guard try await current(g, binding) else { return }; _ = try await act(binding, key, "shown", ["surface": "mobile"]) }
+        do { guard try await current(g, binding) else { return }; observed(.questionPresented); _ = try await act(binding, key, "shown", ["surface": "mobile"]) }
         catch { /* A failed exposure receipt is not a successful answer; never retry automatically. */ }
     }
     public func submit(action: String? = nil, choice: String? = nil, skip: Bool = false) async {
@@ -134,6 +135,7 @@ public struct AccountQuestion: Decodable, Sendable {
             guard try await current(g, binding), card.available() else { if g == generation { invalidate() }; return }
             let message = try await act(binding, card.key, skip ? "skip" : "answer", body)
             guard try await current(g, binding) else { if g == generation { invalidate() }; return }
+            observed(skip ? .questionSkipped : .questionAnswered)
             view.card = nil; view.message = message; view.words = ""; view.choice = nil; draftKey = nil
         } catch {
             if g == generation { view.card = nil; view.message = "처리 결과를 확인하지 못했어요. 작성한 답은 남겨 두었어요. 자동으로 다시 보내지 않아요." }

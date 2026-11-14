@@ -103,20 +103,52 @@ private struct SharedCacheFile: Codable {
     @Published private var editing: [String: [String: [String: String]]] = [:]
     private var account: StoredAccount?
     private let tokenFlight = AccountTokenRefreshFlight()
+    private lazy var teamService: ConversationService = {
+#if DEBUG
+        return TeamEntryFixture.service ?? service
+#else
+        return service
+#endif
+    }()
+    lazy var experience: ProductExperiencePresentation = {
+        let presentation = ProductExperiencePresentation()
+        presentation.controller = ProductExperienceController(identity: { [weak self] in
+            guard let self, self.signedIn, !self.loggingOut, let account = self.account else { return nil }
+            return .init(accountID: account.accountID, sessionID: account.tokens.session_id)
+        }, version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", consent: { [weak self] binding, granted in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            return try await self.teamService.productExperienceConsent(granted, token: token)
+        }, send: { [weak self] binding, events in
+            guard let self else { throw CancellationError() }; let token = try await self.approvalToken(binding)
+            return try await self.teamService.productExperienceEvents(events, token: token)
+        }, load: { [weak self] account in
+            guard let self else { throw CancellationError() }; let file = try self.experienceFile(account)
+            guard FileManager.default.fileExists(atPath: file.path) else { return .init() }
+            let data = try Data(contentsOf: file); guard data.count <= 32768 else { throw SyncFailure.invalidResponse }
+            let queue = try JSONDecoder().decode(ProductExperienceQueue.self, from: data); try queue.validate(); return queue
+        }, save: { [weak self] account, queue in
+            guard let self else { throw CancellationError() }; try queue.validate(); let file = try self.experienceFile(account)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
+            try JSONEncoder().encode(queue).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }, changed: { [weak presentation] in presentation?.state = $0 })
+        return presentation
+    }()
+    private var observedReflectionID: String?
     lazy var questions: AccountQuestionPresentation = {
         let presentation = AccountQuestionPresentation()
         presentation.controller = AccountQuestionController(identity: { [weak self] in try await self?.approvalIdentity() }, load: { [weak self] binding in
             guard let self else { throw CancellationError() }
             let token = try await self.approvalToken(binding)
-            return try await self.service.accountQuestion(token)
+            return try await self.teamService.accountQuestion(token)
         }, act: { [weak self] binding, key, action, body in
             guard let self else { throw CancellationError() }
             let token = try await self.approvalToken(binding)
-            return try await self.service.accountQuestionAction(key, action: action, body: body, token: token)
+            return try await self.teamService.accountQuestionAction(key, action: action, body: body, token: token)
         }, start: { [weak self] binding, id, choice in
             guard let self else { throw CancellationError() }
             let token = try await self.approvalToken(binding)
-            try await self.service.startAccountQuestion(id: id, choice: choice, token: token)
+            try await self.teamService.startAccountQuestion(id: id, choice: choice, token: token)
         }, loadIntent: { [weak self] account in
             guard let self else { throw CancellationError() }
             let file = try self.questionIntentFile(account)
@@ -132,7 +164,7 @@ private struct SharedCacheFile: Codable {
                 var folder = file.deletingLastPathComponent(); var flags = URLResourceValues(); flags.isExcludedFromBackup = true; try folder.setResourceValues(flags)
                 try JSONEncoder().encode(intent).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             } else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
-        }, changed: { [weak presentation] in presentation?.state = $0 })
+        }, observed: { [weak self] event in self?.experience.controller?.record(event) }, changed: { [weak presentation] in presentation?.state = $0 })
         return presentation
     }()
     lazy var approvals: MemberApprovalPresentation = {
@@ -178,6 +210,7 @@ private struct SharedCacheFile: Codable {
             await self.approvals.controller?.discover()
         }
         Task { [weak self] in await self?.refreshDisplayName(attempt: attempt) }
+        Task { [weak self] in await self?.experience.controller?.refresh() }
     }
     private func refreshDisplayName(attempt: UUID) async {
         guard let before = account else { return }
@@ -193,6 +226,10 @@ private struct SharedCacheFile: Codable {
         guard StoredAccount.validID(account) else { throw SyncFailure.invalidResponse }
         let key = Data(account.utf8).base64EncodedString().replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "=", with: "")
         return directory.appendingPathComponent("approval-decisions", isDirectory: true).appendingPathComponent(key, isDirectory: true)
+    }
+    private func experienceFile(_ account: String) throws -> URL {
+        let key = try approvalDirectory(account).lastPathComponent
+        return directory.appendingPathComponent("product-experience", isDirectory: true).appendingPathComponent(key + ".json")
     }
     private func questionIntentFile(_ account: String) throws -> URL {
         let key = try approvalDirectory(account).lastPathComponent
@@ -427,7 +464,7 @@ private struct SharedCacheFile: Codable {
                 let value = try StoredAccount(accountID: id, tokens: tokens, expiresAt: Date().addingTimeInterval(tokens.expires_in))
                 do { try AccountKeychain.save(value) }
                 catch { accountStorageReady = false; throw error }
-                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); displayName = nil
+                tokenFlight.invalidate(); approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil; displayName = nil
                 account = value; signedIn = true; acquired = nil
                 try load(id)
                 // Only this successful, epoch-fenced explicit login may adopt
@@ -479,7 +516,7 @@ private struct SharedCacheFile: Codable {
     }
     private func clearAccount() {
         displayName = nil
-        questions.controller?.invalidate()
+        questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil
         conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
@@ -597,6 +634,9 @@ private struct SharedCacheFile: Codable {
     }
     private func applyReflection(_ value: PersonalReflection) throws {
         try edit(Self.personalID) { try $0.applyReflection(value) }
+        if let request = entries[Self.personalID]?.request, request.status == "completed", request.id == observedReflectionID {
+            observedReflectionID = nil; experience.controller?.record(.reflectionAnswered)
+        }
         opening = value.opening; openingHint = value.hint; hasEarlierReflection = value.state.has_earlier
     }
     private func failure(_ error: Error) {
@@ -625,6 +665,7 @@ private struct SharedCacheFile: Codable {
                 let credential = try await credentialTask.value
                 guard epoch == attempt, responseGeneration == generation else { return }
                 if id == Self.personalID {
+                    observedReflectionID = request.id; experience.controller?.record(.reflectionStarted)
                     let result = try await service.reflect(request, token: credential)
                     guard epoch == attempt, responseGeneration == generation else { return }
                     try applyReflection(result)
@@ -757,7 +798,7 @@ private struct SharedCacheFile: Codable {
         guard (editing[account.accountID] ?? [:]).isEmpty else {
             error = "저장하지 못한 수정이 있어요. 기록을 내보내고 저장 오류를 확인해 주세요."; return
         }
-        approvals.invalidate(); questions.controller?.invalidate()
+        approvals.invalidate(); questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil
         let intent = LogoutIntent(epoch: epoch, accountID: account.accountID, sessionID: account.tokens.session_id)
         // Consume only the in-memory scheduling intent, never durable words or
         // request identity. Reopening must not replay an uncertain request.
@@ -790,7 +831,7 @@ private struct SharedCacheFile: Codable {
                 try await service.logout(current.tokens.access_token)
                 guard matches(execution) else { return }
                 try AccountKeychain.remove()
-                questions.controller?.invalidate(); displayName = nil
+                questions.controller?.invalidate(); experience.controller?.invalidate(); observedReflectionID = nil; displayName = nil
                 account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
                 notice = "로그아웃했어요. 이 기기의 기록 사본은 보존했어요."
             } catch {

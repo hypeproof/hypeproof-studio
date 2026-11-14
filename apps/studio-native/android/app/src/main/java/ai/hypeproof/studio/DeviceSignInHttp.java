@@ -22,17 +22,19 @@ final class DeviceSignInHttp implements NativeDeviceSignIn.Transport {
  }
  public NativeDeviceSignIn.Reply call(String path,Map<String,String> body,String bearer,NativeDeviceSignIn.Cancel cancel,long timeoutMillis) throws Exception {
   if(timeoutMillis<1)throw new Exception("native_deadline");
+  boolean experience=path.equals("/me/product-events/consent")||path.equals("/me/product-events");
+  if(experience&&(bearer==null||(path.equals("/me/product-events")&&body==null)))throw new Exception("invalid_route");
   boolean cardRead=path.equals("/me/cards?surface=mobile")||path.equals("/me/approval-inbox")||path.matches("/me/approval-inbox/[A-Za-z0-9._:-]{1,128}");
   boolean cardWrite=path.equals("/me/question-triggers")||path.matches("/me/cards/[a-z][a-z0-9:.-]{1,63}/(?:shown|answer|skip)")||path.matches("/me/approval-inbox/[A-Za-z0-9._:-]{1,128}/decisions");
   if((cardRead||cardWrite)&&(bearer==null||(path.contains("/../")||path.endsWith("/..")||path.contains("/./")||path.endsWith("/."))||cardRead!=(body==null)))throw new Exception("invalid_route");
-  if(!Set.of("/auth/device/start","/auth/device/poll","/me","/auth/logout","/auth/refresh","/me/reflection","/me/reflection/turns").contains(path) && !path.matches("/me/reflection/turns/[A-Za-z0-9._:-]{1,120}/(?:abandon|cancel)")&&!cardRead&&!cardWrite)throw new Exception("invalid_route");
+  if(!Set.of("/auth/device/start","/auth/device/poll","/me","/auth/logout","/auth/refresh","/me/reflection","/me/reflection/turns").contains(path) && !path.matches("/me/reflection/turns/[A-Za-z0-9._:-]{1,120}/(?:abandon|cancel)")&&!cardRead&&!cardWrite&&!experience)throw new Exception("invalid_route");
   HttpURLConnection c=(HttpURLConnection)new URL(target.service+path).openConnection();
   try (NativeHttpDeadline deadline=new NativeHttpDeadline(cancel,deadlines,Math.min(timeoutMillis,path.equals("/me/reflection/turns")?90000:12000))) {
    cancel.bind(c::disconnect);c.setInstanceFollowRedirects(false);c.setConnectTimeout(Math.min(10000,deadline.remaining()));c.setReadTimeout(deadline.remaining());
    c.setRequestMethod(body==null?"GET":"POST");c.setRequestProperty("Accept","application/json");
    if(bearer!=null)c.setRequestProperty("Authorization","Bearer "+bearer);
    if(cancel.isCancelled())throw new Exception("cancelled");
-   if(body!=null){JSONObject payload=new JSONObject(body);if(path.equals("/me/reflection/turns"))payload.put("revision",Long.parseLong(body.get("revision")));if(path.equals("/me/question-triggers"))payload.put("source_revision",Long.parseLong(body.get("source_revision")));byte[] bytes=payload.toString().getBytes(StandardCharsets.UTF_8);c.setDoOutput(true);c.setFixedLengthStreamingMode(bytes.length);c.setRequestProperty("Content-Type","application/json");try(var out=c.getOutputStream()){out.write(bytes);}}
+   if(body!=null){JSONObject payload=new JSONObject(body);if(path.equals("/me/reflection/turns"))payload.put("revision",Long.parseLong(body.get("revision")));if(path.equals("/me/question-triggers"))payload.put("source_revision",Long.parseLong(body.get("source_revision")));if(path.equals("/me/product-events/consent")){if(!Set.of("true","false").contains(body.get("granted")))throw new Exception("invalid_consent");payload.put("granted",Boolean.parseBoolean(body.get("granted")));}if(path.equals("/me/product-events"))payload.put("events",new org.json.JSONArray(body.get("events")));byte[] bytes=payload.toString().getBytes(StandardCharsets.UTF_8);c.setDoOutput(true);c.setFixedLengthStreamingMode(bytes.length);c.setRequestProperty("Content-Type","application/json");try(var out=c.getOutputStream()){out.write(bytes);}}
    if(cancel.isCancelled())throw new Exception("cancelled");
    c.setReadTimeout(deadline.remaining());
    int status=c.getResponseCode();String type=c.getHeaderField("Content-Type");
@@ -49,6 +51,7 @@ final class DeviceSignInHttp implements NativeDeviceSignIn.Transport {
    JSONObject account=v.optJSONObject("account");if(account!=null){fields.put("account_id",account.opt("id"));fields.put("account_status",account.opt("status"));}
    if(account!=null&&account.opt("display_name") instanceof String)fields.put("display_name",account.getString("display_name"));
    if(cardRead||cardWrite){for(String k:Set.of("schema","availability","cards","card","key","id","request_digest","source","reviewer","brief","state","created_at","expires_at","lease_expires_at","can_decide","unavailable_reason","decision","review","ok","thanks","message","final","change_until","source_revision","reentry","model_calls","policy","created"))if(v.has(k))fields.put(k,v.get(k));}
+   if(experience)for(String k:Set.of("schema","notice_version","preference","title","notice","ok","accepted","deferred","evidence_kind"))if(v.has(k))fields.put(k,v.get(k));
    // Keep only the current account/card protocol fields; arbitrary server fields stay out of UI.
    deadline.remaining();return new NativeDeviceSignIn.Reply(status,fields);
   } finally {cancel.unbind();c.disconnect();}

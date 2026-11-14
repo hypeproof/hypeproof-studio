@@ -13,6 +13,7 @@ final class NativeTeamModel {
     private NativeDeviceSignIn.Credentials binding;private NativeDeviceSignIn.Cancel operation,profileCancel,exposureCancel;private long generation;private String draftKey,shownKey;
     String displayName="",message="",words="",choice,pendingChoice;boolean busy,canStart;NativeAccountCard question;
     List<NativeApprovalCard> approvals=new ArrayList<>();Set<String> pending=new HashSet<>();String availability="";
+    Consumer<NativeProductExperience.Kind> observed=kind->{};
     NativeTeamModel(Supplier<NativeDeviceSignIn.Credentials> current,NativeDeviceSignIn.Transport http,ExecutorService worker,Consumer<Runnable> ui,Store store,Runnable changed){this.current=current;this.http=http;this.worker=worker;this.ui=ui;this.store=store;this.changed=changed;}
     static boolean same(NativeDeviceSignIn.Credentials a,NativeDeviceSignIn.Credentials b){return a!=null&&b!=null&&a.account().equals(b.account())&&a.session().equals(b.session());}
     void invalidate(){generation++;if(operation!=null)operation.cancel();if(profileCancel!=null)profileCancel.cancel();if(exposureCancel!=null)exposureCancel.cancel();binding=null;question=null;approvals=new ArrayList<>();pending.clear();displayName="";message="";words="";choice=null;draftKey=null;shownKey=null;pendingChoice=null;busy=false;canStart=false;availability="";}
@@ -49,7 +50,7 @@ final class NativeTeamModel {
         }catch(Exception ignored){}boolean ok=success;ui.accept(()->{if(!live(g,c))return;busy=false;if(ok)questions(c);else{message="질문을 준비한 결과를 확인하지 못했어요. 새로고침으로 확인해 주세요. 자동으로 다시 요청하지 않아요.";changed.run();}});});
     }
     void presented(){
-        NativeAccountCard card=question;NativeDeviceSignIn.Credentials c=binding;if(card==null||busy||!same(c,current.get()))return;String marker=card.key+":"+card.json.optInt("attempt");if(Objects.equals(shownKey,marker))return;shownKey=marker;
+        NativeAccountCard card=question;NativeDeviceSignIn.Credentials c=binding;if(card==null||busy||!same(c,current.get()))return;String marker=card.key+":"+card.json.optInt("attempt");if(Objects.equals(shownKey,marker))return;shownKey=marker;observed.accept(NativeProductExperience.Kind.QUESTION_PRESENTED);
         NativeDeviceSignIn.Cancel cancel=new NativeDeviceSignIn.Cancel();exposureCancel=cancel;worker.execute(()->{try{verify(c,cancel);call("/me/cards/"+card.key+"/shown",Map.of("surface","mobile"),c,cancel);}catch(Exception ignored){/* Never infer answer success or retry exposure automatically. */}});
     }
     void answer(NativeDeviceSignIn.Credentials c,String action,String selected,boolean skip){
@@ -57,7 +58,7 @@ final class NativeTeamModel {
         try{if(skip){if(card.json.isNull("skip")||!card.available())return;body=Map.of("surface","mobile");}else body=card.answer(action,selected==null?choice:selected,words);}catch(Exception e){message="답이나 선택을 먼저 확인해 주세요.";changed.run();return;}
         long g=++generation;operation=new NativeDeviceSignIn.Cancel();NativeDeviceSignIn.Cancel cancel=operation;busy=true;changed.run();
         worker.execute(()->{String outcome=null;try{verify(c,cancel);if(!card.available())throw new Exception("expired");JSONObject result=call("/me/cards/"+card.key+(skip?"/skip":"/answer"),body,c,cancel);if(!NativeAccountCard.bool(result,"ok"))throw new Exception("invalid_reply");outcome=NativeAccountCard.text(result,skip?"message":"thanks",4000);}catch(Exception ignored){}
-            String result=outcome;ui.accept(()->{if(!live(g,c))return;busy=false;question=null;if(result==null)message="처리 결과를 확인하지 못했어요. 작성한 답은 남겨 두었어요. 자동으로 다시 보내지 않아요.";else{message=result;words="";choice=null;draftKey=null;}changed.run();});});
+            String result=outcome;ui.accept(()->{if(!live(g,c))return;busy=false;question=null;if(result==null)message="처리 결과를 확인하지 못했어요. 작성한 답은 남겨 두었어요. 자동으로 다시 보내지 않아요.";else{observed.accept(skip?NativeProductExperience.Kind.QUESTION_SKIPPED:NativeProductExperience.Kind.QUESTION_ANSWERED);message=result;words="";choice=null;draftKey=null;}changed.run();});});
     }
     private JSONObject questionIntent(NativeDeviceSignIn.Credentials c)throws Exception{
         JSONObject value=store.loadQuestionIntent(c.account());if(value==null)return null;

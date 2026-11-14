@@ -31,6 +31,10 @@ public final class QuestionActivity extends Activity {
     private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
     private ReflectionStorage storage;
     private ReflectionModel model;
+    private final ExecutorService experienceWorker=Executors.newSingleThreadExecutor();
+    private NativeProductExperience experience;
+    private AlertDialog experienceDialog;
+    private LinearLayout experienceContent;
     private NativeTeamModel team;
     private NativeDeviceSignIn.Credentials teamIdentity;
     private LinearLayout teamEntry,teamContent;
@@ -58,6 +62,8 @@ public final class QuestionActivity extends Activity {
         NativeDeviceSignIn.Target target=NativeDeviceSignIn.Target.production();
         NativeDeviceSignIn.Transport http=BuildConfig.DEBUG&&testTransport!=null?testTransport:new DeviceSignInHttp(target,deadlines);
         model=new ReflectionModel(storage,new NativeDeviceSignIn(target,http,NativeDeviceSignIn.MONOTONIC),http,worker,r->handler.post(r),this::update);
+        experience=new NativeProductExperience(()->model.credentials,http,experienceWorker,r->handler.post(r),storage,this::renderExperience);
+        model.observed=experience::record;
         voice=new NativeVoice(this,new NativeVoice.Host(){
             public String projectID(){return voiceScope();}
             public boolean foreground(){return foreground;}
@@ -70,15 +76,17 @@ public final class QuestionActivity extends Activity {
                 voicePrefix="";voiceTurn=null;return true;
             }
             public void changed(){update();}
+            public void observed(NativeProductExperience.Kind kind){experience.record(kind);}
             public void failed(String value){voiceTurn=null;model.error=value;update();}
             public void transcript(String id,String value,boolean complete,boolean automatic){
                 if(!Objects.equals(id,voiceScope()))return;
                 model.edit(voicePrefix.isEmpty()?value:voicePrefix+"\n"+value);
-                if(complete&&automatic){if(model.send()){voiceTurn=model.state.request.optString("id");voiceTicket=voice.session.ticket();voiceWait=SystemClock.elapsedRealtime();}else{voice.stop();model.error="인식한 글을 확인한 뒤 직접 보내 주세요.";}}
+                if(complete&&automatic){experience.record(NativeProductExperience.Kind.VOICE_FINAL);if(model.send()){voiceTurn=model.state.request.optString("id");voiceTicket=voice.session.ticket();voiceWait=SystemClock.elapsedRealtime();}else{voice.stop();model.error="인식한 글을 확인한 뒤 직접 보내 주세요.";}}
                 update();
             }
         });
         team=new NativeTeamModel(()->model.credentials,http,worker,r->handler.post(r),storage,()->{update();renderTeamDialog();});
+        team.observed=experience::record;
         if(saved!=null&&saved.getBundle("unsavedDrafts")!=null){Bundle drafts=saved.getBundle("unsavedDrafts");for(String account:drafts.keySet())model.unsavedDrafts.put(account,drafts.getString(account,""));}
         model.restore();
         if(saved!=null&&Objects.equals(model.account(),saved.getString("draftAccount"))){model.edit(saved.getString("draft",model.draft));}
@@ -87,9 +95,9 @@ public final class QuestionActivity extends Activity {
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
     @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
     @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
-    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();super.onStop();}
+    @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();if(teamDialog!=null)teamDialog.dismiss();if(experienceDialog!=null)experienceDialog.dismiss();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
-    @Override protected void onDestroy(){if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){if(experience!=null)experience.invalidate();experienceWorker.shutdown();if(team!=null)team.invalidate();if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NativeVoice.PERMISSION_REQUEST)voice.permission(grants);}
     private LinearLayout column(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);return c;}
     private TextView text(String value,int size,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(ink);t.setPadding(0,dp(6),0,dp(8));if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
@@ -152,8 +160,8 @@ public final class QuestionActivity extends Activity {
     private void update(){
         if(isDestroyed()||model==null)return;
         if(team!=null&&!NativeTeamModel.same(teamIdentity,model.credentials)){
-            team.invalidate();if(teamDialog!=null)teamDialog.dismiss();teamIdentity=model.credentials;
-            if(teamIdentity!=null)team.profile(teamIdentity);
+            experience.invalidate();if(experienceDialog!=null)experienceDialog.dismiss();team.invalidate();if(teamDialog!=null)teamDialog.dismiss();teamIdentity=model.credentials;
+            if(teamIdentity!=null){team.profile(teamIdentity);experience.refresh(teamIdentity);}
         }
         if(root==null||!Objects.equals(shownAccount,model.account())){if(voice!=null)voice.stop();voiceTurn=null;build();}
         teamEntry.setVisibility(model.account()!=null&&!composer.hasFocus()&&!voice.session.active()?View.VISIBLE:View.GONE);
@@ -211,6 +219,17 @@ public final class QuestionActivity extends Activity {
             }
         }
         updateVoiceReply();
+    }
+    private void openExperience(){
+        if(model.credentials==null||model.busy)return;stopVoice();composer.clearFocus();ScrollView scroll=new ScrollView(this);experienceContent=column();experienceContent.setPadding(dp(20),dp(8),dp(20),dp(12));scroll.addView(experienceContent);
+        experienceDialog=new AlertDialog.Builder(this).setTitle("사용 경험 공유").setView(scroll).setNegativeButton("닫기",null).create();experienceDialog.setOnDismissListener(d->{experienceDialog=null;experienceContent=null;});experienceDialog.show();renderExperience();model.withCurrentAccount(experience::refresh);
+    }
+    private void renderExperience(){
+        if(experienceDialog==null||experienceContent==null||!experienceDialog.isShowing())return;experienceContent.removeAllViews();
+        experienceContent.addView(text(experience.granted?"사용 경험 공유 켜짐":"사용 경험을 공유하지 않아요",16,true));
+        if(!experience.notice.isEmpty())experienceContent.addView(text(experience.notice,15,false));if(!experience.status.isEmpty())experienceContent.addView(text(experience.status,14,false));
+        for(boolean allow:new boolean[]{true,false}){Button choice=button(allow?"동의하고 공유하기":"공유하지 않기",()->experience.choose(allow));choice.setEnabled(experience.available&&!experience.busy);experienceContent.addView(choice);}
+        Button refresh=button("설정 다시 확인",()->experience.refresh(model.credentials));refresh.setEnabled(!experience.busy);experienceContent.addView(refresh);
     }
     private void openTeam(boolean approvals){
         if(team==null||model.credentials==null||model.busy)return;
@@ -285,8 +304,8 @@ public final class QuestionActivity extends Activity {
             if((!waiting&&!model.busy)||SystemClock.elapsedRealtime()-voiceWait>120000){stopVoice();if(model.error.isEmpty())model.error="음성 대기를 멈췄어요. 보낸 글과 답변 상태는 화면에서 확인해 주세요.";handler.post(this::update);}
         }catch(Exception e){stopVoice();}
     }
-    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인"},(d,w)->{
-        switch(w){case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
+    private void menu(){stopVoice();update();new AlertDialog.Builder(this).setTitle("나의 질문").setItems(new String[]{"대화 다시 확인","다시 저장","기록 내보내기","만들기로 이어가기","응답 확인 복구","계정 연결 해제","기기 기록","로그인","사용 경험 공유 설정"},(d,w)->{
+        switch(w){case 8:openExperience();break;case 7:if(model.account()==null)signIn();break;case 6:startActivity(new Intent(this,MainActivity.class));break;case 0:model.refresh();break;case 1:model.retrySave();break;case 2:export();break;case 3:new AlertDialog.Builder(this).setTitle("생각을 만들어 보고 싶다면").setMessage("기존 HP Studio 데스크톱에 같은 계정으로 로그인하고 ‘나의 질문’을 열어 주세요. ‘만들기로 이어가기’에서 구현할 의도를 직접 확인한 뒤 MVP 작업을 시작할 수 있어요.").setPositiveButton("확인",null).show();break;case 4:new AlertDialog.Builder(this).setTitle("응답 확인 복구").setMessage("오래 끝나지 않는 요청을 확인해요. 서버에서 2분 이상 멈춘 요청만 복구하며 이미 발생한 AI 비용은 취소되지 않아요. 같은 요청으로 AI를 다시 실행하지 않아요.").setNegativeButton("취소",null).setPositiveButton("확인",(a,b)->model.abandon()).show();break;case 5:stopVoice();new AlertDialog.Builder(this).setTitle("기기에서 계정 연결 해제").setMessage("이 기기의 로그인 정보를 지우고 서버 세션 해제를 시도해요. 대화와 초안은 기기에 남으며 같은 계정으로 돌아오면 읽을 수 있어요. 서버 대화를 삭제하는 동작은 아니에요.").setNegativeButton("취소",null).setPositiveButton("연결 해제",(a,b)->model.logout()).show();break;}
     }).show();}
     private void export(){
         if(model.state==null)return;
