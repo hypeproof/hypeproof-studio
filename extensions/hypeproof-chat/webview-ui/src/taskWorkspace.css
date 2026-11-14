@@ -67,6 +67,11 @@
 .tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-10); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); color: inherit; text-align: left; background: transparent; margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
 .tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-1)); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
+/* CGP-VOICE-R-030 (REQ-CGPV-43): the live voice conversation's marker on its rail row, an icon and the words "음성 대화 중" at the
+   14px floor in the accent text token (a status, not a control: no fill, no hover). */
+.tw-task-voice { display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-14); min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-accent-default); }
+.tw-task-voice > svg { flex: none; }
+@media (forced-colors: active) { .tw-task-voice { color: CanvasText; } }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
 /* CGP-CHAT-R-025 — 보관함: same quiet rail rows, no destructive colour (nothing is deleted). */

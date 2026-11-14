@@ -2288,3 +2288,13 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
   - Restoring gives back the open card, which is the state it was collapsed from.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-VOICE-R-030: voice session marker in the task rail (2026-11-14, agent-selected)
+
+Confirmed by Jay: no. These are agent choices within REQ-CGPV-43. The coordinator set the constraints: the shipping VoiceConversationControl path, no marker when voice is not served, and #3976's minor path untouched.
+
+- **Source (coordinator).** The marker follows the shipping VoiceConversationControl's live VoiceConversation phase, not the unmounted VoicePanel. The control publishes the active task id to a window-local store (`src/voiceLiveTask.ts`) from its `changed` callback while the phase is active and voice is served, and null otherwise or on unmount. The conversation logic is unchanged.
+- **What "live" covers (agent reading).** The marker covers the whole session, starting through speaking, including the transcribing and answering gaps between capture and playback. Showing it only during capture and playback would make it blink on and off every turn. It is removed at `stopped`, which `stop()` sets only after `recorder.cancel()` has stopped the tracks: that is the release confirmation.
+- **Look (agent choice).** A status, not a control: a static `level` icon (the read-aloud "now reading" mark) and the words "음성 대화 중" at 14px in the accent text token, under the row title, with no fill and no hover. The row's existing accessible name gains ", 음성 대화 중".
+- **Scope.** Only the active task can be marked, because the conversation stops on any task switch. Dictation alone and a manual read-aloud are not a voice session and do not mark the row.
+- **Not covered:** a real installed App, a real microphone and a real screen reader.
