@@ -6,7 +6,8 @@
 //
 // Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error, a timeout,
 // a 401, or a 404 from a Service without the route all read as not busy. A seat the route does
-// not serve (401/403/404) stops asking, and errors back off (nextServiceStatusAt). The offline banner
+// does not have (404) stops asking, and errors back off (nextServiceStatusAt), 401/403 included: a 403
+// session_inactive is temporary (the class opens later with the same token). The offline banner
 // (CGP-SHELL-R-011) already covers a lost network, and a guess must never alarm a learner.
 
 /** How often the panel asks while it is visible. */
@@ -27,7 +28,9 @@ export function parseServiceStatus(body: unknown): boolean {
 type FetchLike = (url: string, init: { headers: Record<string, string>; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /**
- * What one ask found. `unserved` (401/403/404) means this seat is not served the route: stop asking
+ * What one ask found. `unserved` (404) means the Service has no such route: stop asking. 401 and 403 are `error`
+ * (backoff, asked again later): the route answers 401 for a missing, bad, issuer or revoked token, and a 403 such as
+ * `session_inactive` can clear with the same token. The route sends no 403 code that means "never served".
  * until its token or the Service address changes. `error` (network, timeout, 5xx, bad body) backs off.
  */
 export type ServiceStatusAnswer = { busy: boolean; outcome: 'ok' | 'unserved' | 'error' | 'skipped' };
@@ -43,7 +46,7 @@ export async function askServiceStatus(fetchImpl: FetchLike, args: { proxyUrl: s
       headers: { authorization: `Bearer ${args.token}`, accept: 'application/json' },
       signal: AbortSignal.timeout(args.timeoutMs ?? SERVICE_STATUS_TIMEOUT_MS),
     });
-    if (res.status === 401 || res.status === 403 || res.status === 404) return { busy: false, outcome: 'unserved' };
+    if (res.status === 404) return { busy: false, outcome: 'unserved' };
     if (!res.ok) return { busy: false, outcome: 'error' };
     return { busy: parseServiceStatus(await res.json()), outcome: 'ok' };
   } catch {

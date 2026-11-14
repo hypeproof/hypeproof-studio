@@ -1912,7 +1912,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Not before this time (normal minute, or backoff after errors). */
   private serviceStatusNextAt = 0;
   private serviceStatusErrors = 0;
-  /** The Service and token a 401/403/404 came back for: that seat is not served the route, so it is not asked again. */
+  /** The Service and token a 404 came back for: that Service has no such route, so this seat is not asked again. */
   private serviceStatusUnserved: string | undefined;
   /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
   serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;

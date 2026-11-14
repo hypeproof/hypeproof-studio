@@ -6,7 +6,8 @@
 // 2 runs the real ChatPanelProvider.handleMessage against a fake VS Code: a busy answer posts
 //   `serviceStatus: true`, an unchanged answer is not re-posted, recovery posts `false`, a remount
 //   re-posts, asks closer than a minute do not go out, errors back off (capped) and recover, a
-//   401/403/404 stops asking until a remount, a seat without a token asks nothing, and the
+//   404 stops asking for that seat until its token changes while 401/403 back off and are asked again
+//   (a 403 session_inactive clears when the class opens), a seat without a token asks nothing, and the
 //   request carries the seat token only.
 //
 // Run: node --experimental-strip-types test/service-status.smoke.mjs
@@ -60,7 +61,7 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
   assert.equal(await S.fetchServiceBusy(hung, { proxyUrl: "https://s/v1", token: "t", timeoutMs: 50 }), false, "a hung request times out as not busy");
   assert.ok(Date.now() - t0 < 2000, "the timeout ends the wait");
   clearInterval(keepAlive);
-  for (const [code, outcome] of [[401, "unserved"], [403, "unserved"], [404, "unserved"], [500, "error"], [503, "error"]]) {
+  for (const [code, outcome] of [[401, "error"], [403, "error"], [404, "unserved"], [500, "error"], [503, "error"]]) {
     assert.equal((await S.askServiceStatus(rec(code, {}), { proxyUrl: "https://s/v1", token: "t" })).outcome, outcome, `${code} is ${outcome}`);
   }
   assert.equal(S.nextServiceStatusAt(0, "unserved", 0), Infinity);
@@ -146,23 +147,36 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
     assert.equal(asked.length, m + 2, "a good answer returns to once a minute");
     ok("host: errors back off, capped, and recover to the normal minute");
   }
-  for (const code of [401, 403, 404]) {
+  {
     const { h, state, asked, statuses, tick } = make("seat-tok");
-    state.status = code;
+    state.status = 404;
     state.busy = true;
     await h.handleMessage({ type: "serviceStatusRequest", mount: true });
     for (let i = 0; i < 30; i++) await tick();
-    assert.equal(asked.length, 1, `${code}: a seat the route does not serve stops asking`);
-    assert.deepEqual(statuses(), [false], `${code}: and shows nothing`);
+    assert.equal(asked.length, 1, "404: a Service without the route is not asked again");
+    assert.deepEqual(statuses(), [false], "404: and shows nothing");
     await h.handleMessage({ type: "serviceStatusRequest", mount: true });
-    assert.equal(asked.length, 1, `${code}: a remount does not ask again (a task switch adds no Service request)`);
+    assert.equal(asked.length, 1, "404: a remount does not ask again (a task switch adds no Service request)");
     h.context.secrets.get = async () => "new-seat-tok";
     state.status = 200; state.busy = false;
     await tick();
-    assert.equal(asked.length, 2, `${code}: a new token is asked once`);
+    assert.equal(asked.length, 2, "404: a new token is asked once");
     assert.equal(asked.at(-1).auth, "Bearer new-seat-tok");
   }
-  ok("host: 401/403/404 stop polling for that seat until its token changes");
+  for (const code of [401, 403]) {
+    // A 403 session_inactive (or a 401) is not a verdict on the seat: the class opens later with the same token.
+    const { h, state, asked, statuses, tick } = make("seat-tok");
+    state.status = code;
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    for (let i = 0; i < 3; i++) await tick();
+    const refused = asked.length;
+    assert.ok(refused >= 2, `${code}: asked again after backoff (${refused})`);
+    state.status = 200; state.busy = true;   // the session opens; same token
+    for (let i = 0; i < 40 && statuses().at(-1) !== true; i++) await tick();
+    assert.equal(statuses().at(-1), true, `${code}: a later ask with the same token succeeds and shows busy`);
+    assert.ok(asked.every((a) => a.auth === "Bearer seat-tok"), `${code}: the same token throughout`);
+  }
+  ok("host: 404 stops asking for that seat until its token changes; 401/403 back off and are asked again");
   {
     const anon = make(undefined);
     anon.state.busy = true;

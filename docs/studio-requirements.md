@@ -7654,9 +7654,10 @@ never stops them from sending.
   asks only for a signed-in seat on the Service (no token, or a local coach, asks
   nothing), and never more than once a minute: a remount inside that minute (a task switch, the panel
   coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
-  the wait doubles up to 15 minutes and a good answer returns it to a minute. A seat the
-  route does not serve (401, 403, 404) stops asking until its token or the Service address
-  changes. An
+  the wait doubles up to 15 minutes and a good answer returns it to a minute. When the Service
+  has no such route (404), that seat stops asking until its token or the Service address changes.
+  A 401 or 403 is an error and backs off like one: a 403 `session_inactive` clears when the class
+  opens with the same token. An
   unchanged answer is not re-posted, and concurrent asks share one request
   (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
 - Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
@@ -7678,7 +7679,7 @@ never stops them from sending.
 Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
 fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
 `ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
-the 401/403/404 stop, remount, shared requests and a seat without a token) and
+the 404 stop and 401/403 backoff (a 403 that clears with the same token), remount, shared requests and a seat without a token) and
 `busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
 classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
 44px close, focus ring, Enter still sends, healthy removes it, closed stays closed; fails
