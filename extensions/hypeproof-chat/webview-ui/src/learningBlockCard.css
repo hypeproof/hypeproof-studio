@@ -86,6 +86,7 @@
   border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-8); background: var(--hp-bg-app-default);
 }
 .hp-block-report-reason:hover { background-color: var(--hp-bg-control-hover); }
+.hp-block-report-reason:active { background-color: var(--hp-bg-control-pressed); }
 .hp-block-report-reason:has(input:checked) { border-color: var(--hp-text-accent-default); }
 .hp-block-report-note, .hp-block-report-failed { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); }
 .hp-block-report-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
