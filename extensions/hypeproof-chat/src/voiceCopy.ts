@@ -106,3 +106,14 @@ export const AGENT_TOOL_DONE = "끝났어요";
 export const AGENT_STATUS_LABEL = "AI가 하는 일";
 /** Reading a status aloud failed: said apart from any tool failure (VO-20). */
 export const AGENT_STATUS_SPEECH_FAILED = "작업 상태를 소리로 읽지 못했어요. 화면의 글로 볼 수 있어요.";
+
+// ---- Dictation states and recovery (CGP-VOICE-R-014 / R-015 / D-010 / D-012). Agent-written, decisions.md. ----
+/** D-010: the start before the microphone is open (the OS prompt may be up). Static text, no spinner. */
+export const DICTATE_STARTING = "마이크를 켜는 중이에요";
+/** R-015: the one recovery action of a failure line. */
+export const RECOVER_SPEAK_AGAIN = "다시 말하기";
+export const RECOVER_RESEND = "다시 보내기";
+export const RECOVER_TYPE = "글로 쓰기";
+/** R-014: why a control is off while the other one holds the microphone. */
+export const DICTATE_BLOCKED_BY_CONVERSATION = "음성 대화 중에는 받아쓰기를 쓸 수 없어요";
+export const CONVERSATION_BLOCKED_BY_DICTATION = "받아쓰기가 끝나면 쓸 수 있어요";

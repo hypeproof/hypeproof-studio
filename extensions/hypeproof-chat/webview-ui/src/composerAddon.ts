@@ -6,6 +6,8 @@ import type { ComponentType, ReactNode } from "react";
 export interface ComposerVoiceTurn {
   ready: boolean;
   interrupted: boolean;
+  /** CGP-VOICE-R-014: why a voice conversation cannot start now (dictation holds the microphone), or null. */
+  blockedReason?: string | null;
   submit(text: string): string | null;
 }
 
@@ -20,6 +22,10 @@ export interface ComposerAddonApi {
   disabled: boolean;
   /** Capture exclusion only; standalone dictation still inserts and never sends. */
   onDictationBusy?(busy: boolean): void;
+  /** CGP-VOICE-R-014: why the control is off when another control holds the microphone (said, not only greyed). */
+  disabledReason?: string | null;
+  /** CGP-VOICE-R-015: 글로 쓰기 puts the caret back in the composer. */
+  focusComposer?(): void;
 }
 
 /**

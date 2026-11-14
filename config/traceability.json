@@ -17768,6 +17768,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/dictationRecovery.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoiceConversationControl.tsx"
         }
       ]
     },
@@ -17802,6 +17808,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/dictation-recovery.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-conversation-browser.smoke.mjs"
         }
       ]
     },

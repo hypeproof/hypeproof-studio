@@ -201,8 +201,13 @@ try {
       await send({ type: 'voiceDisclosureState', acknowledged: [V1] });
       await b.evaluate(`${composer}.focus()`);
       // Alt+Shift+M starts, the real recorder runs on an AudioContext stream.
+      const idleInput = (await measure({ input: '.hps-input textarea' })).items.input;
       await press(composer, { key: 'M', code: 'KeyM', vk: 77, altKey: true, shiftKey: true }); await settle(400);
-      const rec = await measure({ card: '.hps-voice-recording', input: '.hps-input', stop: '.hps-voice-mic-on' });
+      const rec = await measure({ card: '.hps-voice-recording', input: '.hps-input', stop: '.hps-voice-mic-on', box: '.hps-input textarea', level: '.hps-voice-level' });
+      // CGP-VOICE-D-010: the text box keeps its height across states (no jump over 4px), and the recording shows a
+      // decorative input level from the real stream (aria-hidden; the words carry the state).
+      assert.ok(Math.abs(rec.items.box.h - idleInput.h) <= 4, `${label}: the text box keeps its height while recording (${idleInput.h} -> ${rec.items.box.h})`);
+      assert.ok(rec.items.level && await b.evaluate(`document.querySelector('.hps-voice-level').getAttribute('aria-hidden')`) === 'true', `${label}: a decorative input level while recording`);
       assert.ok(rec.items.card, `${label}: recording card shown`);
       assert.ok(inside(rec.items.card, rec.vw) && !rec.scrollX && !overlap(rec.items.card, rec.items.input), `${label}: recording card inside the viewport and clear of the composer`);
       assert.ok(rec.items.card.fs >= 13.99 && rec.items.stop && rec.items.stop.h >= 43.5, `${label}: recording text and stop control`);
@@ -229,9 +234,13 @@ try {
       await send({ type: 'voiceTranscribeResult', requestId: second.requestId, ok: false, kind: 'unreadable', message: '소리가 잘 들리지 않았어요. 다시 말해 볼까요?', retry: true });
       const notice = '.hps-voice-note[role="status"]';
       assert.equal(await b.evaluate(`document.querySelectorAll('${notice}').length`), 1, `${label}: exactly one manual dictation status`);
-      const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-link` });
+      const note = await measure({ card: notice, input: '.hps-input', retry: `${notice} .hps-voice-primary`, close: `${notice} .hps-voice-link`, icon: `${notice} svg[data-icon="alert"]`, text: `${notice} .hps-voice-failure-text`, box: '.hps-input textarea' });
       assert.ok(note.items.card && inside(note.items.card, note.vw) && !overlap(note.items.card, note.items.input), `${label}: refusal note inside the viewport and clear of the composer`);
-      assert.ok(note.items.retry.h >= 43.5, `${label}: retry is a 44px target`);
+      // CGP-VOICE-R-015 / D-012: the alert icon, one sentence at 14px, one recovery action (다시 보내기 here) and 닫기, all 44px.
+      assert.ok(note.items.retry && note.items.retry.h >= 43.5 && note.items.close && note.items.close.h >= 43.5, `${label}: the recovery action and 닫기 are 44px targets`);
+      assert.equal(await b.evaluate(`document.querySelector('${notice} .hps-voice-primary').textContent`), '다시 보내기', `${label}: the retryable cause offers 다시 보내기`);
+      assert.ok(note.items.icon && Math.abs(note.items.icon.w - 20) <= 0.5 && note.items.text.fs >= 13.99, `${label}: alert icon 20px, sentence 14px`);
+      assert.ok(Math.abs(note.items.box.h - idleInput.h) <= 4, `${label}: the text box keeps its height with the failure line (${idleInput.h} -> ${note.items.box.h})`);
       assert.ok((await b.evaluate(`document.querySelector('${notice}').textContent`)).includes('소리가 잘 들리지 않았어요. 다시 말해 볼까요?'), `${label}: the softer line`);
 
       // Disclosure sheet (a first use): fits a 320x480 / 480x480 viewport without scrolling and has one 시작하기 (DES-CGPV-04).

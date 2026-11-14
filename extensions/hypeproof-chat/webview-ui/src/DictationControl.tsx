@@ -11,12 +11,14 @@ import { useVoice } from "./VoiceProvider";
 import { onHostMessage, postToHost } from "./vscode";
 import type { ComposerAddonApi } from "./composerAddon";
 import {
-  DictationRecorder, base64Of, needsMicExplainer, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type MicPermission,
+  DictationRecorder, base64Of, levelOf, needsMicExplainer, DICTATION_STOP_AT_MS, RETRY_KEEP_MS, type Clip, type DictationEnv, type DictationFailure, type DictationState, type LevelMeter, type MicPermission,
 } from "../../src/voiceDictation";
+import { autoDismissMs, recoveryFor, type DictationRecovery } from "../../src/dictationRecovery";
+import { DICTATE_STARTING, RECOVER_RESEND, RECOVER_SPEAK_AGAIN, RECOVER_TYPE } from "../../src/voiceCopy";
 import {
   CLASS_OFF, CLASS_OFF_HINT, CLOSE, DICTATE_CANCEL_LABEL, DICTATE_DONE, DICTATE_ELAPSED, DICTATE_LABEL, DICTATE_LIMIT_NOTE, DICTATE_RECORDING, DICTATE_START_TIP,
   DICTATE_STOP_LABEL, DICTATE_WORKING, GENERIC_UNAVAILABLE, MIC_BUSY, MIC_DENIED_BODY, MIC_DENIED_DISMISS, MIC_DENIED_TITLE, MIC_SETTINGS_BUTTON,
-  MIC_EXPLAIN_ALLOW, MIC_EXPLAIN_BODY, MIC_EXPLAIN_LATER, MIC_EXPLAIN_TITLE, MIC_SETTINGS_FAILED, NO_MIC, RECOVERED_COPIED, RECOVERED_COPY, RECOVERED_INSERT, RETRY, RETRY_TEXT_LABEL, SOFT_TOO_SHORT, TOO_LARGE, UNSUPPORTED,
+  MIC_EXPLAIN_ALLOW, MIC_EXPLAIN_BODY, MIC_EXPLAIN_LATER, MIC_EXPLAIN_TITLE, MIC_SETTINGS_FAILED, NO_MIC, RECOVERED_COPIED, RECOVERED_COPY, RECOVERED_INSERT, RETRY_TEXT_LABEL, SOFT_TOO_SHORT, TOO_LARGE, UNSUPPORTED,
 } from "../../src/voiceCopy";
 
 export type DictationView =
@@ -25,7 +27,8 @@ export type DictationView =
   | { kind: "recording"; seconds: number }
   | { kind: "working" }
   | { kind: "done" }
-  | { kind: "notice"; text: string; retry: boolean }
+  /** R-015: a failure line with its cause and its one recovery action (null: a refusal with nothing to do but read). */
+  | { kind: "notice"; text: string; cause: string; recovery: DictationRecovery | null }
   | { kind: "denied"; settingsFailed: boolean }
   /** CGP-SHELL-R-010: Studio's own explainer, before the OS microphone prompt can appear. */
   | { kind: "explain" }
@@ -39,6 +42,8 @@ export interface DictationController {
   toggle(): void;
   cancel(): void;
   retry(): void;
+  /** R-015: run the notice's recovery action (다시 보내기 / 다시 말하기 / 글로 쓰기). */
+  recover(): void;
   dismiss(): void;
   insertRecovered(): void;
   copyRecovered(): void;
@@ -48,6 +53,10 @@ export interface DictationController {
   laterMic(): void;
   busy: boolean;
   disabled: boolean;
+  /** R-014: why the control is off (another control holds the microphone), or null. */
+  disabledReason: string | null;
+  /** D-010: the recording's current input level (0..1), or null with no meter. */
+  level(): number | null;
 }
 
 /** Browser objects for the recorder. Tests replace this through `DictationEnvContext`. */
@@ -70,7 +79,31 @@ export const browserDictationEnv = (): DictationEnv => ({
   now: () => Date.now(),
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (h) => clearTimeout(h as never),
+  levelMeter: browserLevelMeter,
 });
+
+/**
+ * CGP-VOICE-D-010: the recording's input level, decorative. An AnalyserNode on the same stream, never connected
+ * to the speakers; `read` overwrites one reused block (no samples are kept) and `close` disconnects everything.
+ */
+function browserLevelMeter(stream: unknown): LevelMeter | null {
+  const Ctx = typeof window === "undefined" ? undefined : (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+  if (!Ctx) return null;
+  const context = new Ctx();
+  const source = context.createMediaStreamSource(stream as MediaStream);
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  source.connect(analyser);
+  const block = new Float32Array(analyser.fftSize);
+  return {
+    read: () => { analyser.getFloatTimeDomainData(block); return levelOf(block); },
+    close: () => {
+      try { source.disconnect(); } catch { /* ignore */ }
+      try { analyser.disconnect(); } catch { /* ignore */ }
+      void context.close().catch(() => {});
+    },
+  };
+}
 export const DictationEnvContext = createContext<() => DictationEnv>(browserDictationEnv);
 
 const FAILURE_TEXT: Record<Exclude<DictationFailure, "denied">, string> = {
@@ -85,7 +118,10 @@ function useDictation(api: ComposerAddonApi): DictationController {
   const [view, setView] = useState<View>({ kind: "idle" });
   const apiRef = useRef(api); apiRef.current = api;
   const clip = useRef<Clip | null>(null);
-  const keepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The browser objects for this control, made once. The retry keep-timer runs on the same clock (tests drive it).
+  const [env] = useState(makeEnv);
+  const envRef = useRef(env);
+  const keepTimer = useRef<unknown>(null);
   const afterRetry = useRef(false);
   const mounted = useRef(true);
   const inFlight = useRef<string | null>(null);
@@ -94,7 +130,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
 
   const dropClip = useCallback(() => {
     clip.current = null; afterRetry.current = false;
-    if (keepTimer.current !== null) { clearTimeout(keepTimer.current); keepTimer.current = null; }
+    if (keepTimer.current !== null) { envRef.current.clearTimeout(keepTimer.current); keepTimer.current = null; }
   }, []);
   // Forgets the clip being transcribed: stops listening for its answer, so a late reply can neither keep it
   // for a retry nor insert text.
@@ -107,9 +143,9 @@ function useDictation(api: ComposerAddonApi): DictationController {
 
   const keepForRetry = useCallback((kept: Clip) => {
     clip.current = kept;
-    if (keepTimer.current !== null) clearTimeout(keepTimer.current);
+    if (keepTimer.current !== null) envRef.current.clearTimeout(keepTimer.current);
     // REQ-CGPV-19: a clip kept for a retry is dropped after ten minutes.
-    keepTimer.current = setTimeout(() => { clip.current = null; keepTimer.current = null; }, RETRY_KEEP_MS);
+    keepTimer.current = envRef.current.setTimeout(() => { clip.current = null; keepTimer.current = null; }, RETRY_KEEP_MS);
   }, []);
 
   const send = useCallback((kept: Clip) => {
@@ -133,7 +169,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
       }
       if (m.kind === "class_off") { dropClip(); voice.markClassOff(); set({ kind: "idle" }); return; }
       if (m.retry) keepForRetry(kept); else dropClip();
-      set({ kind: "notice", text: m.message, retry: m.retry });
+      set({ kind: "notice", text: m.message, cause: m.kind, recovery: recoveryFor(m.kind, m.retry, m.retry) });
     });
     offInFlight.current = off;
     postToHost({ type: "voiceTranscribe", requestId, mime: kept.mime, seconds: kept.seconds, audio: base64Of(kept.bytes) });
@@ -143,8 +179,6 @@ function useDictation(api: ComposerAddonApi): DictationController {
   // re-render (the disclosure being acknowledged, a profile refresh) never swaps the recorder mid-clip.
   const handlers = useRef({ send, set });
   handlers.current = { send, set };
-  const [env] = useState(makeEnv);
-  const envRef = useRef(env);
   const [recorder] = useState(() => new DictationRecorder(env, {
     onState: (state: DictationState) => {
       stopTick();
@@ -159,7 +193,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
     onClip: (c) => { afterRetry.current = false; handlers.current.send(c); },
     onFailure: (kind) => {
       if (kind === "denied") { handlers.current.set({ kind: "denied", settingsFailed: false }); return; }
-      handlers.current.set({ kind: "notice", text: FAILURE_TEXT[kind], retry: false });
+      handlers.current.set({ kind: "notice", text: FAILURE_TEXT[kind], cause: kind, recovery: recoveryFor(kind, false, false) });
     },
   }));
 
@@ -193,7 +227,12 @@ function useDictation(api: ComposerAddonApi): DictationController {
   // CGP-SHELL-R-010: whether this control already showed the microphone explainer (one per control).
   const explained = useRef(false);
   const toggle = useCallback(() => {
-    if (apiRef.current.disabled) return;
+    if (apiRef.current.disabled) {
+      // R-014: refused with a message, not silently, when another control holds the microphone.
+      const reason = apiRef.current.disabledReason;
+      if (reason && recorder.current === "idle" && !inFlight.current) set({ kind: "notice", text: reason, cause: "blocked", recovery: null });
+      return;
+    }
     // CGP-SHELL-R-010: the microphone is never asked for (no card, no query, no getUserMedia) unless
     // dictation itself is served. The composer mounts this control only then, and the Alt+Shift+M
     // listener lives in the button whatever it draws, so the press checks it too.
@@ -231,6 +270,16 @@ function useDictation(api: ComposerAddonApi): DictationController {
     afterRetry.current = true;
     send(kept);
   }, [send]);
+  const recover = useCallback(() => {
+    if (view.kind !== "notice" || !view.recovery) return;
+    if (view.recovery === "resend") {
+      if (clip.current && !inFlight.current) { retry(); return; }
+      // The kept clip is gone (10 minutes, a hide): the only honest fallback is a new recording.
+    }
+    if (view.recovery === "type") { dismiss(); apiRef.current.focusComposer?.(); return; }
+    dismiss();
+    toggle();
+  }, [view, retry, dismiss, toggle]);
   const insertRecovered = useCallback(() => {
     if (view.kind !== "recovered") return;
     if (apiRef.current.insert(view.text)) set({ kind: "done" });
@@ -250,7 +299,8 @@ function useDictation(api: ComposerAddonApi): DictationController {
   }, [set]);
 
   const busy = view.kind === "starting" || view.kind === "recording" || view.kind === "working";
-  return { view, toggle, cancel, retry, dismiss, insertRecovered, copyRecovered, openSettings, allowMic, laterMic, busy, disabled: api.disabled };
+  const level = useCallback(() => recorder.level(), [recorder]);
+  return { view, toggle, cancel, retry, recover, dismiss, level, insertRecovered, copyRecovered, openSettings, allowMic, laterMic, busy, disabled: api.disabled, disabledReason: api.disabled ? api.disabledReason ?? null : null };
 }
 
 const ControllerContext = createContext<DictationController | null>(null);
@@ -296,7 +346,9 @@ export function DictationButton() {
   }
   if (voice.availability.kind !== "on" || !voice.availability.served.dictation || !controller || !view) return null;
   const recording = view.kind === "recording";
-  const label = recording ? DICTATE_STOP_LABEL : DICTATE_LABEL;
+  // R-014: when another control holds the microphone the button says why, in its name and its tooltip.
+  const reason = controller.disabledReason;
+  const label = recording ? DICTATE_STOP_LABEL : reason ? `${DICTATE_LABEL}, ${reason}` : DICTATE_LABEL;
   return (
     <button
       ref={ref}
@@ -305,7 +357,7 @@ export function DictationButton() {
       aria-label={label}
       aria-pressed={recording}
       aria-keyshortcuts="Alt+Shift+M"
-      data-hp-tooltip={recording ? `${DICTATE_STOP_LABEL} · ${DICTATION_SHORTCUT_LABEL()}` : `${DICTATE_START_TIP} · ${DICTATION_SHORTCUT_LABEL()}`}
+      data-hp-tooltip={recording ? `${DICTATE_STOP_LABEL} · ${DICTATION_SHORTCUT_LABEL()}` : reason ?? `${DICTATE_START_TIP} · ${DICTATION_SHORTCUT_LABEL()}`}
       disabled={controller.disabled || view.kind === "starting" || view.kind === "working"}
       onClick={() => controller.toggle()}
     >
@@ -329,12 +381,21 @@ export function DictationNotice() {
 /** The notice for one dictation state (exported so tests read the real markup, e.g. chat-keys' microphone-card guard). */
 export function DictationNoticeView({ view, controller }: { view: View; controller: DictationController }) {
   switch (view.kind) {
-    case "idle": case "starting": return null;
+    case "idle": return null;
+    case "starting":
+      // D-010: the start in words (the OS prompt may be open), never a spinner; 취소 stops it.
+      return (
+        <div className="hps-voice-note hps-voice-starting" role="group" aria-label={DICTATE_STARTING}>
+          <span role="status">{DICTATE_STARTING}</span>
+          <button type="button" className="hps-voice-link" onClick={controller.cancel}>{DICTATE_CANCEL_LABEL}</button>
+        </div>
+      );
     case "recording":
       return (
         <div className="hps-voice-note hps-voice-recording" role="group" aria-label={DICTATE_RECORDING}>
           <span className="hps-voice-rec-dot" aria-hidden="true" />
           <span role="status">{DICTATE_RECORDING}</span>
+          <LevelBar level={controller.level} />
           <span className="hps-voice-time" aria-hidden="true">{DICTATE_ELAPSED(view.seconds, Math.round(DICTATION_STOP_AT_MS / 1000))}</span>
           <span className="hps-voice-limit">{DICTATE_LIMIT_NOTE}</span>
           <button type="button" className="hps-voice-link" onClick={controller.cancel}>{DICTATE_CANCEL_LABEL}</button>
@@ -343,15 +404,7 @@ export function DictationNoticeView({ view, controller }: { view: View; controll
     case "working": return <p className="hps-voice-note" role="status">{DICTATE_WORKING}</p>;
     case "done": return <p className="hps-voice-note" role="status">{DICTATE_DONE}</p>;
     case "notice":
-      return (
-        <div className="hps-voice-note" role="status">
-          <span>{view.text}</span>
-          <span className="hps-voice-btns">
-            {view.retry && <button type="button" className="hps-voice-link" onClick={controller.retry}>{RETRY}</button>}
-            <button type="button" className="hps-voice-link" onClick={controller.dismiss}>{CLOSE}</button>
-          </span>
-        </div>
-      );
+      return <FailureNotice view={view} controller={controller} />;
     case "denied":
       return (
         <div className="hps-voice-note hps-voice-card" role="group" aria-labelledby="hps-voice-denied-title">
@@ -389,4 +442,49 @@ export function DictationNoticeView({ view, controller }: { view: View; controll
         </div>
       );
   }
+}
+
+const RECOVERY_LABEL: Record<DictationRecovery, string> = { resend: RECOVER_RESEND, speak_again: RECOVER_SPEAK_AGAIN, type: RECOVER_TYPE };
+
+/**
+ * D-012 / R-015: one failure line: the alert icon, the cause's one sentence and its one recovery action, with
+ * 닫기 as the quiet way out. Only "too short" goes away on its own (8 s), and not while focus is inside it.
+ */
+function FailureNotice({ view, controller }: { view: Extract<View, { kind: "notice" }>; controller: DictationController }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const ms = autoDismissMs(view.cause);
+    if (ms === null) return;
+    const timer = setTimeout(() => {
+      if (ref.current && ref.current.contains(document.activeElement)) return;
+      controller.dismiss();
+    }, ms);
+    return () => clearTimeout(timer);
+  }, [view, controller]);
+  return (
+    <div ref={ref} className="hps-voice-note hps-voice-failure" role="status" data-cause={view.cause}>
+      <ChatIcon kind="alert" size={20} />
+      <span className="hps-voice-failure-text">{view.text}</span>
+      <span className="hps-voice-btns">
+        {view.recovery && <button type="button" className="hps-voice-primary" data-recovery={view.recovery} onClick={controller.recover}>{RECOVERY_LABEL[view.recovery]}</button>}
+        <button type="button" className="hps-voice-link" onClick={controller.dismiss}>{CLOSE}</button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * D-010: the recording's input level, decorative (aria-hidden; the words carry the state). It follows the real
+ * RMS a few times a second; with reduced motion it is not drawn at all, so nothing moves.
+ */
+function LevelBar({ level }: { level: () => number | null }) {
+  const reduced = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [value, setValue] = useState<number | null>(() => (reduced ? null : level()));
+  useEffect(() => {
+    if (reduced) return;
+    const timer = setInterval(() => setValue(level()), 120);
+    return () => clearInterval(timer);
+  }, [level, reduced]);
+  if (reduced || value === null) return null;
+  return <span className="hps-voice-level" aria-hidden="true" data-level={value.toFixed(2)} style={{ ["--hps-voice-level" as string]: value.toFixed(2) }}><span /></span>;
 }
