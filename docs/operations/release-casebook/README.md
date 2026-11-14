@@ -122,6 +122,9 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-034 | `testDictationEditsDraftThenSendGetsReplyWithoutDesktop` |
 | BB-034 | `testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening` |
 | BB-035 | `testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend` |
+| BB-035 | `testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop` |
+| BB-035 | `testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped` |
+| BB-035 | `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary` |
 | BB-035 | `testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch` |
 | BB-036 | `testBackgroundStopsCaptureAndPreservesUnsentDraftAcrossRelaunch` |
 | BB-036 | `testFailedSendRetainsOutboxAndRetriesSameRequestAfterRelaunch` |
@@ -133,7 +136,11 @@ node scripts/release/select-cases.mjs --target ios --baseline <이전-소스-SHA
 | BB-037 | `testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch` |
 
 `hps-native-journey-evidence/1` 의 빌드·시뮬레이터 결과와 소스 SHA를 보존한다. 이 검사는 실제 앱의
-상태·저장 경로를 사용하지만 인증 서버·HTTP·음성 이벤트는 합성이다. 실기기, 실제 브라우저 로그인,
+상태·저장 경로를 사용하지만 인증 서버·HTTP·마이크 입력은 합성이다. 조건 주도 재생 검사는 실제
+delegate 진입을 사용하되 재생 완료 이벤트도 합성이다. `testRealKoreanPlaybackCompletionReachesNextCaptureBoundary`만
+실제 OS 한국어 음성 합성의 시작·완료를 기다리고, 다음 마이크 입력은 여전히 합성이다. 한국어 음성이나
+완료 callback이 없으면 실패로 남기며 합성 완료로 대체하지 않는다. 실제 오디오 입력 재시작의 증거는 아니다.
+실기기, 실제 브라우저 로그인,
 한국어 음성 인식은 따로 실행하기 전까지 `NOT_RUN` 이다. 실제 iPhone 실행은 빌드 번호·소스 SHA·
 iOS 버전·계정 이용 자격과 케이스별 스크린샷/관측·실패 이유를 별도 기록한다. 한 케이스의 일부만
 관측했으면 전체 PASS 로 합치지 않는다. 시뮬레이터 통과는 `status: 자동화됨` 으로 은퇴시키는
