@@ -7937,8 +7937,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return result;
   }
   /**
-   * The quarantine of one task goes with it: archived or moved to another activity. The handler does not wait for it,
-   * and it never throws or rejects:
+   * The quarantine of one task goes with it: archived or moved to another activity (a refused move throws before this,
+   * so it keeps it). The handler does not wait for the delete, but the task folder is renamed away before this returns control
+   * (purgeTaskQuarantine), so a new turn in a restored task writes into a fresh folder. It never throws or rejects:
    * the archive or move has already happened, and the task handler's own flow (its result, the rename undo, the
    * switch) must run exactly as without it (task-workspace-host). A host without global storage has nothing to purge.
    */

@@ -443,8 +443,7 @@ try {
     const end = send.indexOf('await this.endMemoryFolderGuard(streamId)');
     const restore = send.indexOf('await this.endTurnRestore(turnRestorePoint, streamId');
     assert.ok(end > 0 && end < restore, 'the guard ends in the turn finally, before the turn restore point closes');
-    assert.match(src, /msg\.type === 'taskArchive'\) \{ await store\.archiveTask\(msg\.taskId, expected\); void this\.purgeTaskMemoryQuarantine\(msg\.taskId\); \}/, 'an archived task loses its quarantine');
-    assert.match(src, /msg\.type === 'taskMove'\) \{ moved = await this\.moveTask\(store, msg\.id, msg\.destination, expected\); void this\.purgeTaskMemoryQuarantine\(msg\.id\); \}/, 'a moved task too');
+    // The archive and move purges are pinned by behaviour in test/memory-quarantine-purge.smoke.mjs (#4124), not by source text.
     assert.ok(src.includes('void pruneQuarantine(this.memoryQuarantineBase())'), 'retention applied at activation');
     // The editor-save watcher lives in memoryEditorSaves.ts (artifact provenance keeps save hooks out of the provider).
     const saves = fs.readFileSync(new URL('../src/memoryEditorSaves.ts', import.meta.url), 'utf8');
