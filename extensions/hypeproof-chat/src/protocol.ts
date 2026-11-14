@@ -155,6 +155,8 @@ export interface FileAttachmentPreview {
 export interface ChatConfig {
   // #3563 — true when the Chalk runtime verified this user as an instructor. The Studio chat then points to the Chalk tab. Absent otherwise.
   chalkInstructorTab?: true;
+  /** #4048 — true only in a rehearsal seat (a return is held and this window is the rehearsal folder). Absent otherwise. */
+  rehearsalSeat?: true;
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
   /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
@@ -864,6 +866,7 @@ export type WebviewMessage = (
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  | { type: "rehearsalSeatEnd" }
   // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
   // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the
   // lesson's own criteria are never part of it.
@@ -911,6 +914,8 @@ export type WebviewMessage = (
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
   | { type: "pageCardReveal"; turnId: string; path: string }
+  // CGP-ART-R-023 — 폴더에서 보기 on the deck PDF's saved notice; the host knows which file, the webview sends no path.
+  | { type: "deckPdfReveal" }
   // CGP-KNOW-D-021 — 열기 / 폴더에서 보기 on a stored "다운로드 완료" line of the open task; the host re-checks the file.
   | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
@@ -1101,7 +1106,7 @@ export type HostMessage = (
   // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
   | { type: "downloadLineNotice"; id: string; notice: string | null }
   | { type: "memoryWriteResult"; id: string; state: "undone" | "restored" | "refused"; notice: string | null }
-  | { type: "pageAttached"; label: string }
+  | { type: "pageAttached"; label: string; action?: PageNoticeAction }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
@@ -1246,3 +1251,6 @@ export interface LearningWikiPlan {
   /** Per session: the slides the deck skill drafts that session and the session's question. */
   sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
+
+/** CGP-ART-R-023 — one action on the inline page notice (the deck PDF's 폴더에서 보기). The host decides what it does. */
+export interface PageNoticeAction { kind: "deckPdfReveal"; label: string; name: string }

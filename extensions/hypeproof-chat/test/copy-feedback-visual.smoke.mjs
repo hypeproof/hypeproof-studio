@@ -6,6 +6,7 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {THEMES} from './lib/vscode-default-themes.mjs';
 import {chatPanelProps,chatConfig} from './sx-screen-fixtures.mjs';
 import {findChromium,launch} from './lib/headless-chromium.mjs';
+import {waitFor} from './lib/wait-for.mjs';
 const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Chromium required');console.log('NOT RUN copy feedback visual: no Chromium');process.exit(0);}
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'copy-assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
@@ -20,7 +21,9 @@ try{
   await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:800px"><div id="root"></div></div><script>window.__copyProps=${JSON.stringify(props)};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('synthetic denied')}}});</script><script>${script.outputFiles[0].text}</script></body></html>`,{width,height:900,dark});
   // Force the failure path: headless clipboard access differs by platform (denied on macOS, granted on Linux CI).
   await b.evaluate(`Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new Error('denied'))}})`);
-  await b.evaluate(`document.querySelector('[aria-label="코드 복사"]').focus();document.querySelector('[aria-label="코드 복사"]').click()`);await new Promise(r=>setTimeout(r,40));
+  await b.evaluate(`document.querySelector('[aria-label="코드 복사"]').focus();document.querySelector('[aria-label="코드 복사"]').click()`);
+  // The rejected clipboard write resolves after the click and the notice renders after that: poll for it.
+  await waitFor(b,`!!document.querySelector('.hps-codeblock-status')`,`${seat}/${dark?'dark':'light'}/${width}: copy failure notice`);
   const state=await b.evaluate(`(()=>{const e=document.querySelector('.hps-codeblock-status');const r=e.getBoundingClientRect(),outlet=e.closest('.hps-copy-toasts'),footer=e.closest('footer'),input=document.querySelector('textarea');return {width:r.width,font:getComputedStyle(e).fontSize,icon:!!e.querySelector('[data-icon=alert]'),bottom:r.bottom,footerBottom:footer?.getBoundingClientRect().bottom,outlet:!!outlet,inputBottom:input?.getBoundingClientRect().bottom,focus:document.activeElement?.getAttribute('aria-label'),role:document.querySelector('.hps-copy-live[aria-live=assertive]').textContent?'alert':'',liveEmptyPolite:document.querySelector('.hps-copy-live[aria-live=polite]').textContent==='',hiddenFromAT:outlet.getAttribute('aria-hidden')==='true',text:e.textContent,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth}})()`);
   assert.equal(state.role,'alert','failure is announced through the always-mounted alert region');assert.ok(state.liveEmptyPolite);assert.equal(state.hiddenFromAT,true,'the visual copy is not announced twice');assert.match(state.text,/복사하지 못했습니다/);assert.equal(state.visible,true);assert.equal(state.outlet,true);assert.ok(state.width<=360.1);assert.equal(state.font,'14px');assert.equal(state.icon,true);assert.ok(state.bottom<=state.footerBottom);assert.ok(state.bottom<=900);assert.ok(state.inputBottom<=state.bottom);assert.equal(state.focus,'코드 복사','feedback must not steal focus');
   if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/studio-${seat}-${width}-${dark?'dark':'light'}.png`,Buffer.from(shot.data,'base64'));}
@@ -30,11 +33,16 @@ try{
    assert.ok(capped.pane>400,'pane must be wider than the cap for this measurement to mean anything');assert.ok(capped.width>=359 && capped.width<=360.1,`long toast must sit at the 360px cap, got ${capped.width}`);
   }
   if(seat==='personal' && width===320 && !dark){
-   await b.evaluate(`paintCopy({...window.__copyProps,messages:Array.from({length:20},(_,i)=>({id:'many-'+i,role:'assistant',createdAt:i+1,content:'복사 대상 '+i}))})`);await new Promise(r=>setTimeout(r,40));
-   await b.evaluate(`document.querySelectorAll('[aria-label="답변 복사"]').forEach(button=>button.click())`);await new Promise(r=>setTimeout(r,60));
+   await b.evaluate(`paintCopy({...window.__copyProps,messages:Array.from({length:20},(_,i)=>({id:'many-'+i,role:'assistant',createdAt:i+1,content:'복사 대상 '+i}))})`);
+   // The 20 answers render after paintCopy returns. Clicking before that clicks nothing, and no notice ever appears.
+   await waitFor(b,`document.querySelectorAll('[aria-label="답변 복사"]').length===20`,'personal/light/320: 20 answer copy buttons');
+   await b.evaluate(`document.querySelectorAll('[aria-label="답변 복사"]').forEach(button=>button.click())`);
+   // Each rejected clipboard write resolves after its click and the toast outlet renders after that: poll for all 20 notices.
+   await waitFor(b,`(()=>{const outlet=document.querySelector('.hps-copy-toasts');return !!outlet&&Math.min(outlet.querySelectorAll('.hps-copy-toast').length,document.querySelectorAll('.hps-copy-live[aria-live=assertive] > span').length)===20})()`,'personal/light/320: 20 stacked copy failure notices');
    const stacked=await b.evaluate(`(()=>{const outlet=document.querySelector('.hps-copy-toasts'),r=outlet.getBoundingClientRect(),input=document.querySelector('textarea').getBoundingClientRect();return {errors:Math.min(outlet.querySelectorAll('.hps-copy-toast').length,document.querySelectorAll('.hps-copy-live[aria-live=assertive] > span').length),height:r.height,scroll:outlet.scrollHeight,inputTop:input.top,inputBottom:input.bottom}})()`);
    assert.equal(stacked.errors,20,'concurrent persistent errors are retained');assert.ok(stacked.height<=225.1 && stacked.scroll>stacked.height,'many errors scroll within a bounded outlet');assert.ok(stacked.inputTop>=0 && stacked.inputBottom<=900,'many errors cannot displace input offscreen');
-   await b.evaluate(`paintCopy({...window.__copyProps,messages:[]})`);await new Promise(r=>setTimeout(r,40));assert.equal(await b.evaluate(`document.querySelector('.hps-copy-feedback').textContent`),'','removed messages remove their notices');
+   await b.evaluate(`paintCopy({...window.__copyProps,messages:[]})`);
+   await waitFor(b,`document.querySelector('.hps-copy-feedback').textContent===''`,'personal/light/320: notices removed with their messages');assert.equal(await b.evaluate(`document.querySelector('.hps-copy-feedback').textContent`),'','removed messages remove their notices');
   }
  }
  console.log('PASS real ChatPanel copy failure visibility/alert, pane-bottom geometry, icon, 14px, width cap and focus in both seats/themes at320/800/1420');
