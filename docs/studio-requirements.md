@@ -9377,14 +9377,17 @@ catches what the checks above cannot see: a shell command that builds the path a
     It never shows memory content or a file name.
   - **Snapshot bounds (the store's own limits). Fail closed.** Every entry's name is listed, up to 10,000, so anything
     new the turn adds is always found and moved out. Contents are read for at most 250 entries, the store's memory-named
-    files first, and only up to the 16 KiB item size. An entry past that is tracked by name only: a change inside it
-    cannot be seen, and the turn says `기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.`.
+    files first, and only up to the 16 KiB item size. Every entry whose content was tracked at turn start is read again
+    at the end, so a flood of new files cannot push it out of the read set and hide a rewrite. An entry past the bound at
+    turn start is tracked by name only: a change inside it cannot be seen, and the turn says `기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.`.
     A file past the item size cannot be put back. It is left in place (it is never read as memory either), and the turn
     says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
   - **Studio's own changes during the turn win.** The journal keeps the state Studio left each file in, with its bytes up
     to the item size. A learner's save followed by a shell overwrite in the same turn puts back the learner's save, not
     the pre-turn version. An editor save is journaled from the bytes on disk, so a byte-order mark or CRLF line endings
     are not mistaken for a foreign write.
+  - **Junk names.** A new name the store would never read as memory (not a memory file name) is removed without a copy,
+    so a flood of them cannot fill the quarantine.
   - **Quarantine bounds.**
     - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
       with one folder per seat activity (a keyed hash of its scope) and per task.

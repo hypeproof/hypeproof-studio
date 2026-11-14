@@ -104,6 +104,28 @@ try {
     assert.equal(cr.unchecked, true, 'and the turn says some contents could not be checked');
   });
 
+  await t('a flood of new memory files cannot hide a rewrite of an item tracked at turn start; junk names leave no copies', async () => {
+    clearStudioMemoryJournal();
+    const root = path.join(top, 'flood'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'm-item.md'), '원래 기억\n');
+    const since = Date.now();
+    const before = await snapshotMemoryFolder(root);
+    assert.notEqual(before.get('m-item.md').digest, NAME_ONLY, 'content-tracked at turn start');
+    for (let i = 0; i < SNAPSHOT_MAX.files + 10; i++) fs.writeFileSync(path.join(memDir(root), `a${String(i).padStart(3, '0')}.md`), 'x');
+    for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(memDir(root), `.junk-${i}`), 'j');
+    fs.writeFileSync(path.join(memDir(root), 'm-item.md'), '몰래 바꾼 기억\n');
+    const after = await snapshotMemoryFolder(root);
+    assert.equal(after.get('m-item.md').digest, NAME_ONLY, 'the flood pushed the item out of the end read set');
+    const q = path.join(top, 'q-flood');
+    const r = await revertTurnChanges(root, before, since, q);
+    assert.equal(read(root, 'm-item.md'), '원래 기억\n', 'the rewrite is still put back');
+    assert.deepEqual(ls(memDir(root)), ['m-item.md'], 'every new file is gone');
+    assert.equal(r.failed, 0);
+    const copies = ls(q);
+    assert.equal(copies.some(n => n.includes('.junk-')), false, 'junk names are removed without a copy');
+    assert.equal(copies.length, SNAPSHOT_MAX.files + 10 + 1, 'the memory-named adds and the rewrite are kept aside');
+  });
+
   await t("the learner's save during the turn wins over the turn's later shell overwrite", async () => {
     clearStudioMemoryJournal();
     const root = path.join(top, 'save-then-shell'); fs.mkdirSync(memDir(root), { recursive: true });

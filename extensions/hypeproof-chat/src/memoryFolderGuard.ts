@@ -219,9 +219,16 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     // What the file should be: Studio's last state in the turn, else the state at turn start.
     const target: { digest: string | null; bytes: Buffer | null } | null = studio ? { digest: studio.digest, bytes: studio.bytes } : was ? { digest: was.digest, bytes: was.bytes } : null;
     const targetAbsent = studio ? studio.digest === null : !was;
-    // Read a name-only entry now when it matters (a new name, or one Studio changed).
+    // Read a name-only entry now when it matters: a new name, one Studio changed, or one whose content was tracked at turn
+    // start (a flood of new files must not push it out of the end read set and hide a rewrite).
     let current = now_;
-    if (current?.digest === NAME_ONLY && (!was || studio)) current = (await readEntry(path.join(dir, name))) ?? current;
+    if (current?.digest === NAME_ONLY && (!was || studio || was.digest !== NAME_ONLY)) current = (await readEntry(path.join(dir, name))) ?? current;
+    // A new name the store would never read as memory (not a memory file name) is removed without a copy: it cannot
+    // carry memory, and a flood of such names must not fill the quarantine.
+    if (!was && !studio && current && !memoryFileName(name)) {
+      try { await fs.unlink(path.join(dir, name)); result.reverted++; } catch { result.failed++; }
+      continue;
+    }
     if (!current && targetAbsent) { if (studio) result.kept++; continue; }
     if (current && target && !targetAbsent && current.digest === target.digest) { if (studio) result.kept++; continue; }
     // Unseen inside a name-only entry that existed at turn start and Studio did not touch: nothing to compare.

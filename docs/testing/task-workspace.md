@@ -425,6 +425,8 @@ drop of a stale message is a second layer.
 - **Bounds (fail closed):** a file over the item size is never read, is reported and is left in place. Past the read
   bound, stray files are tracked by name only, a planted memory file is still moved out, and the turn says some contents
   were not checked.
+- **Flood plus rewrite:** 260 new memory files that sort first, 30 junk names and a rewrite of an item tracked at turn
+  start: the rewrite is still put back, every new file is gone, junk names leave no copy.
 - **Studio's last state:** a learner's editor save, then a shell overwrite in the same turn, ends with the learner's
   save; the overwrite is quarantined. A BOM and CRLF file saved in the editor is journaled from disk and kept byte for
   byte.
@@ -446,7 +448,8 @@ Mutants each fail it:
 - the archive purge removed;
 - the journal's state ignored (the pre-turn version restored);
 - new names past the bound not moved;
-- the editor save journaled from the editor's text.
+- the editor save journaled from the editor's text;
+- a content-tracked item not read again at the end (the flood bypass).
 
 A real coach shell command and the packaged app are not run here.
 
