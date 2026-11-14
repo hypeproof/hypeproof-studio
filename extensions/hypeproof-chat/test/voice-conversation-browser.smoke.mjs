@@ -126,6 +126,8 @@ try {
  const blockedSends=calls.filter(c=>c.type==='sendMessage').length;
  const resumePoint=await b.evaluate('(()=>{const e=document.querySelector(".hps-voice-resume"),r=e.getBoundingClientRect();if(!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))throw Error("resume obscured");return{x:r.x+r.width/2,y:r.y+r.height/2}})()');
  await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...resumePoint});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...resumePoint});await drain();
+ // speak() is async: wait for the fourth utterance instead of reading it right after the press (verify-r004, 1/14 race).
+ await wait(async()=>(await spoken()).length===4,'manual resume utterance');
  assert.equal((await spoken()).length,4,'one deliberate manual resume plays the blocked answer');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-resume")'),false);
  await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,150));await drain();
