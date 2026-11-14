@@ -37,6 +37,7 @@ public class ConversationHistoryTest {
     @Rule public final org.junit.rules.TestName testName=new org.junit.rules.TestName();
     private File failureDirectory;
     private Throwable firstFailure;
+    private final JSONArray imeObservations=new JSONArray();
 
     // Espresso calls this before the exception unwinds into JUnit's @After.
     // TestWatcher.failed would run too late to observe the original activity.
@@ -54,7 +55,8 @@ public class ConversationHistoryTest {
                 app.onActivity(activity->{try {
                     state.put("activity",activity.getClass().getName()).put("activity_destroyed",activity.isDestroyed())
                         .put("activity_finishing",activity.isFinishing()).put("window_focus",activity.hasWindowFocus())
-                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility());
+                        .put("decor_visible",activity.getWindow().getDecorView().getVisibility())
+                        .put("ime",imeState(activity)).put("ime_observations",imeObservations);
                 }catch(Exception problem){throw new RuntimeException(problem);}});
             }catch(Throwable problem){state.put("activity_observation_error",problem.getClass().getName());}
             writeFailureJson("failure.json",state);
@@ -67,6 +69,7 @@ public class ConversationHistoryTest {
             }catch(Throwable problem){state.put("screenshot_error",problem.getClass().getName());}
             captureCommand("window.txt","timeout 3 dumpsys window",state);
             captureCommand("power.txt","timeout 3 dumpsys power",state);
+            captureCommand("input-method.txt","timeout 3 dumpsys input_method",state);
             captureCommand("recent-logcat.txt","timeout 3 logcat -d -b main -b system -b crash -t 150",state);
             state.put("capture_finished_ms",SystemClock.elapsedRealtime());writeFailureJson("failure.json",state);
         }catch(Throwable problem){Log.e("StudioFailureEvidence","Failure evidence capture failed: "+problem.getClass().getName());}
@@ -129,8 +132,30 @@ public class ConversationHistoryTest {
     private void ready()throws Exception{
         for(int i=0;i<100;i++){AtomicBoolean busy=new AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();return;}Thread.sleep(50);}throw new AssertionError("response did not settle");
     }
+    private JSONObject imeState(QuestionActivity activity)throws Exception{
+        View decor=activity.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();
+        List<TextView> texts=new ArrayList<>();collect(decor,texts);
+        TextView input=texts.stream().filter(v->"질문 대화 입력".contentEquals(v.getContentDescription()==null?"":v.getContentDescription())).findFirst().orElse(null);
+        JSONObject state=new JSONObject().put("elapsed_ms",SystemClock.elapsedRealtime()).put("window_focus",activity.hasWindowFocus())
+            .put("decor_layout_requested",decor.isLayoutRequested()).put("insets_present",insets!=null)
+            .put("ime_visible",insets!=null&&insets.isVisible(WindowInsets.Type.ime()))
+            .put("ime_bottom",insets==null?-1:insets.getInsets(WindowInsets.Type.ime()).bottom);
+        View focus=activity.getCurrentFocus();state.put("focused_view",focus==null?JSONObject.NULL:focus.getClass().getName());
+        if(input!=null){
+            int[] xy=new int[2];input.getLocationOnScreen(xy);Rect visible=new Rect();boolean shown=input.getGlobalVisibleRect(visible);
+            state.put("editor",new JSONObject().put("enabled",input.isEnabled()).put("focused",input.hasFocus())
+                .put("window_focus",input.hasWindowFocus()).put("attached",input.isAttachedToWindow()).put("layout_requested",input.isLayoutRequested())
+                .put("x",xy[0]).put("y",xy[1]).put("width",input.getWidth()).put("height",input.getHeight())
+                .put("visible",shown).put("visible_bounds",visible.toShortString()).put("text_length",input.length()));
+        }
+        return state;
+    }
+    private void observeIme(String phase){
+        app.onActivity(a->{try{imeObservations.put(imeState(a).put("phase",phase));}catch(Exception e){throw new AssertionError(e);}});
+    }
     private void awaitIme()throws Exception{
-        for(int i=0;i<100;i++){AtomicBoolean shown=new AtomicBoolean();app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();shown.set(insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});if(shown.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();return;}Thread.sleep(50);}throw new AssertionError("actual IME did not appear");
+        for(int i=0;i<100;i++){AtomicBoolean shown=new AtomicBoolean();app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();shown.set(insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});if(shown.get()){InstrumentationRegistry.getInstrumentation().waitForIdleSync();observeIme("visible");return;}Thread.sleep(50);}
+        AssertionError failure=new AssertionError("actual IME did not appear");captureFailure(failure);throw failure;
     }
     private void refresh(){onView(withContentDescription("메뉴")).perform(click());onView(withText("대화 다시 확인")).inRoot(isDialog()).perform(click());}
     private record Reading(String text,int y){}
@@ -183,10 +208,12 @@ public class ConversationHistoryTest {
     @Test public void latestActionAndDraftStayUsableAboveKeyboard()throws Exception{
         if(InstrumentationRegistry.getArguments().getString("largeDark", "false").equals("true")){assertTrue(context.getResources().getConfiguration().fontScale>=1.9f);assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK);}
         launch();onView(withContentDescription("대화 기록")).perform(swipeDown(),swipeDown());
-        String draft="키보드에서 쓰던 글\n둘째 줄";onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft),click());awaitIme();
+        String draft="키보드에서 쓰던 글\n둘째 줄";observeIme("before_replace_and_click");onView(withContentDescription("질문 대화 입력")).perform(replaceText(draft),click());observeIme("after_replace_and_click");awaitIme();
         onView(withText("최신 메시지")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;float d=v.getResources().getDisplayMetrics().density;assertTrue(v.getHeight()>=48*d);assertTrue(v.getWidth()>=48*d);assertTrue(v.createAccessibilityNodeInfo().isClickable());assertEquals("최신 메시지",v.createAccessibilityNodeInfo().getText().toString());});
         app.onActivity(a->{View decor=a.getWindow().getDecorView();WindowInsets insets=decor.getRootWindowInsets();assertNotNull(insets);assertTrue("actual IME is visible",insets.isVisible(WindowInsets.Type.ime()));});
         onView(withContentDescription("질문 대화 입력")).check(matches(isCompletelyDisplayed())).check(matches(withText(draft)));screenshot("android-history-keyboard");
+        File diagnostic=new File(context.getExternalFilesDir(null),"evidence/ime-observations.json");
+        Files.write(diagnostic.toPath(),imeObservations.toString(2).getBytes(StandardCharsets.UTF_8));
         onView(withText("최신 메시지")).perform(click());onView(withText(words(79))).check(matches(isDisplayed()));onView(withContentDescription("질문 대화 입력")).check(matches(withText(draft))).check(matches(hasFocus()));
         app.onActivity(a->{WindowInsets insets=a.getWindow().getDecorView().getRootWindowInsets();assertTrue("Latest keeps actual IME visible",insets!=null&&insets.isVisible(WindowInsets.Type.ime()));});assertEquals(draft,store.load("history-account").draft);assertEquals(0,posts.get());
     }
