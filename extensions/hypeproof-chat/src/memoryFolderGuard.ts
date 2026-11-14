@@ -12,7 +12,8 @@
 // recorded in the journal below and are left alone. Nothing here reads or sends memory text anywhere else.
 
 import { createHash } from "node:crypto";
-import { constants, promises as fs } from "node:fs";
+import { constants, promises as fs, renameSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import * as path from "node:path";
 import { MEMORY_FOLDER, MEMORY_LIMITS, memoryFileName, observeMemoryChanges } from "./activityMemory.ts";
 
@@ -187,6 +188,8 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
     const files: Array<{ file: string; at: number; size: number }> = [];
     for (const task of await fs.readdir(scopeDir).catch(() => [] as string[])) {
       const taskDir = path.join(scopeDir, task);
+      // A purge that did not finish (the app quit between the rename and the delete) leaves a tombstone: finish it.
+      if (task.startsWith(PURGE_TOMBSTONE_PREFIX)) { await fs.rm(taskDir, { recursive: true, force: true }).catch(() => undefined); continue; }
       for (const name of await fs.readdir(taskDir).catch(() => [] as string[])) {
         const file = path.join(taskDir, name);
         const stat = await fs.lstat(file).catch(() => null);
@@ -217,10 +220,19 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
   }
 }
 
-/** Removes one task's quarantine (the task was archived or moved). */
+/** A purged task folder renamed out of the way; never a task key (task keys cannot start with a dot). */
+export const PURGE_TOMBSTONE_PREFIX = ".purge-";
+/**
+ * Removes one task's quarantine (the task was archived or moved). The task folder is renamed to a tombstone
+ * SYNCHRONOUSLY, before this function first yields, and only the tombstone is deleted afterwards. A caller that does not
+ * await (the task handler) therefore cannot have a late delete remove copies a new turn writes into the same task folder
+ * right after an archive, a restore and a new turn (#4124). A tombstone left by a crash is swept by pruneQuarantine.
+ */
 export async function purgeTaskQuarantine(base: string, scopeKey: string, taskKey: string): Promise<void> {
   if (!/^[0-9a-f]{24}$/.test(scopeKey) || !/^[A-Za-z0-9_-]{1,128}$/.test(taskKey)) return;
-  await fs.rm(path.join(base, scopeKey, taskKey), { recursive: true, force: true }).catch(() => undefined);
+  const dir = path.join(base, scopeKey, taskKey), tomb = path.join(base, scopeKey, `${PURGE_TOMBSTONE_PREFIX}${taskKey}-${randomBytes(6).toString("hex")}`);
+  try { renameSync(dir, tomb); } catch { return; } // nothing there (or not ours to move): nothing to purge
+  await fs.rm(tomb, { recursive: true, force: true }).catch(() => undefined);
 }
 
 /**
