@@ -165,6 +165,29 @@ export function collapsedBlocksFrom(value: unknown): string[] {
   const keys = value.filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= COLLAPSED_KEY_MAX);
   return [...new Set(keys)].slice(-COLLAPSED_BLOCKS_MAX);
 }
+/**
+ * The seat the collapsed set belongs to. Classroom PCs are shared: a second learner signing in on the same window must not
+ * inherit the first learner's collapsed blocks. The order of preference:
+ * - the Service's seat id (`activity_id`, 64 hex);
+ * - the lesson capability receipt id, a hash of the service, the seat or credential, and the lesson;
+ * - the local activity id.
+ * Empty when none is known.
+ */
+export function collapseSeat(input: { activityId?: unknown; entryId?: unknown; localActivityId?: unknown }): string {
+  if (typeof input.activityId === "string" && /^[a-f0-9]{64}$/.test(input.activityId)) return "seat:" + input.activityId;
+  if (typeof input.entryId === "string" && input.entryId.length > 0 && input.entryId.length <= 128) return "entry:" + input.entryId;
+  if (typeof input.localActivityId === "string" && input.localActivityId.length > 0 && input.localActivityId.length <= 200) return "local:" + input.localActivityId;
+  return "";
+}
+export interface CollapsedState { seat: string; keys: string[] }
+/** The stored set, read back from webview state: `{ seat, keys }`. Anything else, including #4023's bare array, is null. */
+export function collapsedStateFrom(value: unknown): CollapsedState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as { seat?: unknown; keys?: unknown };
+  return typeof v.seat === "string" && v.seat.length <= 256 ? { seat: v.seat, keys: collapsedBlocksFrom(v.keys) } : null;
+}
+/** The collapsed keys this seat may see: only its own; another seat's set, or none, is empty. */
+export const collapsedFor = (state: CollapsedState | null, seat: string): string[] => (state && state.seat === seat ? state.keys : []);
 /** The set after 접기 (on) or 다시 보기 (off) for one block; newest last, bounded. */
 export function collapseBlock(keys: readonly string[], key: string, on: boolean): string[] {
   const rest = keys.filter((k) => k !== key);

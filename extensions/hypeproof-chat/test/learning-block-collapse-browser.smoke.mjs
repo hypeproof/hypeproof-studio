@@ -33,6 +33,9 @@ const content = weekFixture(3);
 content.steps = content.steps.map((s) => (s.id === 'build' ? { ...s, ui: 'decision_form' } : s));
 const config = (() => { const base = chatConfig(3); return { ...base, profile: { ...base.profile, lesson: { ...base.profile.lesson, content } } }; })();
 // The same lesson at another version: a new version starts with every block shown.
+// Two learners on one shared classroom PC: the same lesson, two Service seats (CGP-LEARN-R-011 (c) follow-up).
+const asSeat = (c) => ({ ...config, profile: { ...config.profile, activity_id: c.repeat(64) } });
+const seatA = asSeat('a'), seatB = asSeat('b');
 const nextVersion = { ...config, profile: { ...config.profile, lesson: { ...config.profile.lesson, version: config.profile.lesson.version + '-next', sha256: 'e'.repeat(64) } } };
 
 const bin = findChromium();
@@ -98,7 +101,7 @@ try {
     assert.deepEqual(col, { collapsed: true, text: `접은 자료: ${title}`, name: `다시 보기: ${title}`, words: '다시 보기', big: true, state: false, bodyHidden: true, surface: true, toggle: false }, `${tag}: collapsed row`);
     assert.equal(await ev('active()'), 'restore', `${tag}: focus moves to 다시 보기`);
     assert.equal(await ev('hostMsgs()'), before, `${tag}: menu and 접기 send nothing to the host`);
-    assert.equal(await ev('(window.__vs.lessonBlocksCollapsed||[]).length'), 1, `${tag}: one collapsed key in the webview state`);
+    assert.equal(await ev('((window.__vs.lessonBlocksCollapsed||{}).keys||[]).length'), 1, `${tag}: one collapsed key in the webview state`);
     checks += 4;
 
     // A re-mount (webview hidden and shown) keeps it collapsed. 다시 보기 by keyboard restores it.
@@ -108,7 +111,7 @@ try {
     const before1 = await ev('hostMsgs()');
     await ev(`card('criterion_form').querySelector('[data-block-restore]').focus()`);
     await press('Enter'); await settle();
-    assert.deepEqual(await ev(`[card('criterion_form').dataset.blockCollapsed===undefined, !!card('criterion_form').querySelector('.hp-material-state'), active(), (window.__vs.lessonBlocksCollapsed||[]).length]`), [true, true, 'menu-toggle', 0], `${tag}: restored, state line back, focus on the menu button, nothing left collapsed`);
+    assert.deepEqual(await ev(`[card('criterion_form').dataset.blockCollapsed===undefined, !!card('criterion_form').querySelector('.hp-material-state'), active(), ((window.__vs.lessonBlocksCollapsed||{}).keys||[]).length]`), [true, true, 'menu-toggle', 0], `${tag}: restored, state line back, focus on the menu button, nothing left collapsed`);
     assert.equal(await ev('hostMsgs()'), before1, `${tag}: 다시 보기 sends nothing to the host`);
     checks += 3;
 
@@ -143,11 +146,32 @@ try {
     // A new lesson version starts with every block shown, though this version still has a collapsed block.
     await ev(`card('decision_form').querySelector('[data-block-menu-toggle]').click()`); await settle();
     await ev(`card('decision_form').querySelector('[data-block-collapse]').click()`); await settle();
-    assert.equal(await ev('(window.__vs.lessonBlocksCollapsed||[]).length'), 2, `${tag}: two collapsed keys`);
+    assert.equal(await ev('((window.__vs.lessonBlocksCollapsed||{}).keys||[]).length'), 2, `${tag}: two collapsed keys`);
     await ev(`remount(${JSON.stringify(nextVersion)})`);
     await waitFor(`document.querySelector('[data-block-card]')`, `${tag} next version block`);
     assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: a new lesson version shows its blocks`);
     checks += 2;
+
+    // A shared classroom PC: learner A collapses a block, then learner B signs in on the same window (no reload). B sees every
+    // block, and A's set is cleared from the webview state rather than hidden, so A finds it shown again too.
+    const collapseCriterion = async () => {
+      await waitFor(`card('criterion_form')`, `${tag} criterion block`);
+      if (await ev(`card('criterion_form').querySelector('[data-block-toggle]').getAttribute('aria-expanded')==='false'`)) { await ev(`card('criterion_form').querySelector('[data-block-toggle]').click()`); await settle(); }
+      await ev(`card('criterion_form').querySelector('[data-block-menu-toggle]').click()`); await settle();
+      await ev(`card('criterion_form').querySelector('[data-block-collapse]').click()`); await settle();
+    };
+    // The seat before A (this lesson without a Service seat id) left blocks collapsed; A is another learner and sees none.
+    await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} learner A`); await settle();
+    assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: learner A does not inherit the previous seat's collapsed blocks`);
+    await collapseCriterion();
+    assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: learner A collapsed the block`);
+    await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} A again`);
+    assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: the same learner keeps it across a re-mount (control)`);
+    await ev(`remount(${JSON.stringify(seatB)})`); await waitFor(`card('criterion_form')`, `${tag} learner B`); await settle();
+    assert.deepEqual(await ev(`[document.querySelectorAll('[data-block-collapsed]').length, JSON.stringify(window.__vs.lessonBlocksCollapsed)]`), [0, JSON.stringify({ seat: 'seat:' + 'b'.repeat(64), keys: [] })], `${tag}: learner B sees every block; A's set is cleared`);
+    await ev(`remount(${JSON.stringify(seatA)})`); await waitFor(`card('criterion_form')`, `${tag} A after B`);
+    assert.equal(await ev(`document.querySelectorAll('[data-block-collapsed]').length`), 0, `${tag}: A's set did not survive B's sign-in`);
+    checks += 5;
   }
   console.log(`PASS learning-block-collapse-browser: ${checks} checks (light/dark, 800/1420 px)`);
 } finally { await browser.close(); }

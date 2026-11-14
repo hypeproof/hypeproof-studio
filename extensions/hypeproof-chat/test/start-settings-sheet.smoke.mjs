@@ -28,7 +28,7 @@ try {
   cases.push({ dark: true, width: 800, forced: true });
   for (const { dark, width, forced } of cases) for (const seat of ['adult', 'minor']) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(`<!doctype html><html data-surface="start" style="${vars}"><style>${css}</style><style>/* a classic 15px scrollbar, as on Linux CI: macOS overlay bars hid #3091 */html{overflow-y:scroll}::-webkit-scrollbar{width:15px}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.sent=[];window.acquireVsCodeApi=()=>({postMessage(m){window.sent.push(m)},getState(){},setState(){}});</script><script>${js}</script></body></html>`, { width, height: 900, dark, forcedColors: forced });
+    await b.load(`<!doctype html><html data-surface="start" style="${vars}"><style>${css}</style><style>/* a classic 15px scrollbar, as on Linux CI: macOS overlay bars hid #3091 */html{overflow-y:scroll}::-webkit-scrollbar{width:15px}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}"><div id="root"></div><script>window.sent=[];window.acquireVsCodeApi=()=>({postMessage(m){window.sent.push(m)},getState(){},setState(){}});</script><script>${js}</script></body></html>`, { width, height: 900, dark, forcedColors: forced, appReady: 'start' });
     const view = seat === 'adult' ? adultView : { ...adultView, advanced: false };
     await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',settings:${JSON.stringify(view)}}}}))`);
     const label = `${width}px ${dark ? 'dark' : 'light'}${forced ? ' forced' : ''} ${seat}`;
@@ -97,7 +97,7 @@ try {
     await until(b, `document.activeElement?.textContent==='설정'`, 'focus returns to 설정');
   }
   // The sheet draws the host's rows only: a view naming one row (and an unknown one) draws that row alone.
-  await b.load(`<!doctype html><html data-surface="start"><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.sent=[];window.acquireVsCodeApi=()=>({postMessage(m){window.sent.push(m)},getState(){},setState(){}});</script><script>${js}</script></body></html>`, { width: 800, height: 900 });
+  await b.load(`<!doctype html><html data-surface="start"><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.sent=[];window.acquireVsCodeApi=()=>({postMessage(m){window.sent.push(m)},getState(){},setState(){}});</script><script>${js}</script></body></html>`, { width: 800, height: 900, appReady: 'start' });
   await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'1.0.0',settings:${JSON.stringify({ ...adultView, rows: ['notices', 'unknown-row'] })}}}}))`);
   await until(b, `[...document.querySelectorAll('.studio-nav button')].some(x=>x.textContent==='설정')`, 'nav');
   await b.evaluate(`[...document.querySelectorAll('.studio-nav button')].find(x=>x.textContent==='설정').click()`);

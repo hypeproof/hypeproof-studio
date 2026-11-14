@@ -9,8 +9,13 @@ import CryptoKit
     nonisolated static var namespace: String { JourneyConfiguration.namespace }
     static var trace: String { JourneyTransport.store.trace() }
     static var responseStop: Bool { enabled && JourneyConfiguration.scenario.hasPrefix("response-stop") }
+    static var realPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-real" }
+    static var heldPlayback: Bool { enabled && JourneyConfiguration.scenario == "voice-playback-held" }
     static var longHistory: Bool { enabled && JourneyConfiguration.scenario == "long-history" }
+    static var logoutSync: Bool { enabled && JourneyConfiguration.scenario == "logout-sync" }
     static func advanceHistory() { if longHistory { JourneyTransport.store.advanceHistory() } }
+    static func holdNextHistory() { if logoutSync { JourneyTransport.store.armHistory() } }
+    static func releaseHistory() { if logoutSync { JourneyTransport.store.releaseHistory() } }
     static func voiceStartAttempt(mode: String, hasSelection: Bool, canSend: Bool, draftEmpty: Bool) {
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
@@ -75,7 +80,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "sign-in-expired", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
@@ -108,8 +113,9 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
             }
         } catch { client?.urlProtocol(self, didFailWithError: error); return }
         guard Self.store.holdHistory(request, id: historyID) else { complete(); return }
-        // Fail this fixture before ConversationService's 25-second timeout.
-        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + 20)
+        // UI-driven logout has several real controls before explicit release.
+        // Its DEBUG-only read budget is 90s; all other scenarios keep 20s/25s.
+        waitForSpeech(deadline: ProcessInfo.processInfo.systemUptime + (JourneyConfiguration.scenario == "logout-sync" ? 60 : 20))
     }
     private func waitForCancelAcknowledgement(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
@@ -135,7 +141,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     private func waitForSpeech(deadline: TimeInterval) {
         stopLock.lock(); let cancelled = stopped; stopLock.unlock()
         guard !cancelled else { Self.store.cancelHistory(historyID); return }
-        if Self.store.historyMayFinish() { complete(historyOutcome: .speech); return }
+        if Self.store.historyMayFinish() { complete(historyOutcome: JourneyConfiguration.scenario == "logout-sync" ? .explicitRelease : .speech); return }
         if ProcessInfo.processInfo.systemUptime >= deadline {
             complete(historyOutcome: .timeout); return
         }
@@ -171,7 +177,7 @@ private final class JourneyTransport: URLProtocol, @unchecked Sendable {
     }
 }
 
-private enum JourneyHistoryOutcome { case speech, timeout }
+private enum JourneyHistoryOutcome { case speech, explicitRelease, timeout }
 
 private struct JourneyAcceptedTurn: Codable {
     let id: String
@@ -211,6 +217,9 @@ private final class JourneyStore: @unchecked Sendable {
     private var value: JourneySnapshot
     private var activeHistoryReads: Set<UUID> = []
     private var speechDelivered = false
+    private var historyArmed = false
+    private var historyReleased = false
+    private var logoutDuringHistory = 0
     private var historyBarrierTimeouts = 0
     private var historyBarrierCompletions = 0
     private var historyBarrierCancellations = 0
@@ -223,9 +232,10 @@ private final class JourneyStore: @unchecked Sendable {
     }
     private var failedTurns: [JourneyAcceptedTurn] { (value.failed.map { [$0] } ?? []) + (value.additionalFailures ?? []) }
     private var historyAccount: Int { value.historyAccount ?? 1 }
-    private var sessionID: String { JourneyConfiguration.scenario == "long-history" ? "journey-session-\(historyAccount)" : "journey-session" }
-    private var accessToken: String { JourneyConfiguration.scenario == "long-history" ? "journey-access-\(historyAccount)" : "journey-access" }
-    private var accountID: String { JourneyConfiguration.scenario == "long-history" ? "journey-account-\(historyAccount)" : "journey-account" }
+    private var switchesAccounts: Bool { ["long-history", "logout-sync"].contains(JourneyConfiguration.scenario) }
+    private var sessionID: String { switchesAccounts ? "journey-session-\(historyAccount)" : "journey-session" }
+    private var accessToken: String { switchesAccounts ? "journey-access-\(historyAccount)" : "journey-access" }
+    private var accountID: String { switchesAccounts ? "journey-account-\(historyAccount)" : "journey-account" }
     private func seedHistory() {
         value.accepted = (1...40).map { number in
             JourneyAcceptedTurn(id: "history-\(historyAccount)-\(number)", text: "Account \(historyAccount) thought \(number). I am saving this question to continue later.")
@@ -254,6 +264,8 @@ private final class JourneyStore: @unchecked Sendable {
             "history_barrier_timeouts": historyBarrierTimeouts,
             "history_barrier_completions": historyBarrierCompletions,
             "history_barrier_cancellations": historyBarrierCancellations,
+            "logout_requests": value.paths.filter { $0 == "POST /v1/auth/logout" }.count,
+            "logout_during_history": logoutDuringHistory,
             "physical_device": "NOT_RUN", "live_authentication": "NOT_RUN", "live_asr": "NOT_RUN"]
         return String(data: (try? JSONSerialization.data(withJSONObject: trace, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
     }
@@ -285,18 +297,28 @@ private final class JourneyStore: @unchecked Sendable {
         lock.lock(); defer { save(); lock.unlock() }
         guard request.httpMethod == "GET", request.url?.path == "/v1/me/reflection" else { return false }
         value.historyReads += 1
-        guard JourneyConfiguration.scenario == "queued-voice", value.historyReads == 2 else { return false }
+        let queuedVoice = JourneyConfiguration.scenario == "queued-voice" && value.historyReads == 2
+        let logout = JourneyConfiguration.scenario == "logout-sync" && historyArmed
+        guard queuedVoice || logout else { return false }
+        if logout { historyArmed = false; historyReleased = false }
         activeHistoryReads.insert(id); value.delayedHistoryReads += 1
         return true
     }
     func historyMayFinish() -> Bool {
-        lock.lock(); defer { lock.unlock() }; return speechDelivered
+        lock.lock(); defer { lock.unlock() }
+        return JourneyConfiguration.scenario == "logout-sync" ? historyReleased : speechDelivered
+    }
+    func armHistory() {
+        lock.lock(); defer { lock.unlock() }; historyArmed = true
+    }
+    func releaseHistory() {
+        lock.lock(); defer { lock.unlock() }; historyReleased = true
     }
     func finishHistory(_ id: UUID, outcome: JourneyHistoryOutcome) {
         lock.lock(); defer { lock.unlock() }
         guard activeHistoryReads.remove(id) != nil else { return }
         switch outcome {
-        case .speech: historyBarrierCompletions += 1
+        case .speech, .explicitRelease: historyBarrierCompletions += 1
         case .timeout: historyBarrierTimeouts += 1
         }
     }
@@ -378,7 +400,7 @@ private final class JourneyStore: @unchecked Sendable {
             ]
             let assistantMessage: [String: Any] = [
                 "id": "answer-" + turn.id, "role": "assistant",
-                "content": JourneyConfiguration.scenario == "long-history" ? "Account \(historyAccount) answer \(index + 1). What would you like to try next? This saved reply stays with its own conversation." : "What small change would make tomorrow better?",
+                "content": JourneyConfiguration.scenario == "long-history" ? "Account \(historyAccount) answer \(index + 1). What would you like to try next? This saved reply stays with its own conversation." : (JourneyConfiguration.scenario == "voice-playback-real" ? "내일은 어떤 작은 일을 해 보고 싶나요?" : "What small change would make tomorrow better?"),
                 "created_at": (index * 2 + 2 + failureOffset) * 1000,
             ]
             messages.append(userMessage)
@@ -417,6 +439,11 @@ private final class JourneyStore: @unchecked Sendable {
             guard actual == value.challenge else { return (400, ["error": "invalid_grant"]) }
             return (200, ["access_token": accessToken, "refresh_token": String(repeating: "c", count: 64), "expires_in": 3600, "session_id": sessionID])
         case ("POST", "/v1/auth/logout"):
+            if JourneyConfiguration.scenario == "logout-sync" {
+                guard request.value(forHTTPHeaderField: "Authorization") == "Bearer " + accessToken else { return (401, ["error": "account_required"]) }
+                if !activeHistoryReads.isEmpty { logoutDuringHistory += 1 }
+                value.historyAccount = historyAccount == 1 ? 2 : 1
+            }
             if JourneyConfiguration.scenario == "long-history" {
                 value.historyAccount = historyAccount + 1; seedHistory()
             }
