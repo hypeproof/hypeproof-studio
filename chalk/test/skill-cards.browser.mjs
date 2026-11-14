@@ -181,7 +181,7 @@ try {
     checks += 1 + g.h.length + g.nav.length + g.summ.length;
 
     // 5a. No cards: no key, never [].
-    await ev(`${clearCard(1)}${clearCard(3)}return 0`);
+    await ev(`${clearCard(1)}${clearCard(2)}${clearCard(3)}return 0`);
     const none = await trySave();
     assert.ok(none.saved && !('skill_cards' in none.saved), `${width}px: no cards send no skill_cards key`);
     // 5b. An older Service: the section and its nav hide, and no key is sent even with a card typed.
