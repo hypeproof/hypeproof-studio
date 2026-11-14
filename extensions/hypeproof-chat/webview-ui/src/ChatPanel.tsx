@@ -95,6 +95,7 @@ import { LessonStepPanel } from './LessonStepPanel';
 import { GoalStatusBar } from './GoalStatusBar';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { collapseSeat } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
@@ -1991,6 +1992,7 @@ export function ChatPanel(props: Props) {
               <p className="hp-rail-lesson-note">안내를 읽은 것만으로 이 단계가 끝나지는 않습니다. 직접 만들고 확인한 기록이 남아야 합니다.</p>
             </details>
             <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
+              seat={collapseSeat({ activityId: config.profile?.activity_id, entryId: config.lessonCapabilityEntry?.id, localActivityId: config.activity?.id })}
               work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
