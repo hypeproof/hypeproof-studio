@@ -9456,6 +9456,14 @@ and [journey verification](testing/native-mobile-growth.md). This is source work
 actual provider sign-in, physical audio and distributed-package acceptance must
 be reported separately. Existing desktop execution remains unchanged.
 
+Studio #4093 makes personal-question readiness independent of desktop-list
+latency, preserves drafts through bounded read failures, and keeps cancellation
+eligible for ordinary recovery. Empty speech results preserve earlier recognized
+words; bounded automatic recapture never sends an empty turn, and Stop cancels
+pending continuation. Verified callback expiry is tested separately from network
+failure. These additions refine MFR-01–05 and retain the same account, outbox and
+existing desktop contracts; native and physical evidence remain separate.
+
 Every escaped user failure follows the same delivery loop: retain the observed
 version and failure (or mark the installed version unknown), add its requirement
 and release-casebook scenario, reproduce the failed boundary, fix it, run the

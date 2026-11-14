@@ -217,7 +217,20 @@ public final class ConversationService: @unchecked Sendable {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
-        let (data, response) = try await session.data(for: req)
+        guard req.timeoutInterval.isFinite, req.timeoutInterval > 0, req.timeoutInterval <= 86_400 else { throw SyncFailure.invalidResponse }
+        // URLRequest's timeout is an idle timeout: a response that keeps sending
+        // bytes can otherwise hold login/history indefinitely. Own one request
+        // and cancel it when the same elapsed deadline expires; never retry it.
+        let request = req
+        let (data, response) = try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+            group.addTask { [session] in try await session.data(for: request) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(request.timeoutInterval * 1_000_000_000))
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
         guard let http = response as? HTTPURLResponse, data.count <= 5_000_000 else { throw SyncFailure.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -241,6 +254,9 @@ public final class ConversationService: @unchecked Sendable {
         let (data, _) = try await request("/v1/auth/native/exchange", method: "POST", body: ["code": code, "code_verifier": proof.verifier, "redirect_uri": NativeAccountProof.redirectURI])
         let value = try JSONDecoder().decode(AccountTokens.self, from: data)
         try value.validate(); return value
+    }
+    public func exchangeNativeSignIn(callback: URL, proof: NativeAccountProof) async throws -> AccountTokens {
+        try await exchangeNativeSignIn(code: proof.authorizationCode(from: callback), proof: proof)
     }
     public func pollSignIn(_ device: String) async throws -> AccountTokens? {
         let (data, status) = try await request("/v1/auth/device/poll", method: "POST", body: ["device_code": device])

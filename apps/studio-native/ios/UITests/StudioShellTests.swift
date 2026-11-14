@@ -291,6 +291,111 @@ final class StudioJourneyTests: XCTestCase {
         XCTAssertEqual(result["submitted_texts"] as? [String], ["I want to make time for learning"])
         try evidence("journey-first-answer", app: app)
     }
+    @MainActor private func waitForTraceCount(_ key: String, atLeast count: Int, in app: XCUIApplication) throws -> [String: Any] {
+        let node = diagnostic("nativeJourneyTrace", in: app)
+        let observed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = node.value as? String,
+                  let value = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
+            return (value[key] as? Int ?? 0) >= count
+        }, object: node)
+        XCTAssertEqual(XCTWaiter.wait(for: [observed], timeout: 10), .completed, "Observe the actual request boundary before judging readiness.")
+        return try trace(app)
+    }
+    @MainActor func testPersonalQuestionReadyAndSendWhileDesktopListIsHeld() throws {
+        let app = launch("desktop-list-held")
+        let words = "One small next step"
+        let input = field(app); input.tap(); input.typeText(words)
+        signIn(app)
+        let held = try waitForTraceCount("desktop_list_starts", atLeast: 1, in: app)
+        XCTAssertEqual(held["held_desktop_lists"] as? Int, 1)
+        XCTAssertEqual(held["desktop_list_cancellations"] as? Int, 0)
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5), "A held desktop list must not keep the personal conversation checking.")
+        XCTAssertEqual(field(app).value as? String, words)
+        let send = app.buttons["sharedSend"]; enabled(send)
+        send.tap(); answer(app)
+        let after = try trace(app)
+        XCTAssertEqual(after["submitted_while_desktop_list_held"] as? Int, 1, "The actual POST must start before the unrelated GET settles.")
+        XCTAssertEqual(after["submitted_texts"] as? [String], [words])
+        XCTAssertEqual((after["submitted_ids"] as? [String])?.count, 1)
+        XCTAssertEqual(after["accepted_turns"] as? Int, 1)
+        XCTAssertEqual((after["paths"] as? [String] ?? []).filter { $0 == "POST /v1/auth/native/exchange" }.count, 1)
+        XCTAssertFalse(app.staticTexts["sharedError"].exists)
+        XCTAssertFalse(app.buttons["linkDesktop"].exists)
+        let next = "Keep this next draft"
+        let followup = field(app); followup.tap(); followup.typeText(next)
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, next)
+        XCTAssertFalse(app.buttons["linkDesktop"].exists)
+        let restored = try trace(app)
+        XCTAssertEqual(restored["submitted_texts"] as? [String], [words])
+        XCTAssertEqual(restored["browser_callbacks"] as? Int, 1)
+        try evidence("journey-personal-ready-desktop-list-held", app: app)
+    }
+    @MainActor func testHistoryTimeoutWaitsForExplicitRetryAndPreservesDraft() throws {
+        let app = launch("history-timeout")
+        let words = "Keep my question while offline"
+        let input = field(app); input.tap(); input.typeText(words)
+        let login = app.buttons["linkDesktop"]; enabled(login); login.tap()
+        _ = try waitForTraceCount("history_timeout_failures", atLeast: 1, in: app)
+        let error = app.staticTexts["sharedError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertFalse(error.label.contains("로그인 시간이 지났어요"))
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["linkDesktop"].exists)
+        XCTAssertEqual(field(app).value as? String, words)
+        XCTAssertTrue(field(app).isEnabled)
+        let retry = app.buttons["retryConversationSync"]; enabled(retry)
+        let before = try trace(app)
+        XCTAssertEqual(before["history_reads"] as? Int, 1)
+        let node = diagnostic("nativeJourneyTrace", in: app)
+        let repoll = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let text = node.value as? String,
+                  let state = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return false }
+            return (state["history_reads"] as? Int ?? 0) > 1
+        }, object: node)
+        repoll.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [repoll], timeout: 5.5), .completed, "A real error remains idle across the existing four-second polling interval.")
+        XCTAssertEqual(try trace(app)["history_reads"] as? Int, 1)
+        retry.tap()
+        _ = try waitForTraceCount("history_reads", atLeast: 2, in: app)
+        XCTAssertTrue(error.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(field(app).value as? String, words)
+        enabled(app.buttons["sharedSend"])
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], [])
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, words)
+        XCTAssertFalse(app.buttons["linkDesktop"].exists)
+        let restored = try trace(app)
+        XCTAssertEqual(restored["submitted_ids"] as? [String], [])
+        XCTAssertEqual(restored["browser_callbacks"] as? Int, 1)
+        XCTAssertEqual((restored["paths"] as? [String] ?? []).filter { $0 == "POST /v1/auth/native/exchange" }.count, 1)
+        try evidence("journey-history-timeout-explicit-retry", app: app)
+    }
+    @MainActor func testCancelledHistoryStillAllowsTheNextOrdinaryPoll() throws {
+        // Transport cancellation coverage, not a claim that this synthetic
+        // request reproduces an actual scene background/foreground ordering.
+        let app = launch("history-cancelled")
+        let words = "Keep my thought through cancellation"
+        let input = field(app); input.tap(); input.typeText(words)
+        let login = app.buttons["linkDesktop"]; enabled(login); login.tap()
+        _ = try waitForTraceCount("history_cancellation_failures", atLeast: 1, in: app)
+        XCTAssertFalse(app.staticTexts["sharedError"].exists)
+        XCTAssertFalse(app.buttons["linkDesktop"].exists)
+        let result = try waitForTraceCount("history_reads", atLeast: 2, in: app)
+        let syncing = app.descendants(matching: .any).matching(identifier: "sharedSyncing").firstMatch
+        XCTAssertTrue(syncing.waitForNonExistence(timeout: 5))
+        enabled(app.buttons["sharedSend"])
+        XCTAssertEqual(field(app).value as? String, words)
+        XCTAssertFalse(app.staticTexts["sharedError"].exists)
+        XCTAssertEqual(result["history_cancellation_failures"] as? Int, 1)
+        XCTAssertEqual(result["submitted_ids"] as? [String], [])
+        XCTAssertEqual(result["browser_callbacks"] as? Int, 1)
+        XCTAssertEqual((result["paths"] as? [String] ?? []).filter { $0 == "POST /v1/auth/native/exchange" }.count, 1)
+        try evidence("journey-history-cancellation-auto-recovery", app: app)
+    }
     @MainActor func testDictationEditsDraftThenSendGetsReplyWithoutDesktop() throws {
         let app = launch("first-answer"); signIn(app)
         let input = field(app); input.tap(); input.typeText("My existing thought")
@@ -890,16 +995,37 @@ final class StudioJourneyTests: XCTestCase {
         let input = field(app); input.tap(); input.typeText("Keep this thought even when login fails")
         let start = app.buttons["linkDesktop"]; enabled(start); start.tap()
         XCTAssertTrue(app.staticTexts["sharedError"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["sharedError"].label, "로그인 시간이 지났어요. 다시 시작해 주세요.", "A state-validated expiry callback, not a generic network timeout, must exercise this branch.")
         enabled(start); XCTAssertFalse(app.buttons["accountCancel"].exists)
         XCTAssertEqual(field(app).value as? String, "Keep this thought even when login fails")
         XCTAssertTrue(field(app).isEnabled)
         let result = try trace(app)
         XCTAssertEqual(result["accepted_turns"] as? Int, 0)
+        XCTAssertEqual(result["browser_callbacks"] as? Int, 1)
         XCTAssertFalse((result["paths"] as? [String] ?? []).contains("POST /v1/auth/native/exchange"))
         app.terminate(); app.launch()
         XCTAssertEqual(field(app).value as? String, "Keep this thought even when login fails")
         XCTAssertEqual(try trace(app)["accepted_turns"] as? Int, 0)
         try evidence("journey-login-failure", app: app)
+    }
+    @MainActor func testSignInNetworkTimeoutIsNotPresentedAsExpiredLogin() throws {
+        let app = launch("sign-in-network-failure")
+        let words = "Keep this thought after a network failure"
+        let input = field(app); input.tap(); input.typeText(words)
+        let login = app.buttons["linkDesktop"]; enabled(login); login.tap()
+        let error = app.staticTexts["sharedError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertFalse(error.label.contains("로그인 시간이 지났어요"))
+        enabled(login); XCTAssertFalse(app.buttons["accountCancel"].exists)
+        XCTAssertEqual(field(app).value as? String, words)
+        let result = try trace(app)
+        XCTAssertEqual(result["browser_callbacks"] as? Int, 0)
+        XCTAssertEqual(result["submitted_ids"] as? [String], [])
+        XCTAssertFalse((result["paths"] as? [String] ?? []).contains("POST /v1/auth/native/exchange"))
+        app.terminate(); app.launch()
+        XCTAssertEqual(field(app).value as? String, words)
+        XCTAssertEqual(try trace(app)["submitted_ids"] as? [String], [])
+        try evidence("journey-login-network-failure-not-expiry", app: app)
     }
     @MainActor func testFirstUseLargeTextDarkAndKeyboardKeepComposerReachable() throws {
         let app = launch("first-answer", arguments: ["--journey-dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
