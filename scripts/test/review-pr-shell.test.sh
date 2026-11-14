@@ -912,7 +912,7 @@ else
   fail "85b: a value other than 1 dropped --inmemory-secrets"
 fi
 OPT_OUT="$(persist_flags 1)"
-if [[ "$OPT_OUT" != *"--inmemory-secrets"* ]] && [[ "$OPT_OUT" == *"NOTE: HPS_REVIEW_PERSIST_SECRETS=1 keeps the Dev app secrets on disk"* ]] && [[ "$OPT_OUT" == *"login keychain password"* ]]; then
+if [[ "$OPT_OUT" != *"--inmemory-secrets"* ]] && [[ "$OPT_OUT" == *"NOTE: HPS_REVIEW_PERSIST_SECRETS=1 keeps the Dev app secrets on disk"* ]] && [[ "$OPT_OUT" == *"login keychain password"* ]] && [[ "$OPT_OUT" == *"Allow once; do not delete the HypeProof Studio Safe Storage item."* ]]; then
   ok "85c: HPS_REVIEW_PERSIST_SECRETS=1 drops --inmemory-secrets and prints one English keychain line"
 else
   fail "85c: opt-in does not drop the flag or the keychain NOTE is missing"
