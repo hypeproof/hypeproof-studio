@@ -72,6 +72,25 @@ final class StudioShellTests: XCTestCase {
         reflection.tap()
         XCTAssertTrue(app.navigationBars["생각 정리"].waitForExistence(timeout: 5))
     }
+    @MainActor private func dragNotebookDown(_ app: XCUIApplication, phase: String) {
+        let header = app.navigationBars["기기 기록"]
+        guard header.isHittable else { XCTFail("The notebook header must be hittable before the single drag."); return }
+        let window = app.windows.firstMatch, windowFrame = window.frame
+        let start = header.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        let startPoint = start.screenPoint, endPoint = end.screenPoint
+        guard windowFrame.height > 0, windowFrame.contains(startPoint), windowFrame.contains(endPoint),
+              endPoint.y - startPoint.y >= windowFrame.height * 0.5 else {
+            XCTFail("The notebook drag must travel downward through at least half of the visible window without leaving it."); return
+        }
+        let geometry = XCTAttachment(string: "window=\(windowFrame); header=\(header.frame); start=\(startPoint); end=\(endPoint)")
+        geometry.name = "notebook-\(phase)-drag-geometry"; geometry.lifetime = .keepAlways; add(geometry)
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "notebook-\(phase)-before-drag"; before.lifetime = .keepAlways; add(before)
+        start.press(forDuration: 0.1, thenDragTo: end)
+        let after = XCTAttachment(screenshot: app.screenshot())
+        after.name = "notebook-\(phase)-after-drag"; after.lifetime = .keepAlways; add(after)
+    }
     @MainActor func testNativeCaptureConfirmAndRelaunch() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -126,7 +145,7 @@ final class StudioShellTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["기기 기록"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["retryNotebookSave"].exists)
         // A real sheet gesture must not discard the only in-memory copy either.
-        app.navigationBars["기기 기록"].swipeDown()
+        dragNotebookDown(app, phase: "unsaved")
         XCTAssertTrue(app.navigationBars["기기 기록"].exists)
         app.buttons["localNotebookMenu"].tap(); app.buttons["전체 기록 내보내기"].tap()
         let closeShare = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Close", "닫기")).firstMatch
@@ -162,7 +181,7 @@ final class StudioShellTests: XCTestCase {
         XCTAssertFalse(app.buttons["stopVoice"].exists)
         XCTAssertEqual(app.webViews.count, 0)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "native-iphone-intent"; shot.lifetime = .keepAlways; add(shot)
-        app.navigationBars["기기 기록"].swipeDown()
+        dragNotebookDown(app, phase: "saved")
         XCTAssertTrue(app.staticTexts["firstQuestion"].waitForExistence(timeout: 5), "A saved notebook must still support ordinary sheet dismissal.")
     }
 }
