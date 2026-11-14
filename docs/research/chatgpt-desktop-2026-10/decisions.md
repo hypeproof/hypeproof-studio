@@ -2367,3 +2367,67 @@ Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend
   - The sheet closes first, so the native folder picker is not under a modal.
 - **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
 
+## CGP-KNOW-R-028 / CGP-KNOW-D-028: per-task memory switches (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Task memory switches" (REQ-STUDIO-TASK-MEMORY-SWITCHES).
+
+- **Place (agent choice).** The switches sit in the personal settings dialog, under the memory list, not in the rail's
+  per-task menu. That menu is a `role="menu"` holding only `옮기기`, and native checkboxes do not belong in a menu. The
+  dialog already shows the activity's memory, and DES-KNOW-46 asks for native checkboxes with visible labels.
+- **Defaults (agent choice).** Both are on, which is today's behaviour. DEC-01 keeps memory always on, and no profile key
+  serves per-task defaults, so none is invented. A served default can be read later without changing the ledger.
+- **Lock (agent choice).** "쓰기 locks after the first send" is read as: once the task has any message. The host decides
+  it from the task's message count, and the webview cannot unlock it.
+- **Keep off covers:** the `remember` tool, the one memory write path, and the SDK runtime's file tools aimed at
+  `.hypeproof/memory/`.
+- **Shell (agent choice).** The SDK runtime also denies any shell command that names `.hypeproof` while keep or use is
+  off. This is a coarse, deny-only check, chosen over parsing shell syntax.
+- **Path check (verifier should-fix).** File-tool targets are compared after the real path of their deepest existing
+  folder is resolved, with case folded on macOS and Windows, so case variants and symlinked folders count.
+- **Read side (verifier should-fix).** With use off, the SDK's `Read`, `Grep`, `Glob` and `NotebookRead` are denied on
+  the memory folder or on a pattern that names `.hypeproof`.
+- **Known gaps (agent choice: state them rather than claim more).**
+  - Write side: quote or escape splitting, interpreter one-liners, names built at run time, the local runtime's shell,
+    and a `Write` through a dangling symlink. These are covered once #4059 (#4014's turn-end check) lands.
+  - Read side: the same shell forms, ancestor searches whose pattern does not name the folder, the local runtime. These
+    stay open, and the row stays partially met for reads.
+- **Storage.** `workspaceState`, booleans per scope and task. Nothing leaves the device.
+- **Seats.** Minors on personal and trial activities get the same switches, because memory is on for them too (DEC-02).
+  Class, lesson and instructor seats have no memory store and so no switches.
+- Confirmed by Jay: no.
+
+## #4014: turn-end memory-folder check for keep-off tasks (2026-11-14, agent-selected)
+
+Closes the shell gap left by CGP-KNOW-R-028 without a policy change. It is host-side only, and it builds on the switches.
+
+- **When.** Only turns that begin with keep off: a snapshot at turn start and a compare in the turn's own `finally`,
+  for every runtime.
+- **What happens to changes (agent choice).** Nothing is deleted:
+  - additions are moved into the extension's global storage (`memory-quarantine/<scope hash>/`);
+  - changes are put back, with the turn's version quarantined;
+  - deletions are restored from the snapshot.
+  A put-back is written beside the file and renamed over it, never left half-written.
+- **Whose change (agent choice).** Every `ActivityMemory` change is journaled synchronously, and so is the learner's
+  editor save of a memory file. Those are left alone; everything else in a keep-off turn is attributed to the turn.
+  No question is asked, because the journal already covers every path Studio itself writes through.
+- **Snapshot bounds (verifier should-fix: fail closed).** Every name is listed, up to 10,000, so new names are always
+  moved out. Contents are read for 250 entries, memory-named first, up to the item size; the rest are tracked by name
+  only (told in the turn).
+- **Studio's last state wins (verifier should-fix).** The journal keeps bytes, so a learner's save survives a later
+  shell overwrite in the same turn. Editor saves are journaled from disk (BOM and CRLF safe).
+- **Not covered, named:** background processes the turn started that write after it ended.
+- **Quarantine bounds (agent choice, coordinator's privacy constraint).**
+  - It is scoped per OS account (global storage), per seat activity (a keyed hash of its scope) and per task, with modes
+    0700/0600.
+  - Three pools per activity (verifier rounds 5 and 6). The learner's own displaced bytes (`orig-…`) are protected: never
+    removed by count, at most 1,000, and at that cap an item is left and reported rather than an original dropped (bytes
+    that exist nowhere else are kept past it). Copies of what the turn wrote: 200 and that many items' bytes, oldest
+    first. Moved files: 200, oldest first. Equal stamps are ordered by name.
+  - A stamp more than 60 s ahead counts as oldest, one within 60 s is clamped to now. Known residual, not handled: a
+    real entry written while the clock ran more than 60 s fast is removed at the next prune after the clock is corrected.
+  - It is kept seven days at most, applied at every check and at activation.
+  - A task's folder is purged when the task is archived or moved.
+  - It is never uploaded or logged.
+  - It is named in the SHELL-R-027 deletion docs as a local copy that a deletion request does not reach.
+- **The line names only the count:** `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`
+- Confirmed by Jay: no.

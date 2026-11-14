@@ -108,6 +108,13 @@ export function personalMemoryActivity(
 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
+/**
+ * CGP-KNOW-R-028 follow-up (#4014): told about every change this store makes (its folder, the file name, the bytes
+ * written or null for a removal), so the keep-off turn check (memoryFolderGuard.ts) leaves Studio's own changes alone.
+ */
+let changeObserver: ((dir: string, name: string, bytes: Buffer | null) => void) | null = null;
+export function observeMemoryChanges(fn: ((dir: string, name: string, bytes: Buffer | null) => void) | null): void { changeObserver = fn; }
+
 export class ActivityMemory {
   readonly root: string;
   constructor(root: string) { this.root = root; }
@@ -197,6 +204,7 @@ export class ActivityMemory {
     const head = task && TASK_ID.test(task) ? `<!-- hypeproof-task: ${task} -->\n` : "";
     // Synced before returning: a correction removes the old file right after, and a crash must not keep only the unlink.
     try { await handle.writeFile(`${head}${text}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
+    changeObserver?.(dir!, name, Buffer.from(`${head}${text}\n`, "utf8"));
     return name;
   }
 
@@ -230,6 +238,7 @@ export class ActivityMemory {
     const handle = await fs.open(path.join(dir!, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
       .catch(() => { throw new MemoryStoreError("changed"); });
     try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    changeObserver?.(dir!, name, bytes);
   }
 
   /** The absolute path of a listed file, for opening it in the editor. */
@@ -248,5 +257,6 @@ export class ActivityMemory {
     const now = await this.identify(name);
     if (expected && !sameId(expected, now)) throw new MemoryStoreError("changed");
     await fs.unlink(now.file);
+    changeObserver?.(path.dirname(now.file), name, null);
   }
 }
