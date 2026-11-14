@@ -2327,3 +2327,18 @@ Confirmed by Jay: no. These are agent choices within REQ-CGPV-43. The coordinato
 - **Look (agent choice; revised after verify-3928).** A status, not a control: a static `level` icon (the read-aloud "now reading" mark) and the words "음성 대화 중" at 14px, under the row title, with no fill and no hover. The words keep the row's own text colour and only the icon carries the accent, because the accent link colour on the selected row is 3.85:1 in Dark+ and 4.36:1 in 2026 Light. In forced colours there is no rule: the UA forces the row's button to ButtonText on ButtonFace and the marker inherits it, which the per-theme smoke measures. The row's existing accessible name gains ", 음성 대화 중".
 - **Scope.** Only the active task can be marked, because the conversation stops on any task switch. Dictation alone and a manual read-aloud are not a voice session and do not mark the row.
 - **Not covered:** a real installed App, a real microphone and a real screen reader.
+
+## CGP-SHELL-R-014 follow-up: the 내 작업 내보내기 row (2026-11-14)
+
+Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend on #4053. The drawing is an agent choice.
+
+- **Rows.** 내 작업 내보내기 joins because its behaviour shipped (CGP-SHELL-R-028).
+  - 화면 밝기 stays with #4053 (CGP-SHELL-R-016).
+  - 팁 보기 is not drawn. Tips (REQ-SHELL-19 / CGP-SHELL-R-019) are not built: no trigger and no "팁 그만 보기" exist, so the row would be a switch with nothing behind it (DEC-SHELL-R014).
+  - The sheet now draws 4 of the 6 rows, and 5 once #4053 lands.
+- **Shape (agent choice).**
+  - An action row drawn like "고급 설정" (a 48px button, with the row-name weight), not a toggle, because export is an action.
+  - A one-line note under it says what is saved and that the learner picks the folder.
+  - The sheet closes first, so the native folder picker is not under a modal.
+- **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
+

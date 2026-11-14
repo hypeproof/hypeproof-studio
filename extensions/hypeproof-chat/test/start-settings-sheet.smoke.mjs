@@ -19,7 +19,7 @@ const dir = fileURLToPath(new URL('../webview-ui/', import.meta.url));
 const app = await build({ entryPoints: [dir + 'src/main.tsx'], bundle: true, platform: 'browser', format: 'iife', outdir: 'start-assets', write: false, loader: { '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl' }, logLevel: 'silent' });
 const css = app.outputFiles.find((f) => f.path.endsWith('.css')).text, js = app.outputFiles.find((f) => f.path.endsWith('.js')).text;
 const shots = process.env.HPS_SHOTS; if (shots) fs.mkdirSync(shots, { recursive: true });
-const adultView = { rows: ['textSize', 'reduceMotion', 'notices'], textSize: 'base', reduceMotion: 'auto', notices: false, advanced: true };
+const adultView = { rows: ['textSize', 'reduceMotion', 'notices', 'export'], textSize: 'base', reduceMotion: 'auto', notices: false, advanced: true };
 const until = async (b, expr, what) => { for (let n = 0; n < 100; n++) { const v = await b.evaluate(expr); if (v) return v; await new Promise((r) => setTimeout(r, 20)); } throw Error('timed out: ' + what); };
 const b = await launch(bin);
 try {
@@ -42,7 +42,7 @@ try {
       const targets=[...d.querySelectorAll('label, button, select')].filter(e=>!e.closest('legend')).map(e=>{const q=e.getBoundingClientRect();return {t:e.textContent.trim().slice(0,20),h:q.height,w:q.width,inside:q.left>=r.left-0.5&&q.right<=r.right+0.5}});
       const texts=[...d.querySelectorAll('label, select, p, button, h2')].filter(e=>e.textContent.trim()).map(e=>({t:e.textContent.trim().slice(0,20),fs:parseFloat(getComputedStyle(e).fontSize)}));
       const probe=document.createElement('span');probe.style.color='var(--hp-text-primary-default)';document.querySelector('.studio-start').append(probe);const primary=getComputedStyle(probe).color;probe.remove();
-      return {primary,colors:[...d.querySelectorAll('h2, .studio-settings-row > label:first-child')].map(e=>getComputedStyle(e).color),title:d.querySelector('h2').textContent,rows:[...d.querySelectorAll('.studio-settings-row > label:first-child')].map(l=>l.textContent),modal:d.matches(':modal'),top:r.top,height:r.height,vh:innerHeight,geo,advanced:[...d.querySelectorAll('button')].filter(x=>x.textContent==='고급 설정').length,
+      return {primary,colors:[...d.querySelectorAll('h2, .studio-settings-row > label:first-child')].map(e=>getComputedStyle(e).color),title:d.querySelector('h2').textContent,rows:[...d.querySelectorAll('.studio-settings-row > label:first-child')].map(l=>l.textContent),modal:d.matches(':modal'),top:r.top,height:r.height,vh:innerHeight,geo,advanced:[...d.querySelectorAll('button')].filter(x=>x.textContent==='고급 설정').length,exportRows:[...d.querySelectorAll('button.studio-settings-row')].filter(x=>x.textContent==='내 작업 내보내기').map(x=>({desc:document.getElementById(x.getAttribute('aria-describedby'))?.textContent.trim()})),
         sent:window.sent.map(x=>x.type),width:r.width,left:r.left,right:r.right,page:document.documentElement.scrollWidth,vw:document.documentElement.clientWidth,targets,texts,focus:document.activeElement?.getAttribute('aria-label')}})()`);
     const L = label + ' ' + JSON.stringify(m);
     assert.equal(m.title, '설정', L);
@@ -59,7 +59,10 @@ try {
     assert.ok(m.modal, 'the sheet is modal (over the page): ' + L);
     assert.ok(Math.abs(m.right - m.vw) <= 0.5 && m.top <= 0.5 && Math.abs(m.height - m.vh) <= 0.5, 'the sheet sits on the right edge at full height: ' + L);
     assert.ok(m.width >= Math.min(320, m.vw) - 0.5 && m.width <= 400.5, 'the sheet is 320-400px wide: ' + L);
-    assert.equal(m.geo.length, m.rows.length + m.advanced, 'every setting and 고급 설정 is a row: ' + L);
+    assert.equal(m.exportRows.length, 1, '내 작업 내보내기 is one action row for every seat: ' + L);
+    assert.match(m.exportRows[0].desc ?? '', /ZIP/, 'the export row is described: ' + L);
+    assert.ok(m.rows.length + m.exportRows.length <= 6, 'at most six setting rows: ' + L);
+    assert.equal(m.geo.length, m.rows.length + m.exportRows.length + m.advanced, 'every setting, the export action and 고급 설정 is a row: ' + L);
     for (const g of m.geo) {
       assert.ok(g.h >= 47.5 && g.h <= 48.5, `48px row ${g.t}: ` + L);
       assert.ok(g.inRow && g.sameLine, `row name and control on one line ${g.t}: ` + L);
@@ -83,6 +86,12 @@ try {
     await b.evaluate(`document.querySelector('dialog.studio-settings header button').focus()`);
     for (let i = 0; i < 8; i++) { await tab(); assert.ok(await b.evaluate(`!!document.activeElement.closest('dialog.studio-settings')`), 'Tab stays inside the sheet: ' + label); }
     await tab(8); assert.ok(await b.evaluate(`!!document.activeElement.closest('dialog.studio-settings')`), 'Shift+Tab stays inside the sheet: ' + label);
+    // 내 작업 내보내기 closes the sheet and asks the host to run the export.
+    await b.evaluate(`window.sent=[];[...document.querySelectorAll('dialog.studio-settings button')].find(x=>x.textContent==='내 작업 내보내기').click()`);
+    assert.deepEqual(JSON.parse(await b.evaluate(`JSON.stringify(window.sent)`)), [{ type: 'startExportMyWork' }], 'export posts one message: ' + label);
+    await until(b, `!document.querySelector('dialog.studio-settings')`, '내 작업 내보내기 closes the sheet');
+    await b.evaluate(`[...document.querySelectorAll('.studio-nav button')].find(x=>x.textContent==='설정').click()`);
+    await until(b, `document.querySelector('dialog.studio-settings')?.open`, 'sheet reopens after export');
     if (seat === 'adult') {
       await b.evaluate(`window.sent=[];[...document.querySelectorAll('dialog.studio-settings button')].find(x=>x.textContent==='고급 설정').click()`);
       assert.deepEqual(JSON.parse(await b.evaluate(`JSON.stringify(window.sent)`)), [{ type: 'openAdvancedSettings' }], label);
