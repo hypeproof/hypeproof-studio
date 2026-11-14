@@ -11,6 +11,9 @@ REQUIRED = {
     'MFR-T01': 'testFirstInstallSignInToFirstAnswerWithoutDesktop',
     'MFR-T02': 'testDictationEditsDraftThenSendGetsReplyWithoutDesktop',
     'MFR-T03': 'testHandsFreeReplyStartsNextTurnAndStopPreventsSecondSend',
+    'MFR-T03-playback': 'testRealKoreanPlaybackCompletionReachesNextCaptureBoundary',
+    'MFR-T03-delegate': 'testPlaybackDelegateResumesCaptureOnceAndLateCompletionCannotUndoStop',
+    'MFR-T03-draft': 'testPlaybackEndPreservesTypedDraftAndExplainsWhyListeningStopped',
     'MFR-T03-stop-denial': 'testStopRacingAdmissionFailurePreservesTypedReasonAfterRelaunch',
     'MFR-T03-response-stop': 'testStopPendingVoiceResponseKeepsWordsAndDoesNotRestartAfterRelaunch',
     'MFR-T03-queued': 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening',
@@ -19,6 +22,7 @@ REQUIRED = {
     'MFR-T05-recorded': 'testRecordedFailureRestoresDraftAcrossRelaunchAndExplicitlySendsNewID',
     'MFR-T05-collision': 'testRecordedFailureCannotReplaceExistingDraft',
     'MPER-T03-history': 'testLongHistoryRestoresLatestAcrossRelaunchConversationAndAccountSwitch',
+    'MPER-T03-logout': 'testLogoutDuringHistorySyncWaitsOnceAndNeverSendsQueuedWords',
     'MPER-T03-following': 'testEightyMessageWindowFollowsNewTailWithoutInterruptingReading',
     'MFR-T01-admission': 'testAIAdmissionDenialRemainsVisibleAfterHistoryRefreshAndRelaunch',
     'MFR-T01-failure': 'testExpiredSignInLeavesActionableFailureInsteadOfInfiniteChecking',
@@ -62,6 +66,8 @@ def collect(source: str, build_log: Path, build_exit: int, simulator_log: Path, 
                                    'external_transports': 'SYNTHETIC', 'app_state_and_persistence': 'REAL'},
             'physical_device': {'status': 'NOT_RUN', 'blocks_test_candidate': False},
             'live_authentication': 'NOT_RUN', 'live_asr': 'NOT_RUN', 'apple_upload': 'NOT_RUN_BY_THIS_CHECK',
+            'os_speech_playback': {'status': next(case['status'] for case in cases if case['requirement'] == 'MFR-T03-playback'),
+                                   'scope': 'Korean AVSpeechSynthesizer through didFinish; Service and next microphone capture remain synthetic'},
             'test_candidate_eligibility': 'PASS' if build_status == journey_status == 'PASS' else 'BLOCKED'}
 
 def main():
