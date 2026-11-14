@@ -48,7 +48,7 @@ final class DeviceSignInHttp implements NativeDeviceSignIn.Transport {
    for(String k:Set.of("error","status","device_code","user_code","verification_uri","verification_uri_complete","expires_in","interval","access_token","refresh_token","session_id","state","opening","hint","acknowledged_id"))if(v.has(k))fields.put(k,v.get(k));
    JSONObject account=v.optJSONObject("account");if(account!=null){fields.put("account_id",account.opt("id"));fields.put("account_status",account.opt("status"));}
    if(account!=null&&account.opt("display_name") instanceof String)fields.put("display_name",account.getString("display_name"));
-   if(cardRead||cardWrite){for(String k:Set.of("schema","availability","cards","card","key","id","request_digest","source","reviewer","brief","state","created_at","expires_at","lease_expires_at","can_decide","unavailable_reason","decision","review","ok","thanks","message","final","change_until","source_revision","reentry","model_calls"))if(v.has(k))fields.put(k,v.get(k));}
+   if(cardRead||cardWrite){for(String k:Set.of("schema","availability","cards","card","key","id","request_digest","source","reviewer","brief","state","created_at","expires_at","lease_expires_at","can_decide","unavailable_reason","decision","review","ok","thanks","message","final","change_until","source_revision","reentry","model_calls","policy","created"))if(v.has(k))fields.put(k,v.get(k));}
    // Keep only the current account/card protocol fields; arbitrary server fields stay out of UI.
    deadline.remaining();return new NativeDeviceSignIn.Reply(status,fields);
   } finally {cancel.unbind();c.disconnect();}

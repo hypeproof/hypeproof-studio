@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -292,7 +293,8 @@ public final class ConversationService: @unchecked Sendable {
         guard UUID(uuidString: id)?.uuidString.lowercased() == id, ["goal", "method", "decision"].contains(choice) else { throw SyncFailure.invalidResponse }
         let (data, _) = try await request("/v1/me/question-triggers", method: "POST", body: ["schema": "hps-question-trigger/1", "id": id, "kind": "choice", "source_id": id, "source_revision": 1, "choice": choice], token: token)
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              result["schema"] as? String == "hps-question-trigger/1", let key = result["key"] as? String, AccountQuestion.validKey(key),
+              result["schema"] as? String == "hps-question-trigger/1", let key = result["key"] as? String, AccountQuestion.validKey(key), key.hasPrefix("growth:"), result["policy"] as? String == "team-question/1",
+              let created = result["created"] as? NSNumber, CFGetTypeID(created) == CFBooleanGetTypeID(),
               let source = result["source"] as? [String: Any], source["kind"] as? String == "choice", source["id"] as? String == id, source["revision"] as? Int == 1,
               let reentry = result["reentry"] as? [String: String], reentry["method"] == "GET", reentry["path"] == "/v1/me/cards",
               result["model_calls"] as? Int == 0 else { throw SyncFailure.invalidResponse }

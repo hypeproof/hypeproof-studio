@@ -29,7 +29,7 @@ private final class QuestionProtocol: URLProtocol {
 
 final class AccountQuestionTests: XCTestCase {
     static var card: [String: Any] {
-        ["schema": "hps-card/1", "key": "team:choice-a", "kind": "team:choice", "attempt": 1,
+        ["schema": "hps-card/1", "key": "growth:choice-a", "kind": "team:choice", "attempt": 1,
          "expires_at": Date().timeIntervalSince1970 * 1000 + 60000, "title": "오늘의 질문", "preface": NSNull(), "prompt": "어디에서 막혔나요?",
          "segments": [["kind": "own_words", "label": "내가 남긴 말", "text": "방법을 찾고 있어요"]],
          "choices": [["id": "method", "label": "방법이 막혔어요"]], "select": "pick",
@@ -61,7 +61,7 @@ final class AccountQuestionTests: XCTestCase {
             try await service.accountQuestionAction(key, action: action, body: body, token: "fixture-access")
         }, changed: { _ in })
         await controller.refresh(); XCTAssertEqual(controller.view.card?.prompt, "어디에서 막혔나요?"); XCTAssertTrue(posts.isEmpty())
-        await controller.presented("team:choice-a"); await controller.presented("team:choice-a")
+        await controller.presented("growth:choice-a"); await controller.presented("growth:choice-a")
         XCTAssertEqual(posts.count, 1); XCTAssertTrue(posts[0].0.hasSuffix("/shown"))
         controller.pick("method"); controller.edit("직접 쓴 답"); XCTAssertEqual(posts.count, 1)
         await controller.submit(action: "continue")
@@ -91,7 +91,7 @@ final class AccountQuestionTests: XCTestCase {
             let body = try QuestionProtocol.object(request); let id = try XCTUnwrap(body["id"] as? String)
             XCTAssertEqual(body["source_id"] as? String, id); XCTAssertEqual(body["source_revision"] as? Int, 1)
             XCTAssertEqual(body["choice"] as? String, "method"); XCTAssertNotNil(UUID(uuidString: id)); posts += 1; started = true
-            return (200, ["schema": "hps-question-trigger/1", "key": "team:choice-a", "source": ["kind": "choice", "id": id, "revision": 1], "reentry": ["method": "GET", "path": "/v1/me/cards"], "model_calls": 0])
+            return (200, ["schema": "hps-question-trigger/1", "key": "growth:choice-a", "source": ["kind": "choice", "id": id, "revision": 1], "reentry": ["method": "GET", "path": "/v1/me/cards"], "model_calls": 0, "policy": "team-question/1", "created": true])
         }
         let identity = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
         let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("fixture-access") }, act: { _, _, _, _ in XCTFail("No answer or exposure from loading"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "fixture-access") }, changed: { _ in })
@@ -119,8 +119,8 @@ final class AccountQuestionTests: XCTestCase {
     @MainActor func testSameQuestionSecondServerAttemptRecordsAnotherRealExposure() async throws {
         var object = Self.card, shown = 0
         let controller = AccountQuestionController(identity: { .init(accountID: "A", sessionID: "session-A") }, load: { _ in try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)) }, act: { _, _, action, _ in XCTAssertEqual(action, "shown"); shown += 1; return "" }, changed: { _ in })
-        await controller.refresh(); await controller.presented("team:choice-a"); await controller.presented("team:choice-a"); XCTAssertEqual(shown, 1)
-        object["attempt"] = 2; await controller.refresh(); await controller.presented("team:choice-a"); XCTAssertEqual(shown, 2)
+        await controller.refresh(); await controller.presented("growth:choice-a"); await controller.presented("growth:choice-a"); XCTAssertEqual(shown, 1)
+        object["attempt"] = 2; await controller.refresh(); await controller.presented("growth:choice-a"); XCTAssertEqual(shown, 2)
     }
     func testUnknownSchemaExpiredCardAndUnknownChoiceCannotAct() throws {
         var object = Self.card; object["expires_at"] = 1
@@ -129,4 +129,22 @@ final class AccountQuestionTests: XCTestCase {
         object = Self.card; object["schema"] = "unknown"; let unknown = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: object)); XCTAssertThrowsError(try unknown.validate())
         let valid = try JSONDecoder().decode(AccountQuestion.self, from: JSONSerialization.data(withJSONObject: Self.card)); XCTAssertThrowsError(try valid.answer(action: "continue", choice: "invented", words: "draft"))
     }
+    @MainActor func testMalformedTriggerReceiptCannotConsumeDurableIntent() async throws {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [QuestionProtocol.self]
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel(); QuestionProtocol.respond = nil }
+        let service = ConversationService(session: session, base: URL(string: "https://fixture.invalid")!), identity = MemberApprovalIdentity(accountID: "A", sessionID: "session-A")
+        for invalid in ["policy", "created", "key"] {
+            var saved: AccountQuestionIntent?, submitted: String?
+            QuestionProtocol.respond = { request in
+                if request.url!.path == "/v1/me/cards" { return (200, ["card": NSNull()]) }
+                let body = try QuestionProtocol.object(request), id = try XCTUnwrap(body["id"] as? String); submitted = id
+                var result: [String: Any] = ["schema": "hps-question-trigger/1", "key": "growth:choice-a", "policy": "team-question/1", "created": true, "source": ["kind": "choice", "id": id, "revision": 1], "reentry": ["method": "GET", "path": "/v1/me/cards"], "model_calls": 0]
+                if invalid == "created" { result[invalid] = 1 } else { result[invalid] = invalid == "policy" ? "unreviewed/2" : "pmf:other" }
+                return (200, result)
+            }
+            let controller = AccountQuestionController(identity: { identity }, load: { _ in try await service.accountQuestion("access") }, act: { _, _, _, _ in XCTFail("No card action"); return "" }, start: { _, id, choice in try await service.startAccountQuestion(id: id, choice: choice, token: "access") }, loadIntent: { _ in saved }, saveIntent: { _, value in saved = value }, changed: { _ in })
+            await controller.refresh(); await controller.begin("method"); XCTAssertNotNil(saved, invalid); XCTAssertEqual(saved?.id, submitted); XCTAssertNil(controller.view.card)
+        }
+    }
+
 }
