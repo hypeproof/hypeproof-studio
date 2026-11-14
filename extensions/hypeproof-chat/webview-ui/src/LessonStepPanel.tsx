@@ -1,7 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { EMPTY_HISTORY, HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, collapseBlock, collapsedBlocksFrom, helpChoices, historyBoundary, historyEdit, historyReset, historyUndo, stepMaterial, surfaceOf, type BlockFields, type BlockHistory, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 import { ChatIcon, type IconKind } from "./ChatDetails";
+import { imeComposing } from "./imeGuard";
+import { patchWebviewState, readWebviewState } from "./vscode";
 import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -54,6 +56,31 @@ export function LessonStepPanel(props: {
   const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
   const blockKey = JSON.stringify([lesson.course_id, lesson.version, lesson.sha256, step.id]);
   const blockOpen = !!openBlocks[blockKey];
+  // CGP-LEARN-R-011 (c) / CGP-LEARN-D-011 — "접기" in the card's 자료 메뉴 puts the block away for this learner; "다시 보기" brings it
+  // back as it was (open or closed). The set lives in the webview's own state, so it survives a hide/show re-mount in this
+  // session; it is never posted to the host: not work, not a report, not an observation event. The report item of DES-CGP-LEARN-11
+  // ("자료가 틀린 것 같아요") is not built yet; the menu is where it will go.
+  const [collapsed, setCollapsed] = useState<string[]>(() => collapsedBlocksFrom(readWebviewState<{ lessonBlocksCollapsed: unknown }>().lessonBlocksCollapsed));
+  const blockCollapsed = collapsed.includes(blockKey);
+  const [menuFor, setMenuFor] = useState("");
+  const menuOpen = menuFor === blockKey;
+  const menuButton = useRef<HTMLButtonElement>(null), menuPanel = useRef<HTMLDivElement>(null), restoreButton = useRef<HTMLButtonElement>(null);
+  const focusAfter = useRef<"" | "restore" | "menu">("");
+  const setBlockCollapsed = (on: boolean) => {
+    const next = collapseBlock(collapsed, blockKey, on);
+    setCollapsed(next); patchWebviewState({ lessonBlocksCollapsed: next }); setMenuFor("");
+    // A block is put away from its open card, so 다시 보기 brings it back open (also after a re-mount, which forgets open/closed).
+    if (!on) setOpenBlocks((o) => ({ ...o, [blockKey]: true }));
+    focusAfter.current = on ? "restore" : "menu";
+  };
+  useLayoutEffect(() => {
+    const f = focusAfter.current;
+    if (!f) return;
+    focusAfter.current = "";
+    (f === "restore" ? restoreButton : menuButton).current?.focus({ preventScroll: true });
+  }, [blockCollapsed]);
+  useLayoutEffect(() => { if (menuOpen) menuPanel.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true }); }, [menuOpen]);
+  const closeMenu = (restoreFocus: boolean) => { setMenuFor(""); if (restoreFocus) menuButton.current?.focus({ preventScroll: true }); };
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
 
   // The host holds the focus for the NEXT turn; a running turn keeps what it started with.
@@ -118,15 +145,50 @@ export function LessonStepPanel(props: {
   // drawn under the work surface and read after it, as the whole sentence. It is never inside the hidden body, so a step switch
   // or a host save that lands on a closed card is still drawn and announced; closed, the card's grid lifts it into the head row
   // under the title, one line with an ellipsis.
-  const block = (content: ReactNode) => !material || !materialText || !state ? content : (
-    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
+  // CGP-LEARN-D-011 — collapsed, the card is one row: "접은 자료: <title>" and 다시 보기. The body stays mounted and hidden (the
+  // rehearsal read-back keeps its nodes); the polite state line is not drawn, so a block the learner put away says nothing.
+  const block = (content: ReactNode) => !material || !materialText || !state ? content : blockCollapsed ? (
+    <section className="hp-material hp-block-card hp-block-collapsed" data-block-card={material.kind} data-block-collapsed="" data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
+      aria-labelledby={ids + "t"}>
+      <p id={ids + "t"} className="hp-block-collapsed-name">접은 자료: {materialText.title}</p>
+      <button ref={restoreButton} type="button" className="hp-cta-quiet" data-block-restore="" aria-label={"다시 보기: " + materialText.title}
+        onClick={() => setBlockCollapsed(false)}>다시 보기</button>
+      <div className="hp-block-card-body" hidden>{content}</div>
+    </section>
+  ) : (
+    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-block-menu={menuOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
       aria-labelledby={ids + "t"} aria-describedby={ids + "h"}>
       <div className="hp-block-card-head">
         <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
         <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
         <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
-          onClick={() => setOpenBlocks((o) => ({ ...o, [blockKey]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
+          onClick={() => { setMenuFor(""); setOpenBlocks((o) => ({ ...o, [blockKey]: !blockOpen })); }}>{blockOpen ? "닫기" : "열어 보기"}</button>
+        {/* CGP-LEARN-D-011 — the 자료 메뉴 is on the open card only, after 닫기. The closed card keeps DES-CGP-LEARN-01's one row (a
+            fourth head column leaves the title no width in a 280px rail), and the open card gains no height (a row of its own
+            pushes the caption under the mission header at 480px / 200 %). */}
+        {blockOpen && <button ref={menuButton} type="button" className="hp-cta-quiet hp-block-menu-toggle" data-block-menu-toggle="" aria-label={"자료 메뉴: " + materialText.title}
+          aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? ids + "m" : undefined}
+          onClick={() => setMenuFor(menuOpen ? "" : blockKey)}
+          onKeyDown={(e) => { if (!menuOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setMenuFor(blockKey); } }}>
+          <ChatIcon kind="dots" size={20} />
+        </button>}
       </div>
+      {menuOpen && <div ref={menuPanel} id={ids + "m"} className="hp-block-menu" role="menu" aria-label={"자료 메뉴: " + materialText.title}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null) && e.relatedTarget !== menuButton.current) setMenuFor(""); }}
+        onKeyDown={(e) => {
+          if (e.defaultPrevented || imeComposing(e)) return;
+          if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(true); return; }
+          if (e.key === "Tab") { setMenuFor(""); return; }
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+          const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+          if (!items.length) return;
+          e.preventDefault();
+          const at = items.indexOf(document.activeElement as HTMLButtonElement);
+          const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+          items[next].focus({ preventScroll: true });
+        }}>
+        <button type="button" role="menuitem" tabIndex={-1} data-block-collapse="" aria-label={"접기: " + materialText.title} onClick={() => setBlockCollapsed(true)}>접기</button>
+      </div>}
       <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
         <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
         {content}

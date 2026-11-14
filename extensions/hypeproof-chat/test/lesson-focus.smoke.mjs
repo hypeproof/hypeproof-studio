@@ -114,4 +114,20 @@ const B = { sha256: "b".repeat(64), version: "m2026.09.22-12", content: { steps:
   assert.deepEqual(big.past.at(-1), { text: "79", reason: "" });
   ok("block reset/undo: preset exactly, one change per burst or reset, empty history disables undo, bounded");
 }
+{
+  // CGP-LEARN-R-011 (c) — the collapsed-block set: per block key, restorable, bounded, malformed state dropped.
+  let c = F.collapseBlock([], "k1", true);
+  c = F.collapseBlock(c, "k2", true);
+  assert.deepEqual(c, ["k1", "k2"]);
+  assert.deepEqual(F.collapseBlock(c, "k1", true), ["k2", "k1"], "collapsing again moves it to the newest end, no duplicate");
+  assert.deepEqual(F.collapseBlock(c, "k1", false), ["k2"], "다시 보기 removes only that block");
+  assert.deepEqual(F.collapseBlock(c, "other", false), c, "restoring a block that is not collapsed changes nothing");
+  let many = []; for (let i = 0; i < 80; i++) many = F.collapseBlock(many, "k" + i, true);
+  assert.equal(many.length, F.COLLAPSED_BLOCKS_MAX, "bounded");
+  assert.equal(many.at(-1), "k79");
+  assert.deepEqual(F.collapsedBlocksFrom(undefined), []);
+  assert.deepEqual(F.collapsedBlocksFrom("k1"), []);
+  assert.deepEqual(F.collapsedBlocksFrom(["k1", 3, "", null, "k1", "x".repeat(600), "k2"]), ["k1", "k2"], "malformed entries dropped");
+  ok("block collapse: per key, restorable, bounded, malformed webview state dropped");
+}
 console.log(`${n} lesson focus checks passed`);
