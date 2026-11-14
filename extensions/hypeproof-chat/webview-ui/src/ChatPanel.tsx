@@ -153,6 +153,8 @@ import { servedApprovalPreset } from "../../src/approvalPreset";
 import { ApprovalPresetLabel, useTurnBoundaryPreset } from "./ApprovalPresetLabel";
 import { learnerHasSent, servedLessonStarters } from "../../src/lessonStarters";
 import { LessonStarters } from "./LessonStarters";
+import { servedSkillCards } from "../../src/lessonSkillCards";
+import { SkillShelf } from "./SkillShelf";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
@@ -1741,6 +1743,8 @@ export function ChatPanel(props: Props) {
       : ux.suggestions.initial;
   // DEC-30 step 3 (CGP-KNOW-R-037): the lesson's starters, learner seats only, until the learner has sent a message in this task.
   const lessonStarters = props.instructor || learnerHasSent(messages) ? [] : servedLessonStarters(config?.profile);
+  // CGP-AGENT-R-020 — the lesson's learner skill cards; unlike starters they stay after the first message.
+  const skillCards = props.instructor ? [] : servedSkillCards(config?.profile);
   const showInitialChips =
     messages.length === 0 &&
     !streaming &&
@@ -2228,7 +2232,8 @@ export function ChatPanel(props: Props) {
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
-          {!props.instructor && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
+          {/* Compact classroom layout: the changed-page card is not drawn at all. */}
+          {!props.instructor && !compactLayout && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
             const card = pageCards.get(m.id)!;
             return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
           }}</PanelBoundary>}
@@ -2337,12 +2342,13 @@ export function ChatPanel(props: Props) {
         )}
 
         {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
-        <PanelBoundary panel="task-activity"><TaskActivity
+        {/* Compact classroom layout: the "AI가 한 일" panel is not drawn at all. */}
+        {!compactLayout && <PanelBoundary panel="task-activity"><TaskActivity
           summary={taskActivity}
           reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
           onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
           onSavePdf={(path) => postToHost({ type: "savePagePdf", path })}
-        /></PanelBoundary>
+        /></PanelBoundary>}
 
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
@@ -2440,6 +2446,7 @@ export function ChatPanel(props: Props) {
         {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
         {/* DEC-30 step 3: starters insert into the draft (a manual draft is kept) and never send. */}
         {lessonStarters.length > 0 && <LessonStarters starters={lessonStarters} onPick={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
+        {skillCards.length > 0 && <SkillShelf cards={skillCards} onTry={text => handleReplyChoice(text)} disabled={streaming || frozen || unavailable || !!props.sendLocked || !!props.sendPending} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2450,7 +2457,8 @@ export function ChatPanel(props: Props) {
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
         {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId} usage={footerUsagePanel}>
-          <ModelControl config={config} streaming={streaming} compact={compactLayout} />
+          {/* Compact classroom layout: the model control (select and its note) is not drawn at all. */}
+          {!compactLayout && <ModelControl config={config} streaming={streaming} />}
           <EffortControl config={config} post={postToHost} />
           {footerUsagePanel && <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} />}</ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">

@@ -7835,6 +7835,15 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/textSize.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
         }
       ]
     },
@@ -7852,6 +7861,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/text-size-geometry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-size-reach.smoke.mjs"
         }
       ]
     },
@@ -19933,6 +19945,50 @@
         {
           "path": "docs/testing/task-workspace.md",
           "section": "## Task memory switches (CGP-KNOW-R-028 / CGP-KNOW-D-028)"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-REQ-SKILL-SHELF",
+      "stage": "requirement",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Lesson skill shelf (CGP-AGENT-R-020)"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-IMP-SKILL-SHELF",
+      "stage": "implementation",
+      "depends_on": [
+        "ST-REQ-SKILL-SHELF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonSkillCards.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SkillShelf.tsx"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-TEST-SKILL-SHELF",
+      "stage": "test",
+      "depends_on": [
+        "ST-REQ-SKILL-SHELF",
+        "ST-IMP-SKILL-SHELF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx"
         }
       ]
     }

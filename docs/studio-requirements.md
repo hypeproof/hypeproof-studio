@@ -844,10 +844,24 @@ CGP-DS-R-009 (2026-10-19): in personal chat the learner chooses a text size, 기
 in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, and the reply-choice text
 inside answers grows by the same 2px steps; control heights and 44px targets do not change. The
 choice is a device preference (`globalState`, not part of any lesson or activity) and applies when
-the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
-dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
+the host confirms it. The default size adds no markup. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
-Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport.
+CGP-SHELL-R-017 (REQ-SHELL-17, 2026-11-14) carries the same choice to the classroom chat, the help
+sheets and panels inside the chat (키보드 단축키, 새로운 기능, the lesson tip, and the classroom help-request,
+approval and lesson panels, whose fixed 15px size now adds the step, plus the mission header's sentence and the lesson
+material cards, which also had fixed sizes) and
+the start page with its 설정 sheet: the step is set on every chat shell, not only the personal one, and
+on the start page root, where every font size adds it. A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so its
+learner sets the size in the start page 설정 sheet, whose note now says "대화와 시작 화면의 글자 크기예요.".
+At 아주 크게 every surface fits a 320px pane and a 640px pane at 200% zoom without horizontal scroll or a
+clipped control; in a 320px pane at 200% (160 CSS px) the start-page footer tagline and the lesson tip's 입력창에 넣기
+action wrap. The personal
+workspace's task rail and heading stay outside the chat shell at their own sizes, as before. Kept as
+shipped, a recorded difference from REQ-SHELL-17: 16 / 18 / 20px, not 15 / 17 / 20px, and the label
+기본, not 보통 (decisions.md "CGP-SHELL-R-017"). Not covered: the entry screen shown before the start
+page connects (`.studio-disconnected`, it has no settings yet) and the separate automation,
+local-review and skill-store webviews.
+Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport. `test/text-size-reach.smoke.mjs` (CGP-SHELL-R-017) renders the start page, its 설정 sheet, the classroom and personal chat and the shortcut sheet in both seats at each size, dark and light, at 320 and 800px and at 200% zoom: every visible line computes to its base size plus the step, and no control leaves the viewport, clips its label or gets shorter.
 
 CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
 44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
@@ -1297,7 +1311,7 @@ chips and domains, chip captions, AI disclosure, rail time and message count, ru
 host names and source policy line rise from 10-13px to 14px. Values are recorded first in
 `docs/design/studio-learning-experience.md` §디자인 시스템. The text-size choice (CGP-DS-R-009) is
 one variable: `--hp-font-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
-(아주 크게). The size tokens are declared on `:root, .hps-shell`, because a custom property is
+(아주 크게); since CGP-SHELL-R-017 every chat shell and the start page root set it. The size tokens are declared on `:root, .hps-shell, .studio-start`, because a custom property is
 substituted where it is declared: re-declared on the shell they pick up its step, so every token
 size inside the chat grows by the same 2px/4px, and the shell's own size is the caption step so text
 that only inherits follows as well. Control heights and 44px targets do not change; they are
@@ -1357,13 +1371,13 @@ runner bar and gallery notice, and the automation question card (`UserQuestionCa
 The naming screen's activity line (`start.css`, ChatPanel only, outside any shell) moves from .9em to
 the caption step in both seats. Side effect in the personal seat: the error-boundary screen and the
 coach-naming card draw a bare `.hps-shell`, so their inherited text grows from 13px to 14px. The
-personal rules and the personal text-size step are unchanged; the classroom keeps the base step
-(0px). DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
+personal rules and the personal text-size step are unchanged; the classroom kept the base step
+(0px) until CGP-SHELL-R-017 gave it the same step. DEC-27 palettes, weights, spacing and 44px targets do not change. Still exempt: visually
 hidden text, decorative glyphs, glyph-only buttons with an accessible name, instructor-only text and
 the unmounted VoicePanel. Not covered: the error-boundary screen's own 11-13px lines (both seats), the
 naming screen's draft-error line and update banner (drawn beside the naming card, outside any shell), the entry page (`start.css`), the automation and local-review surfaces (their own webview
 entry points), DES-CGP-DS-09 weights/tracking/upper steps in the classroom (CGP-DS-D-005 is
-personal-scoped) and the text-size choice in the classroom (CGP-DS-R-009).
+personal-scoped). The text-size choice in the classroom, listed here as not covered, landed with CGP-SHELL-R-017.
 Tests: `test/type-scale.smoke.mjs` step 7 classifies every sub-14px rule in every file the classroom
 loads (not only `styles.css`; personal-scoped and `.tw-*` selectors skip) and computes each classroom learner selector, plus inherited probes
 (CTA, bare paragraph, answer paragraph, trial line, code copy status, tools caption, citation chip,
@@ -7781,6 +7795,41 @@ classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one l
 under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
 deployed Service is NOT RUN.
 
+## Lesson skill shelf (CGP-AGENT-R-020)
+
+REQ-CGP-AGENT-36 / CGP-AGENT-R-020 / DES-CGP-AGENT-36 / CGP-AGENT-D-017 / PI#1 / PI#3: Jay approved this on 2026-11-14.
+A lesson can offer the learner up to six skill cards. An instructor authors them in Chalk (CH-13: a name, a one-line
+summary and a starter prompt), and they are frozen with the lesson version (`skill_cards`, hypeproof-service#488).
+
+- Source: `/v1/profile` serves `skill_cards` only when the frozen lesson has them. Studio re-validates them
+  (`src/lessonSkillCards.ts`) and skips anything malformed:
+  - more than 6 cards;
+  - a name over 30 units, a summary over 80, or a prompt over 300 units or 6 lines;
+  - control, bidi or zero-width characters;
+  - a link, by the Service's `hasLink`. It applies NFKC and folds colon look-alikes, then refuses `<scheme>://`, a
+    known scheme directly followed by `:` (http(s), ftp(s), javascript, vbscript, data, file, blob, mailto, tel,
+    sms, intent, about, vscode*, hypeproof*, x-*; marks stripped and Cyrillic/Greek look-alikes folded), a bare
+    `http:`/`https:`, `www.` plus a domain, and `//` plus a host. Coding text with colons passes (`color:red`,
+    `a:hover`, `std::cout`, `C:\Users`, `//주석`, `Q:답`). The cases live in `chalk/test/fixtures/link-cases.json`;
+  - a duplicate name.
+- What: a collapsed "이 수업의 스킬 (N)" disclosure above the composer, after the starter chips. Each card
+  shows its name and summary and one "써 보기" button ("써 보기: <name>"). It stays after the learner's first
+  message (unlike starters). Instructor surfaces draw no shelf.
+- 써 보기 puts the card's starter prompt into the draft through the same rule as a starter chip: a manual draft is
+  kept, a second press replaces the first card's text, and nothing is sent.
+- Not: no install, enable, delete or source control, and no "보기". The coach's SKILL.md and `Profile.skills` are
+  never shown. The cards never reach the coach. The Service drops them from the coach's lesson JSON, and the dev
+  local runtime drops them too (`devCoachVisibleLesson`).
+- A lesson without cards renders byte-identical to before.
+- Design (DES-CGP-AGENT-36): one column at every width, 44px summary and buttons, 14px text, tokens only.
+
+Evidence:
+- `extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx`: the real ChatPanel on the minimal DOM. It covers
+  placement and collapse, the controls, insert without send, the manual draft, the shelf staying after a send,
+  byte-identity without cards, the reader's refusals, HTML as text, no instructor shelf, and the CSS floors.
+- `test/local-runtime.smoke.mjs`: the dev prompt carries no card text.
+- The installed app against the deployed Service is NOT RUN.
+
 ## Browser downloads (CGP-KNOW-R-021)
 
 REQ-STUDIO-BROWSER-DOWNLOADS (REQ-KNOW-38 / CGP-KNOW-038, design CGP-KNOW-D-021, PI#1;
@@ -8309,8 +8358,9 @@ stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHE
 behaviour exists in the build (DEC-SHELL-R014):
 
 - 글자 크기 — a 기본 / 크게 / 아주 크게 list, the same device preference as the personal chat settings
-  (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
-  An open chat picks the change up at once.
+  (CGP-DS-R-009, `hypeproof.textSize`); since CGP-SHELL-R-017 it applies to every chat seat and the
+  start page itself, and the row's note says "대화와 시작 화면의 글자 크기예요.". An open chat and the
+  start page pick the change up at once.
 - 움직임 줄이기 — a 기기 설정 따르기 / 줄이기 / 줄이지 않기 list, written to `workbench.reduceMotion`
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
@@ -9848,13 +9898,19 @@ today's layout (same DOM, same classes, the static `ChipRack`), and the instruct
 - **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
   and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
   (`--hp-control-min`); only padding, margins and rows shrink.
-- **Composer footer.** The cohort-managed model reason ("선생님이 정한 설정이에요", `small.hps-managed-reason`) stays in the
-  DOM, visually hidden, because the disabled model select describes itself through it (`aria-describedby`). The collapsed
+- **Composer footer.** The model control (the "모델" select and its "선생님이 정한 설정이에요" note) is not drawn at all
+  (class owner decision 2026-11-15, replacing the earlier "note stays visually hidden"). The model control inside the
+  settings sheet is unchanged. The collapsed
   "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
   replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
   The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
   sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
   messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Changed-page card and "AI가 한 일".** Neither the "이번 답에서 바뀐 페이지" card (`PageCard`, with its version label
+  and check status) nor the "AI가 한 일" panel (`TaskActivity`) is drawn (class owner decision 2026-11-15: jargon for a
+  non-developer learner). The "이번 요청 동안 바뀐 파일 N개" block with "모두 되돌리기 / 이대로 둘게요" and the
+  preview-server row are unchanged. Covered by `test/coach-layout-compact.test.tsx`; the standard layout's page card
+  markup is pinned by `test/fixtures/coach-layout-head-page-card.html`.
 - **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
   (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
   line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier

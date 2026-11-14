@@ -21,6 +21,11 @@ export async function chatMenuAction(chat: Chat, name: string) {
 async function selectModel(select: Locator, alias: string) {
   await expect(select).toBeVisible();
   if (await select.isDisabled()) return;
+  // The menu keeps one entry per served model. Since the Service made Haiku 5.5 the default
+  // (service#388), `hypeproof-fast` resolves to the same model as the default entry and is no
+  // longer listed, so there is nothing to pick: the turn already runs on that model.
+  const offered = await select.locator('option').evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+  if (!offered.includes(alias)) return;
   await select.selectOption(alias);
 }
 

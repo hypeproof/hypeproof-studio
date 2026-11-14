@@ -31,6 +31,8 @@ const last = (type: string) => posted.filter((m) => m.type === type).at(-1);
 
 import { H, PROPS as BASE_PROPS, CONVERSATION, config, managed, PROCESSES } from "./fixtures/coach-layout-props";
 import { readFileSync } from "node:fs";
+import { PageCard } from "../webview-ui/src/PageCard";
+import { VIEW as PAGE_VIEW } from "./fixtures/page-card-view";
 const PROPS = { ...BASE_PROPS, onSettings: () => posted.push({ type: "openSettings" }) };
 const noop = () => {};
 const footerOf = (html: string) => html.slice(html.indexOf('<footer class="hps-input-area">'));
@@ -210,13 +212,11 @@ const CONFIRMED = { status: "ready", selected: "f1", view: { configured: true, r
   { id: "f1", label: "수업 이용권", source_kind: "cohort", state: "ready", available: true, active: true, allowed: { models: [] }, ends_at: "2026-12-31T00:00:00Z", can_request: false,
     resources: [{ meter: "requests:count", limit: 100, remaining: 50, spent: 50, held: 0, unresolved: 0, overrun: 0, shared: true }] }] } };
 const compactFooter = (cfg: ChatConfig) => footerOf(renderToStaticMarkup(<ChatPanel {...(PROPS as never)} messages={CONVERSATION as never} config={cfg} instructor={false} />));
-t("compact: the managed-model reason is screen-reader only (still the select's description); the usage panel leaves the footer once the header chip carries it", () => {
+t("compact: the model control (label, select and the managed-model note) is not drawn; the header chip carries usage", () => {
   const html = renderToStaticMarkup(<ChatPanel {...(PROPS as never)} messages={CONVERSATION as never} config={managed("compact", CONFIRMED)} instructor={false} />);
   ok(html.includes("hps-access-chip"), "control: the header chip is drawn");
   const footer = footerOf(html);
-  const id = /<select[^>]*aria-describedby="([^"]+)"/.exec(footer)?.[1];
-  ok(id && footer.includes(`<small id="${id}" class="hps-managed-reason hps-sr-only">`), "the description element is kept and visually hidden");
-  ok(footer.includes("선생님이 정한 설정이에요"), "its words stay in the DOM");
+  ok(!footer.includes("hps-model-selection") && !footer.includes("<select") && !footer.includes("대화 모델") && !footer.includes("모델 ") && !footer.includes("hps-managed-reason") && !footer.includes("선생님이 정한 설정이에요"), "no model control in the footer");
   ok(!footer.includes("hps-access"), "no usage panel in the footer");
 });
 t("compact: the usage panel is hidden from the footer on every activity, chip or no chip", () => {
@@ -334,6 +334,53 @@ t("compact: a running-process card is one row; the heading and state stay for sc
   ok(!html.includes("보여 주는 곳") && !html.includes("꺼도 돼요"), "no served-place line or note");
   ok(html.includes('<span class="hps-sr-only">주소: </span>127.0.0.1:1') && html.includes('class="hps-process-state hps-sr-only"'), "address inline; state kept for assistive tech");
   ok(html.includes(">끄기</button>") && html.includes("미리보기 서버 실행 중"), "title and stop button");
+});
+
+const REVIEW = { turnId: "t1", state: "open", added: ["site/index.html"], changed: [], deleted: [], notCovered: [] };
+const FACTS = [{ id: "f1", verb: "created", target: "site/index.html", inside: true }, { id: "f2", verb: "web", target: "https://example.com/" }];
+// The host's side of one finished turn: a changed-page card on answer a1, two tool facts, a turn review.
+const finishedTurn = async () => {
+  await hostSays({ type: "pageCardsState", cards: [PAGE_VIEW] });
+  for (const fact of FACTS) await hostSays({ type: "taskActivityFact", fact });
+  await hostSays({ type: "turnReviewState", view: REVIEW });
+};
+const drawn = (testid: string) => all((e) => e.getAttribute("data-testid") === testid).length;
+
+t("flag absent: the page card is unchanged and still drawn, byte-identical to main", () => {
+  const html = renderToStaticMarkup(<PageCard view={PAGE_VIEW as never} onOpen={noop} onReveal={noop} />);
+  ok(html.includes("판 690acc65") && html.includes("아직 확인 안 함") && html.includes("확인됨") && html.includes("판 확인 중"), html);
+  eq(norm(html) === norm(golden("page-card")), true, "byte-identical to the markup main draws for the same view");
+});
+t("flag absent: the page card and the 'AI가 한 일' panel are both drawn", async () => {
+  const root = await mount(config());
+  await finishedTurn();
+  eq(drawn("page-card"), 1, "page card");
+  eq(drawn("task-activity"), 1, "AI가 한 일 panel");
+  ok(byClass("hps-task-activity-title")[0].textContent === "AI가 한 일", "its heading");
+  await act(async () => { root.unmount(); });
+});
+t("compact: the changed-page card is not drawn at all", async () => {
+  const root = await mount(config("compact"));
+  await finishedTurn();
+  eq(drawn("page-card"), 0, "no page card element");
+  const text = shell().textContent;
+  ok(!text.includes("이번 답에서 바뀐 페이지") && !text.includes("폴더에서 보기"), "no heading, no buttons");
+  await act(async () => { root.unmount(); });
+});
+t("compact: the 'AI가 한 일' panel is not drawn at all", async () => {
+  const root = await mount(config("compact"));
+  await finishedTurn();
+  eq(drawn("task-activity"), 0, "no panel element");
+  const text = shell().textContent;
+  ok(!text.includes("AI가 한 일") && !text.includes("누르면 목록이 보여요") && !text.includes("만든 파일 1개"), "no heading, subtitle or chips");
+  await act(async () => { root.unmount(); });
+});
+t("compact: the changed-files block (되돌리기 / 이대로 둘게요) is still drawn", async () => {
+  const root = await mount(config("compact"));
+  await finishedTurn();
+  const text = shell().textContent;
+  ok(text.includes("모두 되돌리기") && text.includes("이대로 둘게요"), "undo block stays");
+  await act(async () => { root.unmount(); });
 });
 
 (async () => {

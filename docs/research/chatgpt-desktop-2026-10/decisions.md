@@ -1336,7 +1336,7 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Rows: only rows whose behaviour exists are drawn: 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (`workbench.reduceMotion`) and 알림 (`hypeproofChat.osTaskNotices`, default off). 화면 밝기(테마), 팁 보기 and 내 작업 내보내기 wait for REQ-SHELL-16 / 19 / 28: drawing them now would be switches that do nothing. The cap stays six and the order follows REQ-SHELL-14.
 - 고급 설정: hidden and host-refused for a minor cohort (`isMinorProfile`, which fails closed on an unknown tier, on the connected or previewed profile) and for a free start answered under14. With no seat and no under-14 answer it stays, because the start page "설정" reached the editor for adult/staff setup before this row. This is a navigation guard, not a security boundary: the editor's own menu entry and shortcut are out of scope.
 - Surface: the existing chat settings dialog (`ChatPreferences`) is reused instead of the DES-SHELL-13 right-side sheet; the sheet geometry is CGP-SHELL-D-013's row.
-- Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat.
+- Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat. Superseded 2026-11-14 by CGP-SHELL-R-017: the size applies to every chat seat and the start page, and the row says "대화와 시작 화면의 글자 크기예요.".
 - Default state: on for every seat; no new data flow, no new permission; notices stay off until the learner turns them on.
 
 ## DEC-SHELL-D013: learner settings sheet geometry (CGP-SHELL-D-013, 2026-10-27, agent-selected conservative implementation)
@@ -2467,6 +2467,16 @@ Closes the shell gap left by CGP-KNOW-R-028 without a policy change. It is host-
   - It is never uploaded or logged.
   - It is named in the SHELL-R-027 deletion docs as a local copy that a deletion request does not reach.
 - **The line names only the count:** `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`
+
+## CGP-SHELL-R-017: text size beyond personal chat (2026-11-14, agent-selected)
+
+Requirement: REQ-SHELL-17 (`domains/settings-account-shell.md`), DES-SHELL-16; `docs/studio-requirements.md` CGP-DS-R-009 paragraph. Audit of main (29ab2d366): the choice was stored and the shell was marked in every seat, but the 2px/4px step was scoped to the personal shell, and the start page stored the choice without applying it.
+
+- **Scope.** The step rule now matches every chat shell (`.hps-shell[data-text-size]`), so the classroom chat follows it, and with it every help sheet drawn inside the chat (키보드 단축키, 새로운 기능, the lesson tip, the classroom help request), because they size with the `--hp-font-*` tokens. The lesson, help-request and approval panels (`.hp-rail-lesson`, 15px) were a fixed size; they now add the step too, which is 0 outside a chat shell or the start page. So do the mission header's sentence (`.hp-mission-sentence`, the classroom learner's main line) and the lesson material cards (`.hp-material-title`, `.hp-material-state`), found by the verifier on #4121; the reach smoke now renders a classroom seat with a lesson. The personal workspace's task rail and heading sit outside the chat shell and keep their sizes, as CGP-DS-R-009 shipped them. The start page root carries the choice too; each of its font sizes is its token plus `--hp-font-step`, and the `--hp-font-*` tokens are re-declared on `.studio-start`. Text-size rules stay in `chatDetails.css` and `start.css`; no colour token changes.
+- **Known difference, kept as shipped (coordinator direction; Jay can overrule).** REQ-SHELL-17 and DES-SHELL-16 ask for body text 15/17/20 px and the label 보통. Studio ships 16/18/20 px and 기본 (CGP-DS-R-009, CGP-DS-R-008: 16px is the body step of the type scale, and DEC-29's 14px floor sits under it). Moving the base to 15px would shrink every learner's text, and renaming the label would change shipped copy; neither is done here.
+- **Where a classroom learner sets it.** A classroom seat's 대화 설정 (compact classrooms, #3931) has no text-size picker, so the start page 설정 sheet is its picker. The row's note changes from "혼자 하는 활동의 대화 글자 크기예요." to "대화와 시작 화면의 글자 크기예요." (agent copy).
+- **Narrow windows.** At 아주 크게 every surface fits a 320 px pane and a 640 px pane at 200% zoom. In a 320 px pane at 200% (160 CSS px) the start page footer tagline (만들기 · 검토하기 · 내 것으로) would run past the window, so it may wrap at that width; at the base size it still fits on one line. The lesson tip's 입력창에 넣기 action may wrap there too, instead of widening the shell.
+- **Not covered.** The entry screen drawn before the start page connects (`.studio-disconnected`; it has no settings yet), the separate automation, local-review and skill-store webviews, a real installed app and a screen reader.
 - Confirmed by Jay: no.
 
 ## CGP-SHELL-R-019 / CGP-SHELL-D-018: turning lesson tips off (2026-11-14, agent-selected; one clause parked)
@@ -2495,3 +2505,15 @@ Confirmed by Jay: no. These are agent choices within the rows, and the coordinat
 - **Close (agent choice within "dismissible per session", revised after verify-r027).** Closing hides the banner for that busy episode, and focus returns to the composer. The host keeps the closed state with the last answer, so a remount (a task switch) re-posts it closed; panel state alone was lost on every remount. The episode ends when the Service reads not busy, so the next busy episode shows the banner again. A time window was rejected: it would hide a new busy episode that starts within it. A healthy answer removes the banner on its own.
 - **Instructor and issuer seats (after verify-r027).** The host does not ask for them, because the route answers 401 to an issuer token every time, so they would back off forever. The check uses instructor mode or the issuer token's unverified shape; it only saves a request and grants nothing.
 - **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
+## CGP-AGENT-R-020 / CGP-AGENT-D-017: learner skill cards (2026-11-14)
+
+Confirmed by Jay: yes for the scope (2026-11-14): a learner-facing skill card authored in Chalk, frozen with the lesson version, and Studio showing only these cards and never the coach's SKILL.md or `Profile.skills`. The rest are agent choices, approved by the coordinator.
+
+- **Contract.** `skill_cards` is an optional key on `hps-session-design/1`, following the DEC-30 starters pattern: omitted when empty, never coach data (hypeproof-service#488). The caps are 6 cards, name 30, summary 80, and prompt 300 units over at most 6 lines.
+- **No links.** There is one `hasLink` rule in the Service, in Chalk and in the Studio reader, narrowed for coding lessons (verify-r027). NFKC and the colon look-alikes come first. Then `<scheme>://`, a known scheme directly followed by `:` (marks stripped, Cyrillic/Greek look-alikes folded), a bare `http:`/`https:`, `www.` plus a domain, and `//` plus a host are refused. Coding text with colons passes, `Q:답` included. One case list (`chalk/test/fixtures/link-cases.json`, copied byte-for-byte into the Service with a sha256 pin) is checked on every side. Only values a write introduces are checked; starters get it on new writes only.
+- **Minors.** Cards are served as authored on minor seats, under the starters' safe-text rules.
+- **Shelf.** It is collapsed by default and stays after the first message, because a skill is useful at any point, unlike a starter. It shows one "써 보기" button and nothing else: the dropped "보기" source view is the reason the design row was rewritten. Instructor surfaces draw no shelf.
+- **Rows rewritten.** REQ-CGP-AGENT-36, DES-CGP-AGENT-36 and their register rows now describe the Chalk-authored card instead of a SKILL.md source view.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.
+
