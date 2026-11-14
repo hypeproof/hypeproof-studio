@@ -223,10 +223,11 @@
         "AB-15",
         "AB-16",
         "AB-17",
-        "AB-18"
+        "AB-18",
+        "AB-19"
       ],
       "inline_prefixes": [],
-      "sha256": "4199e94d29b2901c338b87b538c3b30cbe40ddae7f3ee2ad52efe298667ad3da",
+      "sha256": "1879c1429490dd9da1ed9267ab2bae03e36e34371b56036b873a21d3dac5fcbc",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/access-budget-settlement.md",
@@ -2470,6 +2471,35 @@
         "chalk/src"
       ],
       "verification_inputs": []
+    },
+    {
+      "id": "chalk-daily-class-usage",
+      "title": "Chalk budgets daily class usage (CGP-SHELL-R-031, CGP-SHELL-D-030)",
+      "issue": 4007,
+      "kind": "implementation",
+      "feature_ids": [
+        "deliver-operate"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/access-budget-settlement.md",
+          "ids": [
+            "AB-19"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "hypeproof-service#270 (the daily_usage contract) merges and deploys first; then this Chalk chart leaves draft. Check /budgets on the dev host with a class that has a priced and an unpriced attempt.",
+      "design_delta": "Draw the Service's budgets[].daily_usage[] (hypeproof-service#270) on the existing /budgets page as an SVG stacked bar with a legend and a table view.",
+      "positive_control": "A priced attempt shows as confirmed and a held attempt as reserved plus 미확인 1건 on its Korea day; the table shows the same numbers.",
+      "negative_control": "An unknown amount written as 0, a day outside the 14-day window counted, a UTC-day boundary, a learner identifier in the daily view, or a chart drawn for an empty window.",
+      "evidence_required": "Commit SHAs, host, commands and exit codes for the Service test and the Chalk browser test; NOT RUN for the dev host and real D1.",
+      "implementation_paths": [
+        "chalk/src/ui"
+      ],
+      "verification_inputs": [
+        "docs/requirements/access-budget-settlement.md"
+      ]
     },
     {
       "id": "acceptance-access-budget-settlement",

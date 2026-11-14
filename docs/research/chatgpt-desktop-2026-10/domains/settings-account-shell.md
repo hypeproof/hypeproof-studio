@@ -295,6 +295,20 @@ alone.
 | DES-SHELL-33 (REQ-34) | Version column in Chalk manage list. | Column ≤ 96 px; outdated = amber icon + "업데이트 필요"; sortable; included in the dense comparison view (report-gap reset G1). |
 | DES-SHELL-34 (REQ-35) | What's-new panel is dismissible and short. | ≤ 3 bullets, ≤ 40 chars each; close × with 44 px hit area; not modal; light/dark. |
 
+REQ-SHELL-17 status (2026-11-14): partial, still open. The learner chooses the chat text size (#1902), the reading passage keeps its place across a size change (#1954), and the size geometry is measured in headless Chromium (#2716, CGP-DS-D-006). Gaps against this row: the body sizes are 16 / 18 / 20 px, not 15 / 17 / 20, because DS-D-006 set the floor at 16. The labels read 기본 / 크게 / 아주 크게, not 보통 / 크게 / 아주 크게 (`extensions/hypeproof-chat/src/textSize.ts:1-9`). The size applies to personal chat only (`extensions/hypeproof-chat/webview-ui/src/chatDetails.css:396-397`). The start page stores the choice but does not apply it, and help panels and classroom chat keep the base size.
+
+REQ-SHELL-18 / DES-SHELL-17 status (2026-11-14): already shipped. Studio webviews honour `workbench.reduceMotion` in #1896. The three-way host preference (on / off / follow the OS), which is Studio's own setting, comes from #2433 (CGP-DS-D-012).
+
+REQ-SHELL-26 status (2026-11-14): superseded by CGP-ART-D-008, not shipped as written. Minor cohorts' chat links stay inside the safe browser (#1862, CGP-ART-R-008). Since #3489 (CGP-ART-D-008 and its follow-up, decisions.md "CGP-ART-D-008", Jay 2026-11-04), a minor's link outside the cohort allowlist is blocked with a notice; there is no 열기/취소 confirm (`extensions/hypeproof-chat/src/browserSafetyHelpers.ts:60-110`). Adults always confirm with 열기 / 링크 복사, naming the host (#3484, `extensions/hypeproof-chat/src/chatPanelProvider.ts:5311-5313`). That is the opposite of this row's "off by default, with a setting", and no setting turns it off.
+
+REQ-SHELL-30 status (2026-11-14): partial, still open. `선생님께 더 요청하기` with a reason of at most 200 characters and the request state ship in Studio (`AccessControl.tsx`, CGP-SHELL-D-029, #2710), on the Service's `POST /v1/access/requests`; instructors review requests in Chalk `/budgets`. Gaps against this row:
+- The reason is required, not optional, because the Service requires it (`extensions/hypeproof-chat/webview-ui/src/AccessControl.tsx:61-65`).
+- The form shows whenever `can_request` holds and nothing is pending, not only at 10% or less or when exhausted. Only the hint sentence uses that threshold (`AccessControl.tsx:46-47`).
+- The resolved state shows the Service's resolution text, not 승인/거절 labels (`AccessControl.tsx:45`).
+- The 10-minute repeat block is not in the app, and the Service side is unverified.
+
+REQ-SHELL-31 / DES-SHELL-30 status (2026-11-14): built as AB-19 (`docs/requirements/access-budget-settlement.md`, "Chalk daily class usage"). The Chalk chart reads the daily view from hypeproof/hypeproof-service#270 and stays draft until #270 is live. Days follow Korea time (`decisions.md`, DEC-SHELL-R-031).
+
 DES-SHELL-34 status (2026-10-28, CGP-SHELL-D-034): already met on main by the CGP-SHELL-R-035 build. The panel draws the
 shipped lines as a bulleted list (host caps: ≤ 3 lines, a line over 40 characters dropped), closes with a 44px × and is a
 non-modal row in flow above the composer in light and dark. Proved by computed assertions added to

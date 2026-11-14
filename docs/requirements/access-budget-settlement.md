@@ -162,3 +162,12 @@ Chalk `/budgets`는 기존 Service forwarder와 issuer scope를 사용한다. `b
 연결 계정 비활성화/토큰 재발급이 새 예산 주체를 만들지 않도록 거부하고, 수업 예산 초기화 후의 새 계정 연결은 명시적 이관이 필요하다. 강사 mutation에는 현재 계약·기간 활성 상태도 원자적으로 검사한다. 기존 deployment workflow에 additive 0007~0010을 연결했다.
 
 실제 D1에서 취소·미정산·동시 갱신·늦은 과거 정산을, 실제 pinned SDK에서 채팅·재시도·로컬 Read 후속 호출을 검증했다. 단일 실제 공급자 요청도 usage 수집까지 확인했다. [결과](../research/budget-readiness-2026-09-08/README.md)와 [활성화·복구 절차](../operations/access-budget-release.md)를 따른다. 운영 집계는 확보했지만 실수업 비용 분포·승인 상품/요율·공급자 청구 대조·결제 adapter는 아직 완료하지 않았다. 운영 활성화와 #857 전체 완료로 해석하지 않는다.
+
+## Chalk daily class usage (CGP-SHELL-R-031 · CGP-SHELL-D-030 · 2026-11-14)
+
+REQ-SHELL-31 / DES-SHELL-30. This extends AB-12 and AB-15 to a time series for the class's instructor. The data contract is hypeproof-service#270. It is a usage
+observation for planning a class, not a learner score and not a demand claim (Product Intent 5).
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| AB-19 | Chalk `/budgets` draws the Service's `budgets[].daily_usage[]` (hypeproof-service#270) for each class budget as `최근 14일 사용`. The data is 14 Asia/Seoul days per currency meter, `{date, confirmed_amount, reserved_amount, unconfirmed_amount}`, where `unconfirmed_amount` is `null` while unresolved costs remain. The header shows `기준 시각 {as_of} · 한국 시간 기준 날짜`, plus `30분 넘게 지난 숫자 · 새로 확인하세요` once the read is older than 30 minutes. The chart is a monochrome stacked bar per day: confirmed is solid, reserved is hatched and unconfirmed is a dashed outline. A day whose unconfirmed amount is not known yet gets a dashed cap. The legend names all three in words. `표로 보기` / `그래프로 보기` (44 px, `aria-pressed`) switches to a table with the same numbers. An unknown or malformed amount is written `미확인 (금액 확인 전)`, never 0. With no usage in the window the page says `최근 14일 사용 기록이 없습니다.` instead of drawing a chart. A Service without the view gets `일별 사용을 확인하지 못했습니다…`. Several meters get a chooser. | Service `worker/test/budget-surfaces.test.mjs` (#270); `chalk/test/budget-daily.browser.mjs` |
