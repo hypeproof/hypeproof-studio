@@ -9846,13 +9846,19 @@ today's layout (same DOM, same classes, the static `ChipRack`), and the instruct
 - **Chrome.** The mission header is one wrapping row; a collapsed lesson card, the model row, the collapsed access card
   and (classroom seats) the composer lose padding and stacked rows. Every control keeps the learner's 44px floor
   (`--hp-control-min`); only padding, margins and rows shrink.
-- **Composer footer.** The cohort-managed model reason ("선생님이 정한 설정이에요", `small.hps-managed-reason`) stays in the
-  DOM, visually hidden, because the disabled model select describes itself through it (`aria-describedby`). The collapsed
+- **Composer footer.** The model control (the "모델" select and its "선생님이 정한 설정이에요" note) is not drawn at all
+  (class owner decision 2026-11-15, replacing the earlier "note stays visually hidden"). The model control inside the
+  settings sheet is unchanged. The collapsed
   "이용권 · 사용량" panel (`AccessControl`) is not drawn in the footer on ANY activity (instructor decision 2026-11-13,
   replacing the earlier "only where the header chip carries it"); it stays in the gear dialog next to "AI가 할 수 있는 일".
   The one exception is a funding choice the learner must make before sending (`requiresFundingSelection`): that blocks
   sending, so the footer panel and its "이용권을 선택해 주세요" summary stay. Limit errors and notices are separate
   messages and are unchanged. The automation seat's summary says "대화 설정" when the panel is not inside it.
+- **Changed-page card and "AI가 한 일".** Neither the "이번 답에서 바뀐 페이지" card (`PageCard`, with its version label
+  and check status) nor the "AI가 한 일" panel (`TaskActivity`) is drawn (class owner decision 2026-11-15: jargon for a
+  non-developer learner). The "이번 요청 동안 바뀐 파일 N개" block with "모두 되돌리기 / 이대로 둘게요" and the
+  preview-server row are unchanged. Covered by `test/coach-layout-compact.test.tsx`; the standard layout's page card
+  markup is pinned by `test/fixtures/coach-layout-head-page-card.html`.
 - **Command approval (위험한 명령).** Only a prompt whose heading would read "코치가 위험한 명령을 실행하려고 해요"
   (`purpose: 'destructive'`) changes. Title: `이 명령을 실행할까요?`. The fixed "되돌릴 수 없어요" line becomes one small
   line (`.hps-command-warning-compact`, caption size) in the same slot. The prompt carries no reason code (the classifier
