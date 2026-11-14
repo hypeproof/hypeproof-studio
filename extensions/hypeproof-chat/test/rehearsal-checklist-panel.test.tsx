@@ -78,6 +78,14 @@ async function main() {
   assert.ok(unknown.textContent.includes('수업: 서버 · 알 수 없음'), 'unknown lesson model');
   assert.equal(unknown.textContent.includes('다릅니다'), false);
 
+  // #4102 — a server-path rehearsal has no route band, and the checklist still shows (both paths).
+  const serverPath = mountPoint(); const serverRoot = createRoot(serverPath as any);
+  await act(async () => serverRoot.render(<RehearsalSeatBand visible onEnd={() => undefined} panel={{ stucks: STUCKS }} onInsertExpected={() => undefined} />));
+  assert.equal(serverPath.textContent.includes('리허설과 수업의 차이'), false, 'no route band without a subscription route');
+  assert.equal(serverPath.textContent.includes('리허설: 내 구독'), false, 'no rehearsal model line without a subscription route');
+  assert.ok(serverPath.textContent.includes('예상 막힘 점검'), 'the checklist still shows');
+  assert.equal(serverPath.findAll((e: any) => e.localName === 'button' && (e.textContent ?? '').includes('학생 말 넣기')).length, 3);
+
   console.log('rehearsal-checklist-panel render checks passed');
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

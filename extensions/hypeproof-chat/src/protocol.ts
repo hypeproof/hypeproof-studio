@@ -160,7 +160,8 @@ export interface ChatConfig {
   /** #4102 — the rehearsal panel's content, only with the rehearsal signal: the seat's expected stucks and the route values. */
   rehearsalPanel?: {
     stucks: { id: string; expected_stuck: string }[];
-    route: { rehearsalModel: string | null; lessonModel: string | null; minor: boolean };
+    /** Only a subscription rehearsal (profile.rehearsal.path === 'subscription', #4103). Absent otherwise. */
+    route?: { rehearsalModel: string | null; lessonModel: string | null; minor: boolean };
   };
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
@@ -323,7 +324,8 @@ export interface ResolvedProfile {
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
-  rehearsal?: { id: string; course_id: string; version: string; expires_at: number; judged: boolean };
+  /** #4103 — 'subscription' runs the rehearsal on the instructor's own runner; 'server' is the lesson's own route. */
+  rehearsal?: { id: string; course_id: string; version: string; expires_at: number; judged: boolean; path?: 'subscription' | 'server' };
   /** Server-verified identity; never an execution grant. */
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */

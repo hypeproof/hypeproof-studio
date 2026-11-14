@@ -3241,14 +3241,14 @@ export function RehearsalSeatBand({ visible, onEnd, panel, onInsertExpected }: {
         <span className="hps-rehearsal-seat-label">리허설 중</span>
         <button type="button" className="hp-cta-quiet" onClick={onEnd}>끝내고 돌아가기</button>
       </div>
-      {panel ? <RehearsalRoute route={panel.route} /> : null}
+      {panel?.route ? <RehearsalRoute route={panel.route} /> : null}
       {panel ? <RehearsalChecklist stucks={panel.stucks} onInsert={onInsertExpected} /> : null}
     </>
   );
 }
 
 /** #4102 — 리허설과 수업의 차이: the two model lines, the difference (if any), the minor lines, and the record line. */
-function RehearsalRoute({ route }: { route: RehearsalPanel["route"] }) {
+function RehearsalRoute({ route }: { route: NonNullable<RehearsalPanel["route"]> }) {
   const lines = routeLines(route);
   return (
     <div className="hps-rehearsal-route">

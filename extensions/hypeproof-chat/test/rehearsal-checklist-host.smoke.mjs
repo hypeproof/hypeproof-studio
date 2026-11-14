@@ -3,7 +3,7 @@
 // field only when the person marked something; an old report is unchanged.
 import assert from "node:assert/strict";
 import {
-  REHEARSAL_SEAT_KEY, enterRehearsal, resumeOnActivation, forgetIssuer, rehearsalChecklistFor, sanitizeStucks, checklistForReport, rehearsalStucksAt,
+  REHEARSAL_SEAT_KEY, enterRehearsal, resumeOnActivation, forgetIssuer, rehearsalChecklistFor, sanitizeStucks, checklistForReport, rehearsalStucksAt, rehearsalRouteFor,
 } from "../src/rehearsalSeat.ts";
 import { ISSUER_TOKEN_KEY } from "../src/mintStudentTokenHelpers.ts";
 import { rehearsalReport } from "../src/lessonFocus.ts";
@@ -155,6 +155,26 @@ await t("the panel reads the stucks only inside the rehearsal folder, and not el
   assert.deepEqual(await rehearsalStucksAt(s2, FOLDER), STUCKS);
   assert.deepEqual(await rehearsalStucksAt(s2, HOME), []);
   assert.deepEqual(await rehearsalStucksAt(store(), FOLDER), []);
+});
+
+// #4102 — the route band is for the subscription rehearsal only (profile.rehearsal.path === "subscription").
+await t("route: a subscription rehearsal gets the route values (model names, minor)", () => {
+  const profile = { rehearsal: { id: "r", course_id: "c", version: "v", expires_at: 1, judged: false, path: "subscription" }, model_selection: { default: "lesson-model" }, minor_cohort: true };
+  assert.deepEqual(rehearsalRouteFor(profile, "rehearsal-model"), { rehearsalModel: "rehearsal-model", lessonModel: "lesson-model", minor: true });
+});
+
+await t("route: a subscription rehearsal with no local runner shows the rehearsal model as unknown (null)", () => {
+  const profile = { rehearsal: { id: "r", course_id: "c", version: "v", expires_at: 1, judged: false, path: "subscription" }, model_selection: { default: "lesson-model" } };
+  assert.deepEqual(rehearsalRouteFor(profile, undefined), { rehearsalModel: null, lessonModel: "lesson-model", minor: false });
+  assert.deepEqual(rehearsalRouteFor(profile, "default"), { rehearsalModel: null, lessonModel: "lesson-model", minor: false });
+});
+
+await t("route: a server-path rehearsal (or no path) gets no route band (control)", () => {
+  const server = { rehearsal: { id: "r", course_id: "c", version: "v", expires_at: 1, judged: false, path: "server" }, model_selection: { default: "m" } };
+  const nopath = { rehearsal: { id: "r", course_id: "c", version: "v", expires_at: 1, judged: false }, model_selection: { default: "m" } };
+  assert.equal(rehearsalRouteFor(server, "x"), undefined);
+  assert.equal(rehearsalRouteFor(nopath, "x"), undefined);
+  assert.equal(rehearsalRouteFor(null, "x"), undefined);
 });
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }

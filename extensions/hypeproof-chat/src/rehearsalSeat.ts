@@ -237,6 +237,20 @@ export async function rehearsalChecklistFor(h: SeatHost): Promise<SeatStuck[]> {
   return seat?.stucks ?? [];
 }
 
+/**
+ * #4102 — the route band's values. Only a subscription rehearsal has a route difference (profile.rehearsal.path, set by
+ * #4103); a server-path rehearsal is the lesson's own route, so it has none. The rehearsal model is the local runner's name
+ * (null when there is none, or it is only the 'default' alias).
+ */
+export function rehearsalRouteFor(profile: { rehearsal?: { path?: string }; model_selection?: { default?: string }; minor_cohort?: boolean } | null | undefined, localModel: string | undefined): { rehearsalModel: string | null; lessonModel: string | null; minor: boolean } | undefined {
+  if (profile?.rehearsal?.path !== "subscription") return undefined;
+  return {
+    rehearsalModel: localModel && localModel !== "default" ? localModel : null,
+    lessonModel: profile.model_selection?.default ?? null,
+    minor: profile.minor_cohort === true,
+  };
+}
+
 /** #4102 — the expected stucks for the panel, only while the window is the rehearsal seat (no seat: empty). */
 export async function rehearsalStucksAt(secrets: SeatSecrets, root: string | undefined): Promise<SeatStuck[]> {
   if (!(await rehearsalSeatActiveFor(secrets, root))) return [];
