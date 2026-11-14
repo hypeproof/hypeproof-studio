@@ -36,12 +36,6 @@ const config = (() => { const base = chatConfig(3); return { ...base, profile: {
 // Two learners on one shared classroom PC: the same lesson, two Service seats (CGP-LEARN-R-011 (c) follow-up).
 const asSeat = (c) => ({ ...config, profile: { ...config.profile, activity_id: c.repeat(64) } });
 const seatA = asSeat('a'), seatB = asSeat('b');
-// What a same-seat re-mount of the ChatPanel posts to the host, sorted, once each (measured on main abacd1bf5; #4064 pin
-// b). The lesson panel's own share is the one lessonFocus. A new ChatPanel mount request changes this list on purpose:
-// update it then, and only then. An extra post on mount (any type, a second lessonFocus included) fails here.
-const SAME_SEAT_REMOUNT_TYPES = ['accuracyEducationRequest', 'helpRequest', 'inboxRequest', 'lessonFocus', 'lowDiskRequest', 'memoryNoticeRequest',
-  'missingTaskFolderRequest', 'pageCardsRequest', 'perfTraceStateRequest', 'planFirstRequest', 'previewRecoveryRequest', 'queueState',
-  'turnReviewRequest', 'whatsNewRequest'];
 // No seat at all: no Service seat id, no capability receipt, no local activity id (a local/dev or instructor-like window).
 const noSeat = { ...config, activity: { ...config.activity, id: '' } };
 const nextVersion = { ...config, profile: { ...config.profile, lesson: { ...config.profile.lesson, version: config.profile.lesson.version + '-next', sha256: 'e'.repeat(64) } } };
@@ -187,8 +181,11 @@ try {
     const same = await traffic(seatA, 'A again');
     assert.equal(await ev(`card('criterion_form').dataset.blockCollapsed!==undefined`), true, `${tag}: the same learner keeps it across a re-mount (control)`);
     const switched = await traffic(seatB, 'learner B');
-    // #4064 pin b: the control's own list, as a literal, so "post on every mount" cannot hide in both sides of the comparison.
-    assert.deepEqual(same.types, SAME_SEAT_REMOUNT_TYPES, `${tag}: a same-seat re-mount posts exactly ${JSON.stringify(SAME_SEAT_REMOUNT_TYPES)}`);
+    // #4064 pin b: "post on every mount" grows both sides of the comparison together, so the control is pinned on its own
+    // terms. Not the whole mount inventory (it changes with every new ChatPanel feature, verify-r004 on #4083), only what
+    // this panel owns: exactly one lessonFocus, and no type posted twice by one re-mount.
+    assert.equal(same.types.filter((t) => t === 'lessonFocus').length, 1, `${tag}: a same-seat re-mount posts exactly one lessonFocus`);
+    assert.equal(new Set(same.types).size, same.types.length, `${tag}: a re-mount posts each type once (${JSON.stringify(same.types)})`);
     assert.equal(same.sawCollapsed, true, `${tag}: control: the same learner's re-mount draws the collapsed block`);
     // #4064 pin a: learner B's very first frame shows no collapsed block (not only after an effect corrects it).
     assert.equal(switched.sawCollapsed, false, `${tag}: no frame of learner B's mount draws learner A's collapsed block`);
