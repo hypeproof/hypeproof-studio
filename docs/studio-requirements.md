@@ -7940,8 +7940,10 @@ skill's menu) saves the deck skill's `deck.html` as `deck.pdf` in the same folde
     `revealFileInOS`, which shows `deck.pdf` selected in its folder.
   - Refusals ("저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요.") make no OS call. They cover: another
     task, nothing exported yet, the file deleted, replaced by a link, a linked folder on its path, a
-    climbing or rooted path, or swapped between the two walks. Nothing outside the served root is ever
-    revealed.
+    climbing or rooted path, or swapped between the two walks. They also cover the served root itself
+    replaced by a link after the save: the walk runs with `exactRoot`, and a recorded root that no longer
+    canonicalizes to itself is refused. Nothing outside the served root is ever revealed. The page card's
+    open, reload and reveal walk the same way, from the canonical turn root.
   - The page card's own 폴더에서 보기 is unchanged: for the learner's page in the served root it reveals that
     root with the page selected, and a nested page reveals its own folder inside the root
     (CGP-ART-R-010).
