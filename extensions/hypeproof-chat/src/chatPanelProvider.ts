@@ -1782,7 +1782,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       find: () => this.sitePublisher().findClassRepos(),
       signIn: () => this.sitePublisher().signInForContinue(),
       prepare: (args) => this.sitePublisher().prepareContinue(args),
-      newFolder: (root) => nextFreeFolder(root),
+      // A name is also taken when it has an activity binding record, even if the folder is gone from disk.
+      newFolder: (root) => {
+        const connections = activityConnections(this.context);
+        return nextFreeFolder(root, (p) => fs.existsSync(p) || !!connections?.hasBinding(p));
+      },
       classRoot,
     };
   }
