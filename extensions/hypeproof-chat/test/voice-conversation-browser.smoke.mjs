@@ -73,7 +73,7 @@ const setup=async()=>{
  Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>[],speak:u=>window.__utterances.push(u),cancel(){}}});
  if(!navigator.mediaDevices)Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{}});
  navigator.mediaDevices.getUserMedia=async()=>{const context=new AudioContext(),osc=context.createOscillator(),gain=context.createGain(),dest=context.createMediaStreamDestination();gain.gain.value=0;osc.connect(gain);gain.connect(dest);osc.start();window.__gain=gain;window.__contexts.push(context);window.__streams.push(dest.stream);return dest.stream};`;
- await b.load(`<html><style>${css}</style><body><div id="root"></div><script>${harness}</script><script>${script}</script></body></html>`,{width:800,height:900});
+ await b.load(`<html><style>${css}</style><body><div id="root"></div><script>${harness}</script><script>${script}</script></body></html>`,{width:800,height:900,appReady:true});
  await send({type:'config',config});await send({type:'history',messages:store.getHistory()});await drain();
  await fixture.send({type:'voiceDisclosureAck',policyVersion:'hps-voice-policy/1',activityId:config.activity.id,taskId:store.getView().activeTaskId});
  assert(fixture.posts.some(m=>m.type==='voiceDisclosureState'&&m.acknowledged.includes('hps-voice-policy/1')),'real host persisted the prior policy acknowledgement');await drain();
