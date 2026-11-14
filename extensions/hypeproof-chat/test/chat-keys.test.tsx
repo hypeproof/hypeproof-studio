@@ -54,7 +54,7 @@ t('negative controls: every other Escape owner keeps it', () => {
 // The microphone cards and the recording line, from the real component's markup (verify-3956: the guard once named a
 // class no element had, and this test had built that element itself).
 const noop = () => {};
-const controller = (view: DictationView) => ({ view, toggle: noop, cancel: noop, retry: noop, recover: noop, dismiss: noop, insertRecovered: noop, copyRecovered: noop, openSettings: noop, busy: false, disabled: false, disabledReason: null, level: () => null }) as DictationController;
+const controller = (view: DictationView) => ({ view, toggle: noop, cancel: noop, retry: noop, recover: noop, dismiss: noop, insertRecovered: noop, copyRecovered: noop, openSettings: noop, busy: false, disabled: false, disabledReason: null, level: () => null, hasKeptClip: () => false }) as DictationController;
 const drawn = (view: DictationView) => renderToStaticMarkup(<DictationNoticeView view={view} controller={controller(view)} />);
 t('the drawn microphone cards and the recording line keep Escape; other dictation notes do not', () => {
   for (const view of [{ kind: 'denied', settingsFailed: false }, { kind: 'recovered', text: '받아 적은 말', copied: false }, { kind: 'recording', seconds: 3 }] as DictationView[]) {

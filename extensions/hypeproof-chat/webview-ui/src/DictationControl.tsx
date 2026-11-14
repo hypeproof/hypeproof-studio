@@ -57,6 +57,8 @@ export interface DictationController {
   disabledReason: string | null;
   /** D-010: the recording's current input level (0..1), or null with no meter. */
   level(): number | null;
+  /** R-015 / policy 3: whether a clip is held in memory for 다시 보내기 right now (read-only; never the bytes). */
+  hasKeptClip(): boolean;
 }
 
 /** Browser objects for the recorder. Tests replace this through `DictationEnvContext`. */
@@ -300,10 +302,13 @@ function useDictation(api: ComposerAddonApi): DictationController {
 
   const busy = view.kind === "starting" || view.kind === "recording" || view.kind === "working";
   const level = useCallback(() => recorder.level(), [recorder]);
-  return { view, toggle, cancel, retry, recover, dismiss, level, insertRecovered, copyRecovered, openSettings, allowMic, laterMic, busy, disabled: api.disabled, disabledReason: api.disabled ? api.disabledReason ?? null : null };
+  const hasKeptClip = useCallback(() => clip.current !== null, []);
+  return { view, toggle, cancel, retry, recover, dismiss, level, insertRecovered, copyRecovered, openSettings, allowMic, laterMic, busy, disabled: api.disabled, disabledReason: api.disabled ? api.disabledReason ?? null : null, hasKeptClip };
 }
 
 const ControllerContext = createContext<DictationController | null>(null);
+/** The dictation controller of the enclosing scope, or null (tests read its state through it). */
+export const useDictationController = (): DictationController | null => useContext(ControllerContext);
 
 /** Holds the one dictation controller so the button and the status area share it. Mounted by the composer addon. */
 export function DictationScope({ api, children }: { api: ComposerAddonApi; children: ReactNode }) {

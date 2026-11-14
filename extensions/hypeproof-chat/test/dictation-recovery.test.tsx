@@ -9,7 +9,7 @@ import { click, document, mountPoint } from "./fixtures/mini-dom.mjs";
 import { createRoot } from "react-dom/client";
 import { VoiceProvider, useVoiceController } from "../webview-ui/src/VoiceProvider";
 import { dictationAddonFor } from "../webview-ui/src/dictationAddon";
-import { DictationEnvContext } from "../webview-ui/src/DictationControl";
+import { DictationEnvContext, useDictationController, type DictationController } from "../webview-ui/src/DictationControl";
 import { ReadAloudButton, SpeechEnvContext, browserSpeechEnv } from "../webview-ui/src/ReadAloudButton";
 import { insertAtCaret } from "../webview-ui/src/composerAddon";
 import { DICTATION_STOP_AT_MS } from "../src/voiceDictation";
@@ -51,6 +51,9 @@ class FakeRecorder {
   emit(bytes: Uint8Array) { this.ondataavailable?.({ data: { size: bytes.length, arrayBuffer: async () => bytes.buffer } }); }
 }
 let rig: Rig & { focused: number };
+/** Reads the real controller (the kept-clip flag only, never the bytes). */
+let probe: DictationController | null = null;
+function Probe() { probe = useDictationController(); return null; }
 let blockedReason: string | null = null;
 let denyMic = false;
 let clock = 0;
@@ -88,7 +91,7 @@ function Harness({ profile, scope = "s1", speech = speechEnv, insertOk = true, c
     createElement(DictationEnvContext.Provider, { value: dictEnv },
       createElement(SpeechEnvContext.Provider, { value: speech as never },
         createElement("div", { className: "frame" },
-          addon ? createElement(addon.Scope, { api }, createElement("div", { className: "composer" }, createElement(addon.Notice), createElement(addon.Control))) : null,
+          addon ? createElement(addon.Scope, { api }, createElement("div", { className: "composer" }, createElement(addon.Notice), createElement(addon.Control), createElement(Probe))) : null,
           createElement("div", { className: "answer-actions" }, createElement(ReadAloudButton, { answerId: "a1", content }))))));
 }
 const profileOn = (extra: Record<string, unknown> = {}) => ({ profile_id: "p", voice: { dictation: true, read_aloud: true, policy_version: V1, ...extra } });
@@ -109,7 +112,7 @@ const line = () => all((e) => (e.getAttribute("class") ?? "").includes("hps-voic
 const actions = () => line() ? line().findAll((e: El) => e.tagName === "BUTTON").map((b: El) => b.textContent.trim()) : null;
 const press = () => act(() => click(byLabel("받아쓰기") as never));
 /** Record and stop, so a clip goes to the host. */
-const recordClip = async () => { await press(); await flush(); rig.recorders.at(-1)!.emit(new Uint8Array(8)); await advance(1500); await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); };
+const recordClip = async () => { await press(); await flush(); rig.recorders.at(-1)!.emit(new Uint8Array(24).map((_, i) => (i * 37 + 11) & 255)); await advance(1500); await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush(); };
 const lastSend = () => posted("voiceTranscribe").at(-1)!;
 
 for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
@@ -170,6 +173,63 @@ for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
     const sends = posted("voiceTranscribe").length, mics = rig.mediaCalls;
     await act(() => click(byText("다시 보내기") as never)); await flush();
     eq([posted("voiceTranscribe").length, rig.mediaCalls], [sends, mics + 1], "no stale resend; a fresh recording");
+  });
+}
+
+for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
+  t(`${seat}: the retry copy is memory only and dropped on success, 닫기, window hide, pagehide, leaving the chat and after 10 minutes`, async () => {
+    const failOnce = async () => {
+      await recordClip();
+      await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: false, kind: "network", message: "연결", retry: true });
+      ok(probe!.hasKeptClip(), "a retryable failure keeps the clip in memory");
+    };
+    // No disk: no storage API, no blob URL, nothing in the webview state, the audio only in voiceTranscribe.
+    const spies: string[] = [];
+    const gw = globalThis as unknown as Record<string, unknown>;
+    const keep = { ls: gw.localStorage, ss: gw.sessionStorage, idb: gw.indexedDB, cou: (URL as unknown as { createObjectURL?: unknown }).createObjectURL };
+    const trap = (name: string) => new Proxy({}, { get: (_t, k) => () => { spies.push(`${name}.${String(k)}`); } });
+    gw.localStorage = trap("localStorage"); gw.sessionStorage = trap("sessionStorage"); gw.indexedDB = trap("indexedDB");
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = () => { spies.push("URL.createObjectURL"); return ""; };
+    (globalThis as unknown as { __vsState: unknown }).__vsState = undefined;
+    try {
+      await mount(profile(), { acked: true });
+      // Success drops it.
+      await failOnce();
+      const audio = lastSend().audio as string;
+      await act(() => click(byText("다시 보내기") as never));
+      await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: true, text: "다시 들은 문장" });
+      ok(!probe!.hasKeptClip(), "success drops the copy");
+      // 닫기 drops it.
+      await failOnce();
+      await act(() => click(byText("닫기") as never));
+      ok(!probe!.hasKeptClip(), "닫기 drops the copy");
+      // Hiding the window drops it (visibilitychange), and so does pagehide.
+      await failOnce();
+      const doc = document as unknown as { visibilityState: string; dispatchEvent(e: unknown): void };
+      const vis = Object.getOwnPropertyDescriptor(doc, "visibilityState");
+      Object.defineProperty(doc, "visibilityState", { configurable: true, get: () => "hidden" });
+      await act(() => { doc.dispatchEvent({ type: "visibilitychange", bubbles: false }); });
+      if (vis) Object.defineProperty(doc, "visibilityState", vis); else delete (doc as unknown as { visibilityState?: string }).visibilityState;
+      ok(!probe!.hasKeptClip(), "a hidden window drops the copy");
+      await failOnce();
+      await act(() => { g.window.dispatchEvent({ type: "pagehide", bubbles: false }); });
+      ok(!probe!.hasKeptClip(), "pagehide drops the copy");
+      // Ten minutes drop it.
+      await failOnce();
+      await advance(10 * 60 * 1000 + 1);
+      ok(!probe!.hasKeptClip(), "after 10 minutes the copy is gone");
+      // Leaving the chat (a task or seat switch remounts the chat) drops it.
+      await failOnce();
+      const before = probe!;
+      await act(() => root.render(createElement("div")));
+      ok(!before.hasKeptClip(), "leaving the chat drops the copy");
+      eq(spies, [], "no storage or blob URL was used");
+      const state = JSON.stringify((globalThis as unknown as { __vsState: unknown }).__vsState ?? null);
+      ok(!state.includes(audio.slice(0, 12)), "the webview state holds no audio");
+      ok(g.__posted.filter((m) => m.type !== "voiceTranscribe").every((m) => !JSON.stringify(m).includes(audio.slice(0, 12))), "no other host message carries the audio");
+    } finally {
+      gw.localStorage = keep.ls; gw.sessionStorage = keep.ss; gw.indexedDB = keep.idb; (URL as unknown as { createObjectURL: unknown }).createObjectURL = keep.cou;
+    }
   });
 }
 
