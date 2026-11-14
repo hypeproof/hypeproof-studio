@@ -35,7 +35,9 @@ const CARDS = [
 const config = (extra: Record<string, unknown> = {}) => ({
   model: "claude-sonnet-5", hasToken: true, proxyUrl: "http://localhost:8787",
   coach: { name: "HypeProof", personality: "", configured: true },
-  profile: { profile_id: "class-a", activity_kind: "classroom", observation: null, lesson: null, rehearsal: null, welcome: { greeting_md: "안녕하세요" }, model_selection: null, ux: UX, ...extra },
+  // The coach's own skills ride on the served profile too (Profile.skills, SKILL.md text). The shelf must never draw them.
+  profile: { profile_id: "class-a", activity_kind: "classroom", observation: null, lesson: null, rehearsal: null, welcome: { greeting_md: "안녕하세요" }, model_selection: null, ux: UX,
+    skills: [{ name: "ZZCOACHSKILL", description: "ZZCOACHDESC", content: "---\nname: ZZCOACHSKILL\n---\n# ZZSKILLMD coach instructions" }], ...extra },
   activity: { id: "a1", name: "수업", kind: "classroom", workspace: "/tmp/w", verified: true },
 }) as unknown as ChatConfig;
 const PROPS = {
@@ -83,6 +85,15 @@ t("served cards are a collapsed shelf above the composer: title with count, name
   eq((shelf.match(/<button type="button" class="hps-skill-card-try"/g) ?? []).length, 2, "one button per card");
   ok(shelf.includes('aria-label="써 보기: 요약 스킬"'), "the button names its card");
   ok(!shelf.includes(CARDS[0].prompt), "the prompt is not drawn on the shelf");
+});
+
+t("the coach's Profile.skills and SKILL.md text never reach the shelf or the composer", async () => {
+  for (const out of [html(config({ skill_cards: CARDS })), html(config())])
+    for (const marker of ["ZZCOACHSKILL", "ZZCOACHDESC", "ZZSKILLMD"]) ok(!out.includes(marker), `${marker} reached the panel markup`);
+  const h = await harness(config({ skill_cards: CARDS }));
+  for (const b of h.tries()) await h.press(b);
+  for (const marker of ["ZZCOACHSKILL", "ZZCOACHDESC", "ZZSKILLMD"]) ok(!h.draft().includes(marker), `${marker} reached the composer`);
+  eq(servedSkillCards({ skills: [{ name: "ZZCOACHSKILL", summary: "s", prompt: "p" }] } as never), [], "the reader reads skill_cards only, never skills");
 });
 
 t("no install, enable, delete or source control; no SKILL.md", () => {

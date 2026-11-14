@@ -7664,7 +7664,11 @@ summary and a starter prompt), and they are frozen with the lesson version (`ski
   - more than 6 cards;
   - a name over 30 units, a summary over 80, or a prompt over 300 units or 6 lines;
   - control, bidi or zero-width characters;
-  - a link (the Service's `hasLink`: NFKC first, any scheme token, `www.`, `//`);
+  - a link, by the Service's `hasLink`. It applies NFKC and folds colon look-alikes, then refuses `<scheme>://`, a
+    known scheme directly followed by `:` (http(s), ftp(s), javascript, vbscript, data, file, blob, mailto, tel,
+    sms, intent, about, vscode*, hypeproof*, x-*; marks stripped and Cyrillic/Greek look-alikes folded), a bare
+    `http:`/`https:`, `www.` plus a domain, and `//` plus a host. Coding text with colons passes (`color:red`,
+    `a:hover`, `std::cout`, `C:\Users`, `//주석`, `Q:답`). The cases live in `chalk/test/fixtures/link-cases.json`;
   - a duplicate name.
 - What: a collapsed "이 수업의 스킬 (N)" disclosure above the composer, after the starter chips. Each card
   shows its name and summary and one "써 보기" button ("써 보기: <name>"). It stays after the learner's first
