@@ -449,8 +449,21 @@ Source/parser checks are not App, installed-device, live-auth or physical-ASR PA
 Desktop controls: `account-cards.smoke.mjs`, `team-product-loop.smoke.mjs`,
 `account-question-entry.test.tsx`, and existing personal-reflection/member-approval host/UI controls.
 Native controls: `AccountQuestionTests.swift`, `TeamEntryUITests.swift`,
-`NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`. A fixture name or compiled APK alone is not
+`NativeTeamModelTest.java`, `TeamEntryJourneyTest.java`, `AccountPushTests.swift`,
+`NativePushTest.java`. A fixture name or compiled APK alone is not
 an executed native journey. Report the actual run and any missing physical/provider evidence.
+
+Capability controls must exercise unavailable/error/account-switch metadata as
+well as available-but-declined consent. Both the visible choice and controller
+submission boundary must agree; no trigger is sent for an unavailable capability,
+and an existing pending intent is retained. Consent menu checks use one real tap
+and observe the window rather than retrying a lost interaction into a pass.
+
+Push controls must cover logout and off/on during permission/token work, stale
+receipts, and opening a notice with current authorization. The default unconfigured
+build never substitutes a token or reports delivery. Use `apps/studio-native/PUSH.md`
+for the provisioning boundary; source review and local transport do not qualify
+APNs/FCM acceptance or a physical notification.
 
 For MFR-03/04 and MVOICE-03/04, automatic personal-history reads keep a cached ready conversation
 visually quiet. `testSecondSpokenTurnSendsThroughQuietPeriodicHistoryAndStopKeepsTheNextDraft`

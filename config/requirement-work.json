@@ -989,7 +989,7 @@
       "inline_prefixes": [
         "MENT"
       ],
-      "sha256": "625092aece469a2414471ba57357150c9e5762db11367c74c5f69b258ed188be",
+      "sha256": "04ab0d034be54418d12209ecedcb2ee8d3334086029c5bf89b33ea6ea733854a",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5209,7 +5209,16 @@
         "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionStorage.java",
         "apps/studio-native/ios/Sources/StudioCore/ProductExperience.swift",
         "apps/studio-native/ios/App/ProductExperienceView.swift",
-        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeProductExperience.java"
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeProductExperience.java",
+        "apps/studio-native/PUSH.md",
+        "apps/studio-native/android/app/build.gradle",
+        "apps/studio-native/android/app/src/main/AndroidManifest.xml",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativePush.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioMessagingService.java",
+        "apps/studio-native/ios/App/AccountPushView.swift",
+        "apps/studio-native/ios/App/HPStudio-Push.entitlements.example",
+        "apps/studio-native/ios/App/HPStudioApp.swift",
+        "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/account-cards.smoke.mjs",
@@ -5223,7 +5232,10 @@
         "apps/studio-native/ios/Tests/StudioCoreTests/ProductExperienceTests.swift",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeProductExperienceTest.java",
         "apps/studio-native/scripts/collect-native-journeys.py",
-        "apps/studio-native/tests/test_native_journey_evidence.py"
+        "apps/studio-native/tests/test_native_journey_evidence.py",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativePushTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java",
+        "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
       ]
     }
   ]

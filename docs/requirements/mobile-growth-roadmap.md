@@ -69,6 +69,13 @@ The client requires Service `team-product-api` line `1` in the shared release
 dependency ledger. That line proves compatible source, not enabled operation:
 0091/0092 schema, team-event/push flags, verified membership and provider readiness
 must be checked separately before activating the corresponding experience.
+Starting choices require current-account capability metadata. Missing, stale or
+rejected metadata hides those choices and blocks trigger submission while keeping
+pending intent and normal conversation intact. Capability availability is separate
+from optional measurement consent: declining measurement does not disable questions.
+Notification permission is also a separate explicit choice. An unconfigured
+provider remains visibly unavailable; a late permission/token callback after
+logout or disable cannot register for the previous account.
 
 The existing Mac desktop is the sole desktop product. The previous Catalyst preview is superseded and no longer built or uploaded; its local data is preserved. Mobile parity means the essential user outcomes, not replicating a desktop IDE on a phone. Foundry owns versioned execution and verification; existing platform CI and release engines remain the executors. Keep Foundry/policy/adapter/product versions distinct. READY, merged, signed, uploaded, available to testers, installed and user-accepted are separate states.
 

@@ -19839,6 +19839,33 @@
         },
         {
           "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativeProductExperience.java"
+        },
+        {
+          "path": "apps/studio-native/PUSH.md"
+        },
+        {
+          "path": "apps/studio-native/android/app/build.gradle"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/NativePush.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/StudioMessagingService.java"
+        },
+        {
+          "path": "apps/studio-native/ios/App/AccountPushView.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudio-Push.entitlements.example"
+        },
+        {
+          "path": "apps/studio-native/ios/App/HPStudioApp.swift"
+        },
+        {
+          "path": "apps/studio-native/ios/Sources/StudioCore/AccountPush.swift"
         }
       ]
     },
@@ -19889,6 +19916,15 @@
         },
         {
           "path": "apps/studio-native/tests/test_native_journey_evidence.py"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativePushTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/TestHttpServer.java"
+        },
+        {
+          "path": "apps/studio-native/ios/Tests/StudioCoreTests/AccountPushTests.swift"
         }
       ]
     }
