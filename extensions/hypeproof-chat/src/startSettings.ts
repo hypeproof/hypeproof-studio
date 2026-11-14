@@ -8,8 +8,9 @@
  *
  * Only rows whose behaviour exists today are listed (DEC-SHELL-R014 in decisions.md):
  * 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (workbench.reduceMotion, CGP-DS-R-015) and
- * 알림 (hypeproofChat.osTaskNotices, the task-notice core patch) and 화면 밝기 (CGP-SHELL-R-016: HP Dark, HP Light or the
- * device's setting). 팁 보기 (REQ-SHELL-19) and 내 작업 내보내기 (REQ-SHELL-28) join the list when their rows ship;
+ * 알림 (hypeproofChat.osTaskNotices, the task-notice core patch), 화면 밝기 (CGP-SHELL-R-016: HP Dark, HP Light or the
+ * device's setting) and 내 작업 내보내기 (REQ-SHELL-28), an action row that runs the shipped export (CGP-SHELL-R-028).
+ * 팁 보기 (REQ-SHELL-19) joins the list when its row ships;
  * a row without its behaviour would be a switch that does nothing.
  */
 import { normalizeTextSize, type TextSize } from "./textSize";
@@ -19,7 +20,7 @@ export const START_SETTING_ROWS = ["textSize", "theme", "reduceMotion", "notices
 export type StartSettingRow = (typeof START_SETTING_ROWS)[number];
 export const START_SETTINGS_MAX_ROWS = 6;
 /** Rows whose behaviour exists in this build. */
-export const START_SETTING_ROWS_AVAILABLE: readonly StartSettingRow[] = ["textSize", "theme", "reduceMotion", "notices"];
+export const START_SETTING_ROWS_AVAILABLE: readonly StartSettingRow[] = ["textSize", "theme", "reduceMotion", "notices", "export"];
 
 /**
  * CGP-SHELL-R-016 — 화면 밝기. `dark` / `light` pin one of the two HP themes; `system` follows the device (VS Code's
@@ -58,6 +59,8 @@ export const START_SETTINGS_COPY = {
   notices: "알림",
   noticesLabel: "창을 보고 있지 않을 때 컴퓨터 알림으로도 알려 줘요.",
   noticesHint: "코치가 일을 마치거나 확인을 기다릴 때 알려요. 답변 내용은 알림에 넣지 않아요.",
+  export: "내 작업 내보내기",
+  exportHint: "작업 폴더와 대화를 ZIP 파일 하나로 저장해요. 저장할 폴더는 직접 골라요.",
   advanced: "고급 설정",
 } as const;
 

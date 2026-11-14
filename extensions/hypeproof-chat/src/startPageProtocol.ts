@@ -128,6 +128,8 @@ export type StartRequest =
   /** Epic #3418 REQ-STORE-ENTRY — opens the skill store panel (`hypeproof-chat.skillStore`). Not offered on a classroom seat. */
   | { type: "openSkillStore" }
   | { type: "openAdvancedSettings" }
+  /** CGP-SHELL-R-014 — the sheet's 내 작업 내보내기 row: runs the shipped export (CGP-SHELL-R-028). */
+  | { type: "startExportMyWork" }
   | { type: "startSetting"; key: "textSize" | "theme" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
   | { type: "connectCourse"; token: string; joinClass?: string }

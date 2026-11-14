@@ -49,10 +49,46 @@ remain blocked for inspection. Missing is not proof that
 an in-flight action cannot still finish. No generic unlock/force-publish bypass exists.
 
 A DONE operation with identical input is reusable without repeating side effects.
-A new operation ID consumes a new cost reservation and a bounded attempt. Quotes
+A new operation ID consumes a new cost reservation and a bounded attempt, except
+that a candidate may have only one initial `build` operation. Quotes
 bind the whole request, expiry and candidate, not merely an adapter's name. Quote
 correctness is a release-manager attestation; this tool cannot enforce provider-side
 billing or claim a final invoice. Use provider limits and actual observations too.
+
+### Desktop build recovery
+
+`build --plan` binds the exact candidate's committed platform/workflow bytes,
+managed tag marker and trigger modes. The supported mixed producer creates one
+tag for Mac and sends one Windows dispatch with that tag as the workflow ref,
+the full source SHA as both source inputs, `managed_draft=true`, and the final
+release version. The Windows write uses a separate repository-scoped Actions
+broker grant. No extra Mac dispatch, signing override or publication is allowed.
+The dispatcher requests a run ID using GitHub's documented
+[`return_run_details`](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+option; a lost/empty response still requires exact run observation, never replay.
+
+Each tag/dispatch intent is committed with the existing state CAS before its
+effect. A successful tag is retained when Windows has not started. `reconcile`
+only reads provider records; missing, truncated, multiple or mismatched run
+evidence remains UNKNOWN. If Windows has no saved intent, the current owner may
+resume that unattempted step with the original checkout and a new whole-build
+quote, using the same operation ID:
+
+```bash
+"${release[@]}" resume-build --operation build-1 --checkout /path/to/exact/studio-candidate --quote /tmp/build-resume-quote.json --plan
+# Confirm the original request digest and fresh whole-build upper bound, then:
+"${release[@]}" resume-build --operation build-1 --checkout /path/to/exact/studio-candidate --quote /tmp/build-resume-quote.json
+```
+
+The reservation stays at least as large as either whole-build quote; it is not
+reset by partial success. Resume count and total budget remain bounded. An
+already-attempted dispatch cannot be resent even if no run is visible yet.
+`BUILD_RUNS_OBSERVED` means both exact runs exist; it does not mean successful
+builds, package acceptance or deployment. Collection still requires both complete
+platform receipts and original bytes, including Mac signing. S1/S3/S4/S5, no
+automatic managed-draft acceptance and all existing publication gates remain.
+Legacy tag-only UNKNOWN operations are observed under their original request;
+never reinterpret them as permission for a new dispatch.
 
 Shared state lives on one `ops/release-state/<identity>` orphan branch containing
 only `state.json`. Each non-forced ref update compares the exact prior commit; a stale
@@ -203,6 +239,77 @@ Previous copies are kept beside the installation as hidden backups. Receipts bin
 source revision, dirty-working-tree status and every installed file hash. A local
 install or fixture pass does not mean teammates have installed it, main merged,
 or remote provider operations have been exercised.
+
+## Failed native CI evidence (Harness #660)
+
+For a **terminal failed** `studio-native-mobile.yml` run, use the separate
+read-only collector below. It does not prepare a release, mutate manager state,
+dispatch/rerun a workflow, or turn failed CI into a successful native gate.
+
+```bash
+python3 "$CANONICAL_CHECKOUT/scripts/hype-release/native_evidence.py" \
+  --run-id <REST-run-id> --attempt <exact-attempt> --expected-head <40-char-PR-head> \
+  --platform ios --studio-repo /path/to/trusted/local/studio \
+  --verifier-sha <separately-trusted-local-origin-main-SHA> \
+  --output /private/task/evidence \
+  --archive <identity-artifact-id>=/private/already-downloaded-identity.zip \
+  --archive <ios-artifact-id>=/private/already-downloaded-ios.zip
+```
+
+The archive arguments are optional, but use them when another owner has already
+downloaded these exact artifacts. Each archive must match fresh REST artifact
+ID/name/run/head, selected-attempt job time window, provider SHA-256 and length.
+The same verified bytes in the collector cache are also reused. A partial,
+tampered, expired, missing supplied or unknown archive is preserved and refused;
+it is never silently overwritten or downloaded again. Coordinate ownership
+before new downloads; resource-wrap large archive processing, after already
+queued evidence work. There is no credential fallback or automatic retry.
+
+The local Studio repository must contain the expected head Git object. The
+collector imports only the operator-pinned **origin/main**
+`verify-native-candidate.py` Git object, never a failed PR script, artifact code
+or modified working file. It reuses that verifier's identity parser/checks, then
+compares the expected head's native tree/workflow to CI identity, exactly as the
+existing gate does. The CI-reported tested checkout SHA is recorded separately
+and may name an ephemeral PR merge absent from local Git. Full merge ancestry
+is **not evaluated**; release ancestry gates are unchanged. Missing expected-head
+objects block; fetch them separately through the normal read-only source path.
+This diagnostic source binding does not establish trust in a PR's test claims.
+
+All provider reads use the existing `NativeGitHub` Actions profile and REST
+schemas. `gh run view --json` is not a REST run document. Outputs are local and
+private under `run-<id>/attempt-<n>/collections/<execution-id>`; archives have
+immutable artifact-ID cache paths. Each execution keeps its metadata, partial
+files and terminal receipt without overwriting earlier observations.
+Use a POSIX host and an owned private output directory: existing managed
+directories with group/other access are refused without changing permissions.
+This also contains incomplete downloads. Supplied external archives remain
+read-only and untouched; their owner's existing access policy remains in force.
+
+For iOS, failed test IDs from `native-journeys.json` select exact rows in the
+existing `journey-attachments/manifest.json`, including AX/video whose
+`isAssociatedWithFailure` is false. Only selected attachments and bounded
+producer logs/receipts are copied. Traversal, absolute/backslash paths,
+duplicates, symlinks, encrypted members and excessive expansion are refused.
+Before `ZipFile` allocates entries, a bounded end-record read refuses ZIP64,
+multidisk, ambiguous layout, more than 20,000 declared entries or a central
+directory above 2 MiB; the byte bound applies even to a forged small entry count.
+No app, script, binary plist or video is executed or decoded. Raw contents stay
+in local files, not stdout or publication. Review/redact before sharing any
+logs, screenshots, AX or video; they can contain customer words.
+
+`COLLECTED` means the failed-case files were selected, **not** that the failure
+was diagnosed or the app passed. `PARTIAL` retains available logs when build/setup
+failed or a case/manifest is missing; Android currently collects logs only and
+is explicitly partial. `FAILED` preserves bytes when identity, bounds, extraction
+or the final attempt recheck fails. Partial/failed exit nonzero. Visual review,
+physical audio, native acceptance and release eligibility remain separate.
+
+Offline regressions: `python3 -m unittest discover -s tests/hype_release -p
+'test_native_evidence.py'`. Controls cover REST/schema confusion, exclusive-file
+collision recovery, exact cached-byte reuse, malformed/stale identity, failed-case
+selection, hostile archives and private partial receipts. They make no live
+provider, simulator or release claim.
 
 ## Native TestFlight operation (Harness #579)
 

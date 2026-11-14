@@ -57,6 +57,11 @@ export function StartSettingsSheet({ open, onClose, opener, view }: { open: bool
       </div>
       <p id="studio-settings-notice-hint" className="studio-settings-hint">{C.noticesLabel} {C.noticesHint}</p>
     </>}
+    {rows.includes("export") && <>
+      <button type="button" className="studio-settings-row studio-settings-action" aria-describedby="studio-settings-export-hint"
+        onClick={() => { onClose(); postToHost({ type: "startExportMyWork" }); }}>{C.export}</button>
+      <p id="studio-settings-export-hint" className="studio-settings-hint">{C.exportHint}</p>
+    </>}
     {v.advanced && <button type="button" className="studio-settings-row studio-settings-advanced" onClick={() => { onClose(); postToHost({ type: "openAdvancedSettings" }); }}>{C.advanced}</button>}
   </ChatPreferences>;
 }
