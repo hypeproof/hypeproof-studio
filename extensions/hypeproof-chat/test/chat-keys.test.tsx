@@ -64,7 +64,7 @@ t('the drawn microphone cards and the recording line keep Escape; other dictatio
     assert.equal(mayStopAnswer(esc(el('box')), doc, true), false, `${view.kind}: ${html.slice(0, 80)}`);
     holder.remove();
   }
-  for (const view of [{ kind: 'done' }, { kind: 'working' }, { kind: 'notice', text: '다시 해 볼까요', cause: 'network', recovery: 'resend' }] as DictationView[]) {
+  for (const view of [{ kind: 'done' }, { kind: 'working' }, { kind: 'notice', id: 1, text: '다시 해 볼까요', cause: 'network', recovery: 'resend' }] as DictationView[]) {
     const holder = doc.createElement('div'); holder.innerHTML = drawn(view); doc.body.append(holder);
     assert.equal(mayStopAnswer(esc(el('box')), doc, true), true, `${view.kind} is a status line, not a card`);
     holder.remove();

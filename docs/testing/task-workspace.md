@@ -380,7 +380,7 @@ names why it is off, and Alt+Shift+M is refused with that line without asking fo
 kept for 다시 보내기 is dropped on every one of these events: success, 닫기, a hidden window, pagehide, leaving the chat
 (a task or seat switch) and 10 minutes. This is read through the controller's `hasKeptClip()` flag, never the bytes.
 Throughout, no storage API or blob URL is touched, the webview state holds no audio, and only `voiceTranscribe`
-carries it. Red on main c2be35060: the 10 original cases fail; the 2 drop cases need the new flag. `voice-browser.smoke.mjs` and `voice-conversation-browser.smoke.mjs` add the real-App checks: the
+carries it. When the copy expires while the line is shown, the label turns into 다시 말하기 by itself. A stale 다시 보내기 press neither resends nor opens the microphone. With a parent re-render every 500 ms, the too-short line is still dismissed at about 8 s. Mutants for each of these (a timer restarted by renders, a resend label that records, no live label change) fail the test. Red on main c2be35060: the 10 original cases fail; the 2 drop cases need the new flag. `voice-browser.smoke.mjs` and `voice-conversation-browser.smoke.mjs` add the real-App checks: the
 bar on a real AudioContext stream, the text box height within 4px, the failure line's icon, 14px text and 44px buttons,
 and the dictation button's reason during a live conversation. Both fail on main.
 

@@ -28,7 +28,7 @@ export type DictationView =
   | { kind: "working" }
   | { kind: "done" }
   /** R-015: a failure line with its cause and its one recovery action (null: a refusal with nothing to do but read). */
-  | { kind: "notice"; text: string; cause: string; recovery: DictationRecovery | null }
+  | { kind: "notice"; id: number; text: string; cause: string; recovery: DictationRecovery | null }
   | { kind: "denied"; settingsFailed: boolean }
   /** CGP-SHELL-R-010: Studio's own explainer, before the OS microphone prompt can appear. */
   | { kind: "explain" }
@@ -112,6 +112,10 @@ const FAILURE_TEXT: Record<Exclude<DictationFailure, "denied">, string> = {
   no_mic: NO_MIC, busy: MIC_BUSY, unsupported: UNSUPPORTED, too_short: SOFT_TOO_SHORT, too_large: TOO_LARGE, failed: GENERIC_UNAVAILABLE,
 };
 
+/** Each failure line gets its own id: its 8 s timer belongs to that line, not to a render. */
+let noticeSeq = 0;
+const nextNoticeId = () => ++noticeSeq;
+
 function newRequestId(): string { return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; }
 
 function useDictation(api: ComposerAddonApi): DictationController {
@@ -142,12 +146,14 @@ function useDictation(api: ComposerAddonApi): DictationController {
   };
   const stopTick = () => { if (tick.current !== null) { clearInterval(tick.current); tick.current = null; } };
   const set = useCallback((next: View) => { if (mounted.current) setView(next); }, []);
+  /** The kept clip is gone: a line still offering 다시 보내기 now offers 다시 말하기 (same line, same id). */
+  const clipGone = () => { if (mounted.current) setView((v) => (v.kind === "notice" && v.recovery === "resend" ? { ...v, recovery: "speak_again" } : v)); };
 
   const keepForRetry = useCallback((kept: Clip) => {
     clip.current = kept;
     if (keepTimer.current !== null) envRef.current.clearTimeout(keepTimer.current);
     // REQ-CGPV-19: a clip kept for a retry is dropped after ten minutes.
-    keepTimer.current = envRef.current.setTimeout(() => { clip.current = null; keepTimer.current = null; }, RETRY_KEEP_MS);
+    keepTimer.current = envRef.current.setTimeout(() => { clip.current = null; keepTimer.current = null; clipGone(); }, RETRY_KEEP_MS);
   }, []);
 
   const send = useCallback((kept: Clip) => {
@@ -171,7 +177,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
       }
       if (m.kind === "class_off") { dropClip(); voice.markClassOff(); set({ kind: "idle" }); return; }
       if (m.retry) keepForRetry(kept); else dropClip();
-      set({ kind: "notice", text: m.message, cause: m.kind, recovery: recoveryFor(m.kind, m.retry, m.retry) });
+      set({ kind: "notice", id: nextNoticeId(), text: m.message, cause: m.kind, recovery: recoveryFor(m.kind, m.retry, m.retry) });
     });
     offInFlight.current = off;
     postToHost({ type: "voiceTranscribe", requestId, mime: kept.mime, seconds: kept.seconds, audio: base64Of(kept.bytes) });
@@ -195,7 +201,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
     onClip: (c) => { afterRetry.current = false; handlers.current.send(c); },
     onFailure: (kind) => {
       if (kind === "denied") { handlers.current.set({ kind: "denied", settingsFailed: false }); return; }
-      handlers.current.set({ kind: "notice", text: FAILURE_TEXT[kind], cause: kind, recovery: recoveryFor(kind, false, false) });
+      handlers.current.set({ kind: "notice", id: nextNoticeId(), text: FAILURE_TEXT[kind], cause: kind, recovery: recoveryFor(kind, false, false) });
     },
   }));
 
@@ -232,7 +238,7 @@ function useDictation(api: ComposerAddonApi): DictationController {
     if (apiRef.current.disabled) {
       // R-014: refused with a message, not silently, when another control holds the microphone.
       const reason = apiRef.current.disabledReason;
-      if (reason && recorder.current === "idle" && !inFlight.current) set({ kind: "notice", text: reason, cause: "blocked", recovery: null });
+      if (reason && recorder.current === "idle" && !inFlight.current) set({ kind: "notice", id: nextNoticeId(), text: reason, cause: "blocked", recovery: null });
       return;
     }
     // CGP-SHELL-R-010: the microphone is never asked for (no card, no query, no getUserMedia) unless
@@ -276,7 +282,10 @@ function useDictation(api: ComposerAddonApi): DictationController {
     if (view.kind !== "notice" || !view.recovery) return;
     if (view.recovery === "resend") {
       if (clip.current && !inFlight.current) { retry(); return; }
-      // The kept clip is gone (10 minutes, a hide): the only honest fallback is a new recording.
+      // The kept clip is gone (10 minutes, a hide). A press labelled 다시 보내기 never opens the microphone: the
+      // label turns into 다시 말하기 and only a press on that starts a recording.
+      if (!clip.current) clipGone();
+      return;
     }
     if (view.recovery === "type") { dismiss(); apiRef.current.focusComposer?.(); return; }
     dismiss();
@@ -457,15 +466,17 @@ const RECOVERY_LABEL: Record<DictationRecovery, string> = { resend: RECOVER_RESE
  */
 function FailureNotice({ view, controller }: { view: Extract<View, { kind: "notice" }>; controller: DictationController }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const dismissRef = useRef(controller.dismiss); dismissRef.current = controller.dismiss;
+  // Keyed on this line's id only: a parent re-render (a streaming answer re-renders the composer) never restarts it.
   useEffect(() => {
     const ms = autoDismissMs(view.cause);
     if (ms === null) return;
     const timer = setTimeout(() => {
       if (ref.current && ref.current.contains(document.activeElement)) return;
-      controller.dismiss();
+      dismissRef.current();
     }, ms);
     return () => clearTimeout(timer);
-  }, [view, controller]);
+  }, [view.id, view.cause]);
   return (
     <div ref={ref} className="hps-voice-note hps-voice-failure" role="status" data-cause={view.cause}>
       <ChatIcon kind="alert" size={20} />

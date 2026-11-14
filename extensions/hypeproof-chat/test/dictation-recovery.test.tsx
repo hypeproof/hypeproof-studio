@@ -55,6 +55,10 @@ let rig: Rig & { focused: number };
 let probe: DictationController | null = null;
 function Probe() { probe = useDictationController(); return null; }
 let blockedReason: string | null = null;
+/** The element mount() rendered, so a test can re-render the same tree (a parent re-render, not a remount). */
+let mounted: { profile: unknown; opts: Record<string, unknown>; key: string } | null = null;
+let ticks = 0;
+const rerenderParent = () => act(() => root.render(createElement(Harness, { profile: mounted!.profile, ...mounted!.opts, key: mounted!.key, tick: ++ticks } as never)));
 let denyMic = false;
 let clock = 0;
 const timers: Array<{ at: number; fn: () => void; id: number }> = [];
@@ -100,7 +104,8 @@ async function mount(profile: unknown, opts: { scope?: string; speech?: () => Re
   rig = { speechEnvCalls: 0, recorders: [], mediaCalls: 0, tracksStopped: 0, spoken: [], utterances: [], cancels: 0, inserted: [], insertOk: true, focused: 0 } as never;
   timers.length = 0; clock = 0; denyMic = false; micError = null; micGate = null; withRecorder = true; blockedReason = opts.blocked ?? null; g.__posted.length = 0;
   meter.reads = 0; meter.closed = 0; meter.value = 0.6;
-  await act(() => root.render(createElement(Harness, { profile, ...opts, key: Math.random() })));
+  mounted = { profile, opts, key: String(Math.random()) };
+  await act(() => root.render(createElement(Harness, { profile, ...opts, key: mounted!.key })));
   if (opts.acked && posted("voiceDisclosureRead").length) await hostSays({ type: "voiceDisclosureState", acknowledged: [V1] });
 }
 const advance = (ms: number) => act(async () => { clock += ms; for (const tm of [...timers]) if (tm.at <= clock) { timers.splice(timers.indexOf(tm), 1); tm.fn(); } await new Promise((r) => setTimeout(r, 0)); });
@@ -165,14 +170,28 @@ for (const [seat, profile] of [["adult", adult], ["minor", minor]] as const) {
     eq(rig.mediaCalls, calls + 1, "a new recording");
     ok(byLabel("받아쓰기 끝내기"), "recording again");
     await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush();
-    // A kept clip lives ten minutes (REQ-CGPV-19); after that 다시 보내기 cannot resend and records instead.
+    // A kept clip lives ten minutes (REQ-CGPV-19). When it goes, the line's 다시 보내기 turns into 다시 말하기 while it
+    // is on screen; a press under the 다시 보내기 label never opens the microphone.
     await mount(profile(), { acked: true });
     await recordClip();
     await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: false, kind: "network", message: "연결", retry: true });
+    eq(actions(), ["다시 보내기", "닫기"], "a resend while the clip is kept");
+    // The clip expires while the line is on screen: the label changes by itself, with no press.
     await advance(10 * 60 * 1000 + 1);
+    eq(actions(), ["다시 말하기", "닫기"], "the label turned into 다시 말하기 when the clip expired");
+    await act(() => click(byText("닫기") as never));
+    await recordClip();
+    await hostSays({ type: "voiceTranscribeResult", requestId: lastSend().requestId, ok: false, kind: "network", message: "연결", retry: true });
     const sends = posted("voiceTranscribe").length, mics = rig.mediaCalls;
-    await act(() => click(byText("다시 보내기") as never)); await flush();
-    eq([posted("voiceTranscribe").length, rig.mediaCalls], [sends, mics + 1], "no stale resend; a fresh recording");
+    // A stale press: the clip expires and the old (resend) controller is pressed before React re-renders.
+    const stale = probe!;
+    await act(async () => { clock += 10 * 60 * 1000 + 1; for (const tm of [...timers]) if (tm.at <= clock) { timers.splice(timers.indexOf(tm), 1); tm.fn(); } stale.recover(); });
+    await flush();
+    eq([posted("voiceTranscribe").length, rig.mediaCalls], [sends, mics], "a stale 다시 보내기 press neither resends nor opens the microphone");
+    eq(actions(), ["다시 말하기", "닫기"], "the label changed live to 다시 말하기");
+    await act(() => click(byText("다시 말하기") as never)); await flush();
+    eq([posted("voiceTranscribe").length, rig.mediaCalls], [sends, mics + 1], "only 다시 말하기 records anew");
+    await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush();
   });
 }
 
@@ -239,8 +258,12 @@ t("too short: its line goes away after 8 s; a no-microphone line never does", as
   await act(() => click(byLabel("받아쓰기 끝내기") as never)); await flush();
   ok(line() && line().getAttribute("data-cause") === "too_short", "too short");
   eq(actions(), ["다시 말하기", "닫기"]);
-  await act(() => new Promise((r) => setTimeout(r, 8_300)));
-  eq(line(), undefined, "gone after 8 s");
+  // The composer re-renders all the time while an answer streams: the 8 s belong to the line, not to a render.
+  const started = Date.now();
+  while (Date.now() - started < 7_400) { await act(() => new Promise((r) => setTimeout(r, 500))); await rerenderParent(); }
+  ok(line() && line().getAttribute("data-cause") === "too_short", "still there just before 8 s, despite the re-renders");
+  for (let i = 0; i < 4 && line(); i++) { await act(() => new Promise((r) => setTimeout(r, 500))); await rerenderParent(); }
+  ok(!line(), `gone at about 8 s with a parent re-render every 500 ms (${Date.now() - started} ms)`);
   micError = "NotFoundError";
   await press(); await flush();
   await act(() => new Promise((r) => setTimeout(r, 8_300)));
