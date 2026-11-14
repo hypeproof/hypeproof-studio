@@ -160,7 +160,8 @@ public final class QuestionActivity extends Activity {
         if(!composer.getText().toString().equals(model.draft)){editing=true;composer.setText(model.draft);composer.setSelection(composer.length());editing=false;}
         boolean capturing=voice!=null&&(voice.session.phase()==VoiceSession.Phase.LISTENING||voice.session.phase()==VoiceSession.Phase.PERMISSION);
         composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canActivatePrimary());
-        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.stoppingResponse?"답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
+        String visibleError=model.displayError();
+        status.setText(!visibleError.isEmpty()?visibleError:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.stoppingResponse?"답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&visibleError.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
         actions.removeAllViews();
         if(s==null){
             if(model.brokenCredentials)actions.addView(button("로그인 복구",()->new AlertDialog.Builder(this).setTitle("로그인 복구").setMessage("읽지 못한 로그인 정보는 이 기기에 보존하고 다시 로그인해요. 대화 파일은 그대로 남아요.").setNegativeButton("취소",null).setPositiveButton("보존 후 다시 로그인",(d,w)->{try{storage.preserveBrokenCredentials();model.brokenCredentials=false;model.error="";update();}catch(Exception e){model.error="연결 정보를 보존하지 못했어요.";update();}}).show()));

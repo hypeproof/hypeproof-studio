@@ -38,7 +38,7 @@ final class ReflectionModel {
     }
     private static final class ResponseFlight {
         final NativeDeviceSignIn.Credentials credentials;final NativeDeviceSignIn.Cancel operation;final String id,text;
-        boolean suppressed,finished,dispatched;String failure;
+        boolean suppressed,finished,dispatched;String failure,failureCode;
         ResponseFlight(NativeDeviceSignIn.Credentials c,NativeDeviceSignIn.Cancel operation,JSONObject request){this.credentials=c;this.operation=operation;id=request.optString("id");text=request.optString("text");}
         synchronized boolean claimDispatch(){if(suppressed)return false;dispatched=true;return true;}
         synchronized boolean suppress(){suppressed=true;return !dispatched;}
@@ -63,6 +63,7 @@ final class ReflectionModel {
         catch(Exception e){readOnly=true;try{state=new ReflectionState(credentials.account());}catch(Exception ignored){}error="대화 파일을 읽지 못했어요. 원본을 보존하고 전송을 멈췄어요. 내보내기로 보관할 수 있어요.";}
     }
     String account(){return credentials==null?null:credentials.account();}
+    String displayError(){return !error.isEmpty()?error:state==null?"":state.failureMessage();}
     private boolean live(long ticket,String account){return !closed&&epoch==ticket&&Objects.equals(account,account());}
     private void invalidate(){epoch++;if(cancel!=null)cancel.cancel();if(stopCancel!=null)stopCancel.cancel();cancel=null;stopCancel=null;responseFlight=null;queuedSend=null;refreshing=false;busy=false;signing=false;stoppingResponse=false;}
     interface Edit {void apply(ReflectionState next) throws Exception;}
@@ -70,6 +71,11 @@ final class ReflectionModel {
         if(state==null||readOnly)return false;
         try{ReflectionState next=state.copy();next.draft=draft;edit.apply(next);store.save(next);state=next;draft=next.draft;unsavedDrafts.remove(next.account);notice="이 기기에 저장했어요.";return true;}
         catch(Exception e){error="기록을 저장하지 못했어요. 작성한 글은 화면에 남아 있어요. 다시 저장하거나 내보내 주세요.";return false;}
+    }
+    private boolean rememberAdmission(ResponseFlight flight,NativeDeviceSignIn.Reply result){
+        String code=String.valueOf(result.body().get("error"));
+        if(flight==null||state==null||!state.canRememberFailure(flight.id,flight.text,code))return true;
+        return save(next->next.rememberFailure(flight.id,flight.text,code));
     }
     private boolean saveGuest(){
         if(guestReadOnly)return false;
@@ -227,7 +233,7 @@ final class ReflectionModel {
                 stopCancel=null;stoppingResponse=false;
                 boolean waitForFailure=false;
                 if(result!=null&&state!=null&&state.request!=null&&id.equals(state.request.optString("id"))&&text.equals(state.request.optString("text"))){
-                    if(save(next->next.apply(result))){
+                    if(save(next->{next.apply(result);if(next.status().equals("failed")&&flight!=null)next.rememberFailure(flight.id,flight.text,flight.failureCode);})){
                         String status=state.status();waitForFailure=status.equals("failed")&&flight!=null&&!flight.finished;
                         error=status.equals("failed")&&flight!=null&&flight.failure!=null?flight.failure:"";
                         notice=status.equals("cancelled")?"답변 받기를 중지했어요. 이미 실행된 AI 비용은 발생할 수 있어요.":status.equals("completed")?"답변이 이미 도착했어요. 대화에서 확인해 주세요.":status.equals("failed")?"답변을 받지 못했어요. 보낸 이야기는 남아 있어요.":"완료 여부를 확인하지 못했어요. 자동으로 다시 보내지 않아요.";
@@ -258,8 +264,8 @@ final class ReflectionModel {
                     flight.finished=true;
                     if(flight.suppressed){
                         if(result!=null&&result.status()==401){logout();error="같은 계정으로 다시 연결해 주세요. 저장한 글은 남아 있어요.";changed.run();return;}
-                        if(result!=null&&result.status()>=400&&result.body().containsKey("error"))flight.failure=responseError(result);
-                        if(state!=null&&state.status().equals("failed")&&flight.id.equals(state.request.optString("id"))&&flight.text.equals(state.request.optString("text"))&&flight.failure!=null)error=flight.failure;
+                        if(result!=null&&result.status()>=400&&result.body().containsKey("error")){flight.failure=responseError(result);flight.failureCode=String.valueOf(result.body().get("error"));}
+                        if(state!=null&&state.status().equals("failed")&&flight.id.equals(state.request.optString("id"))&&flight.text.equals(state.request.optString("text"))&&flight.failure!=null&&rememberAdmission(flight,result))error=flight.failure;
                         if(!stoppingResponse){busy=false;responseFlight=null;}changed.run();return;
                     }
                 }
@@ -273,7 +279,7 @@ final class ReflectionModel {
                         // The server rejected this ID before dispatch. Preserve its words as a draft.
                         save(next->{if(next.status().equals("local")){String submitted=next.request.getString("text");if(!next.draft.isEmpty()&&!next.draft.equals(submitted))throw new Exception("preserve_both");next.draft=submitted;next.request=null;}});
                     }
-                    error=responseError(result);
+                    if(!sending||rememberAdmission(flight,result))error=responseError(result);
                     changed.run();return;
                 }
                 try{
@@ -300,8 +306,7 @@ final class ReflectionModel {
     }
     private static String responseError(NativeDeviceSignIn.Reply result){
         String code=String.valueOf(result.body().get("error"));
-        if(code.equals("reflection_monthly_limit"))return "이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
-        if(code.equals("reflection_admission_unavailable"))return "AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.";
+        String admission=ReflectionState.admissionMessage(code);if(admission!=null)return admission;
         return result.status()==403?"이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.":result.status()==429?"이용 한도에 도달했어요. 잠시 후 대화를 확인해 주세요.":"대화 상태가 바뀌었거나 응답을 받지 못했어요. 먼저 대화를 확인해 주세요.";
     }
     void close(){closed=true;invalidate();}

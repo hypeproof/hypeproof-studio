@@ -331,7 +331,7 @@ public class QuestionJourneyTest {
     @Test public void voiceAdmissionDenialKeepsServiceReasonAndStopsWithoutReplay()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted,"reflection_monthly_limit");
         String words="이번 주에 시도해 보고 싶은 일이 있어요";
-        onView(withContentDescription("음성 대화")).perform(click());
+        startReadyVoice(voice);
         app.onActivity(a->{voice.partial("이번 주에 시도해 보고 싶은 일");voice.endpoint();voice.result(words);});ready();drain();
         onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
         assertFalse(voice.controller.session.active());assertTrue(voice.spoken.isEmpty());assertEquals(1,voice.starts);assertEquals(1,submitted.size());
@@ -339,6 +339,12 @@ public class QuestionJourneyTest {
         assertEquals(words,saved.request.getString("text"));assertEquals(submitted.get(0),saved.request.getString("id"));assertNotNull(store.loadCredentials());
         app.onActivity(a->{voice.result("오래된 최종 결과");voice.endpoint();});drain();
         assertFalse(voice.controller.session.active());assertEquals(1,voice.starts);assertEquals(1,submitted.size());assertTrue(voice.spoken.isEmpty());
+        confirmFailedTurn();
+        onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();
+        onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+        onView(withText(words)).check(matches(isDisplayed()));assertEquals(1,submitted.size());assertEquals(submitted.get(0),store.load("test-account").request.getString("id"));
+        app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("voice");field.setAccessible(true);assertFalse(((NativeVoice)field.get(a)).session.active());}catch(Exception e){throw new AssertionError(e);}});
         screen("android-voice-admission-denial");
     }
     private void confirmFailedTurn()throws Exception{
