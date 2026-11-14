@@ -465,11 +465,11 @@ const SKILL_DEFAULT={max_count:6,name_max:30,summary_max:80,prompt_max:300,promp
 // The Service's hasLink (lesson-skill-cards.ts), the same rule. Coding text with colons passes (color:red, a:hover,
 // std::cout, C:\Users, //주석). After NFKC and folding the colon look-alikes, refused: <scheme>://; a known scheme directly
 // followed by ':' (Cyrillic/Greek look-alikes folded); www. plus a domain; // followed by a host.
-const LINK_SCHEMES=['http','https','ftp','ftps','javascript','vbscript','data','file','blob','mailto','tel','sms','intent'];
+const LINK_SCHEMES=['http','https','ftp','ftps','javascript','vbscript','data','file','blob','mailto','tel','sms','intent','about'];
 const LINK_CONFUSABLE={'а':'a','в':'b','с':'c','ԁ':'d','е':'e','һ':'h','н':'h','і':'i','ј':'j','к':'k','м':'m','о':'o','р':'p','ԛ':'q','ѕ':'s','т':'t','υ':'u','ѵ':'v','ԝ':'w','х':'x','у':'y','α':'a','ο':'o','ρ':'p','τ':'t','ν':'v','ι':'i','κ':'k','χ':'x','ε':'e','ѡ':'w'};
 const hasLink=t=>{const n=String(t??'').normalize('NFKC').replace(/[\u02D0\uA789\u2236\uFE13\uFE55]/g,':');
   if(/(?:^|[^\p{L}\p{N}+.\-])\p{L}[\p{L}\p{N}\p{M}+.\-]*:\/\//u.test(n))return true;
-  for(const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu)){const k=[...m[1].toLowerCase()].map(ch=>LINK_CONFUSABLE[ch]??ch).join('');if(LINK_SCHEMES.includes(k)||k.startsWith('vscode')||k.startsWith('hypeproof'))return true;}
+  for(const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=(\S?))/gu)){const k=[...m[1].normalize('NFD').replace(/\p{M}/gu,'').toLowerCase()].map(ch=>LINK_CONFUSABLE[ch]??ch).join('');if(!m[2]){if(k==='http'||k==='https')return true;continue;}if(LINK_SCHEMES.includes(k)||k.startsWith('vscode')||k.startsWith('hypeproof')||k.startsWith('x-'))return true;}
   return /(?:^|[^\p{L}\p{N}])www\.[\p{L}\p{N}-]+\.[\p{L}\p{N}-]{2,}/iu.test(n)||/(?:^|[^\p{L}\p{N}:])\/\/[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.test(n);};
 // Like the Service, only values this save introduces are checked: what the opened draft already had is left alone, so an
 // untouched old starter or card field with a link does not block the save.

@@ -142,8 +142,8 @@ try {
     }
     // The same rule as the Service: Korean prose with a colon is not a link.
     // The same rule as the Service: coding text with colons passes; scheme, www. and host forms are refused.
-    const NOT_LINKS = ['www.', 'www.x', 'www 사이트', 'color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
-    const LINKS = ['https://x', 'http:x', 'ftp:x', 'sms:1', 'tel:010', 'vscode-insiders:x', 'hypeproof-studio://x', 'any-scheme://x', 'ｈｔｔｐｓ://x', 'https：//x', 'һttps:x', 'httpsː//x', 'www.example.com', '//evil.example'];
+    const NOT_LINKS = ['x-axis: 10', 'about: 소개', 'www.', 'www.x', 'www 사이트', 'color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
+    const LINKS = ['https://x', 'http:x', 'ftp:x', 'sms:1', 'tel:010', 'vscode-insiders:x', 'hypeproof-studio://x', 'any-scheme://x', 'ｈｔｔｐｓ://x', 'https：//x', 'һttps:x', 'httpsː//x', 'www.example.com', '//evil.example', 'jávascript:x', 'j\u0301avascript:x', '보기 https:', 'about:blank', 'x-custom:open'];
     assert.deepEqual(await ev(`return ${JSON.stringify(NOT_LINKS)}.map(hasLink)`), NOT_LINKS.map(() => false), `${width}px: coding text is not a link`);
     assert.deepEqual(await ev(`return ${JSON.stringify(LINKS)}.map(hasLink)`), LINKS.map(() => true), `${width}px: every link form is refused`);
     const dupWarn = await ev(`${card(3, 'ＳＵＭ', '설명', '프롬프트')}${card(2, 'sum', '설명', '프롬프트')}return document.getElementById('skill-cards-warning').textContent`);
