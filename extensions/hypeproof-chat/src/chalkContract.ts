@@ -1,4 +1,5 @@
 import { createContractWaits, type ContractWaits, type HumanWait, type WaitSignalResult } from "./localRuntime/humanWait.ts";
+import { ENTER_OPEN_FAILED } from "./rehearsalSeat.ts";
 // Studio side of the Chalk command contract v0 (docs/contract/studio-chalk.md).
 // Kept free of the vscode module: the command bus, the local runner and the studio
 // operations are injected, so the contract is testable with stubs. The extension wires
@@ -87,6 +88,8 @@ export interface ContractOps {
   reviewPrepare(week: number | undefined): Promise<{ ok: boolean; message?: string }>;
   /** #4048 — start a same-window rehearsal in this window. Absent on a host without the seat. */
   enterRehearsalSeat?(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void>;
+  /** #4048 — show one approved sentence to the instructor on a failed entry. */
+  notify?(message: string): void;
 }
 
 /** Approval kinds that Chalk shows as its own prompt, and only when the studio policy asks for one. */
@@ -169,11 +172,16 @@ export class ChalkContractHost {
    * already expired on the next start (no question, return).
    */
   private async enterRehearsalSeat(args: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
+    // The approved sentence is shown once on each of the three failure paths below, and no other path shows it.
+    const refuse = (reason: "inactive" | "stale" | "failed"): { ok: false; reason: string } => {
+      this.ops.notify?.(ENTER_OPEN_FAILED);
+      return { ok: false, reason };
+    };
     if (!args || typeof args !== "object") return { ok: false, reason: "invalidArgs" };
     const a = args as Record<string, unknown>;
     if (a.contractVersion !== CONTRACT_VERSION) return { ok: false, reason: "contractVersion" };
-    if (this.nonce === null) return { ok: false, reason: "inactive" };
-    if (a.sessionNonce !== this.nonce) return { ok: false, reason: "stale" };
+    if (this.nonce === null) return refuse("inactive");
+    if (a.sessionNonce !== this.nonce) return refuse("stale");
     const enter = this.ops.enterRehearsalSeat;
     if (!enter) return { ok: false, reason: "unavailable" };
     const token = a.token, rehearsalId = a.rehearsalId;
@@ -185,7 +193,7 @@ export class ChalkContractHost {
       return { ok: true };
     } catch {
       // The host's message stays out of the result: the reason is only a code.
-      return { ok: false, reason: "failed" };
+      return refuse("failed");
     }
   }
 

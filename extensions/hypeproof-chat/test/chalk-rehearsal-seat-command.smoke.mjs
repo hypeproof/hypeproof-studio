@@ -118,6 +118,52 @@ await t("a host without the seat entry answers unavailable, not a crash", async 
   assert.ok(r.ok === false, "refused");
 });
 
+// The approved sentence is shown once on every failure path the command has (nonce, inactive, entry failure).
+const ENTER_FAILED_TEXT = "리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다.";
+async function withNotify({ enter } = {}) {
+  const shown = [];
+  const bus = makeBus();
+  const ops = {
+    openExternal: async () => ({ ok: true }), openReport: async () => ({ ok: true }),
+    inboxView: async () => null, inboxOpened: async () => {}, inboxLink: async () => ({ ok: true }),
+    reviewPrepare: async () => ({ ok: true }),
+    enterRehearsalSeat: enter ?? (async () => {}),
+    notify: (m) => shown.push(m),
+  };
+  let n = 0;
+  const host = new ChalkContractHost(bus, runner(), ops, () => `nonce-${++n}`);
+  host.register();
+  return { bus, shown, host, activate: () => host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "server" }) };
+}
+
+await t("a stale nonce shows the approved sentence once and returns stale", async () => {
+  const { bus, shown, activate } = await withNotify();
+  await activate();
+  assert.deepEqual(await enterCall(bus, { sessionNonce: "old", ...REHEARSAL }), { ok: false, reason: "stale" });
+  assert.deepEqual(shown, [ENTER_FAILED_TEXT]);
+});
+
+await t("an inactive contract shows the approved sentence once and returns inactive", async () => {
+  const { bus, shown } = await withNotify();
+  assert.deepEqual(await enterCall(bus, REHEARSAL), { ok: false, reason: "inactive" });
+  assert.deepEqual(shown, [ENTER_FAILED_TEXT]);
+});
+
+await t("an entry failure shows the approved sentence once, not twice, and returns failed", async () => {
+  const { bus, shown, activate } = await withNotify({ enter: async () => { throw new Error("리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다."); } });
+  await activate();
+  assert.deepEqual(await enterCall(bus, REHEARSAL), { ok: false, reason: "failed" });
+  assert.deepEqual(shown, [ENTER_FAILED_TEXT], "one sentence, from the command path only");
+});
+
+await t("a good call shows nothing and invalid arguments show nothing", async () => {
+  const { bus, shown, activate } = await withNotify();
+  await activate();
+  assert.deepEqual(await enterCall(bus, REHEARSAL), { ok: true });
+  assert.deepEqual(await enterCall(bus, { ...REHEARSAL, token: "" }), { ok: false, reason: "invalidArgs" });
+  assert.deepEqual(shown, []);
+});
+
 await t("hasRehearsalReturn and endRehearsalSeat are not on the bus", async () => {
   const { bus } = await activated();
   assert.equal(bus.handlers.get("hypeproof.runtime.hasRehearsalReturn"), undefined);

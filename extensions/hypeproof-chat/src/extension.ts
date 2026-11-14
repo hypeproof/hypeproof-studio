@@ -308,7 +308,7 @@ export async function activate(context: vscode.ExtensionContext) {
     },
     provider.chalkRunner(),
     // #4048 — the rehearsal seat entry is a host function of this window, reached through the contract bus.
-    { ...provider.chalkOps(), enterRehearsalSeat: (input) => enterRehearsalSeat(input) },
+    { ...provider.chalkOps(), enterRehearsalSeat: (input) => enterRehearsalSeat(input), notify: (m) => { void vscode.window.showWarningMessage(m); } },
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
