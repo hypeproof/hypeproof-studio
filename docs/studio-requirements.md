@@ -8471,8 +8471,8 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
 4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
    The host logs nothing about it and touches no file.
 5. Local copies a request does not reach, because they never leave the device: the memory quarantine of keep-off turns
-   (REQ-STUDIO-TASK-MEMORY-SWITCHES, `memory-quarantine/` in the extension's global storage). It keeps at most 200 copies
-   per activity and seven days. It is removed with its task when the task is archived or moved, and it is never uploaded
+   (REQ-STUDIO-TASK-MEMORY-SWITCHES, `memory-quarantine/` in the extension's global storage). It keeps at most 200 copies,
+   200 moved files and 1,000 of the learner's own displaced originals per activity, and seven days. It is removed with its task when the task is archived or moved, and it is never uploaded
    or logged.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
@@ -9389,15 +9389,26 @@ catches what the checks above cannot see: a shell command that builds the path a
   - **Other files are moved, never deleted.** A new name the store would never read as memory (a photo the learner
     dropped in from the file manager, or junk) is renamed into the quarantine: no copy, no extra disk. At most 200 per
     turn; the rest is left in place and reported. A move across volumes is not attempted, and the file stays and is
-    reported. Moved files follow the count and seven-day caps, but not the byte cap. Age and order come from the stamp in
+    reported. Moved files have their own count cap (200 per activity) and the seven-day cap, but not the byte cap. Age and order come from the stamp in
     the quarantined file's name, never its mtime (a move keeps the original's date, and a turn can set any date); the
     moved file's times are set to the move as well.
   - **An item that cannot be put back keeps its bytes.** When the item was replaced by a folder, its earlier bytes are
-    copied into the quarantine before the failure is reported.
+    copied into the quarantine before the failure is reported, also when the folder sits past the read bound.
+  - **The learner's own bytes are a protected pool.** A copy whose bytes are the learner's own (the item's state at turn
+    start, or the learner's save during the turn) is kept as an original (`orig-…`): an item that could not be put back,
+    or one that was still on disk when the target differed. Originals are never removed by count, only after seven days,
+    so nothing the turn writes or moves can evict one. Per activity at most 1,000 (five times the item count); at that cap
+    an item that would need a new original is left as it is and reported, and no original is dropped. Bytes that exist
+    nowhere else any more (a folder swap) are kept even past the cap.
   - **Quarantine bounds.**
     - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
       with one folder per seat activity (a keyed hash of its scope) and per task.
-    - Per activity: at most the store's item count (200 copies) and that many full items' bytes. The oldest go first.
+    - Per activity, three pools: originals (above); copies of what the turn wrote, at most the store's item count (200)
+      and that many full items' bytes, oldest first; moved files, at most 200, oldest first. Equal stamps are ordered by
+      name.
+    - Ages come from the stamp in each name. A stamp more than 60 s ahead of the clock was not written by Studio and
+      counts as oldest; one within 60 s is clamped to now. Known residual: an entry Studio really wrote while the clock
+      ran more than 60 s fast, after the clock is corrected, is taken for a planted one and removed at the next prune.
     - Nothing older than seven days is kept, applied at every check and at activation.
     - A task's folder is removed when the task is archived or moved.
     - Nothing reads it back into memory, uploads it or logs it (tested).

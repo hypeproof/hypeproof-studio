@@ -29,12 +29,23 @@ export const SNAPSHOT_MAX = { files: MEMORY_LIMITS.items + 50, keepBytes: MEMORY
  * extension's global storage (this OS account only, folders 0700, files 0600), one folder per activity scope and task;
  * a task's folder goes when the task is archived or moved. Nothing reads it back into memory, uploads it or logs it.
  */
-// `files` and `bytes` cap the copies (memory items and the originals a swap displaced); moved files (`moved-…`, the
-// turn's or the learner's non-memory files) have their own count cap, `moved`, so a flood of moves never evicts a copy.
-// `clockSkewMs`: how far ahead of the clock a stamp may be and still count as now (see quarantinedAt).
-export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, moved: MEMORY_LIMITS.items, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000, movesPerTurn: MEMORY_LIMITS.items, clockSkewMs: 60_000 } as const;
+// Three pools, each under the seven-day retention:
+// - originals (`orig-…`): the learner's own bytes the revert had to set aside: the state at turn start (or the
+//   learner's save during the turn) of an item that could not be put back (swapped for a folder) or that was still on
+//   disk when the target differed. Never evicted by count: at most `originals` per activity, and when that is reached
+//   the revert leaves the item as it is (reported) instead of dropping an original. One exception: bytes that exist
+//   nowhere else any more (the item was swapped for a folder) are written past the cap, since refusing would lose them.
+//   Known residual: a real entry stamped more than `clockSkewMs` ahead (written while the clock ran fast, then
+//   corrected) counts as planted and ages out at the next prune;
+// - copies: what the turn wrote, under the `files` count and `bytes` caps, oldest first;
+// - moves (`moved-…`, the turn's or the learner's non-memory files): their own `moved` count cap.
+// Nothing the turn writes can take an original's place. `clockSkewMs`: how far ahead of the clock a stamp may be and
+// still count as now (see quarantinedAt).
+export const QUARANTINE_LIMITS = { files: MEMORY_LIMITS.items, moved: MEMORY_LIMITS.items, originals: MEMORY_LIMITS.items * 5, bytes: MEMORY_LIMITS.items * MEMORY_LIMITS.bytes, retentionMs: 7 * 24 * 3600_000, movesPerTurn: MEMORY_LIMITS.items, clockSkewMs: 60_000 } as const;
 /** Files moved (renamed, never copied) out of the store: kept under the count and age caps, outside the byte cap. */
 export const MOVED_PREFIX = "moved-";
+/** The learner's own earlier bytes set aside by a revert: the protected pool (see QUARANTINE_LIMITS). */
+export const ORIGINAL_PREFIX = "orig-";
 
 /** `digest` NAME_ONLY: listed but not read (past the bounds); its content changes are not seen. */
 export interface SnapEntry { size: number; digest: string; bytes: Buffer | null }
@@ -147,7 +158,8 @@ export function clearStudioMemoryJournal(): void { journal.length = 0; }
 export interface RevertResult { reverted: number; kept: number; failed: number; unchecked: boolean }
 
 /**
- * When a quarantined file was put there: the stamp its name starts with (`<stamp>-…` or `moved-<stamp>-…`), never its
+ * When a quarantined file was put there: the stamp its name starts with (`<stamp>-…`, `moved-<stamp>-…` or
+ * `orig-<stamp>-…`), never its
  * mtime, which a move keeps from the original (a photo copied in from the file manager keeps its old date) and a turn
  * can set to anything. A name without a stamp counts as oldest. The result is never later than `now`: a stamp up to
  * `clockSkewMs` ahead (a clock adjusted backwards) is clamped to `now`; one further ahead was not written by Studio
@@ -155,7 +167,7 @@ export interface RevertResult { reverted: number; kept: number; failed: number; 
  * retention. Clamping a far-future stamp to `now` instead would re-clamp on every prune and never age.
  */
 export function quarantinedAt(name: string, now = Date.now()): number {
-  const m = /^(?:moved-)?(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/.exec(name);
+  const m = /^(?:moved-|orig-)?(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/.exec(name);
   if (!m) return 0;
   const t = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
   if (Number.isNaN(t) || t > now + QUARANTINE_LIMITS.clockSkewMs) return 0;
@@ -191,8 +203,10 @@ export async function pruneQuarantine(base: string, now = Date.now()): Promise<v
     // order never depends on readdir.
     const newestFirst = quarantineOrder;
     const isMoved = (f: { file: string }) => path.basename(f.file).startsWith(MOVED_PREFIX);
+    // Originals are bounded at write time (revertTurnChanges) and only age out here: never removed by count.
+    const isOriginal = (f: { file: string }) => path.basename(f.file).startsWith(ORIGINAL_PREFIX);
     let count = 0, bytes = 0;
-    for (const f of files.filter((x) => !isMoved(x)).sort(newestFirst)) {
+    for (const f of files.filter((x) => !isMoved(x) && !isOriginal(x)).sort(newestFirst)) {
       count++; bytes += f.size;
       if (count > QUARANTINE_LIMITS.files || bytes > QUARANTINE_LIMITS.bytes) await fs.rm(f.file, { force: true }).catch(() => undefined);
     }
@@ -235,11 +249,29 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     made = true;
   };
   let seq = 0, moves = 0;
-  const keepCopy = async (name: string, bytes: Buffer) => {
+  // Originals already held for this activity (every task folder of its scope), counted once per revert.
+  let originals = -1;
+  const countOriginals = async () => {
+    if (originals >= 0) return originals;
+    originals = 0;
+    const scopeDir = path.dirname(quarantine);
+    for (const task of await fs.readdir(scopeDir).catch(() => [] as string[]))
+      for (const n of await fs.readdir(path.join(scopeDir, task)).catch(() => [] as string[])) if (n.startsWith(ORIGINAL_PREFIX)) originals++;
+    return originals;
+  };
+  class OriginalsFull extends Error {}
+  // `learner`: the digests of the learner's own states of this item (turn start, the learner's save during the turn).
+  // Bytes matching one go to the protected pool; anything else is what the turn wrote.
+  // `mustKeep`: the bytes exist nowhere else any more (the item was swapped for a folder), so they are written even past
+  // the cap; refusing would lose them. Every other original at the cap is refused, and the item stays as it is on disk.
+  const keepCopy = async (name: string, bytes: Buffer, learner: Array<string | null | undefined>, mustKeep = false) => {
+    const original = learner.includes(digestOf(bytes));
+    if (original && !mustKeep && (await countOriginals()) >= QUARANTINE_LIMITS.originals) throw new OriginalsFull();
     await ensureQuarantine();
-    const target = path.join(quarantine, `${stamp}-${++seq}-${path.basename(name)}`);
+    const target = path.join(quarantine, `${original ? ORIGINAL_PREFIX : ""}${stamp}-${++seq}-${path.basename(name)}`);
     const handle = await fs.open(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    if (original) originals++;
   };
   const putBack = async (name: string, bytes: Buffer) => {
     // Written beside it under a temporary name and renamed over it: never a half-written memory file.
@@ -257,7 +289,14 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     // Read a name-only entry now when it matters: a new name, one Studio changed, or one whose content was tracked at turn
     // start (a flood of new files must not push it out of the end read set and hide a rewrite).
     let current = now_;
-    if (current?.digest === NAME_ONLY && (!was || studio || was.digest !== NAME_ONLY)) current = (await readEntry(path.join(dir, name))) ?? current;
+    if (current?.digest === NAME_ONLY && (!was || studio || was.digest !== NAME_ONLY)) {
+      const file = path.join(dir, name);
+      const read = await readEntry(file);
+      // Not a regular file any more (an item swapped for a folder past the read bound): it is handled as a swap, so
+      // the learner's bytes are set aside, instead of being skipped as "unseen" and lost.
+      if (read) current = read;
+      else if (!(await fs.lstat(file).catch(() => null))?.isFile()) current = undefined;
+    }
     // A new name the store would never read as memory (not a memory file name) is removed without a copy: it cannot
     // carry memory, and a flood of such names must not fill the quarantine.
     if (!was && !studio && current && !memoryFileName(name)) {
@@ -279,9 +318,12 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
     if (current && target && !targetAbsent && current.digest === target.digest) { if (studio) result.kept++; continue; }
     // Unseen inside a name-only entry that existed at turn start and Studio did not touch: nothing to compare.
     if (current?.digest === NAME_ONLY && was && !studio) continue;
+    const learner = [was?.digest, studio?.digest];
+    // An item whose on-disk bytes are the learner's own and would need setting aside while the protected pool is full:
+    // keepCopy refuses before anything is changed, so the item stays as it is and is reported; no original is dropped.
     try {
       if (current) {
-        if (current.bytes) await keepCopy(name, current.bytes);
+        if (current.bytes) await keepCopy(name, current.bytes, learner);
         else if (!targetAbsent) { result.failed++; continue; }   // past the item size: cannot be copied, left as it is
       }
       if (targetAbsent) {
@@ -291,7 +333,7 @@ export async function revertTurnChanges(root: string, before: Snapshot, since: n
         if (!target!.bytes) { result.failed++; continue; }
         try { await putBack(name, target!.bytes); } catch (error) {
           // Cannot be put back (the item was swapped for a folder, say): its earlier bytes are kept aside first, never lost.
-          await keepCopy(name, target!.bytes).catch(() => undefined);
+          await keepCopy(name, target!.bytes, learner, true).catch(() => undefined);
           throw error;
         }
       }

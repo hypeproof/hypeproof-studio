@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 import { ActivityMemory, MEMORY_LIMITS } from '../src/activityMemory.ts';
-import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, quarantinedAt, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, quarantineOrder, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
+import { FOLDER_GUARD_COPY, MOVED_PREFIX, NAME_ONLY, ORIGINAL_PREFIX, quarantinedAt, QUARANTINE_LIMITS, SNAPSHOT_MAX, clearStudioMemoryJournal, diffSnapshots, noteStudioMemoryChange, noteStudioMemorySave, pruneQuarantine, purgeTaskQuarantine, quarantineOrder, revertTurnChanges, snapshotMemoryFolder } from '../src/memoryFolderGuard.ts';
 
 const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'memory-guard-')));
 let passed = 0;
@@ -292,6 +292,78 @@ try {
     for (let i = 0; i < QUARANTINE_LIMITS.files; i++) fs.writeFileSync(path.join(dir, `${stampOf(now + 365 * 24 * 3600_000)}-${i + 1}-planted.md`), 'p');
     await pruneQuarantine(path.join(top, 'qfuture'), now);
     assert.deepEqual(ls(dir), [real], 'the real copy stays and the planted future copies age out at once');
+  });
+
+  // Round 6: the learner's own displaced bytes are a protected pool that nothing the turn writes can evict.
+  const swapForFolder = (root, name) => { fs.rmSync(path.join(memDir(root), name)); fs.mkdirSync(path.join(memDir(root), name)); fs.writeFileSync(path.join(memDir(root), name, 'inside'), 'x'); };
+  const originalsIn = (scopeDir) => ls(scopeDir).flatMap(task => ls(path.join(scopeDir, task)).filter(n => n.startsWith(ORIGINAL_PREFIX)).map(n => fs.readFileSync(path.join(scopeDir, task, n), 'utf8')));
+
+  await t('201 planted memory files in a later turn do not evict a saved original', async () => {
+    clearStudioMemoryJournal();
+    const base = path.join(top, 'qplant'), scopeDir = path.join(base, 'e'.repeat(24));
+    const root = path.join(top, 'plant-later'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'zz.md'), '학습자의 원래 기억\n');
+    // Turn A swaps the item for a folder: its bytes go to the protected pool.
+    let since = Date.now(), before = await snapshotMemoryFolder(root);
+    swapForFolder(root, 'zz.md');
+    await revertTurnChanges(root, before, since, path.join(scopeDir, 'turn-a'), Date.now() - 60_000);
+    assert.deepEqual(originalsIn(scopeDir), ['학습자의 원래 기억\n'], 'turn A keeps the original in the protected pool');
+    // Turn B plants 201 memory-named files; each is reverted into a copy of what the turn wrote.
+    fs.rmSync(path.join(memDir(root), 'zz.md'), { recursive: true });
+    clearStudioMemoryJournal();
+    since = Date.now(); before = await snapshotMemoryFolder(root);
+    for (let i = 0; i < QUARANTINE_LIMITS.files + 1; i++) fs.writeFileSync(path.join(memDir(root), `p${String(i).padStart(4, '0')}.md`), '심음');
+    const r = await revertTurnChanges(root, before, since, path.join(scopeDir, 'turn-b'));
+    assert.equal(r.reverted, QUARANTINE_LIMITS.files + 1);
+    await pruneQuarantine(base);
+    assert.deepEqual(originalsIn(scopeDir), ['학습자의 원래 기억\n'], 'the original survives the prune');
+    assert.equal(ls(path.join(scopeDir, 'turn-b')).length, QUARANTINE_LIMITS.files, "the turn's copies keep their own cap");
+  });
+
+  await t('a folder swap plus 400 planted memory files in one turn does not evict the original', async () => {
+    clearStudioMemoryJournal();
+    const base = path.join(top, 'qswap400'), scopeDir = path.join(base, 'f'.repeat(24));
+    const root = path.join(top, 'swap-400'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'zz.md'), '바뀌면 안 되는 기억\n');
+    const since = Date.now(), before = await snapshotMemoryFolder(root);
+    swapForFolder(root, 'zz.md');
+    for (let i = 0; i < 400; i++) fs.writeFileSync(path.join(memDir(root), `a${String(i).padStart(4, '0')}.md`), '심음');
+    await revertTurnChanges(root, before, since, path.join(scopeDir, 'turn'));
+    await pruneQuarantine(base);
+    assert.deepEqual(originalsIn(scopeDir), ['바뀌면 안 되는 기억\n'], 'the original survives');
+    assert.equal(ls(path.join(scopeDir, 'turn')).filter(n => !n.startsWith(ORIGINAL_PREFIX)).length, QUARANTINE_LIMITS.files, 'planted copies are capped');
+  });
+
+  await t('the protected pool: never pruned by count, aged out after seven days, and at its cap an item is left rather than an original dropped', async () => {
+    clearStudioMemoryJournal();
+    const stampOf = (t) => new Date(t).toISOString().replace(/[:.]/g, '-');
+    const base = path.join(top, 'qorig'), scopeDir = path.join(base, '0'.repeat(24)), held = path.join(scopeDir, 'held');
+    fs.mkdirSync(held, { recursive: true });
+    const now = Date.now();
+    for (let i = 0; i < QUARANTINE_LIMITS.originals; i++) fs.writeFileSync(path.join(held, `${ORIGINAL_PREFIX}${stampOf(now - 1000)}-${i + 1}-o${String(i).padStart(4, '0')}.md`), 'o');
+    const old = `${ORIGINAL_PREFIX}${stampOf(now - QUARANTINE_LIMITS.retentionMs - 60_000)}-1-old.md`;
+    fs.writeFileSync(path.join(held, old), 'old');
+    await pruneQuarantine(base, now);
+    assert.equal(ls(held).length, QUARANTINE_LIMITS.originals, 'all fresh originals stay (no count eviction); the 8-day one is gone');
+    assert.equal(fs.existsSync(path.join(held, old)), false);
+    // At the cap: Studio removed an item during the turn, then the turn wrote the learner's earlier bytes back. Setting
+    // those bytes aside would add an original, so the item is left as it is and reported.
+    const root = path.join(top, 'orig-cap'); fs.mkdirSync(memDir(root), { recursive: true });
+    fs.writeFileSync(path.join(memDir(root), 'k.md'), '학습자 기억\n');
+    const since = Date.now(), before = await snapshotMemoryFolder(root);
+    fs.rmSync(path.join(memDir(root), 'k.md')); await noteStudioMemoryChange(memDir(root), 'k.md', null);
+    fs.writeFileSync(path.join(memDir(root), 'k.md'), '학습자 기억\n');
+    const r = await revertTurnChanges(root, before, since, path.join(scopeDir, 'turn'));
+    assert.equal(read(root, 'k.md'), '학습자 기억\n', 'the item is left as it is');
+    assert.ok(r.failed >= 1, 'and reported');
+    assert.equal(ls(held).length, QUARANTINE_LIMITS.originals, 'no original was dropped');
+    // An item swapped for a folder: its bytes exist nowhere else, so they are kept even past the cap.
+    clearStudioMemoryJournal();
+    fs.writeFileSync(path.join(memDir(root), 'z.md'), '폴더로 바뀔 기억\n');
+    const s2 = Date.now(), b2 = await snapshotMemoryFolder(root);
+    swapForFolder(root, 'z.md');
+    await revertTurnChanges(root, b2, s2, path.join(scopeDir, 'turn2'));
+    assert.deepEqual(ls(path.join(scopeDir, 'turn2')).filter(n => n.startsWith(ORIGINAL_PREFIX)).map(n => fs.readFileSync(path.join(scopeDir, 'turn2', n), 'utf8')), ['폴더로 바뀔 기억\n'], 'bytes that exist nowhere else are kept past the cap');
   });
 
   // ---- the provider ----

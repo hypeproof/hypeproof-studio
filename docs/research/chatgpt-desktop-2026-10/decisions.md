@@ -2342,7 +2342,12 @@ Closes the shell gap left by CGP-KNOW-R-028 without a policy change. It is host-
 - **Quarantine bounds (agent choice, coordinator's privacy constraint).**
   - It is scoped per OS account (global storage), per seat activity (a keyed hash of its scope) and per task, with modes
     0700/0600.
-  - At most 200 copies per activity, and that many items' bytes. The oldest go first.
+  - Three pools per activity (verifier rounds 5 and 6). The learner's own displaced bytes (`orig-…`) are protected: never
+    removed by count, at most 1,000, and at that cap an item is left and reported rather than an original dropped (bytes
+    that exist nowhere else are kept past it). Copies of what the turn wrote: 200 and that many items' bytes, oldest
+    first. Moved files: 200, oldest first. Equal stamps are ordered by name.
+  - A stamp more than 60 s ahead counts as oldest, one within 60 s is clamped to now. Known residual, not handled: a
+    real entry written while the clock ran more than 60 s fast is removed at the next prune after the clock is corrected.
   - It is kept seven days at most, applied at every check and at activation.
   - A task's folder is purged when the task is archived or moved.
   - It is never uploaded or logged.
