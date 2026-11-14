@@ -28,7 +28,7 @@ type FetchLike = (url: string, init: { headers: Record<string, string>; signal?:
 
 /**
  * What one ask found. `unserved` (401/403/404) means this seat is not served the route: stop asking
- * until the panel remounts. `error` (network, timeout, 5xx, bad body) backs off.
+ * until its token or the Service address changes. `error` (network, timeout, 5xx, bad body) backs off.
  */
 export type ServiceStatusAnswer = { busy: boolean; outcome: 'ok' | 'unserved' | 'error' | 'skipped' };
 

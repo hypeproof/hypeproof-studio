@@ -1909,35 +1909,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private serviceBusyPosted: boolean | undefined;
   private serviceStatusRun: Promise<void> | undefined;
-  /** Not before this time (backoff after errors; Infinity once the route is not served to this seat). */
+  /** Not before this time (normal minute, or backoff after errors). */
   private serviceStatusNextAt = 0;
   private serviceStatusErrors = 0;
+  /** The Service and token a 401/403/404 came back for: that seat is not served the route, so it is not asked again. */
+  private serviceStatusUnserved: string | undefined;
   /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
   serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;
   serviceStatusNow: (() => number) | undefined;
-  /** The last answer, re-posted to a remounted panel without asking the Service again inside the interval. */
+  /** The last answer, re-posted to a remounted panel without asking the Service again. */
   private serviceStatusLast: boolean | undefined;
   /**
-   * A remount (a task switch, the panel coming back) re-posts the last answer; it asks the Service again only once the
-   * interval has passed, or once after an unserved answer. A task switch never adds a Service request of its own.
+   * A remount (a task switch, the panel coming back) re-posts the last answer and never adds a Service request of its
+   * own: it asks only once the interval has passed. A seat the route does not serve is asked again only after its token
+   * or the Service address changes.
    */
-  resetServiceStatus(): void { this.serviceBusyPosted = undefined; if (this.serviceStatusNextAt === Number.POSITIVE_INFINITY) { this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; } }
+  resetServiceStatus(): void { this.serviceBusyPosted = undefined; }
   refreshServiceStatus(): Promise<void> {
     if (this.serviceStatusRun) return this.serviceStatusRun;
     const run = (async () => {
       try {
-        const now = (this.serviceStatusNow ?? Date.now)();
-        if (now < this.serviceStatusNextAt) {
+        const repost = async () => {
           if (this.serviceBusyPosted === undefined && this.serviceStatusLast !== undefined && await this.post({ type: "serviceStatus", busy: this.serviceStatusLast }) !== false) this.serviceBusyPosted = this.serviceStatusLast;
-          return;
-        }
+        };
+        const now = (this.serviceStatusNow ?? Date.now)();
         const proxyUrl = this.proxyUrl();
         const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
         const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
+        const seat = `${proxyUrl}\n${token ?? ""}`;
+        if (this.serviceStatusUnserved === seat) { await repost(); return; }
+        if (this.serviceStatusUnserved !== undefined) { this.serviceStatusUnserved = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
+        if (now < (this.serviceStatusNextAt ?? 0)) { await repost(); return; }
         const answer = await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
-        this.serviceStatusErrors = answer.outcome === 'error' ? this.serviceStatusErrors + 1 : 0;
+        // `?? 0`: a test harness built with Object.create skips the field initialisers.
+        this.serviceStatusErrors = answer.outcome === 'error' ? (this.serviceStatusErrors ?? 0) + 1 : 0;
+        if (answer.outcome === 'unserved') this.serviceStatusUnserved = seat;
         // No token yet is not a verdict on the seat: ask again on the next request.
-        this.serviceStatusNextAt = answer.outcome === 'skipped' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
+        this.serviceStatusNextAt = answer.outcome === 'skipped' || answer.outcome === 'unserved' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
         this.serviceStatusLast = answer.busy;
         if (answer.busy === this.serviceBusyPosted) return;
         if (await this.post({ type: "serviceStatus", busy: answer.busy }) !== false) this.serviceBusyPosted = answer.busy;

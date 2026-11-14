@@ -7655,7 +7655,8 @@ never stops them from sending.
   nothing), and never more than once a minute: a remount inside that minute (a task switch, the panel
   coming back) re-posts the last answer without asking again. After an error (network, timeout, 5xx)
   the wait doubles up to 15 minutes and a good answer returns it to a minute. A seat the
-  route does not serve (401, 403, 404) stops asking until the panel remounts. An
+  route does not serve (401, 403, 404) stops asking until its token or the Service address
+  changes. An
   unchanged answer is not re-posted, and concurrent asks share one request
   (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
 - Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,

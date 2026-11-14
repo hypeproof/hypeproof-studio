@@ -155,9 +155,14 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
     assert.equal(asked.length, 1, `${code}: a seat the route does not serve stops asking`);
     assert.deepEqual(statuses(), [false], `${code}: and shows nothing`);
     await h.handleMessage({ type: "serviceStatusRequest", mount: true });
-    assert.equal(asked.length, 2, `${code}: a remount asks once more`);
+    assert.equal(asked.length, 1, `${code}: a remount does not ask again (a task switch adds no Service request)`);
+    h.context.secrets.get = async () => "new-seat-tok";
+    state.status = 200; state.busy = false;
+    await tick();
+    assert.equal(asked.length, 2, `${code}: a new token is asked once`);
+    assert.equal(asked.at(-1).auth, "Bearer new-seat-tok");
   }
-  ok("host: 401/403/404 stop polling until a remount");
+  ok("host: 401/403/404 stop polling for that seat until its token changes");
   {
     const anon = make(undefined);
     anon.state.busy = true;
