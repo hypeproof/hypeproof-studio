@@ -8496,6 +8496,10 @@ carries `data_deletion: {available: true}` (Service `HPS_DATA_DELETION_REQUESTS`
    A failed refresh keeps the last known status and shows the Service's Korean sentence (`role="alert"`).
 4. Nothing in Studio deletes anything. The Service records the request; an operator processes it by hand.
    The host logs nothing about it and touches no file.
+5. Local copies a request does not reach, because they never leave the device: the memory quarantine of keep-off turns
+   (REQ-STUDIO-TASK-MEMORY-SWITCHES, `memory-quarantine/` in the extension's global storage). It keeps at most 200 copies,
+   200 moved files and 1,000 of the learner's own displaced originals per activity, and seven days. It is removed with its task when the task is archived or moved, and it is never uploaded
+   or logged.
 
 Tests: `extensions/hypeproof-chat/test/data-deletion-request.test.tsx`; Service
 `worker/test/data-deletion-requests.test.mjs`. Not claimed: guardian requests (DEC-23), status after the
@@ -9391,6 +9395,64 @@ keeps) and PI#5. DEC-01 and DEC-02 apply unchanged. It builds on REQ-STUDIO-MEMO
   - reads by the local CLI runtime's tools.
 
   Through any of these, memory text could reach that task's later requests.
+
+**Turn-end folder check (#4014).** A turn that begins with keep off takes a snapshot of `.hypeproof/memory/` and compares
+it when the turn ends, in every runtime: the Agent SDK runtime and the local CLI runtime share the same turn `finally`. That
+catches what the checks above cannot see: a shell command that builds the path at run time, or the local runtime's shell.
+  - **What happens to changes.** An added file is moved out of the store into a quarantine. A changed file gets its earlier
+    bytes back (written beside it and renamed over it), and the turn's version goes to the quarantine. A deleted file is
+    restored.
+  - **Studio's own changes are left alone:** every `ActivityMemory` append, restore and remove (the memory list, an undo),
+    and the learner's own save of a memory file in the editor.
+  - **The line.** One line in that turn, kept with it, names only the count: `이 작업에서 기억에 쓴 내용 N개를 되돌렸어요.`.
+    It never shows memory content or a file name.
+  - **Snapshot bounds (the store's own limits). Fail closed.** Every entry's name is listed, up to 10,000, so anything
+    new the turn adds is always found and moved out. Contents are read for at most 250 entries, the store's memory-named
+    files first, and only up to the 16 KiB item size. Every entry whose content was tracked at turn start is read again
+    at the end, so a flood of new files cannot push it out of the read set and hide a rewrite. An entry past the bound at
+    turn start is tracked by name only: a change inside it cannot be seen, and the turn says `기억 폴더에 파일이 많아서 일부 파일의 바뀐 내용은 확인하지 못했어요. 새로 생긴 파일은 모두 옮겼어요. 기억 목록에서 확인해 주세요.`.
+    A file past the item size cannot be put back. It is left in place (it is never read as memory either), and the turn
+    says `기억 파일 N개는 되돌리지 못했어요. 기억 목록에서 확인해 주세요.`.
+  - **Studio's own changes during the turn win.** The journal keeps the state Studio left each file in, with its bytes up
+    to the item size. A learner's save followed by a shell overwrite in the same turn puts back the learner's save, not
+    the pre-turn version. An editor save is journaled from the bytes on disk, so a byte-order mark or CRLF line endings
+    are not mistaken for a foreign write.
+  - **Other files are moved, never deleted.** A new name the store would never read as memory (a photo the learner
+    dropped in from the file manager, or junk) is renamed into the quarantine: no copy, no extra disk. At most 200 per
+    turn; the rest is left in place and reported. A move across volumes is not attempted, and the file stays and is
+    reported. Moved files have their own count cap (200 per activity) and the seven-day cap, but not the byte cap. Age and order come from the stamp in
+    the quarantined file's name, never its mtime (a move keeps the original's date, and a turn can set any date); the
+    moved file's times are set to the move as well.
+  - **An item that cannot be put back keeps its bytes.** When the item was replaced by a folder, its earlier bytes are
+    copied into the quarantine before the failure is reported, also when the folder sits past the read bound.
+  - **The learner's own bytes are a protected pool.** A copy whose bytes are the learner's own (the item's state at turn
+    start, or the learner's save during the turn) is kept as an original (`orig-…`): an item that could not be put back,
+    or one that was still on disk when the target differed. Originals are never removed by count, only after seven days,
+    so nothing the turn writes or moves can evict one. Per activity at most 1,000 (five times the item count); at that cap
+    an item that would need a new original is left as it is and reported, and no original is dropped. Bytes that exist
+    nowhere else any more (a folder swap) are kept even past the cap.
+  - **Quarantine bounds.**
+    - It lives in the extension's global storage, so it belongs to this OS account only. Folders are 0700 and files 0600,
+      with one folder per seat activity (a keyed hash of its scope) and per task.
+    - Per activity, three pools: originals (above); copies of what the turn wrote, at most the store's item count (200)
+      and that many full items' bytes, oldest first; moved files, at most 200, oldest first. Equal stamps are ordered by
+      name.
+    - Ages come from the stamp in each name. A stamp more than 60 s ahead of the clock was not written by Studio and
+      counts as oldest; one within 60 s is clamped to now. Known residual: an entry Studio really wrote while the clock
+      ran more than 60 s fast, after the clock is corrected, is taken for a planted one and removed at the next prune.
+    - Nothing older than seven days is kept, applied at every check and at activation.
+    - A task's folder is removed when the task is archived or moved.
+    - Nothing reads it back into memory, uploads it or logs it (tested).
+    - A data deletion request (CGP-SHELL-R-027) does not reach it, because it never leaves the device.
+  - **Write side, with this check.** A new or deleted memory file, or a changed one among the read entries, does not
+    survive a keep-off turn, in either runtime. The shell form does not matter. What remains, and is told or named:
+    - a change inside an entry past the read bound (told in the turn);
+    - a file past the item size (told);
+    - a write by a process the turn started in the background that lands after the turn ended (for example
+      `nohup sh -c 'sleep 30; …' &`). The next keep-off turn's snapshot already includes it, so it is not put back. This
+      one is not told.
+  - **A turn that began with keep on is not checked.** If keep is turned on during a keep-off turn, a shell write after
+    that is still put back.
 
 - **Policy.** The switches only narrow what the served memory policy allows. Where memory is not available for the seat
   (no store binding: class, lesson and instructor seats), there is no group and no write path.

@@ -19571,6 +19571,12 @@
           "path": "extensions/hypeproof-chat/src/memoryPathCheck.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/memoryFolderGuard.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/TaskMemorySwitches.tsx"
         },
         {
@@ -19603,6 +19609,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-memory-switches.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-folder-guard.smoke.mjs"
         },
         {
           "path": "docs/testing/task-workspace.md",
