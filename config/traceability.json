@@ -14329,6 +14329,53 @@
       ]
     },
     {
+      "owner": "jayleekr",
+      "id": "ST-REQ-BUSY-BANNER",
+      "stage": "requirement",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Busy banner (CGP-AGENT-R-031)"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-IMP-BUSY-BANNER",
+      "stage": "implementation",
+      "depends_on": [
+        "ST-REQ-BUSY-BANNER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/serviceStatus.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/BusyBanner.tsx"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-TEST-BUSY-BANNER",
+      "stage": "test",
+      "depends_on": [
+        "ST-REQ-BUSY-BANNER",
+        "ST-IMP-BUSY-BANNER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/service-status.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/busy-banner-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-BROWSER-DOWNLOADS",
       "stage": "requirement",
       "owner": "jayleekr",

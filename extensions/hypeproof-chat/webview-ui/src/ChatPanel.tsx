@@ -44,6 +44,8 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { LowDiskBar } from './LowDiskBar';
+import { BusyBanner, busyBannerShown } from './BusyBanner';
+import { SERVICE_STATUS_POLL_MS } from '../../src/serviceStatus';
 import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
@@ -836,6 +838,19 @@ export function ChatPanel(props: Props) {
     (timer as unknown as { unref?: () => void }).unref?.();
     const stop = () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
     return stop;
+  }, []);
+  // CGP-AGENT-R-031 — the Service's busy signal. The panel asks on mount, when it comes back into view, on focus and
+  // once a minute while visible; only the host's confirmed `true` shows the banner. Closing it holds for this session.
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [busyDismissed, setBusyDismissed] = useState(false);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "serviceStatus") setServiceBusy(msg.busy === true); });
+    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "serviceStatusRequest" }); };
+    postToHost({ type: "serviceStatusRequest", mount: true });
+    document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const timer = setInterval(ask, SERVICE_STATUS_POLL_MS);
+    (timer as unknown as { unref?: () => void }).unref?.();
+    return () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
   }, []);
   // REQ-STUDIO-PREVIEW-RECOVERY — the host measures the learner's preview tab (server state, HTTP status) and pushes it when a
   // browser tab changes; the panel asks again on mount, when it comes back into view and when the window regains focus.
@@ -2354,6 +2369,8 @@ export function ChatPanel(props: Props) {
         {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
+        {/* CGP-AGENT-R-031: renders nothing unless the Service reads busy; never holds a send. */}
+        {busyBannerShown(serviceBusy, busyDismissed) && <BusyBanner onDismiss={() => { setBusyDismissed(true); textareaRef.current?.focus({ preventScroll: true }); }} />}
         {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
         {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {

@@ -7629,6 +7629,47 @@ personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work 
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
 
+## Busy banner (CGP-AGENT-R-031)
+
+REQ-CGP-AGENT-66 / CGP-AGENT-R-031 / DES-CGP-AGENT-66 / CGP-AGENT-D-027 / PI#4 / ADAPT:
+while the AI side is struggling, Studio says so before the learner sends, calmly, and
+never stops them from sending.
+
+- Signal: the Service serves `GET /v1/service-status` → `{"busy": true|false}` to an
+  authenticated participant seat only (hypeproof-service#465). It is derived from the
+  upstream failures learner turns already meet (429, 529, 5xx and unreachable, not a
+  learner's own Stop), over a short window. The body names no provider, model, status
+  or count, and the public `/health` carries no such flag.
+- When Studio asks: the panel asks on mount, when it comes back into view, on window
+  focus, and once a minute while visible. The host asks only for a signed-in seat on the
+  Service (no token, or a local coach, asks nothing). An unchanged answer is not
+  re-posted, and concurrent asks share one request (`src/serviceStatus.ts`,
+  `ChatPanelProvider.refreshServiceStatus`).
+- Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
+  a 5-second timeout, a 401, a 404 from a Service without the route, or a malformed body
+  reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
+- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요. 답이
+  늦을 수 있어요.", and one close button ("붐빔 알림 닫기"). It is `role="status"`. It
+  leaves on its own when the Service reads healthy and comes back if busy returns. Once
+  the learner closes it, it stays closed for the rest of that panel session; focus
+  returns to the composer.
+- Not: it never holds a send, disables the composer, names a provider or a cause, or
+  replaces the stall watchdog (REQ-M26), which still handles a turn that does not answer.
+- Design (DES-CGP-AGENT-66): an amber edge (`--hp-border-warn-default`) on the widget
+  background, one line of text at least 14px from 320 to 1420 px, a 44px close with the
+  shared focus ring, no animation or transition at all (so reduced motion needs no
+  override), and in forced colours the edge becomes a text-coloured line and the ring
+  stays.
+
+Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
+fail-quiet fetch with positive and negative controls; the real `ChatPanelProvider` for
+busy, dedupe, recovery, remount, shared requests and a seat without a token) and
+`busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
+classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
+44px close, focus ring, Enter still sends, healthy removes it, closed stays closed; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser). The installed app against the
+deployed Service is NOT RUN.
+
 ## Browser downloads (CGP-KNOW-R-021)
 
 REQ-STUDIO-BROWSER-DOWNLOADS (REQ-KNOW-38 / CGP-KNOW-038, design CGP-KNOW-D-021, PI#1;

@@ -2288,3 +2288,16 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
   - Restoring gives back the open card, which is the state it was collapsed from.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-AGENT-R-031 / CGP-AGENT-D-027: busy banner before send (2026-11-14)
+
+Confirmed by Jay: no. These are agent choices within the rows, and the coordinator set the constraints: no flag on the public health, authenticated seats only, derived from existing signals, no provider names, never block sending.
+
+- **Signal (agent choice).** It counts the upstream failures learner turns already meet at the Service's four failure sites: 429, 529, 5xx and unreachable, not a learner's own Stop. Busy is 4 or more in the current minute and the two before it, memoised per isolate for 20 s (hypeproof-service#465). Two sources were rejected:
+  - The provider breaker covers only the OpenAI router path, and when it is open the fallback still serves the turn.
+  - The heartbeat runs every 15 minutes, so the banner would stay up long after recovery.
+- **Route (agent choice).** It is a new authenticated `GET /v1/service-status` → `{busy}`, not a `/v1/profile` field. Studio reads the profile at start, not on a timer, and the profile route runs gate checks and builds a large body.
+- **Asking (agent choice).** The cadence follows the low-disk bar: on mount, back in view, on focus, and once a minute while visible. Fail quiet: only a confirmed `true` shows the banner.
+- **Copy (agent choice).** "AI가 지금 붐벼요. 답이 늦을 수 있어요." The first clause is the row's own text. The second tells the learner what to expect without asking them to do anything. It fits on one line at 320 px.
+- **Close (agent choice within "dismissible per session").** Closing holds for the panel session even if busy flips back, and focus returns to the composer. A healthy answer removes the banner on its own.
+- **Not covered:** the installed app against the deployed Service, and a real screen reader.

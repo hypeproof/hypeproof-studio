@@ -2587,6 +2587,14 @@ html, body, #root {
   .hps-memory-notice-confirm { color: ButtonText; border-color: ButtonText; background: Canvas; }
 }
 .hps-low-disk-amounts, .hps-low-disk-keep { margin: 0; }
+/* CGP-AGENT-D-027 busy banner: one amber info line above the composer, icon + text + a 44px close. No motion. */
+.hps-busy-banner { box-sizing: border-box; display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); margin: 0; padding-block: 0; padding-inline: var(--ds-c-studio-styles-space-1) 0; border-inline-start: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); min-width: 0; }
+.hps-busy-banner > svg { flex: 0 0 auto; }
+.hps-busy-banner-text { flex: 1 1 auto; min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); word-break: keep-all; overflow-wrap: anywhere; }
+.hps-busy-banner-close { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); padding: 0; border: var(--ds-c-studio-styles-size-3) solid transparent; border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: var(--vscode-foreground, inherit); }
+.hps-busy-banner-close:hover { background-color: var(--hp-bg-control-hover); }
+.hps-busy-banner-close:active { background-color: var(--hp-bg-control-pressed); }
+.hps-busy-banner-close:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-low-disk-steps { margin: var(--ds-c-studio-styles-space-13) 0; padding-inline-start: var(--ds-c-studio-styles-space-20); }
 /* CGP-AGENT-D-026 (DES-CGP-AGENT-64) — the 느려요 기록 pill above the composer while a recording runs.
    Red fill with its own ink in each theme (4.5:1 text, 3:1 against the panel), a 44px target, text at the
@@ -2646,6 +2654,9 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   /* REQ-KNOW-35: the amber edge becomes a text line; the disclosure keeps a link colour and an outline on focus. */
   .hps-low-disk { border-left-color: CanvasText; }
   .hps-low-disk-help { color: LinkText; }
+  /* CGP-AGENT-D-027: the amber edge becomes a text line; the close keeps a button colour. */
+  .hps-busy-banner { border-inline-start-color: CanvasText; }
+  .hps-busy-banner-close { color: ButtonText; }
   .hps-preview-recovery-action { border: var(--ds-c-studio-styles-size-3) solid ButtonText; background: ButtonFace; color: ButtonText; }
 }
 

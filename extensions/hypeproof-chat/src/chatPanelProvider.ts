@@ -102,6 +102,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
+import { fetchServiceBusy } from './serviceStatus';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED, FOLDER_CONSENT_TIMED_OUT } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -1896,6 +1897,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     })();
     this.lowDiskRun = run;
     void run.finally(() => { if (this.lowDiskRun === run) this.lowDiskRun = undefined; if (rerun) void this.refreshLowDisk(); });
+    return run;
+  }
+  /**
+   * CGP-AGENT-R-031 — the Service's busy signal for the banner above the composer. Asked only for a
+   * signed-in seat on the Service (a local coach has no Service to ask). An unchanged answer is not
+   * re-posted; concurrent asks share one request.
+   */
+  private serviceBusyPosted: boolean | undefined;
+  private serviceStatusRun: Promise<void> | undefined;
+  /** Test seam: the fetch used to ask (undefined = the global fetch). */
+  serviceStatusFetch: Parameters<typeof fetchServiceBusy>[0] | undefined;
+  refreshServiceStatus(): Promise<void> {
+    if (this.serviceStatusRun) return this.serviceStatusRun;
+    const run = (async () => {
+      try {
+        const proxyUrl = this.proxyUrl();
+        const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
+        const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
+        const busy = await fetchServiceBusy(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof fetchServiceBusy>[0]), { proxyUrl, token });
+        if (busy === this.serviceBusyPosted) return;
+        if (await this.post({ type: "serviceStatus", busy }) !== false) this.serviceBusyPosted = busy;
+      } catch (error) {
+        console.warn('[serviceStatus] check failed', error);
+      }
+    })();
+    this.serviceStatusRun = run;
+    void run.finally(() => { if (this.serviceStatusRun === run) this.serviceStatusRun = undefined; });
     return run;
   }
   /** A send while the folder is missing is held: the text goes back to the composer, the notice is shown, no turn starts. */
@@ -8704,6 +8732,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
+      case "serviceStatusRequest": if (msg.mount === true) this.serviceBusyPosted = undefined; await this.refreshServiceStatus(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
