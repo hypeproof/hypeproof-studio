@@ -2266,3 +2266,10 @@ This is a Studio-only change with no Service contract. Confirmed by Jay: no (all
 - **Look (agent choice).** Both are the existing quiet button (not Primary, per SX-04), with 44px targets and 14px text. A disabled button uses the muted text token and a dashed boundary, so "visibly distinct" does not rest on opacity alone. The native `disabled` state carries the announcement.
 - **Copy.** Each block's controls help names both buttons, and the button labels are the design row's. Both are the agent's wording within the row.
 - **Not covered:** a real installed App and a real screen reader.
+
+## CGP-DS-R-022: the task menu joins the shared menu token set (2026-11-14, agent-selected)
+
+Audit of main (7205ff64b): the tools menu and the personal header menu already share the learner-menu tokens (#2575, typeahead #2724) and `test/menu-tokens-computed.smoke.mjs` guards them. The rail's task menu (`TaskMenu.tsx`, CGP-KNOW-R-009, built later) did not: 6px gutter, 10px block padding, 6px item radius, `text-align: left`. Its 44px items, 12px panel radius and 14px text already met the floor. R-022: PARTIAL (one of three Studio menus); D-019 Studio part: PARTIAL for the same menu.
+- Change: `taskWorkspace.css` task-menu rules now read `--ds-c-menu-gutter`, `--ds-c-menu-item-height`, `--ds-c-menu-item-pad-block` / `-inline` and `--hp-radius-menu-item`, and align to `start`. No new token, no token value, colour or theme change; no component or copy change.
+- Not covered: the `보여주기` attach list in the unmounted VoicePanel is a `role="group"` of buttons, not a menu, and keeps its own rules. Chalk's dense 32px menu (DES-CGP-DS-24) stays separate.
+- Confirmed by Jay: no.

@@ -12746,6 +12746,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/menuTypeahead.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
         }
       ]
     },
@@ -12759,6 +12762,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/menu-tokens-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-menu-computed.smoke.mjs"
         }
       ]
     },
