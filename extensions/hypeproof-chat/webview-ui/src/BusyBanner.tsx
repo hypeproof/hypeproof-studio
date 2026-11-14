@@ -7,7 +7,7 @@
 
 import { ChatIcon } from './ChatDetails';
 
-export const BUSY_BANNER_TEXT = 'AI가 지금 붐벼요. 답이 늦을 수 있어요.';
+export const BUSY_BANNER_TEXT = 'AI가 지금 붐벼요';
 export const BUSY_BANNER_CLOSE_LABEL = '붐빔 알림 닫기';
 
 /** Shown only while busy and not closed in this session. */

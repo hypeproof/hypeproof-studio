@@ -57,7 +57,7 @@ try{
   assert.ok(contrast(...m.textContrast)>=4.5,`${label}: text contrast ${contrast(...m.textContrast).toFixed(2)}`);
   assert.ok(m.edge>=2,`${label}: the amber edge`);
   assert.equal(m.motion,0,`${label}: no animation or transition`);
-  assert.equal(m.allText,'AI가 지금 붐벼요. 답이 늦을 수 있어요.',`${label}: the copy`);assert.doesNotMatch(m.allText,PROVIDER,`${label}: no provider or cause`);
+  assert.equal(m.allText,'AI가 지금 붐벼요',`${label}: the copy`);assert.doesNotMatch(m.allText,PROVIDER,`${label}: no provider or cause`);
   assert.equal(m.buttons.length,1,`${label}: exactly one control`);assert.equal(m.buttons[0].label,'붐빔 알림 닫기');
   assert.ok(m.buttons[0].w>=44&&m.buttons[0].h>=44,`${label}: close target ${m.buttons[0].w}x${m.buttons[0].h}`);
   assert.equal(m.readOnly,false);assert.equal(m.disabled,false,`${label}: the composer stays editable`);

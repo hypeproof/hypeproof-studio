@@ -5,7 +5,9 @@
 //   (positive and negative controls for the parse and the fail-quiet rule).
 // 2 runs the real ChatPanelProvider.handleMessage against a fake VS Code: a busy answer posts
 //   `serviceStatus: true`, an unchanged answer is not re-posted, recovery posts `false`, a remount
-//   re-posts, a seat without a token asks nothing, and the request carries the seat token only.
+//   re-posts, asks closer than a minute do not go out, errors back off (capped) and recover, a
+//   401/403/404 stops asking until a remount, a seat without a token asks nothing, and the
+//   request carries the seat token only.
 //
 // Run: node --experimental-strip-types test/service-status.smoke.mjs
 
@@ -54,9 +56,19 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
   assert.equal(await S.fetchServiceBusy(rec(200, () => { throw new SyntaxError("bad json"); }), { proxyUrl: "https://s/v1", token: "t" }), false, "a bad body reads as not busy");
   const hung = (_u, init) => new Promise((_r, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
   const t0 = Date.now();
+  const keepAlive = setInterval(() => {}, 1000); // AbortSignal.timeout does not hold the process open
   assert.equal(await S.fetchServiceBusy(hung, { proxyUrl: "https://s/v1", token: "t", timeoutMs: 50 }), false, "a hung request times out as not busy");
   assert.ok(Date.now() - t0 < 2000, "the timeout ends the wait");
-  ok("pure: fetch is fail-quiet and sends only the seat token");
+  clearInterval(keepAlive);
+  for (const [code, outcome] of [[401, "unserved"], [403, "unserved"], [404, "unserved"], [500, "error"], [503, "error"]]) {
+    assert.equal((await S.askServiceStatus(rec(code, {}), { proxyUrl: "https://s/v1", token: "t" })).outcome, outcome, `${code} is ${outcome}`);
+  }
+  assert.equal(S.nextServiceStatusAt(0, "unserved", 0), Infinity);
+  assert.equal(S.nextServiceStatusAt(0, "error", 0), S.SERVICE_STATUS_POLL_MS);
+  assert.equal(S.nextServiceStatusAt(0, "error", 3), S.SERVICE_STATUS_POLL_MS * 8);
+  assert.equal(S.nextServiceStatusAt(0, "error", 30), S.SERVICE_STATUS_MAX_BACKOFF_MS);
+  assert.ok(S.nextServiceStatusAt(0, "ok", 5) < S.SERVICE_STATUS_POLL_MS, "a good answer allows the next minute's ask");
+  ok("pure: fetch is fail-quiet and sends only the seat token; outcomes and backoff");
 }
 
 // ── 2. The real chat host ──
@@ -77,41 +89,82 @@ const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300
   const make = (token) => {
     const h = Object.create(ChatPanelProvider.prototype);
     const posts = [], asked = [];
-    const state = { busy: false };
+    const state = { busy: false, status: 200, now: 1_000_000 };
     Object.assign(h, {
       context: { globalState: { get: () => undefined, update: async () => {} }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => token } },
       post: async (m) => { posts.push(J(m)); return true; },
     });
-    h.serviceStatusFetch = async (url, init) => { asked.push({ url, auth: init.headers.authorization }); return { ok: true, status: 200, json: async () => ({ busy: state.busy }) }; };
+    h.serviceStatusNow = () => state.now;
+    h.serviceStatusFetch = async (url, init) => { asked.push({ url, auth: init.headers.authorization, at: state.now }); if (state.status === 0) throw new TypeError("fetch failed"); return { ok: state.status === 200, status: state.status, json: async () => ({ busy: state.busy }) }; };
     const statuses = () => posts.filter((m) => m.type === "serviceStatus").map((m) => m.busy);
-    return { h, state, statuses, asked };
+    const tick = async (ms = S.SERVICE_STATUS_POLL_MS) => { state.now += ms; await h.handleMessage({ type: "serviceStatusRequest" }); };
+    return { h, state, statuses, asked, tick };
   };
 
-  const { h, state, statuses, asked } = make("seat-tok");
-  await h.handleMessage({ type: "serviceStatusRequest", mount: true });
-  assert.deepEqual(statuses(), [false], "mount posts the calm state");
-  assert.equal(asked[0].url, "https://api.hypeproof-ai.xyz/v1/service-status");
-  assert.equal(asked[0].auth, "Bearer seat-tok");
-  state.busy = true;
-  await h.handleMessage({ type: "serviceStatusRequest" });
-  assert.deepEqual(statuses(), [false, true], "busy is posted");
-  await h.handleMessage({ type: "serviceStatusRequest" });
-  assert.deepEqual(statuses(), [false, true], "an unchanged answer is not re-posted");
-  state.busy = false;
-  await h.handleMessage({ type: "serviceStatusRequest" });
-  assert.deepEqual(statuses(), [false, true, false], "recovery clears it");
-  await h.handleMessage({ type: "serviceStatusRequest", mount: true });
-  assert.deepEqual(statuses(), [false, true, false, false], "a remounted panel is told again");
-  await Promise.all([h.refreshServiceStatus(), h.refreshServiceStatus()]);
-  assert.equal(asked.length, 5, "concurrent asks share one request");
-  ok("host: busy, dedupe, recovery, remount, shared request");
-
-  const anon = make(undefined);
-  anon.state.busy = true;
-  await anon.h.handleMessage({ type: "serviceStatusRequest", mount: true });
-  assert.equal(anon.asked.length, 0, "no token: the Service is not asked");
-  assert.deepEqual(anon.statuses(), [false], "no token: no banner");
-  ok("host: a seat without a token asks nothing and shows nothing");
+  {
+    const { h, state, statuses, asked, tick } = make("seat-tok");
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.deepEqual(statuses(), [false], "mount posts the calm state");
+    assert.equal(asked[0].url, "https://api.hypeproof-ai.xyz/v1/service-status");
+    assert.equal(asked[0].auth, "Bearer seat-tok");
+    state.busy = true;
+    await tick();
+    assert.deepEqual(statuses(), [false, true], "busy is posted");
+    await tick();
+    assert.deepEqual(statuses(), [false, true], "an unchanged answer is not re-posted");
+    state.busy = false;
+    await tick();
+    assert.deepEqual(statuses(), [false, true, false], "recovery clears it");
+    const before = asked.length;
+    await tick(5_000); await tick(5_000);
+    assert.equal(asked.length, before, "asks closer than a minute apart (focus, back in view) do not reach the Service");
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.deepEqual(statuses(), [false, true, false, false], "a remounted panel is told again");
+    state.now += S.SERVICE_STATUS_POLL_MS;
+    await Promise.all([h.refreshServiceStatus(), h.refreshServiceStatus()]);
+    assert.equal(asked.length, before + 2, "concurrent asks share one request");
+    ok("host: busy, dedupe, recovery, minimum interval, remount, shared request");
+  }
+  {
+    const { h, state, asked, tick } = make("seat-tok");
+    state.status = 0;
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    const gaps = [];
+    for (let i = 0; i < 40; i++) { const n = asked.length; await tick(); if (asked.length > n) gaps.push(asked.at(-1).at); }
+    const waits = gaps.map((t, i) => t - (i ? gaps[i - 1] : asked[0].at));
+    assert.ok(waits.length >= 3, `errors still retry (${waits.length})`);
+    for (let i = 1; i < waits.length; i++) assert.ok(waits[i] >= waits[i - 1], `the wait grows after each error: ${waits}`);
+    assert.ok(Math.max(...waits) <= S.SERVICE_STATUS_MAX_BACKOFF_MS + S.SERVICE_STATUS_POLL_MS, `capped: ${waits}`);
+    assert.ok(waits.at(-1) > S.SERVICE_STATUS_POLL_MS * 4, `backed off: ${waits}`);
+    state.status = 200;
+    const n = asked.length;
+    for (let i = 0; i < 20 && asked.length === n; i++) await tick();
+    const m = asked.length;
+    await tick(); await tick();
+    assert.equal(asked.length, m + 2, "a good answer returns to once a minute");
+    ok("host: errors back off, capped, and recover to the normal minute");
+  }
+  for (const code of [401, 403, 404]) {
+    const { h, state, asked, statuses, tick } = make("seat-tok");
+    state.status = code;
+    state.busy = true;
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    for (let i = 0; i < 30; i++) await tick();
+    assert.equal(asked.length, 1, `${code}: a seat the route does not serve stops asking`);
+    assert.deepEqual(statuses(), [false], `${code}: and shows nothing`);
+    await h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    assert.equal(asked.length, 2, `${code}: a remount asks once more`);
+  }
+  ok("host: 401/403/404 stop polling until a remount");
+  {
+    const anon = make(undefined);
+    anon.state.busy = true;
+    await anon.h.handleMessage({ type: "serviceStatusRequest", mount: true });
+    await anon.tick();
+    assert.equal(anon.asked.length, 0, "no token: the Service is not asked");
+    assert.deepEqual(anon.statuses(), [false], "no token: no banner");
+    ok("host: a seat without a token asks nothing and shows nothing");
+  }
 }
 
 console.log(`service-status: ${passed} checks passed`);

@@ -2297,7 +2297,8 @@ Confirmed by Jay: no. These are agent choices within the rows, and the coordinat
   - The provider breaker covers only the OpenAI router path, and when it is open the fallback still serves the turn.
   - The heartbeat runs every 15 minutes, so the banner would stay up long after recovery.
 - **Route (agent choice).** It is a new authenticated `GET /v1/service-status` → `{busy}`, not a `/v1/profile` field. Studio reads the profile at start, not on a timer, and the profile route runs gate checks and builds a large body.
-- **Asking (agent choice).** The cadence follows the low-disk bar: on mount, back in view, on focus, and once a minute while visible. Fail quiet: only a confirmed `true` shows the banner.
-- **Copy (agent choice).** "AI가 지금 붐벼요. 답이 늦을 수 있어요." The first clause is the row's own text. The second tells the learner what to expect without asking them to do anything. It fits on one line at 320 px.
+- **Asking (coordinator constraints; the numbers are agent choices).** The panel asks on mount, back in view, on focus, and once a minute, but only while the view is visible and the window is focused. The host asks at most once a minute. Errors double the wait up to 15 minutes. A 401, 403 or 404 stops asking until a remount. Fail quiet: only a confirmed `true` shows the banner.
+- **Service cost (coordinator).** Failures are counted per isolate and written to KV at most once per 12 s per isolate, into one window key. A read is one KV get behind a 20 s memo. A failed KV write is dropped.
+- **Copy.** "AI가 지금 붐벼요", the row's own text only. A second clause ("답이 늦을 수 있어요.") wrapped to two lines at 320 px beside the icon and the 44px close, and DES-CGP-AGENT-66 asks for one line.
 - **Close (agent choice within "dismissible per session").** Closing holds for the panel session even if busy flips back, and focus returns to the composer. A healthy answer removes the banner on its own.
 - **Not covered:** the installed app against the deployed Service, and a real screen reader.

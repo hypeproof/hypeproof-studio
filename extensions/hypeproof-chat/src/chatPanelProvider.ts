@@ -102,7 +102,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
-import { fetchServiceBusy } from './serviceStatus';
+import { askServiceStatus, nextServiceStatusAt } from './serviceStatus';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED, FOLDER_CONSENT_TIMED_OUT } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -1906,18 +1906,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private serviceBusyPosted: boolean | undefined;
   private serviceStatusRun: Promise<void> | undefined;
-  /** Test seam: the fetch used to ask (undefined = the global fetch). */
-  serviceStatusFetch: Parameters<typeof fetchServiceBusy>[0] | undefined;
+  /** Not before this time (backoff after errors; Infinity once the route is not served to this seat). */
+  private serviceStatusNextAt = 0;
+  private serviceStatusErrors = 0;
+  /** Test seams: the fetch used to ask (undefined = the global fetch) and the clock. */
+  serviceStatusFetch: Parameters<typeof askServiceStatus>[0] | undefined;
+  serviceStatusNow: (() => number) | undefined;
+  /** A remount starts over: re-post the state, and ask again even after an unserved answer. */
+  resetServiceStatus(): void { this.serviceBusyPosted = undefined; this.serviceStatusNextAt = 0; this.serviceStatusErrors = 0; }
   refreshServiceStatus(): Promise<void> {
     if (this.serviceStatusRun) return this.serviceStatusRun;
     const run = (async () => {
       try {
+        const now = (this.serviceStatusNow ?? Date.now)();
+        if (now < this.serviceStatusNextAt) return;
         const proxyUrl = this.proxyUrl();
         const local = (() => { try { return !!localRuntimeConfig(vscode.env.appName, proxyUrl); } catch { return false; } })();
         const token = local ? undefined : await this.context.secrets.get(TOKEN_KEY);
-        const busy = await fetchServiceBusy(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof fetchServiceBusy>[0]), { proxyUrl, token });
-        if (busy === this.serviceBusyPosted) return;
-        if (await this.post({ type: "serviceStatus", busy }) !== false) this.serviceBusyPosted = busy;
+        const answer = await askServiceStatus(this.serviceStatusFetch ?? (fetch as unknown as Parameters<typeof askServiceStatus>[0]), { proxyUrl, token });
+        this.serviceStatusErrors = answer.outcome === 'error' ? this.serviceStatusErrors + 1 : 0;
+        // No token yet is not a verdict on the seat: ask again on the next request.
+        this.serviceStatusNextAt = answer.outcome === 'skipped' ? 0 : nextServiceStatusAt(now, answer.outcome, this.serviceStatusErrors - 1);
+        if (answer.busy === this.serviceBusyPosted) return;
+        if (await this.post({ type: "serviceStatus", busy: answer.busy }) !== false) this.serviceBusyPosted = answer.busy;
       } catch (error) {
         console.warn('[serviceStatus] check failed', error);
       }
@@ -8732,7 +8743,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
-      case "serviceStatusRequest": if (msg.mount === true) this.serviceBusyPosted = undefined; await this.refreshServiceStatus(); return;
+      case "serviceStatusRequest": if (msg.mount === true) this.resetServiceStatus(); await this.refreshServiceStatus(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;

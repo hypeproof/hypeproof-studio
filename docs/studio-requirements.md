@@ -7641,15 +7641,18 @@ never stops them from sending.
   learner's own Stop), over a short window. The body names no provider, model, status
   or count, and the public `/health` carries no such flag.
 - When Studio asks: the panel asks on mount, when it comes back into view, on window
-  focus, and once a minute while visible. The host asks only for a signed-in seat on the
-  Service (no token, or a local coach, asks nothing). An unchanged answer is not
-  re-posted, and concurrent asks share one request (`src/serviceStatus.ts`,
-  `ChatPanelProvider.refreshServiceStatus`).
+  focus, and once a minute while the view is visible and the window is focused. The host
+  asks only for a signed-in seat on the Service (no token, or a local coach, asks
+  nothing), and never more than once a minute. After an error (network, timeout, 5xx)
+  the wait doubles up to 15 minutes and a good answer returns it to a minute. A seat the
+  route does not serve (401, 403, 404) stops asking until the panel remounts. An
+  unchanged answer is not re-posted, and concurrent asks share one request
+  (`src/serviceStatus.ts`, `ChatPanelProvider.refreshServiceStatus`).
 - Fail quiet: only an explicit `busy: true` from a 200 shows the banner. A network error,
   a 5-second timeout, a 401, a 404 from a Service without the route, or a malformed body
   reads as not busy. The offline banner (CGP-SHELL-R-011) covers a lost network.
-- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요. 답이
-  늦을 수 있어요.", and one close button ("붐빔 알림 닫기"). It is `role="status"`. It
+- What: one info line above the composer, in every seat: an icon, "AI가 지금 붐벼요", and one
+  close button ("붐빔 알림 닫기"). It is `role="status"`. It
   leaves on its own when the Service reads healthy and comes back if busy returns. Once
   the learner closes it, it stays closed for the rest of that panel session; focus
   returns to the composer.
@@ -7662,8 +7665,9 @@ never stops them from sending.
   stays.
 
 Evidence: `extensions/hypeproof-chat/test/service-status.smoke.mjs` (pure URL, parse and
-fail-quiet fetch with positive and negative controls; the real `ChatPanelProvider` for
-busy, dedupe, recovery, remount, shared requests and a seat without a token) and
+fail-quiet fetch with positive and negative controls, outcomes and backoff; the real
+`ChatPanelProvider` for busy, dedupe, recovery, the minimum interval, backoff and its cap,
+the 401/403/404 stop, remount, shared requests and a seat without a token) and
 `busy-banner-browser.smoke.mjs` (the real ChatPanel in headless Chromium: personal and
 classroom, dark/light, 320/800/1420 px, forced colours and reduced motion; one line,
 44px close, focus ring, Enter still sends, healthy removes it, closed stays closed; fails

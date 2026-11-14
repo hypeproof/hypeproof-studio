@@ -840,12 +840,13 @@ export function ChatPanel(props: Props) {
     return stop;
   }, []);
   // CGP-AGENT-R-031 — the Service's busy signal. The panel asks on mount, when it comes back into view, on focus and
-  // once a minute while visible; only the host's confirmed `true` shows the banner. Closing it holds for this session.
+  // once a minute while visible and focused; only the host's confirmed `true` shows the banner. Closing it holds for this session.
   const [serviceBusy, setServiceBusy] = useState(false);
   const [busyDismissed, setBusyDismissed] = useState(false);
   useEffect(() => {
     const off = onHostMessage((msg) => { if (msg.type === "serviceStatus") setServiceBusy(msg.busy === true); });
-    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "serviceStatusRequest" }); };
+    // Only while the view is visible and the window is focused; the host adds backoff and stops for a seat it is not served to.
+    const ask = () => { if (document.visibilityState !== "hidden" && document.hasFocus()) postToHost({ type: "serviceStatusRequest" }); };
     postToHost({ type: "serviceStatusRequest", mount: true });
     document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
     const timer = setInterval(ask, SERVICE_STATUS_POLL_MS);
