@@ -40,6 +40,12 @@ const LIMITS = { max_count: 6, name_max: 30, summary_max: 80, prompt_max: 300, p
 const MODELS = { default: 'sonnet', choices: [{ alias: 'sonnet', label: 'Sonnet' }], effort: { default: 'medium', allowed: ['medium'] } };
 const FEATURES = { choices: [{ key: 'read', label: '읽기' }], approval_presets: PRESETS, assistant_tones: TONES, skill_cards: LIMITS };
 const OLD_FEATURES = { choices: FEATURES.choices, approval_presets: PRESETS, assistant_tones: TONES };
+const LINK_CASES = JSON.parse(readFileSync(new URL('./fixtures/link-cases.json', import.meta.url), 'utf8'));
+assert.ok(LINK_CASES.not_links.length >= 20 && LINK_CASES.links.length >= 40, 'the shared link case list is complete');
+// Byte-equality pin: hypeproof-service worker/test/fixtures/link-cases.json must hash to the same value (follow-up), so a
+// rule change on either side that is not mirrored fails a test instead of depending on someone remembering.
+export const LINK_CASES_SHA256 = 'c888f5e802881a3d0e7131e2163c23632477ef0b5a088344bcb5cc6aaae06a6c';
+assert.equal((await import('node:crypto')).createHash('sha256').update(readFileSync(new URL('./fixtures/link-cases.json', import.meta.url))).digest('hex'), LINK_CASES_SHA256, 'link-cases.json changed: update the pin here and the Service copy together');
 const SAFE_CASES = JSON.parse(readFileSync(new URL('./fixtures/safe-text-cases.json', import.meta.url), 'utf8')).cases;
 const FROZEN_CARDS = [{ name: '고정 카드', summary: '고정 설명', prompt: '고정 프롬프트' }];
 const FROZEN = { schema: 'hps-session-design/1', steps: [{ id: 's1', instructions: 'a' }], skill_cards: FROZEN_CARDS };
@@ -142,8 +148,8 @@ try {
     }
     // The same rule as the Service: Korean prose with a colon is not a link.
     // The same rule as the Service: coding text with colons passes; scheme, www. and host forms are refused.
-    const NOT_LINKS = ['x-axis: 10', 'about: 소개', 'www.', 'www.x', 'www 사이트', 'color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
-    const LINKS = ['https://x', 'http:x', 'ftp:x', 'sms:1', 'tel:010', 'vscode-insiders:x', 'hypeproof-studio://x', 'any-scheme://x', 'ｈｔｔｐｓ://x', 'https：//x', 'һttps:x', 'httpsː//x', 'www.example.com', '//evil.example', 'jávascript:x', 'j\u0301avascript:x', '보기 https:', 'about:blank', 'x-custom:open'];
+    // The shared case list (test/fixtures/link-cases.json); the Studio shelf reader and the Service check the same file.
+    const { not_links: NOT_LINKS, links: LINKS } = LINK_CASES;
     assert.deepEqual(await ev(`return ${JSON.stringify(NOT_LINKS)}.map(hasLink)`), NOT_LINKS.map(() => false), `${width}px: coding text is not a link`);
     assert.deepEqual(await ev(`return ${JSON.stringify(LINKS)}.map(hasLink)`), LINKS.map(() => true), `${width}px: every link form is refused`);
     const dupWarn = await ev(`${card(3, 'ＳＵＭ', '설명', '프롬프트')}${card(2, 'sum', '설명', '프롬프트')}return document.getElementById('skill-cards-warning').textContent`);
