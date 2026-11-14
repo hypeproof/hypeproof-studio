@@ -88,6 +88,19 @@ const measure = `(() => {
   }
   const probe = document.createElement('span'); probe.style.color = 'var(--hp-ring-focus-default)'; document.body.append(probe);
   out.ringColor = getComputedStyle(probe).color; probe.remove();
+  // CGP-DS-R-022: the task menu uses the shared learner-menu token set, read against the tokens themselves
+  // (resolved in the panel's own scope), never against literal pixels.
+  const tok = document.createElement('div');
+  tok.style.cssText = 'position:absolute;visibility:hidden;padding:var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline);margin-top:var(--ds-c-menu-gutter);min-height:var(--ds-c-menu-item-height);border-radius:var(--hp-radius-menu);border-top-right-radius:var(--hp-radius-menu-item)';
+  panel.parentElement.append(tok);
+  const t = getComputedStyle(tok), ps = getComputedStyle(panel);
+  const item = panel.querySelector('button[role="menuitem"]'), is = item ? getComputedStyle(item) : null;
+  out.tokens = {
+    gutter: [ps.paddingTop, t.marginTop], radius: [ps.borderTopLeftRadius, t.borderTopLeftRadius],
+    itemRadius: [is?.borderTopLeftRadius, t.borderTopRightRadius], itemPadBlock: [is?.paddingTop, t.paddingTop],
+    itemPadInline: [is?.paddingInlineStart, t.paddingInlineStart], itemHeight: [is?.minHeight, t.minHeight], align: [is?.textAlign, 'start'],
+  };
+  tok.remove();
   return out;
 })()`;
 const RING = ['outline-width', 'outline-style', 'outline-color', 'outline-offset'];
@@ -148,6 +161,8 @@ function check(results) {
       expect(r.reason?.focusable && r.reason?.focused, `${r.where}: the disabled move item is not focusable/focused (${JSON.stringify(r.reason)})`);
       expect(r.reason?.text?.startsWith('수업 작업은'), `${r.where}: the reason is not the item's description (${r.reason?.text})`);
     }
+    for (const [k, [got, want]] of Object.entries(r.tokens ?? {})) expect(got === want, `${r.where}: task menu ${k} is ${got}, not the shared menu token ${want} (CGP-DS-R-022)`);
+    expect(Object.keys(r.tokens ?? {}).length === 7, `${r.where}: menu token geometry not measured`);
     const row = r.ring?.row;
     for (const name of ['item', 'toggle']) {
       const ring = r.ring?.[name];
@@ -184,4 +199,4 @@ try {
   }
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`task-menu-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS task menu computed: 44px targets, 14px text, inside the rail, the rows\' 2px focus ring, the class reason on the focusable item; personal and class x dark and light x 1420 and 800; four injected overrides caught');
+console.log('PASS task menu computed: the shared menu token set (gutter, radius, item radius, padding, height, start alignment), 44px targets, 14px text, inside the rail, the rows\' 2px focus ring, the class reason on the focusable item; personal and class x dark and light x 1420 and 800; four injected overrides caught');
