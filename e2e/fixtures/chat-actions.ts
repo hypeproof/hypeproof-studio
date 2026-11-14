@@ -21,7 +21,14 @@ export async function chatMenuAction(chat: Chat, name: string) {
 async function selectModel(select: Locator, alias: string) {
   await expect(select).toBeVisible();
   if (await select.isDisabled()) return;
-  await select.selectOption(alias);
+  // The menu carries one entry per model: an alias and the explicit id it resolves to are the
+  // same choice, and the Service keeps the first key it meets (`modelBinding`, [default, ...allowed]).
+  // service#388 moved the trial profile's default to claude-haiku-5-5, so the hypeproof-fast
+  // alias that resolved to the same model is no longer its own entry. A pinned alias can be
+  // absent while the picker itself works: take the menu's first entry — the profile's default
+  // model — and keep checking that the App picks a model and its turn writes the file.
+  const options = await select.locator('option').evaluateAll(all => all.map(option => (option as HTMLOptionElement).value));
+  await select.selectOption(options.includes(alias) ? alias : { index: 0 });
 }
 
 export async function chooseChatModel(chat: Chat, alias: string) {
