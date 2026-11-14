@@ -7743,6 +7743,41 @@ personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work 
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
 
+## Lesson skill shelf (CGP-AGENT-R-020)
+
+REQ-CGP-AGENT-36 / CGP-AGENT-R-020 / DES-CGP-AGENT-36 / CGP-AGENT-D-017 / PI#1 / PI#3: Jay approved this on 2026-11-14.
+A lesson can offer the learner up to six skill cards. An instructor authors them in Chalk (CH-13: a name, a one-line
+summary and a starter prompt), and they are frozen with the lesson version (`skill_cards`, hypeproof-service#488).
+
+- Source: `/v1/profile` serves `skill_cards` only when the frozen lesson has them. Studio re-validates them
+  (`src/lessonSkillCards.ts`) and skips anything malformed:
+  - more than 6 cards;
+  - a name over 30 units, a summary over 80, or a prompt over 300 units or 6 lines;
+  - control, bidi or zero-width characters;
+  - a link, by the Service's `hasLink`. It applies NFKC and folds colon look-alikes, then refuses `<scheme>://`, a
+    known scheme directly followed by `:` (http(s), ftp(s), javascript, vbscript, data, file, blob, mailto, tel,
+    sms, intent, about, vscode*, hypeproof*, x-*; marks stripped and Cyrillic/Greek look-alikes folded), a bare
+    `http:`/`https:`, `www.` plus a domain, and `//` plus a host. Coding text with colons passes (`color:red`,
+    `a:hover`, `std::cout`, `C:\Users`, `//주석`, `Q:답`). The cases live in `chalk/test/fixtures/link-cases.json`;
+  - a duplicate name.
+- What: a collapsed "이 수업의 스킬 (N)" disclosure above the composer, after the starter chips. Each card
+  shows its name and summary and one "써 보기" button ("써 보기: <name>"). It stays after the learner's first
+  message (unlike starters). Instructor surfaces draw no shelf.
+- 써 보기 puts the card's starter prompt into the draft through the same rule as a starter chip: a manual draft is
+  kept, a second press replaces the first card's text, and nothing is sent.
+- Not: no install, enable, delete or source control, and no "보기". The coach's SKILL.md and `Profile.skills` are
+  never shown. The cards never reach the coach. The Service drops them from the coach's lesson JSON, and the dev
+  local runtime drops them too (`devCoachVisibleLesson`).
+- A lesson without cards renders byte-identical to before.
+- Design (DES-CGP-AGENT-36): one column at every width, 44px summary and buttons, 14px text, tokens only.
+
+Evidence:
+- `extensions/hypeproof-chat/test/lesson-skill-cards.test.tsx`: the real ChatPanel on the minimal DOM. It covers
+  placement and collapse, the controls, insert without send, the manual draft, the shelf staying after a send,
+  byte-identity without cards, the reader's refusals, HTML as text, no instructor shelf, and the CSS floors.
+- `test/local-runtime.smoke.mjs`: the dev prompt carries no card text.
+- The installed app against the deployed Service is NOT RUN.
+
 ## Browser downloads (CGP-KNOW-R-021)
 
 REQ-STUDIO-BROWSER-DOWNLOADS (REQ-KNOW-38 / CGP-KNOW-038, design CGP-KNOW-D-021, PI#1;
