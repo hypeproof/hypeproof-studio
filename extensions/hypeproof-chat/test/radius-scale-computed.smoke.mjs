@@ -267,7 +267,7 @@ async function run(b, { evidence } = {}) {
         await new Promise((r) => setTimeout(r, 60));
         const task = [
           { name: 'task menu', sel: '.tw-task-menu-panel', want: all(12) },
-          { name: 'task menu item (nested)', sel: '.tw-task-menu-panel button[role="menuitem"]', outer: '.tw-task-menu-panel', nested: true, want: 6 },
+          { name: 'task menu item (nested)', sel: '.tw-task-menu-panel button[role="menuitem"]', outer: '.tw-task-menu-panel', nested: true, want: 8 }, // CGP-DS-R-022: shared menu gutter (12 - 4)
         ];
         judge(label, task, await readAt(b, task));
         await click(b, label, '.tw-task-menu-toggle');
