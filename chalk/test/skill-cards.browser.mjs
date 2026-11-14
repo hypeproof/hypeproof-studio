@@ -139,11 +139,25 @@ try {
       assert.match(r.refused, re, `${width}px: message — got ${r.refused}`);
     }
     // The same rule as the Service: Korean prose with a colon is not a link.
-    assert.deepEqual(await ev(`return ['시간: 10분','시간:10분','Note: 10','오전 9:30','ftp://x','//x','sms:1'].map(hasLink)`), [false, false, false, false, true, true, true], `${width}px: hasLink matches the Service rule`);
+    // The same rule as the Service: coding text with colons passes; scheme, www. and host forms are refused.
+    const NOT_LINKS = ['color:red', 'a:hover', 'h1:first-child', 'std::cout', 'key:value', 'A:B 비율', 'C:\\Users', '//주석', 'TODO:x', 'fix:버그', '시간:10분', 'example.com/x'];
+    const LINKS = ['https://x', 'http:x', 'ftp:x', 'sms:1', 'tel:010', 'vscode-insiders:x', 'hypeproof-studio://x', 'any-scheme://x', 'ｈｔｔｐｓ://x', 'https：//x', 'һttps:x', 'httpsː//x', 'www.example.com', '//evil.example'];
+    assert.deepEqual(await ev(`return ${JSON.stringify(NOT_LINKS)}.map(hasLink)`), NOT_LINKS.map(() => false), `${width}px: coding text is not a link`);
+    assert.deepEqual(await ev(`return ${JSON.stringify(LINKS)}.map(hasLink)`), LINKS.map(() => true), `${width}px: every link form is refused`);
     const dupWarn = await ev(`${card(3, 'ＳＵＭ', '설명', '프롬프트')}${card(2, 'sum', '설명', '프롬프트')}return document.getElementById('skill-cards-warning').textContent`);
     assert.match(dupWarn, /카드 3번이 앞의 카드와 이름이 같습니다/, `${width}px: a duplicate (NFKC, case-insensitive) is warned live`);
     await ev(`${clearCard(2)}${card(3, '질문 만들기', expected[1].summary, expected[1].prompt)}return 0`);
     checks += blocked.length * 2 + 1;
+
+    // 3b. An opened draft whose card already has a link saves while that field is untouched; a new link is still refused.
+    await ev(`render({...content(),skill_cards:[{name:'예전 카드',summary:'예전 설명',prompt:'자료 https://old.example 보기'}]});return 0`);
+    const untouched = await trySave();
+    assert.ok(untouched.saved, `${width}px: an untouched old link does not block the save — ${untouched.refused}`);
+    await ev(`${set('skill-card-1-summary', '새 설명 www.new.example')}return 0`);
+    const changed = await trySave();
+    assert.match(changed.refused ?? '', /카드 1번의 한 줄 설명에는 링크/, `${width}px: a new link in a changed field is refused`);
+    await ev(`render({...content(),skill_cards:${JSON.stringify(expected)}});return 0`);
+    checks += 2;
 
     // 4. Rehearsal read, impact and the frozen summary.
     await ev(`readiness={version:'m1',state:'not_run',content:${JSON.stringify(FROZEN)}};candidateVersion='m1';renderReadiness();return 0`);
