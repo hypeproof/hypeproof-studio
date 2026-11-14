@@ -263,6 +263,36 @@ entitlements apply; this work does not invent a free signed-in AI allowance.
 Physical Korean ASR, live account approval and iPhone/Android/desktop sync remain
 separate acceptance gates. Source/build tests are not those observations.
 
+#### Android Send during history refresh — Studio #4010
+
+MADR-02/03 and MPER-03 keep one explicit text or dictated Send available while an
+existing personal-history GET is waiting. Save the original request ID and words
+before dispatch, and retain subsequent draft edits separately. Only this never-sent
+request may adopt the successful read's revision and continue once in the same
+foreground account/session. An earlier uncertain POST keeps its original bytes.
+
+Stop, background/navigation, account/session changes, a failed or stale read,
+remote work in progress, and failed persistence prevent delayed dispatch. The
+local outbox survives interruption and restart without automatic replay. The UI
+must explain that the words are retained and leave the next choice to the person.
+This adds no timer, poll, endpoint, hosted speech call or extra AI turn.
+
+#### Android persistent admission explanation — Studio #4015
+
+MADR-02/03/05 and MPER-03/04 retain an account-reflection request's typed access,
+monthly, budget or admission explanation through successful history reads and
+relaunch. Store only its request ID and an allowed public error code in the
+existing account cache; use fixed customer-facing text, never raw provider text.
+Old cache-v1 records remain readable. Keep submitted words, later drafts and the
+original uncertain request revision intact, without replay or an extra AI call.
+
+Only a new explicit request or a validated resolved/replaced request clears the
+explanation. Failed/unknown or empty reads do not imply success. Account/session
+fences, stale responses, failed atomic writes and late Stop/error callbacks must
+not erase or attach the reason to another request. Confirmed cancellation or
+completion wins over a late failure body. Storage/auth errors take precedence in
+the existing status row; local persistence is not live-service acceptance.
+
 #### Android in-flight response Stop — Studio #3997
 
 MADR-02/03/04 and MPER-04 keep `응답 수신 멈추기` available while the original

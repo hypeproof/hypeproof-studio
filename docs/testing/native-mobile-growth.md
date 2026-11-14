@@ -349,3 +349,48 @@ and identity; its former pre-persistence local-retry shortcut is not evidence.
 
 New App journeys and changed AX diagnostics require actual hosted Xcode execution.
 Source/parser checks are not App, installed-device, live-auth or physical-ASR PASS.
+
+
+### Android Send during history refresh — Studio #4010
+
+Hold the actual history GET after a valid account opens. Type a thought and press
+the real Send button before releasing that read. The local outbox must already
+contain one ID and the exact words; a second draft stays separate. After a valid
+newer snapshot, observe exactly one POST with that ID, text and reconciled revision.
+Restart must retain the response and later draft without sending again. The old
+Activity must fail this same enabled-Send control, and the old model must reject
+the corresponding explicit send.
+
+Use the real model/cache with controlled callback order for Stop, account/session
+change, close, failed save/read, stale snapshot, remote in-flight work and uncertain
+POST. The latter must preserve its original ID/revision rather than rebase or
+replay. An actual Activity background boundary must leave the queued request on
+disk but prevent dispatch when its held read completes. Synthetic network and
+speech callbacks do not establish physical speech or live account acceptance.
+
+Record focused source, APK, emulator, command and exit identities separately.
+Preserve any failing surrounding voice-Stop control and investigate whether actual
+capture began; passing the new cases cannot erase that failure.
+
+### Android persistent admission explanation — Studio #4015
+
+Use the existing account-reflection refusal journey. After one actual enabled
+voice tap reaches capture, deliver the synthetic OS speech result and a typed
+admission refusal. Verify the explanation, submitted words and stopped voice.
+Perform the real history refresh, then close and relaunch the Activity. The same
+reason and original request must remain visible, with exactly one POST and no
+automatic voice restart. The original runtime must fail specifically after the
+successful GET removes the explanation, rather than during setup or capture.
+
+Production model/cache controls cover legacy cache-v1 loading, code allowlisting,
+same-request failed/unknown and empty reads, new intent, confirmed completion or
+cancellation, adopted different requests, stale responses, storage failure and
+account/session isolation. Reuse the real loopback Stop control for a typed body
+arriving after the failed row; separately deliver an already-arrived POST error
+callback after confirmed completion/cancellation and verify it cannot override
+that state. No raw provider text may enter the saved explanation.
+
+Record source/APK identities and native assertions separately from live Service,
+physical speech, billing and installed-device acceptance. Synthetic response
+codes/statuses must be disclosed accurately; a screenshot proves only its actual
+visible state. Preserve the original runtime's failing log.

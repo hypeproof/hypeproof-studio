@@ -980,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "a0436e4d7ae49fd4e1ac4ef5e9c093d8126b25ee41cc3312c343001e8b4f4b87",
+      "sha256": "e91597fbaf0c9903ac151c0b150b12ea8469a27c8f0ba13c0a56094806c2700b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5074,6 +5074,77 @@
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeDeviceSignInTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionAdmissionTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStopTest.java"
+      ]
+    },
+    {
+      "id": "android-send-during-sync",
+      "title": "Preserve explicit Android Send during personal-history refresh",
+      "issue": 4010,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-02",
+            "MADR-03",
+            "MPER-03"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify the held-read Send and lifecycle boundaries, resolve any failing voice regression, then obtain exact-source native CI and installed-device acceptance.",
+      "design_delta": "Keep one durable local outbox and one in-memory same-read continuation; do not change cache schema or replay uncertain requests.",
+      "positive_control": "A real Android Send during a held GET persists the exact words and sends once at the reconciled revision while preserving later draft edits.",
+      "negative_control": "Old Activity/model reject the same send; Stop, account/session/background, invalid reads, save failure and restart cannot dispatch the retained outbox.",
+      "evidence_required": "Before/after actual model and Activity evidence, original failures, APK/source hashes, independent review and exact-source native CI; physical/live acceptance separately identified.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
+      ]
+    },
+    {
+      "id": "android-admission-persistence",
+      "title": "Retain Android request admission explanations through history reads and relaunch",
+      "issue": 4015,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-02",
+            "MADR-03",
+            "MADR-05",
+            "MPER-03",
+            "MPER-04"
+          ]
+        }
+      ],
+      "depends_on": [
+        "android-send-during-sync"
+      ],
+      "next_action": "Integrate after the scoped Send-during-refresh change, obtain independent review and exact-source native CI, then verify installed-device and live account behavior separately.",
+      "design_delta": "Persist an optional request-ID and allowlisted-code marker in the existing account cache-v1; display fixed safe text in the existing status row without replay or new provider calls.",
+      "positive_control": "The actual Android refusal journey retains its explanation and original words after a successful GET and relaunch, with exactly one POST and stopped voice.",
+      "negative_control": "The original runtime loses the explanation after GET; stale/account/session responses, failed writes and late typed bodies cannot clear or misbind it, and confirmed terminal resolution wins.",
+      "evidence_required": "Exact old-runtime failure and candidate Activity/AtomicFile/Keystore evidence, source/APK hashes, focused model and real loopback Stop controls, independent review and native CI; physical/live acceptance reported separately.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionAdmissionTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStopTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     }

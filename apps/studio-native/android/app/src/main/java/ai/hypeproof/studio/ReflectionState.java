@@ -12,6 +12,12 @@ final class ReflectionState {
     String draft="",opening=OPENING,hint=HINT;
     JSONArray messages=new JSONArray();
     JSONObject request;
+    private String failureID,failureCode;
+    private static final Map<String,String> ADMISSION_MESSAGES=Map.of(
+        "reflection_access_required","이 계정의 AI 이용 권한을 확인해 주세요. 글과 대화는 보존돼요.",
+        "reflection_monthly_limit","이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.",
+        "reflection_budget_limit","AI 이용 한도에 도달했어요. 기록은 그대로 남아 있어요.",
+        "reflection_admission_unavailable","AI 이용 상태를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요. 보낸 이야기와 기록은 남아 있어요.");
     boolean earlier;
     ReflectionState(String account) throws Exception {if(!account.matches("[A-Za-z0-9_-]{1,128}"))throw new Exception("invalid_account");this.account=account;}
     ReflectionState(String account,String encoded) throws Exception {
@@ -20,11 +26,20 @@ final class ReflectionState {
         revision=integer(v,"revision");draft=string(v,"draft",4000);opening=string(v,"opening",500);hint=string(v,"hint",1000);
         messages=v.getJSONArray("messages");validateMessages(messages);earlier=bool(v,"has_earlier");
         request=v.isNull("request")?null:v.getJSONObject("request");validateRequest(request,true);
+        if(v.has("request_failure")&&!v.isNull("request_failure")){
+            JSONObject failure=v.getJSONObject("request_failure");failureID=id(failure,"request_id");failureCode=string(failure,"code",64);
+            if(!ADMISSION_MESSAGES.containsKey(failureCode)||(request!=null&&(!failureID.equals(request.optString("id"))||Set.of("completed","cancelled").contains(status()))))throw new Exception("invalid_cache");
+        }
     }
     static String decode(byte[] bytes) throws Exception {return java.nio.charset.StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString();}
     static byte[] encode(String value) throws Exception {java.nio.ByteBuffer buffer=java.nio.charset.StandardCharsets.UTF_8.newEncoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).encode(java.nio.CharBuffer.wrap(value));byte[] bytes=new byte[buffer.remaining()];buffer.get(bytes);return bytes;}
     ReflectionState copy() throws Exception {return new ReflectionState(account,json().toString());}
-    JSONObject json() throws Exception {return new JSONObject().put("version",1).put("account",account).put("revision",revision).put("draft",draft).put("opening",opening).put("hint",hint).put("messages",messages).put("has_earlier",earlier).put("request",request==null?JSONObject.NULL:request);}
+    JSONObject json() throws Exception {JSONObject value=new JSONObject().put("version",1).put("account",account).put("revision",revision).put("draft",draft).put("opening",opening).put("hint",hint).put("messages",messages).put("has_earlier",earlier).put("request",request==null?JSONObject.NULL:request);if(failureID!=null)value.put("request_failure",new JSONObject().put("request_id",failureID).put("code",failureCode));return value;}
+    static String admissionMessage(String code){return code==null?null:ADMISSION_MESSAGES.get(code);}
+    String failureMessage(){return failureID==null?"":ADMISSION_MESSAGES.get(failureCode);}
+    boolean canRememberFailure(String id,String text,String code){return code!=null&&ADMISSION_MESSAGES.containsKey(code)&&request!=null&&id.equals(request.optString("id"))&&text.equals(request.optString("text"))&&!Set.of("completed","cancelled").contains(status());}
+    void rememberFailure(String id,String text,String code){if(canRememberFailure(id,text,code)){failureID=id;failureCode=code;}}
+    private void clearFailure(){failureID=null;failureCode=null;}
     static String string(JSONObject v,String key,int limit) throws Exception {Object s=v.get(key);if(!(s instanceof String)||((String)s).length()>limit||((String)s).indexOf('\0')>=0)throw new Exception("invalid_response");return (String)s;}
     static long integer(JSONObject v,String key) throws Exception {Object n=v.get(key);if(!(n instanceof Number)||!Double.isFinite(((Number)n).doubleValue())||((Number)n).doubleValue()!=((Number)n).longValue()||((Number)n).longValue()<0||((Number)n).doubleValue()>9007199254740991d)throw new Exception("invalid_response");return ((Number)n).longValue();}
     private static boolean bool(JSONObject v,String key) throws Exception {if(!(v.get(key) instanceof Boolean))throw new Exception("invalid_response");return v.getBoolean(key);}
@@ -53,7 +68,7 @@ final class ReflectionState {
     }
     void enqueue() throws Exception {
         String text=draft.trim();if(outstanding()||text.isEmpty()||text.length()>4000||text.indexOf('\0')>=0)throw new Exception("invalid_turn");
-        long now=System.currentTimeMillis();request=new JSONObject().put("id",UUID.randomUUID().toString()).put("text",text).put("status","local").put("created_at",now).put("updated_at",now).put("expected_revision",revision);draft="";
+        long now=System.currentTimeMillis();request=new JSONObject().put("id",UUID.randomUUID().toString()).put("text",text).put("status","local").put("created_at",now).put("updated_at",now).put("expected_revision",revision);draft="";clearFailure();
     }
     Map<String,String> submission() throws Exception {
         if(!status().equals("local"))throw new Exception("invalid_turn");
@@ -69,6 +84,8 @@ final class ReflectionState {
         boolean acknowledged=request!=null&&request.optString("id").equals(reply.optString("acknowledged_id"));
         if(request!=null)for(int i=0;i<transcript.length();i++){JSONObject m=transcript.getJSONObject(i);if(request.optString("id").equals(m.getString("id"))&&"user".equals(m.getString("role"))&&request.optString("text").equals(m.getString("content")))acknowledged=true;}
         if(!status().equals("local")||(turn!=null&&request.optString("id").equals(turn.optString("id")))||acknowledged)request=turn;
+        // An empty read does not prove that a rejected request completed.
+        if(failureID!=null&&request!=null&&(!failureID.equals(request.optString("id"))||Set.of("completed","cancelled").contains(status())))clearFailure();
         messages=transcript;revision=next;opening=nextOpening;hint=nextHint;earlier=nextEarlier;
     }
     /** Voice may read only the answer attached to its own user turn. */

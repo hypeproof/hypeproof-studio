@@ -33,10 +33,80 @@ public class QuestionJourneyTest {
     private void ready()throws Exception{for(int i=0;i<100;i++){java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);busy.set(((ReflectionModel)field.get(a)).busy);}catch(Exception e){throw new AssertionError(e);}});if(!busy.get())return;Thread.sleep(50);}throw new AssertionError("fixture did not settle");}
     private void screen(String name)throws Exception{Bitmap pixels=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(pixels);File dir=new File(context.getExternalFilesDir(null),"evidence");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(pixels.compress(Bitmap.CompressFormat.PNG,100,out));}pixels.recycle();}
     private static ReflectionModel questionModel(QuestionActivity a){try{var field=QuestionActivity.class.getDeclaredField("model");field.setAccessible(true);return (ReflectionModel)field.get(a);}catch(Exception e){throw new AssertionError(e);}}
+    private void startReadyVoice(VoiceFixture voice)throws Exception{
+        long deadline=android.os.SystemClock.elapsedRealtime()+5000;
+        var ready=new java.util.concurrent.atomic.AtomicBoolean();
+        var details=new java.util.concurrent.atomic.AtomicReference<String>();
+        do{
+            app.onActivity(a->{try{
+                var field=QuestionActivity.class.getDeclaredField("talk");field.setAccessible(true);android.view.View button=(android.view.View)field.get(a);
+                var foreground=QuestionActivity.class.getDeclaredField("foreground");foreground.setAccessible(true);
+                ReflectionModel model=questionModel(a);android.graphics.Rect bounds=new android.graphics.Rect();boolean visible=button.getGlobalVisibleRect(bounds);
+                ready.set(!model.busy&&button.isEnabled()&&button.isShown()&&button.hasWindowFocus()&&visible);
+                details.set("busy="+model.busy+", enabled="+button.isEnabled()+", shown="+button.isShown()+", windowFocus="+button.hasWindowFocus()+", foreground="+foreground.getBoolean(a)+", bounds="+bounds+", error="+model.error);
+            }catch(Exception e){throw new AssertionError(e);}});
+            if(ready.get())break;
+            long remaining=deadline-android.os.SystemClock.elapsedRealtime();if(remaining>0)Thread.sleep(Math.min(50,remaining));
+        }while(android.os.SystemClock.elapsedRealtime()<deadline);
+        if(!ready.get())failVoiceReadiness("Voice button did not become ready within 5 seconds: "+details.get());
+        onView(withContentDescription("음성 대화")).check(matches(isCompletelyDisplayed())).check(matches(isEnabled())).perform(click());
+        var listening=new java.util.concurrent.atomic.AtomicBoolean();
+        app.onActivity(a->{
+            listening.set(voice.starts==1&&voice.capture!=null&&voice.controller.session.phase()==VoiceSession.Phase.LISTENING);
+            details.set("starts="+voice.starts+", capture="+(voice.capture!=null)+", phase="+voice.controller.session.phase()+", busy="+questionModel(a).busy+", error="+questionModel(a).error);
+        });
+        if(!listening.get())failVoiceReadiness("One actual voice tap did not start capture: "+details.get());
+    }
+    private void failVoiceReadiness(String detail)throws Exception{
+        AssertionError failure=new AssertionError(detail);
+        try{screen("android-voice-start-not-ready");}catch(Exception evidenceError){failure.addSuppressed(evidenceError);}
+        throw failure;
+    }
     private static NativeDeviceSignIn.Reply stopSnapshot(JSONObject request,String status)throws Exception{
         JSONObject turn=request==null?null:new JSONObject(request.toString()).put("status",status);
         JSONArray messages=new JSONArray();if(turn!=null)messages.put(new JSONObject().put("id",turn.getString("id")).put("role","user").put("content",turn.getString("text")).put("created_at",1000));
         return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",turn==null?0:3).put("messages",messages).put("turn",turn==null?JSONObject.NULL:turn).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+    }
+    @Test public void sendDuringHeldHistoryUsesOneDurableIntentAndKeepsLaterDraft()throws Exception{
+        var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+        var sent=new java.util.concurrent.atomic.AtomicReference<Map<String,String>>();var posts=new java.util.concurrent.atomic.AtomicInteger();
+        ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        ReflectionState initial=new ReflectionState("test-account");initial.draft="동기화가 끝나기 전에 보낼 내 생각";store.save(initial);
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            assertEquals("synthetic-access",bearer);
+            if(path.equals("/me/reflection")){
+                entered.countDown();if(!release.await(12,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("held history not released");
+                if(sent.get()==null)return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",7).put("messages",new JSONArray()).put("turn",JSONObject.NULL).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+            }else{assertEquals("/me/reflection/turns",path);posts.incrementAndGet();sent.set(new HashMap<>(body));assertEquals("7",body.get("revision"));}
+            Map<String,String> value=sent.get();JSONObject turn=new JSONObject().put("id",value.get("id")).put("text",value.get("text")).put("status","completed").put("created_at",1000).put("updated_at",1001);
+            JSONArray messages=new JSONArray().put(new JSONObject().put("id",value.get("id")).put("role","user").put("content",value.get("text")).put("created_at",1000)).put(new JSONObject().put("id","queued-answer").put("role","assistant").put("content","그 경험에서 무엇을 바꾸고 싶으세요?").put("created_at",1001));
+            return new NativeDeviceSignIn.Reply(200,Map.of("state",new JSONObject().put("id","personal-reflection").put("revision",8).put("messages",messages).put("turn",turn).put("has_earlier",false),"opening",ReflectionState.OPENING,"hint",ReflectionState.HINT));
+        };
+        try{
+            app=ActivityScenario.launch(QuestionActivity.class);assertTrue(entered.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
+            onView(withText("보내기")).check(matches(isEnabled())).perform(click());
+            ReflectionState queued=store.load("test-account");String id=queued.request.getString("id");assertEquals(initial.draft,queued.request.getString("text"));assertEquals("local",queued.status());assertEquals(0,posts.get());
+            onView(withContentDescription("질문 대화 입력")).perform(replaceText("기다리는 동안 적은 다음 생각"),closeSoftKeyboard());onView(withText("보내기")).check(matches(org.hamcrest.Matchers.not(isEnabled())));
+            screen("android-send-waits-for-history");release.countDown();ready();drain();
+            onView(withText("그 경험에서 무엇을 바꾸고 싶으세요?")).check(matches(isDisplayed()));onView(withContentDescription("질문 대화 입력")).check(matches(withText("기다리는 동안 적은 다음 생각")));
+            assertEquals(1,posts.get());assertEquals(id,sent.get().get("id"));assertEquals(initial.draft,sent.get().get("text"));assertEquals("completed",store.load("test-account").status());
+            app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();assertEquals(1,posts.get());assertEquals(id,store.load("test-account").request.getString("id"));onView(withContentDescription("질문 대화 입력")).check(matches(withText("기다리는 동안 적은 다음 생각")));screen("android-queued-send-restored");
+        }finally{release.countDown();}
+    }
+    @Test public void leavingWhileSendWaitsForHistoryKeepsWordsWithoutLaterDispatch()throws Exception{
+        var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);var posts=new java.util.concurrent.atomic.AtomicInteger();
+        ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
+        ReflectionState initial=new ReflectionState("test-account");initial.draft="나중에 직접 다시 확인할 질문";store.save(initial);
+        QuestionActivity.testTransport=(path,body,bearer,cancel)->{
+            if(body!=null){posts.incrementAndGet();throw new AssertionError("Leaving must not dispatch a queued question");}
+            assertEquals("/me/reflection",path);entered.countDown();if(!release.await(10,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("held history not released");return stopSnapshot(null,"pending");
+        };
+        try{
+            app=ActivityScenario.launch(QuestionActivity.class);assertTrue(entered.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();onView(withText("보내기")).check(matches(isEnabled())).perform(click());String id=store.load("test-account").request.getString("id");
+            app.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);release.countDown();app.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);ready();drain();
+            assertEquals(0,posts.get());assertEquals(id,store.load("test-account").request.getString("id"));assertEquals(initial.draft,store.load("test-account").request.getString("text"));
+            app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();assertEquals(0,posts.get());assertEquals(id,store.load("test-account").request.getString("id"));onView(withText(initial.draft)).check(matches(isDisplayed()));screen("android-queued-send-background");
+        }finally{release.countDown();}
     }
     @Test public void heldVoiceResponseCanStopBeforePostReturnsAndKeepsWordsAcrossRestart()throws Exception{
         var posted=new java.util.concurrent.CountDownLatch(1);var stopRead=new java.util.concurrent.CountDownLatch(1);var releasePost=new java.util.concurrent.CountDownLatch(1);var postReturned=new java.util.concurrent.CountDownLatch(1);var releaseCancel=new java.util.concurrent.CountDownLatch(1);
@@ -53,8 +123,8 @@ public class QuestionJourneyTest {
         };
         ReflectionStorage store=new ReflectionStorage(context);store.saveCredentials(new NativeDeviceSignIn.Credentials("test-account","test-session","synthetic-access","synthetic-refresh",System.currentTimeMillis()+3600000));
         try{
-            app=ActivityScenario.launch(QuestionActivity.class);ready();VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
-            onView(withContentDescription("음성 대화")).perform(click());app.onActivity(a->voice.result("중지해도 남겨 둘 나의 말"));assertTrue(posted.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
+            app=ActivityScenario.launch(QuestionActivity.class);VoiceFixture voice=new VoiceFixture();app.onActivity(a->voice.install(a));
+            startReadyVoice(voice);app.onActivity(a->voice.result("중지해도 남겨 둘 나의 말"));assertTrue(posted.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
             onView(withText("응답 수신 멈추기")).check(matches(isCompletelyDisplayed())).check((v,e)->{if(e!=null)throw e;assertTrue(v.getHeight()>=48*v.getResources().getDisplayMetrics().density);});
             onView(withText("응답 수신 멈추기")).perform(click());onView(withText("멈추기")).perform(click());assertTrue(stopRead.await(3,java.util.concurrent.TimeUnit.SECONDS));drain();
             assertEquals(0,cancels.get());assertEquals("local",store.load("test-account").status());assertFalse(voice.controller.session.active());
@@ -261,7 +331,7 @@ public class QuestionJourneyTest {
     @Test public void voiceAdmissionDenialKeepsServiceReasonAndStopsWithoutReplay()throws Exception{
         java.util.List<String> submitted=Collections.synchronizedList(new ArrayList<>());VoiceFixture voice=conversation(submitted,"reflection_monthly_limit");
         String words="이번 주에 시도해 보고 싶은 일이 있어요";
-        onView(withContentDescription("음성 대화")).perform(click());
+        startReadyVoice(voice);
         app.onActivity(a->{voice.partial("이번 주에 시도해 보고 싶은 일");voice.endpoint();voice.result(words);});ready();drain();
         onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
         assertFalse(voice.controller.session.active());assertTrue(voice.spoken.isEmpty());assertEquals(1,voice.starts);assertEquals(1,submitted.size());
@@ -269,6 +339,12 @@ public class QuestionJourneyTest {
         assertEquals(words,saved.request.getString("text"));assertEquals(submitted.get(0),saved.request.getString("id"));assertNotNull(store.loadCredentials());
         app.onActivity(a->{voice.result("오래된 최종 결과");voice.endpoint();});drain();
         assertFalse(voice.controller.session.active());assertEquals(1,voice.starts);assertEquals(1,submitted.size());assertTrue(voice.spoken.isEmpty());
+        confirmFailedTurn();
+        onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+        app.close();app=ActivityScenario.launch(QuestionActivity.class);ready();drain();
+        onView(withText("이번 달 이용 한도에 닿았습니다. 다음 달에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.")).check(matches(isDisplayed()));
+        onView(withText(words)).check(matches(isDisplayed()));assertEquals(1,submitted.size());assertEquals(submitted.get(0),store.load("test-account").request.getString("id"));
+        app.onActivity(a->{try{var field=QuestionActivity.class.getDeclaredField("voice");field.setAccessible(true);assertFalse(((NativeVoice)field.get(a)).session.active());}catch(Exception e){throw new AssertionError(e);}});
         screen("android-voice-admission-denial");
     }
     private void confirmFailedTurn()throws Exception{

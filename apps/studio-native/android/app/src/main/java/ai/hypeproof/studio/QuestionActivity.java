@@ -78,7 +78,7 @@ public final class QuestionActivity extends Activity {
     }
     @Override protected void onStart(){super.onStart();visible=true;handler.removeCallbacks(poll);handler.post(poll);}
     @Override protected void onResume(){super.onResume();foreground=true;if(voice!=null)voice.resumePermission();}
-    @Override protected void onPause(){foreground=false;if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
+    @Override protected void onPause(){foreground=false;if(model!=null)model.suspendQueuedSend();if(voice!=null&&voice.session.phase()!=VoiceSession.Phase.PERMISSION)stopVoice();super.onPause();}
     @Override protected void onStop(){visible=false;handler.removeCallbacks(poll);stopVoice();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(model!=null){out.putString("draftAccount",model.account());out.putString("draft",model.draft);Bundle drafts=new Bundle();for(var entry:model.unsavedDrafts.entrySet())drafts.putString(entry.getKey(),entry.getValue());out.putBundle("unsavedDrafts",drafts);}}
     @Override protected void onDestroy(){if(model!=null)model.close();if(voice!=null)voice.close();handler.removeCallbacks(poll);worker.shutdown();deadlines.shutdown();super.onDestroy();}
@@ -132,7 +132,7 @@ public final class QuestionActivity extends Activity {
         setContentView(root);root.requestApplyInsets();
     }
     private String voiceScope(){return model.account()==null?"guest-local-draft":model.account();}
-    private boolean canSend(){return !model.readOnly&&!model.busy&&!model.brokenCredentials&&(model.account()!=null||!model.guestReadOnly)&&(model.state==null||!model.state.outstanding())&&!model.draft.trim().isEmpty()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
+    private boolean canSend(){return model.canSend()&&voice.session.phase()!=VoiceSession.Phase.LISTENING&&voice.session.phase()!=VoiceSession.Phase.PERMISSION;}
     private boolean canActivatePrimary(){
         if(model.account()!=null)return canSend();
         return !model.readOnly&&!model.guestReadOnly&&!model.busy&&!model.signing&&!model.brokenCredentials
@@ -160,7 +160,8 @@ public final class QuestionActivity extends Activity {
         if(!composer.getText().toString().equals(model.draft)){editing=true;composer.setText(model.draft);composer.setSelection(composer.length());editing=false;}
         boolean capturing=voice!=null&&(voice.session.phase()==VoiceSession.Phase.LISTENING||voice.session.phase()==VoiceSession.Phase.PERMISSION);
         composer.setEnabled(!model.readOnly&&(s!=null||!model.guestReadOnly)&&!capturing);send.setText(s==null?"로그인":"보내기");send.setEnabled(canActivatePrimary());
-        status.setText(!model.error.isEmpty()?model.error:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.stoppingResponse?"답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&model.error.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
+        String visibleError=model.displayError();
+        status.setText(!visibleError.isEmpty()?visibleError:model.signing?"브라우저에서 로그인을 완료해 주세요.":model.stoppingResponse?"답변 중지를 확인하고 있어요. 보낸 글은 남아 있어요.":model.busy?"대화를 확인하고 있어요.":model.notice);status.setTextColor(muted);status.setVisibility(status.length()==0||(composer.hasFocus()&&visibleError.isEmpty()&&!model.busy)?View.GONE:View.VISIBLE);
         actions.removeAllViews();
         if(s==null){
             if(model.brokenCredentials)actions.addView(button("로그인 복구",()->new AlertDialog.Builder(this).setTitle("로그인 복구").setMessage("읽지 못한 로그인 정보는 이 기기에 보존하고 다시 로그인해요. 대화 파일은 그대로 남아요.").setNegativeButton("취소",null).setPositiveButton("보존 후 다시 로그인",(d,w)->{try{storage.preserveBrokenCredentials();model.brokenCredentials=false;model.error="";update();}catch(Exception e){model.error="연결 정보를 보존하지 못했어요.";update();}}).show()));

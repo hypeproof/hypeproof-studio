@@ -80,6 +80,20 @@ public class ReflectionStopTest {
             f.model.stopResponse();f.until(()->!f.model.stoppingResponse);assertEquals("failed",f.model.state.status());assertTrue(f.model.busy);assertEquals(0,f.cancels.get());
             f.release.countDown();f.until(()->!f.model.busy);
             assertTrue(f.model.error,code.equals("reflection_monthly_limit")?f.model.error.startsWith("이번 달"):f.model.error.startsWith("AI 이용 상태"));assertEquals(id,f.store.load("A").request.getString("id"));assertEquals(1,f.posts.get());assertNotNull(f.model.credentials);
+            String reason=f.model.displayError();f.model.refresh();f.until(()->!f.model.busy);assertEquals(reason,f.model.displayError());
+            ReflectionModel restarted=new ReflectionModel(f.store,new NativeDeviceSignIn(NativeDeviceSignIn.Target.debugLoopback(true,f.server.url()+"/v1"),f.http,NativeDeviceSignIn.MONOTONIC),f.http,f.worker,f.ui::add,()->{});
+            try{restarted.restore();assertEquals(reason,restarted.displayError());assertEquals(id,restarted.state.request.getString("id"));assertEquals(1,f.posts.get());}finally{restarted.close();}
+        }
+    }
+    @Test public void lateAdmissionBodyNeverOverridesConfirmedCompletionOrCancellation()throws Exception{
+        for(String terminal:List.of("completed","cancelled")){
+            var h=new ReflectionModelTest.Harness();h.model.edit("완료 상태를 바꾸면 안 되는 말");assertTrue(h.model.send());String id=h.model.state.request.getString("id");
+            h.answer=new NativeDeviceSignIn.Reply(429,Map.of("error","reflection_monthly_limit"));h.worker.one();Runnable lateBody=h.ui.remove();
+            JSONObject turn=new JSONObject(h.model.state.request.toString()).put("status",terminal);
+            h.snapshot(ReflectionStateTest.reply(3,new JSONArray().put(ReflectionStateTest.message(id,"user",turn.getString("text"))),turn));
+            h.model.stopResponse();h.finish();assertEquals(terminal,h.model.state.status());
+            // The typed POST body already arrived; deliver its actual queued UI callback after Stop.
+            lateBody.run();assertEquals(terminal,h.store.load("A").status());assertEquals(id,h.store.load("A").request.getString("id"));assertEquals("",h.store.load("A").failureMessage());assertFalse(h.model.displayError().startsWith("이번 달"));assertEquals(1,h.submitted.size());h.model.close();
         }
     }
     @Test public void closeAndChangedSessionFenceQueuedStopAcknowledgement()throws Exception{
