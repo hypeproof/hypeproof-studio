@@ -66,10 +66,13 @@ export function LessonStepPanel(props: {
   // previous learner's set is cleared from the webview state, not just hidden.
   const [stored, setStored] = useState(() => collapsedStateFrom(readWebviewState<{ lessonBlocksCollapsed: unknown }>().lessonBlocksCollapsed));
   const collapsed = collapsedFor(stored, props.seat);
+  // An empty seat (a local/dev runtime, or an instructor profile without a Service seat id) is not one learner: it would be a
+  // bucket every such window shares. Its set lives in memory only, and switching to it clears what another seat stored.
+  const persist = (own: { seat: string; keys: string[] }) => patchWebviewState({ lessonBlocksCollapsed: own.seat ? own : null });
   useEffect(() => {
     if (stored && stored.seat === props.seat) return;
     const own = { seat: props.seat, keys: [] };
-    setStored(own); patchWebviewState({ lessonBlocksCollapsed: own });
+    setStored(own); persist(own);
   }, [props.seat, stored]);
   const blockCollapsed = collapsed.includes(blockKey);
   const [menuFor, setMenuFor] = useState("");
@@ -79,7 +82,7 @@ export function LessonStepPanel(props: {
   const setBlockCollapsed = (on: boolean) => {
     const next = collapseBlock(collapsed, blockKey, on);
     const own = { seat: props.seat, keys: next };
-    setStored(own); patchWebviewState({ lessonBlocksCollapsed: own }); setMenuFor("");
+    setStored(own); persist(own); setMenuFor("");
     // A block is put away from its open card, so 다시 보기 brings it back open (also after a re-mount, which forgets open/closed).
     if (!on) setOpenBlocks((o) => ({ ...o, [blockKey]: true }));
     focusAfter.current = on ? "restore" : "menu";
