@@ -21,7 +21,7 @@ export interface SkillCard { name: string; summary: string; prompt: string }
 const UNSAFE_LINE = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
 
 /** Schemes refused even without `//` (the Service's LINK_SCHEMES), plus the `vscode…` and `hypeproof…` prefixes. */
-const LINK_SCHEMES = ["http", "https", "ftp", "ftps", "javascript", "vbscript", "data", "file", "blob", "mailto", "tel", "sms", "intent"];
+const LINK_SCHEMES = ["http", "https", "ftp", "ftps", "javascript", "vbscript", "data", "file", "blob", "mailto", "tel", "sms", "intent", "about"];
 const CONFUSABLE: Record<string, string> = {
   "а": "a", "в": "b", "с": "c", "ԁ": "d", "е": "e", "һ": "h", "н": "h", "і": "i", "ј": "j", "к": "k", "м": "m", "о": "o", "р": "p",
   "ԛ": "q", "ѕ": "s", "т": "t", "υ": "u", "ѵ": "v", "ԝ": "w", "х": "x", "у": "y", "α": "a", "ο": "o", "ρ": "p", "τ": "t",
@@ -37,9 +37,10 @@ const CONFUSABLE: Record<string, string> = {
 export function hasLink(text: string): boolean {
   const n = text.normalize("NFKC").replace(/[\u02D0\uA789\u2236\uFE13\uFE55]/g, ":");
   if (/(?:^|[^\p{L}\p{N}+.\-])\p{L}[\p{L}\p{N}\p{M}+.\-]*:\/\//u.test(n)) return true;
-  for (const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu)) {
-    const k = [...m[1]!.toLowerCase()].map((ch) => CONFUSABLE[ch] ?? ch).join("");
-    if (LINK_SCHEMES.includes(k) || k.startsWith("vscode") || k.startsWith("hypeproof")) return true;
+  for (const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])(\p{L}[\p{L}\p{N}\p{M}+.\-]*):(?=(\S?))/gu)) {
+    const k = [...m[1]!.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()].map((ch) => CONFUSABLE[ch] ?? ch).join("");
+    if (!m[2]) { if (k === "http" || k === "https") return true; continue; }
+    if (LINK_SCHEMES.includes(k) || k.startsWith("vscode") || k.startsWith("hypeproof") || k.startsWith("x-")) return true;
   }
   return /(?:^|[^\p{L}\p{N}])www\.[\p{L}\p{N}-]+\.[\p{L}\p{N}-]{2,}/iu.test(n) || /(?:^|[^\p{L}\p{N}:])\/\/[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.test(n);
 }

@@ -135,9 +135,9 @@ t("the reader re-validates: links, unsafe text, over-long fields, too many lines
   eq(servedSkillCards({ skill_cards: [good, { ...good, name: "요약 스킬".toUpperCase() }] }).length, 1, "a duplicate name is skipped");
   eq(servedSkillCards({ skill_cards: Array.from({ length: 8 }, (_, i) => ({ ...good, name: `스킬 ${i}` })) }).length, 6, "at most six");
   eq(servedSkillCards(null), [], "null profile");
-  for (const text of ["color:red", "a:hover", "h1:first-child", "std::cout", "key:value", "A:B 비율", "C:\\Users", "//주석", "TODO:x", "fix:버그", "시간: 10분", "example.com/x"])
+  for (const text of ["x-axis: 10", "about: 소개", "color:red", "a:hover", "h1:first-child", "std::cout", "key:value", "A:B 비율", "C:\\Users", "//주석", "TODO:x", "fix:버그", "시간: 10분", "example.com/x"])
     eq(hasLink(text), false, `positive control: ${text}`);
-  for (const link of ["https://x", "http:x", "ftp:x", "sms:1", "tel:010", "vscode-insiders:x", "hypeproof-studio://x", "any-scheme://x", "ｈｔｔｐｓ://x", "https：//x", "һttps:x", "httpsː//x", "www.example.com", "//evil.example"])
+  for (const link of ["https://x", "http:x", "ftp:x", "sms:1", "tel:010", "vscode-insiders:x", "hypeproof-studio://x", "any-scheme://x", "ｈｔｔｐｓ://x", "https：//x", "һttps:x", "httpsː//x", "www.example.com", "//evil.example", "jávascript:x", "j\u0301avascript:x", "보기 https:", "about:blank", "x-custom:open"])
     eq(hasLink(link), true, `refused: ${link}`);
   eq(servedSkillCards({ skill_cards: [{ ...good, prompt: "color:red 로 바꿔 줘" }] }).length, 1, "a coding prompt is kept");
 });
