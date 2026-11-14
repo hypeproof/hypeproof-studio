@@ -1161,3 +1161,47 @@ final class StudioJourneyTests: XCTestCase {
         try evidence("journey-first-thought-collision", app: app)
     }
 }
+
+/// The one case that leaves the synthetic transport: real Service sign-in start, then the
+/// real system browser session opens the real Lab sign-in URL. It stops at the furthest hop a
+/// hosted runner can truthfully reach without an account. It never authenticates, so the Lab
+/// form POST through the proxy, the callback from Lab and the code exchange are NOT verified
+/// here; scripts/collect-signin-journey.py records them as NOT_RUN.
+final class StudioSignInBoundaryTests: XCTestCase {
+    @MainActor private func attach(_ name: String, _ app: XCUIApplication) {
+        let hierarchy = XCTAttachment(string: app.debugDescription); hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); screenshot.name = name + "-screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+    @MainActor func testSystemBrowserOpensLiveSignInPageAndCancelReturnsToApp() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-journey"]
+        app.launchEnvironment["HP_NATIVE_JOURNEY"] = "sign-in-live-boundary"
+        app.launchEnvironment["HP_NATIVE_JOURNEY_ID"] = UUID().uuidString
+        app.launch()
+        let start = app.buttons["linkDesktop"]
+        XCTAssertTrue(start.waitForExistence(timeout: 15)); start.tap()
+        // The system asks once before sharing sign-in state with the website.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let consent = springboard.alerts.buttons["Continue"]
+        if consent.waitForExistence(timeout: 30) { consent.tap() }
+        let browser = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
+        let presented = browser.wait(for: .runningForeground, timeout: 60)
+        attach("live-sign-in-browser", browser)
+        XCTAssertTrue(presented, "The real system sign-in browser session must open after the live Service start.")
+        let page = NSPredicate(format: "label CONTAINS[c] 'hypeproof' OR value CONTAINS[c] 'hypeproof' OR label CONTAINS[c] 'google' OR label CONTAINS[c] 'sign in' OR label CONTAINS[c] '로그인'")
+        let loaded = browser.descendants(matching: .any).matching(page).firstMatch.waitForExistence(timeout: 45)
+        attach("live-sign-in-page", browser)
+        XCTAssertTrue(loaded, "The sign-in page served for the Service-issued URL must load in the system browser.")
+        var closed = false
+        for label in ["Cancel", "Close", "Done", "취소", "닫기"] where browser.buttons[label].exists {
+            browser.buttons[label].tap(); closed = true; break
+        }
+        XCTAssertTrue(closed, "The system browser needs a visible way back to the app.")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30))
+        let again = app.buttons["linkDesktop"]
+        XCTAssertTrue(again.waitForExistence(timeout: 15))
+        XCTAssertTrue(again.isEnabled, "Cancelling the system browser must end waiting and allow another attempt.")
+        XCTAssertFalse(app.buttons["accountCancel"].exists)
+    }
+}

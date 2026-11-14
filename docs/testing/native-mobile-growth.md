@@ -339,6 +339,24 @@ receipts name `workflow_source_sha`; their app source fields still name the
 candidate. An actual v2 signed upload and Harness reconciliation remain required
 before claiming live compatibility.
 
+Signed-in journey and audience gate (Studio #3697, #3693; Lab #1669 escape). The
+simulator case `StudioSignInBoundaryTests.testSystemBrowserOpensLiveSignInPageAndCancelReturnsToApp`
+uses the real Service sign-in start and the real system browser session against the
+live Lab URL, then cancels. It verifies only: Service start returns a Lab URL, the
+system browser session loads the sign-in page, and cancelling returns to the app.
+`scripts/collect-signin-journey.py` records those three hops per source SHA and
+lists three hops as NOT_RUN because a hosted runner has no account: the Lab form
+POST through the proxy (the seam that broke), the callback from Lab, and the code
+exchange. The record is therefore PARTIAL, never PASS. `verify-native-candidate.py`
+reads the record of the exact run attempt; a missing record is NOT_RUN. The
+`distribution_audience` input defaults to `internal`: internal upload proceeds on
+PARTIAL or NOT_RUN and the receipt's `distribution` block says so and keeps
+`testFlightInternalTestingOnly` true. `external` is refused before signing unless
+the record is PASS; FAIL blocks both audiences. PASS needs an owner-provided test
+account and a Lab test-login path; neither exists, so external distribution stays
+blocked until then. Controls: `test_verify_native_candidate.py`
+(`SignedInJourneyDistribution`, `SigninCollector`).
+
 Authorized deployment acceptance: supply one Harness request, verify the run
 name and gate `deployment_request` match its exact digest/source, then inspect
 that run attempt's `upload-receipt.json` and IPA digest. A missing receipt stays

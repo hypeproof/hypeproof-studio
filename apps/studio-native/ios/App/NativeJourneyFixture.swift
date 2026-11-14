@@ -37,14 +37,18 @@ import CryptoKit
         guard enabled else { return }
         JourneyTransport.store.voiceStartAttempt(mode: mode, hasSelection: hasSelection, canSend: canSend, draftEmpty: draftEmpty)
     }
+    // The only scenario that leaves the synthetic transport: Service start and the
+    // system browser are real, so nothing here can exchange or store credentials.
+    static var liveBoundary: Bool { enabled && JourneyConfiguration.scenario == "sign-in-live-boundary" }
     static var service: ConversationService? {
         guard enabled else { return nil }
+        if liveBoundary { return ConversationService(session: URLSession(configuration: .ephemeral)) }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [JourneyTransport.self]
         return ConversationService(session: URLSession(configuration: configuration), base: URL(string: "https://native-journey.invalid")!)
     }
     static func authenticate(url: URL) async throws -> URL? {
-        guard enabled else { return nil }
+        guard enabled, !liveBoundary else { return nil }  // live boundary uses the real ASWebAuthenticationSession
         if JourneyConfiguration.scenario == "sign-in-cancel" {
             // The UI cancels the real model operation while this owned transport
             // is suspended. Bound a missing Cancel action rather than hang CI.
@@ -142,7 +146,7 @@ private enum JourneyConfiguration {
     static let scenario = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY"] ?? ""
     static let namespace = ProcessInfo.processInfo.environment["HP_NATIVE_JOURNEY_ID"] ?? ""
     static let enabled = ProcessInfo.processInfo.arguments.contains("--native-journey")
-        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
+        && ["first-answer", "retry-once", "pending-text-mismatch", "response-stop", "response-stop-denied", "voice-answer", "voice-hold", "voice-playback-real", "voice-playback-held", "voice-empty-results", "voice-periodic-poll", "sign-in-expired", "sign-in-network-failure", "desktop-list-held", "history-timeout", "history-cancelled", "sign-in-cancel", "sign-in-live-boundary", "draft-collision", "access-denied", "queued-voice", "recorded-failure", "long-history", "logout-sync", "member-inbox"].contains(scenario)
         && !namespace.isEmpty && namespace.utf8.count <= 64
         && namespace.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }
 }
