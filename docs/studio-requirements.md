@@ -8742,6 +8742,41 @@ and 1420px, criterion and decision blocks: preset exactly, undo of a reset, then
 no host message, saved work kept, quiet 44px/14px buttons, disabled colour and dashed boundary) and
 `test/lesson-focus.smoke.mjs` (the pure history: one change per burst or reset, empty history disables undo, bounded).
 
+REQ-STUDIO-LEARNING-BLOCK-COLLAPSE / REQ-CGP-LEARN-11 (c) and DES-CGP-LEARN-11, collapse half (traces to
+REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-011) / PI#2: a learner can put away a learning block they do not want and bring
+it back. **Partial:** this covers only (c) "접기". The report half, (a) and (b), is not built: the "자료가 틀린 것 같아요" item,
+its optional field and the report reaching the lesson's instructor in Chalk. That half needs a Service and Chalk route.
+
+The open 자료 card has a 자료 메뉴 button in its head, after 닫기. It is a quiet 44×44 button, named "자료 메뉴: <block title>",
+with `aria-haspopup="menu"`. The closed card keeps DES-CGP-LEARN-01's one row and has no menu button, because a fourth head
+column would leave the title no width in a 280px rail. The open card gains no height. The button opens an in-flow menu as a row
+under the head, with one item, "접기" (`role="menuitem"`, named "접기: <title>", 44px, 14px). Closing the card
+closes its menu. ArrowDown or ArrowUp on
+the button, or Enter or a click, opens the menu with focus on its first item. Escape closes it and returns focus to the button,
+and Tab closes it.
+
+접기 replaces the card with one row: "접은 자료: <title>" and a quiet 44px "다시 보기" button named "다시 보기: <title>", and focus
+moves to that button. While collapsed, the card body stays mounted and hidden (the rehearsal read-back keeps its nodes), and the
+polite state line is not drawn. 다시 보기 restores the card open, the state it was collapsed from (also after a re-mount, which forgets open/closed), and focus moves to the menu button.
+
+The collapsed set belongs to the learner's own view. It is keyed by lesson version and step, like open/closed, and kept in the
+webview's own state, so it survives a hide/show re-mount in the session. It is bounded to 50, and a new lesson version starts
+with every block shown. It is never sent to the host, so it is not work, not a report and not an observation event. Seats:
+every seat that draws the lesson rail. Default: on. Display only, with no new data flow and no new learner text field.
+
+Evidence:
+- `extensions/hypeproof-chat/test/learning-block-collapse-browser.smoke.mjs` runs in headless Chromium with real key events,
+  light and dark, at 800 and 1420px, on the criterion and decision blocks. It checks:
+  - the closed card has no menu button, and in the open card Tab from 닫기 reaches it;
+  - ArrowDown, Escape and Enter work as described;
+  - names, 44px, 14px, focus ring, and no sideways scroll;
+  - the collapsed row and where focus goes;
+  - no host message and no fetch;
+  - the state survives a re-mount;
+  - another step and a new lesson version are shown;
+  - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
+- `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
+
 ## Activity memory state line (CGP-KNOW-R-022)
 
 REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI
