@@ -85,6 +85,8 @@ export interface ContractOps {
   inboxOpened(objectId: string, generation: number): Promise<void>;
   inboxLink(objectId: string, url: string, generation: number, action: "open" | "copy"): Promise<{ ok: boolean }>;
   reviewPrepare(week: number | undefined): Promise<{ ok: boolean; message?: string }>;
+  /** #4048 — start a same-window rehearsal in this window. Absent on a host without the seat. */
+  enterRehearsalSeat?(input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void>;
 }
 
 /** Approval kinds that Chalk shows as its own prompt, and only when the studio policy asks for one. */
@@ -157,7 +159,34 @@ export class ChalkContractHost {
       this.bus.registerCommand("hypeproof.runtime.inboxLink", (args) => this.inboxLink(args)),
       this.bus.registerCommand("hypeproof.runtime.reviewPrepare", (args) => this.reviewPrepare(args)),
       this.bus.registerCommand("hypeproof.runtime.humanWait", (args) => this.humanWait(args)),
+      this.bus.registerCommand("hypeproof.runtime.enterRehearsalSeat", (args) => this.enterRehearsalSeat(args)),
     ];
+  }
+
+  /**
+   * #4048 — Chalk asks for the same-window rehearsal. Only a live instructor contract with the right nonce may enter.
+   * The token goes to the host and never into a result or a reason. A null expiry is passed as 0: the seat treats it as
+   * already expired on the next start (no question, return).
+   */
+  private async enterRehearsalSeat(args: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!args || typeof args !== "object") return { ok: false, reason: "invalidArgs" };
+    const a = args as Record<string, unknown>;
+    if (a.contractVersion !== CONTRACT_VERSION) return { ok: false, reason: "contractVersion" };
+    if (this.nonce === null) return { ok: false, reason: "inactive" };
+    if (a.sessionNonce !== this.nonce) return { ok: false, reason: "stale" };
+    const enter = this.ops.enterRehearsalSeat;
+    if (!enter) return { ok: false, reason: "unavailable" };
+    const token = a.token, rehearsalId = a.rehearsalId;
+    if (typeof token !== "string" || token.length === 0 || typeof rehearsalId !== "string" || rehearsalId.length === 0) return { ok: false, reason: "invalidArgs" };
+    const expiresAt = a.expiresAt === null ? 0 : a.expiresAt;
+    if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return { ok: false, reason: "invalidArgs" };
+    try {
+      await enter.call(this.ops, { token, expiresAt, rehearsalId });
+      return { ok: true };
+    } catch {
+      // The host's message stays out of the result: the reason is only a code.
+      return { ok: false, reason: "failed" };
+    }
   }
 
   get active(): boolean { return this.nonce !== null; }
