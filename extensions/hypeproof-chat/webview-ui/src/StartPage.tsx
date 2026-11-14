@@ -16,6 +16,8 @@ import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice, freeEndedBody } from "../../src/freeStart";
 import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
 import { imeComposing } from "./imeGuard";
+import { accountGreeting } from "../../src/accountGreeting";
+import { AccountQuestionCard } from './AccountQuestionCard';
 
 /** The last two segments of a workspace path ("…/local-trial-744/workspace"); the full path stays in the title and accessible name. */
 export function shortWorkspace(path: string): string {
@@ -66,6 +68,7 @@ export function StartPage() {
     setToken("");
   };
   const copy = startPageCopy(state.coachName);
+  const greeting = accountGreeting(state.account);
   const freeSeat = !!state.profile?.free;
   const activity = activityLabel(state.profile?.kind, state.profile?.pass, "활동", freeSeat);
   const passLeft = passSummary(state.profile?.pass);
@@ -136,11 +139,18 @@ export function StartPage() {
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
-        <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>
-        <h1 id="start-title">{state.automationsEnabled ? <>어떤 업무를<br/><span>자동화할까요?</span></> : <>생각을 현실로.<br/><span>완성은 내 손으로.</span></>}</h1>
-        <p className="studio-lead">{state.automationsEnabled ? <>평소 하던 일을 코치에게 설명해 주세요.<br className="studio-wide"/> 함께 스킬을 만들고, 하나씩 연결해 실행해요.</> : <>목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</>}</p>
+        <p className="studio-eyebrow" data-testid={greeting ? "account-greeting" : undefined}><span/> {greeting ?? "생각에서, 나의 결과물로"}</p>
+        {greeting && state.questionCard && <AccountQuestionCard key={state.questionCard.binding ?? 'none'} view={state.questionCard} post={postToHost} />}
+        {greeting && state.teamProduct?.available && <section className="studio-question" aria-label="질문 시작과 사용 기록">
+          {!state.questionCard?.card && <><p>어디부터 이야기해 볼까요?</p><div className="studio-question-choices">{([{id:'goal',label:'이루고 싶은 일'}, {id:'method',label:'다르게 해 볼 방법'}, {id:'decision',label:'결정이 필요한 일'}] as const).map(f => <button key={f.id} disabled={state.teamProduct?.busy || (!!state.teamProduct?.pendingFocus && state.teamProduct.pendingFocus !== f.id)} onClick={() => postToHost({type:'teamQuestionFocus',binding:state.teamProduct!.binding!,choice:f.id})}>{f.label}</button>)}<button onClick={() => postToHost({type:'questionCardRefresh'})}>질문 다시 조회</button></div></>}
+          <details><summary>사용 경험 개선 {state.teamProduct.granted ? '참여 중' : '설정'}</summary><p>{state.teamProduct.notice}</p><button disabled={state.teamProduct.busy} onClick={() => postToHost({type:'teamProductConsent',binding:state.teamProduct!.binding!,granted:!state.teamProduct!.granted})}>{state.teamProduct.granted ? '수집 중지' : '동의하고 참여'}</button></details>
+          {state.teamProduct.message && <p role="status">{state.teamProduct.message}</p>}
+        </section>}
+        {!(greeting && state.questionCard?.card) && <><h1 id="start-title">{greeting ? <>오늘 어떤 일을<br/><span>먼저 풀어볼까요?</span></> : state.automationsEnabled ? <>어떤 업무를<br/><span>자동화할까요?</span></> : <>생각을 현실로.<br/><span>완성은 내 손으로.</span></>}</h1>
+        <p className="studio-lead">{greeting ? <>마음에 남은 생각이나 맡은 일부터 이야기해요.<br className="studio-wide"/> 질문을 나누며 다음 행동을 함께 정해요.</> : state.automationsEnabled ? <>평소 하던 일을 코치에게 설명해 주세요.<br className="studio-wide"/> 함께 스킬을 만들고, 하나씩 연결해 실행해요.</> : <>목표를 정하고, AI와 함께 만들고,<br className="studio-wide"/> 결과를 검토하는 나만의 작업 공간.</>}</p></>}
         <div className="studio-entry-options" aria-label="나를 알아가는 대화">
           <button data-testid="personal-reflection-entry" data-personal-question-entry="true" className="studio-choice" disabled={state.checking || purchaseHeld || state.personalReflectionPending} onClick={() => { setEntry("account"); setEditing(true); postToHost({ type: "openPersonalReflection" }); }}>나의 질문 <span aria-hidden="true">→</span></button>
+          {greeting && state.memberApprovals?.entryVisible && <button data-testid="member-approval-entry" className="studio-choice" disabled={state.checking || purchaseHeld} onClick={() => { setApprovalsOpen(true); postToHost({ type: "memberApprovalRefresh" }); }}>내 검토가 필요한 요청 <span aria-hidden="true">→</span></button>}
           <p className="studio-help">요즘의 나와 바꾸고 싶은 것을, 한 가지 질문부터 이야기해요.</p>
         </div>
         <div className="studio-process" aria-label="목표 정하기, 함께 만들기, 직접 검토하기">
