@@ -141,6 +141,11 @@ export interface ClassroomOpsObserver {
   lessonStep(lessonVersion: string, stepId: string, status: "in_progress" | "submitted"): void;
   /** A real change to the learner's artifact, as digests only. */
   artifactChanged(before: string | undefined, after: string, stepId?: string): void;
+  /**
+   * CGP-LEARN-R-011 — the learner reported a lesson block (lessonFocus.ts materialReportPayload: ids and a reason chip, no
+   * text). False when this window has no live class connection or the outbox refused it, so the learner is told it was not sent.
+   */
+  materialReport?(payload: Record<string, unknown>): Promise<boolean>;
 }
 
 export class ClassroomOpsHost implements ClassroomOpsObserver {
@@ -908,6 +913,13 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     // "I finished this step" is the learner's own statement: self-reported, not a verified completion.
     if (status === "submitted") void this.outbox.add("evidence", evidencePayload("decision", { sourceState: "self_reported", stepId }), "student");
     this.loop?.nudge();
+  }
+  async materialReport(payload: Record<string, unknown>): Promise<boolean> {
+    const outbox = this.outbox;
+    if (!outbox || !this.loop) return false;
+    const queued = await outbox.add("material_report", payload, "student");
+    if (queued) this.loop?.nudge();
+    return queued;
   }
   artifactChanged(before: string | undefined, after: string, stepId?: string): void {
     if (!this.outbox || before === after) return;

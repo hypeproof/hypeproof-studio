@@ -71,6 +71,45 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256, uiVersion: (step.ui_version as number | undefined) ?? 1 };
 }
 
+/**
+ * CGP-LEARN-R-011 (a) / D-011 — "자료가 틀린 것 같아요". The learner picks one of three reasons; there is no text field, for any
+ * seat, because the class board this goes to never carries a learner's words (Service classroom-ops `material_report`).
+ */
+export const MATERIAL_REPORT_REASONS = ["wrong", "broken", "unclear"] as const;
+export type MaterialReportReason = (typeof MATERIAL_REPORT_REASONS)[number];
+export const MATERIAL_REPORT_REASON_WORDS: Record<MaterialReportReason, string> = { wrong: "내용이 틀려요", broken: "열리지 않아요", unclear: "이해하기 어려워요" };
+export const isMaterialReportReason = (v: unknown): v is MaterialReportReason => typeof v === "string" && (MATERIAL_REPORT_REASONS as readonly string[]).includes(v);
+
+/** Key order never changes the digest: objects are written with sorted keys, at every depth. */
+export function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return "[" + v.map(stableJson).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableJson((v as Record<string, unknown>)[k])).join(",") + "}";
+  return JSON.stringify(v) ?? "null";
+}
+
+/**
+ * The report's payload, built in the HOST from the served lesson only: which block (course, version, step, type, pinned
+ * version, a digest of its params) and the reason. The webview names a step and a reason, nothing else; a step that draws no
+ * block here, or a reason outside the three, gives null. `digest` is sha-256 hex (the host passes node:crypto).
+ */
+export function materialReportPayload(
+  lesson: (Lesson & { course_id: string }) | null | undefined,
+  msg: { stepId?: unknown; reason?: unknown },
+  digest: (text: string) => string,
+): Record<string, unknown> | null {
+  if (!lesson || typeof msg.stepId !== "string" || !isMaterialReportReason(msg.reason)) return null;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(lesson.course_id) || !/^[A-Za-z0-9_.+-]{1,64}$/.test(lesson.version) || !/^[A-Za-z0-9_-]{1,128}$/.test(msg.stepId)) return null;
+  const material = stepMaterial(lesson, msg.stepId);
+  if (!material) return null;
+  const params = (lesson.content.steps.find((s) => s.id === msg.stepId) as { ui_params?: unknown } | undefined)?.ui_params;
+  return {
+    lesson_course: lesson.course_id, lesson_version: lesson.version, step_id: material.stepId,
+    block_type: material.kind, block_version: material.uiVersion,
+    ...(params !== undefined ? { params_sha256: digest(stableJson(params)) } : {}),
+    reason: msg.reason,
+  };
+}
+
 /** What a block's state sentence is computed from: the fields as the learner has them now, and the last save, if any. */
 export interface MaterialInput { text: string; reason: string; saved?: { text: string; reason?: string } }
 export interface MaterialState { key: string; sentence: string }

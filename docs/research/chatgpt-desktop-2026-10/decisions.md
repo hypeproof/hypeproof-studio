@@ -2322,6 +2322,18 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
 
+## CGP-LEARN-R-011 (a)(b) / CGP-LEARN-D-011: report a learning block to the class instructor (2026-11-15)
+
+Confirmed by Jay: no. These are agent choices; the coordinator set the scope (the report half of the row, Service then Chalk then Studio).
+
+- **Channel (agent choice).** The report is a classroom-ops event `material_report` on the learner's existing class connection, not `/v1/report`. `/v1/report` goes to the operator and fans out to Discord and the GitHub triage job; the class connection reaches the run's own instructor and nobody else. `classroom_shares` was not used either: its kind CHECK would need a migration, and Service deploys are blocked on migrations. ops event kinds are validated in code, so no migration is needed.
+- **No learner text, for any seat (agent choice; deviates from DES-CGP-LEARN-11's optional 0–300 field).** The ops board's contract is that a learner's words never reach it (the evidence event carries provenance only). An adult-only field would break that for the same board, and a minor seat must not get a new free-text field. The learner picks one of three reasons: `wrong` 내용이 틀려요, `broken` 열리지 않아요, `unclear` 이해하기 어려워요. The optional field stays deferred until Jay decides whether it should exist and through which consented path.
+- **Block identity (agent choice).** Course, lesson version, step, block type and pinned version, both checked against the step UI catalog, plus a sha-256 of the step's `ui_params` when it has any. The host builds it from the served lesson; the webview sends a step and a reason only.
+- **Who sees the item (agent choice).** Only a window with a live class connection (inbox run present, not offline, not ended). Without one there is no instructor to reach, so the item is not drawn. Instructor windows and rehearsals never draw it. If the outbox refuses or the connection drops after the item was drawn, the learner is told it was not sent.
+- **Inline, not modal (DES-CGP-LEARN-11).** A row under the card head, the same in-flow placement as the menu. The reasons are native radios, so arrow keys work without custom handling. The actions are quiet buttons (SX-04).
+- **Instructor side (agent choice).** Chalk `/manage` lists reports in the seat drawer as "자료 신고", after the evidence. The only control is "확인함", on the existing review route (`coach` capability, revision CAS). There is no seat-list badge yet, so an instructor finds reports by opening the seat. That is a follow-up candidate.
+- **Not covered:** a real installed App, a real class run end to end, and a real screen reader.
+
 ## CGP-ART-R-023 gap: 폴더에서 보기 on the deck PDF result (2026-11-14, #4057 §7.2)
 
 Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 on the PDF result, reveal the exported file inside the seat's served root, reuse the existing reveal path and its path-safety checks, and never reveal anything outside the root. The choices below are the agent's.

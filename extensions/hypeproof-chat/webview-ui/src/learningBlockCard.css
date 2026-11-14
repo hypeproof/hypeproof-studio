@@ -69,3 +69,30 @@
   .hp-block-menu { border-color: CanvasText; }
   .hp-block-menu > [role="menuitem"] { color: ButtonText; }
 }
+
+/* CGP-LEARN-D-011 (DES-CGP-LEARN-11, report half): "자료가 틀린 것 같아요" opens inline as a row under the head, in flow like the
+   menu (never a modal, never positioned). Three reason chips are native radios in 44px labels at the learner's 14px floor; the
+   actions are quiet buttons (SX-04: the screen's one Primary stays region A's). There is no text field. */
+.hp-material.hp-block-card[data-block-open][data-block-report] { grid-template-areas: "thumb name toggle more" "report report report report" "body body body body" "state state state state"; }
+.hp-block-report {
+  grid-area: report; display: flex; flex-direction: column; gap: var(--hp-space-2); min-width: 0;
+  padding-block: var(--hp-space-2); border-block-start: var(--ds-c-focus-width) solid var(--hp-border-divider-default);
+}
+.hp-block-report-title { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
+.hp-block-report-reasons { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hp-block-report-reason {
+  display: inline-flex; align-items: center; gap: var(--hp-space-1); box-sizing: border-box;
+  min-height: var(--hp-control-min); padding-inline: var(--hp-space-2); font-size: var(--hp-font-caption); cursor: pointer;
+  border: var(--ds-c-focus-width) solid var(--hp-border-divider-default); border-radius: var(--hp-radius-8); background: var(--hp-bg-app-default);
+}
+.hp-block-report-reason:hover { background-color: var(--hp-bg-control-hover); }
+.hp-block-report-reason:has(input:checked) { border-color: var(--hp-text-accent-default); }
+.hp-block-report-note, .hp-block-report-failed { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); }
+.hp-block-report-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hp-block-report-actions > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-block-report-actions > button:disabled { color: var(--hp-text-muted-default); border-style: dashed; cursor: default; }
+@media (forced-colors: active) {
+  .hp-block-report { border-color: CanvasText; }
+  .hp-block-report-reason { border-color: ButtonText; color: ButtonText; }
+  .hp-block-report-reason:has(input:checked) { border-color: Highlight; }
+}

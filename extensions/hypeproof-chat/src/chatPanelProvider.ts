@@ -156,7 +156,7 @@ import { logsAvailable, readSessionLogs } from "./reportLogsHost";
 import { collectReportMetadata } from "./reportProblem";
 import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
 import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
-import { acceptFocus, acceptWork, collapseSeat, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { acceptFocus, acceptWork, collapseSeat, materialReportPayload, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -9573,6 +9573,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.workspaceState.update("hps.lessonWork", { ...all, [lesson.sha256]: { ...(all[lesson.sha256] ?? {}), [saved.stepId]: saved.work } });
         this.spool?.recordWorkflow({ event: "lesson_work_saved", payload: { lesson_version: lesson.version, step_id: saved.stepId, kind: saved.work.kind } });
         await this.post({ type: "lessonWorkState", sha256: lesson.sha256, work: this.lessonWorkFor(lesson.sha256) });
+        return;
+      }
+      // CGP-LEARN-R-011 — "자료가 틀린 것 같아요". Only a block the served lesson draws on that step, and one of three reasons;
+      // it goes to the class board over the classroom-ops outbox (ids only, no text). No live class connection: not sent, and said so.
+      case "materialReport": {
+        const lesson = this.cachedProfile?.lesson;
+        const payload = materialReportPayload(lesson, msg, (t) => createHash("sha256").update(t, "utf8").digest("hex"));
+        let sent = false;
+        if (payload) { try { sent = (await this.opsObserver?.materialReport?.(payload)) === true; } catch { sent = false; } }
+        if (lesson) await this.post({ type: "materialReportResult", sha256: lesson.sha256, stepId: msg.stepId, state: sent ? "sent" : "not_sent" });
         return;
       }
       // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside
