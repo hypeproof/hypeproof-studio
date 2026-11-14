@@ -236,7 +236,8 @@ print('fixture command completed')
         for preserved in ["branches: ['release/studio-unified-preview']", 'needs: native-candidate',
                           'environment: apple-native-preview', 'platform: [ios]', 'cancel-in-progress: false']:
             self.assertIn(preserved, workflow)
-        self.assertEqual(workflow.count('required: false'), 4)
+        self.assertEqual(workflow.count('required: false'), 5)
+        self.assertIn('NATIVE_DISTRIBUTION_AUDIENCE: ${{ inputs.distribution_audience }}', workflow)
         self.assertIn('uses: actions/download-artifact@v4', workflow)
         self.assertEqual(workflow.count('name: studio-native-release-gate-${{ github.run_id }}-${{ github.run_attempt }}'), 2)
         self.assertLess(workflow.index('uses: actions/download-artifact@v4'), workflow.index('name: Archive, validate and upload'))
