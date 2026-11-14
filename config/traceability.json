@@ -13572,6 +13572,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/lessonTips.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
@@ -13589,6 +13598,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/lesson-tip-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-tips-off.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-tips-host.smoke.mjs"
         }
       ]
     },

@@ -2301,3 +2301,15 @@ Confirmed by Jay: no. The coordinator set the scope: offer 폴더에서 보기 o
 - **Refusal copy (agent wording).** "저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요." is used for every refusal, because the fix is the same each time.
 - **Not changed.** The page card's own 폴더에서 보기: a nested page still reveals its own folder.
 - **Not covered:** the installed App's OS file manager. `revealFileInOS` is a fixture in the host test.
+
+## CGP-SHELL-R-019 / CGP-SHELL-D-018: turning lesson tips off (2026-11-14, agent-selected; one clause parked)
+
+Audit of main (origin/main 2026-11-14): both rows are `merged_into` CGP-CHAT-R-021 / D-021, which are built (#2767, #2972). The only tip is the served step's Chalk-authored hint (owner decision above, "CGP-CHAT-R-021: lesson tip source and action"), so there is no Studio tip catalogue to write or review. Never while a turn streams and one tip at a time are MET; D-018's 13px and 24px give way to the 14px and 44px floors, as D-021 already does. Missing: "팁 그만 보기 stops all tips until re-enabled".
+- Preference (agent choice): `hypeproofChat.lessonTips` in the host's globalState, the same storage as the chat text size: per learner on this computer, never synced, logged or sent. Only `false` is off, so a corrupt value never removes help. The key is exported from vscode-free `src/lessonTips.ts` for the start page's 팁 보기 row.
+- Action (agent choice): a third quiet button `팁 그만 보기` (muted ink, no underline, 44px) after `입력창에 넣기`. It hides only the tip row. The lesson's steps, instructions, mission header, 힌트 보기 and anything required by the instructor are untouched.
+- Reversibility (agent copy): the row is replaced by `팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.` with `다시 켜기` focused (role=status), until the next send. The 팁 보기 row in the start settings sheet (CGP-SHELL-R-014, builder-art-r005's follow-up after their export-row PR) is the lasting way back. Once it ships, the line can add `설정의 팁 보기에서도 다시 켤 수 있어요`; until then the line names only the action that exists.
+- Parked (needs Jay): REQ-SHELL-19's "at most once per session and only after an observed trigger (e.g. 3 failed runs)". It contradicts the owner decision to show a step's hint from the start; gating instructor-written help behind three failures changes the lesson. Recommendation: keep hints shown from the start. If triggered help is wanted, add a separate Chalk-authored field (for example `hint_after_failures`) through a Service schema change, never Studio copy, with "once per session" applying only to it.
+- Default state: tips on for everyone (unchanged). No flag, policy, Service or minor-seat change.
+- Not covered: a real installed App and a screen reader: NOT RUN.
+- Confirmed by Jay: no.
+

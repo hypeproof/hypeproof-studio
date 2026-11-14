@@ -169,6 +169,8 @@ export interface ChatConfig {
   lessonSettingsChanges?: import('./lessonSettingsChange').LessonSettingsNotice[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
+  /** CGP-SHELL-R-019: lesson tips are shown on this device (false only after 팁 그만 보기). */
+  lessonTips?: boolean;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
   /**
@@ -804,6 +806,8 @@ export type WebviewMessage = (
   | { type: "openChalkInstructorPanel" } // #3563 — the Chalk tab button in the instructor notice; the host runs the Chalk command
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
   | { type: "setTextSize"; size: string }
+  /** CGP-SHELL-R-019: the learner turned lesson tips off (팁 그만 보기) or back on. */
+  | { type: "setLessonTips"; on: boolean }
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }

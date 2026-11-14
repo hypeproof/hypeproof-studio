@@ -7120,8 +7120,8 @@ The tip may expose FRAMING and JUDGMENT behaviour (whether a learner uses or edi
 help); showing, using or dismissing it is not recorded as evidence and is not a learning outcome.
 Presentation (design CGP-CHAT-D-021 / CGP-CHAT-D19): the tip is one row element in the
 composer column's flow, never positioned over the composer; at chat-column widths (800px and
-up) the 도움말 badge, the text and both buttons share one line, and a narrow panel (320px) may
-wrap the two buttons under the text inside the same row (44px targets win over a single visual
+up) the 도움말 badge, the text and the buttons share one line, and a narrow panel (320px) may
+wrap the buttons under the text inside the same row (44px targets win over a single visual
 line). However long the hint is, the text is clamped to two lines, so the row stays above the
 composer and the composer stays on screen at every text size. Under forced colours the row keeps
 a CanvasText border and the buttons use ButtonText/GrayText.
@@ -7130,6 +7130,29 @@ Validation: `lesson-tip.test.tsx` (source, hygiene, keys, dismiss bound, prefill
 `FOCUS_REQUIRE_BROWSER=1` without a browser), which also covers the instructor console, an
 unavailable seat, a rehearsal, a pending send (posted, not yet started, then rejected), a
 twelve-line hint at 320/800/1420px with base and xlarge text, and forced colours.
+
+### Turning lesson tips off (CGP-SHELL-R-019)
+
+REQ-SHELL-19 / CGP-SHELL-035 / PI#4 (the learner decides how much help the screen offers; it may
+expose OWNERSHIP): the tip row has a third, quiet action, `팁 그만 보기`, after `입력창에 넣기`.
+Pressing it turns every lesson tip off: in every step, task and window on this computer, until the
+learner turns tips on again. It hides only this row. The lesson's steps, instructions, mission
+header, the rail's 힌트 보기 and anything an instructor marked as required stay as they are.
+The choice is one device preference, `hypeproofChat.lessonTips` (`src/lessonTips.ts`), kept in the
+host's globalState like the chat text size. Only a stored `false` is off (absent means on), it is
+written only from a boolean `setLessonTips` message, never synced, logged or sent to the Service,
+and reaches the chat as `config.lessonTips`. Right after the press the row is replaced by a
+`role="status"` line, `팁을 껐어요. 다시 보려면 다시 켜기를 눌러 주세요.`, whose `다시 켜기` (focused)
+turns tips back on; the line ends with the next send. The start page's 팁 보기 row (CGP-SHELL-R-014)
+binds to the same key and is added by that row's follow-up. Per-step 닫기 is unchanged. Seats
+without a served lesson, hintless steps and the instructor console draw no tip and no action.
+Not built (needs Jay, decisions.md): REQ-SHELL-19's "at most once per session and only after an
+observed trigger (e.g. 3 failed runs)". It contradicts the owner decision that a step's hint shows
+from the start.
+Validation: `lesson-tips-off.smoke.mjs` (actual App in headless Chromium: one off write and the way
+back, off hides every tip but never the lesson, 다시 켜기, 닫기 unchanged, the note ends with the next
+send, negative controls, 44px/14px/focus ring in both themes at 320-1420px; red on main) and
+`lesson-tips-host.smoke.mjs` (only `false` is off; boolean-only globalState write; never synced).
 
 ## Find in chat (CGP-CHAT-R-027)
 
