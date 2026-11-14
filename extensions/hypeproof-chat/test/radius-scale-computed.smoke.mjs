@@ -136,6 +136,7 @@ const q = (sel) => `document.querySelector(${JSON.stringify(sel)})`;
 // CGP-DS-D-008: the root class list of every dialog in webview-ui/src (grep '<dialog' and 'hp-modal'). A new dialog
 // that is missing here fails the inventory check below.
 const DIALOGS = [
+  ['member-approval hp-modal', 'MemberApprovalInbox.tsx'],
   ['hps-annotation-leave hp-modal', 'AnnotationLeaveDialog.tsx'],
   ['hps-write-approval hps-browser-approval hp-modal', 'BrowserApprovalDialog.tsx'],
   ['hps-write-approval hps-command-approval hp-modal', 'CommandApprovalDialog.tsx'],

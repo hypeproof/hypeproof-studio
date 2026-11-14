@@ -23,6 +23,7 @@ import { isMinorProfile } from "./sdkCoachHelpers";
 import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
 import { TEXT_SIZE_KEY } from "./textSize";
 import type { ActivityResume } from './studioNavigation';
+import { MemberApprovalController, parseApprovalPending } from './memberApproval';
 import { isChildSeat, childRefusalNow } from "./childProfile";
 
 /**
@@ -117,6 +118,10 @@ export class StartPage {
   private reflectionEntry?: ReflectionEntry;
   private reflectionEntering = false;
   private openingChat?: vscode.WebviewPanel;
+  private memberApprovals?: MemberApprovalController;
+  private memberAccount?: string;
+  private memberSession?: string;
+  private memberProbe = 0;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -124,6 +129,19 @@ export class StartPage {
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
   ) {
+    if (accounts) this.memberApprovals = new MemberApprovalController({
+      identity: () => accounts.approvalIdentity(), request: (identity,id,decision) => accounts.approvalRequest(identity,id,decision), uuid: randomUUID,
+      load: async accountID => {
+        const prefix = 'hypeproof.memberApproval.v1.' + Buffer.from(accountID).toString('base64url') + '.';
+        return parseApprovalPending(context.globalState.keys().filter(k=>k.startsWith(prefix)).map(k=>context.globalState.get(k)),accountID);
+      },
+      save: async (accountID,pending) => {
+        const prefix = 'hypeproof.memberApproval.v1.' + Buffer.from(accountID).toString('base64url') + '.';
+        for(const row of pending) await context.globalState.update(prefix+row.id,row);
+      },
+      remove: async (accountID,id) => { await context.globalState.update('hypeproof.memberApproval.v1.' + Buffer.from(accountID).toString('base64url') + '.' + id,undefined); },
+      changed: () => { if(this.panel)void this.refresh(); },
+    });
     // REQ-STUDIO-START-UPDATE-NOTICE — a found, cleared or dismissed update redraws an open start page.
     // Optional: hosts without the hook (tests, older providers) just show no notice.
     this.chat.onAvailableUpdateChanged?.(() => { if (this.panel) void this.refresh(); });
@@ -141,6 +159,17 @@ export class StartPage {
     const account = this.accounts?.view();
     if (this.reflectionEntry && ((this.reflectionEntry.accountId && account?.account?.id !== this.reflectionEntry.accountId)
         || (this.reflectionEntry.waiting && account?.status === 'signedOut' && !account.busy))) this.reflectionEntry = undefined;
+    const memberAccount = account?.status === 'signedIn' ? account.account?.id : undefined;
+    const changedMember = memberAccount!==this.memberAccount;
+    if(changedMember || !memberAccount) { this.memberAccount=memberAccount; this.memberSession=undefined; this.memberApprovals?.invalidate(); }
+    const probe=++this.memberProbe;
+    if(memberAccount && this.accounts?.approvalSessionKey) void this.accounts.approvalSessionKey().then(session=>{
+      if(probe!==this.memberProbe || this.memberAccount!==memberAccount) return;
+      if(session!==this.memberSession || changedMember) {
+        this.memberSession=session; this.memberApprovals?.invalidate();
+        if(session) void this.memberApprovals?.discover();
+      }
+    }).catch(()=>{ if(probe===this.memberProbe) { this.memberSession=undefined; this.memberApprovals?.invalidate(); } });
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
     if (this.panel) void this.refresh();
     void this.loadStore().then((changed) => { if (changed && this.panel) return this.refresh(); });
@@ -456,7 +485,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.stopPurchaseWait();
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.memberApprovals?.dismiss(); if (!this.reflectionEntry?.opening) this.reflectionEntry = undefined; this.useGrantAfterSignIn = false; this.candidate = undefined; this.stopPurchaseWait();
       this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
@@ -843,6 +872,7 @@ export class StartPage {
       ...(childSeat ? {} : { purchase: this.purchaseView() }),
       ...(this.storeOn && !childSeat ? { skillStore: true } : {}),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
+      ...(this.memberApprovals ? {memberApprovals:this.memberApprovals.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
@@ -856,6 +886,10 @@ export class StartPage {
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
+    // Account-bound cards are read after settings/profile awaits so an older render
+    // cannot put a previous account's card back after logout or a new session.
+    if (this.memberApprovals) state.memberApprovals = this.memberApprovals.view();
+    if (this.accounts) state.account = this.accounts.view();
     await this.panel?.webview.postMessage({ type: "startState", state });
     if (this.panel) this.maybeRefill(running);
   }
@@ -889,6 +923,8 @@ export class StartPage {
     if (msg.type === 'accountActivate' && this.reflectionEntry) { await this.continuePersonalReflection(msg.passId); return; }
     if (!continuation && !['startReady', 'accountRefresh', 'accountReopen', 'accountCopyLink'].includes(msg.type)) this.reflectionEntry = undefined;
     if (msg.type === 'cancelPersonalReflection') { if (this.accounts?.view().status === 'waiting' || this.accounts?.view().busy) this.accounts.cancel(); await this.refresh(); return; }
+    if(msg.type==='memberApprovalRefresh') { await this.memberApprovals?.refresh(); return; }
+    if(msg.type==='memberApprovalDecision') { await this.memberApprovals?.decide(msg.id,msg.requestDigest,msg.choice); return; }
     if (!continuation && !["startReady", "accountRefresh", "accountReopen", "accountCopyLink"].includes(msg.type)) this.accountEntryRevision++;
     if (!["startReady", "accountSignIn", "accountReopen", "accountCopyLink", "accountRefresh"].includes(msg.type)) this.useGrantAfterSignIn = false;
     if (msg.type.startsWith("account")) {
