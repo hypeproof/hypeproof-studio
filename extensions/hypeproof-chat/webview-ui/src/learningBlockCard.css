@@ -58,8 +58,10 @@
   min-height: var(--hp-control-min); padding: 0 var(--hp-space-2); text-align: start; font: inherit; font-size: var(--hp-font-caption);
   background: transparent; color: var(--hp-text-primary-default); border: 0; border-radius: var(--hp-radius-8); cursor: pointer;
 }
-.hp-block-menu > [role="menuitem"]:hover { background: var(--hp-bg-app-default); }
-.hp-block-menu > [role="menuitem"]:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: calc(-1 * var(--ds-c-focus-width)); }
+/* Hover and pressed fills are the shared control state layers, as in the rail's task menu (taskWorkspace.css); the focus ring is
+   the tokens.css :focus-visible baseline. */
+.hp-block-menu > [role="menuitem"]:hover { background-color: var(--hp-bg-control-hover); }
+.hp-block-menu > [role="menuitem"]:active { background-color: var(--hp-bg-control-pressed); }
 .hp-material.hp-block-card.hp-block-collapsed { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name restore"; }
 .hp-block-collapsed .hp-block-collapsed-name { grid-area: name; margin: 0; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hp-block-collapsed > button { grid-area: restore; min-width: var(--hp-control-min); min-height: var(--hp-control-min); font-size: var(--hp-font-caption); white-space: nowrap; }
