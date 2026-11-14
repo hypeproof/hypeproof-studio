@@ -9656,7 +9656,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // it goes to the class board over the classroom-ops outbox (ids only, no text). The answer is the Service's own outcome.
       case "materialReport": {
         const lesson = this.cachedProfile?.lesson;
-        const payload = materialReportPayload(lesson, msg, (t) => createHash("sha256").update(t, "utf8").digest("hex"));
+        const payload = materialReportPayload(lesson, msg);
         // "sent" only after the Service accepted it (or already holds the same report); a queued report is not sent.
         let outcome: string = "not_sent";
         if (payload) { try { outcome = (await this.opsObserver?.materialReport?.(payload)) ?? "not_sent"; } catch { outcome = "not_sent"; } }

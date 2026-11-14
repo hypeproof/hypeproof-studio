@@ -1,6 +1,6 @@
 // CGP-LEARN-R-011 (a) (REQ-STUDIO-LEARNING-BLOCK-REPORT) — the host half of "자료가 틀린 것 같아요".
 // 1. lessonFocus.ts materialReportPayload builds the report from the SERVED lesson only: course, version, step, block type, pinned
-//    version, a key-order-free params digest, and one of three reasons. A step without a drawn block, an unknown reason or a
+//    version and one of three reasons (no params digest). A step without a drawn block, an unknown reason or a
 //    hostile id gives null. The result carries no text field, so it passes the Service's material_report allowlist.
 // 2. The real ChatPanelProvider.handleMessage queues it on the class connection (opsObserver.materialReport) and answers
 //    materialReportResult "sent" only for the Service's `accepted`; duplicate, capped and unconfirmed say so, and everything else is "not_sent".
@@ -12,16 +12,14 @@
 
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { MATERIAL_REPORT_REASONS, MATERIAL_REPORT_REASON_WORDS, materialReportPayload, stableJson } from "../src/lessonFocus.ts";
+import { MATERIAL_REPORT_REASONS, MATERIAL_REPORT_REASON_WORDS, materialReportPayload } from "../src/lessonFocus.ts";
 
 const require = createRequire(import.meta.url), extension = fileURLToPath(new URL("..", import.meta.url));
 let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log(`ok ${name}`); }
-const sha = (t) => createHash("sha256").update(t, "utf8").digest("hex");
 
 const step = (id, extra) => ({ id, title: `${id} 단계`, instructions: "해 보기", hint: "", acceptance: "직접 확인", ...extra });
 const LESSON = {
@@ -30,16 +28,15 @@ const LESSON = {
     steps: [step("s1", { ui: "criterion_form" }), step("s2", { ui: "decision_form", ui_version: 1, ui_params: { b: 2, a: [{ y: "1", x: "2" }] } }), step("s3"), step("s4", { ui: "decision_form", ui_version: 2 }), step("s5", { ui: "constructor" })] },
 };
 // The Service's allowlist (worker src/lib/classroom-ops.ts validatePayload 'material_report'), restated so a new key here fails.
-const SERVICE_KEYS = ["lesson_course", "lesson_version", "step_id", "block_type", "block_version", "params_sha256", "reason"];
+const SERVICE_KEYS = ["lesson_course", "lesson_version", "step_id", "block_type", "block_version", "reason"];
 
 await test("payload: block identity and reason from the served lesson, no text field (positive control)", () => {
   assert.deepEqual([...MATERIAL_REPORT_REASONS], ["wrong", "broken", "unclear"]);
   assert.deepEqual(Object.values(MATERIAL_REPORT_REASON_WORDS), ["내용이 틀려요", "열리지 않아요", "이해하기 어려워요"]);
-  const p = materialReportPayload(LESSON, { stepId: "s1", reason: "wrong" }, sha);
+  const p = materialReportPayload(LESSON, { stepId: "s1", reason: "wrong" });
   assert.deepEqual(p, { lesson_course: "web-1", lesson_version: "m2026.11.15-1", step_id: "s1", block_type: "criterion_form", block_version: 1, reason: "wrong" });
-  const q = materialReportPayload(LESSON, { stepId: "s2", reason: "unclear" }, sha);
-  assert.equal(q.params_sha256, sha(stableJson({ a: [{ x: "2", y: "1" }], b: 2 })), "the digest does not depend on key order");
-  assert.match(q.params_sha256, /^[a-f0-9]{64}$/);
+  const q = materialReportPayload(LESSON, { stepId: "s2", reason: "unclear" });
+  assert.equal("params_sha256" in q, false, "no params digest, even for a step with ui_params (the Service refuses a client digest)");
   for (const x of [p, q]) assert.ok(Object.keys(x).every((k) => SERVICE_KEYS.includes(k)), JSON.stringify(x));
 });
 
@@ -50,7 +47,7 @@ await test("payload: no block, an unknown reason or a hostile id gives null (neg
     [LESSON, { stepId: "s1" }], [LESSON, { stepId: 1, reason: "wrong" }], [null, { stepId: "s1", reason: "wrong" }],
     [{ ...LESSON, course_id: "web 1" }, { stepId: "s1", reason: "wrong" }], [{ ...LESSON, version: "a/b" }, { stepId: "s1", reason: "wrong" }],
   ];
-  for (const [l, m] of no) assert.equal(materialReportPayload(l, m, sha), null, JSON.stringify(m));
+  for (const [l, m] of no) assert.equal(materialReportPayload(l, m), null, JSON.stringify(m));
 });
 
 // ─── the real provider handler ───────────────────────────────────────────────
@@ -151,7 +148,7 @@ await test("ops host: the answer is the Service's outcome for that seq; a reject
   const { h, added, inbox } = make();
   h.onReports({ served: true, outcomes: [], rejected: [] }, live);
   assert.equal(h.reportsAvailable(), true); assert.equal(inbox.length, 1, "availability change republishes the inbox view");
-  const payload = materialReportPayload(LESSON, { stepId: "s2", reason: "unclear" }, sha);
+  const payload = materialReportPayload(LESSON, { stepId: "s2", reason: "unclear" });
   const p1 = h.materialReport(payload);
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(JSON.parse(JSON.stringify(added)), [["material_report", payload, "student"]]);

@@ -9032,7 +9032,6 @@ The webview posts `{ type: "materialReport", stepId, reason }` and nothing else.
 lesson only (`lessonFocus.ts` `materialReportPayload`):
 - the course, version and step;
 - the block type and pinned version of the block that step draws;
-- a key-order-free sha-256 of the step's `ui_params`, when it has any;
 - the reason.
 
 A step that draws no block, or an unknown reason, gives nothing. The host queues the payload as a classroom-ops
