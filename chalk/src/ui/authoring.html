@@ -443,6 +443,7 @@ function styleCheck(){
   if(role.length>ROLE_MAX||STYLE_UNSAFE.test(role))throw fix($('assistant_role'),'AI 역할은 줄바꿈·보이지 않는 문자 없이 '+ROLE_MAX+'자 이내 한 줄로 적어 주세요.');
   if((role||lessonTone)&&!cleanLine($('assistant_name').value))throw fix($('assistant_name'),'AI 역할이나 말투를 쓰려면 AI 이름도 함께 적어 주세요. 이름 없이는 저장되지 않습니다.');
   for(const [i,e] of starterInputs().entries()){const v=cleanLine(e.value);if(v.length>STARTER_MAX||STYLE_UNSAFE.test(v))throw fix(e,'시작 문장 '+(i+1)+'번은 줄바꿈·보이지 않는 문자 없이 '+STARTER_MAX+'자 이내 한 줄로 적어 주세요.');}
+  for(const [i,e] of starterInputs().entries())if(hasLink(cleanLine(e.value)))throw fix(e,'시작 문장 '+(i+1)+'번에는 링크(https:// 등)를 넣을 수 없습니다.');
   const d=starterDuplicates();if(d.length)throw fix(starterInputs()[d[0]-1],'시작 문장 '+d[0]+'번이 앞의 문장과 같습니다. 하나를 바꾸거나 지운 뒤 저장하세요.');
 }
 const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join(' / '):'없음';
@@ -452,7 +453,9 @@ const startersLine=a=>Array.isArray(a)&&a.length?a.map((x,i)=>(i+1)+'. '+x).join
 // Service without the key, the section hides and sends nothing. A card is saved only when all three fields are filled; empty rows
 // are dropped; the key is omitted when no card is left, so an old lesson keeps its bytes and digest. Cards are plain text: no link.
 const SKILL_DEFAULT={max_count:6,name_max:30,summary_max:80,prompt_max:300,prompt_max_lines:6};
-const SKILL_LINK=/\b(?:https?|javascript|data|file|vbscript|mailto|vscode|command):/i;
+// The Service's hasLink (lesson-skill-cards.ts), the same rule: NFKC first, then any scheme token (a word with a Latin letter
+// directly followed by ':' and a non-space, confusable mixes included), www. or a leading //. Korean prose with a colon passes.
+const hasLink=t=>{const n=String(t??'').normalize('NFKC');if(/(?:^|\s)\/\//u.test(n)||/(?:^|[^\p{L}\p{N}])www\./iu.test(n))return true;for(const m of n.matchAll(/(?:^|[^\p{L}\p{N}+.\-])([\p{L}\p{N}][\p{L}\p{N}\p{M}+.\-]*):(?=\S)/gu))if(/[A-Za-z]/.test(m[1]))return true;return false;};
 const skillServed=()=>!(featureCatalogueScope===identity()&&featureCatalogue&&!(featureCatalogue.skill_cards&&typeof featureCatalogue.skill_cards==='object'));
 const skillLimits=()=>{const s=featureCatalogueScope===identity()&&featureCatalogue?.skill_cards;if(!s||typeof s!=='object')return SKILL_DEFAULT;const out={...SKILL_DEFAULT};for(const k of Object.keys(SKILL_DEFAULT))if(Number.isSafeInteger(s[k])&&s[k]>0)out[k]=s[k];return out;};
 const skillRows=()=>[...document.querySelectorAll('#skill-cards-list>li')];
@@ -488,7 +491,7 @@ function skillCheck(){
     if(sum.length>L.summary_max||STYLE_UNSAFE.test(sum))throw fix(s,'카드 '+no+'번의 한 줄 설명은 줄바꿈·보이지 않는 문자 없이 '+L.summary_max+'자 이내로 적어 주세요.');
     const lines=pr.split('\n');
     if(pr.length>L.prompt_max||lines.length>L.prompt_max_lines||lines.some(x=>x!==x.trim()||STYLE_UNSAFE.test(x)))throw fix(p,'카드 '+no+'번의 시작 프롬프트는 '+L.prompt_max+'자, '+L.prompt_max_lines+'줄 이내로, 줄 앞뒤 공백과 보이지 않는 문자 없이 적어 주세요.');
-    for(const [e,v,label] of [[n,name,'이름'],[s,sum,'한 줄 설명'],[p,pr,'시작 프롬프트']])if(SKILL_LINK.test(v))throw fix(e,'카드 '+no+'번의 '+label+'에는 링크(https:// 등)를 넣을 수 없습니다.');
+    for(const [e,v,label] of [[n,name,'이름'],[s,sum,'한 줄 설명'],[p,pr,'시작 프롬프트']])if(hasLink(v))throw fix(e,'카드 '+no+'번의 '+label+'에는 링크(https:// 등)를 넣을 수 없습니다.');
   }
   const d=skillDuplicates();if(d.length)throw fix(skillRows()[d[0]-1].querySelector('.skill-name'),'카드 '+d[0]+'번의 이름이 앞의 카드와 같습니다. 이름을 바꾼 뒤 저장하세요.');
 }

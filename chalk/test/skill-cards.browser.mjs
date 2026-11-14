@@ -124,6 +124,10 @@ try {
       [card(3, '질문 만들기', '', '프롬프트'), /카드 3번의 한 줄 설명을 적어 주세요/],
       [card(3, '질문 만들기', '설명', '자세한 건 https://example.com 참고'), /카드 3번의 시작 프롬프트에는 링크/],
       [card(3, 'javascript:x', '설명', '프롬프트'), /카드 3번의 이름에는 링크/],
+      [card(3, '질문 만들기', 'ｈｔｔｐｓ://x 참고', '프롬프트'), /카드 3번의 한 줄 설명에는 링크/],
+      [card(3, '질문 만들기', '설명', 'һttps://x 보기'), /카드 3번의 시작 프롬프트에는 링크/],
+      [card(3, '질문 만들기', '설명', 'www.example.com 보기'), /카드 3번의 시작 프롬프트에는 링크/],
+      [card(3, '질문 만들기', '설명', 'hypeproof-studio://open'), /카드 3번의 시작 프롬프트에는 링크/],
       [card(3, '요약 스킬', '설명', '프롬프트'), /카드 3번의 이름이 앞의 카드와 같습니다/],
       [card(3, '줄 많음', '설명', '1\n2\n3\n4\n5\n6\n7'), /6줄 이내/],
       [card(3, '공백 줄', '설명', '첫 줄\n  들여쓴 줄'), /줄 앞뒤 공백/],
@@ -134,6 +138,8 @@ try {
       assert.ok(r.refused, `${width}px: ${re} must block the save`);
       assert.match(r.refused, re, `${width}px: message — got ${r.refused}`);
     }
+    // The same rule as the Service: Korean prose with a colon is not a link.
+    assert.deepEqual(await ev(`return ['시간: 10분','시간:10분','Note: 10','오전 9:30','ftp://x','//x','sms:1'].map(hasLink)`), [false, false, false, false, true, true, true], `${width}px: hasLink matches the Service rule`);
     const dupWarn = await ev(`${card(3, 'ＳＵＭ', '설명', '프롬프트')}${card(2, 'sum', '설명', '프롬프트')}return document.getElementById('skill-cards-warning').textContent`);
     assert.match(dupWarn, /카드 3번이 앞의 카드와 이름이 같습니다/, `${width}px: a duplicate (NFKC, case-insensitive) is warned live`);
     await ev(`${clearCard(2)}${card(3, '질문 만들기', expected[1].summary, expected[1].prompt)}return 0`);
