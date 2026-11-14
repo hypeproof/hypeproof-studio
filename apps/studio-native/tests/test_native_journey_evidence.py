@@ -29,6 +29,7 @@ class JourneyEvidence(unittest.TestCase):
         self.assertEqual(result['physical_device'], {'status': 'NOT_RUN', 'blocks_test_candidate': False})
         self.assertEqual(result['live_authentication'], 'NOT_RUN'); self.assertEqual(result['live_asr'], 'NOT_RUN')
         self.assertTrue(all(item['status'] == 'PASS' for item in result['simulator_journeys']['cases']))
+        self.assertEqual(result['os_speech_playback']['status'], 'PASS')
         self.assertEqual(len(result['simulator_journeys']['evidence']['sha256']), 64)
 
     def test_build_only_old_shell_tests_missing_or_skipped_case_cannot_pass(self):
@@ -42,6 +43,8 @@ class JourneyEvidence(unittest.TestCase):
                 result = self.run_fixture(log=log)
                 self.assertEqual(result['build']['status'], 'PASS')
                 self.assertEqual(result['test_candidate_eligibility'], 'BLOCKED')
+                if "testRealKoreanPlaybackCompletionReachesNextCaptureBoundary" not in log:
+                    self.assertEqual(result['os_speech_playback']['status'], 'NOT_RUN')
 
     def test_prior_seven_journeys_cannot_replace_queued_voice_execution(self):
         queued = 'testVoiceFinishingDuringHistorySyncSendsOnceAndResumesListening'

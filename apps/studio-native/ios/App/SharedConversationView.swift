@@ -44,6 +44,12 @@ private struct ConversationTimelinePreference: PreferenceKey {
 }
 
 struct SharedConversationView: View {
+    private enum SettingsDestination {
+        case context, exportCache, clearCache, notebook, privacy
+#if DEBUG
+        case finishPlayback, advanceHistory, holdHistory, releaseHistory
+#endif
+    }
     @StateObject private var model = SharedConversationModel()
     @StateObject private var voice = VoiceController()
     @Environment(\.scenePhase) private var phase
@@ -60,6 +66,8 @@ struct SharedConversationView: View {
     @State private var showNotebook = false
     @State private var notebookAfterHistory = false
     @State private var showPrivacy = false
+    @State private var showSettings = false
+    @State private var settingsDestination: SettingsDestination?
     @State private var timelineGeneration = UUID()
     @State private var timelineLayout: ConversationTimelineLayout?
     @State private var timelineFollowing = true
@@ -85,23 +93,8 @@ struct SharedConversationView: View {
                     }.accessibilityLabel("대화 기록").accessibilityIdentifier("conversationHistory")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        if model.signedIn {
-                            if model.selected != nil { Button("내 상황과 의도") { voice.stop(); focused = false; showContext = true } }
-                            Button("새로 고침") { model.refresh() }
-                            Button("이 기기의 연동 기록 내보내기") { voice.stop(); focused = false; exportURL = model.exportCache() }
-                            Button("이 기기의 사본 삭제") { voice.stop(); focused = false; clearCache = true }
-                            Button("로그아웃") { voice.stop(); model.logout() }.disabled(model.busy || model.syncing)
-                        }
-                        Button("이 기기의 기록") { voice.stop(); focused = false; showNotebook = true }.accessibilityIdentifier("localNotebook")
-                        Button("대화와 개인정보") { voice.stop(); focused = false; showPrivacy = true }
-#if DEBUG
-                        if NativeJourneyFixture.longHistory {
-                            Button("Simulate remote reply") { NativeJourneyFixture.advanceHistory() }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
-                        }
-#endif
-                        Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
-                        Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
+                    Button {
+                        settingsDestination = nil; focused = false; showSettings = true
                     } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
                         .accessibilityLabel("대화 설정").accessibilityIdentifier("conversationSettings")
                 }
@@ -114,17 +107,17 @@ struct SharedConversationView: View {
         .onDisappear { voice.stop(); model.setVisible(false) }
         .onChange(of: phase) { _, value in
             model.setVisible(value == .active)
-            if value == .background { voice.stop() }
-            else if value == .inactive, voice.turn.phase != .authorizing { voice.stop() }
+            if value == .background { voice.stop(reason: .background) }
+            else if value == .inactive, voice.turn.phase != .authorizing { voice.stop(reason: .background) }
             else if value == .active { voice.resumeIfActive() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { _ in voice.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { _ in voice.stop(reason: .interrupted) }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: RunLoop.main)) { notification in
             if let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-               reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop() }
+               reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { voice.stop(reason: .routeChanged) }
         }
-        .onChange(of: model.selected) { _, _ in voice.stop() }
-        .onChange(of: model.signedIn) { _, _ in voice.stop() }
+        .onChange(of: model.selected) { _, _ in voice.stop(reason: .scopeChanged) }
+        .onChange(of: model.signedIn) { _, _ in voice.stop(reason: .scopeChanged) }
         .onChange(of: model.cache.request) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.busy) { _, _ in reconcileVoiceReply() }
         .onChange(of: model.syncing) { _, syncing in if !syncing { reconcileVoiceReply() } }
@@ -140,6 +133,7 @@ struct SharedConversationView: View {
 #if DEBUG
         .overlay(alignment: .topLeading) { journeyDiagnostics }
 #endif
+        .sheet(isPresented: $showSettings, onDismiss: finishSettingsDismissal) { settingsSheet }
         .sheet(isPresented: $showContext) { contextSheet }
         .sheet(isPresented: $showHistory, onDismiss: {
             if notebookAfterHistory { notebookAfterHistory = false; showNotebook = true }
@@ -161,6 +155,98 @@ struct SharedConversationView: View {
         .confirmationDialog("이 iPhone의 사본만 삭제할까요?", isPresented: $clearCache, titleVisibility: .visible) {
             Button("이 기기의 사본 삭제", role: .destructive) { voice.stop(); model.clearCache() }
         } message: { Text("서버의 계정 대화와 데스크톱의 기록은 남아요. 서버 기록은 계정의 데이터 관리 대상입니다.") }
+    }
+    private var settingsSheet: some View {
+        NavigationStack {
+            List {
+                if model.signedIn {
+                    Section {
+                        if model.selected != nil {
+                            settingsButton("내 상황과 의도") { leaveSettings(for: .context) }.disabled(model.loggingOut)
+                        }
+                        settingsButton("새로 고침") { showSettings = false; model.refresh() }
+                        settingsButton("이 기기의 연동 기록 내보내기") { leaveSettings(for: .exportCache) }
+                        settingsButton("이 기기의 사본 삭제") { leaveSettings(for: .clearCache) }
+                        settingsButton("로그아웃") {
+                            // Capture this explicit intent now, even while the
+                            // sheet dismisses or the current history read ends.
+                            showSettings = false; voice.stop(); voiceRequestID = nil; model.logout()
+                        }.disabled(!model.canLogout)
+                    }
+                }
+                Section {
+                    settingsButton("이 기기의 기록") { leaveSettings(for: .notebook) }.accessibilityIdentifier("localNotebook")
+                    settingsButton("대화와 개인정보") { leaveSettings(for: .privacy) }
+                }
+#if DEBUG
+                if NativeJourneyFixture.heldPlayback {
+                    settingsButton("Deliver playback completion") { leaveSettings(for: .finishPlayback) }.accessibilityIdentifier("nativePlaybackFinish")
+                }
+                if NativeJourneyFixture.longHistory {
+                    settingsButton("Simulate remote reply") { leaveSettings(for: .advanceHistory) }.accessibilityIdentifier("nativeJourneyAdvanceHistory")
+                }
+                if NativeJourneyFixture.logoutSync {
+                    settingsButton("Hold next history read") { leaveSettings(for: .holdHistory) }.accessibilityIdentifier("nativeJourneyHoldHistory")
+                    settingsButton("Finish held history read") { leaveSettings(for: .releaseHistory) }.accessibilityIdentifier("nativeJourneyReleaseHistory")
+                }
+#endif
+                Section("음성") {
+                    Toggle("음성 대화의 답변 읽기", isOn: $speakAnswers)
+                    Toggle("내 목소리 다시 듣기", isOn: $reviewRecording)
+                    if !voice.timeline.entries.isEmpty {
+                        ShareLink(item: voice.timeline.export) { Label("음성 문제 확인 기록 공유", systemImage: "square.and.arrow.up") }
+                    }
+                }
+            }
+            .environment(\.defaultMinListRowHeight, 44)
+            .navigationTitle("대화 설정").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if model.syncing {
+                        ProgressView().accessibilityLabel("대화 확인 중").accessibilityIdentifier("settingsSyncing")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("닫기") { showSettings = false }.accessibilityIdentifier("closeConversationSettings")
+                }
+            }
+        }.presentationDetents([.large]).presentationDragIndicator(.visible)
+    }
+    private func settingsButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+        }.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+    }
+    private func leaveSettings(for destination: SettingsDestination) {
+        switch destination {
+        case .context, .exportCache, .clearCache, .notebook, .privacy: voice.stop(); focused = false
+#if DEBUG
+        case .finishPlayback, .advanceHistory, .holdHistory, .releaseHistory: break
+#endif
+        }
+        settingsDestination = destination; showSettings = false
+    }
+    private func finishSettingsDismissal() {
+        // Dismiss the first presentation before opening another one. Consume
+        // the destination first; swipe/Close without a choice has no effect.
+        guard let destination = settingsDestination else { return }
+        settingsDestination = nil
+        switch destination {
+        case .context:
+            if model.signedIn && model.selected != nil && !model.loggingOut { showContext = true }
+        case .exportCache:
+            if model.signedIn && !model.loggingOut { exportURL = model.exportCache() }
+        case .clearCache:
+            if model.signedIn && !model.loggingOut { clearCache = true }
+        case .notebook: showNotebook = true
+        case .privacy: showPrivacy = true
+#if DEBUG
+        case .finishPlayback: voice.finishFixturePlayback()
+        case .advanceHistory: NativeJourneyFixture.advanceHistory()
+        case .holdHistory: NativeJourneyFixture.holdNextHistory(); model.refresh()
+        case .releaseHistory: NativeJourneyFixture.releaseHistory()
+#endif
+        }
     }
     private var welcome: some View {
         ScrollView {
@@ -365,7 +451,7 @@ struct SharedConversationView: View {
                     .accessibilityLabel("메시지")
                 HStack(spacing: 4) {
                     if voice.isActive {
-                        Label(voice.isCapturing ? "듣고 있어요" : "대화 중", systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
+                        Label(voice.activityLabel, systemImage: voice.isCapturing ? "waveform" : "speaker.wave.2").font(.callout)
                         Spacer()
                         Button("멈춤") { voice.stop() }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("음성 멈춤").accessibilityIdentifier("sharedVoiceStop")
                     } else {
@@ -409,7 +495,7 @@ struct SharedConversationView: View {
                     }.buttonStyle(.plain).accessibilityIdentifier("conversationPrivacy")
                 }
             }
-            if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary) }
+            if !voice.status.isEmpty { Text(voice.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedVoiceStatus") }
             if reviewRecording { Text("원음은 최대 30초만 메모리에 담아요. 파일이나 서버에 저장하지 않으며 화면을 나가거나 다음 녹음을 시작하면 지워요.").font(.caption2).foregroundStyle(.secondary) }
             if voice.canReplayOwnVoice {
                 HStack {
@@ -445,6 +531,7 @@ struct SharedConversationView: View {
         }
     }
     @ViewBuilder private var status: some View {
+        if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
         if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
@@ -456,7 +543,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in
@@ -465,9 +552,13 @@ struct SharedConversationView: View {
                 } else {
                     journeyDiagnostic("nativeJourneyTrace", label: "Native journey trace", value: NativeJourneyFixture.trace)
                 }
+                journeyDiagnostic("nativeVoiceTimeline", label: "Voice transition trace", value: voice.timeline.export)
                 journeyDiagnostic("nativeJourneyAppearance", label: "Native journey appearance", value: colorScheme == .dark ? "dark" : "light")
                 if NativeJourneyFixture.longHistory {
                     journeyDiagnostic("nativeJourneyLoadedRevision", label: "Applied history revision", value: String(model.cache.cursor))
+                }
+                if NativeJourneyFixture.logoutSync {
+                    journeyDiagnostic("nativeJourneyPendingRequestID", label: "Retained request identity", value: model.cache.request?.id ?? "")
                 }
             }
         }
@@ -491,7 +582,15 @@ struct SharedConversationView: View {
         let id = selection ?? "local-first-thought"
         focused = false; voiceRequestID = nil; voiceCompletionWaitStarted = nil; let prefix = model.draftText
         voice.start(projectID: id, mode: mode, reviewRecording: reviewRecording, nextTurn: {
-            guard phase == .active, model.selected == selection, model.signedIn == signedIn, model.canSend, model.draftText.isEmpty else { voice.stop(); return }
+            guard phase == .active else { voice.stop(reason: .background); return }
+            guard model.selected == selection, model.signedIn == signedIn else { voice.stop(reason: .scopeChanged); return }
+            guard model.draftText.isEmpty else {
+                voice.record(.draftPresent); voice.fail("입력 중인 글을 남겨 두었어요. 먼저 보내거나 정리한 뒤 음성 대화를 다시 시작해 주세요."); return
+            }
+            guard model.canSend else {
+                voice.record(model.cache.request?.outstanding == true ? .requestOutstanding : .notReady)
+                voice.fail("다음 말을 받을 준비가 되지 않았어요. 대화 상태를 확인한 뒤 음성 대화를 다시 시작해 주세요."); return
+            }
             beginVoice(.conversation)
         }, transcript: { text in
             guard model.selected == selection, model.signedIn == signedIn else { return }
