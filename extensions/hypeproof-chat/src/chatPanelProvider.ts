@@ -45,6 +45,7 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
+import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
 import { setLocalStallTimeoutProvider } from './localRuntime/stallWatch';
@@ -291,7 +292,7 @@ import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostW
 import { previewReviewBar, type TurnReviewView } from "./turnReviewView";
 import type { PreviewReviewAction } from "./previewProvider";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, readPageInFolder, recheckFileInFolder, recordedRoot, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
@@ -2798,6 +2799,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * unless every slide was captured and deck.html is byte-identical before and after.
    */
   private deckPdfBusy = false;
+  /** CGP-ART-R-023 — the last saved deck PDF (memory only): the served root it was written in and its path there. */
+  private deckPdfSaved: { taskKey: string; root: string; rel: string } | null = null;
+  /** Test seam: the OS reveal. */
+  deckPdfRevealInOS: (abs: string) => Promise<unknown> = async (abs) => vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs));
+  /**
+   * 폴더에서 보기 on the saved notice. The file is walked again under the served root with the page card's checks (every
+   * segment lstat-checked, no link, a regular file, inside the root, the same inode twice) right before the OS call; any
+   * other task, a missing record or a failed walk is a refusal line and no OS call.
+   */
+  async deckPdfReveal(): Promise<void> {
+    const saved = this.deckPdfSaved;
+    if (!saved || saved.taskKey !== this.turnRestoreTaskKey()) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    // saved.root was stored canonical: a root swapped for a link since then is refused (exactRoot), never followed.
+    const checked = recheckFileInFolder(saved.root, saved.rel, { exactRoot: true });
+    if (!checked.ok) { this.postPageNotice(DECK_PDF_COPY.revealGone); return; }
+    try { await this.deckPdfRevealInOS(checked.abs); } catch { /* the press passed the gate; a failed OS call adds no claim */ }
+  }
   /** Test seam: the CDP channel to a tab. Production attaches a CdpSession. */
   deckPdfAttach: (tab: vscode.BrowserTab) => Promise<{ send: CdpSend; close(): Promise<void> }> = async (tab) => {
     const session = await CdpSession.attach(tab);
@@ -2865,7 +2883,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
-      this.postPageNotice(DECK_PDF_COPY.saved(path.relative(workRoot, target).split(path.sep).join("/"), result.pages));
+      // CGP-ART-R-023 (REQ-ART-23 (2)) — 폴더에서 보기 on the result: the file as written, inside the served root.
+      const shown = path.relative(workRoot, target).split(path.sep).join("/");
+      // The reveal walks with exactRoot, so the root is recorded in canonicalFolder's form, and the file's path is taken
+      // relative to that same form (the deck was resolved under it). A root that cannot be resolved now still keeps the
+      // saved file and its notice, without the action; the log says so, without paths.
+      let saved: { taskKey: string; root: string; rel: string } | null = null;
+      try { const rec = recordedRoot(root); saved = { taskKey: this.turnRestoreTaskKey(), root: rec, rel: path.relative(rec, target).split(path.sep).join("/") }; }
+      catch { this.logChannel?.appendLine("[deck-pdf] served root could not be resolved; 폴더에서 보기 not offered"); }
+      this.deckPdfSaved = saved;
+      this.postPageNotice(DECK_PDF_COPY.saved(shown, result.pages), undefined, saved ? { kind: "deckPdfReveal", label: DECK_PDF_COPY.reveal, name: shown } : undefined);
     } catch {
       this.postPageNotice(DECK_PDF_COPY.notLoaded);
     } finally {
@@ -4520,7 +4547,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pendingPageAttachment) return;
     this.pendingPageContext = null;
     this.pendingPageImage = null;
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     void this.post({ type: "pageAttached", label: "" });
     this.dropPageAttachment();
   }
@@ -4583,11 +4610,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * be recreated later (WebviewView has no retainContextWhenHidden). Posting
    * is idempotent: the webview reducer replaces pageNotice, never appends.
    */
-  postPageNotice(label: string, source?: import("./denialSource").DenialSource): void {
+  postPageNotice(label: string, source?: import("./denialSource").DenialSource, action?: import("./protocol").PageNoticeAction): void {
     if (source) { void this.postDenialNotice(source); return; }
     this.pendingPageNotice = label;
-    void this.post({ type: "pageAttached", label });
+    this.pendingPageNoticeAction = action;
+    void this.post(action ? { type: "pageAttached", label, action } : { type: "pageAttached", label });
   }
+  private pendingPageNoticeAction: import("./protocol").PageNoticeAction | undefined;
 
   private denialWrites?: Promise<void>;
 
@@ -8043,7 +8072,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
         const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
         const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
-        if (card && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
+        // The gate walks with exactRoot, so the card's root is recorded in canonicalFolder's form (#4066 round 2: the turn
+        // root is JS realpath, which keeps a Windows `c:` and the opened case). A root that cannot be resolved makes no card.
+        let cardRoot: string | null = null;
+        try { cardRoot = recordedRoot(handle.root); } catch { this.logChannel?.appendLine("[page-card] turn root could not be resolved; no card"); }
+        if (card && cardRoot && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, cardRoot, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,
@@ -8258,8 +8291,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let local: LocalRuntimeConfig | null = null;
     try { local = (localRuntimeConfig(vscode.env.appName, s.proxyUrl) ?? instructorLocalRuntime(s.isInstructor, this.releaseRuntime)); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
-    // Same choices as the legacy panel (instructorModelChoices); only with a local runner (#3564).
-    const models = contractModels(local ? localModelSelection(local) : null);
+    // chalk#25: the contract list is the allowlist (instructorModelChoices). The legacy panel keeps localModelSelection.
+    const models = local ? contractModels(instructorModelChoices(local)) : undefined;
     const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection, models };
     this.contractSync = this.contractSync
       .then(async () => { this.contractView = await syncInstructorSession(host, this.contractView, want); })
@@ -8284,11 +8317,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     return {
       available: () => local() !== null,
-      executorModel: () => local()?.model,
+      executorModel: (requested) => {
+        const l = local();
+        return l ? executorModelFor(l, requested) : undefined;
+      },
       run: async (input) => {
         // #3608 — a Chalk turn re-checks a gate closed for no CLI or a failed login, so a CLI installed since then is used.
         if (!!this.contractView.token && shouldRecheckRelease(this.releaseGateReason)) await refreshReleaseGate(this as unknown as ReleaseGateHost, this.releaseGateInputs.isInstructor, this.releaseGateInputs.panelMode, true);
-        return this.runContractTurn(input, local());
+        // chalk#25: the turn runs on the requested model only when it is in the allowlist (withTurnModel).
+        const l = local();
+        return this.runContractTurn(input, l ? withTurnModel(l, input.model) : null);
       },
       previewOpen: (webPath) => this.contractPreviewOpen(webPath),
     };
@@ -8718,6 +8756,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
+      case "deckPdfReveal": await this.deckPdfReveal(); return;
       case "pageCardOpen":
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
@@ -8798,7 +8837,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // for WebviewView → React state reset). Re-posting is idempotent: the
         // reducer replaces pageNotice rather than appending.
         if (this.pendingPageNotice) {
-          void this.post({ type: "pageAttached", label: this.pendingPageNotice });
+          const action = this.pendingPageNoticeAction;
+          void this.post(action ? { type: "pageAttached", label: this.pendingPageNotice, action } : { type: "pageAttached", label: this.pendingPageNotice });
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
         this.postAnnotations();
@@ -9694,7 +9734,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
-    this.pendingPageNotice = null;
+    this.pendingPageNotice = null; this.pendingPageNoticeAction = undefined;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     this.finishAnnotationSend(annotations);
     // CGP-ART-R-006 — the preview was only for choosing; it leaves the page as the request goes.

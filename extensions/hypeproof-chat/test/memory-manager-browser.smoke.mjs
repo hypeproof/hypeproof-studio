@@ -46,7 +46,7 @@ try {
   for (const [dark, width, forcedColors] of [[true, 1420, false], [false, 1420, false], [true, 800, false], [false, 800, false], [true, 320, false], [false, 320, false], [true, 800, true], [false, 1420, true]]) {
     const tag = `${width}-${dark ? 'dark' : 'light'}${forcedColors ? '-forced' : ''}`;
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await b.load(page(dark, ` style="${vars}"`), { width, height: 900, dark, forcedColors });
+    await b.load(page(dark, ` style="${vars}"`), { width, height: 900, dark, forcedColors, appReady: true });
     await send({ type: 'config', config });
     await send({ type: 'history', messages: [] });
     await openMemory(width);
@@ -124,7 +124,7 @@ try {
   }
   assert.equal(runs, 8);
   // A classroom seat has no task workspace: no drawer, no list and no 모두 지우기.
-  await b.load(page(true), { width: 1420, height: 800, dark: true });
+  await b.load(page(true), { width: 1420, height: 800, dark: true, appReady: true });
   await send({ type: 'config', config: chatConfig(3) }); await send({ type: 'history', messages: [] }); await settle(150);
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-shell') && !document.querySelector('.tw-works-open') && !document.querySelector('[data-testid=activity-memory]')`), true, 'classroom seat: no memory view');
   console.log('PASS memory manager: classroom seat has none');

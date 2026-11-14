@@ -95,6 +95,7 @@ import { LessonStepPanel } from './LessonStepPanel';
 import { GoalStatusBar } from './GoalStatusBar';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { collapseSeat } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
@@ -171,6 +172,7 @@ interface Props {
    * — that was what split the screen into two blocks.
    */
   messages: ChatMessage[];
+  pageNoticeAction?: import("../../src/protocol").PageNoticeAction; // CGP-ART-R-023 — e.g. the deck PDF's 폴더에서 보기
   pageNotice: string | null;           // #308 — inline notice for "페이지를 코치에게"
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
   annotationsEnabled?: boolean;
@@ -1991,6 +1993,7 @@ export function ChatPanel(props: Props) {
               <p className="hp-rail-lesson-note">안내를 읽은 것만으로 이 단계가 끝나지는 않습니다. 직접 만들고 확인한 기록이 남아야 합니다.</p>
             </details>
             <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
+              seat={collapseSeat({ activityId: config.profile?.activity_id, entryId: config.lessonCapabilityEntry?.id, localActivityId: config.activity?.id })}
               work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
@@ -2201,6 +2204,15 @@ export function ChatPanel(props: Props) {
           <div className="hps-page-notice" role="status" aria-live="polite">
             {/* REQ-STUDIO-STROKE-ICONS: the host's leading glyph becomes a stroke icon. */}
             {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
+          </div>
+        )}
+        {/* CGP-ART-R-023 (REQ-ART-23 (2)) — the notice's one quiet action, outside its polite region so the region reads only the
+            sentence. The host decides which file it shows and checks it again before the OS call. */}
+        {props.pageNotice && props.pageNoticeAction?.kind === "deckPdfReveal" && (
+          <div className="hps-page-notice-actions">
+            <button type="button" className="hp-cta-quiet" data-page-notice-action="deckPdfReveal"
+              aria-label={`${props.pageNoticeAction.label}: ${props.pageNoticeAction.name}`}
+              onClick={() => postToHost({ type: "deckPdfReveal" })}>{props.pageNoticeAction.label}</button>
           </div>
         )}
 

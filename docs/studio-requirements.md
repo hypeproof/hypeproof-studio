@@ -3137,6 +3137,8 @@ PR — 이 도메인은 "각 PC 에 빠짐없이, 깨지지 않게 쌓인다"까
 | REQ-STUDIO-LOCAL-TURN-BUDGET | A local turn's 180 s budget counts only active model time. Time spent waiting for a person (an approval, the overwrite confirmation, an email question) does not count, and a turn that ends while the person is answering denies that answer, so a late approval or confirmation never runs the write. | Fake-clock checks: a 200 s wait does not stop the turn; 180 s of active time after the answer does; a late approval or pick after the turn ended is denied and the file is unchanged. Email wait behaviour unchanged. The Chalk-side wait for a tool result is not counted here (see the PR). | Unit (`test/human-wait.smoke.mjs`, `test/local-email-runtime.smoke.mjs`); agent Dev run (👁) pending |
 | REQ-STUDIO-LOCAL-BROWSER-OPEN | On the instructor local runner (legacy turn and Chalk contract turn) `browser_open` follows the student rule (REQ-M20/M28): an outside address is asked once through the turn's approval gate and not opened if refused; loopback (127.0.0.1, localhost, [::1]) and an address already open are not asked; `live_preview_start` is not asked; a policy-denied address is not opened. The judgement is `evaluateSdkToolUse`; remembered origins are the host's. 0.0.0.0 stays asked (known, unchanged). | `test/local-browser-open-approval.smoke.mjs` (loopback allow, outside ask/refuse, already open, live preview, deny, origin memory, budget during the wait, late answer denied); agent Dev run (👁) pending | Unit (`test/local-browser-open-approval.smoke.mjs`); wiring by source (`src/chatPanelProvider.ts`) |
 | REQ-STUDIO-INSTRUCTOR-SUBSCRIPTION | On the release app, an instructor can run the instructor turn with their own Claude or Codex CLI subscription. The gate opens only when the server verifies instructor mode (whoami), the setting `hypeproofChat.instructorSubscription` is on (default off, machine scope), the seat is the instructor's own panel (not a student slot), the seat is not a rehearsal, and a CLI is found at an absolute path and its status command succeeds. A learner never gets it. Credentials are never read, stored or logged: only the status command's exit status is used, and the CLI child environment drops vendor keys, `HPS_*` values and token-shaped names. The Dev-only runner (`HPS_DEV_RUNTIME`) stays closed on the release app name. | `test/release-instructor-runner.smoke.mjs` (open on the release name with instructor and setting on; closed for learner, student slot, setting off, rehearsal, no CLI, relative path, login failure; Dev env ignored on the release name; no credential file read; env allowlist); release-build check by JY (NOT RUN here) | Unit (`test/release-instructor-runner.smoke.mjs`); agent Dev run (👁) pending |
+| REQ-STUDIO-CHALK-MODEL-ALLOWLIST | On the instructor local runner, the model an instructor picks in Chalk runs the Chalk contract turn only when it is in the provider allowlist (claude `sonnet`, `opus`; codex has no extra model, only the configured one; the configured model is always included). The list is sent only through `activateInstructor.models`. A requested model outside the list, or none, runs the default and is reported as `executorModel`; the turn is not refused, and Chalk shows a notice when the two differ. The legacy panel's single-choice model list is unchanged. The proxy path's model selection is unchanged. CLI `--model` receives the executed value (chalk#25). | `test/chalk-instructor-model.smoke.mjs` (allowlist shape; positive: `opus` reaches the CLI `--model` argument; negative: `fable`, `haiku`, arbitrary text keep the default in both the pure check and the CLI argument; legacy choice count and source guard) | Unit (`test/chalk-instructor-model.smoke.mjs`); Dev run with the claude CLI on `opus` pending (agent, Dev) |
+
 | REQ-STUDIO-CHALK-RUNTIME-SWITCH | Changing `hypeproofChat.instructorRuntime` takes effect without a reload. Leaving `chalk-extension` ends the active Chalk session once (`deactivateInstructor` with `reason: "runtimeChanged"`); with no session nothing is sent. Returning to `chalk-extension` activates again with a new nonce. | After the switch to legacy, a turn with the old nonce is refused `noSession`; the switch runs from the configuration event alone, and the session ends before the refresh, so a failing refresh (profile or whoami) cannot keep it alive and the chat view need not be resolved. Chalk-side screen text: hypeproof/hypeproof-chalk#38, checked in an agent Dev run (👁). | Unit (`test/chalk-contract.smoke.mjs`, runtime switch checks incl. a rejecting refresh, via `applyInstructorRuntimeSetting`); wiring by source (`src/extension.ts` listener); Dev run pending |
 
 REQ-A8 fixture isolation: both the environment flag and the existing user-data test-state file keep an explicitly opened practice folder. The activation verdict is shared with spool suppression and passed through onboarding and token changes (#713). Normal cohort switching remains unchanged.
@@ -7933,9 +7935,28 @@ skill's menu) saves the deck skill's `deck.html` as `deck.pdf` in the same folde
 - **Progress.** The first in-chat notice ("덱을 PDF로 저장하고 있어요 (0 / N장)") is posted before
   anything is awaited (DES-ART-23: within 300 ms), then one per slide, then "덱을 PDF로 저장했어요:
   <path> (N장, 발표자 노트 없이)". One export at a time; a second press while one runs is refused.
-- **Folder.** REQ-ART-23 (2), **폴더에서 보기** from the result card, is the page card's action
-  (REQ-STUDIO-PAGE-CARD): for the learner's page in the served root it reveals that root with the page
-  selected; a nested page reveals its own folder inside the root (kept from CGP-ART-R-010).
+- **Folder.** REQ-ART-23 (2), **폴더에서 보기** from the result (2026-11-14, the #4057 §7.2 gap).
+  - The saved notice carries one quiet 44px button, "폴더에서 보기" (accessible name "폴더에서 보기: <path>").
+    It sits under the notice, outside its polite region.
+  - A press posts `deckPdfReveal` with no path. The host keeps the last export in memory only: the task,
+    the canonical served root it was written in, and `deck.pdf` relative to that root.
+  - Right before the OS call, the host walks that path again under the served root with the page card's
+    checks: every segment lstat-checked, no link, a regular file, inside the root, the same inode on two
+    walks (`resolveFileInFolder` / `recheckFileInFolder`, the page card's walk). Only then does it call
+    `revealFileInOS`, which shows `deck.pdf` selected in its folder.
+  - Refusals ("저장한 PDF를 찾지 못했어요. 다시 PDF로 저장해 주세요.") make no OS call. They cover: another
+    task, nothing exported yet, the file deleted, replaced by a link, a linked folder on its path, a
+    climbing or rooted path, or swapped between the two walks. They also cover the served root itself
+    replaced by a link after the save: the walk runs with `exactRoot`, and a recorded root that no longer
+    canonicalizes to itself is refused. Nothing outside the served root is ever revealed. The page card's
+    open, reload and reveal walk the same way, from the canonical turn root.
+  - The page card's own 폴더에서 보기 is unchanged: for the learner's page in the served root it reveals that
+    root with the page selected, and a nested page reveals its own folder inside the root
+    (CGP-ART-R-010).
+  - Evidence: `test/deck-pdf-host.test.mjs` (the real export's notice and press, and every refusal) and
+    `test/page-card.smoke.mjs` (the shared walk for a non-page file, including the seam swaps).
+    `test/page-notice-action-browser.smoke.mjs` covers the button: 44px, 14px, name, focus ring, outside
+    the live region, and a press posting only `deckPdfReveal`.
 
 Tests: `test/deck-pdf.smoke.mjs` (PDF structure; the real `renderDeck` deck in headless Chromium with
 the notes painted red over every slide and the switch on: three pages at 1280x720 and no red pixel on
@@ -8760,7 +8781,13 @@ moves to that button. While collapsed, the card body stays mounted and hidden (t
 polite state line is not drawn. 다시 보기 restores the card open, the state it was collapsed from (also after a re-mount, which forgets open/closed), and focus moves to the menu button.
 
 The collapsed set belongs to the learner's own view. It is keyed by lesson version and step, like open/closed, and kept in the
-webview's own state, so it survives a hide/show re-mount in the session. It is bounded to 50, and a new lesson version starts
+webview's own state, so it survives a hide/show re-mount in the session. It is stored with its seat. The seat is the Service seat
+id (`activity_id`); without one, the lesson capability receipt id; without that, the local activity id. A seat sees only its
+own set. Classroom PCs are shared, so when another learner's seat appears on the same window, the previous learner's set is
+cleared from the webview state, not only hidden. A window with no seat (a local/dev runtime, or an instructor profile without
+a Service seat id) would make every such window share one set, so its set is kept in memory only and never stored. Switching
+to it clears what another seat stored. A seat switch sends the host nothing that a same-seat re-mount does not, and fetches
+nothing. It is bounded to 50, and a new lesson version starts
 with every block shown. It is never sent to the host, so it is not work, not a report and not an observation event. Seats:
 every seat that draws the lesson rail. Default: on. Display only, with no new data flow and no new learner text field.
 
@@ -8772,7 +8799,10 @@ Evidence:
   - names, 44px, 14px, focus ring, and no sideways scroll;
   - the collapsed row and where focus goes;
   - no host message and no fetch;
-  - the state survives a re-mount;
+  - the state survives a re-mount for the same learner;
+  - a second learner on the same window sees every block, and the first learner's set is cleared;
+  - host traffic across a seat switch equals a same-seat re-mount's, with no fetch (post-on-seat and fetch-on-seat mutants fail);
+  - with no seat, the block collapses in view, nothing is stored, a re-mount shows it again, and the previous seat's set is cleared;
   - another step and a new lesson version are shown;
   - the card is restored open, and closing it closes its menu and leaves one row of 72px or less.
 - `test/lesson-focus.smoke.mjs` covers the pure collapsed set: per key, restorable, bounded, and malformed state dropped.
