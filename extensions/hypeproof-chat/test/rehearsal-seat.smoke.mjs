@@ -15,6 +15,7 @@ import {
   forgetIssuer,
   hasReturnIssuer,
   storeIssuerUnlessHeld,
+  storeDevSeed,
   rehearsalSeatActiveFor,
   leaveWithoutReport,
   leaveAfterReport,
@@ -353,6 +354,30 @@ await t("the approved leave and band sentences match exactly", () => {
   assert.equal(LEAVE_AFTER_TEXT, LEAVE_AFTER);
   assert.equal(REHEARSAL_BAND_TEXT, "리허설 중");
   assert.equal(REHEARSAL_BAND_BUTTON, "끝내고 돌아가기");
+});
+
+// ── Dev seeds must not overwrite a held rehearsal seat (#4052 Dev check) ──
+await t("dev seed with a held return: the issuer seed and the student-token seed are not stored", async () => {
+  const store = new Map([[REHEARSAL_RETURN_KEY, ISSUER]]);
+  const secrets = { get: async (k) => store.get(k), store: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } };
+  assert.equal(await storeDevSeed(secrets, ISSUER_TOKEN_KEY, "synthetic-dev-issuer-value-0000"), false);
+  assert.equal(await storeDevSeed(secrets, "hypeproofChat.workshopToken", "synthetic-dev-student-value-0000"), false);
+  assert.equal(store.get(ISSUER_TOKEN_KEY), undefined, "the issuer key stays empty");
+  assert.equal(store.get("hypeproofChat.workshopToken"), undefined, "no student token is bound");
+});
+
+await t("dev seed control: without a held return both seeds are stored as before", async () => {
+  const store = new Map();
+  const secrets = { get: async (k) => store.get(k), store: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } };
+  assert.equal(await storeDevSeed(secrets, ISSUER_TOKEN_KEY, "synthetic-dev-issuer-value-0000"), true);
+  assert.equal(await storeDevSeed(secrets, "hypeproofChat.workshopToken", "synthetic-dev-student-value-0000"), true);
+  assert.equal(store.get(ISSUER_TOKEN_KEY), "synthetic-dev-issuer-value-0000");
+});
+
+await t("static: both Dev seed sites in extension.ts go through storeDevSeed", () => {
+  const ext = readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
+  assert.match(ext, /storeDevSeed\(context\.secrets, ISSUER_TOKEN_KEY, t\)/, "issuer seed");
+  assert.match(ext, /storeDevSeed\(context\.secrets, TOKEN_KEY, token\)/, "student-token seed");
 });
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }

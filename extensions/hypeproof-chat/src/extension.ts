@@ -52,7 +52,7 @@ import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import {
   RESUME_CONTINUE, RESUME_QUESTION, RESUME_RETURN, RETURN_FAILED,
   enterRehearsal, endRehearsal, forgetIssuer, hasReturnIssuer, offerResume, resumeOnActivation, storeIssuerUnlessHeld,
-  leaveWithoutReport, leaveAfterReport, type LeaveAsk,
+  leaveWithoutReport, leaveAfterReport, storeDevSeed, type LeaveAsk,
   type SeatHost,
 } from "./rehearsalSeat";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -1505,7 +1505,8 @@ async function applyTestBackdoors(
 
   if (token && token.length > 0) {
     try {
-      await context.secrets.store(TOKEN_KEY, token);
+      // #4052 — a Dev seed never overwrites a held rehearsal seat.
+      await storeDevSeed(context.secrets, TOKEN_KEY, token);
     } catch {
       // A stale development seed must not prevent command registration or
       // the normal participation screen from opening. Never log the token.
@@ -1561,7 +1562,7 @@ async function applyTestBackdoors(
         if (fs.existsSync(devIssuerTokenFile)) {
           const t = fs.readFileSync(devIssuerTokenFile, "utf8").trim();
           if (t.length > 20) {
-            await context.secrets.store(ISSUER_TOKEN_KEY, t);
+            await storeDevSeed(context.secrets, ISSUER_TOKEN_KEY, t);
           }
         }
       } catch { /* ignore — best effort */ }

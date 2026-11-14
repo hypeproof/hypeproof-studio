@@ -184,6 +184,13 @@ export async function forgetIssuer(h: SeatHost): Promise<void> {
   await h.secrets.delete(REHEARSAL_SEAT_KEY);
 }
 
+/** A Dev seed (issuer or student token) is stored only when no rehearsal return is held (#4052 Dev check). */
+export async function storeDevSeed(secrets: SeatSecrets, key: string, value: string): Promise<boolean> {
+  if (await returnHeld(secrets)) return false;
+  await secrets.store(key, value);
+  return true;
+}
+
 /** A return is held: the instructor credential sits aside, so no new credential may take its slot. */
 export async function returnHeld(secrets: SeatSecrets): Promise<boolean> {
   return !!(await secrets.get(REHEARSAL_RETURN_KEY));
