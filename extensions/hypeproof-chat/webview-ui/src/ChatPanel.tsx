@@ -2211,7 +2211,8 @@ export function ChatPanel(props: Props) {
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
-          {!props.instructor && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
+          {/* Compact classroom layout: the changed-page card is not drawn at all. */}
+          {!props.instructor && !compactLayout && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
             const card = pageCards.get(m.id)!;
             return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
           }}</PanelBoundary>}
@@ -2320,12 +2321,13 @@ export function ChatPanel(props: Props) {
         )}
 
         {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
-        <PanelBoundary panel="task-activity"><TaskActivity
+        {/* Compact classroom layout: the "AI가 한 일" panel is not drawn at all. */}
+        {!compactLayout && <PanelBoundary panel="task-activity"><TaskActivity
           summary={taskActivity}
           reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
           onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
           onSavePdf={(path) => postToHost({ type: "savePagePdf", path })}
-        /></PanelBoundary>
+        /></PanelBoundary>}
 
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
@@ -2431,7 +2433,8 @@ export function ChatPanel(props: Props) {
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
         {!personalWorkspace && <ConversationSettings compact={automationCompact} required={requiresFundingSelection(config)} questionId={props.questionId} usage={footerUsagePanel}>
-          <ModelControl config={config} streaming={streaming} compact={compactLayout} />
+          {/* Compact classroom layout: the model control (select and its note) is not drawn at all. */}
+          {!compactLayout && <ModelControl config={config} streaming={streaming} />}
           <EffortControl config={config} post={postToHost} />
           {footerUsagePanel && <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={automationCompact} />}</ConversationSettings>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
