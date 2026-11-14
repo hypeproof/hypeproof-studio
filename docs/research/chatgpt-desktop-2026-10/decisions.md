@@ -2286,6 +2286,7 @@ Confirmed by Jay: no. These are agent choices within the design row, and the coo
   - The body stays mounted and hidden, so the rehearsal read-back is unchanged.
   - The polite state line is not drawn, so a block the learner put away is not announced.
   - Restoring gives back the open card, which is the state it was collapsed from.
+- **Seat (coordinator follow-up, 2026-11-14; key order is an agent choice).** Classroom PCs are shared, so the set is stored with its seat as `{ seat, keys }`. The seat is the Service `activity_id`, else the lesson capability receipt id, else the local activity id. A different seat sees nothing, and on its first render it replaces the stored set, so the previous learner's set is cleared rather than hidden. #4023's bare-array state is dropped.
 - **Persistence (agent choice).** Collapse state lives in the webview's own state (`patchWebviewState`), keyed by lesson version and step, bounded to 50. It survives a hide/show re-mount, which plain React state would not. A new lesson version starts with every block shown. Nothing is posted to the host (coordinator: local state only, no evidence event).
 - **Not covered:** a real installed App and a real screen reader.
 
