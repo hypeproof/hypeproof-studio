@@ -51,6 +51,7 @@ import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { insertAtCaret, PassThrough } from './composerAddon';
+import { CONVERSATION_BLOCKED_BY_DICTATION, DICTATE_BLOCKED_BY_CONVERSATION } from "../../src/voiceCopy";
 import { VoiceConversationControl } from './VoiceConversationControl';
 import { AnswerExtras } from './answerExtras';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
@@ -1119,7 +1120,11 @@ export function ChatPanel(props: Props) {
   const [dictationBusy, setDictationBusy] = useState(false);
   const dictationBusyRef = useRef(false);
   const reportDictationBusy = useCallback((busy: boolean) => { dictationBusyRef.current = busy; setDictationBusy(busy); }, []);
-  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy };
+  const addonApi = { insert: insertFromAddon, get disabled() { return unavailable || folderMissing || !!props.questionPanel || voiceActive || voiceActiveRef.current; }, onDictationBusy: reportDictationBusy,
+    // CGP-VOICE-R-014: a dictation press during a voice conversation is refused with this line, not silently.
+    get disabledReason() { return voiceActive || voiceActiveRef.current ? DICTATE_BLOCKED_BY_CONVERSATION : null; },
+    // CGP-VOICE-R-015: 글로 쓰기 puts the caret back in the composer.
+    focusComposer: () => { requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true })); } };
   // Unrelated work belongs to the person. Automatic speech never sends their text/attachments.
   const voiceInterrupted = unavailable || folderMissing || !!props.questionPanel || !!props.sendLocked ||
     !!draft || pendingImages.length > 0 || stagedPhotos.length > 0 || imports.length > 0 || queued !== null ||
@@ -2423,7 +2428,7 @@ export function ChatPanel(props: Props) {
       <AddonScope api={addonApi}>
       <MaterialsScope enabled={compactLayout && !!config?.materials}>
       <footer className="hps-input-area">
-      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice }} onActive={reportVoiceActive} />}
+      {!props.instructor && <VoiceConversationControl config={config} turn={{ get ready() { return voiceReady && !dictationBusyRef.current; }, interrupted: voiceInterrupted, submit: submitVoice, get blockedReason() { return dictationBusy || dictationBusyRef.current ? CONVERSATION_BLOCKED_BY_DICTATION : null; } }} onActive={reportVoiceActive} />}
 
         {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });

@@ -368,6 +368,22 @@ browser autoplay refusal, a screen reader and the packaged app are not run here.
 
 ## Microphone explainer before the OS prompt (CGP-SHELL-R-010 / CGP-SHELL-D-009)
 
+`test/dictation-recovery.test.tsx` (CGP-VOICE-R-014 / R-015 / D-010 / D-012) renders the real dictation addon under a
+served-voice profile for an adult seat and a minor seat, with voice-ui's scripted recorder and timers. Each webview
+cause (no microphone, microphone busy, unsupported, too short) and each host cause (network, cap, auth, unavailable, too
+long, too large) shows its own line and exactly one recovery action. 다시 보내기 resends the same bytes without reopening
+the microphone, and after 10 minutes it records anew instead. 다시 말하기 starts a recording, and 글로 쓰기 focuses the
+composer. The draft is never touched. Too short goes away after 8 s, while the no-microphone line stays. Starting is said
+in words with 취소, and 취소 closes a late microphone. The level bar follows the meter, is flat for silence (the negative
+control), is absent under reduced motion, and the meter is closed on stop. During a conversation the dictation button
+names why it is off, and Alt+Shift+M is refused with that line without asking for the microphone. For each seat, the copy
+kept for 다시 보내기 is dropped on every one of these events: success, 닫기, a hidden window, pagehide, leaving the chat
+(a task or seat switch) and 10 minutes. This is read through the controller's `hasKeptClip()` flag, never the bytes.
+Throughout, no storage API or blob URL is touched, the webview state holds no audio, and only `voiceTranscribe`
+carries it. When the copy expires while the line is shown, the label turns into 다시 말하기 by itself. A stale 다시 보내기 press neither resends nor opens the microphone. With a parent re-render every 500 ms, the too-short line is still dismissed at about 8 s. Mutants for each of these (a timer restarted by renders, a resend label that records, no live label change) fail the test. Red on main c2be35060: the 10 original cases fail; the 2 drop cases need the new flag. `voice-browser.smoke.mjs` and `voice-conversation-browser.smoke.mjs` add the real-App checks: the
+bar on a real AudioContext stream, the text box height within 4px, the failure line's icon, 14px text and 44px buttons,
+and the dictation button's reason during a live conversation. Both fail on main.
+
 `test/voice-mic-explainer.test.tsx` renders the composer's dictation control under a served-voice profile
 (disclosure read) on the minimal DOM. The recorder and the permission answer are scripted, and the test
 counts `getUserMedia`, the only call that can raise the OS prompt. Cases:
