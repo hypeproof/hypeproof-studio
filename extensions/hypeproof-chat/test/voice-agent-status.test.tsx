@@ -383,6 +383,7 @@ t("F2: a status never reads over a blocked answer, so its 소리 켜기 still re
   await tool("toolu_1", "done");
   eq(announcer(), "파일 고치기 index.html 끝났어요", "the status is still announced");
   eq(rig.spoken.length, before, "no status reading over the blocked answer");
+  eq(speechFailedLine(), [], "a blocked answer is not a failed status reading (only the status id counts)");
   ok(resume(), "the answer's recovery is still there");
   await press(resume());
   eq(rig.spoken.slice(before).map((u) => u.text), answer.slice(1).map((u) => u.text), "one press reads exactly the unheard chunks");
