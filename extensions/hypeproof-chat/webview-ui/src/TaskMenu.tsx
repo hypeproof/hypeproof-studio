@@ -11,21 +11,23 @@ interface Props {
   disabled: boolean;
   onOpenChange: (open: boolean) => void;
   onMove: (destination: string) => void;
+  archive?: { active: boolean; run: () => void };
 }
 
 /**
- * CGP-KNOW-R-009 / DES-KNOW-14 — the per-task menu in the rail. It offers only "move to another
+ * CGP-KNOW-R-009 / DES-KNOW-14 — the per-task menu in the rail. It offers "move to another
  * personal activity", with one item per personal activity the host listed. Where moving is not
  * possible (a class task, a trial, or no other personal activity) the move item stays focusable
  * with aria-disabled and its reason as visible, announced description; nothing is offered to pick.
  * The host re-checks every move; this menu never decides eligibility.
  */
-export function TaskMenu({ title, move, open, disabled, onOpenChange, onMove }: Props) {
+export function TaskMenu({ title, move, open, disabled, onOpenChange, onMove, archive }: Props) {
   const toggle = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const headingId = useId();
   const reasonId = useId();
+  const archiveReasonId = useId();
   const items = () => [...(panel.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]') ?? [])];
   const close = (restore: boolean) => { onOpenChange(false); if (restore) toggle.current?.focus({ preventScroll: true }); };
   useLayoutEffect(() => { if (open) items()[0]?.focus({ preventScroll: true }); }, [open]);
@@ -62,6 +64,11 @@ export function TaskMenu({ title, move, open, disabled, onOpenChange, onMove }: 
           <button type="button" role="menuitem" tabIndex={-1} aria-disabled="true" aria-describedby={reasonId} onClick={event => event.preventDefault()}>다른 활동으로 옮기기</button>
           <p id={reasonId} className="tw-task-menu-reason">{reason}</p>
         </div>}
+      {archive && <div role="group" aria-label="작업 보관">
+        <button type="button" role="menuitem" tabIndex={-1} aria-disabled={!archive.active || disabled}
+          aria-describedby={archiveReasonId} onClick={() => { if (!archive.active || disabled) return; close(false); archive.run(); }}>보관하기</button>
+        <p id={archiveReasonId} className="tw-task-menu-reason">{archive.active ? '목록에서 숨기고 대화는 보관함에 남겨요. 다시 열 수 있어요.' : '이 작업을 먼저 연 뒤 보관할 수 있어요.'}</p>
+      </div>}
     </div>}
   </>;
 }

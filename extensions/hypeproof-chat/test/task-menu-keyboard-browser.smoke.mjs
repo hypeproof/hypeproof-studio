@@ -120,7 +120,7 @@ async function personal() {
   f = await focused();
   expect(f.open && f.item === 0, `ArrowDown on the toggle did not open the menu on its first item (${JSON.stringify(f)})`);
   expect(f.ax.role === 'menuitem' && f.ax.name === '옮기기: 그림 연습' && !f.ax.disabled, `the first item announces ${JSON.stringify(f.ax)}`);
-  for (const [key, want] of [['ArrowDown', 1], ['ArrowDown', 2], ['ArrowDown', 0], ['ArrowUp', 2], ['Home', 0], ['End', 2], ['ArrowUp', 1]]) {
+  for (const [key, want] of [['ArrowDown', 1], ['ArrowDown', 2], ['ArrowDown', 3], ['ArrowDown', 0], ['ArrowUp', 3], ['Home', 0], ['End', 3], ['ArrowUp', 2]]) {
     await press(key);
     f = await focused();
     expect(f.open && f.item === want, `${key} put focus on item ${f.item}, want ${want}`);
@@ -135,12 +135,31 @@ async function personal() {
   f = await focused();
   expect(!f.open, 'Tab did not close the menu');
   await b.evaluate(`document.querySelector('.tw-task-menu-toggle').focus()`);
-  await press('ArrowDown'); await press('End');
+  await press('ArrowDown'); await press('End'); await press('ArrowUp');
   expect((await focused()).sent.length === 0, 'a taskMove was posted before any item was chosen');
   await press('Enter');
   f = await focused();
   expect(JSON.stringify(f.sent) === JSON.stringify([{ id: 't1', destination: 'ref-d' }]), `Enter on the last item posted ${JSON.stringify(f.sent)}, want one taskMove of t1 to ref-d`);
   expect(!f.open, 'the menu stayed open after a move was chosen');
+  // #3234: the last item is now reversible archive, with a readable explanation.
+  await b.evaluate(`document.querySelector('.tw-task-menu-toggle').focus()`);
+  await press('ArrowDown'); await press('End');
+  f = await focused();
+  expect(f.ax.role === 'menuitem' && f.ax.name === '보관하기' && !f.ax.disabled && f.ax.focusable, `active archive accessibility: ${JSON.stringify(f.ax)}`);
+  expect(f.reasonShown && f.ax.description.includes('다시 열 수 있어요'), 'archive does not explain reversible storage');
+  await press('Enter');
+  expect(await b.evaluate(`window.sent.filter(m=>m.type==='taskArchive').length`) === 1, 'active archive must post exactly once');
+  expect(!(await focused()).open, 'archive did not close the menu');
+  await b.evaluate(`document.querySelectorAll('.tw-task-menu-toggle')[1].focus()`);
+  await press('ArrowDown'); await press('End');
+  f = await focused();
+  expect(f.ax.name === '보관하기' && f.ax.disabled && f.ax.focusable, 'inactive archive must be focusable but disabled');
+  expect(f.reasonShown && f.ax.description.includes('먼저 연 뒤'), 'inactive archive must explain opening the task first');
+  await press('Enter'); await press(' ');
+  expect(await b.evaluate(`window.sent.filter(m=>m.type==='taskArchive').length`) === 1, 'inactive row archived the active task');
+  await press('Escape');
+  f = await focused();
+  expect(!f.open && f.isToggle && f.toggleIndex === 1, 'inactive archive Escape must return to its own row');
   return failures;
 }
 

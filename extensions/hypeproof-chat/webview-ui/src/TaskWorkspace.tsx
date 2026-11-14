@@ -677,7 +677,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
-          {taskMove && <TaskMenu title={task.title} move={taskMove} open={menuFor === task.id} disabled={blocked} onOpenChange={open => setMenuFor(open ? task.id : null)} onMove={destination => moveTask(task.id, destination)} />}
+          {taskMove && <TaskMenu title={task.title} move={taskMove} open={menuFor === task.id} disabled={blocked} onOpenChange={open => setMenuFor(open ? task.id : null)} onMove={destination => moveTask(task.id, destination)} archive={taskMove.allowed ? { active: task.id === view.activeTaskId, run: () => postToHost({ type: 'taskArchive' }) } : undefined} />}
         </li>;
         })}
       </ul>

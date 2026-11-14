@@ -13901,6 +13901,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskMenu.tsx"
         }
       ]
     },
@@ -13924,6 +13927,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-archive-menu-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-menu.test.tsx"
         }
       ]
     },
