@@ -1,0 +1,301 @@
+// #4048 (chalk#17) — a same-window rehearsal. The instructor credential moves to REHEARSAL_RETURN_KEY while the
+// learner seat runs (the issuer key is empty), and comes back when the rehearsal ends, after a restart, or after a failed
+// return is retried. Pure: no vscode import. The host (extension.ts) supplies the secrets, folders and dialogs.
+import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers.ts";
+
+export const REHEARSAL_RETURN_KEY = "chalk.rehearsal.returnIssuer";
+export const REHEARSAL_SEAT_KEY = "chalk.rehearsal.seat";
+export const RESUME_QUESTION = "리허설 중에 앱이 닫혔습니다. 리허설을 이어갈까요, 끝내고 강사로 돌아갈까요?";
+export const RESUME_CONTINUE = "이어가기";
+export const RESUME_RETURN = "끝내고 돌아가기";
+export const RETURN_FAILED = "강사 자격으로 돌아가지 못했습니다. 앱을 다시 켜면 다시 시도합니다.";
+export const ENTER_OPEN_FAILED = "리허설 창을 열지 못했습니다. 강사 자격은 그대로입니다.";
+export const ISSUER_REPLACE_BLOCKED = "리허설을 끝낸 뒤에 강사 토큰을 바꾸세요.";
+export const MINT_BLOCKED = "리허설을 끝낸 뒤에 학생 토큰을 발급하세요.";
+
+export type SeatPhase = "entering" | "inside" | "returning";
+export interface SeatRecord {
+  phase: SeatPhase;
+  rehearsalId: string;
+  /** Epoch milliseconds when the student token expires. */
+  expiresAt: number;
+  homeFolder: string;
+  rehearsalFolder: string;
+  pendingToken?: string;
+}
+export interface SeatSecrets {
+  get(key: string): PromiseLike<string | undefined>;
+  store(key: string, value: string): PromiseLike<void>;
+  delete(key: string): PromiseLike<void>;
+}
+export interface SeatHost {
+  /** SecretStorage as seen by the activity wrap: TOKEN_KEY goes through the activity connection. */
+  secrets: SeatSecrets;
+  currentRoot(): string | undefined;
+  /** The dedicated rehearsal folder for one rehearsal (canonical spelling, not chosen by the learner). */
+  rehearsalFolderFor(rehearsalId: string): string;
+  makeFolder(folder: string): void;
+  /** Opens the folder in this window (forceReuseWindow). The window reloads; the promise may reject. */
+  openFolder(folder: string): Promise<void>;
+  /** Stores the student token under the activity wrap, so it binds to the current (rehearsal) folder. */
+  bindStudentToken(token: string): Promise<void>;
+  /** Drops the rehearsal activity record and binding for a folder, and disconnects if it is this window. */
+  releaseStudentBinding(folder: string): Promise<void>;
+  /** Shows the restart question. Undefined when dismissed. */
+  askResume(): Promise<"resume" | "return" | undefined>;
+  notify(message: string): void;
+  now(): number;
+  /** Diagnostic line (facts only: a label, never a value). Optional; the host writes it to its channel. */
+  log?(line: string): void;
+}
+
+export class RehearsalSeatError extends Error {}
+
+/** #4048 Dev 3차 — every clear of the return key or the seat records its path label (no value). */
+const clearedBy = (h: SeatHost, label: string): void => { h.log?.(`[seat] cleared by ${label}`); };
+
+const parseSeat = (raw: string | undefined): SeatRecord | undefined => {
+  if (!raw) return undefined;
+  try { const s = JSON.parse(raw); return typeof s?.phase === "string" && typeof s.homeFolder === "string" ? s : undefined; }
+  catch { return undefined; }
+};
+const readSeat = (h: SeatHost) => Promise.resolve(h.secrets.get(REHEARSAL_SEAT_KEY)).then(parseSeat);
+const writeSeat = (h: SeatHost, s: SeatRecord) => h.secrets.store(REHEARSAL_SEAT_KEY, JSON.stringify(s));
+
+/** Restores the issuer from the return key, then deletes the return key and the seat. Order keeps a crash safe. */
+async function restoreIssuer(h: SeatHost): Promise<void> {
+  const ret = await h.secrets.get(REHEARSAL_RETURN_KEY);
+  if (ret) await h.secrets.store(ISSUER_TOKEN_KEY, ret);
+  await h.secrets.delete(REHEARSAL_SEAT_KEY);
+  clearedBy(h, "restore");
+  await h.secrets.delete(REHEARSAL_RETURN_KEY);
+}
+
+/** Start a rehearsal in this window: move the credential aside, then open the dedicated folder. */
+export async function enterRehearsal(h: SeatHost, input: { token: string; expiresAt: number; rehearsalId: string }): Promise<void> {
+  if (!input.token || !input.rehearsalId || !Number.isFinite(input.expiresAt))
+    throw new RehearsalSeatError("리허설 정보를 확인해 주세요.");
+  const issuer = await h.secrets.get(ISSUER_TOKEN_KEY);
+  if (!issuer) throw new RehearsalSeatError("강사 자격이 없어서 리허설을 열 수 없어요.");
+  if (await h.secrets.get(REHEARSAL_RETURN_KEY)) throw new RehearsalSeatError("이미 리허설 중이에요.");
+  const home = h.currentRoot();
+  if (!home) throw new RehearsalSeatError("작업 폴더를 먼저 열어 주세요.");
+  const folder = h.rehearsalFolderFor(input.rehearsalId);
+  await h.secrets.store(REHEARSAL_RETURN_KEY, issuer);
+  await writeSeat(h, { phase: "entering", rehearsalId: input.rehearsalId, expiresAt: input.expiresAt, homeFolder: home, rehearsalFolder: folder, pendingToken: input.token });
+  // #4048 Dev 3차 — the issuer is removed only after the return key and the seat read back as written.
+  const readBack = await h.secrets.get(REHEARSAL_RETURN_KEY);
+  const seatBack = await readSeat(h);
+  if (readBack !== issuer || !seatBack || seatBack.rehearsalId !== input.rehearsalId || seatBack.pendingToken !== input.token) {
+    clearedBy(h, "enter-readback");
+    await h.secrets.delete(REHEARSAL_SEAT_KEY);
+    await h.secrets.delete(REHEARSAL_RETURN_KEY);
+    throw new RehearsalSeatError(ENTER_OPEN_FAILED);
+  }
+  await h.secrets.delete(ISSUER_TOKEN_KEY);
+  try {
+    h.makeFolder(folder);
+    await h.openFolder(folder);
+  } catch {
+    await restoreIssuer(h);
+    throw new RehearsalSeatError(ENTER_OPEN_FAILED);
+  }
+}
+
+/** Return to the home folder with the credential. A failure keeps the return key for the next start. */
+async function resumeReturn(h: SeatHost, seat: SeatRecord): Promise<"done" | "reloading" | "failed"> {
+  try {
+    const root = h.currentRoot();
+    if (sameFolder(root, seat.rehearsalFolder)) await h.releaseStudentBinding(root as string);
+    await writeSeat(h, { ...seat, phase: "returning", pendingToken: undefined });
+    const ret = await h.secrets.get(REHEARSAL_RETURN_KEY);
+    if (!ret) throw new RehearsalSeatError("return key missing");
+    await h.secrets.store(ISSUER_TOKEN_KEY, ret);
+    if (!sameFolder(root, seat.homeFolder)) {
+      await h.openFolder(seat.homeFolder);
+      return "reloading";
+    }
+    clearedBy(h, "return");
+    await h.secrets.delete(REHEARSAL_RETURN_KEY);
+    await h.secrets.delete(REHEARSAL_SEAT_KEY);
+    return "done";
+  } catch {
+    h.notify(RETURN_FAILED);
+    return "failed";
+  }
+}
+
+/** Both keys present: the start was interrupted after the credential came back. Release the seat, then finish the return. */
+async function finishInterrupted(h: SeatHost, seat: SeatRecord | undefined): Promise<"done" | "reloading" | "failed"> {
+  const root = h.currentRoot();
+  if (seat && sameFolder(root, seat.rehearsalFolder)) await h.releaseStudentBinding(root as string);
+  if (seat && !sameFolder(root, seat.homeFolder)) {
+    try { await h.openFolder(seat.homeFolder); return "reloading"; }
+    catch { h.notify(RETURN_FAILED); return "failed"; }
+  }
+  clearedBy(h, "finish");
+  await h.secrets.delete(REHEARSAL_RETURN_KEY);
+  await h.secrets.delete(REHEARSAL_SEAT_KEY);
+  return "done";
+}
+
+/**
+ * Runs at activation, after the activity wrap and before the resume marker. Returns:
+ * - "none": no rehearsal state.
+ * - "bound": entered this window; the student token is bound to the rehearsal folder.
+ * - "ask": a rehearsal was open when the app closed and the token is valid; call offerResume (not awaited here).
+ * - "inside": (not returned here; see offerResume)
+ * - "reloading": a return opened the home folder; the window will reload.
+ * - "done": the return finished in this window.
+ * - "failed": the return did not finish; the return key is kept and the failure was shown.
+ */
+export async function resumeOnActivation(h: SeatHost): Promise<"none" | "bound" | "ask" | "reloading" | "done" | "failed"> {
+  const ret = await h.secrets.get(REHEARSAL_RETURN_KEY);
+  const seat = await readSeat(h);
+  if (!ret) {
+    if (seat) { clearedBy(h, "no-return"); await h.secrets.delete(REHEARSAL_SEAT_KEY); }
+    return "none";
+  }
+  if (await h.secrets.get(ISSUER_TOKEN_KEY)) return finishInterrupted(h, seat);
+  if (!seat) { await restoreIssuer(h); return "done"; }
+  const root = h.currentRoot();
+  if (seat.phase === "entering") {
+    if (sameFolder(root, seat.rehearsalFolder) && seat.pendingToken) {
+      try { await h.bindStudentToken(seat.pendingToken); }
+      catch { return (await resumeReturn(h, seat)) === "reloading" ? "reloading" : "failed"; }
+      await writeSeat(h, { ...seat, phase: "inside", pendingToken: undefined });
+      return "bound";
+    }
+    return (await resumeReturn(h, seat)) as "reloading" | "done" | "failed";
+  }
+  if (seat.phase === "inside") {
+    if (!sameFolder(root, seat.rehearsalFolder) || seat.expiresAt <= h.now()) return (await resumeReturn(h, seat)) as "reloading" | "done" | "failed";
+    return "ask";
+  }
+  return (await resumeReturn(h, seat)) as "reloading" | "done" | "failed";
+}
+
+/** After the restart question: "return" goes home; "resume" (or dismissed) keeps the seat. */
+export async function offerResume(h: SeatHost): Promise<"inside" | "none" | "reloading" | "done" | "failed"> {
+  const seat = await readSeat(h);
+  const choice = await h.askResume();
+  if (choice !== "return") return "inside";
+  return seat ? resumeReturn(h, seat) : endRehearsal(h);
+}
+
+/** The chalk "끝내고 돌아가기" button, or any explicit end: go home with the credential. */
+export async function endRehearsal(h: SeatHost): Promise<"none" | "reloading" | "done" | "failed"> {
+  if (!(await h.secrets.get(REHEARSAL_RETURN_KEY))) return "none";
+  const seat = await readSeat(h);
+  const root = h.currentRoot() ?? "";
+  return resumeReturn(h, seat ?? { phase: "returning", rehearsalId: "", expiresAt: 0, homeFolder: root, rehearsalFolder: "" });
+}
+
+/** "Forget the instructor token": the issuer, the return key and the seat are all deleted. */
+export async function forgetIssuer(h: SeatHost): Promise<void> {
+  const seat = await readSeat(h);
+  const root = h.currentRoot();
+  if (seat && sameFolder(root, seat.rehearsalFolder)) await h.releaseStudentBinding(root as string);
+  await h.secrets.delete(ISSUER_TOKEN_KEY);
+  clearedBy(h, "forget");
+  await h.secrets.delete(REHEARSAL_RETURN_KEY);
+  await h.secrets.delete(REHEARSAL_SEAT_KEY);
+}
+
+/** A Dev seed (issuer or student token) is stored only when no rehearsal return is held (#4052 Dev check). */
+export async function storeDevSeed(secrets: SeatSecrets, key: string, value: string): Promise<boolean> {
+  if (await returnHeld(secrets)) return false;
+  await secrets.store(key, value);
+  return true;
+}
+
+/** A return is held: the instructor credential sits aside, so no new credential may take its slot. */
+export async function returnHeld(secrets: SeatSecrets): Promise<boolean> {
+  return !!(await secrets.get(REHEARSAL_RETURN_KEY));
+}
+
+/** setInstructorToken: store the typed credential unless a return is held. Returns whether it was stored. */
+export async function storeIssuerUnlessHeld(secrets: SeatSecrets, token: string, notify: (message: string) => void): Promise<boolean> {
+  if (await returnHeld(secrets)) { notify(ISSUER_REPLACE_BLOCKED); return false; }
+  await secrets.store(ISSUER_TOKEN_KEY, token);
+  return true;
+}
+
+/**
+ * #4048 Dev 2차 — two spellings name one folder when they differ only by drive-letter case, slash or backslash, and a
+ * trailing separator. A window's root and the seat record must match under this rule, or the seat is taken for elsewhere.
+ */
+export function sameFolder(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/^([a-zA-Z]):/, (_m, d: string) => `${d.toUpperCase()}:`).replace(/\/+$/, "");
+  const na = norm(a), nb = norm(b);
+  return na.length > 0 && na === nb;
+}
+
+export interface SeatFacts { phase: string; rootMatch: boolean; retHeld: boolean; issuerHeld: boolean }
+/** Facts only, for the diagnostic line: no path, token or cohort. */
+export async function seatFacts(h: SeatHost): Promise<SeatFacts> {
+  const seat = await readSeat(h);
+  return {
+    phase: seat?.phase ?? "none",
+    rootMatch: !!seat && sameFolder(h.currentRoot(), seat.rehearsalFolder),
+    retHeld: await returnHeld(h.secrets),
+    issuerHeld: !!(await h.secrets.get(ISSUER_TOKEN_KEY)),
+  };
+}
+export function seatLogLine(outcome: string, f: SeatFacts): string {
+  return `[seat] outcome=${outcome} phase=${f.phase} rootMatch=${f.rootMatch} retHeld=${f.retHeld} issuerHeld=${f.issuerHeld}`;
+}
+
+/** Outcomes where the learner connection is set up or the return already runs (its own failure is shown there). */
+const SETTLED_OUTCOMES = new Set(["bound", "ask", "inside", "reloading", "done", "failed"]);
+/**
+ * #4048 safety net (chalk-po): a window with a held return that ends without a learner connection goes back to the
+ * instructor, once, with the approved sentence. A settled outcome shows nothing. "threw" is the activation check failing.
+ */
+export async function returnAfterUnsettled(h: SeatHost, outcome: string): Promise<"none" | "reloading" | "done" | "failed"> {
+  if (SETTLED_OUTCOMES.has(outcome) || !(await returnHeld(h.secrets))) return "none";
+  h.notify(ENTER_OPEN_FAILED);
+  const seat = await readSeat(h);
+  const root = h.currentRoot() ?? "";
+  return resumeReturn(h, seat ?? { phase: "returning", rehearsalId: "", expiresAt: 0, homeFolder: root, rehearsalFolder: "" });
+}
+
+// ── The student-panel band and the leave questions (#4048, approved wording) ──
+export const REHEARSAL_BAND_TEXT = "리허설 중";
+export const REHEARSAL_BAND_BUTTON = "끝내고 돌아가기";
+export const LEAVE_WITHOUT_TEXT = "리허설 보고를 보내지 않았습니다. 그래도 강사로 돌아갈까요?";
+export const LEAVE_AFTER_TEXT = "리허설 보고를 보냈습니다. 강사로 돌아갈까요?";
+const LEAVE_WITHOUT_BUTTONS = ["돌아가기", "취소"] as const;
+const LEAVE_AFTER_BUTTONS = ["돌아가기", "계속하기"] as const;
+
+/** The band shows only in a rehearsal seat: a return is held, a seat is recorded, and the window is its folder. */
+export async function rehearsalSeatActiveFor(secrets: SeatSecrets, root: string | undefined): Promise<boolean> {
+  if (!root || !(await returnHeld(secrets))) return false;
+  const seat = parseSeat(await secrets.get(REHEARSAL_SEAT_KEY));
+  return !!seat && sameFolder(seat.rehearsalFolder, root);
+}
+
+/** Asks one question with two buttons; resolves to the label the person chose, or undefined when dismissed. */
+export type LeaveAsk = (message: string, buttons: readonly string[]) => Promise<string | undefined>;
+
+/** The leave question after a report was not sent (palette item and the band button). Outside the seat it asks nothing. */
+export async function leaveWithoutReport(h: SeatHost, ask: LeaveAsk): Promise<"none" | "stayed" | "reloading" | "done" | "failed"> {
+  if (!(await rehearsalSeatActiveFor(h.secrets, h.currentRoot()))) return "none";
+  const choice = await ask(LEAVE_WITHOUT_TEXT, LEAVE_WITHOUT_BUTTONS);
+  if (choice !== "돌아가기") return "stayed";
+  return endRehearsal(h) as Promise<"reloading" | "done" | "failed">;
+}
+
+/** The leave question after a report was sent successfully. A failed report never reaches this. */
+export async function leaveAfterReport(h: SeatHost, ask: LeaveAsk): Promise<"none" | "stayed" | "reloading" | "done" | "failed"> {
+  if (!(await rehearsalSeatActiveFor(h.secrets, h.currentRoot()))) return "none";
+  const choice = await ask(LEAVE_AFTER_TEXT, LEAVE_AFTER_BUTTONS);
+  if (choice !== "돌아가기") return "stayed";
+  return endRehearsal(h) as Promise<"reloading" | "done" | "failed">;
+}
+
+/** Is a credential held for a return (the seat is running or was interrupted)? Used by the chalk side. */
+export async function hasReturnIssuer(h: SeatHost): Promise<boolean> {
+  return !!(await h.secrets.get(REHEARSAL_RETURN_KEY));
+}

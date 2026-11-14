@@ -31,6 +31,7 @@ Scope: how HypeProof Studio and the Chalk extension (`hypeproof.hypeproof-chalk`
 | `hypeproof.runtime.cancelTurn` | `{ contractVersion, sessionNonce, turnId }` | `{ cancelled }` | Stops the turn; Studio then sends `done(cancelled)`. |
 | `hypeproof.runtime.previewOpen` | `{ contractVersion, webPath }` | `{ ok, error? }` | No session nonce in v0 (this command is not tied to a turn). `webPath` must stay inside the Studio folder. |
 | `hypeproof.runtime.humanWait` | `{ contractVersion, sessionNonce, turnId, waitId, state }`, `state` is `start`, `keepalive` or `end` | `{ ok }` or `{ ok: false, reason }` | Chalk announces a wait for a person (approval, overwrite confirmation) in a Chalk turn (#3601). The turn's stall watch counts it as a pause. `reason`: `contractVersion`, `stale` (no session, unknown turn or waitId), `turn-ended`, `invalidArgs`, `limit` (more than 4 waits open). Ended by Chalk, by the turn closing, or by deactivate; a wait with no keepalive for 90 s ends by itself. Optional: a Chalk that does not send it leaves the stall watch to the tool rule. |
+| `hypeproof.runtime.enterRehearsalSeat` | `{ contractVersion, sessionNonce, token, expiresAt, rehearsalId }`; `expiresAt` is epoch ms or `null` (null means already expired on restart) | `{ ok: true }` or `{ ok: false, reason }`; `reason` is `inactive`, `stale`, `invalidArgs`, `contractVersion`, `unavailable` or `failed` | Starts a rehearsal seat in this Studio window (#4048). The token is never echoed. `inactive`, `stale` and `failed` show one Studio sentence; the others show nothing. |
 
 ### 2.3 Refusal reasons from `runLocalTurn`
 
@@ -148,6 +149,7 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-11-14): `hypeproof.runtime.enterRehearsalSeat` (§2.2, #4048). Backward-compatible addition: a Chalk that does not send it sees no change; a Studio without the command answers `unavailable`.
 - v0 (2026-11-08): `hypeproof.runtime.humanWait` (§2.2, #3601). Backward-compatible addition: a Chalk that does not send it leaves the stall watch to the tool rule; a Studio without the command makes Chalk's call fail, which Chalk ignores.
 - v0 (2026-11-07): `deactivateInstructor` reason `runtimeChanged` (#3578). Backward-compatible: a Chalk that does not know the reason ends the session as a general end. Studio sends it once when the runtime leaves `chalk-extension` and a session is active.
 - v0 (2026-11-13, chalk#25): the meaning of `activateInstructor.models` and `runLocalTurn.model` changes (§5, §7). No field is added or removed, so the version stays v0. A `model` outside the list runs the default.

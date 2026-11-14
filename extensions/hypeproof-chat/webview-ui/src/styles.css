@@ -1262,6 +1262,10 @@ html, body, #root {
 }
 .hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
 
+/* CGP-ART-R-023: the page notice's one action (the deck PDF's 폴더에서 보기), a quiet 44px button at the 14px floor under the
+   notice line. Its fills are the quiet button's own. */
+.hps-page-notice-actions { display: flex; margin: 0 0 var(--ds-c-studio-styles-space-7); }
+.hps-page-notice-actions > button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hps-page-notice {
   margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-7);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
@@ -2761,7 +2765,10 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-attachment:has(.hps-photo-failure) { box-sizing: border-box; width: min(100%, var(--ds-c-studio-styles-size-106)); height: auto; min-height: var(--ds-c-studio-styles-size-46); display: flex; flex-wrap: wrap; align-items: center; align-self: flex-start; gap: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); overflow: visible; }
 .hps-attachment:has(.hps-photo-failure) > img { width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); flex: 0 0 var(--ds-c-studio-styles-size-8); border-radius: var(--ds-c-studio-styles-radius-13); }
 .hps-attachment:has(.hps-photo-failure) > .hps-attachment-name { flex: 1 1 0; min-width: 0; height: auto; padding: 0; justify-content: flex-start; text-align: start; }
-.hps-attachment:has(.hps-photo-failure) > .hps-attachment-remove { position: static; flex: 0 0 var(--ds-c-studio-styles-size-8); width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); margin-inline-start: auto; }
+/* position: relative, not static: the button stays in the flex row, and its ::before dot (position: absolute) keeps the button
+   as its containing block, so the white × stays on the dark dot. Static moved the dot to the chip's centre and left the ×
+   on the light panel at 1.19:1 (found on #4053). */
+.hps-attachment:has(.hps-photo-failure) > .hps-attachment-remove { position: relative; flex: 0 0 var(--ds-c-studio-styles-size-8); width: var(--ds-c-studio-styles-size-8); height: var(--ds-c-studio-styles-size-8); margin-inline-start: auto; }
 .hps-attachment:has(.hps-photo-failure) > .hps-photo-failure { box-sizing: border-box; order: 1; flex: 1 0 100%; min-width: 0; margin: 0; }
 /* The rows live in the footer, so the reason is on screen with the composer. Compact: the name and reason on the left, the actions on the right. */
 .hps-attachment-failures { max-height: 45vh; overflow-y: auto; }
