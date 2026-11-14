@@ -45,6 +45,7 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
+import { mustStayLocal } from './rehearsalRoute';
 import {executorModelFor,instructorModelChoices,withTurnModel} from './localRuntime/instructorModels';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { confirmUnlessTurnEnds, createHumanWait } from './localRuntime/humanWait';
@@ -9701,6 +9702,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // REQ-STUDIO-FOLDER-CONSENT — a personal activity in a folder that is not its own asks once; the choice only narrows.
     const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
+    // #4099 — a subscription rehearsal turn runs only on the local runtime. Without one it stops here, before any step below that can reach the server.
+    if (mustStayLocal(profile?.rehearsal) && !(localRuntimeConfig(vscode.env.appName, proxyUrl) ?? instructorLocalRuntime(this._instructorMode.isInstructor === true, this.releaseRuntime))) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
     // CGP-AGENT-R-002 — the approval preset this turn runs under (the label and the SDK verdict use the same value).
     this.turnApprovalPreset = servedApprovalPreset(profile)?.id ?? null;
     // DEC-11 amended — `auto` needs both the turn's seat and the live one to be adult; no profile counts as minor.
