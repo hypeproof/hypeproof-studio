@@ -50,5 +50,12 @@ check('RR-4 nothing before the guard calls a conversation route or a runner (sta
   }
 });
 
+check('RR-5 without a local runtime the guard throws the existing no-local-runtime sentence, and the sentence is unchanged', () => {
+  const line = src.slice(guardAt, src.indexOf('\n', guardAt));
+  if (!line.includes('throw new Error(NO_LOCAL_RUNTIME_MESSAGE);')) throw new Error('guard does not throw NO_LOCAL_RUNTIME_MESSAGE');
+  const chalkContract = readFileSync(new URL('../src/chalkContract.ts', import.meta.url), 'utf8');
+  if (!chalkContract.includes('export const NO_LOCAL_RUNTIME_MESSAGE = "강사 채팅은 지금 내 Claude 구독 연결에서만 됩니다.";')) throw new Error('sentence changed');
+});
+
 if (failed) { console.error(`rehearsal-route: ${failed} failed`); process.exit(1); }
 console.log('rehearsal-route: all checks passed.');
