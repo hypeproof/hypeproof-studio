@@ -19536,6 +19536,12 @@
         },
         {
           "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionAdmissionTest.java"
+        },
+        {
+          "path": "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStopTest.java"
         }
       ]
     }

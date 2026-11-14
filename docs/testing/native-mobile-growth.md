@@ -371,3 +371,26 @@ speech callbacks do not establish physical speech or live account acceptance.
 Record focused source, APK, emulator, command and exit identities separately.
 Preserve any failing surrounding voice-Stop control and investigate whether actual
 capture began; passing the new cases cannot erase that failure.
+
+### Android persistent admission explanation — Studio #4015
+
+Use the existing account-reflection refusal journey. After one actual enabled
+voice tap reaches capture, deliver the synthetic OS speech result and a typed
+admission refusal. Verify the explanation, submitted words and stopped voice.
+Perform the real history refresh, then close and relaunch the Activity. The same
+reason and original request must remain visible, with exactly one POST and no
+automatic voice restart. The original runtime must fail specifically after the
+successful GET removes the explanation, rather than during setup or capture.
+
+Production model/cache controls cover legacy cache-v1 loading, code allowlisting,
+same-request failed/unknown and empty reads, new intent, confirmed completion or
+cancellation, adopted different requests, stale responses, storage failure and
+account/session isolation. Reuse the real loopback Stop control for a typed body
+arriving after the failed row; separately deliver an already-arrived POST error
+callback after confirmed completion/cancellation and verify it cannot override
+that state. No raw provider text may enter the saved explanation.
+
+Record source/APK identities and native assertions separately from live Service,
+physical speech, billing and installed-device acceptance. Synthetic response
+codes/statuses must be disclosed accurately; a screenshot proves only its actual
+visible state. Preserve the original runtime's failing log.

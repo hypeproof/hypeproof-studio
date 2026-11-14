@@ -980,7 +980,7 @@
         "MVOICE-05"
       ],
       "inline_prefixes": [],
-      "sha256": "b7c4e3ec9f6d6c4e4dab2f96c0130a6d87f2b625360cf7cf6e4ff62a74176d2a",
+      "sha256": "e91597fbaf0c9903ac151c0b150b12ea8469a27c8f0ba13c0a56094806c2700b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/mobile-growth-roadmap.md",
@@ -5075,7 +5075,9 @@
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/DeviceSignInHttpTest.java",
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/NativeHttpDeadlineTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java",
-        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java"
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionAdmissionTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStopTest.java"
       ]
     },
     {
@@ -5106,6 +5108,43 @@
       ],
       "verification_inputs": [
         "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionSendDuringSyncTest.java",
+        "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
+      ]
+    },
+    {
+      "id": "android-admission-persistence",
+      "title": "Retain Android request admission explanations through history reads and relaunch",
+      "issue": 4015,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/mobile-growth-roadmap.md",
+          "ids": [
+            "MADR-02",
+            "MADR-03",
+            "MADR-05",
+            "MPER-03",
+            "MPER-04"
+          ]
+        }
+      ],
+      "depends_on": [
+        "android-send-during-sync"
+      ],
+      "next_action": "Integrate after the scoped Send-during-refresh change, obtain independent review and exact-source native CI, then verify installed-device and live account behavior separately.",
+      "design_delta": "Persist an optional request-ID and allowlisted-code marker in the existing account cache-v1; display fixed safe text in the existing status row without replay or new provider calls.",
+      "positive_control": "The actual Android refusal journey retains its explanation and original words after a successful GET and relaunch, with exactly one POST and stopped voice.",
+      "negative_control": "The original runtime loses the explanation after GET; stale/account/session responses, failed writes and late typed bodies cannot clear or misbind it, and confirmed terminal resolution wins.",
+      "evidence_required": "Exact old-runtime failure and candidate Activity/AtomicFile/Keystore evidence, source/APK hashes, focused model and real loopback Stop controls, independent review and native CI; physical/live acceptance reported separately.",
+      "implementation_paths": [
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/QuestionActivity.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionModel.java",
+        "apps/studio-native/android/app/src/main/java/ai/hypeproof/studio/ReflectionState.java"
+      ],
+      "verification_inputs": [
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionAdmissionTest.java",
+        "apps/studio-native/android/app/src/test/java/ai/hypeproof/studio/ReflectionStopTest.java",
         "apps/studio-native/android/app/src/androidTest/java/ai/hypeproof/studio/QuestionJourneyTest.java"
       ]
     }
