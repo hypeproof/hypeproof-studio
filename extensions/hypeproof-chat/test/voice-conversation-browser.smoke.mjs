@@ -38,6 +38,10 @@ const click=async name=>{
  await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...rect});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...rect});await drain();
 };
 const spoken=()=>b.evaluate('window.__utterances.map(u=>u.text)');
+// CGP-VOICE-R-030 — the task rail's marker: how many rows carry it, whether it sits on the active row, and that row's name.
+const marker=()=>b.evaluate(`(()=>{const m=[...document.querySelectorAll('.tw-task [data-voice-live]')];const row=m[0]?.closest('.tw-task');const lum=c=>{const v=(c.match(/[\\d.]+/g)||[]).slice(0,3).map(Number).map(x=>{x/=255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4});return v[0]*.2126+v[1]*.7152+v[2]*.0722};let bg=null;for(let n=m[0];n&&!bg;n=n.parentElement){const c=getComputedStyle(n).backgroundColor;if(c&&!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c))bg=c}const fg=m[0]?getComputedStyle(m[0]).color:null;const L=fg&&bg?[lum(fg),lum(bg)].sort((x,y)=>y-x):null;
+ return {count:m.length,active:row?.getAttribute('aria-current')==='page',name:row?.getAttribute('aria-label')??null,text:m[0]?.textContent??null,size:m[0]?parseFloat(getComputedStyle(m[0]).fontSize):null,contrast:L?(L[0]+.05)/(L[1]+.05):null}})()`);
+const noMarker=async why=>{const m=await marker();assert.equal(m.count,0,'no voice marker: '+why+' '+JSON.stringify(m))};
 const live=()=>b.evaluate('window.__streams.filter(s=>s.getTracks().some(t=>t.readyState==="live")).length');
 const speech=async()=>{
  await wait(async()=>/듣고 있어요/.test(await label()),'listening');
@@ -77,10 +81,14 @@ const setup=async()=>{
 };
 try {
  const store=await setup();
+ assert(await b.evaluate("document.querySelectorAll('.tw-task').length>0"),'the real task rail is drawn');
+ await noMarker('before any voice session');
  await click('자동 음성 대화 시작');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-disclosure")'),false,'existing acknowledgement adds no recurring mode gate');
  controls.push('one deliberate start with inline behavior and no redundant acknowledgement');
  await wait(async()=>await live()===1,'capture before IME Escape');
+ {const m=await marker();assert.equal(m.count,1,'one row is marked while capture is live');assert.equal(m.active,true,'the marked row is the active task');assert.equal(m.text,'음성 대화 중');assert.match(m.name??'',/, 음성 대화 중$/,'the row name ends with the marker words');assert(m.size>=14,'marker text at the 14px floor '+m.size);assert(m.contrast>=4.5,'marker text contrast >= 4.5:1, got '+m.contrast);}
+ controls.push('the active task row is marked 음성 대화 중 while capture is live');
  // Exercise the native listener itself; document's IME host barrier is separate protection.
  for (const flags of [{isComposing:true,keyCode:27},{isComposing:false,keyCode:229}]) {
   const prevented=await b.evaluate(`(()=>{const event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,...${JSON.stringify(flags)}});window.dispatchEvent(event);return event.defaultPrevented})()`);
@@ -90,6 +98,7 @@ try {
  }
  const prevented=await b.evaluate(`(()=>{const event=new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true,cancelable:true});window.dispatchEvent(event);return event.defaultPrevented})()`);
  await drain();assert.equal(prevented,true,'ordinary Escape is handled');assert.equal(await live(),0,'ordinary Escape stops capture');
+ await noMarker('Escape stopped the session and released the microphone');
  controls.push('composing Escape and legacy 229 retain capture; ordinary Escape stops');
  await click('자동 음성 대화 시작');
  // Silence alone cannot dispatch; the analyser and recorder are real, no fake end-turn event.
@@ -98,12 +107,14 @@ try {
  for(let turn=1;turn<=2;turn++) {
   await speech();await wait(async()=>(await spoken()).length===turn,'spoken answer '+turn);
   assert.equal(await live(),0,'half duplex closes capture before transcription/reply/TTS');
+  assert.equal((await marker()).count,1,'the marker stays while the answer plays (the session is live)');
   assert.equal(calls.filter(c=>c.type==='sendMessage').length,turn);
   const request=calls.filter(c=>c.type==='sendMessage').at(-1);assert(store.getHistory().some(m=>m.id===request.id&&m.role==='user'));assert(store.getHistory().some(m=>m.id===request.id+'-answer'&&m.role==='assistant'),'real host persisted the matching response');
   await b.evaluate('window.__utterances.at(-1).onend()');await wait(async()=>await live()===1,'next capture');
  }
  controls.push('two automatic observed-audio turns through actual host/account/disk store');
  await click('음성 대화 중지');assert.equal(await live(),0);
+ await noMarker('Stop released the microphone');controls.push('Stop removes the marker after the microphone is released');
  await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,150));assert.equal(await live(),0);controls.push('Stop fences late playback completion');
  // Actual mounted App uses the same hub for automatic playback and the answer's manual recovery.
  await click('자동 음성 대화 시작');await speech();
@@ -111,10 +122,12 @@ try {
  assert.equal(await live(),0);
  await b.evaluate("window.__utterances.at(-1).onerror({error:'not-allowed'})");await drain();
  await wait(()=>b.evaluate('!!document.querySelector(".hps-voice-resume")'),'manual blocked-playback recovery');
- assert(await b.evaluate(`!!document.querySelector('button[aria-label="자동 음성 대화 시작"]')`),'blocked reading stops the automatic conversation');
+ assert(await b.evaluate(`!!document.querySelector('button[aria-label="자동 음성 대화 시작"]')`),'blocked reading stops the automatic conversation');await noMarker('blocked playback stopped the session');
  const blockedSends=calls.filter(c=>c.type==='sendMessage').length;
  const resumePoint=await b.evaluate('(()=>{const e=document.querySelector(".hps-voice-resume"),r=e.getBoundingClientRect();if(!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))throw Error("resume obscured");return{x:r.x+r.width/2,y:r.y+r.height/2}})()');
  await b.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...resumePoint});await b.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...resumePoint});await drain();
+ // speak() is async: wait for the fourth utterance instead of reading it right after the press (verify-r004, 1/14 race).
+ await wait(async()=>(await spoken()).length===4,'manual resume utterance');
  assert.equal((await spoken()).length,4,'one deliberate manual resume plays the blocked answer');
  assert.equal(await b.evaluate('!!document.querySelector(".hps-voice-resume")'),false);
  await b.evaluate('window.__utterances.at(-1).onend()');await new Promise(r=>setTimeout(r,150));await drain();
@@ -123,9 +136,9 @@ try {
  const before=calls.filter(c=>c.type==='sendMessage').length;
  hold=true;await click('자동 음성 대화 시작');await speech();await wait(async()=>!!held,'held transcription');assert.equal(await live(),0);
  await send({type:'config',config:{...config,activity:{...config.activity,id:'other-account-activity'}}});
- await send({type:'voiceTranscribeResult',requestId:held.requestId,ok:true,text:'늦은 전사'});await drain();assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);assert.equal(await live(),0);controls.push('scope switch fences stale transcription without send');
+ await send({type:'voiceTranscribeResult',requestId:held.requestId,ok:true,text:'늦은 전사'});await drain();assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);assert.equal(await live(),0);await noMarker('scope switch stopped the session');controls.push('scope switch fences stale transcription without send');
  hold=false;held=null;await send({type:'config',config});await drain();refusal=true;
- await click('자동 음성 대화 시작');await speech();await wait(async()=>/한도/.test(await label()),'authoritative refusal');assert.equal(await live(),0);assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);controls.push('Service cap refusal stops with zero automatic retry');
+ await click('자동 음성 대화 시작');await speech();await wait(async()=>/한도/.test(await label()),'authoritative refusal');assert.equal(await live(),0);assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);await noMarker('the cap refusal stopped the session');controls.push('Service cap refusal stops with zero automatic retry');
  const unack={...config,profile:{...config.profile,profile_id:'unacknowledged-internal-profile'}};
  fixture.current.h.cachedProfile=unack.profile;
  await send({type:'config',config:unack});await drain();await click('자동 음성 대화 시작');
@@ -137,6 +150,15 @@ try {
  await b.evaluate('document.querySelector(".hps-input textarea").focus()');await b.send('Input.insertText',{text:'보관할 초안'});await drain();
  assert.equal(await b.evaluate(`document.querySelector('button[aria-label="자동 음성 대화 시작"]').disabled`),true,'unrelated draft blocks the loop');
  assert.equal(await b.evaluate('document.querySelector(".hps-input textarea").value'),'보관할 초안');assert.equal(calls.filter(c=>c.type==='sendMessage').length,before);controls.push('unrelated manual draft retained with no automatic send');
+ // Voice not served: no conversation control and never a marker, even right after a session was live.
+ refusal=false;fixture.current.h.cachedProfile=config.profile;await send({type:'config',config});await drain();
+ await b.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'');t.dispatchEvent(new Event('input',{bubbles:true}))})()`);await drain();
+ await click('자동 음성 대화 시작');await wait(async()=>(await marker()).count===1,'marked again before unserving');
+ const unserved={...config,profile:{...config.profile,voice:undefined}};fixture.current.h.cachedProfile=unserved.profile;
+ await send({type:'config',config:unserved});await drain();
+ assert.equal(await live(),0,'unserving voice stops capture');await noMarker('voice is not served');
+ assert.equal(await b.evaluate(`!!document.querySelector('[aria-label="자동 음성 대화"]')`),false,'no voice conversation control when voice is not served');
+ controls.push('voice not served: no control, no marker');
  const screenshot=await b.send('Page.captureScreenshot',{format:'png'});
  if(process.env.VOICE_EVIDENCE){mkdirSync(process.env.VOICE_EVIDENCE,{recursive:true});writeFileSync(process.env.VOICE_EVIDENCE+'/voice-conversation.png',Buffer.from(screenshot.data,'base64'));writeFileSync(process.env.VOICE_EVIDENCE+'/result.json',JSON.stringify({controls,provider_calls:0,hardware_microphone:false,actual_recorder:true,actual_analyser:true,actual_host_store:true,calls},null,2)+'\n')}
  console.log('PASS '+JSON.stringify(controls));

@@ -1,11 +1,10 @@
 // CGP-CHAT-R-030 — the learner's shortcut sheet lists only the chat keys this webview binds.
-// Every row names the handler that owns it; a key with no handler (Esc to stop an answer, a
-// focus-the-composer key) is not listed until it is built.
+// Every row names the handler that owns it; a key with no handler is not listed until it is built.
 
 export type ShortcutPlatform = 'mac' | 'other';
 
 export interface ChatShortcut {
-  id: 'send' | 'newline' | 'close' | 'find' | 'conversation' | 'dictate' | 'help';
+  id: 'send' | 'newline' | 'stop' | 'focus' | 'close' | 'find' | 'conversation' | 'dictate' | 'help';
   /** Key caps in press order, already in the platform's names. */
   keys: string[];
   label: string;
@@ -34,6 +33,11 @@ export function chatShortcuts(platform: ShortcutPlatform, options: { taskWorkspa
     { id: 'send', keys: ['Enter'], label: '메시지 보내기', note: '답하는 중에 누르면 끝나고 보내도록 예약해요' },
     // The textarea's own newline: the composer handler returns early for Shift+Enter.
     { id: 'newline', keys: [modifier('Shift', platform), 'Enter'], label: '줄 바꾸기' },
+    // chatKeys.ts useChatKeys: Esc stops the answer while one streams, when nothing else (a menu, a dialog, IME, voice,
+    // dictation) handles that Escape.
+    { id: 'stop', keys: ['Esc'], label: '답변 멈추기', note: '답하는 중에 눌러요. 메뉴나 창이 열려 있으면 그것부터 닫아요' },
+    // chatKeys.ts useChatKeys: Alt+Shift+K (Option+Shift+K) puts the cursor in the message box.
+    { id: 'focus', keys: [modifier('Alt', platform), modifier('Shift', platform), 'K'], label: '입력창으로 가기' },
     // useDialogFocus / menu and panel handlers: Escape closes the open dialog, menu or panel.
     // (The composer ignores Enter while it is read-only: no activity or a missing task folder.)
     { id: 'close', keys: ['Esc'], label: '열린 창·메뉴 닫기' },

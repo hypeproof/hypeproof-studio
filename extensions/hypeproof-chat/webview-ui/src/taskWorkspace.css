@@ -67,6 +67,13 @@
 .tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-10); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); color: inherit; text-align: left; background: transparent; margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
 .tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-1)); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
+/* CGP-VOICE-R-030 (REQ-CGPV-43): the live voice conversation's marker on its rail row, an icon and the words "음성 대화 중" at the
+   14px floor (a status, not a control: no fill, no hover). The words keep the row's own text colour: the accent link colour
+   on the selected row is 3.85:1 in Dark+ and 4.36:1 in 2026 Light (verify-3928), so only the icon carries the accent.
+   Forced colours need no rule: the UA forces the row's <button> to ButtonText on ButtonFace and the marker inherits it
+   (measured, icon included, in voice-live-task-marker-computed). */
+.tw-task-voice { display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-14); min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: inherit; }
+.tw-task-voice > svg { flex: none; color: var(--hp-text-accent-default); }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
 /* CGP-CHAT-R-025 — 보관함: same quiet rail rows, no destructive colour (nothing is deleted). */
@@ -365,11 +372,12 @@ body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace {
    flow under its row, because the task list scrolls and would clip a popover. */
 .tw-task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--ds-c-studio-taskworkspace-space-2); }
 .tw-task-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--hp-control-min); min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; margin: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
-.tw-task-menu-panel { grid-column: 1 / -1; margin: 0 0 var(--ds-c-studio-taskworkspace-space-14); padding: var(--ds-c-studio-taskworkspace-space-15); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); }
+/* CGP-DS-R-022: the shared learner-menu token set (gutter, item height and padding, nested radius), as in chatDetails.css. */
+.tw-task-menu-panel { grid-column: 1 / -1; margin: 0 0 var(--ds-c-studio-taskworkspace-space-14); padding: var(--ds-c-menu-gutter); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); }
 .tw-task-menu-heading, .tw-task-menu-reason { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--tw-muted); overflow-wrap: anywhere; }
 .tw-task-menu-heading { margin-bottom: var(--ds-c-studio-taskworkspace-space-12); }
 .tw-task-menu-reason { margin-top: var(--ds-c-studio-taskworkspace-space-12); }
-.tw-task-menu-panel button[role="menuitem"] { display: block; width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: calc(var(--hp-radius-menu) - var(--ds-c-studio-taskworkspace-space-15)); background: transparent; color: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.tw-task-menu-panel button[role="menuitem"] { display: block; width: 100%; min-height: var(--ds-c-menu-item-height); box-sizing: border-box; margin: 0; padding: var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline); border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--hp-radius-menu-item); background: transparent; color: inherit; text-align: start; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .tw-task-menu-panel button[role="menuitem"]:hover:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-hover); }
 .tw-task-menu-panel button[role="menuitem"]:active:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-pressed); }
 .tw-task-menu-panel button[role="menuitem"][aria-disabled="true"] { color: var(--tw-muted); cursor: not-allowed; }

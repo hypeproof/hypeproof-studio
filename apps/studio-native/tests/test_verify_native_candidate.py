@@ -138,5 +138,133 @@ class GateContracts(unittest.TestCase):
             with self.assertRaisesRegex(gate.Refused, 'clean'):
                 gate.source_identity(root)
 
+
+COLLECT = importlib.util.spec_from_file_location('signin_collect', Path(__file__).parents[1] / 'scripts/collect-signin-journey.py')
+collect = importlib.util.module_from_spec(COLLECT)
+COLLECT.loader.exec_module(collect)
+PASSED = f"Test Case '-[HPStudioUITests.StudioSignInBoundaryTests {collect.TEST}]' "
+
+def journey_record(status='PARTIAL', **hops):
+    value = {name: {'status': 'NOT_RUN'} for name in gate.REQUIRED_HOPS}
+    value.update({name: {'status': 'PASS'} for name in collect.BROWSER_HOPS})
+    value.update(hops)
+    return {'schema': gate.SIGNIN_SCHEMA, 'repository': gate.REPOSITORY, 'source_head_sha': HEAD, 'run_id': 123,
+            'run_attempt': 2, 'status': status, 'hops': value}
+
+def with_journey(record):
+    listing = artifacts()
+    listing['artifacts'].append({'id': 789, 'name': 'studio-native-signin-journey-123-2', 'expired': False,
+                                 'workflow_run': {'id': 123, 'head_sha': HEAD}})
+    return Mock(side_effect=[{'workflow_runs': [RUN]}, listing, archive(document()),
+                             archive(record, 'signin-journey.json'), {'workflow_runs': [RUN]}])
+
+class SignedInJourneyDistribution(unittest.TestCase):
+    """Designed outcomes: who may receive a build, given the journey result for that exact source."""
+    def test_external_needs_pass_internal_may_proceed_and_says_so_fail_blocks_both(self):
+        external = gate.decide_distribution('external', 'PASS')
+        self.assertEqual((external['testflight_internal_only'], external['external_distribution_eligible']), (False, True))
+        for status in ('NOT_RUN', 'PARTIAL', 'FAIL'):
+            with self.subTest(status=status), self.assertRaisesRegex(gate.Refused, 'External distribution requires|FAILED'):
+                gate.decide_distribution('external', status)
+        for status in ('NOT_RUN', 'PARTIAL'):
+            internal = gate.decide_distribution('internal', status)
+            with self.subTest(status=status):
+                self.assertTrue(internal['testflight_internal_only'])
+                self.assertFalse(internal['external_distribution_eligible'])
+                self.assertIn('Internal testing only', internal['note'])
+                self.assertEqual(internal['signed_in_journey'], status)
+        with self.assertRaisesRegex(gate.Refused, 'FAILED'):
+            gate.decide_distribution('internal', 'FAIL')
+        for audience, status in (('public', 'PASS'), ('external', 'MAYBE')):
+            with self.assertRaises(gate.Refused):
+                gate.decide_distribution(audience, status)
+
+    def test_default_audience_is_internal_and_garbage_is_refused(self):
+        self.assertEqual(gate.distribution_audience({}), 'internal')
+        self.assertEqual(gate.distribution_audience({'NATIVE_DISTRIBUTION_AUDIENCE': 'external'}), 'external')
+        for value in ('EXTERNAL', 'all', 'internal\n'):
+            with self.assertRaises(gate.Refused):
+                gate.distribution_audience({'NATIVE_DISTRIBUTION_AUDIENCE': value})
+
+    def test_verdict_is_pass_only_when_every_hop_passes_and_is_recomputed_from_hops(self):
+        every = {name: {'status': 'PASS'} for name in gate.REQUIRED_HOPS}
+        self.assertEqual(gate.journey_status(every), 'PASS')
+        self.assertEqual(gate.journey_status({**every, gate.REQUIRED_HOPS[3]: {'status': 'NOT_RUN'}}), 'PARTIAL')
+        self.assertEqual(gate.journey_status({**every, gate.REQUIRED_HOPS[0]: {'status': 'FAIL'}}), 'FAIL')
+        self.assertEqual(gate.journey_status({}), 'NOT_RUN')
+        for bad in ({'invented_hop': {'status': 'PASS'}}, {gate.REQUIRED_HOPS[0]: {'status': 'GREEN'}}, []):
+            with self.assertRaises(gate.Refused):
+                gate.journey_status(bad)
+
+    def test_gate_and_collector_agree_on_the_hops(self):
+        self.assertEqual(gate.REQUIRED_HOPS, collect.REQUIRED_HOPS)
+        for hops in ({}, {n: {'status': 'PASS'} for n in collect.REQUIRED_HOPS},
+                     {n: {'status': 'PASS'} for n in collect.BROWSER_HOPS}):
+            self.assertEqual(gate.journey_status(hops), collect.overall(hops))
+
+    def test_missing_journey_record_is_not_run_never_pass(self):
+        read = Mock(side_effect=[{'workflow_runs': [RUN]}, artifacts(), archive(document()), {'workflow_runs': [RUN]}])
+        result = gate.wait_for_candidate(SOURCE, HEAD, 10, 10, read=read)
+        self.assertEqual(result['signed_in_journey']['status'], 'NOT_RUN')
+        self.assertEqual(result['signed_in_journey']['unverified'], list(gate.REQUIRED_HOPS))
+
+    def test_exact_run_record_is_read_and_unverified_hops_are_listed(self):
+        result = gate.wait_for_candidate(SOURCE, HEAD, 10, 10, read=with_journey(journey_record()))
+        journey = result['signed_in_journey']
+        self.assertEqual(journey['status'], 'PARTIAL')
+        self.assertEqual(journey['unverified'], list(collect.AUTHENTICATED_HOPS))
+        self.assertEqual(journey['artifact_id'], 789)
+
+    def test_record_for_another_source_run_or_with_a_forged_verdict_is_refused(self):
+        for change in ({'source_head_sha': MERGE}, {'run_id': 124}, {'run_attempt': 1}, {'status': 'PASS'},
+                       {'schema': 'other'}, {'repository': 'other/repo'}):
+            with self.subTest(change=change), self.assertRaises(gate.Refused):
+                gate.wait_for_candidate(SOURCE, HEAD, 10, 10, read=with_journey({**journey_record(), **change}))
+
+    def test_upload_side_decision_is_recomputed_and_matches_the_requested_audience(self):
+        partial = {'signed_in_journey': {'hops': journey_record()['hops']}}
+        full = {'signed_in_journey': {'hops': {n: {'status': 'PASS'} for n in gate.REQUIRED_HOPS}}}
+        external = {'NATIVE_DISTRIBUTION_AUDIENCE': 'external'}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'gate.json'
+            def decide(document, environ):
+                path.write_text(json.dumps(document))
+                return gate.release_distribution(path, environ)
+            self.assertTrue(decide(partial, {})['testflight_internal_only'])
+            self.assertTrue(decide({}, {})['testflight_internal_only'])  # legacy gate without a record: NOT_RUN
+            self.assertFalse(decide(full, external)['testflight_internal_only'])
+            for document in (partial, {}):
+                with self.assertRaises(gate.Refused):
+                    decide(document, external)
+            # A gate admitted for one audience cannot be replayed for another.
+            admitted = {**full, 'distribution': gate.decide_distribution('external', 'PASS')}
+            with self.assertRaisesRegex(gate.Refused, 'differs'):
+                decide(admitted, {})
+
+class SigninCollector(unittest.TestCase):
+    def lines(self, *events):
+        return ''.join(PASSED + event + '\n' for event in events)
+
+    def test_passing_browser_case_still_leaves_the_authenticated_hops_unverified(self):
+        record = collect.collect(HEAD, 123, 2, self.lines('started.', 'passed (12.0 seconds).'), 0)
+        self.assertEqual(record['status'], 'PARTIAL')
+        self.assertEqual(record['unverified'], list(collect.AUTHENTICATED_HOPS))
+        self.assertTrue(all('reason' in record['hops'][n] for n in collect.AUTHENTICATED_HOPS))
+        self.assertEqual(gate.verify_signin_journey(record, RUN, 789)['status'], 'PARTIAL')
+
+    def test_failed_absent_or_crashed_browser_case_is_never_a_pass(self):
+        for log, code, expected in ((self.lines('started.', 'failed (3.0 seconds).'), 65, 'FAIL'),
+                                    ('', 0, 'NOT_RUN'), ('', 65, 'NOT_RUN'),
+                                    (self.lines('started.'), 65, 'FAIL'),
+                                    (self.lines('started.', 'passed (1.0 seconds).'), 65, 'FAIL'),
+                                    (self.lines('started.', 'skipped (0.1 seconds).'), 0, 'NOT_RUN')):
+            with self.subTest(log=log, code=code):
+                self.assertEqual(collect.collect(HEAD, 1, 1, log, code)['status'], expected)
+
+    def test_identity_must_be_real(self):
+        for args in (('short', 1, 1, '', 0), (HEAD, 0, 1, '', 0), (HEAD, 1, 1, '', 256)):
+            with self.assertRaises(ValueError):
+                collect.collect(*args)
+
 if __name__ == '__main__':
     unittest.main()

@@ -19,6 +19,13 @@ WORKFLOW = '.github/workflows/studio-native-mobile.yml'
 RELEASE_WORKFLOW = '.github/workflows/studio-apple-testflight.yml'
 ARTIFACT_PREFIX = 'studio-native-candidate'
 SCHEMA = 'hps-native-candidate/1'
+SIGNIN_PREFIX = 'studio-native-signin-journey'
+SIGNIN_SCHEMA = 'hps-native-signin-journey/1'
+# Same hop list as collect-signin-journey.py (a test keeps them identical). PASS needs every hop to PASS.
+REQUIRED_HOPS = ('service_start_returns_lab_url', 'system_browser_session_loads_sign_in_page', 'cancel_returns_to_app',
+                 'browser_form_post_through_lab_proxy', 'callback_returns_to_app_from_lab', 'token_exchange_and_account_load')
+HOP_STATES = ('PASS', 'FAIL', 'NOT_RUN')
+AUDIENCES = ('internal', 'external')
 
 class Refused(ValueError):
     pass
@@ -182,13 +189,13 @@ def select_artifact(payload, run):
         raise Refused('Artifact does not belong to selected exact-head run')
     return artifact
 
-def read_identity_archive(data):
+def read_identity_archive(data, member='native-candidate.json'):
     if len(data) > 65536:
         raise Refused('Oversized identity archive')
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             entries = archive.infolist()
-            if len(entries) != 1 or entries[0].filename != 'native-candidate.json':
+            if len(entries) != 1 or entries[0].filename != member:
                 raise Refused('Unexpected identity archive contents')
             entry = entries[0]
             mode = entry.external_attr >> 16
@@ -200,6 +207,88 @@ def read_identity_archive(data):
             return value
     except (zipfile.BadZipFile, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise Refused('Invalid identity archive') from exc
+
+def journey_status(hops):
+    """Verdict recomputed from hop states; a stored verdict is never trusted."""
+    if not isinstance(hops, dict) or set(hops) - set(REQUIRED_HOPS):
+        raise Refused('Malformed signed-in journey hops')
+    states = []
+    for name in REQUIRED_HOPS:
+        hop = hops.get(name, {'status': 'NOT_RUN'})
+        if not isinstance(hop, dict) or hop.get('status') not in HOP_STATES:
+            raise Refused('Malformed signed-in journey hop state')
+        states.append(hop['status'])
+    if 'FAIL' in states:
+        return 'FAIL'
+    if all(state == 'PASS' for state in states):
+        return 'PASS'
+    return 'PARTIAL' if 'PASS' in states else 'NOT_RUN'
+
+def not_run_journey(reason):
+    return {'status': 'NOT_RUN', 'reason': reason, 'hops': {}, 'unverified': list(REQUIRED_HOPS)}
+
+def select_signin_artifact(payload, run):
+    """The journey record of this exact run attempt, or None. Absence means NOT_RUN, never PASS."""
+    name = f"{SIGNIN_PREFIX}-{integer(run['id'])}-{integer(run['run_attempt'])}"
+    matches = [a for a in payload.get('artifacts', []) if a.get('name') == name and a.get('expired') is False]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise Refused('Duplicate signed-in journey artifacts')
+    artifact = matches[0]
+    integer(artifact.get('id'))
+    origin = artifact.get('workflow_run', {})
+    if origin.get('id') != run['id'] or origin.get('head_sha') != run['head_sha']:
+        raise Refused('Journey artifact does not belong to selected exact-head run')
+    return artifact
+
+def verify_signin_journey(document, run, artifact_id):
+    if document.get('schema') != SIGNIN_SCHEMA or document.get('repository') != REPOSITORY:
+        raise Refused('Unexpected signed-in journey schema/repository')
+    if (document.get('source_head_sha') != run['head_sha'] or document.get('run_id') != run['id']
+            or document.get('run_attempt') != run['run_attempt']):
+        raise Refused('Signed-in journey does not bind the selected source, run and attempt')
+    status = journey_status(document.get('hops'))
+    if document.get('status') != status:
+        raise Refused('Signed-in journey verdict differs from its hops')
+    return {'status': status, 'artifact_id': artifact_id, 'source_head_sha': run['head_sha'],
+            'hops': {name: document['hops'].get(name, {'status': 'NOT_RUN'}) for name in REQUIRED_HOPS},
+            'unverified': [n for n in REQUIRED_HOPS if document['hops'].get(n, {}).get('status') != 'PASS']}
+
+def distribution_audience(environ):
+    value = environ.get('NATIVE_DISTRIBUTION_AUDIENCE', '') or 'internal'
+    if value not in AUDIENCES:
+        raise Refused('Distribution audience must be internal or external')
+    return value
+
+def decide_distribution(audience, status):
+    """Who may receive this build, from the signed-in journey result for the exact source.
+
+    External testers need a PASS. Internal testing may proceed on PARTIAL or NOT_RUN, but the
+    decision records it. A known FAIL blocks both: the login is broken for that exact source.
+    """
+    if audience not in AUDIENCES or status not in ('PASS', 'FAIL', 'PARTIAL', 'NOT_RUN'):
+        raise Refused('Unknown distribution audience or signed-in journey status')
+    if status == 'FAIL':
+        raise Refused('Signed-in journey FAILED for this source; no TestFlight upload')
+    if audience == 'external' and status != 'PASS':
+        raise Refused(f'External distribution requires a PASS signed-in journey for this exact source; it is {status}')
+    return {'audience': audience, 'signed_in_journey': status,
+            'testflight_internal_only': audience == 'internal',
+            'external_distribution_eligible': status == 'PASS',
+            'note': 'Internal testing only; the signed-in journey is ' + status + ', not PASS.'
+                    if audience == 'internal' and status != 'PASS' else 'Signed-in journey PASS for this exact source.'
+                    if status == 'PASS' else ''}
+
+def release_distribution(path, environ):
+    """Upload-side decision, recomputed from the downloaded gate and this run's audience input."""
+    document = json.loads(path.read_text())
+    journey = document.get('signed_in_journey')
+    status = journey_status(journey.get('hops')) if isinstance(journey, dict) and journey.get('hops') else 'NOT_RUN'
+    decision = decide_distribution(distribution_audience(environ), status)
+    if 'distribution' in document and document['distribution'] != decision:
+        raise Refused('Native release gate distribution differs from this upload request')
+    return decision
 
 def verify_identity(document, expected, run):
     if document.get('schema') != SCHEMA or document.get('repository') != REPOSITORY:
@@ -259,9 +348,16 @@ def wait_for_candidate(expected, head, timeout, interval, read=api, clock=time.m
         if run and run.get('status') == 'completed':
             if run.get('conclusion') != 'success':
                 raise Refused('Exact-head native CI did not succeed')
-            artifact = select_artifact(read(base + f"/runs/{run['id']}/artifacts?per_page=100"), run)
+            listing = read(base + f"/runs/{run['id']}/artifacts?per_page=100")
+            artifact = select_artifact(listing, run)
             document = read_identity_archive(read(base + f"/artifacts/{artifact['id']}/zip", binary=True))
             verify_identity(document, expected, run)
+            journey_artifact = select_signin_artifact(listing, run)
+            if journey_artifact is None:
+                journey = not_run_journey('no signed-in journey record for this run attempt')
+            else:
+                record = read_identity_archive(read(base + f"/artifacts/{journey_artifact['id']}/zip", binary=True), 'signin-journey.json')
+                journey = verify_signin_journey(record, run, journey_artifact['id'])
             # A rerun or a newer exact-head run can start while its old artifact
             # downloads. Re-read eligibility immediately before emitting PASS.
             latest = select_run(read(base + '/workflows/studio-native-mobile.yml/runs?head_sha=' + sha(head) + '&per_page=100'), head)
@@ -272,7 +368,8 @@ def wait_for_candidate(expected, head, timeout, interval, read=api, clock=time.m
                     'release_checkout_sha': expected['checkout_sha'], 'source_head_sha': head,
                     'native_run_id': run['id'], 'native_run_attempt': run['run_attempt'],
                     'artifact_id': artifact['id'], 'native_tree': expected['native_tree'],
-                    'native_workflow': expected['native_workflow'], 'signing': 'NOT_RUN', 'deployment': 'NOT_RUN'}
+                    'native_workflow': expected['native_workflow'], 'signing': 'NOT_RUN', 'deployment': 'NOT_RUN',
+                    'signed_in_journey': journey}
         if run and run.get('status') not in ('queued', 'in_progress', 'waiting', 'requested', 'pending'):
             raise Refused('Unknown native run state')
         sleep(min(interval, max(0, deadline - clock())))
@@ -318,8 +415,12 @@ def main():
                               workflow_source_sha=identity['workflow_source_sha'])
             result.update(deployment_request=identity['deployment_request'],
                           release_run_id=identity['run_id'], release_run_attempt=identity['run_attempt'])
+            # Refuse before the environment-protected signing job when this audience may not receive the build.
+            journey = result.get('signed_in_journey') or not_run_journey('no signed-in journey record')
+            result['distribution'] = decide_distribution(distribution_audience(os.environ), journey_status(journey.get('hops')) if journey.get('hops') else 'NOT_RUN')
         else:
             identity['native_gate'] = verify_release_gate(args.release_gate, source, identity)
+            identity['distribution'] = release_distribution(args.release_gate, os.environ)
             if args.mode == 'request':
                 result = {'schema': 'hps-native-upload-preflight/1', 'repository': REPOSITORY, **identity}
             else:

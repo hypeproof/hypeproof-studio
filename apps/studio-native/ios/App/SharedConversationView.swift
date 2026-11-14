@@ -542,6 +542,13 @@ struct SharedConversationView: View {
     @ViewBuilder private var status: some View {
         if model.loggingOut { ProgressView("계정 확인을 마치고 로그아웃하는 중이에요.").font(.caption).accessibilityIdentifier("sharedLoggingOut") }
         if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("sharedError") }
+        if model.signedIn && model.error != nil && !model.syncing && !model.loggingOut {
+            Button { voice.stop(); model.refresh() } label: {
+                Label("대화 다시 확인", systemImage: "arrow.clockwise").frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered).disabled(model.busy)
+            .accessibilityIdentifier("retryConversationSync")
+        }
         if !model.notice.isEmpty { Text(model.notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sharedStatus") }
         if model.syncing { ProgressView("대화 확인 중").font(.caption).accessibilityIdentifier("sharedSyncing") }
     }
@@ -552,7 +559,7 @@ struct SharedConversationView: View {
     @ViewBuilder private var journeyDiagnostics: some View {
         if NativeJourneyFixture.enabled {
             VStack(spacing: 0) {
-                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync {
+                if NativeJourneyFixture.responseStop || NativeJourneyFixture.logoutSync || NativeJourneyFixture.syncRecovery {
                     // Observe a genuinely in-flight transport without changing
                     // production state or occupying transcript layout.
                     TimelineView(.periodic(from: .now, by: 0.1)) { _ in

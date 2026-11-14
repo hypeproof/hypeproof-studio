@@ -163,6 +163,9 @@ private struct SharedCacheFile: Codable {
     }
     private var operation: Task<Void, Never>?
     private var polling: Task<Void, Never>?
+    private var personalHistoryNeedsRetry = false
+    private var conversationListFlight: (id: UUID, epoch: UUID, task: Task<Void, Never>)?
+    @Published private(set) var conversationListError: String?
     private var epoch = UUID()
     private var visible = true
     private var cacheReadable = true
@@ -345,7 +348,7 @@ private struct SharedCacheFile: Codable {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 4_000_000_000)
                     guard !Task.isCancelled, let self, self.visible else { return }
-                    await self.synchronize()
+                    await self.synchronize(automatic: true)
                 }
             }
         }
@@ -365,10 +368,9 @@ private struct SharedCacheFile: Codable {
                 let callback = try await browser.authenticate(start.authorization_uri, expiresIn: start.expires_in)
                 try Task.checkCancellation()
                 guard epoch == attempt else { return }
-                let code = try proof.authorizationCode(from: callback)
                 loginStatus = "로그인을 마무리하고 있어요."
                 // The code is single-use. Never retry an ambiguous exchange.
-                let tokens = try await service.exchangeNativeSignIn(code: code, proof: proof)
+                let tokens = try await service.exchangeNativeSignIn(callback: callback, proof: proof)
                 acquired = tokens
                 let id = try await service.accountID(tokens.access_token, sessionID: tokens.session_id)
                 try Task.checkCancellation()
@@ -426,13 +428,15 @@ private struct SharedCacheFile: Codable {
         }
     }
     private func clearAccount() {
+        conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         tokenFlight.invalidate(); approvals.invalidate()
         do { try AccountKeychain.remove() } catch { accountStorageReady = false }
         account = nil; signedIn = false; entries = [:]; conversations = []; selected = nil
     }
     func refresh() { Task { await synchronize() } }
-    private func synchronize() async {
+    private func synchronize(automatic: Bool = false) async {
         guard signedIn, cacheReadable, visible, !busy, !syncing, !stoppingReflection else { return }
+        guard !automatic || !isReflection || !personalHistoryNeedsRetry else { return }
         syncing = true; let attempt = epoch; let current = selected
         defer {
             syncing = false
@@ -462,9 +466,16 @@ private struct SharedCacheFile: Codable {
 #endif
             guard epoch == attempt else { return }
             try applyReflection(personal)
+            personalHistoryNeedsRetry = false
             let personalItem = SharedConversation(id: Self.personalID, title: "나를 알아가는 대화", host_session_id: "", revision: personal.state.revision, updated_at: personal.state.messages.last?.created_at ?? 0)
             // A desktop-list outage must not hide an already available personal conversation.
             try persist(entries: entries, conversations: [personalItem] + conversations.filter { $0.id != Self.personalID })
+            if current == Self.personalID {
+                refreshConversationList(credential, attempt: attempt)
+                error = guestDraftFailure ?? cache.requestFailure
+                notice = "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요."
+                return
+            }
             var list = try await service.list(credential)
             list.insert(personalItem, at: 0)
             guard epoch == attempt else { return }
@@ -489,14 +500,50 @@ private struct SharedCacheFile: Codable {
             }
             error = guestDraftFailure ?? cache.requestFailure
             notice = isReflection ? "같은 계정의 대화예요. 컴퓨터가 꺼져 있어도 질문을 받을 수 있어요." : "동기화됨 · 이 작업의 실행은 데스크톱에 있어요"
-        } catch { if epoch == attempt { failure(error) } }
+        } catch {
+            if epoch == attempt {
+                if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
+                    if current == Self.personalID { personalHistoryNeedsRetry = true }
+                    failure(error)
+                }
+            }
+        }
+    }
+    private func refreshConversationList(_ credential: String, attempt: UUID) {
+        guard conversationListFlight?.epoch != attempt, let identity = account else { return }
+        conversationListFlight?.task.cancel()
+        let id = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer { if conversationListFlight?.id == id { conversationListFlight = nil } }
+            do {
+                let list = try await service.list(credential)
+                try Task.checkCancellation()
+                guard epoch == attempt, signedIn, account?.accountID == identity.accountID,
+                      account?.tokens.session_id == identity.tokens.session_id else { return }
+                // Read current entries and personal metadata after the GET. A
+                // concurrent draft edit or answer must not be replaced by the
+                // snapshot captured when discovery started.
+                let personal = conversations.filter { $0.id == Self.personalID }
+                try persist(entries: entries, conversations: personal + list)
+                conversationListError = nil
+            } catch {
+                guard !(error is CancellationError), epoch == attempt, signedIn,
+                      account?.accountID == identity.accountID,
+                      account?.tokens.session_id == identity.tokens.session_id else { return }
+                conversationListError = "컴퓨터의 대화 목록을 확인하지 못했어요. 나의 질문은 계속 쓸 수 있어요."
+            }
+        }
+        conversationListFlight = (id, attempt, task)
     }
     private func applyReflection(_ value: PersonalReflection) throws {
         try edit(Self.personalID) { try $0.applyReflection(value) }
         opening = value.opening; openingHint = value.hint; hasEarlierReflection = value.state.has_earlier
     }
     private func failure(_ error: Error) {
-        self.error = error.localizedDescription
+        self.error = (error as? URLError)?.code == .timedOut
+            ? "대화를 확인하는 데 시간이 오래 걸려요. 작성한 글은 남아 있어요. 다시 확인해 주세요."
+            : error.localizedDescription
         if case SyncFailure.http(let status, let code) = error, status == 401 || ["session_revoked", "account_inactive", "refresh_reuse"].contains(code) {
             clearAccount()
         }
@@ -672,6 +719,7 @@ private struct SharedCacheFile: Codable {
         // Let a shared credential refresh finish before invalidating its flight.
         tokenFlight.invalidate()
         epoch = UUID()
+        conversationListFlight?.task.cancel(); conversationListFlight = nil; conversationListError = nil
         let execution = LogoutIntent(epoch: epoch, accountID: current.accountID, sessionID: current.tokens.session_id)
         operation = Task {
             defer {

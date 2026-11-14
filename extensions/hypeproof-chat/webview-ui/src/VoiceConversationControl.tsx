@@ -11,6 +11,7 @@ import { onHostMessage, postToHost } from './vscode';
 import { ChatIcon } from './ChatDetails';
 import { windowOutputMute } from '../../src/voiceOutputMute';
 import { readServedVoice } from '../../src/voiceServed';
+import { windowVoiceLiveTask } from '../../src/voiceLiveTask';
 import { nativeComposing } from './imeGuard';
 
 export function voiceConversationScope(config: ChatConfig | undefined): string {
@@ -71,7 +72,15 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
       recorder: makeRecorder(), observe: observeVoiceEndpoint, scope: () => voiceConversationScope(latest.current.config), ready,
       transcribe: (requestId, clip) => postToHost({ type: 'voiceTranscribe', requestId, mime: clip.mime, seconds: clip.seconds, audio: base64Of(clip.bytes) }),
       submit: text => latest.current.turn.submit(text), speech,
-      changed: next => { latest.current.onActive(!['idle', 'stopped'].includes(next.phase)); setView(next); }, id: () => `v${crypto.randomUUID().replace(/-/g, '')}`,
+      changed: next => {
+        const active = !['idle', 'stopped'].includes(next.phase);
+        latest.current.onActive(active);
+        // CGP-VOICE-R-030 — the task rail's marker: the active task while a session is live and voice is served; null once the
+        // session has stopped, which comes after the microphone was released.
+        const value = latest.current, served = value.voice.availability.kind === 'on' && value.voice.availability.served.dictation && value.voice.availability.served.readAloud;
+        windowVoiceLiveTask.set(active && served ? value.config?.taskWorkspace?.activeTaskId ?? null : null);
+        setView(next);
+      }, id: () => `v${crypto.randomUUID().replace(/-/g, '')}`,
     });
     loop.current = controller;
     const offSpeech = speech.subscribe(() => controller.playbackChanged());
@@ -92,7 +101,7 @@ export function VoiceConversationControl({ turn, config, onActive }: { turn: Com
       if (event.key === 'Escape' && !isComposing && controller.active) { event.preventDefault(); controller.stop(); }
     };
     document.addEventListener('visibilitychange', visibility); window.addEventListener('pagehide', hide); window.addEventListener('keydown', escape);
-    return () => { off(); offSpeech(); offMute(); controller.stop(); loop.current = null; document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', hide); window.removeEventListener('keydown', escape); };
+    return () => { off(); offSpeech(); offMute(); controller.stop(); windowVoiceLiveTask.set(null); loop.current = null; document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', hide); window.removeEventListener('keydown', escape); };
   }, [speech, makeRecorder]);
   const active = !['idle', 'stopped'].includes(view.phase);
   useLayoutEffect(() => { loop.current?.stop(); }, [scope]);

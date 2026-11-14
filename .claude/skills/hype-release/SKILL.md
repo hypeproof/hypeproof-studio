@@ -16,6 +16,9 @@ approval engine or call a draft a stable customer update.
    synced repository; global Codex installs also include `runtime/release.py` beside
    this skill. Python 3.11+, Git and authenticated `gh` are required. Studio build
    contract/approval checks additionally require the product's supported Node runtime.
+   Windows dispatch and native scoped writes use the canonical Harness entrypoint
+   (including its trusted `scripts/agent-identity` broker). A mirrored skill runtime
+   does not gain that authority; do not repair a missing broker with member tokens.
 3. Initialize or resume the candidate using the current policy and a shared
    HypeProof state repository. Remote identity comes from `gh`; never substitute a
    teammate's token. `status` first, then reconcile UNKNOWN operations before acting.
@@ -28,9 +31,14 @@ approval engine or call a draft a stable customer update.
    use the advertised user path without test-only SDK seeding and reach first
    answer, file save and preview. Bind setup and previous-package identity to native
    evidence; a missing journey is BLOCKED even if all selected smokes are green.
-5. Build once via the existing managed annotated tag. Do not also dispatch workflows.
-   A lost response is UNKNOWN: observe the exact tag/run before any retry. A failed
-   run may use bounded `retry-build`, followed by `reconcile` when its attempt advances.
+5. Build once through the bounded `build` operation. Its exact request binds the
+   managed tag that starts Mac and, for dispatch-only Windows, one accounted Windows
+   dispatch using the same tag/source/version. Do not dispatch either workflow
+   independently. A lost response is UNKNOWN: `reconcile` observes the exact tag and
+   both runs without replay. If a partial build has a never-attempted effect, use
+   `resume-build` with the original checkout and a fresh whole-request quote. It
+   reuses the reservation and cannot repeat an attempted write. A failed run may
+   use bounded `retry-build`, followed by `reconcile` when its attempt advances.
 6. Collect successful Mac/Windows receipts and the exact bytes. Compare digest + size
    uniquely when GitHub normalizes filenames. CI success is not an installed-app,
    certificate trust, functional login, UX or human-acceptance verdict.
@@ -68,3 +76,27 @@ Use the user's authorized scope without repetitive permission questions. A techn
 or policy block needs its exact source and the concrete prepared action. Never invent
 PASS, approval, credentials, $0 final billing, or completion of an unobserved test.
 Keep engineering records in English and the user-facing report in Korean.
+
+## Desktop trigger preflight
+
+The `build` adapter reads the exact candidate's committed platform configuration
+and workflows. It requires Mac's `push: tags: [v*]` plus either the same Windows
+tag trigger or the supported Windows `workflow_dispatch` input contract. Unsupported
+or ambiguous triggers fail before reservation/tag creation; use the existing
+release-cut path instead. The confirmed request binds source, tag marker, config
+and workflow digests, trigger modes and all dispatch inputs. Windows dispatch uses
+a separate repository-scoped Actions broker grant; it never uses an ambient member
+credential for the new write. Mac is never additionally dispatched.
+
+Each effect has a durable CAS intent before its write. `reconcile` is read-only
+toward GitHub builds and may retain partial observations in the state store.
+`resume-build --operation ID --checkout PATH --quote FILE` can execute only a
+never-attempted effect of that original request. A new operation ID cannot start
+another build for the candidate. Refreshing the quote keeps the greater reserved
+whole-build bound and respects the original budget/attempt limits. A missing or
+ambiguous run remains UNKNOWN even when GitHub accepted the request; no timeout
+proves a write was absent. Legacy UNKNOWN operations keep their original semantics.
+
+`BUILD_RUNS_OBSERVED` means both exact runs exist, not that builds succeeded or
+packages were installed. Collect both successful receipts and immutable package
+bytes, then retain S1/S3/S4/S5, signing, native acceptance and publication gates.

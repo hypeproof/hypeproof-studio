@@ -53,7 +53,7 @@ await t('the webview band is drawn only from the config flag and calls the host 
 });
 
 await t('the approved band texts are in the component', () => {
-  assert.match(panel, /<span>리허설 중<\/span>/);
+  assert.match(panel, /<span className="hps-rehearsal-seat-label">리허설 중<\/span>/);
   assert.match(panel, /끝내고 돌아가기/);
 });
 
