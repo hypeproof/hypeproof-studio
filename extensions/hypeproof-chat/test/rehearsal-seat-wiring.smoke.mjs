@@ -46,7 +46,9 @@ await t('the palette item is hidden outside the seat by its when clause and list
 });
 
 await t('the webview band is drawn only from the config flag and calls the host on its button', () => {
-  assert.match(panel, /<RehearsalSeatBand visible=\{!!config\?\.rehearsalSeat\} onEnd=\{props\.onEndRehearsalSeat \?\? \(\(\) => undefined\)\} \/>/);
+  // The band rides in the banner slot, and only a rehearsal signal puts it there (no new sibling without the signal).
+  assert.match(panel, /const updateBanner = config\?\.rehearsalSeat \? \(\n\s*<>\{updateBannerCore\}<RehearsalSeatBand visible onEnd=\{props\.onEndRehearsalSeat \?\? \(\(\) => undefined\)\} \/><\/>\n\s*\) : updateBannerCore;/);
+  assert.doesNotMatch(panel, /<RehearsalSeatBand visible=\{!!config/, 'no separate sibling band');
   assert.match(app, /onEndRehearsalSeat=\{\(\) => postToHost\(\{ type: "rehearsalSeatEnd" \}\)\}/);
 });
 

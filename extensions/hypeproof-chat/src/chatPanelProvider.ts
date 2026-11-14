@@ -12000,7 +12000,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.currentClassNoticeId = visibleClassWindow?.noticeId;
     // #4048 — the rehearsal band and its palette item follow the same signal: a rehearsal seat only.
     const seatBand = await this.rehearsalSeatBand();
-    void vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand).then(undefined, () => undefined);
+    void (async () => vscode.commands.executeCommand("setContext", "hypeproofChat.rehearsalSeat", seatBand))().catch(() => undefined);
     await this.post({
       type: "config",
       config: {

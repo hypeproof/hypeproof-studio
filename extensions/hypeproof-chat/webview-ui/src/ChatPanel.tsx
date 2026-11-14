@@ -1480,9 +1480,14 @@ export function ChatPanel(props: Props) {
   //
   // If you need a new hook, add it **above** this block.
   // ─────────────────────────────────────────────────────────────────────────
-  const updateBanner = config?.update ? (
+  const updateBannerCore = config?.update ? (
     <UpdateBanner offer={config.update} onInstall={props.onInstallUpdate} onDismiss={props.onDismissUpdate} />
   ) : null;
+  // #4052 — the rehearsal band rides in the same slot as the update banner. Without the signal that slot is exactly the
+  // one main renders, so no sibling's tree position (and no React useId) moves. A new sibling would shift them.
+  const updateBanner = config?.rehearsalSeat ? (
+    <>{updateBannerCore}<RehearsalSeatBand visible onEnd={props.onEndRehearsalSeat ?? (() => undefined)} /></>
+  ) : updateBannerCore;
   // #1298 — config null means postConfig not yet received; show loading regardless of instructor role.
   // Once config arrives, an instructor may render without a profile or activity.
   // #3563 — an instructor verified by the Chalk runtime sees the Chalk tab notice, not the student start screen.
@@ -1960,7 +1965,6 @@ export function ChatPanel(props: Props) {
       {draftError && <p role="alert">{draftError}</p>}
       {linkBlockedBanner}
       {updateBanner}
-      <RehearsalSeatBand visible={!!config?.rehearsalSeat} onEnd={props.onEndRehearsalSeat ?? (() => undefined)} />
 
       <ConversationSupport compact={automationCompact}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
