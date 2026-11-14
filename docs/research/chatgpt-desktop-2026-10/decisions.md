@@ -2367,6 +2367,30 @@ Confirmed by Jay: no. The coordinator scoped this to the rows that do not depend
   - The sheet closes first, so the native folder picker is not under a modal.
 - **Who sees it (no new policy).** The same seats as the shipped entry: the chat settings dialog draws 내 작업 내보내기 with no seat condition (`ChatPanel.tsx:2719` and `:2750`, CGP-SHELL-R-028), and the palette command is hidden (`package.json`, `when: false`). The row calls the same host function, `ChatPanelProvider.exportMyWork`, so its guards apply unchanged: a work folder must exist, no turn may be running, and one export runs at a time. The row adds no gate and drops none.
 
+## CGP-DS-R-022: the task menu joins the shared menu token set (2026-11-14, agent-selected)
+
+Audit of main (7205ff64b): the tools menu and the personal header menu already share the learner-menu tokens (#2575, typeahead #2724) and `test/menu-tokens-computed.smoke.mjs` guards them. The rail's task menu (`TaskMenu.tsx`, CGP-KNOW-R-009, built later) did not: 6px gutter, 10px block padding, 6px item radius, `text-align: left`. Its 44px items, 12px panel radius and 14px text already met the floor. R-022: PARTIAL (one of three Studio menus); D-019 Studio part: PARTIAL for the same menu.
+- Change: `taskWorkspace.css` task-menu rules now read `--ds-c-menu-gutter`, `--ds-c-menu-item-height`, `--ds-c-menu-item-pad-block` / `-inline` and `--hp-radius-menu-item`, and align to `start`. No new token, no token value, colour or theme change; no component or copy change.
+- Not covered: the `보여주기` attach list in the unmounted VoicePanel is a `role="group"` of buttons, not a menu, and keeps its own rules. Chalk's dense 32px menu (DES-CGP-DS-24) stays separate.
+
+## CGP-CHAT-R-030 gaps: Esc stops an answer, Alt+Shift+K focuses the composer (2026-11-14, agent-selected)
+
+Requirement: `docs/studio-requirements.md` "Keyboard shortcut sheet (CGP-CHAT-R-030)".
+
+- **Esc (agent choice).** It stops only while an answer streams, through the same path as the stop button.
+  - Every other Escape owner comes first: an IME composition, dialogs, open menus and lists, the find bar, the voice
+    panel and voice conversation, dictation recording, the microphone cards (`.hps-voice-card`: mic denied, recovered
+    text), a visible tooltip (that press closes the tooltip only; the chat notes it in window capture, before tooltips.ts hides it, and no other Escape owner changes), and another text field's own Escape. A message parked
+    during the stream goes back into the composer, as with the stop button.
+  - The decision waits until the event's dispatch has finished, so a listener that handles Escape later still wins.
+- **Focus key (agent choice): Alt+Shift+K (⌥ Option+⇧ Shift+K).** It is matched by the physical key, so macOS Option
+  layouts work. VS Code has no default binding for it and neither macOS nor Windows reserves it, and it sits beside the
+  chat's existing Alt+Shift+J and Alt+Shift+M. Shift+Esc was rejected: VS Code binds it in editor contexts, and a
+  webview forwards keys to the workbench.
+- **Scope.** Studio only, in every ChatPanel seat. The instructor panel and other surfaces are unchanged. Both rows
+  appear in the sheet only now that the keys are bound.
+- Confirmed by Jay: no.
+
 ## CGP-AGENT-R-020 / CGP-AGENT-D-017: learner skill cards (2026-11-14)
 
 Confirmed by Jay: yes for the scope (2026-11-14): a learner-facing skill card authored in Chalk, frozen with the lesson version, and Studio showing only these cards and never the coach's SKILL.md or `Profile.skills`. The rest are agent choices, approved by the coordinator.

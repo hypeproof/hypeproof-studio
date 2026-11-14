@@ -154,7 +154,7 @@
       "margin-right: var(--ds-c-studio-taskworkspace-space-12)": 1,
       "padding: var(--hp-space-2) var(--hp-space-2) var(--hp-space-2) var(--hp-space-4)": 1,
       "right: 0": 2,
-      "text-align: left": 10
+      "text-align: left": 9
     }
   }
 }
